@@ -122,14 +122,7 @@ const screenType = "screen"
 // it fails twice: once for the unscreened handler, once for the router composition.
 func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 	fset := token.NewFileSet()
-	// The whole package, not mount.go: a door registered from any other file would
-	// otherwise be screened by nobody's assertion.
-	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, 0)
-	if err != nil {
-		t.Fatalf("parse the package: %v", err)
-	}
+	pkgs := shipped(t, fset)
 
 	// held records which doors were actually FOUND, so the check cannot pass by
 	// matching nothing — a renamed or recomposed path with the assertion still green is
@@ -196,6 +189,99 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 			t.Errorf("no registration of the credit door %s was found — either it moved (and this "+
 				"list must move with it) or the check is reading nothing and would stay green "+
 				"however the door is wired", door)
+		}
+	}
+}
+
+// shipped is the package as it will be COMPILED — every non-test file, parsed. The
+// structural checks read it through one function because they must read the SAME source:
+// a check that parsed a subset would be green over exactly the file the next mint is
+// added to. It is the whole package rather than mount.go for that reason.
+func shipped(t *testing.T, fset *token.FileSet) map[string]*ast.Package {
+	t.Helper()
+	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
+		return !strings.HasSuffix(fi.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		t.Fatalf("parse the package: %v", err)
+	}
+	return pkgs
+}
+
+// mints is EVERY function in this package that DEPOSITS into the spendable ledger, and
+// the reason each one may. It is a closed list because the check below reads it.
+//
+// The list exists because the pre-charge refusal is a property of the two doors the
+// screen is composed onto, and NOT of the ledger. A mint added beside these three is a
+// mint with no screen in front of it: [screen.settle]'s own [payment.diverged] guard
+// backstops the address, but nothing stops a new caller charging a card first and
+// discovering afterwards that the credit has nowhere to go. That is the defect this
+// batch fixed, and a new entry here is where the next one gets caught.
+var mints = map[string]string{
+	"settle": "the CARD settlement — the only mint behind a charge, screened at both doors, " +
+		"and refused before the card moves when the charge and the credit name two orgs",
+	"planeCredit": "the internal plane's credit op — the org is the CALLER's and can never be an " +
+		"argument, the ref is required, and no card is charged, so there is nothing to take first",
+	"Credit": "commerce's creditledger adapter — the admin grant, the door a platform operator " +
+		"funds another organisation through and the one the pre-charge refusal names",
+}
+
+// TestCreditDoors_EveryMintIntoTheSpendableLedgerIsAccountedFor — the same structural
+// argument as the door check, one level down.
+//
+// The door check asks whether every ADDRESS onto the card core is screened. This asks
+// what can put money in the ledger AT ALL, because the two questions have different
+// answers: a mint reached from a webhook, a job or a second settlement path is not a
+// door and would not appear on [creditDoors] at all.
+//
+// It is a LIST WITH REASONS rather than a count, so the failure tells the next author
+// what the check is for: either the new mint charges nothing first (say why, add it) or
+// it charges a card and needs the screen's own refusal ahead of it.
+//
+// Mutation proof: delete any entry from [mints] and the check names the function and the
+// line; add a fourth `fin.Deposit` anywhere in the package and it fails until the reason
+// is written down.
+func TestCreditDoors_EveryMintIntoTheSpendableLedgerIsAccountedFor(t *testing.T) {
+	fset := token.NewFileSet()
+	found := map[string]string{}
+	for _, pkg := range shipped(t, fset) {
+		for _, file := range pkg.Files {
+			for _, decl := range file.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok {
+					continue
+				}
+				ast.Inspect(fn, func(n ast.Node) bool {
+					call, ok := n.(*ast.CallExpr)
+					if !ok {
+						return true
+					}
+					sel, ok := call.Fun.(*ast.SelectorExpr)
+					if !ok || sel.Sel.Name != "Deposit" {
+						return true
+					}
+					if _, seen := found[fn.Name.Name]; !seen {
+						found[fn.Name.Name] = fset.Position(call.Pos()).String()
+					}
+					return true
+				})
+			}
+		}
+	}
+
+	for name, where := range found {
+		if _, ok := mints[name]; !ok {
+			t.Errorf("%s: %s deposits into the spendable ledger and is not accounted for in [mints] — "+
+				"if it stands behind a card charge it needs the screen's refusal ahead of it "+
+				"(screen.decide), because the ledger boundary can only refuse AFTER the money moved",
+				where, name)
+		}
+	}
+	for name := range mints {
+		if _, ok := found[name]; !ok {
+			t.Errorf("[mints] names %s and nothing in the package deposits there — either it moved "+
+				"(and this list must move with it) or the check is reading nothing and would stay "+
+				"green however the ledger is minted", name)
 		}
 	}
 }

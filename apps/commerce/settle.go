@@ -64,10 +64,17 @@ package commerce
 // a READ and the wrong shape for a CREDIT. The card cleared on ONE org's merchant
 // account, so a deposit into the OTHER's wallet is money crossing between two customers'
 // books on nothing but a masqueraded session's say-so. Splitting the value fixed the read
-// and left the mint quietly landing at the wrong address behind a 200; the deposit now
-// refuses a payment whose two names are not one name. There is no correct wallet to pick
-// there — see the guard's own note — and a SuperAdmin funding a customer has the admin
-// grant, which is a credit that states whose it is.
+// and left the mint quietly landing at the wrong address behind a 200; a payment whose
+// two names are not one name is refused. There is no correct wallet to pick there — see
+// the guard's own note — and a SuperAdmin funding a customer has the admin grant, which
+// is a credit that states whose it is.
+//
+// THAT REFUSAL IS THE SCREEN'S, AND THIS ONE IS THE BACKSTOP. Asked here it is asked too
+// late: this runs after the money core has charged the card, so the refusal it produced
+// was a 500 over money that had really moved. [screen.decide] asks [payment.diverged]
+// before the handler runs — same rule, one method, no card charged — and the check below
+// stays for the mints this screen does not compose. Defence in depth, in the order that
+// costs a customer nothing.
 //
 // This is also what closes the divergence payments.go records at exposePayments:
 // commerce's typed door credits its store under the ORG POOL (org.Name), while for
@@ -113,10 +120,12 @@ package commerce
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
+	financeclient "github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
@@ -191,6 +200,12 @@ func receiptOf(ctx context.Context, org, id string) (settlement, error) {
 // move — and every one of them answers the door rather than being swallowed,
 // because a top-up that quietly credits nothing is the defect this file exists to
 // end. There is no branch here that returns nil without a deposit.
+//
+// THEY ARE NOT ALL THE SAME REFUSAL, THOUGH, and the difference is the only thing an
+// operator can act on: some clear themselves the moment the customer retries, and some
+// refuse every retry there will ever be. Each branch names which it is by answering
+// through [screen.uncredited] or [screen.stranded] — the second states a terminal bit to
+// alert on and the doors that settle it.
 func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 	// The payment's three names, resolved once by [seen]. All are required: `org` says
 	// which books hold the receipt this credit is sized from, `ledger` names the ledger
@@ -200,21 +215,26 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 	// this refuses a payment it cannot resolve a payer for, and a resolved payer means
 	// a resolved namespace), so this is the boundary check saying so, not a fallback.
 	if p.org == "" || p.ledger == "" || p.subject == "" {
-		return s.uncredited(p, ref, "the door settled a payment whose payer this process could not resolve")
+		return s.stranded(p, ref, "the door settled a payment whose payer this process could not resolve")
 	}
 	// No settlement identity, no idempotent deposit. Depositing under an invented
 	// key credits the same money again on the very next retry, which is worse than
 	// the credit this refuses.
 	if ref == "" || id == "" {
-		return s.uncredited(p, ref, "the door answered success and named no settlement to key the credit on")
+		return s.stranded(p, ref, "the door answered success and named no settlement to key the credit on")
 	}
 
 	got, err := s.receipt(ctx, p.org, id)
 	if err != nil {
+		// The one read whose failure this process cannot classify: a datastore that was
+		// briefly unavailable and a row that is not in these books answer the same way.
+		// Reported as RETRYABLE because a retry may genuinely clear it, and claiming to
+		// know it is terminal would send an operator to reconcile a payment that is
+		// about to credit itself.
 		return s.uncredited(p, ref, "the settled receipt %q could not be read: %v", id, err)
 	}
 	if got.cents <= 0 {
-		return s.uncredited(p, ref, "the settled receipt %q states an amount of %d", id, got.cents)
+		return s.stranded(p, ref, "the settled receipt %q states an amount of %d", id, got.cents)
 	}
 	// ONE ASSET. finance holds USD and its balance read ignores the currency
 	// argument entirely, so a minor unit from another currency deposited here is
@@ -227,10 +247,10 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 		cur = "usd"
 	}
 	if cur != "usd" {
-		return s.uncredited(p, ref, "the charge settled in %q and this ledger holds usd", cur)
+		return s.stranded(p, ref, "the charge settled in %q and this ledger holds usd", cur)
 	}
 
-	// A MINT IS THE ONE PLACE THE TWO NAMES MUST BE ONE NAME.
+	// A MINT IS THE ONE PLACE THE TWO NAMES MUST BE ONE NAME — the BACKSTOP reading of it.
 	//
 	// Everything above this line is a READ, and the split is right for every one of them:
 	// the receipt is read out of the books the charge was WRITTEN in, and the model judges
@@ -247,11 +267,17 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 	// a door that SAYS SO — the admin grant, a credit whose whole subject is whose it is —
 	// and a card taken inside someone else's org is not it.
 	//
-	// It cannot fire for the callers that pay for themselves: [principal] answers one
-	// string for both names for an ordinary member and for a SuperAdmin at home, so
-	// org == ledger there and this is only ever the masquerade.
-	if p.org != p.ledger {
-		return s.uncredited(p, ref,
+	// THE SCREEN HAS ALREADY REFUSED THIS, and that is why the refusal here is TERMINAL
+	// rather than a door's answer. [screen.decide] asks the same [payment.diverged] before
+	// the handler charges the card, so no composed door can reach this line — anything that
+	// does is a mint standing outside the screen, and by the time it is here the money has
+	// moved. Retrying cannot help it: the same identity resolves the same two names every
+	// time. So it is refused, tagged terminal, and handed to an operator with the two doors
+	// that CAN settle it.
+	//
+	// It cannot fire for the callers that pay for themselves — see [payment.diverged].
+	if p.diverged() {
+		return s.stranded(p, ref,
 			"the card was charged in %q and this credit belongs to %q — a settled %d-cent top-up cannot "+
 				"mint in books the charge was never taken against", p.org, p.ledger, got.cents)
 	}
@@ -275,6 +301,15 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 		Test: got.test,
 	})
 	if err != nil {
+		// A REF THAT IS ANOTHER PAYMENT'S IS THE ONE DEPOSIT FAILURE THAT NEVER CLEARS.
+		// finance refuses a ref already posted for a different (subject, amount) rather
+		// than answering with the other payment's entry, and every replay of this
+		// settlement carries the same ref, so the retry the customer is invited to make
+		// refuses forever. Every other deposit failure is a write this process can lose
+		// and win later.
+		if errors.Is(err, financeclient.ErrRefTaken) {
+			return s.stranded(p, ref, "the deposit failed: %v", err)
+		}
 		return s.uncredited(p, ref, "the deposit failed: %v", err)
 	}
 	s.lg.Info("a settled card payment credited the spendable ledger",
@@ -285,26 +320,68 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 	return nil
 }
 
-// uncredited is the ONE answer to "the card was charged and the balance was not".
+// uncredited is "the card was charged and the balance was not" for the refusals a
+// RETRY CAN STILL CLEAR: a receipt read that failed, a deposit whose write was lost,
+// a ledger this process did not have.
 //
-// It is loud in both directions on purpose. The OPERATOR gets a RECONCILE line
-// naming the settlement, BOTH orgs and why — the books the charge is in are where the
-// receipt is found and the ledger is where the credit belongs, and a manual credit
-// needs both — and a silent 200 would leave nobody anything to look for. The
-// CUSTOMER gets a 500 and the settlement reference — their own payment's id, which
-// the receipt already returns to them — because the honest answer to "did my
-// top-up work" is no, and because quoting the reference is what makes support able
-// to find the charge. Retrying with the same idempotency key replays the receipt
-// and re-runs the deposit, so the customer's own retry is the recovery path.
+// Retrying with the same idempotency key replays the receipt and re-runs the deposit,
+// so for these the customer's own retry IS the recovery path, and saying so is true.
+// The ones it is not true of are [screen.stranded]'s.
 func (s screen) uncredited(p payment, ref, why string, args ...any) error {
+	return s.reconcile(p, ref, false, fmt.Sprintf(why, args...))
+}
+
+// stranded is that same fact for the refusals NO RETRY CAN EVER CLEAR — money taken
+// and money that will still be uncredited after any number of attempts.
+//
+// They are a distinct class because the RECOVERY is distinct, and telling a customer
+// to retry a payment that refuses forever is worse than telling them nothing: they
+// retry, the idempotency key replays the same receipt into the same refusal, and a
+// fresh key takes the card again. Every one of them is a fact about the settlement
+// itself rather than about this process's luck — the two names that cannot be one
+// name, a receipt that settled in another currency or for nothing, a settlement the
+// door could not identify, a reference that is already another payment's. Nothing
+// downstream changes any of those.
+//
+// So this states the terminal bit for an operator to ALERT on, and names the two
+// doors that actually settle it: the admin grant credits the balance and the
+// processor refunds the charge. It is loud rather than silent for the reason the
+// whole file is: a settled charge with no credit and nobody told is the defect.
+func (s screen) stranded(p payment, ref, why string, args ...any) error {
+	return s.reconcile(p, ref, true, fmt.Sprintf(why, args...))
+}
+
+// reconcile is the ONE answer to "the card was charged and the balance was not".
+//
+// It is loud in both directions on purpose. The OPERATOR gets a RECONCILE line naming
+// the settlement, BOTH orgs, why, whether any retry can clear it and what does clear it
+// — the books the charge is in are where the receipt is found and the ledger is where
+// the credit belongs, and a manual credit needs both — and a silent 200 would leave
+// nobody anything to look for. The CUSTOMER gets a 500 and the settlement reference —
+// their own payment's id, which the receipt already returns to them — because the honest
+// answer to "did my top-up work" is no, and because quoting the reference is what makes
+// support able to find the charge.
+//
+// A terminal refusal says so to the customer as well, in the only terms that are
+// actionable to them: do not retry, this needs support. Inviting a retry there is
+// inviting a second charge.
+func (s screen) reconcile(p payment, ref string, terminal bool, why string) error {
+	recovery := "the customer's own retry replays the receipt and completes the credit"
+	if terminal {
+		recovery = "no retry can credit this: issue the balance with POST /v1/admin/grants " +
+			"and refund the charge with the processor"
+	}
 	s.lg.Error("RECONCILE: a card payment settled and the spendable balance was NOT credited",
 		"door", p.door, "via", p.via, "org", p.org,
 		"ledger", p.ledger, "subject", p.subject,
-		"settlement", ref, "why", fmt.Sprintf(why, args...))
-	if ref == "" {
-		return zip.Errorf(http.StatusInternalServerError,
-			"the charge settled but crediting your balance failed — contact support")
+		"settlement", ref, "terminal", terminal, "why", why, "recovery", recovery)
+	answer := "the charge settled but crediting your balance failed — contact support"
+	if terminal {
+		answer = "the charge settled and it cannot be credited to this balance — " +
+			"retrying will not credit it, contact support"
 	}
-	return zip.Errorf(http.StatusInternalServerError,
-		"the charge settled but crediting your balance failed — contact support with reference %s", ref)
+	if ref == "" {
+		return zip.Errorf(http.StatusInternalServerError, "%s", answer)
+	}
+	return zip.Errorf(http.StatusInternalServerError, "%s with reference %s", answer, ref)
 }
