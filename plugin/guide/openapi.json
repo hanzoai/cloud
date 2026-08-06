@@ -311,7 +311,7 @@
     },
     "/v1/guide/steps/{id}/reset": {
       "post": {
-        "operationId": "post_v1_guide_steps_id_reset",
+        "operationId": "post_v1_guide_steps_by_id_reset",
         "summary": "Returns one step of the caller org's journey to todo — clearing a manual mark or a skip — and returns the refreshed journey.",
         "description": "Returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey. Reset is never\ndependency-gated. Auto-detect runs on the next read, so a step the org has in\nfact completed elsewhere goes straight back to done.",
         "tags": [
@@ -344,7 +344,7 @@
     },
     "/v1/guide/steps/{id}/skip": {
       "post": {
-        "operationId": "post_v1_guide_steps_id_skip",
+        "operationId": "post_v1_guide_steps_by_id_skip",
         "summary": "Marks one step of the caller org's journey skipped and returns the refreshed journey.",
         "description": "Marks one step of the caller org's journey skipped and returns the\nrefreshed journey. Skipping is never dependency-gated — the founder is\ndeclaring the step does not apply to them — so a step whose dependencies are\nunfinished can still be skipped, and a skipped step counts as terminal for\neverything downstream of it.",
         "tags": [

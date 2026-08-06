@@ -169,7 +169,7 @@
     },
     "/v1/flags/defs/{key}": {
       "delete": {
-        "operationId": "delete_v1_flags_defs_key",
+        "operationId": "delete_v1_flags_defs_by_key",
         "summary": "Removes one flag definition by key and records the deletion in the change log.",
         "description": "Removes one flag definition by key and records the\ndeletion in the change log. A key the caller's store does not hold is a 404.",
         "tags": [
@@ -200,7 +200,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_flags_defs_key",
+        "operationId": "get_v1_flags_defs_by_key",
         "summary": "Returns one flag definition by key, or 404 when the caller's store has none under that key.",
         "description": "Returns one flag definition by key, or 404 when the caller's\nstore has none under that key.",
         "tags": [
@@ -231,7 +231,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_flags_defs_key",
+        "operationId": "put_v1_flags_defs_by_key",
         "summary": "Creates or replaces the flag definition at the path's key and returns the stored row.",
         "description": "Creates or replaces the flag definition at the path's key and\nreturns the stored row. The BODY IS THE DEFINITION DOCUMENT — the flag-definition\nJSON object the evaluator consumes — and it is stored verbatim except that its\n\"key\" is forced to the key in the URL, so a document can never be filed under a\nname other than the one it was addressed by. Every write bumps the version and\nappends to the change log under the caller's identity.",
         "tags": [
