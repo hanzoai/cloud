@@ -13,7 +13,7 @@ import (
 
 func open(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(namespace.System(), houseSubsystem, t.TempDir())
+	s, err := Open(namespace.System(), houseSubsystem, t.TempDir(), "")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
