@@ -114,8 +114,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
 		return fmt.Errorf("treasury.Mount: data dir: %w", err)
 	}
-	// Platform-level, not per-org: the treasury is the fleet's own book.
-	store, err := sqlstore.Open(namespace.System(), "treasury", deps.DataDir)
+	// Platform-level, not per-org: the treasury is the fleet's own book. Its kinds
+	// (accrual, seed, payout) are all scoped by the book itself rather than by a
+	// wallet, so it opens with no wallet-scoped kind.
+	store, err := sqlstore.Open(namespace.System(), "treasury", deps.DataDir, "")
 	if err != nil {
 		return fmt.Errorf("treasury.Mount: open store: %w", err)
 	}
