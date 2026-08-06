@@ -387,6 +387,25 @@ func (o ops) getModel(ctx context.Context, in *pricingModelRef) (*Model, error) 
 		return nil, zip.Errorf(http.StatusInternalServerError, "pricing dispatch failed")
 	}
 	if status != http.StatusOK {
+		// AN ADMIN ASKS ABOUT THE CATALOG, NOT ABOUT THE BUNDLE. The embedded
+		// @hanzo/pricing bundle is a stale snapshot of first-party prices; the
+		// authority for what exists and whether it is enabled is the overlay,
+		// which commerce backs. A model the admin has DISABLED is exactly the
+		// case where the two disagree: the bundle stops serving it, so its 404
+		// arrives before the gate below can decide, and the one caller who is
+		// supposed to still see it — the admin who turned it off — is told it
+		// does not exist. VisibleCatalog already keeps disabled entries for
+		// admins; it simply never ran.
+		//
+		// So a 404 from the bundle is not the end of the question. If the overlay
+		// knows this id, the admin gets the overlay's answer.
+		if status == http.StatusNotFound && callerIsAdmin(ctx) && cat != nil {
+			if ov, ok, gerr := cat.Get(ctx, kindModel, in.Name); gerr == nil && ok {
+				m := mergeModel(Model{"id": in.Name}, ov.Overrides)
+				m["_overlay"] = modelAdminState(ov, true, Overlay{}, false)
+				return &m, nil
+			}
+		}
 		return nil, dispatchErr(status, body) // the bundle's own 404/503 and message.
 	}
 	var m Model
