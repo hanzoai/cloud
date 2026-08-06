@@ -52287,6 +52287,25 @@ paths:
       tags:
       - billing
       x-app: commerce
+  /v1/billing/topup:
+    post:
+      description: 'Charges a card the caller already has on file, named by paymentMethodId,
+        and credits the caller''s own balance — the SAVED-card twin of topup/token,
+        sharing the one charge-and-credit core the auto-recharge cron runs on. The
+        credit lands on the caller''s OWN billing subject: the request body''s subject
+        field is pinned to the caller before the handler sees it, so a top-up can
+        never be redirected to another subject or outside the caller''s org. It is
+        screened for risk before any money moves, exactly as the token path is, because
+        both credit the SPENDABLE wallet. The rule most callers get wrong is that
+        paymentMethodId is NOT covered by that subject pin — it is a card id, not
+        a subject key — so it is checked separately, and a card belonging to any other
+        subject answers 404 rather than 403: a permission error would confirm the
+        id exists, which is an ownership oracle over other people''s cards.'
+      operationId: post_v1_billing_topup
+      summary: Add credit to your balance by charging one of your saved cards
+      tags:
+      - billing
+      x-app: commerce
   /v1/billing/topup/token:
     post:
       description: 'Charges the single-use card token for the given amount and credits
@@ -74504,6 +74523,19 @@ paths:
         The answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.
       operationId: post_v1_integrations_slack_events
       summary: Slack Events API webhook
+      tags:
+      - integrations
+      x-app: integrations
+  /v1/integrations/slack/install:
+    get:
+      description: |-
+        The address behind "Add to Slack" and the Direct install URL in Slack's app directory. It redirects to Slack's consent screen and does nothing else — the consent URL is built by the same code the console's Connect button uses, so a workspace is asked for the same scopes however the install began.
+
+        It is deliberately anonymous: it carries no state and binds no org, because the person clicking Install in the directory has no Hanzo session yet, and inventing an org for an anonymous click is exactly what the tenant rules forbid. The org is resolved where every other install resolves it — the provider callback, from the signed state a console connect minted or from the workspace already being connected — so an install that starts here finishes under the same rules.
+
+        It exists as our own address rather than a bare slack.com link because Slack refuses a slack.com URL in that field, and routing the click through us is what lets the install be attributed. Where the app is not configured it answers 503, rather than a consent URL with an empty client_id that Slack would render as its own dead-end error page.
+      operationId: get_v1_integrations_slack_install
+      summary: Begin installing the Hanzo Slack app
       tags:
       - integrations
       x-app: integrations
