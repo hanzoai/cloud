@@ -57147,9 +57147,11 @@ paths:
   /v1/commerce/collection/:
     get:
       description: |-
-        Returns this tenant's collection records.
+        Returns this tenant's collection records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: get_v1_commerce_collection
       summary: List collection records
       tags:
@@ -57157,9 +57159,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one collection record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one collection from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: post_v1_commerce_collection
       summary: Create a collection record
       tags:
@@ -57168,9 +57172,11 @@ paths:
   /v1/commerce/collection/{collectionid}:
     delete:
       description: |-
-        Deletes the collection record with this id.
+        Removes the collection with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: delete_v1_commerce_collection_by_collectionid
       parameters:
       - in: path
@@ -57184,9 +57190,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the collection record with this id.
+        Returns the one collection with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: get_v1_commerce_collection_by_collectionid
       parameters:
       - in: path
@@ -57200,9 +57208,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored collection, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: patch_v1_commerce_collection_by_collectionid
       parameters:
       - in: path
@@ -57216,9 +57226,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: post_v1_commerce_collection_by_collectionid
       parameters:
       - in: path
@@ -57226,15 +57238,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one collection record
+      summary: Update one collection record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the collection record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the collection with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's collection is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: put_v1_commerce_collection_by_collectionid
       parameters:
       - in: path
@@ -57260,9 +57274,11 @@ paths:
   /v1/commerce/disclosure/:
     get:
       description: |-
-        Returns this tenant's disclosure records.
+        Returns this tenant's disclosure records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_disclosure
       summary: List disclosure records
       tags:
@@ -57270,9 +57286,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one disclosure record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one disclosure from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_disclosure
       summary: Create a disclosure record
       tags:
@@ -57281,9 +57299,11 @@ paths:
   /v1/commerce/disclosure/{disclosureid}:
     delete:
       description: |-
-        Deletes the disclosure record with this id.
+        Removes the disclosure with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: delete_v1_commerce_disclosure_by_disclosureid
       parameters:
       - in: path
@@ -57297,9 +57317,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the disclosure record with this id.
+        Returns the one disclosure with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_disclosure_by_disclosureid
       parameters:
       - in: path
@@ -57313,9 +57335,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored disclosure, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: patch_v1_commerce_disclosure_by_disclosureid
       parameters:
       - in: path
@@ -57329,9 +57353,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_disclosure_by_disclosureid
       parameters:
       - in: path
@@ -57339,15 +57365,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one disclosure record
+      summary: Update one disclosure record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the disclosure record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the disclosure with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's disclosure is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: put_v1_commerce_disclosure_by_disclosureid
       parameters:
       - in: path
@@ -57362,9 +57390,11 @@ paths:
   /v1/commerce/discount/:
     get:
       description: |-
-        Returns this tenant's discount records.
+        Returns this tenant's discount records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: get_v1_commerce_discount
       summary: List discount records
       tags:
@@ -57372,9 +57402,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one discount record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one discount from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: post_v1_commerce_discount
       summary: Create a discount record
       tags:
@@ -57383,9 +57415,11 @@ paths:
   /v1/commerce/discount/{discountid}:
     delete:
       description: |-
-        Deletes the discount record with this id.
+        Removes the discount with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: delete_v1_commerce_discount_by_discountid
       parameters:
       - in: path
@@ -57399,9 +57433,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the discount record with this id.
+        Returns the one discount with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: get_v1_commerce_discount_by_discountid
       parameters:
       - in: path
@@ -57415,9 +57451,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored discount, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: patch_v1_commerce_discount_by_discountid
       parameters:
       - in: path
@@ -57431,9 +57469,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: post_v1_commerce_discount_by_discountid
       parameters:
       - in: path
@@ -57441,15 +57481,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one discount record
+      summary: Update one discount record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the discount record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the discount with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's discount is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: put_v1_commerce_discount_by_discountid
       parameters:
       - in: path
@@ -57464,9 +57506,11 @@ paths:
   /v1/commerce/movie/:
     get:
       description: |-
-        Returns this tenant's movie records.
+        Returns this tenant's movie records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_movie
       summary: List movie records
       tags:
@@ -57474,9 +57518,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one movie record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one movie from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_movie
       summary: Create a movie record
       tags:
@@ -57485,9 +57531,11 @@ paths:
   /v1/commerce/movie/{movieid}:
     delete:
       description: |-
-        Deletes the movie record with this id.
+        Removes the movie with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: delete_v1_commerce_movie_by_movieid
       parameters:
       - in: path
@@ -57501,9 +57549,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the movie record with this id.
+        Returns the one movie with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_movie_by_movieid
       parameters:
       - in: path
@@ -57517,9 +57567,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored movie, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: patch_v1_commerce_movie_by_movieid
       parameters:
       - in: path
@@ -57533,9 +57585,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_movie_by_movieid
       parameters:
       - in: path
@@ -57543,15 +57597,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one movie record
+      summary: Update one movie record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the movie record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the movie with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's movie is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: put_v1_commerce_movie_by_movieid
       parameters:
       - in: path
@@ -57566,9 +57622,11 @@ paths:
   /v1/commerce/note/:
     get:
       description: |-
-        Returns this tenant's note records.
+        Returns this tenant's note records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_note
       summary: List note records
       tags:
@@ -57576,9 +57634,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one note record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one note from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_note
       summary: Create a note record
       tags:
@@ -57587,9 +57647,11 @@ paths:
   /v1/commerce/note/{noteid}:
     delete:
       description: |-
-        Deletes the note record with this id.
+        Removes the note with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: delete_v1_commerce_note_by_noteid
       parameters:
       - in: path
@@ -57603,9 +57665,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the note record with this id.
+        Returns the one note with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_note_by_noteid
       parameters:
       - in: path
@@ -57619,9 +57683,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored note, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: patch_v1_commerce_note_by_noteid
       parameters:
       - in: path
@@ -57635,9 +57701,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_note_by_noteid
       parameters:
       - in: path
@@ -57645,15 +57713,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one note record
+      summary: Update one note record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the note record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the note with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's note is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: put_v1_commerce_note_by_noteid
       parameters:
       - in: path
@@ -57668,9 +57738,11 @@ paths:
   /v1/commerce/product/:
     get:
       description: |-
-        Returns this tenant's product records.
+        Returns this tenant's product records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: get_v1_commerce_product
       summary: List product records
       tags:
@@ -57678,9 +57750,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one product record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one product from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: post_v1_commerce_product
       summary: Create a product record
       tags:
@@ -57689,9 +57763,11 @@ paths:
   /v1/commerce/product/{productid}:
     delete:
       description: |-
-        Deletes the product record with this id.
+        Removes the product with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: delete_v1_commerce_product_by_productid
       parameters:
       - in: path
@@ -57705,9 +57781,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the product record with this id.
+        Returns the one product with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: get_v1_commerce_product_by_productid
       parameters:
       - in: path
@@ -57721,9 +57799,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored product, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: patch_v1_commerce_product_by_productid
       parameters:
       - in: path
@@ -57737,9 +57817,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: post_v1_commerce_product_by_productid
       parameters:
       - in: path
@@ -57747,15 +57829,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one product record
+      summary: Update one product record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the product record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the product with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's product is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: put_v1_commerce_product_by_productid
       parameters:
       - in: path
@@ -57770,9 +57854,11 @@ paths:
   /v1/commerce/return/:
     get:
       description: |-
-        Returns this tenant's return records.
+        Returns this tenant's return records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: get_v1_commerce_return
       summary: List return records
       tags:
@@ -57780,9 +57866,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one return record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one return from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: post_v1_commerce_return
       summary: Create a return record
       tags:
@@ -57791,9 +57879,11 @@ paths:
   /v1/commerce/return/{returnid}:
     delete:
       description: |-
-        Deletes the return record with this id.
+        Removes the return with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: delete_v1_commerce_return_by_returnid
       parameters:
       - in: path
@@ -57807,9 +57897,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the return record with this id.
+        Returns the one return with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: get_v1_commerce_return_by_returnid
       parameters:
       - in: path
@@ -57823,9 +57915,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored return, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: patch_v1_commerce_return_by_returnid
       parameters:
       - in: path
@@ -57839,9 +57933,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: post_v1_commerce_return_by_returnid
       parameters:
       - in: path
@@ -57849,15 +57945,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one return record
+      summary: Update one return record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the return record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the return with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's return is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: put_v1_commerce_return_by_returnid
       parameters:
       - in: path
@@ -57872,9 +57970,11 @@ paths:
   /v1/commerce/saleschannel/:
     get:
       description: |-
-        Returns this tenant's saleschannel records.
+        Returns this tenant's saleschannel records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: get_v1_commerce_saleschannel
       summary: List saleschannel records
       tags:
@@ -57882,9 +57982,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one saleschannel record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one saleschannel from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: post_v1_commerce_saleschannel
       summary: Create a saleschannel record
       tags:
@@ -57893,9 +57995,11 @@ paths:
   /v1/commerce/saleschannel/{saleschannelid}:
     delete:
       description: |-
-        Deletes the saleschannel record with this id.
+        Removes the saleschannel with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: delete_v1_commerce_saleschannel_by_saleschannelid
       parameters:
       - in: path
@@ -57909,9 +58013,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the saleschannel record with this id.
+        Returns the one saleschannel with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: get_v1_commerce_saleschannel_by_saleschannelid
       parameters:
       - in: path
@@ -57925,9 +58031,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored saleschannel, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: patch_v1_commerce_saleschannel_by_saleschannelid
       parameters:
       - in: path
@@ -57941,9 +58049,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: post_v1_commerce_saleschannel_by_saleschannelid
       parameters:
       - in: path
@@ -57951,15 +58061,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one saleschannel record
+      summary: Update one saleschannel record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the saleschannel record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the saleschannel with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's saleschannel is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: put_v1_commerce_saleschannel_by_saleschannelid
       parameters:
       - in: path
@@ -57974,9 +58086,11 @@ paths:
   /v1/commerce/stocklocation/:
     get:
       description: |-
-        Returns this tenant's stocklocation records.
+        Returns this tenant's stocklocation records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: get_v1_commerce_stocklocation
       summary: List stocklocation records
       tags:
@@ -57984,9 +58098,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one stocklocation record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one stocklocation from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: post_v1_commerce_stocklocation
       summary: Create a stocklocation record
       tags:
@@ -57995,9 +58111,11 @@ paths:
   /v1/commerce/stocklocation/{stocklocationid}:
     delete:
       description: |-
-        Deletes the stocklocation record with this id.
+        Removes the stocklocation with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: delete_v1_commerce_stocklocation_by_stocklocationid
       parameters:
       - in: path
@@ -58011,9 +58129,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the stocklocation record with this id.
+        Returns the one stocklocation with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: get_v1_commerce_stocklocation_by_stocklocationid
       parameters:
       - in: path
@@ -58027,9 +58147,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored stocklocation, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: patch_v1_commerce_stocklocation_by_stocklocationid
       parameters:
       - in: path
@@ -58043,9 +58165,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: post_v1_commerce_stocklocation_by_stocklocationid
       parameters:
       - in: path
@@ -58053,15 +58177,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one stocklocation record
+      summary: Update one stocklocation record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the stocklocation record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the stocklocation with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's stocklocation is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check.
       operationId: put_v1_commerce_stocklocation_by_stocklocationid
       parameters:
       - in: path
@@ -58076,9 +58202,11 @@ paths:
   /v1/commerce/submission/:
     get:
       description: |-
-        Returns this tenant's submission records.
+        Returns this tenant's submission records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_submission
       summary: List submission records
       tags:
@@ -58086,9 +58214,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one submission record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one submission from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_submission
       summary: Create a submission record
       tags:
@@ -58097,9 +58227,11 @@ paths:
   /v1/commerce/submission/{submissionid}:
     delete:
       description: |-
-        Deletes the submission record with this id.
+        Removes the submission with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: delete_v1_commerce_submission_by_submissionid
       parameters:
       - in: path
@@ -58113,9 +58245,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the submission record with this id.
+        Returns the one submission with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_submission_by_submissionid
       parameters:
       - in: path
@@ -58129,9 +58263,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored submission, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: patch_v1_commerce_submission_by_submissionid
       parameters:
       - in: path
@@ -58145,9 +58281,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_submission_by_submissionid
       parameters:
       - in: path
@@ -58155,15 +58293,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one submission record
+      summary: Update one submission record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the submission record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the submission with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's submission is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: put_v1_commerce_submission_by_submissionid
       parameters:
       - in: path
@@ -58178,9 +58318,11 @@ paths:
   /v1/commerce/subscriber/:
     get:
       description: |-
-        Returns this tenant's subscriber records.
+        Returns this tenant's subscriber records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: get_v1_commerce_subscriber
       summary: List subscriber records
       tags:
@@ -58188,9 +58330,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one subscriber record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one subscriber from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: post_v1_commerce_subscriber
       summary: Create a subscriber record
       tags:
@@ -58199,9 +58343,11 @@ paths:
   /v1/commerce/subscriber/{subscriberid}:
     delete:
       description: |-
-        Deletes the subscriber record with this id.
+        Removes the subscriber with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: delete_v1_commerce_subscriber_by_subscriberid
       parameters:
       - in: path
@@ -58215,9 +58361,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the subscriber record with this id.
+        Returns the one subscriber with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: get_v1_commerce_subscriber_by_subscriberid
       parameters:
       - in: path
@@ -58231,9 +58379,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored subscriber, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: patch_v1_commerce_subscriber_by_subscriberid
       parameters:
       - in: path
@@ -58247,9 +58397,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: post_v1_commerce_subscriber_by_subscriberid
       parameters:
       - in: path
@@ -58257,15 +58409,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one subscriber record
+      summary: Update one subscriber record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the subscriber record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the subscriber with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's subscriber is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: put_v1_commerce_subscriber_by_subscriberid
       parameters:
       - in: path
@@ -58297,9 +58451,11 @@ paths:
   /v1/commerce/tokentransaction/:
     get:
       description: |-
-        Returns this tenant's tokentransaction records.
+        Returns this tenant's tokentransaction records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_tokentransaction
       summary: List tokentransaction records
       tags:
@@ -58307,9 +58463,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one tokentransaction record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one tokentransaction from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_tokentransaction
       summary: Create a tokentransaction record
       tags:
@@ -58318,9 +58476,11 @@ paths:
   /v1/commerce/tokentransaction/{tokentransactionid}:
     delete:
       description: |-
-        Deletes the tokentransaction record with this id.
+        Removes the tokentransaction with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: delete_v1_commerce_tokentransaction_by_tokentransactionid
       parameters:
       - in: path
@@ -58334,9 +58494,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the tokentransaction record with this id.
+        Returns the one tokentransaction with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_tokentransaction_by_tokentransactionid
       parameters:
       - in: path
@@ -58350,9 +58512,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored tokentransaction, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: patch_v1_commerce_tokentransaction_by_tokentransactionid
       parameters:
       - in: path
@@ -58366,9 +58530,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_tokentransaction_by_tokentransactionid
       parameters:
       - in: path
@@ -58376,15 +58542,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one tokentransaction record
+      summary: Update one tokentransaction record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the tokentransaction record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the tokentransaction with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's tokentransaction is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: put_v1_commerce_tokentransaction_by_tokentransactionid
       parameters:
       - in: path
@@ -58399,9 +58567,13 @@ paths:
   /v1/commerce/transfer/:
     get:
       description: |-
-        Returns this tenant's transfer records.
+        Returns this tenant's transfer records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A transfer RECORDS that a payable was paid out-of-band; it does not move money. Commerce executes no payout, so writing one settles a debt in the books and nowhere else — which is why the family is admin-gated when the rest of the merchant CRUD is not.
       operationId: get_v1_commerce_transfer
       summary: List transfer records
       tags:
@@ -58409,9 +58581,13 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one transfer record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one transfer from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A transfer RECORDS that a payable was paid out-of-band; it does not move money. Commerce executes no payout, so writing one settles a debt in the books and nowhere else — which is why the family is admin-gated when the rest of the merchant CRUD is not.
       operationId: post_v1_commerce_transfer
       summary: Create a transfer record
       tags:
@@ -58420,9 +58596,13 @@ paths:
   /v1/commerce/transfer/{transferid}:
     delete:
       description: |-
-        Deletes the transfer record with this id.
+        Removes the transfer with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A transfer RECORDS that a payable was paid out-of-band; it does not move money. Commerce executes no payout, so writing one settles a debt in the books and nowhere else — which is why the family is admin-gated when the rest of the merchant CRUD is not.
       operationId: delete_v1_commerce_transfer_by_transferid
       parameters:
       - in: path
@@ -58436,9 +58616,13 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the transfer record with this id.
+        Returns the one transfer with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A transfer RECORDS that a payable was paid out-of-band; it does not move money. Commerce executes no payout, so writing one settles a debt in the books and nowhere else — which is why the family is admin-gated when the rest of the merchant CRUD is not.
       operationId: get_v1_commerce_transfer_by_transferid
       parameters:
       - in: path
@@ -58452,9 +58636,13 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored transfer, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A transfer RECORDS that a payable was paid out-of-band; it does not move money. Commerce executes no payout, so writing one settles a debt in the books and nowhere else — which is why the family is admin-gated when the rest of the merchant CRUD is not.
       operationId: patch_v1_commerce_transfer_by_transferid
       parameters:
       - in: path
@@ -58468,9 +58656,13 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A transfer RECORDS that a payable was paid out-of-band; it does not move money. Commerce executes no payout, so writing one settles a debt in the books and nowhere else — which is why the family is admin-gated when the rest of the merchant CRUD is not.
       operationId: post_v1_commerce_transfer_by_transferid
       parameters:
       - in: path
@@ -58478,15 +58670,19 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one transfer record
+      summary: Update one transfer record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the transfer record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the transfer with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's transfer is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A transfer RECORDS that a payable was paid out-of-band; it does not move money. Commerce executes no payout, so writing one settles a debt in the books and nowhere else — which is why the family is admin-gated when the rest of the merchant CRUD is not.
       operationId: put_v1_commerce_transfer_by_transferid
       parameters:
       - in: path
@@ -58501,9 +58697,11 @@ paths:
   /v1/commerce/variant/:
     get:
       description: |-
-        Returns this tenant's variant records.
+        Returns this tenant's variant records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: get_v1_commerce_variant
       summary: List variant records
       tags:
@@ -58511,9 +58709,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one variant record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one variant from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: post_v1_commerce_variant
       summary: Create a variant record
       tags:
@@ -58522,9 +58722,11 @@ paths:
   /v1/commerce/variant/{variantid}:
     delete:
       description: |-
-        Deletes the variant record with this id.
+        Removes the variant with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: delete_v1_commerce_variant_by_variantid
       parameters:
       - in: path
@@ -58538,9 +58740,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the variant record with this id.
+        Returns the one variant with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: get_v1_commerce_variant_by_variantid
       parameters:
       - in: path
@@ -58554,9 +58758,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored variant, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: patch_v1_commerce_variant_by_variantid
       parameters:
       - in: path
@@ -58570,9 +58776,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: post_v1_commerce_variant_by_variantid
       parameters:
       - in: path
@@ -58580,15 +58788,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one variant record
+      summary: Update one variant record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the variant record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the variant with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's variant is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The org's subscription is checked on every call: with no active subscription, trial or redeemed invite the answer is 402 subscription_required, and a billing store this process cannot read fails closed with 503 billing_unavailable rather than serving. A platform service token or a superadmin passes without that check. This kind also carries a per-method token permission, so a token that authenticates but lacks the scope for this method is refused 403; the admin permission satisfies every one of them.
       operationId: put_v1_commerce_variant_by_variantid
       parameters:
       - in: path
@@ -58603,9 +58813,13 @@ paths:
   /v1/commerce/wallet/:
     get:
       description: |-
-        Returns this tenant's wallet records.
+        Returns this tenant's wallet records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A wallet holds blockchain accounts and the keys generated for them, so it is admin-gated on reads as much as writes.
       operationId: get_v1_commerce_wallet
       summary: List wallet records
       tags:
@@ -58613,9 +58827,13 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one wallet record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one wallet from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A wallet holds blockchain accounts and the keys generated for them, so it is admin-gated on reads as much as writes.
       operationId: post_v1_commerce_wallet
       summary: Create a wallet record
       tags:
@@ -58624,9 +58842,13 @@ paths:
   /v1/commerce/wallet/{walletid}:
     delete:
       description: |-
-        Deletes the wallet record with this id.
+        Removes the wallet with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A wallet holds blockchain accounts and the keys generated for them, so it is admin-gated on reads as much as writes.
       operationId: delete_v1_commerce_wallet_by_walletid
       parameters:
       - in: path
@@ -58640,9 +58862,13 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the wallet record with this id.
+        Returns the one wallet with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A wallet holds blockchain accounts and the keys generated for them, so it is admin-gated on reads as much as writes.
       operationId: get_v1_commerce_wallet_by_walletid
       parameters:
       - in: path
@@ -58656,9 +58882,13 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored wallet, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A wallet holds blockchain accounts and the keys generated for them, so it is admin-gated on reads as much as writes.
       operationId: patch_v1_commerce_wallet_by_walletid
       parameters:
       - in: path
@@ -58672,9 +58902,13 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A wallet holds blockchain accounts and the keys generated for them, so it is admin-gated on reads as much as writes.
       operationId: post_v1_commerce_wallet_by_walletid
       parameters:
       - in: path
@@ -58682,15 +58916,19 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one wallet record
+      summary: Update one wallet record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the wallet record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the wallet with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's wallet is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A wallet holds blockchain accounts and the keys generated for them, so it is admin-gated on reads as much as writes.
       operationId: put_v1_commerce_wallet_by_walletid
       parameters:
       - in: path
@@ -58705,9 +58943,11 @@ paths:
   /v1/commerce/watchlist/:
     get:
       description: |-
-        Returns this tenant's watchlist records.
+        Returns this tenant's watchlist records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_watchlist
       summary: List watchlist records
       tags:
@@ -58715,9 +58955,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one watchlist record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one watchlist from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_watchlist
       summary: Create a watchlist record
       tags:
@@ -58726,9 +58968,11 @@ paths:
   /v1/commerce/watchlist/{watchlistid}:
     delete:
       description: |-
-        Deletes the watchlist record with this id.
+        Removes the watchlist with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: delete_v1_commerce_watchlist_by_watchlistid
       parameters:
       - in: path
@@ -58742,9 +58986,11 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the watchlist record with this id.
+        Returns the one watchlist with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: get_v1_commerce_watchlist_by_watchlistid
       parameters:
       - in: path
@@ -58758,9 +59004,11 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored watchlist, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: patch_v1_commerce_watchlist_by_watchlistid
       parameters:
       - in: path
@@ -58774,9 +59022,11 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: post_v1_commerce_watchlist_by_watchlistid
       parameters:
       - in: path
@@ -58784,15 +59034,17 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one watchlist record
+      summary: Update one watchlist record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the watchlist record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the watchlist with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's watchlist is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401.
       operationId: put_v1_commerce_watchlist_by_watchlistid
       parameters:
       - in: path
@@ -58807,9 +59059,13 @@ paths:
   /v1/commerce/webhook/:
     get:
       description: |-
-        Returns this tenant's webhook records.
+        Returns this tenant's webhook records as a pagination envelope — page, display, count, models and facets — so the records are under `models` and not at the top level. `display` sets the page size and `page` the 1-based page (paging needs both; `display` alone just caps the result), and `sort` names the field to order by. When the request carries no resolvable org namespace this answers 200 with an EMPTY page rather than an error, so an empty `models` means nothing was readable for this tenant — not necessarily that no records exist.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A webhook carries the delivery endpoint and the access token sent with it, so it is admin-gated: this is outbound credential material, not catalogue.
       operationId: get_v1_commerce_webhook
       summary: List webhook records
       tags:
@@ -58817,9 +59073,13 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Creates one webhook record and returns it, including the id every other operation on this resource addresses it by.
+        Creates one webhook from the request body and returns the stored record, including the id every other operation on this resource addresses it by.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A webhook carries the delivery endpoint and the access token sent with it, so it is admin-gated: this is outbound credential material, not catalogue.
       operationId: post_v1_commerce_webhook
       summary: Create a webhook record
       tags:
@@ -58828,9 +59088,13 @@ paths:
   /v1/commerce/webhook/{webhookid}:
     delete:
       description: |-
-        Deletes the webhook record with this id.
+        Removes the webhook with this id, after writing a copy aside under an internal deleted key — so the record stops answering here but is not erased from storage. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A webhook carries the delivery endpoint and the access token sent with it, so it is admin-gated: this is outbound credential material, not catalogue.
       operationId: delete_v1_commerce_webhook_by_webhookid
       parameters:
       - in: path
@@ -58844,9 +59108,13 @@ paths:
       x-app: commerce
     get:
       description: |-
-        Returns the webhook record with this id.
+        Returns the one webhook with this id.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A webhook carries the delivery endpoint and the access token sent with it, so it is admin-gated: this is outbound credential material, not catalogue.
       operationId: get_v1_commerce_webhook_by_webhookid
       parameters:
       - in: path
@@ -58860,9 +59128,13 @@ paths:
       x-app: commerce
     patch:
       description: |-
-        Updates only the fields present in the body and leaves the rest as they are.
+        Loads the stored webhook, decodes the body over it and writes the result, so fields the body omits keep the values they already had. An id that does not exist answers 404.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A webhook carries the delivery endpoint and the access token sent with it, so it is admin-gated: this is outbound credential material, not catalogue.
       operationId: patch_v1_commerce_webhook_by_webhookid
       parameters:
       - in: path
@@ -58876,9 +59148,13 @@ paths:
       x-app: commerce
     post:
       description: |-
-        Published because this address accepts every method the generator knows. Creation is POST on the collection above; POST here addresses a record that already exists.
+        The method-override door, not a second create — creation is POST on the collection. With no override this does exactly what PATCH does: the fields present in the body are written and the rest are left alone. Set `_method` (form field or query parameter) or the `X-HTTP-Method-Override` header to PUT, PATCH or DELETE and it performs THAT method instead, so a POST to this address can replace or DELETE the record. Any other override value is ignored and the call stays a PATCH.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A webhook carries the delivery endpoint and the access token sent with it, so it is admin-gated: this is outbound credential material, not catalogue.
       operationId: post_v1_commerce_webhook_by_webhookid
       parameters:
       - in: path
@@ -58886,15 +59162,19 @@ paths:
         required: true
         schema:
           type: string
-      summary: Act on one webhook record
+      summary: Update one webhook record, or tunnel another method at it
       tags:
       - commerce
       x-app: commerce
     put:
       description: |-
-        Replaces the webhook record with this id: fields absent from the body are reset, which is what makes this different from PATCH.
+        Replaces the webhook with this id: the body is decoded onto an EMPTY record that keeps only the existing key, so every field the body omits is reset to its zero value. That is the whole difference from PATCH, and it is how a partial PUT silently clears fields. An id that does not exist answers 404 — this verb never creates.
 
-        Scoped to the caller's own tenant: the org comes from the validated session, never from the body or a header, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+        Scoped to the caller's own tenant: the store is keyed by the org the edge resolves from the verified token, and a client-sent X-Org-Id is deleted before routing rather than trusted, so one tenant's webhook is not addressable by another even by exact id — an id outside the caller's tenant answers 404, the same as one that does not exist.
+
+        An anonymous call is refused 401. The token must carry the admin permission — a plain member's token is refused 403 here, on reads as well as writes.
+
+        A webhook carries the delivery endpoint and the access token sent with it, so it is admin-gated: this is outbound credential material, not catalogue.
       operationId: put_v1_commerce_webhook_by_webhookid
       parameters:
       - in: path
