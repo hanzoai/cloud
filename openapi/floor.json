@@ -1,6 +1,6 @@
 {
-  "paths": 1751,
-  "operations": 2509,
+  "paths": 1753,
+  "operations": 2511,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -20,7 +20,7 @@
     "balancers": 4,
     "base": 1,
     "benchmark": 6,
-    "billing": 38,
+    "billing": 39,
     "blueprint": 3,
     "books": 25,
     "bot": 11,
@@ -96,7 +96,7 @@
     "ingress": 18,
     "insights": 2,
     "install-patch": 1,
-    "integrations": 32,
+    "integrations": 33,
     "k8s": 5,
     "kb": 9,
     "keys": 3,
