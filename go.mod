@@ -25,7 +25,7 @@ require (
 	github.com/hanzoai/namespace v1.2.0
 	github.com/hanzoai/notify v1.7.2
 	github.com/hanzoai/plans v1.4.14
-	github.com/hanzoai/pricing v1.4.7
+	github.com/hanzoai/pricing v1.4.10
 	github.com/hanzoai/pubsub v1.4.5
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
@@ -71,7 +71,6 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
