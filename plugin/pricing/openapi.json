@@ -66,7 +66,7 @@
     },
     "/v1/admin/catalog/providers/{name}": {
       "patch": {
-        "operationId": "patch_v1_admin_catalog_providers_by_name",
+        "operationId": "patch_v1_admin_catalog_providers_name",
         "summary": "Sets one provider's availability overlay.",
         "description": "Sets one provider's availability overlay.\n\nThe overlay decides whether a provider is off, in beta for named orgs, or\ngenerally available, and carries the price overrides applied on top of the\ncatalog. Only the fields the patch names change; every other field keeps the\nvalue it had, and an absent overlay starts from the catalog default (enabled).\nAnswers the new effective overlay, so a console needs no second read.\n\nSuperAdmin only.",
         "tags": [
@@ -612,7 +612,7 @@
     },
     "/v1/pricing/model/{name}": {
       "get": {
-        "operationId": "get_v1_pricing_model_by_name",
+        "operationId": "get_v1_pricing_model_name",
         "summary": "Returns one model's catalog entry — its pricing, context window and capabilities as the pricing source records them.",
         "description": "Returns one model's catalog entry — its pricing, context window and\ncapabilities as the pricing source records them. A model hidden for the\ncaller's org answers the same 404 an unknown name does, so a disabled model\ngets no existence oracle.",
         "tags": [

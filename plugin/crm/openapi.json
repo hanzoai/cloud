@@ -68,7 +68,7 @@
     },
     "/v1/crm/applications/{id}": {
       "get": {
-        "operationId": "get_v1_crm_applications_by_id",
+        "operationId": "get_v1_crm_applications_id",
         "summary": "Returns one Startup Program application with its AI screen and stage history.",
         "description": "Returns one Startup Program application with its AI screen and stage history.\nAn id belonging to another org reads as not found.",
         "tags": [
@@ -91,7 +91,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Application"
+                  "$ref": "#/components/schemas/ProgramApplication"
                 }
               }
             },
@@ -100,7 +100,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_crm_applications_by_id",
+        "operationId": "patch_v1_crm_applications_id",
         "summary": "Moves one Startup Program application through the pipeline.",
         "description": "Moves one Startup Program application through the pipeline. The\nmove is recorded on the application's timeline, attributed to the calling\nstaff user: it may advance exactly one stage, go back to any earlier stage,\nreject from any non-rejected stage, or reopen a rejected application to\n`applied`; anything else is refused. Rejecting requires a reason. A note with\nno stage change is still recorded.",
         "tags": [
@@ -138,7 +138,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Application"
+                  "$ref": "#/components/schemas/ProgramApplication"
                 }
               }
             },
@@ -217,7 +217,7 @@
     },
     "/v1/crm/companies/{id}": {
       "delete": {
-        "operationId": "delete_v1_crm_companies_by_id",
+        "operationId": "delete_v1_crm_companies_id",
         "summary": "Removes one of the caller org's companies and answers 204.",
         "description": "Removes one of the caller org's companies and answers 204. Any\ncontact or opportunity in the org that referenced it keeps existing with the\nreference cleared, so nothing is left pointing at a company that is gone.",
         "tags": [
@@ -242,7 +242,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_crm_companies_by_id",
+        "operationId": "get_v1_crm_companies_id",
         "summary": "Returns one of the caller org's companies.",
         "description": "Returns one of the caller org's companies. An id belonging to\nanother org reads as not found.",
         "tags": [
@@ -274,7 +274,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_crm_companies_by_id",
+        "operationId": "put_v1_crm_companies_id",
         "summary": "Replaces one of the caller org's companies.",
         "description": "Replaces one of the caller org's companies. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required.",
         "tags": [
@@ -400,7 +400,7 @@
     },
     "/v1/crm/contacts/{id}": {
       "delete": {
-        "operationId": "delete_v1_crm_contacts_by_id",
+        "operationId": "delete_v1_crm_contacts_id",
         "summary": "Removes one of the caller org's contacts and answers 204.",
         "description": "Removes one of the caller org's contacts and answers 204. Any\nopportunity in the org that named it point of contact keeps existing with\nthat reference cleared.",
         "tags": [
@@ -425,7 +425,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_crm_contacts_by_id",
+        "operationId": "get_v1_crm_contacts_id",
         "summary": "Returns one of the caller org's contacts.",
         "description": "Returns one of the caller org's contacts. An id belonging to\nanother org reads as not found.",
         "tags": [
@@ -457,7 +457,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_crm_contacts_by_id",
+        "operationId": "put_v1_crm_contacts_id",
         "summary": "Replaces one of the caller org's contacts.",
         "description": "Replaces one of the caller org's contacts. Every writable field\nis taken from the request, so a field the request omits is CLEARED — send the\nwhole record. One of firstName, lastName or email is required.",
         "tags": [
@@ -583,7 +583,7 @@
     },
     "/v1/crm/opportunities/{id}": {
       "delete": {
-        "operationId": "delete_v1_crm_opportunities_by_id",
+        "operationId": "delete_v1_crm_opportunities_id",
         "summary": "Removes one of the caller org's deals and answers 204.",
         "description": "Removes one of the caller org's deals and answers 204.",
         "tags": [
@@ -608,7 +608,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_crm_opportunities_by_id",
+        "operationId": "get_v1_crm_opportunities_id",
         "summary": "Returns one of the caller org's deals.",
         "description": "Returns one of the caller org's deals. An id belonging to\nanother org reads as not found.",
         "tags": [
@@ -640,7 +640,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_crm_opportunities_by_id",
+        "operationId": "put_v1_crm_opportunities_id",
         "summary": "Replaces one of the caller org's deals.",
         "description": "Replaces one of the caller org's deals. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required and the stage must be a pipeline\nstage.",
         "tags": [
@@ -712,81 +712,6 @@
   },
   "components": {
     "schemas": {
-      "Application": {
-        "properties": {
-          "company": {
-            "description": "Company is the applicant's company name.",
-            "type": "string"
-          },
-          "companyId": {
-            "description": "CompanyID is the CRM Company minted for this lead at intake, so the startup\nalso appears in the org's standard CRM tabs. Empty when that best-effort\nprojection did not run.",
-            "type": "string"
-          },
-          "contactId": {
-            "description": "ContactID is the CRM Contact minted for this lead at intake. Empty when that\nbest-effort projection did not run.",
-            "type": "string"
-          },
-          "contactName": {
-            "description": "ContactName is the person who applied.",
-            "type": "string"
-          },
-          "createdAt": {
-            "description": "CreatedAt is the unix second the application arrived. Server-owned.",
-            "type": "integer"
-          },
-          "email": {
-            "description": "Email is the applicant's email — half of the (email, company) key a\nresubmission refreshes instead of duplicating.",
-            "type": "string"
-          },
-          "events": {
-            "description": "Events is the append-only stage-transition log, oldest first.",
-            "items": {
-              "$ref": "#/components/schemas/StageEvent"
-            },
-            "type": "array"
-          },
-          "id": {
-            "description": "ID is the server-minted application id (\"appl_\" + 128 random bits).",
-            "type": "string"
-          },
-          "metadata": {
-            "additionalProperties": {
-              "type": "object"
-            },
-            "description": "Metadata is the FULL submitted form, every field, including the arrays the\npromoted columns above do not carry (tier1Investors, useCases) and the\ndeterministic tier1Matched list.",
-            "type": "object"
-          },
-          "reason": {
-            "description": "Reason is why the application was rejected, required to reject. Empty\notherwise.",
-            "type": "string"
-          },
-          "role": {
-            "description": "Role is the applicant's role at their company.",
-            "type": "string"
-          },
-          "screen": {
-            "$ref": "#/components/schemas/ScreenResult",
-            "description": "Screen is the AI screen. It runs after intake, so a freshly created\napplication carries a \"pending\" screen."
-          },
-          "stage": {
-            "description": "Stage is the pipeline stage: applied, screened, qualified, credits-offered,\nonboarded or rejected. Server-owned — it starts at \"applied\" and moves only\nthrough the transition machine.",
-            "type": "string"
-          },
-          "tier1": {
-            "description": "Tier1 is whether the applicant is tier-1 backed, derived deterministically\nat intake from the submitted fund list — independent of the AI screen.",
-            "type": "boolean"
-          },
-          "updatedAt": {
-            "description": "UpdatedAt is the unix second of the last write. Server-owned.",
-            "type": "integer"
-          },
-          "website": {
-            "description": "Website is the applicant's website as submitted.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "Company": {
         "properties": {
           "arr": {
@@ -942,6 +867,81 @@
         },
         "type": "object"
       },
+      "ProgramApplication": {
+        "properties": {
+          "company": {
+            "description": "Company is the applicant's company name.",
+            "type": "string"
+          },
+          "companyId": {
+            "description": "CompanyID is the CRM Company minted for this lead at intake, so the startup\nalso appears in the org's standard CRM tabs. Empty when that best-effort\nprojection did not run.",
+            "type": "string"
+          },
+          "contactId": {
+            "description": "ContactID is the CRM Contact minted for this lead at intake. Empty when that\nbest-effort projection did not run.",
+            "type": "string"
+          },
+          "contactName": {
+            "description": "ContactName is the person who applied.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is the unix second the application arrived. Server-owned.",
+            "type": "integer"
+          },
+          "email": {
+            "description": "Email is the applicant's email — half of the (email, company) key a\nresubmission refreshes instead of duplicating.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Events is the append-only stage-transition log, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/StageEvent"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the server-minted application id (\"appl_\" + 128 random bits).",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Metadata is the FULL submitted form, every field, including the arrays the\npromoted columns above do not carry (tier1Investors, useCases) and the\ndeterministic tier1Matched list.",
+            "type": "object"
+          },
+          "reason": {
+            "description": "Reason is why the application was rejected, required to reject. Empty\notherwise.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Role is the applicant's role at their company.",
+            "type": "string"
+          },
+          "screen": {
+            "$ref": "#/components/schemas/ScreenResult",
+            "description": "Screen is the AI screen. It runs after intake, so a freshly created\napplication carries a \"pending\" screen."
+          },
+          "stage": {
+            "description": "Stage is the pipeline stage: applied, screened, qualified, credits-offered,\nonboarded or rejected. Server-owned — it starts at \"applied\" and moves only\nthrough the transition machine.",
+            "type": "string"
+          },
+          "tier1": {
+            "description": "Tier1 is whether the applicant is tier-1 backed, derived deterministically\nat intake from the submitted fund list — independent of the AI screen.",
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the unix second of the last write. Server-owned.",
+            "type": "integer"
+          },
+          "website": {
+            "description": "Website is the applicant's website as submitted.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ScreenResult": {
         "properties": {
           "draftReply": {
@@ -1013,7 +1013,7 @@
           "data": {
             "description": "Data is the page of applications, newest first.",
             "items": {
-              "$ref": "#/components/schemas/Application"
+              "$ref": "#/components/schemas/ProgramApplication"
             },
             "type": "array"
           }

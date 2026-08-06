@@ -331,6 +331,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// The login-manager teardown, for the link process that has no session store
 	// in it — two doors onto the ONE StopSessions (sessions_rpc.go).
 	exposeSessions()
+	exposeRunOnBehalf()
 
 	o := agentOps{s: s}
 	// Bridge FIRST, and at the door this SUBSYSTEM is, not on one node inside it: a

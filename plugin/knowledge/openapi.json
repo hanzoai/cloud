@@ -73,7 +73,7 @@
     },
     "/v1/kb/connectors/{provider}": {
       "delete": {
-        "operationId": "delete_v1_kb_connectors_by_provider",
+        "operationId": "delete_v1_kb_connectors_provider",
         "summary": "Revokes a connection: it tombstones the stored credential so a later sync cannot reuse it, purges this provider's points from the org's vector namespace, and marks the connector disconnected.",
         "description": "Revokes a connection: it tombstones the stored credential\nso a later sync cannot reuse it, purges this provider's points from the org's\nvector namespace, and marks the connector disconnected. The documents already\ningested stay in the org's store — they are the org's own data — but stop being\nretrievable by search; a caller deletes them through the document surface.",
         "tags": [
@@ -106,7 +106,7 @@
     },
     "/v1/kb/connectors/{provider}/callback": {
       "get": {
-        "operationId": "get_v1_kb_connectors_by_provider_callback",
+        "operationId": "get_v1_kb_connectors_provider_callback",
         "summary": "CompleteConnectorOAuth finishes an OAuth connection: it exchanges the provider's code for a token, seals that token in KMS, and records the connection.",
         "description": "CompleteConnectorOAuth finishes an OAuth connection: it exchanges the\nprovider's code for a token, seals that token in KMS, and records the\nconnection. THE ORG COMES FROM THE SIGNED STATE, not from a header and not from\nthe provider, so an attacker cannot bind their own account to someone else's\norg — a tampered, expired or foreign-provider state is refused outright. The\ntoken itself is never returned, never written into the document, and never\nlogged; the document holds only its KMS path.",
         "tags": [
@@ -166,7 +166,7 @@
     },
     "/v1/kb/connectors/{provider}/connect": {
       "get": {
-        "operationId": "get_v1_kb_connectors_by_provider_connect",
+        "operationId": "get_v1_kb_connectors_provider_connect",
         "summary": "StartConnectorOAuth returns the provider authorize URL the console opens to connect this org's account.",
         "description": "StartConnectorOAuth returns the provider authorize URL the console opens to\nconnect this org's account. There is no server-side redirect — the console\nstays in control of the navigation. The URL carries a state this server SIGNED\nover the caller's validated org, so the connection the callback completes can\nonly ever land in that org.",
         "tags": [
@@ -199,7 +199,7 @@
     },
     "/v1/kb/connectors/{provider}/sync": {
       "post": {
-        "operationId": "post_v1_kb_connectors_by_provider_sync",
+        "operationId": "post_v1_kb_connectors_provider_sync",
         "summary": "Pulls the provider's documents for the caller's org and files them as knowledge sources, which the store's own hook then indexes — so a synced document is retrievable exactly like a hand-written page.",
         "description": "Pulls the provider's documents for the caller's org and files\nthem as knowledge sources, which the store's own hook then indexes — so a\nsynced document is retrievable exactly like a hand-written page. The org is the\nvalidated tenant and the credential is read from KMS, so an org can only ever\nsync its own connection. A provider failure is reported honestly (502) and\nrecorded on the connector rather than silently swallowed.",
         "tags": [

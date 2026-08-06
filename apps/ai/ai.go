@@ -25,6 +25,7 @@ import (
 	aictl "github.com/hanzoai/ai/controllers"
 	aiobject "github.com/hanzoai/ai/object"
 	airouters "github.com/hanzoai/ai/routers"
+	aiweb "github.com/hanzoai/ai/web"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/websearch"
 	"github.com/hanzoai/cloud/manifest"
@@ -327,6 +328,52 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			return false, nil // no cap installed → uncapped, the same semantics a nil hook had
 		}
 		return f(ctx, subject, namespace)
+	})
+	// ONE CORS AUTHORITY. cloud.EdgeCORS decides which browser origins may read
+	// this edge; this takes ai's own answer out of the request.
+	//
+	// hanzoai/ai carries routers.CorsFilter, a filter it inserts ahead of every
+	// route, which REFUSES with 403 any origin outside `allowedOriginSuffixes` — 21
+	// apex domains compiled into the module. That list cannot name a customer's
+	// domain, and a deployment cannot change it, so the shipped feature (fork
+	// hanzoai/console, deploy it on your own domain, call this API) was structurally
+	// impossible: cloud would admit the origin, ai would refuse the call. The
+	// preflight short-circuits in EdgeCORS and never reaches ai, so the browser saw
+	// a clean 204 followed by a 403 — allowed preflight, denied request, the classic
+	// asymmetry.
+	//
+	// The filter's POSITIVE half is already dead in production: setCorsHeaders
+	// returns early whenever X-Forwarded-Host is set, which the ingress always sets,
+	// so ai has not added a CORS header at the edge in a long time. Only its refusal
+	// is live. Clearing Origin takes its own `origin == ""` early return, which adds
+	// nothing and refuses nothing — so what is removed is exactly the second verdict,
+	// and nothing else.
+	//
+	// SCOPED AND CONDITIONAL, both deliberately:
+	//
+	//   - only for origins cloud ALREADY ADMITTED (cloud.CORSAllows — the same
+	//     predicate EdgeCORS used, same instance, same cache, so the two cannot
+	//     disagree). A denied origin keeps its header and ai still answers 403
+	//     exactly as it does today: this changes the allow path only.
+	//   - only for non-upgrade requests. controllers/dev_bridge.go guards cross-site
+	//     WebSocket hijacking with CheckOrigin, which returns TRUE on an empty Origin
+	//     to admit CLI clients — clearing it there would fail OPEN. A socket has no
+	//     preflight and no ACAO; its Origin check is a different mechanism and stays
+	//     with the handler that owns the socket.
+	//
+	// BeforeStatic, so it runs ahead of every BeforeRouter filter including
+	// CorsFilter regardless of the order InstallFilters ran in.
+	airouters.App.InsertFilter("*", aiweb.BeforeStatic, func(ctx *aiweb.Context) {
+		r := ctx.Request
+		if r == nil || r.Header.Get("Origin") == "" {
+			return
+		}
+		if r.Header.Get("Upgrade") != "" {
+			return
+		}
+		if cloud.CORSAllows(r.Context(), r.Header.Get("Origin")) {
+			r.Header.Del("Origin")
+		}
 	})
 	// The MCP door's inventory, registered BEFORE the wildcard below so the
 	// reading order is the routing order (see mcp.go — the router would pick the

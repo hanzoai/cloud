@@ -23,6 +23,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -66,16 +67,35 @@ func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte,
 		}
 		rows := make([]finance.UsageRow, 0, len(reply.Rows))
 		for _, r := range reply.Rows {
-			// A usage row is a FIGURE SOMEONE READS: per-token debits are
-			// routinely finer than a cent (0.00589 USD is a real row), and
-			// Minor()'s exactness guard turned every such ledger into a 502 on
-			// the usage page. RoundMinor is the explicit display rounding that
-			// guard tells us to make.
-			cents, cerr := r.Amount.RoundMinor()
+			// Round DOWN, explicitly — the same choice balance.go:126 already made,
+			// for the same reason, on a row read from the same ledger.
+			//
+			// Minor() REFUSES anything finer than a cent rather than round behind
+			// the caller. A per-token AI charge is routinely finer than a cent, so
+			// on this path the refusal was not an edge case: ONE sub-cent row in the
+			// page failed the whole read, and the caller (billing.go:458) tests err
+			// before coResident, so it answered 502 "billing upstream unreachable"
+			// with nothing upstream involved. That is the 2026-08-03 balance bug
+			// verbatim; balance and ai were converted then, this row was missed.
+			// Measured 2026-08-06: /v1/billing/balance 200, /v1/billing/usage 502,
+			// same org, same ledger, same process — only this call differed.
+			cents, cerr := r.Amount.FloorMinor()
 			if cerr != nil {
-				return nil, false, cerr
+				// The peer ANSWERED and the reply did not parse — a real failure,
+				// not an absent ledger. Report it as handled so it surfaces here
+				// rather than falling through to a commerce proxy that is not
+				// configured on this deployment and would mask it as a 501.
+				return nil, true, fmt.Errorf("usage: commerce ledger row %s: %w", r.ID, cerr)
 			}
-			rows = append(rows, finance.UsageRow{ID: r.ID, Model: r.Model, Cents: cents, CreatedAt: r.CreatedAt})
+			// Carry the EXACT debit, not just its rounding. usageEnvelope emits it as
+			// `decimal`, and that field is the whole reason a page of sub-cent calls
+			// totals correctly instead of totalling zero — dropping Amount here would
+			// have traded the 502 for a silently understated bill.
+			exact, perr := money.ParseUSD(r.Amount.Decimal)
+			if perr != nil {
+				return nil, true, fmt.Errorf("usage: commerce ledger row %s amount %q: %w", r.ID, r.Amount.Decimal, perr)
+			}
+			rows = append(rows, finance.UsageRow{ID: r.ID, Model: r.Model, Cents: cents, Amount: exact, CreatedAt: r.CreatedAt})
 		}
 		env := usageEnvelope(org, rows)
 		if out, ok := enrichUsageLedger(env, product, groupBy); ok {

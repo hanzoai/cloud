@@ -34,12 +34,20 @@ func init() {
 // (the embedded runtime serves only the list) and none is registered here.
 //
 // Why an explicit cloud route rather than only the order-70 wildcard: this pins the
-// public flat path to the runtime's internal /api/sessions route SERVER-SIDE (the
-// same discipline query.go uses for the composite query) AND enforces the tenant
-// gate at the cloud boundary — an org-less caller gets a clean 403 here before the
+// public flat path to the runtime's internal /api/sessions route SERVER-SIDE AND
+// enforces the tenant gate at the cloud boundary — an org-less caller gets a clean 403 here before the
 // request reaches the runtime, and the org the runtime binds (gen_ai.hanzo.org_id
 // from X-Org-Id) is the SAME validated tenant this handler refuses to proceed
 // without. Registered by mountScope (order 69), so it precedes the wildcard.
+//
+// This used to cite query.go's composite-query pin as the precedent for the move.
+// That file is GONE — it pinned POST /v1/o11y/query_range to the v3 engine, and when
+// it went the module's v5 querier took the address, whose composite accepts only
+// {queries:[…]}. The console still sent the v3 {queryType,panelType,builderQueries}
+// envelope and every Logs page 400'd on "unknown field \"queryType\" in composite
+// query". Citing a deleted pin as the discipline to follow is how the next route
+// inherits the same break, so the reference is removed rather than reworded: this
+// route stands on its OWN pin, three lines below, which is still here.
 //
 // The list query (?limit=&offset=) rides through unchanged; the runtime returns the
 // llmobstypes.GettableSessions {items,offset,limit} under the {status,data} envelope
