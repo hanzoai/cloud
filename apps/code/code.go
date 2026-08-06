@@ -88,8 +88,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "code")
 	s := &service{
 		dataDir: deps.DataDir,
-		embed:   newEmbedder(deps.Embed, ""),            // embeddings ride the read-only (pk-) embed credential
-		synth:   newSynth(deps.AI, deps.AIDefaultModel), // synthesis is chat completion → M2M
+		embed:   newEmbedder(deps.Embed, ""),           // embeddings ride the read-only (pk-) embed credential
+		synth:   newSynth(deps.AI, cloud.DefaultModel), // synthesis is chat completion → M2M
 		log:     b.Log,
 		stores:  cloud.NewOrgStore(b, "code", openStore),
 	}

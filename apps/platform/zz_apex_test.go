@@ -1,6 +1,10 @@
 package platform
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/hanzoai/cloud/brand"
+)
 
 // The defect this fixes: selfGitHost was deps.Domain verbatim ("api.hanzo.ai"),
 // and the forge is a SIBLING ("git.hanzo.ai"), so hostAllowed never matched and
@@ -8,9 +12,9 @@ import "testing"
 func TestSelfForgeIsAllowedFromTheApex(t *testing.T) {
 	saved := selfGitHost
 	defer func() { selfGitHost = saved }()
-	selfGitHost = apexOf("api.hanzo.ai")
+	selfGitHost = brand.Apex("api.hanzo.ai")
 	if selfGitHost != "hanzo.ai" {
-		t.Fatalf("apexOf(api.hanzo.ai) = %q, want hanzo.ai", selfGitHost)
+		t.Fatalf("brand.Apex(api.hanzo.ai) = %q, want hanzo.ai", selfGitHost)
 	}
 	for _, h := range []string{"git.hanzo.ai", "ci.hanzo.ai", "cd.hanzo.ai", "hanzo.ai"} {
 		if !hostAllowed(h) {
@@ -23,8 +27,8 @@ func TestSelfForgeIsAllowedFromTheApex(t *testing.T) {
 }
 
 func TestApexOfMultiLabelSuffix(t *testing.T) {
-	if got := apexOf("api.example.co.uk"); got != "example.co.uk" {
-		t.Errorf("apexOf = %q, want example.co.uk (never the bare suffix)", got)
+	if got := brand.Apex("api.example.co.uk"); got != "example.co.uk" {
+		t.Errorf("brand.Apex = %q, want example.co.uk (never the bare suffix)", got)
 	}
 }
 
@@ -32,7 +36,7 @@ func TestApexOfMultiLabelSuffix(t *testing.T) {
 func TestOldDomainVerbatimRefusedTheForge(t *testing.T) {
 	saved := selfGitHost
 	defer func() { selfGitHost = saved }()
-	selfGitHost = "api.hanzo.ai" // what the code did before apexOf
+	selfGitHost = "api.hanzo.ai" // what the code did before the apex reduction
 	if hostAllowed("git.hanzo.ai") {
 		t.Fatal("expected the old behaviour to REFUSE git.hanzo.ai — if this passes, the bug never existed")
 	}

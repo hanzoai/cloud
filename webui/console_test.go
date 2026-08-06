@@ -1,10 +1,15 @@
 package webui
 
-// Tests for the embedded console: ONE binary serves the SPA at the web root AND
-// the /v1 API, from the same zip/fiber app. They drive real requests through the
-// stack (app.Fiber().Test) exactly as production Serve wires it — a /v1 route
-// registered FIRST, then Mount registered LAST — so the assertions prove the real
-// precedence and SPA-fallback behavior, not a mock of it.
+// Tests for the console: ONE binary serves the SPA at the web root AND the /v1
+// API, from the same zip/fiber app. They drive real requests through the stack
+// (app.Fiber().Test) exactly as production Serve wires it — a /v1 route registered
+// FIRST, then Mount registered LAST — so the assertions prove the real precedence
+// and SPA-fallback behavior, not a mock of it.
+//
+// The bundle is a FIXTURE now rather than the embed, and it is shaped like the
+// real one: a static export's shell with the default brand baked into its <title>
+// (what the white-label rewrite has to find) plus a bare-hash asset under
+// _next/static (what Next.js actually emits).
 
 import (
 	"bytes"
@@ -36,10 +41,22 @@ func newConsoleApp(t *testing.T) *zip.App {
 	})
 
 	// Console LAST — terminal catch-all, same as Serve.
-	if err := Mount(app); err != nil {
+	if err := Mount(app, testBundle()); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app
+}
+
+// shellHTML is the fixture SPA shell: a static export's <head> carrying the BAKED
+// default-brand title, which is the thing brandTitle has to rewrite per host.
+const shellHTML = `<!doctype html><html><head><meta charset="utf-8"><title>Hanzo Cloud Console</title></head><body><div id="__next"></div></body></html>`
+
+// testBundle is a console bundle in the shape a published release carries.
+func testBundle() fstest.MapFS {
+	return fstest.MapFS{
+		"index.html":                            {Data: []byte(shellHTML)},
+		"_next/static/css/bdec3a94ead6ad5f.css": {Data: []byte("body{margin:0}")},
+	}
 }
 
 // do issues a test request and returns status, body, and headers. Fiber's Test
@@ -74,16 +91,11 @@ func do(t *testing.T, app *zip.App, method, target string, headers map[string]st
 	return resp.StatusCode, body, resp.Header
 }
 
-// indexHTML is the embedded shell, read straight from the embed FS, so tests
-// compare against the exact bytes that ship (works for the fallback shell AND
-// the real console bundle the image build drops in).
+// indexHTML is the shell the fixture bundle carries, so the assertions compare
+// against the exact bytes the handler was given.
 func indexHTML(t *testing.T) []byte {
 	t.Helper()
-	b, err := consoleFS.ReadFile("dist/index.html")
-	if err != nil {
-		t.Fatalf("read embedded index.html: %v", err)
-	}
-	return b
+	return []byte(shellHTML)
 }
 
 // TestRoot_ServesConsoleIndex: GET / returns 200 with the console index.html.
@@ -98,7 +110,7 @@ func TestRoot_ServesConsoleIndex(t *testing.T) {
 		t.Errorf("GET / Content-Type = %q, want text/html*", ct)
 	}
 	if !bytes.Equal(body, indexHTML(t)) {
-		t.Errorf("GET / body is not the embedded index.html (got %d bytes, want %d)",
+		t.Errorf("GET / body is not the bundle index.html (got %d bytes, want %d)",
 			len(body), len(indexHTML(t)))
 	}
 	// The shell must not be cached, so a new build is picked up immediately.
@@ -166,7 +178,7 @@ func TestUnmatchedAPIPath_Is404_NotSPA(t *testing.T) {
 	}
 }
 
-// TestAsset_ServedWithType: a real embedded file (index.html by its own path) is
+// TestAsset_ServedWithType: a real file in the bundle (index.html by its own path) is
 // served with the right type and a cache header — proving assets are served
 // directly, not routed through the SPA fallback.
 func TestAsset_ServedDirectly(t *testing.T) {
@@ -184,10 +196,10 @@ func TestAsset_ServedDirectly(t *testing.T) {
 	}
 }
 
-// TestPathTraversal_CannotEscapeEmbedFS: crafted traversal paths must never read
-// outside the embed (io/fs rejects "..", leading "/", so Open/Stat fail and the
+// TestPathTraversal_CannotEscapeTheBundle: crafted traversal paths must never read
+// outside the bundle (io/fs rejects "..", leading "/", so Open/Stat fail and the
 // request falls back to the SPA shell — never a host file, never a 500).
-func TestPathTraversal_CannotEscapeEmbedFS(t *testing.T) {
+func TestPathTraversal_CannotEscapeTheBundle(t *testing.T) {
 	app := newConsoleApp(t)
 	for _, evil := range []string{
 		"/../go.mod",
@@ -212,15 +224,15 @@ func TestPathTraversal_CannotEscapeEmbedFS(t *testing.T) {
 			}
 		}
 		// Belt-and-suspenders: the body must never contain source we know lives
-		// outside the embed (go.mod's module line, serve.go's package clause).
+		// outside the bundle (go.mod's module line, serve.go's package clause).
 		if bytes.Contains(body, []byte("module github.com/hanzoai/cloud")) ||
 			bytes.Contains(body, []byte("func Listen(")) {
-			t.Errorf("GET %s leaked repo source outside the embed FS", evil)
+			t.Errorf("GET %s leaked repo source outside the bundle", evil)
 		}
 	}
 }
 
-// TestRoot_TitleIsHostBranded: the embedded console is a STATIC export whose
+// TestRoot_TitleIsHostBranded: the console is a STATIC export whose
 // <title> is baked to the default (Hanzo) brand at build time. serveIndex must
 // rewrite it to the REQUEST host's white-label brand, so console.lux.cloud never
 // renders "Hanzo Cloud Console" in the browser tab (a white-label violation) —

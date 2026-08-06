@@ -49,11 +49,13 @@ func rollback(s *cloud.Service[state], c *zip.Ctx) error {
 	if !platform.IsSemverTag(tag) {
 		return zip.ErrBadRequest("'tag' must be a clean semver (vX.Y.Z) — the prior release to pin")
 	}
-	// The release seam owns the CR patch (one way). It requires the paas control
-	// plane co-resident; absent it, fail closed with the honest reason.
-	if !cloud.ServiceReleaserRegistered() {
-		return zip.Errorf(http.StatusServiceUnavailable, "release plane not available (paas subsystem not co-resident)")
-	}
+	// The release seam owns the CR patch (one way) and answers for its own
+	// availability. There used to be a ServiceReleaserRegistered() pre-check here
+	// that 503'd with "paas subsystem not co-resident" — true of this process and
+	// false of the fleet, because platform runs as its own plugin. It refused
+	// every rollback in the split deployment and named a cause that was not the
+	// cause. OnServiceRelease now reaches platform over the plane and reports what
+	// actually happened.
 
 	// Resolve the CR to derive its repository (rollback keeps the repo; only the tag
 	// moves) and to 404 an unknown app before firing the release.
