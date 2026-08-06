@@ -13,8 +13,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +21,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/internal/planetest"
 )
 
 // ── Workers AI model validation (the SSRF guard) ────────────────────────────────
@@ -275,14 +274,16 @@ func TestNewMutationsRequireOrgAdmin(t *testing.T) {
 // "ai" spine. The balance is positive by default; set broke to model a frozen / broke
 // org the gate must refuse.
 type billStub struct {
-	broke  bool // when true the gate sees a 0 balance
-	mu     sync.Mutex
-	usages int32
-	body   []byte
+	broke bool // when true the gate sees a 0 balance
+	// The usage DEBIT crosses the internal plane, not HTTP — metering.Usage.Ref is
+	// `json:"-"` and could not survive a JSON body. The balance READ below is still
+	// HTTP. See internal/planetest.
+	peer *planetest.Commerce
 }
 
 func (b *billStub) server(t *testing.T) *httptest.Server {
 	t.Helper()
+	b.peer = planetest.Serve(t)
 	avail := int64(100000)
 	if b.broke {
 		avail = 0
@@ -291,23 +292,13 @@ func (b *billStub) server(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, fmt.Sprintf(`{"available":%d}`, avail))
 	})
-	mux.HandleFunc("/v1/billing/usage", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&b.usages, 1)
-		b.mu.Lock()
-		b.body, _ = io.ReadAll(r.Body)
-		b.mu.Unlock()
-		_, _ = io.WriteString(w, `{"transactionId":"tx_1","type":"usage"}`)
-	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
 }
 
-func (b *billStub) usageBody() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return string(b.body)
-}
+func (b *billStub) usages() int32     { return b.peer.Count() }
+func (b *billStub) usageBody() string { return string(b.peer.Body()) }
 
 // meteredHarness is harness + an injected commerce client, so the "ai"-provider meter
 // this subsystem builds is actually enabled and its debit is observable.
@@ -378,7 +369,7 @@ func TestWorkersAIMetersUnifiedSpine(t *testing.T) {
 
 	// Debit fired on the UNIFIED spine (async fire-and-forget). total=1000 tokens,
 	// rate=2000 uUSD/1k, BYO 100 bps → fee = 1000*2000/1000*100/10000 = 20 micro-USD.
-	waitFor(t, "usage debit", func() bool { return atomic.LoadInt32(&bill.usages) > 0 })
+	waitFor(t, "usage debit", func() bool { return bill.usages() > 0 })
 	ub := bill.usageBody()
 	for _, want := range []string{`"provider":"ai"`, `"service":"ai"`, `"model":"` + model + `"`, `"amountMicros":20`, `"user":"orga"`} {
 		if !strings.Contains(ub, want) {
@@ -409,7 +400,7 @@ func TestWorkersAIBrokeOrgRefusedOnNonText(t *testing.T) {
 	if len(rec.reqs) != 0 {
 		t.Fatalf("a refused inference was still proxied to Cloudflare (%d calls): %+v", len(rec.reqs), rec.reqs)
 	}
-	if n := atomic.LoadInt32(&bill.usages); n != 0 {
+	if n := bill.usages(); n != 0 {
 		t.Fatalf("a refused inference recorded %d debit(s); want 0", n)
 	}
 }
@@ -439,7 +430,7 @@ func TestWorkersAINoUsageBillsFloor(t *testing.T) {
 	if status != 200 {
 		t.Fatalf("no-usage run status=%d resp=%s", status, resp)
 	}
-	waitFor(t, "floor debit", func() bool { return atomic.LoadInt32(&bill.usages) > 0 })
+	waitFor(t, "floor debit", func() bool { return bill.usages() > 0 })
 	if ub := bill.usageBody(); !strings.Contains(ub, `"amountMicros":100`) {
 		t.Fatalf("a no-usage run must bill the floor (100); body=%s", ub)
 	}

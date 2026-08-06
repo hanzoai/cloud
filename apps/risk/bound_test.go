@@ -33,6 +33,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/internal/planetest"
+	moneyplane "github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -367,11 +369,21 @@ type debit struct {
 	Micros    int64
 }
 
-// asks is how many times the money plane has been reached, for any reason.
+// asks is how many times the money plane has been reached, for any reason — the HTTP
+// reads AND the plane debits. Counting only the HTTP half would let a surface that
+// must name no subject debit freely and still read as silent.
 func (l *ledger) asks() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.asked
+	return l.asked + len(l.posted)
+}
+
+// record takes one debit off the money plane. The billed org rides the CALLER, and the
+// amount is read in MICROS because a per-screen price is finer than a cent.
+func (l *ledger) record(org string, in moneyplane.RecordIn) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.posted = append(l.posted, debit{Org: org, User: in.Subject, Micros: planetest.Micros(in.Amount)})
 }
 
 func (l *ledger) Do(r *http.Request) (*http.Response, error) {
@@ -384,22 +396,10 @@ func (l *ledger) Do(r *http.Request) (*http.Response, error) {
 	switch {
 	case strings.HasSuffix(r.URL.Path, "/v1/billing/balance"):
 		return reply(http.StatusOK, fmt.Sprintf(`{"available":%d,"balance":%d,"currency":"usd"}`, l.available, l.available)), nil
-	case strings.HasSuffix(r.URL.Path, "/v1/billing/usage"):
-		// The field names are commerce's own wire: `amount` is cents, `amountMicros`
-		// the sub-cent form a per-screen price needs.
-		var u struct {
-			User         string `json:"user"`
-			AmountMicros int64  `json:"amountMicros"`
-			AmountCents  int64  `json:"amount"`
-		}
-		body, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(body, &u)
-		micros := u.AmountMicros
-		if micros == 0 {
-			micros = u.AmountCents * 10_000
-		}
-		l.posted = append(l.posted, debit{Org: r.Header.Get("X-Org-Id"), User: u.User, Micros: micros})
-		return reply(http.StatusOK, `{}`), nil
+	// There is no /v1/billing/usage case. The DEBIT left HTTP: metering.Usage.Ref is
+	// `json:"-"` and could not survive a JSON body, so it crosses the internal plane
+	// and lands in [ledger.record] instead. A case here would be dead code that made
+	// the debits below look accounted for.
 	default:
 		// Spend caps and anything else this surface does not use: absent, which the
 		// client reads as "no cap configured".
@@ -456,6 +456,9 @@ func reply(code int, body string) *http.Response {
 // mountBilled mounts risk with a REAL metering client pointed at books.
 func mountBilled(t *testing.T, books *ledger) *zip.App {
 	t.Helper()
+	// The balance READ is HTTP and `books` answers it; the DEBIT crosses the plane and
+	// lands in books.record. Both halves of the money contract, one ledger.
+	planetest.ServeWith(t, books.record)
 	client, err := metering.New(metering.Config{BaseURL: "http://commerce.test", Token: "t", Org: brandA, HTTPClient: books})
 	if err != nil {
 		t.Fatalf("metering client: %v", err)
