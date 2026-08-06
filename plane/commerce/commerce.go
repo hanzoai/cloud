@@ -85,8 +85,8 @@ func FinanceSpend(ctx context.Context, in *plane.SpendIn) (*plane.Spend, error) 
 // FinanceTxns ledger entries for this org.
 //
 // Calls plane.FinanceTxns on commerce over the peer plane.
-func FinanceTxns(ctx context.Context) (*plane.Txns, error) {
-	return plane.Ask[struct{}, plane.Txns](ctx, App, plane.FinanceTxns, &struct{}{})
+func FinanceTxns(ctx context.Context, in *plane.TxnsIn) (*plane.Txns, error) {
+	return plane.Ask[plane.TxnsIn, plane.Txns](ctx, App, plane.FinanceTxns, in)
 }
 
 // FinanceUsage recorded debits for this org.
