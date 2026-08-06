@@ -16,8 +16,10 @@ package platform
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"unsafe"
 
 	"testing"
@@ -180,37 +182,86 @@ func TestCanonicalProjectsNoPeerIsAnError(t *testing.T) {
 	}
 }
 
-// TestCanonicalProjectsSocketIsLoadBearing is the mutation that proves the wire is
-// the wire. The call succeeds; the socket is then UNLINKED with the peer still
-// alive and the call fails; the peer rebinds and it succeeds again.
+// TestCanonicalProjectsCoresidentSkipsTheWire pins the half of Ask that is NOT a
+// transport. When the peer is THIS process — a fused binary where iam and
+// platform are both mounted — plane.Ask finds it with zip.Serving and runs the op
+// through zip.Here, the same opByName and invoke the socket plane uses, with
+// nothing encoded and no kernel in the middle.
 //
-// It exists because a transport that never carries a byte looks exactly like one
-// that does from every angle except this one — which is the lesson clients/rpc.go
-// cost, and the reason plane_only_transport_test.go stands.
-func TestCanonicalProjectsSocketIsLoadBearing(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("ZIP_RUNTIME_DIR", dir)
+// So the socket is not load-bearing here, and asserting that it is would be
+// asserting the wrong thing: unlinking it changes nothing because nothing was
+// going to touch it.
+func TestCanonicalProjectsCoresidentSkipsTheWire(t *testing.T) {
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
 	plane.Unbind()
 	stop := servePeer(t, []plane.Project{{Owner: "acme", Name: "web"}})
+	t.Cleanup(func() { _ = stop() })
+
+	if zip.Serving("iam") == nil {
+		t.Fatal("iam is served by this process; zip.Serving must find it")
+	}
+	c := canonicalProjects{}
+	if _, err := c.List(context.Background(), "acme"); err != nil {
+		t.Fatalf("co-resident List: %v", err)
+	}
+	// The door is gone and the call still works, because it never used the door.
+	if err := os.Remove(zip.SocketPath("iam")); err != nil {
+		t.Fatalf("unlink: %v", err)
+	}
+	rows, err := c.List(context.Background(), "acme")
+	if err != nil {
+		t.Fatalf("a co-resident call must not depend on the socket: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Name != "web" {
+		t.Fatalf("co-resident List returned %+v", rows)
+	}
+}
+
+// TestCanonicalProjectsSocketIsLoadBearing is the other half: when the peer is
+// NOT this process, the socket is the whole dependency.
+//
+// "Not this process" is arranged the way zip.Serving actually decides it — it
+// keys on SocketPath(name), so a caller resolving iam.sock in a DIFFERENT runtime
+// directory misses the local registration and dials for real. That is the same
+// arrangement planewire_probe_test.go uses to capture the frames, and the bytes it
+// captured are the evidence that this path is a wire at all.
+//
+// The mutation is the point: the call succeeds, the socket is unlinked with the
+// peer still alive and it fails, the peer rebinds and it succeeds again. A
+// transport that never carries a byte looks exactly like one that does from every
+// angle except this one.
+func TestCanonicalProjectsSocketIsLoadBearing(t *testing.T) {
+	front, back := t.TempDir(), t.TempDir()
+
+	t.Setenv("ZIP_RUNTIME_DIR", back)
+	plane.Unbind()
+	stop := servePeer(t, []plane.Project{{Owner: "acme", Name: "web"}})
+	t.Cleanup(func() { _ = stop() })
+	peer := filepath.Join(back, "iam.sock")
+
+	// front is where the caller dials; it forwards to the peer's real socket.
+	relayTo(t, filepath.Join(front, "iam.sock"), peer)
+	t.Setenv("ZIP_RUNTIME_DIR", front)
+	plane.Unbind()
+	if zip.Serving("iam") != nil {
+		t.Fatal("the caller must NOT find iam locally, or this proves nothing about a wire")
+	}
 
 	c := canonicalProjects{}
 	if _, err := c.List(context.Background(), "acme"); err != nil {
-		t.Fatalf("with the socket bound, List must succeed: %v", err)
+		t.Fatalf("with the socket reachable, List must succeed: %v", err)
 	}
 
-	// The peer is still alive; only its door is gone.
-	sock := zip.SocketPath("iam")
-	if err := os.Remove(sock); err != nil {
-		t.Fatalf("unlink %s: %v", sock, err)
+	// The peer is alive; only the door the caller uses is gone.
+	if err := os.Remove(filepath.Join(front, "iam.sock")); err != nil {
+		t.Fatalf("unlink: %v", err)
 	}
 	if _, err := c.List(context.Background(), "acme"); err == nil {
 		t.Fatal("the socket was unlinked and the call SUCCEEDED — nothing is crossing it")
 	}
 
-	// Rebind and it works again: the socket is the whole dependency.
-	_ = stop()
-	stop = servePeer(t, []plane.Project{{Owner: "acme", Name: "web"}})
-	t.Cleanup(func() { _ = stop() })
+	// Rebind the caller's door and it works again.
+	relayTo(t, filepath.Join(front, "iam.sock"), peer)
 	rows, err := c.List(context.Background(), "acme")
 	if err != nil {
 		t.Fatalf("after rebinding, List must succeed again: %v", err)
@@ -218,6 +269,37 @@ func TestCanonicalProjectsSocketIsLoadBearing(t *testing.T) {
 	if len(rows) != 1 || rows[0].Name != "web" {
 		t.Fatalf("after rebinding, List returned %+v", rows)
 	}
+}
+
+// relayTo binds at and forwards every connection to peer, so a caller in one
+// runtime directory reaches a peer serving in another over a real socket.
+func relayTo(t *testing.T, at, peer string) {
+	t.Helper()
+	ln, err := net.Listen("unix", at)
+	if err != nil {
+		t.Fatalf("listen %s: %v", at, err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, aerr := ln.Accept()
+			if aerr != nil {
+				return
+			}
+			go func() {
+				defer func() { _ = c.Close() }()
+				up, derr := net.Dial("unix", peer)
+				if derr != nil {
+					return
+				}
+				defer func() { _ = up.Close() }()
+				done := make(chan struct{})
+				go func() { _, _ = io.Copy(up, c); _ = up.(*net.UnixConn).CloseWrite(); close(done) }()
+				_, _ = io.Copy(c, up)
+				<-done
+			}()
+		}
+	}()
 }
 
 // TestCanonicalProjectsHoldsNoAddress is the knob check. A peer is addressed by
