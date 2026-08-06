@@ -238,8 +238,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// PUT, not POST, because binding is idempotent: re-binding the same agent to
 	// the same machine is the state the caller asked for, not a second binding.
 	//
-	// Both literals are registered ahead of /v1/machines/:id so no machine id
-	// captures them — the same ordering /v1/machines/launch relies on. See bots.go.
+	// vm now answers on these SAME four addresses, so the translation bots.go used
+	// to keep is gone rather than moved — one spelling end to end.
 	zip.Get(reg, "/v1/machines/agents", o.listAgents,
 		zip.WithOperationID("listMachineAgents"), zip.WithTags("compute"))
 	zip.Put(reg, "/v1/machines/:id/agent", o.bindAgent,
