@@ -158,6 +158,9 @@ type declareSpec struct {
 	Tag        string
 	Hosts      []string
 	Env        []declareEnv
+	// SecretKeys are the env names whose values are SEALED IN KMS and referenced
+	// from the file, never carried in it. Sorted, so the render is byte-stable.
+	SecretKeys []string
 	Port       int
 	Replicas   int
 	// Automated is written as cd.automated. A branch declaration carries it
@@ -175,6 +178,11 @@ type declareSpec struct {
 type declareEnv struct {
 	Name  string `json:"name" yaml:"name"`
 	Value string `json:"value" yaml:"value"`
+	// Secret marks a value the caller knows is a credential. It is a HINT that
+	// may only ADD secrecy: the server seals anything shaped like a credential
+	// whether or not this is set (secretshape.go), because a values file is
+	// committed to git and git history is forever.
+	Secret bool `json:"secret,omitempty" yaml:"-"`
 }
 
 // platformProject is the fence the PLATFORM's own directories sync under. It
@@ -222,7 +230,14 @@ var reservedNames = map[string]bool{
 	"knative-serving": true, "istio-system": true, "cattle-system": true,
 	// the platform's own service directories, as the inventory holds them today
 	"collab": true, "enso": true, "extract-svc": true, "integrations": true,
-	"team": true, "zen": true,
+	"team": true, "zen": true, "team-go": true, "preview": true, "registry": true,
+	// other namespaces universe declares on these clusters. Reservation is a
+	// STATIC list because it must answer before any cluster is reached — a
+	// derivation from the LIVE namespace set would be the stronger rule, but it
+	// fails OPEN exactly when the apiserver is unreachable, which is the moment
+	// it is most needed. Named here, it is wrong only by omission and never by
+	// outage. See the follow-up note on reserved().
+	"adnexus": true, "bootnode": true, "pars-mainnet": true,
 	// brands, and the reserved SuperAdmin org
 	"hanzo": true, "lux": true, "zoo": true, "admin": true,
 }
@@ -239,12 +254,17 @@ func platformOwned(dir string) bool {
 	if reservedNames[dir] {
 		return true
 	}
-	for _, family := range []string{"kube-", "hanzo-", "lux-", "zoo-"} {
+	for _, family := range []string{"kube-", "hanzo-", "lux-", "zoo-", "pars-"} {
 		if strings.HasPrefix(dir, family) {
 			return true
 		}
 	}
-	return false
+	// `*-system` is the universal convention for an operator's own namespace
+	// (kms-operator-system, nchain-system, operator-system, cert-manager-system,
+	// and every operator SDK scaffold), so it is reserved as a SUFFIX rather than
+	// enumerated — the next operator installed must not be claimable in the
+	// window before someone remembers to add it.
+	return strings.HasSuffix(dir, "-system")
 }
 
 // reserved reports whether a directory may NOT be claimed by an ordinary org.
@@ -367,7 +387,23 @@ func (d declareSpec) render() []byte {
 	if d.Replicas > 0 {
 		w("replicas: %d\n", d.Replicas)
 	}
-	if len(d.Env) > 0 {
+	// SECRETS ARE REFERENCES, NEVER VALUES — the chart's own rule
+	// (charts/app/templates/kmssecret.yaml), and the reason a values file is safe
+	// to commit, publish and fork. A sealed key is named here and its material
+	// lives in KMS; the operator syncs it into <app>-env and the container reads
+	// it through secretKeyRef. Nothing below can carry credential material.
+	if len(d.SecretKeys) > 0 {
+		w("kmsSecrets:\n")
+		w("- name: %s\n", managedSecretName(d.Name))
+		w("  projectSlug: %s\n", d.Org)
+		w("  secretsPath: /%s\n", kmsSecretsPath(d.Name))
+		w("  secretName: %s\n", managedSecretName(d.Name))
+		w("  keys:\n")
+		for _, k := range d.SecretKeys {
+			w("  - %s\n", k)
+		}
+	}
+	if len(d.Env) > 0 || len(d.SecretKeys) > 0 {
 		w("env:\n")
 		for _, e := range d.Env {
 			w("- name: %s\n", e.Name)
@@ -375,6 +411,11 @@ func (d declareSpec) render() []byte {
 			// value here would still be PARSED by YAML first, and a version like
 			// 1.10 or an address like 0x53141 is not the string the caller meant.
 			w("  value: %s\n", yamlString(e.Value))
+		}
+		for _, k := range d.SecretKeys {
+			w("- name: %s\n", k)
+			w("  valueFrom:\n    secretKeyRef:\n      name: %s\n      key: %s\n",
+				managedSecretName(d.Name), k)
 		}
 	}
 	w("resources:\n")
@@ -556,16 +597,35 @@ func fenceOf(root, org string) (string, error) {
 					Project string `yaml:"project"`
 				} `yaml:"spec"`
 			} `yaml:"template"`
+			TemplatePatch string `yaml:"templatePatch"`
 		} `yaml:"spec"`
 	}
 	if err := yaml.Unmarshal(b, &set); err != nil {
 		return "", fmt.Errorf("does not parse as YAML: %w", err)
 	}
+	// templatePatch is rendered as TEXT and merged OVER the typed template, so a
+	// patch that sets spec.project overrides the fence invisibly to a check that
+	// reads only the template. Reading the template alone would confirm a fence
+	// the controller then replaces. Evaluating the merge faithfully means
+	// reimplementing the generator, so this refuses instead: a patch that so much
+	// as mentions the project is a fence this cannot predict.
+	if strings.Contains(set.Spec.TemplatePatch, "project") {
+		return "", fmt.Errorf("its templatePatch mentions `project`, which is merged OVER the template and would override the fence unseen")
+	}
 	expr := strings.TrimSpace(set.Spec.Template.Spec.Project)
 	if expr == "" {
 		return "", fmt.Errorf("declares no spec.template.spec.project, so it fences nothing this API can predict")
 	}
-	t, err := template.New("project").Funcs(sprig.TxtFuncMap()).Option("missingkey=error").Parse(expr)
+	// The generator's function map, minus the two the controller REMOVES. `env`
+	// and `expandenv` read the PROCESS environment, so leaving them in would
+	// render this check against cloud's environment and the controller against
+	// its own — the same expression, two answers, and the one that decides the
+	// fence is not this one. Removed rather than tolerated, so such a template
+	// fails to parse here and is refused.
+	funcs := sprig.TxtFuncMap()
+	delete(funcs, "env")
+	delete(funcs, "expandenv")
+	t, err := template.New("project").Funcs(funcs).Option("missingkey=error").Parse(expr)
 	if err != nil {
 		return "", fmt.Errorf("its project template does not parse: %w", err)
 	}
@@ -826,6 +886,18 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 				return fmt.Errorf("stat %s: %w", rel, statErr)
 			}
 
+			// LAST LINE. Everything above splits secrets out before rendering, so
+			// this should never fire — which is exactly why it is here. A commit
+			// to universe is irreversible: git history is replicated to every
+			// clone and cannot be unpublished, so the cost of one missed path is
+			// unbounded and the cost of this check is a scan of one small file.
+			// It reads the BYTES about to be written, not the inputs, so it holds
+			// however they were produced.
+			if leaked := leakedSecret(spec); leaked != "" {
+				return fmt.Errorf("refusing to commit %s: the rendered declaration carries credential material in %s — a values file is git history and cannot be unpublished",
+					declarePath(spec.Org, spec.Name), leaked)
+			}
+
 			changed := true
 			switch {
 			case created:
@@ -920,6 +992,23 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 		inventory.invalidate()
 	}
 	return res, nil
+}
+
+// leakedSecret reports the env name whose rendered VALUE looks like a
+// credential, or "" when the render is safe to commit.
+//
+// It re-asks the same question the split asked, of the OUTPUT rather than the
+// input. Two independent checks of one property is not duplication here: the
+// first decides what to seal, this one proves the decision held all the way to
+// the bytes, and they can only disagree if something between them is wrong —
+// which is the case worth catching.
+func leakedSecret(spec declareSpec) string {
+	for _, e := range spec.Env {
+		if mustSeal(e.Name, e.Value) {
+			return e.Name
+		}
+	}
+	return ""
 }
 
 // checkDeclared refuses an UPDATE that would need to change more than the tag.

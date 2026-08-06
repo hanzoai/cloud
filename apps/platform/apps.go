@@ -45,6 +45,7 @@ package platform
 import (
 	"net/http"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -222,6 +223,16 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 			return zip.ErrBadRequest("every env entry needs a name")
 		}
 	}
+	// SPLIT BEFORE ANYTHING IS RENDERED. A values file is committed to universe
+	// git, so a credential written into one is cleartext in git HISTORY forever,
+	// readable by everyone who can read the repository and unrecoverable by
+	// deletion. That is strictly worse than the database case the operator lane
+	// had, and it is why this split is here rather than deeper: nothing that
+	// could reach render() ever holds credential material.
+	plain, secretKeys, err := splitSecretEnv(s, c, dir, name, req.Env)
+	if err != nil {
+		return err
+	}
 
 	spec := declareSpec{
 		Name:       name,
@@ -229,7 +240,8 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 		Repository: declareRepository(s, dir, name),
 		Tag:        req.Tag,
 		Hosts:      []string{host},
-		Env:        req.Env,
+		Env:        plain,
+		SecretKeys: secretKeys,
 		Port:       port,
 		Replicas:   replicas,
 		// A declaration this API writes is CD-automated: it carries no operator
@@ -435,6 +447,50 @@ func listCI(s *cloud.Service[state], c *zip.Ctx) error {
 	return zip.Errorf(http.StatusNotImplemented,
 		"platform ci: continuous integration is not wired — this deployment has no forge API client, "+
 			"and answering an empty run list would be indistinguishable from a forge with no runs")
+}
+
+// splitSecretEnv seals every credential into KMS and returns the entries that
+// may safely be written to git, plus the names of the ones that may not.
+//
+// The rule is the operator lane's (secretshape.go), applied one step earlier:
+// the client's `secret` flag may only ADD secrecy, and the server seals anything
+// SHAPED like a credential regardless. What differs is the consequence of
+// missing one. In the operator lane a missed secret lands in a database column;
+// here it lands in a git commit that is replicated to every clone and cannot be
+// unpublished. So this fails closed harder: no KMS, no deploy.
+func splitSecretEnv(s *cloud.Service[state], c *zip.Ctx, org, app string, env []declareEnv) ([]declareEnv, []string, error) {
+	var plain []declareEnv
+	var keys []string
+	for _, e := range env {
+		if !e.Secret && !mustSeal(e.Name, e.Value) {
+			plain = append(plain, e)
+			continue
+		}
+		if strings.TrimSpace(e.Value) == "" {
+			// Nothing to seal and nothing to leak. A named-but-empty secret would
+			// otherwise mint a reference to a KMS record that does not exist.
+			return nil, nil, zip.ErrBadRequest("env " + e.Name + " is marked secret but carries no value")
+		}
+		if s.KMS == nil {
+			return nil, nil, zip.Errorf(http.StatusServiceUnavailable,
+				"env %s is a credential and this deployment has no KMS to seal it into — refusing to write it to git", e.Name)
+		}
+		if err := s.KMS.PutSecret(c.Context(), kmsSecretRef(org, app, e.Name), []byte(e.Value)); err != nil {
+			// The error names the KEY only. A 5xx body must never echo the value.
+			s.Log.Error("seal declare secret", "org", org, "app", app, "key", e.Name, "err", err)
+			return nil, nil, zip.Errorf(http.StatusBadGateway, "could not seal %s into KMS; nothing was written", e.Name)
+		}
+		keys = append(keys, e.Name)
+	}
+	if len(keys) > 0 {
+		sort.Strings(keys)
+		// The tenant needs a KMS identity for the operator to authenticate with,
+		// or the reference resolves to nothing and the pod waits on a Secret that
+		// never arrives. Best-effort, exactly as the operator lane treats it: the
+		// declaration is still correct, the sync reports pending.
+		ensureTenantKMSAuth(s, c.Context(), org)
+	}
+	return plain, keys, nil
 }
 
 // ── derivation (the security spine) ──────────────────────────────────────────
