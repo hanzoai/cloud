@@ -103,9 +103,22 @@ type Route struct {
 // on lifecycle stage — the CI exec path (never listens) and the live endpoint
 // (has listened) would emit different documents, which is exactly the drift this
 // package exists to prevent. Excluding it makes the projection total and stable.
+// TRACE and OPTIONS are excluded for the reason CONNECT and HEAD are: All()
+// binds them mechanically, nobody DECLARED them, and a published operation is a
+// promise. They are transport, not product.
+//
+// TRACE echoes the request back. It is a debugging verb, it is the Cross-Site
+// Tracing vector, and it should not be reachable on a public API at all — so
+// advertising 33 of them in the contract is worse than merely routing them,
+// because the contract is what SDKs, the CLI and the MCP tool list are built
+// from. OPTIONS is CORS preflight: a browser sends it, a person never does, and
+// `hanzo meet options` is not a command anyone wants.
+//
+// Between them they were 66 of the document's operations — 66 SDK methods, 66
+// CLI verbs and 66 MCP tools that existed because a route table was read as a
+// product surface.
 var methods = map[string]bool{
-	"GET": true, "PUT": true, "POST": true, "DELETE": true,
-	"OPTIONS": true, "PATCH": true, "TRACE": true,
+	"GET": true, "PUT": true, "POST": true, "DELETE": true, "PATCH": true,
 }
 
 // Methods returns the methods this generator publishes, sorted.
