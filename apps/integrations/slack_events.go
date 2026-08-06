@@ -177,7 +177,24 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		emitIngress(org, in, "")
 		reply := slackReplier(s, org, route.Channel, route.ThreadTS, route.User)
-		bridgeSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
+		bridgeSpawn(s, org, func() {
+			// SAY SOMETHING IMMEDIATELY. A turn is a real model completion and
+			// measured 9,955 / 35,893 / 52,985 ms in production — the plumbing is
+			// ~25ms of it. Until this, the person saw an empty thread for the whole
+			// of that, which is indistinguishable from the bot being broken; the
+			// day's actual bug reports were "it does nothing" for a system that was
+			// working and slow.
+			//
+			// setStatus is Slack's own affordance for exactly this and it is the
+			// only one available: there is NO SSE to a Slack client, so "streaming"
+			// here means a status and then a message, never a token stream.
+			//
+			// Best-effort by construction: a failed status must never cost the
+			// answer, so the error is dropped rather than returned. Slack clears it
+			// when the reply lands.
+			slackThinking(s, org, route.Channel, route.ThreadTS)
+			runBridgeTurn(s, org, in, reply)
+		})
 		return c.NoContent(http.StatusOK)
 	default: // slackRouteAck / slackRouteIgnore — valid but nothing to act on
 		return c.NoContent(http.StatusOK)
@@ -646,3 +663,42 @@ func slackReadBody(c *zip.Ctx) []byte {
 	}
 	return b
 }
+
+// slackThinking shows Slack's native "is thinking…" indicator on a thread while
+// a turn runs.
+//
+// It exists because the wait is REAL and long: a turn is a model completion,
+// measured 9,955–52,985 ms in production against ~25 ms of plumbing. Perceived
+// latency is the only kind we can fix without changing the model, and an empty
+// thread for fifty seconds reads as a dead bot.
+//
+// assistant.threads.setStatus is the ONE mechanism Slack offers here. There is no
+// SSE to a Slack client, so the honest vocabulary is: a status, then a message.
+// Anything else would be a second message to edit, which is worse — it occupies
+// the thread with a placeholder the reader has to skip past.
+//
+// It requires the assistant:write scope and a thread; a channel mention without a
+// thread has nowhere to hang a status, so that case is skipped rather than faked.
+// Every failure is swallowed: a status that did not render must never cost the
+// answer that follows it.
+func slackThinking(s *cloud.Service[state], org, channel, threadTS string) {
+	if strings.TrimSpace(threadTS) == "" || strings.TrimSpace(channel) == "" {
+		return // no thread to decorate; the reply itself is the only signal
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), slackStatusBudget)
+	defer cancel()
+	tok, err := TokenFor(ctx, org, "slack", slackBotTokenSecret)
+	if err != nil {
+		return
+	}
+	_ = slackChatPost(ctx, string(tok), "/assistant.threads.setStatus", map[string]any{
+		"channel_id": channel,
+		"thread_ts":  threadTS,
+		"status":     "is thinking…",
+	})
+}
+
+// slackStatusBudget bounds the status call. It is deliberately tiny: the status
+// is a courtesy that runs BEFORE the work, so a slow Slack must not delay the
+// answer it is announcing.
+const slackStatusBudget = 3 * time.Second
