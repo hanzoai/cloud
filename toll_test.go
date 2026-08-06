@@ -98,7 +98,13 @@ type tollRig struct {
 	app  *zip.App
 }
 
-func tollApp(t *testing.T) *tollRig {
+func tollApp(t *testing.T) *tollRig { return tollRigWith(t, true) }
+
+// tollRigWith composes the rig with or without the HTTP edge gate. edge=false is
+// not a variant anybody deploys — it is the question "what happens when the edge
+// gate is not there", and the answer has to be "the op seam charges", never
+// "nobody does".
+func tollRigWith(t *testing.T, edge bool) *tollRig {
 	t.Helper()
 	t.Setenv(zip.RuntimeDirEnv, t.TempDir())
 
@@ -124,7 +130,9 @@ func tollApp(t *testing.T) *tollRig {
 	// test hands the identity in as the headers a gateway mints, and what turns a
 	// signature into those headers is prepaid_e2e_test.go's question.
 	app.Use(Bridge())
-	app.Use(BillingGate(m, DefaultPrice))
+	if edge {
+		app.Use(BillingGate(m, DefaultPrice))
+	}
 	app.Use(SpendGate(nil))
 	app.Use(DenyEnvelope())
 	app.Authorize(Toll(m, nil))
@@ -465,6 +473,43 @@ func TestTollMovesNothingForUnpricedWork(t *testing.T) {
 	}
 }
 
+// TestTollTakesOverWhenTheEdgeIsGone pins the one property that makes two money
+// seams safe to have at all.
+//
+// The op seam stands down for a request the edge gate has CLAIMED, and the first
+// version of that check inferred the claim from the request's path: a path that
+// names a declared surface must be one the edge answered for. True — and the truth
+// of it depends on a line in a composition root two files away. Unmount BillingGate
+// and the inference still says yes, the op seam still stands down, and a priced
+// operation over REST becomes free with both gates present in the source. So the
+// claim is now MADE, and this is the test that would have caught the difference:
+// with no edge gate, REST must still be charged exactly once — by the op seam.
+func TestTollTakesOverWhenTheEdgeIsGone(t *testing.T) {
+	r := tollRigWith(t, false)
+	r.fund(t, tollPrice, "fund-noedge")
+	before := r.ran.Load()
+
+	if refused, detail := r.doors()[doorIndex("REST")].call(t, tollRun); refused {
+		t.Fatalf("a funded caller was refused with no edge gate mounted: %s", detail)
+	}
+	if r.ran.Load() != before+1 {
+		t.Fatalf("handler ran %d times, want 1", r.ran.Load()-before)
+	}
+	if got := r.balance(t); got != 0 {
+		t.Fatalf("balance is %dc, want 0c — with the edge gate unmounted NOTHING charged "+
+			"the operation, which is the gap a stand-down that guesses would leave", got)
+	}
+
+	ran := r.ran.Load()
+	refused, detail := r.doors()[doorIndex("REST")].call(t, tollRun)
+	if !refused {
+		t.Fatalf("the call on an empty wallet was served: %s", detail)
+	}
+	if r.ran.Load() != ran {
+		t.Fatal("the handler ran on an empty wallet")
+	}
+}
+
 // ── the seam itself ─────────────────────────────────────────────────────────────
 
 // TestOperationIsTheSameValueAtEveryDoor is the measurement the whole design rests
@@ -476,7 +521,10 @@ func TestTollMovesNothingForUnpricedWork(t *testing.T) {
 // things again, which is the bug.
 func TestOperationIsTheSameValueAtEveryDoor(t *testing.T) {
 	r := tollApp(t)
+	r.fund(t, tollFund, "fund-measure")
 	var ops, reqs []string
+	// The observer REPLACES Toll for this test on purpose: what is being measured
+	// is the VALUE zip hands the seam, not what cloud does with it.
 	r.app.Authorize(func(ctx context.Context, op zip.Op, _ any) error {
 		ops = append(ops, op.Method+" "+op.Path)
 		if c, live := Request(ctx); live {
