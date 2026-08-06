@@ -38,7 +38,7 @@ import "embed"
 
 // specs holds every app's openapi.json — the same committed files the drift gate
 // regenerates from source and the weave composes into openapi.yaml
-// (mk/fleet.mk surface-check). Embedding them is what lets the host describe the
+// (mk/fleet.mk check). Embedding them is what lets the host describe the
 // whole fleet without starting any of it: the alternative is reading the live
 // router, and the light host's live router is 113 proxy prefixes.
 //
