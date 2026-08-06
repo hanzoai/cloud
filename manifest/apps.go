@@ -126,7 +126,16 @@ var Apps = []App{
 	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	{Name: "do", Prefixes: []string{"/v1/balancers", "/v1/vpcs"}},
-	{Name: "platform", Prefixes: []string{"/v1/builds", "/v1/environments", "/v1/pipelines", "/v1/platform/fleet", "/v1/platform/health", "/v1/platform/projects", "/v1/releases", "/v1/run", "/v1/runner"}},
+	// /v1/platform/apps is the DELIVERY surface — declarations in universe git
+	// reconciled by cd.hanzo.ai — and /v1/platform/cd is what that plane did with
+	// them. Both are deeper than nothing this row already holds, and neither
+	// collides with projects' /v1/platform/sites below: the router resolves nested
+	// static prefixes by specificity, so the three /v1/platform families reach the
+	// two apps that serve them regardless of order. /v1/platform/ci is named here
+	// though it answers 501 — an address the fleet publishes and routes nowhere is
+	// the defect this table exists to prevent, and a 501 that names what is missing
+	// is a better answer than commerce's bare-"/v1" 404.
+	{Name: "platform", Prefixes: []string{"/v1/builds", "/v1/environments", "/v1/pipelines", "/v1/platform/apps", "/v1/platform/cd", "/v1/platform/ci", "/v1/platform/fleet", "/v1/platform/health", "/v1/platform/projects", "/v1/releases", "/v1/run", "/v1/runner"}},
 	{Name: "projects", Prefixes: []string{"/v1/platform/sites", "/v1/projects", "/v1/sites"}},
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
