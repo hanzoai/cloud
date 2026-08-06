@@ -17,4 +17,13 @@ func init() {
 			"Roster.recipients": "everyone in the org who may be mailed; empty is a real answer, not an error",
 		},
 	})
+	zip.Describe("POST /iam/projects", zip.Doc{
+		Description: "Answers with the projects owned by the CALLER'S OWN org.\n\nThe org comes from the authenticated call and can never be an argument. Owner\nis the tenancy key of the whole project table, so a caller able to pass it\ncould list another tenant's work — which is exactly the hole the HTTP client\nthis replaces had to mint a per-org credential to close.\n\nThe projection is narrow on purpose: five fields are what it takes to key,\nname and date a project. Returning the record itself would put IAM's metadata\nand workspace columns on a wire whose layout is positional, so every field\nhere is one the contract can never reorder.\n\nIt fails closed on a store that is not open. This process owns the store, so a\nnil handle is a boot-order fault, and an empty list would read as \"this org has\nno projects\" — a lie that a caller would act on by offering to create one that\nalready exists.",
+		Fields: map[string]string{
+			"Project.createdTime": "RFC3339, as IAM stores it; empty when IAM has none, never a fabricated time",
+			"Project.displayName": "the human name; may be empty, and the caller falls back to Name",
+			"Project.name":        "the slug, unique within the org",
+			"Project.owner":       "the org that owns it — the tenancy key",
+		},
+	})
 }

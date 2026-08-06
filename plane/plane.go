@@ -104,6 +104,18 @@ const (
 
 	IAMMailable = "iam_mailable"
 
+	// IAMProjects lists the projects an org owns, from the store that owns them.
+	//
+	// A project is IAM's noun. Platform reads it because a PaaS app is scoped to
+	// one, and platform used to reach for it two different ways depending on where
+	// IAM was: the in-process store when this binary IS the IAM, and — when it is
+	// not — an HTTP GET to /v1/iam/projects authenticated as a per-org machine
+	// identity that platform MINTED for the purpose. The second one is what this
+	// replaces, and the credential goes with it: the plane already carries the
+	// caller's tenant, so an org-scoped read needs no identity of its own to
+	// present. The narrowest possible grant is the one you never have to issue.
+	IAMProjects = "iam_projects"
+
 	// TeamMember answers "what is this person's role in that workspace?" for a
 	// caller that holds an IAM identity and no workspace claim.
 	//
@@ -555,6 +567,33 @@ type Recipient struct {
 // Roster is who an org may mail.
 type Roster struct {
 	Recipients []Recipient `json:"recipients"` // everyone in the org who may be mailed; empty is a real answer, not an error
+}
+
+// ---- iam.projects ----------------------------------------------------------
+
+// Project is one project, projected to what a caller outside IAM can act on:
+// the (org, name) key that scopes an app, the display name and description a
+// console renders, and when it was made.
+//
+// The identity record's other columns — workspace, tags, metadata, the default
+// flag — stay in IAM. A peer that needed one of them would be reaching past the
+// question it asked, and every field added here is a field the wire's positional
+// layout pins forever (see zapenc: a field IS its offset).
+type Project struct {
+	Owner       string `json:"owner"`       // the org that owns it — the tenancy key
+	Name        string `json:"name"`        // the slug, unique within the org
+	DisplayName string `json:"displayName"` // the human name; may be empty, and the caller falls back to Name
+	Description string `json:"description"`
+	CreatedTime string `json:"createdTime"` // RFC3339, as IAM stores it; empty when IAM has none, never a fabricated time
+}
+
+// Projects is every project one org owns.
+//
+// The org is not in the reply and is not an argument: it is the caller's own
+// tenant, taken from the call. An empty list is a real answer — an org with no
+// projects — and never the shape a failed read takes.
+type Projects struct {
+	Projects []Project `json:"projects"`
 }
 
 // ---- team ------------------------------------------------------------------

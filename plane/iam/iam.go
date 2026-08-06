@@ -31,6 +31,7 @@ const App = "iam"
 // plane_registry_test.go.
 var Ops = []string{
 	plane.IAMMailable,
+	plane.IAMProjects,
 }
 
 // IAMMailable who this org may mail.
@@ -38,4 +39,11 @@ var Ops = []string{
 // Calls plane.IAMMailable on iam over the peer plane.
 func IAMMailable(ctx context.Context) (*plane.Roster, error) {
 	return plane.Ask[struct{}, plane.Roster](ctx, App, plane.IAMMailable, &struct{}{})
+}
+
+// IAMProjects projects this org owns.
+//
+// Calls plane.IAMProjects on iam over the peer plane.
+func IAMProjects(ctx context.Context) (*plane.Projects, error) {
+	return plane.Ask[struct{}, plane.Projects](ctx, App, plane.IAMProjects, &struct{}{})
 }
