@@ -1568,6 +1568,11 @@ type RunOnBehalfIn struct {
 	Ref string `json:"ref"`
 	// Input is the user's message, already stripped of the leading @mention.
 	Input string `json:"input"`
+	// Model is the ASKER's own choice, empty when they have not made one. It is a
+	// preference of the person, not a property of the agent, which is why it rides
+	// the turn instead of being written into an agent row: two people in one
+	// workspace can prefer different models of the same assistant.
+	Model string `json:"model,omitempty"`
 }
 
 // RunOnBehalfOut is one finished turn.
