@@ -112,6 +112,13 @@ const (
 	// integrations, the app that knows whether one is imported is git.
 	GitStatus = "git_status"
 
+	// GitGrant / GitRevoke delegate — and withdraw — the right to create ONE ref
+	// in ONE repository. git owns refs, so git decides who may write one, and an
+	// orchestrator that dispatches untrusted work asks for this instead of
+	// carrying the org's git credential. See apps/git/grant.go.
+	GitGrant  = "git_grant"
+	GitRevoke = "git_revoke"
+
 	// GitMirror declares (or removes) a native repo's OUTBOUND mirror target. The
 	// sync engine decides a mirror should exist; the git app owns the repos and
 	// the reactor that pushes them. Two processes, so declaring it was a nil call
@@ -636,6 +643,47 @@ type Imported struct {
 	// Repo names what was imported.
 	Repo string `json:"repo"`
 }
+
+// GrantIn asks the forge to delegate ONE ref write in ONE repository.
+//
+// There is no Org field, on purpose: the tenant rides the caller's plane
+// identity, so an app cannot delegate a write into a repository it does not act
+// for by naming one.
+type GrantIn struct {
+	// Repo is the repository the grant addresses, and the only one it opens.
+	Repo string `json:"repo" validate:"required"`
+	// Project is the repository's sub-scope; empty is the org's default scope.
+	Project string `json:"project,omitempty"`
+	// Ref is the FULL ref the grant may create, and the only one. The forge
+	// delegates the machine namespace and nothing else.
+	Ref string `json:"ref" validate:"required"`
+	// TTLSeconds bounds the grant. Absent, or longer than the forge's cap, gets
+	// the cap — a grant is never open-ended.
+	TTLSeconds int `json:"ttlSeconds,omitempty"`
+}
+
+// Granted is the delegated capability.
+type Granted struct {
+	// Token is the bearer. It authenticates nobody and opens nothing but the pack
+	// protocol on the repository named in the request — never a log line.
+	Token string `json:"token"`
+	// Handle revokes the grant. It is the token's digest, so carrying it back
+	// never means presenting the secret twice.
+	Handle string `json:"handle"`
+	// ExpiresAt is the unix second the grant stops working regardless.
+	ExpiresAt int64 `json:"expiresAt"`
+}
+
+// RevokeIn withdraws a grant early, so its life is the run's life rather than
+// its TTL.
+type RevokeIn struct {
+	// Handle is what Granted returned. An unknown handle, or one belonging to
+	// another org, is a no-op rather than an error: revoking is idempotent.
+	Handle string `json:"handle" validate:"required"`
+}
+
+// Revoked is the empty receipt for a withdrawal.
+type Revoked struct{}
 
 // FilesIn asks for a repo's files at one ref.
 type FilesIn struct {

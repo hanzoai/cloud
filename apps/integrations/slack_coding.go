@@ -52,16 +52,20 @@ const (
 	// slower than this is a wedged peer, and the user gets an honest ack instead
 	// of a webhook that hangs.
 	codingDispatchTimeout = 30 * time.Second
-
-	// agentCredProvider / agentCredToken / agentCredUser name the per-org agent git
-	// credential in the integrations KMS namespace (/orgs/{org}/integrations/agent).
-	// An operator/automation seals the org's agent sk- key there; the coding path
-	// reads it fail-closed and never logs it.
-	agentCredProvider = "agent"
-	agentCredToken    = "git-token"
-	agentCredUser     = "git-user"
-	defaultAgentUser  = "x-access-token"
 )
+
+// There is no per-org agent git credential any more, and the constants that
+// named one are gone rather than left unused.
+//
+// They pointed at /orgs/{org}/integrations/agent/git-token, where an operator
+// sealed the org's `sk-` key. IAM resolves such a key to a user, so cloud minted
+// a full org principal from it and the process running untrusted model output
+// held something that opened /v1/kms/secrets and every other org-scoped API. A
+// run now gets a push GRANT from the forge instead (apps/git/grant.go), which
+// authenticates nobody and opens one ref in one repository.
+//
+// Deleted, not deprecated: a constant naming a secret is an instruction to seal
+// one, and the whole point is that there is nothing left to seal.
 
 // codingRepoRE mirrors the git repo name rule (clients/git nameRE): a safe
 // identifier, so a hostile "repo" token can never smuggle a path or a second org.
