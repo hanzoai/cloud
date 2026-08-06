@@ -3,6 +3,8 @@ package sites
 import (
 	"os"
 	"strings"
+
+	"github.com/hanzoai/cloud/brand"
 )
 
 // The ONE resolution of the site-edge configuration.
@@ -21,11 +23,15 @@ import (
 // domain is the deployment's primary API host (api.hanzo.ai) — the caller resolves
 // it, because it is the deployment's fact and not this package's. It seeds the
 // self-domain exclusion with its registrable domain (hanzo.ai), so a customer
-// binding can never shadow a real Hanzo host. Empty ⇒ read CLOUD_DOMAIN.
+// binding can never shadow a real Hanzo host. Empty ⇒ read CLOUD_DOMAIN, and
+// failing that derive api.<brand apex> through the SAME brand.APIHost the root
+// Config uses — this file used to spell the literal "api.hanzo.ai" for itself,
+// which made the deployment's own host a fact stated in two places, brand-blind
+// in both.
 func ConfigFromEnv(domain string) Config {
 	apex := env("CLOUD_SITES_APEX", "hanzo.app")
 	if domain = strings.TrimSpace(domain); domain == "" {
-		domain = env("CLOUD_DOMAIN", "api.hanzo.ai")
+		domain = env("CLOUD_DOMAIN", brand.APIHost(env("CLOUD_BRAND", brand.Default)))
 	}
 	return Config{
 		Apex: apex,
@@ -72,22 +78,17 @@ func selfFloor(apex, domain string) []string {
 	return out
 }
 
-// registrableDomain returns the last two dot-separated labels of a host (a
-// pragmatic "registrable domain" without a public-suffix list): api.hanzo.ai →
-// hanzo.ai, hanzo.app → hanzo.app. A host with fewer than two labels is returned
-// unchanged. This only seeds the self-domain exclusion set; it never gates org
-// isolation (which is the S3-prefix boundary in the serve path).
-func registrableDomain(host string) string {
-	host = strings.ToLower(strings.TrimSpace(host))
-	if i := strings.IndexByte(host, ':'); i >= 0 {
-		host = host[:i]
-	}
-	parts := strings.Split(strings.Trim(host, "."), ".")
-	if len(parts) < 2 {
-		return host
-	}
-	return strings.Join(parts[len(parts)-2:], ".")
-}
+// registrableDomain is brand.Apex.
+//
+// It was "the last two dot-separated labels", described as a pragmatic
+// registrable domain without a public-suffix list. It is not pragmatic here: its
+// output seeds SelfDomains, the set that decides a host is OURS and therefore not
+// a tenant's to claim, and on any multi-label suffix the last two labels ARE the
+// suffix — api.acme.co.uk yielded "co.uk", so a white-label deployment on one
+// claimed every domain under it. The three brands we run today (hanzo.ai,
+// lux.network, zoo.ngo) are all single-label suffixes, which is why nothing
+// noticed. brand.Apex is the same reduction platform and git need, done once.
+func registrableDomain(host string) string { return brand.Apex(host) }
 
 // env reads a non-blank environment value, else def.
 func env(k, def string) string {

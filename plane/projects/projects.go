@@ -30,10 +30,18 @@ const App = "projects"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.ProjectsOwnership,
 	plane.ProjectsResolveKey,
 	plane.SitesLive,
 	plane.SitesResolve,
 	plane.SitesResolveOrg,
+}
+
+// ProjectsOwnership report whether the calling org owns a project, and whether another o....
+//
+// Calls plane.ProjectsOwnership on projects over the peer plane.
+func ProjectsOwnership(ctx context.Context, in *plane.OwnerIn) (*plane.Ownership, error) {
+	return plane.Ask[plane.OwnerIn, plane.Ownership](ctx, App, plane.ProjectsOwnership, in)
 }
 
 // ProjectsResolveKey resolve a publishable ingest key to the project that minted it.

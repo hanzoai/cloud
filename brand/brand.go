@@ -16,7 +16,11 @@
 // host + brand domain), so they live in code, not in KMS.
 package brand
 
-import "strings"
+import (
+	"strings"
+
+	"golang.org/x/net/publicsuffix"
+)
 
 // Info is the PUBLIC per-brand identity used for token validation + URL scoping.
 // No secrets.
@@ -177,3 +181,70 @@ func Issuers() []string {
 	}
 	return out
 }
+
+// Apex returns the registrable apex of a host: the domain one label below the
+// public suffix ("api.hanzo.ai" -> "hanzo.ai", "hanzo.ai" -> "hanzo.ai"). It is
+// THE ONE derivation of that value in this binary.
+//
+// It exists because a deployment's SIBLING hosts are its own: the forge
+// (git.<apex>), CI (ci.<apex>), CD (cd.<apex>) and the status page
+// (status.<apex>) are neither the API host nor children of it, and any code that
+// must decide "is this host mine?" has to reduce to the apex first. Three
+// packages needed that reduction and each wrote its own, by three different
+// rules that agreed only on the three brand domains we happen to run today:
+//
+//	platform  publicsuffix                    api.acme.co.uk -> acme.co.uk
+//	sites     last two labels                 api.acme.co.uk -> co.uk      (WRONG)
+//	git       TrimPrefix "api." + "git."      cloud.hanzo.ai -> git.cloud.hanzo.ai (WRONG)
+//
+// The sites rule hands a bare public suffix to the self-domain floor, which is
+// the set that decides a host is OURS and not a tenant's to claim — so a
+// white-label on any multi-label suffix claimed every domain under it. The git
+// rule advertised a forge host that platform's own allowlist would then refuse,
+// which is verbatim the defect dc84b46d fixed in platform alone: the fix was
+// correct and incomplete, because the derivation was duplicated rather than
+// shared. One copy cannot disagree with itself.
+//
+// publicsuffix rather than "last two labels" so a multi-label suffix (co.uk,
+// com.au, github.io) yields the registrable domain and not the suffix itself,
+// which would trust — or claim — every domain under it. A name with no
+// registrable form (localhost, a bare IP) is returned verbatim: it is not
+// delegable, so it is its own apex.
+func Apex(host string) string {
+	h := strings.ToLower(strings.TrimSpace(host))
+	if h == "" {
+		return ""
+	}
+	if i := strings.IndexByte(h, ':'); i >= 0 { // tolerate host:port
+		h = h[:i]
+	}
+	h = strings.TrimSuffix(h, ".") // a fully-qualified Host may carry the root dot
+	apex, err := publicsuffix.EffectiveTLDPlusOne(h)
+	if err != nil {
+		return h
+	}
+	return apex
+}
+
+// Sibling is the host named `label` under host's registrable apex:
+// Sibling("api.hanzo.ai", "git") == "git.hanzo.ai". It is how a deployment names
+// the surfaces it owns beside its API — the forge, CI, CD, status — from the one
+// domain it is configured with, so those names cannot drift apart per package.
+func Sibling(host, label string) string {
+	apex := Apex(host)
+	if apex == "" || label == "" {
+		return apex
+	}
+	return label + "." + apex
+}
+
+// APIHost is the public API host a deployment of brand `id` answers on:
+// api.<that brand's apex> — api.hanzo.ai, api.lux.network, api.zoo.ngo.
+//
+// It is here, beside the apex it derives from, because two packages need the
+// SAME answer and neither can hold it for the other: package cloud resolves
+// Config.Domain from it, and apps/sites (a leaf that must never import the root
+// package) resolves the self-domain floor from it. Each used to spell the
+// literal "api.hanzo.ai" for itself, so the deployment's own host was stated
+// twice, brand-blind in both places, and nothing made the two agree.
+func APIHost(id string) string { return "api." + For(id).Domain }

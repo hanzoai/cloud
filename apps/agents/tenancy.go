@@ -54,7 +54,7 @@ func (st *state) storeFor(org string) (*Store, error) {
 // place to read to know what a store can be named after.
 func (st *state) namespaceFor(org string) (namespace.Namespace, error) {
 	if st == nil || st.stores == nil {
-		return namespace.Namespace{}, fmt.Errorf("agents: not mounted")
+		return namespace.Namespace{}, fmt.Errorf("%w: agents", cloud.ErrNoPeer)
 	}
 	return cloud.OrgNamespace(org, "")
 }
@@ -95,7 +95,12 @@ func tenantStore(ctx context.Context, st *state) (*Store, string, error) {
 // path would have refused.
 func mountedStore(org string) (*Store, string, error) {
 	if mounted == nil {
-		return nil, "", fmt.Errorf("agents: not mounted")
+		// ErrNoPeer, not a bare string: "this process does not own the session
+		// store" is a routable fact — a caller can take the plane leg — and every
+		// other absence on this estate is spelled the same way. A caller that
+		// cannot tell absence from failure is how StopSessions came to report a
+		// revoke that stopped nothing as a success.
+		return nil, "", fmt.Errorf("%w: agents (this process does not own the session store)", cloud.ErrNoPeer)
 	}
 	org = strings.TrimSpace(org)
 	if org == "" || len(org) > principal.MaxOrgLen {
@@ -141,7 +146,7 @@ func (st *state) storeForPublic(org string) (*Store, bool) {
 // unreadable org's file cannot take down the scheduler for every other org.
 func (st *state) eachStore(fn func(ns namespace.Namespace, sto *Store, err error)) error {
 	if st == nil || st.stores == nil {
-		return fmt.Errorf("agents: not mounted")
+		return fmt.Errorf("%w: agents", cloud.ErrNoPeer)
 	}
 	return st.stores.Each(fn)
 }

@@ -15,8 +15,9 @@ package agents
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud"
 )
 
 // persona is one built-in agent definition. Name is the lowercase @-handle;
@@ -79,10 +80,7 @@ func SeedPersonalities(ctx context.Context, org string) (int, error) {
 	if serr != nil {
 		return 0, nil // never mounted, or an org this deployment cannot place: no-op
 	}
-	model := strings.TrimSpace(mounted.State.defaultModel)
-	if model == "" {
-		return 0, nil
-	}
+	model := cloud.DefaultModel
 
 	created := 0
 	now := time.Now().Unix()

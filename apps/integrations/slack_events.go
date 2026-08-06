@@ -94,6 +94,24 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	switch d.Kind {
 	case slackRouteChallenge:
 		return c.String(http.StatusOK, d.Challenge)
+	case slackRouteHome:
+		// Same ISOLATION ROOT as the agent arm: the org comes ONLY from the
+		// install→org map for the Slack-verified team_id, never from the payload.
+		org, ok := OrgForExternalID("slack", d.TeamID)
+		if !ok {
+			return c.NoContent(http.StatusOK)
+		}
+		tok, err := TokenFor(c.Context(), org, "slack", slackBotTokenSecret)
+		if err != nil {
+			s.Log.Warn("slack home: no bot token", "org", org, "err", err)
+			return c.NoContent(http.StatusOK)
+		}
+		if err := slackPublishHome(c.Context(), string(tok), d.User); err != nil {
+			// A Home that fails to render is cosmetic — never fail the event, or
+			// Slack retries a view publish it will render identically next open.
+			s.Log.Warn("slack home: publish failed", "org", org, "err", err)
+		}
+		return c.NoContent(http.StatusOK)
 	case slackRouteAgent:
 		// ISOLATION ROOT, resolved SYNC (so the per-org limiter keys on the real
 		// tenant and a shed happens BEFORE anything is recorded): org comes ONLY from
@@ -313,6 +331,7 @@ const (
 	slackRouteChallenge                       // url_verification handshake
 	slackRouteAck                             // valid but nothing to act on (echo/subtype/non-message)
 	slackRouteAgent                           // @mention / DM: run an agent on-behalf-of the user
+	slackRouteHome                            // app_home_opened: publish the Home tab
 )
 
 type slackRoute struct {
@@ -386,6 +405,17 @@ func routeSlackEvent(raw []byte) slackRoute {
 	// routes to the agent. So the conversation works the moment the app is listed.
 	case "assistant_thread_started", "assistant_thread_context_changed":
 		return slackRoute{Kind: slackRouteAck}
+	// The Home tab. Slack shows its OWN "this is still a work in progress"
+	// placeholder for any app whose manifest enables home_tab_enabled and which
+	// never publishes a view — so an app that does nothing here looks unfinished
+	// to every user who clicks it. Publishing on open (rather than once at
+	// install) is what Slack's API expects: the view is per-user and is rendered
+	// from whatever we publish the moment they look.
+	case "app_home_opened":
+		if ev.User == "" {
+			return slackRoute{Kind: slackRouteAck}
+		}
+		return slackRoute{Kind: slackRouteHome, TeamID: env.TeamID, User: ev.User}
 	case "app_mention":
 		if ev.BotID != "" || ev.User == "" || ev.Text == "" {
 			return slackRoute{Kind: slackRouteAck}
@@ -598,4 +628,43 @@ func slackReadBody(c *zip.Ctx) []byte {
 		return b[:slackMaxBody]
 	}
 	return b
+}
+
+// slackPublishHome renders the App Home tab for one user.
+//
+// Slack fills an unpublished Home with its own "this is still a work in
+// progress" placeholder, so the choice is not between a Home and no Home — it is
+// between OUR page and Slack's apology. Any app that turns on home_tab_enabled
+// and stops there looks half-built to everyone who clicks it.
+//
+// Published per user on app_home_opened rather than once at install: the view is
+// per-user state in Slack's model, and rendering at open means the page reflects
+// what is true now instead of what was true when the workspace connected.
+//
+// The content deliberately answers the two questions someone clicking Home
+// actually has — what can this do, and what do I type — rather than describing
+// the product. A Home that reads like a landing page teaches nothing.
+func slackPublishHome(ctx context.Context, botToken, user string) error {
+	section := func(text string) map[string]any {
+		return map[string]any{"type": "section", "text": map[string]any{"type": "mrkdwn", "text": text}}
+	}
+	view := map[string]any{
+		"type": "home",
+		"blocks": []map[string]any{
+			{"type": "header", "text": map[string]any{"type": "plain_text", "text": "Hanzo AI", "emoji": true}},
+			section("The Open AI Cloud, in Slack. Ask a question, write and ship code, or query your own infrastructure — in a channel with `@Hanzo`, or right here in a DM."),
+			{"type": "divider"},
+			section("*Try asking*\n• `@Hanzo what changed on main today?`\n• `@Hanzo why is my service returning 500s?`\n• `@Hanzo deploy my app and give me the URL`\n• `@Hanzo add a health check to my Go service`"),
+			{"type": "divider"},
+			section("*Two ways to reach it*\n• `@Hanzo` in any channel it has been invited to\n• `/hanzo <your question>` anywhere, without inviting it"),
+			section("_Hanzo only posts in channels it is a member of — invite it with_ `/invite @Hanzo`_. That is deliberate: it holds no permission to post anywhere uninvited._"),
+			{"type": "context", "elements": []map[string]any{
+				{"type": "mrkdwn", "text": "<https://hanzo.ai|hanzo.ai>  ·  <https://docs.hanzo.ai|Docs>  ·  <https://cloud.hanzo.ai|Console>"},
+			}},
+		},
+	}
+	return slackChatPost(ctx, botToken, "/views.publish", map[string]any{
+		"user_id": user,
+		"view":    view,
+	})
 }
