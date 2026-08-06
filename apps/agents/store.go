@@ -73,6 +73,32 @@ type Run struct {
 	Error      string
 	DurationMs int64
 	CreatedAt  int64
+
+	// Actor is the "org/sub" identity the run was executed and billed AS. The row
+	// already recorded which tenant paid; it never recorded which person asked,
+	// so "who ran this" was answerable only from an HTTP audit line that a
+	// scheduled or on-behalf run never produces. Empty means there was no person
+	// — a schedule or a service token — which is a different fact from unknown.
+	Actor string
+
+	// TraceID is the trace this run IS, so the record and its spans are one thing
+	// an operator can move between. Without it the run history and the trace store
+	// hold two accounts of the same event with no key in common: you can see that
+	// a run took nine seconds but not which call spent them.
+	//
+	// Empty when the process had no tracer installed — an honest "not recorded",
+	// never a fabricated id.
+	TraceID string
+
+	// PromptTokens/CompletionTokens are what the gateway reported for the run's
+	// FINAL completion, and ToolCalls is how many tool dispatches it made. They
+	// are what the run itself knows. The per-round token spend of a tool loop is
+	// the metering ledger's account, joined by this run's id (see
+	// types.ChatRequest.RunID) — recorded there once, rather than re-totalled here
+	// into a second number that could disagree with the money.
+	PromptTokens     int
+	CompletionTokens int
+	ToolCalls        int
 }
 
 // Store is ONE ORG's agents database — the file at
@@ -133,9 +159,18 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   output      TEXT NOT NULL DEFAULT '',
   error       TEXT NOT NULL DEFAULT '',
   duration_ms INTEGER NOT NULL DEFAULT 0,
-  created_at  INTEGER NOT NULL
+  created_at  INTEGER NOT NULL,
+  actor             TEXT NOT NULL DEFAULT '',
+  trace_id          TEXT NOT NULL DEFAULT '',
+  prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+  completion_tokens INTEGER NOT NULL DEFAULT 0,
+  tool_calls        INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ix_runs_org_agent_created ON agent_runs(org, agent_name, created_at);
+-- The org-wide feed: "what ran here lately", across every agent. The per-agent
+-- index cannot serve it — its leading column after org is agent_name, so an
+-- org-wide scan by recency would sort every row the org ever produced.
+CREATE INDEX IF NOT EXISTS ix_runs_org_created ON agent_runs(org, created_at);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -153,6 +188,24 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_agent_created ON agent_runs(org, agent_na
 		"service_account_id": "TEXT NOT NULL DEFAULT ''",
 	}); err != nil {
 		return err
+	}
+	// Same forward, idempotent upgrade for the run attribution columns, so a
+	// deployment's existing history keeps working and every run recorded from
+	// here on can name its actor, its trace and its token account.
+	if err := s.addColumns("agent_runs", map[string]string{
+		"actor":             "TEXT NOT NULL DEFAULT ''",
+		"trace_id":          "TEXT NOT NULL DEFAULT ''",
+		"prompt_tokens":     "INTEGER NOT NULL DEFAULT 0",
+		"completion_tokens": "INTEGER NOT NULL DEFAULT 0",
+		"tool_calls":        "INTEGER NOT NULL DEFAULT 0",
+	}); err != nil {
+		return err
+	}
+	// The org-wide recency index, created AFTER the columns above for the same
+	// reason the scheduler's partial index is: a legacy DB gains them just now.
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS ix_runs_org_created
+		ON agent_runs(org, created_at)`); err != nil {
+		return fmt.Errorf("migrate: org runs index: %w", err)
 	}
 	// Partial index for the once-a-minute scheduler scan — created AFTER the
 	// lifecycle columns exist (a legacy DB gains them just above), so it selects
@@ -316,7 +369,7 @@ const agentCols = `id,org,name,model,instructions,description,tools,status,execu
 
 // runCols is the run projection, named ONCE so the insert, the two reads and the
 // legacy fan-out cannot drift apart on a column added to only some of them.
-const runCols = `id,org,agent_name,status,model,input,output,error,duration_ms,created_at`
+const runCols = `id,org,agent_name,status,model,input,output,error,duration_ms,created_at,actor,trace_id,prompt_tokens,completion_tokens,tool_calls`
 
 func scanAgent(sc interface{ Scan(...any) error }) (Agent, error) {
 	var a Agent
@@ -492,12 +545,28 @@ func (s *Store) Delete(ctx context.Context, org, name string) (bool, error) {
 // InsertRun records one agent execution.
 func (s *Store) InsertRun(ctx context.Context, r Run) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_runs (`+runCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.Org, r.AgentName, r.Status, r.Model, r.Input, r.Output, r.Error, r.DurationMs, r.CreatedAt)
+		`INSERT INTO agent_runs (`+runCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.Org, r.AgentName, r.Status, r.Model, r.Input, r.Output, r.Error, r.DurationMs, r.CreatedAt,
+		r.Actor, r.TraceID, r.PromptTokens, r.CompletionTokens, r.ToolCalls)
 	if err != nil {
 		return fmt.Errorf("insert run: %w", err)
 	}
 	return nil
+}
+
+// scanRun reads one row of the runCols projection. It exists because there are
+// two readers of that projection and they were each spelling the column order out
+// by hand — which is the drift runCols was named once to prevent, reintroduced one
+// layer down. One scanner means a column added to the projection is added to every
+// read of it, or to none.
+func scanRun(sc interface{ Scan(...any) error }) (Run, error) {
+	var r Run
+	if err := sc.Scan(&r.ID, &r.Org, &r.AgentName, &r.Status, &r.Model, &r.Input,
+		&r.Output, &r.Error, &r.DurationMs, &r.CreatedAt,
+		&r.Actor, &r.TraceID, &r.PromptTokens, &r.CompletionTokens, &r.ToolCalls); err != nil {
+		return Run{}, fmt.Errorf("scan run: %w", err)
+	}
+	return r, nil
 }
 
 // ListRuns returns the run history for (org,agent), newest first, capped.
@@ -513,10 +582,9 @@ func (s *Store) ListRuns(ctx context.Context, org, agent string, limit int) ([]R
 	defer func() { _ = rows.Close() }()
 	var out []Run
 	for rows.Next() {
-		var r Run
-		if err := rows.Scan(&r.ID, &r.Org, &r.AgentName, &r.Status, &r.Model, &r.Input,
-			&r.Output, &r.Error, &r.DurationMs, &r.CreatedAt); err != nil {
-			return nil, fmt.Errorf("scan run: %w", err)
+		r, err := scanRun(rows)
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, r)
 	}
@@ -541,10 +609,9 @@ func (s *Store) RunsSince(ctx context.Context, org string, since int64, limit in
 	defer func() { _ = rows.Close() }()
 	var out []Run
 	for rows.Next() {
-		var r Run
-		if err := rows.Scan(&r.ID, &r.Org, &r.AgentName, &r.Status, &r.Model, &r.Input,
-			&r.Output, &r.Error, &r.DurationMs, &r.CreatedAt); err != nil {
-			return nil, fmt.Errorf("scan run: %w", err)
+		r, err := scanRun(rows)
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, r)
 	}

@@ -99,7 +99,7 @@ func TestRunCallsTools(t *testing.T) {
 
 	a := mk("maxpower", "greeter")
 	a.Tools = []string{"weather"}
-	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "weather in Tokyo?", "")
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "weather in Tokyo?", "", "run_test")
 
 	if r.Status != "ok" {
 		t.Fatalf("want ok, got %q err=%q", r.Status, r.Error)
@@ -147,7 +147,7 @@ func TestRunWithoutToolsIsUnchanged(t *testing.T) {
 	a := mk("maxpower", "greeter")
 	a.Instructions = "You are a greeter."
 	a.Tools = []string{"weather"} // declared, but the plane offers nothing
-	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "say hi", "")
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "say hi", "", "run_test")
 
 	if r.Status != "ok" || r.Output != "hi there" {
 		t.Fatalf("want the plain completion, got %+v", r)
@@ -178,7 +178,7 @@ func TestToolFailureReachesTheModel(t *testing.T) {
 
 	a := mk("maxpower", "greeter")
 	a.Tools = []string{"weather"}
-	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "weather?", "")
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "weather?", "", "run_test")
 
 	if r.Status != "ok" {
 		t.Fatalf("a failed tool must not fail the run, got %q err=%q", r.Status, r.Error)
@@ -209,7 +209,7 @@ func TestToolLoopIsBounded(t *testing.T) {
 
 	a := mk("maxpower", "greeter")
 	a.Tools = []string{"weather"}
-	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "go", "")
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "go", "", "run_test")
 
 	if r.Status != "ok" || r.Output != "done" {
 		t.Fatalf("bounded loop must still answer, got %+v", r)
@@ -265,7 +265,7 @@ func TestNestedAgentsAreBoundedByDepth(t *testing.T) {
 	}
 	a := mk("maxpower", "greeter")
 	a.Tools = []string{"weather"}
-	r := executeRun(ctx, ai, "maxpower", "maxpower/u1", a, "go", "")
+	r := executeRun(ctx, ai, "maxpower", "maxpower/u1", a, "go", "", "run_test")
 
 	if r.Status != "ok" || r.Output != "at the bottom" {
 		t.Fatalf("a run at the depth limit must still answer, got %+v", r)
@@ -289,7 +289,7 @@ func TestDispatchDeepensTheContext(t *testing.T) {
 	}}
 	a := mk("maxpower", "greeter")
 	a.Tools = []string{"weather"}
-	if r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "go", ""); r.Status != "ok" {
+	if r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "go", "", "run_test"); r.Status != "ok" {
 		t.Fatalf("run failed: %+v", r)
 	}
 	if saw != 1 {
