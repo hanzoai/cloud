@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -88,7 +90,9 @@ func router(t *testing.T, name string) {
 	// Called exactly as run() calls it: no handle, torn down by the app's own
 	// shutdown hooks. If this ever grows a return value again, the caller in
 	// main.go is one `defer f()()` away from never opening the door at all.
-	serveWake(app)
+	// The agent door rides the same socket, over this host's own children —
+	// which is one lazy plugin here, and none of it is what this file tests.
+	serveWake(app, fleet.Mount(app, manifest.MCPPath, routed([]string{name}), locate(app)))
 	waitFor(t, zip.SocketPath(plane.HostApp))
 }
 

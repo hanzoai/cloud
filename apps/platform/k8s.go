@@ -945,18 +945,47 @@ func buildFrontendCmdRev(buildCtx, dockerfile, image, revision string) []any {
 	// `buildcache` tag (the standard convention) so it is per-repo, needs no extra
 	// credentials, and is garbage-collected with the package.
 	//
-	// mode=max exports intermediate stages too, which is what makes a one-line code
-	// change reuse the dependency layers instead of rebuilding them. Both flags are
-	// ADVISORY in buildkit: a missing or unreadable cache ref is a cache miss, never
-	// a build failure, so a first build (or a registry hiccup) behaves exactly as it
-	// does today. Skipped for a digest-pinned ref, which names no tag to hang the
-	// cache off.
+	// What the cache can and cannot buy is measured, not assumed — see cacheArgs.
+	// Both flags are ADVISORY in buildkit: a missing or unreadable cache ref is a
+	// cache miss, never a build failure, so a first build (or a registry hiccup)
+	// behaves exactly as it does today. Skipped for a digest-pinned ref, which
+	// names no tag to hang the cache off.
 	if repo, tag := splitImageRef(image); tag != "" && !strings.Contains(tag, ":") {
 		for _, a := range cacheArgs(repo) {
 			cmd = append(cmd, a)
 		}
 	}
-	return append(cmd, "--output", "type=image,name="+image+",push=true")
+	// ZSTD, not buildkit's default gzip. This image is ONE 1.63GB layer — the
+	// per-app plugin binaries, 98.8% of its 1.65GB — and gzip writes a layer as a
+	// single stream on a single core, so the export ran at 23.7MB/s with seven of
+	// the runner's eight CPUs idle: 175.0s and 174.7s on two consecutive builds.
+	// Measured on those same bytes, both orderings, 2026-08-06: gzip 245.5s/256.1s
+	// against zstd 58.1s/53.3s. The zstd result is also 1.2% SMALLER (1,626,561,616
+	// vs 1,646,830,883 bytes), so every pull gets slightly cheaper too.
+	//
+	// oci-mediatypes is the enabling half, not decoration: a zstd layer is
+	// application/vnd.oci.image.layer.v1.tar+zstd, and the Docker schema2 manifest
+	// this lane emitted before has no media type that can name one. Setting the
+	// compression without it would push layers no client could read.
+	//
+	// force-compression is load-bearing, not belt-and-braces. Without it buildkit
+	// treats any already-compressed blob as good enough and reuses it: asked for
+	// zstd over layers it had itself just written as gzip, it published an OCI
+	// manifest whose layers were still ...layer.v1.tar+gzip, having done no
+	// compression work at all. That failure is silent and lands in the "still
+	// works, only slow" direction — the kind that survives review and quietly gives
+	// back the whole saving. Forcing it means what ships is what was measured. The
+	// price is re-compressing ~11MB of alpine base layers, under a second.
+	//
+	// Verified before shipping rather than assumed, because the blast radius is
+	// "nothing in the fleet can pull our images": ghcr.io stores the zstd blobs,
+	// and kubelet/containerd 1.7.28 pulled and RAN the resulting image on two
+	// different node pools, including one that had never seen the bytes.
+	//
+	// One caller had to change WITH this and is not optional: imagePullable in
+	// pin.go negotiates the manifest by Accept, and ghcr answers a type it was not
+	// offered with 404. See the note there.
+	return append(cmd, "--output", "type=image,name="+image+",push=true,compression=zstd,force-compression=true,oci-mediatypes=true")
 }
 
 // cacheBucket is the object-store bucket the layer cache lives in. One bucket for
@@ -987,15 +1016,41 @@ func cacheArgs(repo string) []string {
 			",region=" + getenv("S3_REGION", "us-east-1") +
 			",endpoint_url=" + s3CacheEndpoint(ep) +
 			",use_path_style=true,name=" + cacheKey(repo)
-		// mode=max exports the intermediate stages too, which is where the Go
-		// compiles live; without it a multi-stage build caches only its final
-		// layers and the expensive steps rerun anyway.
-		return []string{"--import-cache", common, "--export-cache", common + ",mode=max"}
+		// mode=min, for the reason spelled out on the registry branch below: max
+		// re-compresses and re-uploads the whole build stage to buy back a few
+		// seconds of `apk add`.
+		return []string{"--import-cache", common, "--export-cache", common + ",mode=min,compression=zstd"}
 	}
 	ref := repo + ":buildcache"
+	// mode=min. The claim this used to carry — that max keeps the Go compiles warm
+	// — is not what the builds do. Two independent cloud builds imported this cache
+	// and got the SAME eight cached steps: `apk add`, `adduser`, the libsqlcipher
+	// symlink and WORKDIR, once per stage. Every expensive step missed both times
+	// and had to: `COPY . .` sits in front of them and its digest changes with
+	// every commit, and the compiles write into `--mount=type=cache`, which is
+	// worker-local and never travels in an exported cache at all — a build pod is
+	// fresh, so it starts them cold no matter what this flag says.
+	//
+	// What max charged for those eight steps: it exports every intermediate stage,
+	// and the build stage holds the same 4.2GB of plugin binaries the image does,
+	// so buildkit compressed them a SECOND time and pushed a second 1.6GB blob.
+	// Measured 2026-08-06 — 221.3s and 225.2s of a 17-minute build, reproduced at
+	// 212.1s on a synthetic build of the same shape, against 1.8s for min.
+	//
+	// Four of the eight steps are stage-2, i.e. layers of the FINAL image, so min
+	// still exports them. Only the four build-stage records are given up, and those
+	// are worth 4.6s cold (measured: 4.4 + 0.1 + 0.1 + 0.0).
+	//
+	// compression matches the image's, which is what keeps min cheap: min exports
+	// the final image's layers, so if the two settings disagree buildkit has to
+	// re-compress all of them here and the saving is handed straight back.
+	//
+	// Both flags stay ADVISORY in buildkit — a missing or unreadable cache ref is a
+	// cache miss, never a build failure — so --import-cache keeps working unchanged
+	// against a ref written either way, including one written by the old mode.
 	return []string{
 		"--import-cache", "type=registry,ref=" + ref,
-		"--export-cache", "type=registry,ref=" + ref + ",mode=max",
+		"--export-cache", "type=registry,ref=" + ref + ",mode=min,compression=zstd",
 	}
 }
 

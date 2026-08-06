@@ -74,9 +74,26 @@ type Door struct {
 // for the same reason it must not publish its routes.
 func Mount(host *zip.App, path string, apps []string, at At) *Door {
 	d := &Door{host: host, at: at, apps: apps, owner: map[string]string{}}
-	host.Post(path, d.serve)
+	d.Serve(host, path)
 	return d
 }
+
+// Serve publishes THIS door at another address — the same gather, the same
+// routing table, the same [refuse] gate.
+//
+// It exists because the fleet's own subsystems need the door too, and the
+// address a subsystem can reach is not the edge's. An agent inside `agents`
+// that asked api.hanzo.ai for its tools would leave the fleet, re-enter through
+// the front door and arrive back one process away carrying whatever credential
+// it could find; the host's internal socket is one hop with no edge on it (see
+// cmd/cloud/wake.go, which is the one caller).
+//
+// A SECOND Door over the same children would be a second routing table and,
+// worse, a second place the curation rule could be applied — or forgotten. This
+// is the same object reached from another direction: one aggregation, one
+// policy, one owner map. Which is also why an internal caller cannot be offered
+// a wider surface than an external one: there is no wider surface to offer.
+func (d *Door) Serve(on *zip.App, path string) { on.Post(path, d.serve) }
 
 // message is one JSON-RPC 2.0 envelope, in the shape this door reads it.
 type message struct {
@@ -115,12 +132,24 @@ func (d *Door) serve(c *zip.Ctx) error {
 // list answers tools/list from the subsystems themselves, and NAMES the ones it
 // could not reach.
 func (d *Door) list(c *zip.Ctx, req message) error {
-	tools, down := d.gather(c)
-	result := map[string]any{"tools": tools}
+	tools, down, held := d.gather(c)
+	// ONE TOOL PER SUBSYSTEM, the operation carried in an argument. The flat
+	// projection was 1,189 tools in 977 KB, which no model holds and every client
+	// truncates. See fleet/grouped.go.
+	result := map[string]any{"tools": group(tools)}
+	meta := map[string]any{}
+	if held > 0 {
+		// The same obligation as Unavailable, for a different cause: a list
+		// shortened by POLICY must say so too. See fleet/surface.go.
+		meta[Refused] = map[string]any{"count": held, "rule": TheRule}
+	}
 	if len(down) > 0 {
-		result["_meta"] = map[string]any{Unavailable: down}
+		meta[Unavailable] = down
 		d.host.Logger().Warn("fleet mcp: tools/list is INCOMPLETE — subsystems did not answer",
 			"unavailable", len(down), "apps", len(d.apps), "tools", len(tools))
+	}
+	if len(meta) > 0 {
+		result["_meta"] = meta
 	}
 	return c.JSON(200, rpcResult(req.ID, result))
 }
@@ -134,9 +163,29 @@ func (d *Door) list(c *zip.Ctx, req message) error {
 // none of them serves it.
 func (d *Door) call(c *zip.Ctx, req message) error {
 	var p struct {
-		Name string `json:"name"`
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
 	}
 	_ = json.Unmarshal(req.Params, &p)
+
+	// [Describe] is the door's OWN tool — the fetch half of a surface whose enums
+	// carry names and no schemas — so it is answered here rather than routed.
+	if p.Name == Describe {
+		return d.describe(c, req, p.Arguments)
+	}
+
+	// A subsystem tool is an ENVELOPE over one operation. Unwrapping it yields
+	// exactly the name and message a direct call carries, so everything below is
+	// ONE dispatch for both spellings: the same routing table, the same gate on
+	// the way into it, the same hop, the same reply.
+	msg := c.Fiber().Request().Body()
+	if composed(p.Name) {
+		op, body, ok := unwrap(req.ID, p.Arguments)
+		if !ok {
+			return c.JSON(200, rpcErr(req.ID, -32602, p.Name+` needs {"op":"<operation>","input":{}}`))
+		}
+		p.Name, msg = op, body
+	}
 
 	app := d.ownerOf(p.Name)
 	if app == "" {
@@ -144,12 +193,22 @@ func (d *Door) call(c *zip.Ctx, req message) error {
 		app = d.ownerOf(p.Name)
 	}
 	if app == "" {
+		// Either nobody serves it, or refuse() withheld it — and the caller gets
+		// the same answer for both. Telling a client which of the two it hit would
+		// turn the door into an oracle for the identity surface it just declined
+		// to expose.
 		return c.JSON(200, rpcErr(req.ID, -32602, "unknown tool: "+p.Name))
 	}
-	// The caller's OWN message, at the child's own door. The child's registry
-	// invokes it, so the host can only ever name a tool and never invoke one the
-	// child did not declare.
-	ans := Ask(d.at, []string{app}, c.Fiber().Request(), manifest.FrameworkMCPPath)[0]
+	// The caller's own REQUEST — its headers, so identity propagates — carrying
+	// msg, which for a direct call is the caller's own body byte for byte and for
+	// an envelope is that same call spelled out. The child's registry invokes it,
+	// so the host can only ever name a tool and never invoke one the child did
+	// not declare.
+	hop := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(hop)
+	c.Fiber().Request().CopyTo(hop)
+	hop.SetBody(msg)
+	ans := Ask(d.at, []string{app}, hop, manifest.FrameworkMCPPath)[0]
 	if ans.Err != nil {
 		// A hop failure is MCP isError content, per the spec: the model reads "this
 		// tool is not available right now" and reacts, where a 503 body is a
@@ -163,22 +222,34 @@ func (d *Door) call(c *zip.Ctx, req message) error {
 	return c.Bytes(200, ans.Body)
 }
 
-// named is one tool with its name lifted out, so the composed list sorts without
-// re-parsing and each descriptor is carried VERBATIM — the bytes the child's own
-// registry projected, never a re-encoding.
+// named is one tool with its name and its OWNER lifted out, so the composed list
+// sorts and groups without re-parsing and each descriptor is carried VERBATIM —
+// the bytes the child's own registry projected, never a re-encoding.
 type named struct {
+	app  string
 	name string
 	raw  json.RawMessage
 }
 
-// gather asks every app what it serves, right now, and returns the union plus
-// the outages.
+// gather asks every app what it serves, right now, and returns the PROJECTABLE
+// union, the outages, and how many tools policy withheld.
 //
 // The request it sends is the CALLER's, with the body replaced by a canonical
 // tools/list: the headers ride along, so a child whose tools depend on who is
 // asking answers for this caller, while the body cannot be a tools/call the
 // discovery path would otherwise execute on every child in the fleet.
-func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage) {
+//
+// This is also where the tool surface is GATED, and it is the only place, on
+// purpose. The routing table [Door.owner] is written here and nowhere else, so a
+// name that refuse() rejects is never written, is never routable, and a
+// tools/call naming it gets the same -32602 as a tool that does not exist —
+// including from a client that cached the name before the rule existed. A filter
+// applied in list() instead would have been a suggestion.
+//
+// It returns the tools themselves rather than their bytes because every caller
+// needs the OWNER too: list() groups by it (fleet/grouped.go) and describe()
+// answers out of the same gated set.
+func (d *Door) gather(c *zip.Ctx) ([]named, []Outage, int) {
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 	c.Fiber().Request().CopyTo(req)
@@ -188,6 +259,7 @@ func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage) {
 
 	var all []named
 	var down []Outage
+	held := 0
 	owner := map[string]string{}
 	for _, a := range Ask(d.at, d.apps, req, manifest.FrameworkMCPPath) {
 		if a.Err != nil {
@@ -200,6 +272,11 @@ func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage) {
 			continue
 		}
 		for _, t := range tools {
+			// The gate, before the routing table. See fleet/surface.go.
+			if refuse(t.name) {
+				held++
+				continue
+			}
 			// One name is one dispatch, so two owners would make it unroutable. The
 			// manifest's order is the router's order, so the first claimant wins here
 			// exactly as it wins a prefix — and the loser is logged rather than
@@ -211,22 +288,26 @@ func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage) {
 				continue
 			}
 			owner[t.name] = a.App
+			t.app = a.App
 			all = append(all, t)
 		}
 	}
-	sort.Slice(all, func(i, j int) bool { return all[i].name < all[j].name })
+	// Product surface FIRST, then alphabetical — because clients truncate, and a
+	// list sorted only by name put 128 o11y console ops in front of every product
+	// tool the fleet has. rank() states the mechanism; nothing is hidden by it.
+	sort.Slice(all, func(i, j int) bool {
+		ri, rj := rank(all[i].name), rank(all[j].name)
+		if ri != rj {
+			return ri < rj
+		}
+		return all[i].name < all[j].name
+	})
 
 	d.mu.Lock()
 	d.owner = owner
 	d.mu.Unlock()
 
-	// Never nil: `"tools": null` is a client-visible difference from an empty
-	// fleet, and JSON has one way to say "no tools".
-	out := make([]json.RawMessage, 0, len(all))
-	for _, t := range all {
-		out = append(out, t.raw)
-	}
-	return out, down
+	return all, down, held
 }
 
 func (d *Door) ownerOf(tool string) string {
