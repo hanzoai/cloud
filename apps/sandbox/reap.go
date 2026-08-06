@@ -63,6 +63,7 @@ func reap(ctx context.Context, s *cloud.Service[state]) {
 			return
 		case <-t.C:
 			sweep(ctx, s)
+			orphans(ctx, s)
 		}
 	}
 }
@@ -118,4 +119,99 @@ func end(ctx context.Context, s *cloud.Service[state], st *Store, m Sandbox, why
 		return
 	}
 	s.Log.Info("reaped sandbox", "id", m.ID, "org", m.Org, "why", why)
+}
+
+// orphans removes sandbox pods no row claims any more.
+//
+// It is the sweep that has to exist, because the two above only reach a pod a ROW
+// names: a stop that failed, a process that died between deleting the row and
+// deleting the pod, a row lost to a restored backup — each leaves a pod running
+// submitted code that nothing will ever ask about again. Without this, the only
+// remedy is somebody at a terminal, and the remedy somebody at a terminal reaches
+// for is `kubectl delete pods` with a selector they wrote in a hurry. That has
+// already happened once and it took kube-system DaemonSets with it.
+//
+// So the sweep is written down, and BOUNDED BY CONSTRUCTION rather than by the care
+// of whoever runs it (bound.go):
+//
+//   - it lists in the SANDBOX NAMESPACE, which bindTo has already refused to let be
+//     a system namespace,
+//   - with the SANDBOX LABEL, so a neighbour scheduled there is not even returned,
+//   - and it deletes by NAME with a UID precondition, after checking the object it
+//     read back carries that label — never by handing a selector to a bulk delete.
+//
+// A pod younger than `idleAfter` is left alone. A create writes its row after the
+// pod exists, so a sandbox mid-creation legitimately has a pod and no row for a
+// moment — but the grace is an HOUR and not one interval, because the cost of the
+// two mistakes is not symmetric: a leaked pod costs an hour of a node, and a pod
+// deleted out from under its owner costs their work. The same hour the idle clock
+// uses, for the same reason.
+//
+// ONE DEPLOYMENT PER SANDBOX NAMESPACE. This sweep's whole claim is "no row of ours
+// names this pod", so a second cloud pointed at the same SANDBOX_NAMESPACE would
+// read the first one's live sandboxes as orphans. That is the same invariant the
+// stores already have — one writer per store — and it is stated here because this is
+// where breaking it deletes something.
+func orphans(ctx context.Context, s *cloud.Service[state]) {
+	rt := s.State.rt
+	if err := rt.ready(); err != nil {
+		return
+	}
+	list, err := rt.pods().List(ctx, rt.bound.list())
+	if err != nil {
+		s.Log.Warn("reap: list sandbox pods", "namespace", rt.bound.Namespace, "err", err)
+		return
+	}
+	claimed := known(ctx, s)
+	if claimed == nil {
+		// Not "no sandboxes are claimed" — the stores could not be read, and treating
+		// an unreadable store as an empty one would delete every live sandbox in the
+		// fleet. The one answer this sweep must never guess at.
+		return
+	}
+	for i := range list.Items {
+		p := &list.Items[i]
+		id := p.GetLabels()[labSandbox]
+		if id == "" || claimed[id] {
+			continue
+		}
+		if age := time.Since(p.GetCreationTimestamp().Time); age < idleAfter {
+			continue
+		}
+		if !rt.bound.covers(p) {
+			continue
+		}
+		if err := rt.pods().Delete(ctx, p.GetName(), precondition(p)); err != nil {
+			s.Log.Warn("reap: delete orphan", "pod", p.GetName(), "err", err)
+			continue
+		}
+		s.Log.Info("reaped orphan sandbox pod", "pod", p.GetName(), "id", id)
+	}
+}
+
+// known is every sandbox id the stores still claim, or nil when they could not all
+// be read. nil is the load-bearing value: a partial answer here is indistinguishable
+// from "these sandboxes are orphans", and acting on it would delete live work.
+func known(ctx context.Context, s *cloud.Service[state]) map[string]bool {
+	out, failed := map[string]bool{}, false
+	_ = s.State.stores.Each(func(ns namespace.Namespace, st *Store, openErr error) {
+		if openErr != nil {
+			s.Log.Warn("reap: open store", "namespace", ns, "err", openErr)
+			failed = true
+			return
+		}
+		ids, err := st.IDs(ctx, ns.ID())
+		if err != nil {
+			s.Log.Warn("reap: list for orphan sweep", "namespace", ns, "err", err)
+			failed = true
+			return
+		}
+		for id := range ids {
+			out[id] = true
+		}
+	})
+	if failed {
+		return nil
+	}
+	return out
 }

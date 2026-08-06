@@ -1985,35 +1985,68 @@ line of source in the repo. Same shape in `apps/knowledge` (9 registrations off
 already teaches, one level up: **the grep is a hint and the published subset
 (`plugin/<app>/openapi.json`) is the denominator.** Count operations, not lines.
 
-**`apps/exec` is 0 typed of 56, and that is the finished answer, not a to-do.**
-It is a transparent edge: `Mount` hands all 8 paths to
-`httputil.NewSingleHostReverseProxy` and the sandboxed code executor supplies
-every byte, every Content-Type and every status. There is nothing here to
-describe and four independent wire facts that a typed op would move — a verbatim
-upstream status (`zip` answers its own declared one, typed.go:305-311), response
-fields this repo never named (an `Out` drops them), a multipart `/v1/upload` body
-(`zip` decodes every non-empty typed body with `jsonenc.Unmarshal`, typed.go:242)
-and a byte-bodied `/v1/download/{id}` (a typed op always `c.JSON`s, typed.go:311).
-The 16 `OPTIONS`/`TRACE` operations are not expressible at all: `zip` has typed
-registrars for Get/Post/Put/Patch/Delete and nothing else. `openapi.Register` is
-refused too rather than reached for — on this surface it could only publish a
-guess at a contract this repo does not own (`{lang, code, files?}` is
-`@librechat/agents`'), and `openapi.Binary`'s `application/octet-stream` is not
-what a multipart envelope is. The refusal is a GATE:
-`apps/exec/typed_wire_test.go` holds the closed ledger (`untypedPaths` x
-`servedMethods`, crossed to 56) plus eight measurements of those wire facts
-through the REAL `Mount`, so a route added here is typed by default, a stale
-reason goes red, and the day one becomes typable
-`TestTheSurfaceIsWhollyUndescribed` goes red and sends the next agent to this
-paragraph. Two things this surface cannot express and a reader should not assume:
-it has **no tenancy** — one process-wide `CODE_EXEC_API_KEY` (the gateway bypasses
-these paths, so `principal.OrgFrom` is never consulted) and session ids on
-`/v1/files/{sid}` and `/v1/download/{id}` are opaque and org-unscoped, so
-cross-session reads are prevented by id unguessability and not by a tenant check;
-and it claims three GENERIC top-level nouns (`/v1/files`, `/v1/upload`,
-`/v1/download`) which outrank `ai`'s bare `/v1/*` by static-prefix specificity
-regardless of mount order — harmless today (ai's files live at `/v1/ai/files`),
-and a silent shadow the moment `ai` adds OpenAI's own `/v1/files`.
+**`apps/exec` WAS 0 typed of 56, and that answer expired with the thing it
+described.** It was a transparent edge — `Mount` handed all 8 paths to
+`httputil.NewSingleHostReverseProxy` — and the reason nothing could be typed was
+that the wire belonged to the upstream executor. **There was no executor.** The
+`code-exec` Service in ns `hanzo` had ZERO endpoints for 33 days, so `/v1/exec`
+answered 503 in production for that whole time, and `apps/functions` — the other
+reader of `CODE_EXEC_UPSTREAM` — was failing against the same absence. A better
+address was never the fix; the thing being addressed did not exist.
+
+**A LibreChat session IS a sandbox.** `apps/sandbox` is the one compute primitive
+("a code-exec call = a sandbox with a session lease", its package doc), so `exec`
+now composes over it and holds no store, no session table and no lifetime:
+`session_id` is the sandbox id, upload/download/list are `Write`/`Read`/`Read` on
+that sandbox, and the lease ends on `apps/sandbox`'s reaper, not here. The
+surface went **40 published operations → 5**, of which `POST /v1/exec` is now a
+TYPED op (`CodeRun` → `CodeResult`): the schema, the MCP tool, the CLI command
+and the SDK method that a proxy could never carry. Four stay untyped and the
+reasons are DIFFERENT ones, all about the callers' wire rather than about
+ownership: `/v1/upload` is multipart (`zip` decodes every non-empty typed body
+with `jsonenc.Unmarshal`, typed.go:242), `/v1/download/{sid}/{id}` answers BYTES
+(a typed op always `c.JSON`s, typed.go:311), `/v1/files/{sid}` answers a BARE
+JSON ARRAY the client runs `.find()` over, and `/v1/exec/programmatic` answers
+501 because it is a different protocol — a run suspended on each tool call and
+resumed from a continuation token (`@hanzochat/agents` ProgrammaticToolCalling),
+which is a program and not an endpoint.
+
+**The contract was MEASURED from the callers, in `~/work/hanzo/chat`, and three
+of its details are easy to get wrong from memory.** Download is TWO segments,
+`/download/{session_id}/{fileId}` (crud.js `getCodeOutputDownloadStream`), not
+`/download/{id}`. Upload answers `{message:"success", session_id, files:[{fileId,
+filename}]}` and the client THROWS unless `message` is that literal. The session
+listing is a bare array of `{name, lastModified}` whose `name` is the same
+two-segment identifier, because `getSessionInfo` matches it as a prefix. Also:
+the code tool tells the model to persist artifacts in **`/mnt/data`**, so
+`sandbox`'s `workdirFor(class)` puts an `exec` sandbox there and a `dev` one at
+`/work` — listing `/work` after a run would have reported no files and read as
+"the model wrote nothing".
+
+**A file id IS its path.** Artifacts are collected as everything under the
+workdir newer than a marker the run stamps for itself, and reported with `id` =
+the path relative to that workdir — so a download is a `Read` and there is no id
+table to keep, migrate or leak.
+
+**The call is `cloud.Ask`, and NOT a Go import, for a reason that is not style.**
+Apps ship as separate plugin binaries (`plugin/<app>/main.go` "links only its own
+subsystem"), so importing `apps/sandbox` would give `exec` a SECOND sandbox
+service — its own `cloud.OrgStore` on the same per-org SQLite files, its own
+reaper racing the real one. `plane.Ask` already collapses to an in-process
+dispatch where the fleet fuses two apps (`zip.Serving`/`zip.Here`), so the ONE
+call is a function call when they are co-resident and a socket hop when they are
+not, and which it is, is not the caller's business.
+
+**TENANCY, and the trap in it.** `cloud.For` states a caller only on a context
+with NO REQUEST behind it — `zip.CallerOf` reads the request's headers first,
+deliberately, so no handler can assert an org a caller did not arrive with. A
+typed op's ctx HAS a request behind it and a `*zip.Ctx` handler's `c.Context()`
+does not, so `cloud.For(typedCtx, org)` silently states nothing and the peer
+answers 403. `exec.callCtx` is the one rule: pass the ctx through unchanged when
+it already carries a principal (hanzo.chat forwards the end user's IAM bearer —
+crud.js `codeAuthHeaders`), and otherwise detach to `context.Background()`, state
+the deployment's BRAND org, and put the request's cancellation back with
+`context.AfterFunc` so a disconnected client does not leave a run executing.
 
 **Collisions, and the resolution.** Source does not collide; two artifacts do —
 the regenerated `openapi.yaml` golden and `go.sum`. Both resolve the same way:
@@ -4417,3 +4450,573 @@ nothing; `Mount` starts a loop that hydrates from the warehouse (no network) and
 until it succeeds every set refuses. Re-taking happens at HALF the freshness
 bound, because a set refreshed only once it is already stale is stale for the
 whole interval between the two.
+
+## The automatic debug-and-resolve loop (`insights.hanzo.ai`)
+
+An error occurs, the session and the person who hit it are already on the plane,
+an agent diagnoses it, and where the evidence carries it the loop opens a PR or
+answers the customer. This section is the design. It is a WIRING decision: every
+rung below already exists as a shipped surface, and the loop is a trigger plus a
+join plus a policy about who may pull which rung.
+
+### Provenance — which tree each claim was verified against
+
+**This repo has two divergent lines and production builds the one this file is
+not on.** Both checkouts carry the same two remotes (`forge` =
+git.hanzo.ai/hanzoai/cloud, `inc` = github.com/hanzo-inc/cloud), so they look
+interchangeable and are not:
+
+| | `forge/main` | `inc/main` |
+|---|---|---|
+| `fleet/surface.go` (`refuse()`) | **absent** | present |
+| `apps/agents/door.go` | **absent** | present |
+| relative position | 187 ahead of inc HEAD | 16 ahead of forge/main |
+
+Production runs `ghcr.io/hanzoai/cloud:sha-8465354e6bf3`, and its live behavior —
+88 grouped tools, `hanzo_describe` first, 134 refused — exists **only on the inc
+line**. An earlier draft of § 6 and § 9 was written against a forge-line checkout
+and concluded the agent door withholds nothing and that nothing in cloud calls
+it. Both were false in production, and false in the dangerous direction:
+they understated a control that exists, which invites building a redundant one.
+
+So, by claim class:
+
+- **§ "The plane, in numbers", § 1 trigger, § 2 join, § 3 evidence, § 5 privacy** —
+  verified against the LIVE warehouse (`datastore-0`, ClickHouse) and are
+  line-independent: the DDL owner is the sibling repo `hanzoai/o11y`, not either
+  cloud line.
+- **§ 6 containment, § 9 composition** — verified against the LIVE door
+  (`POST https://api.hanzo.ai/v1/mcp`) and the inc-line source. Do not re-check
+  them against a forge-line checkout; the files are not there.
+
+`~/work/hanzo/cloud` is **not** a separate product line — same repo, on branch
+`feat/sandbox-executor`, one commit behind `forge/main`, carrying concurrent
+sandbox work. It is a working checkout, not a fork. **This section should land on
+the inc line's `LLM.md`**, because that is what production builds and what § 6
+and § 9 describe. The forge↔inc divergence is itself the finding: it is why this
+was got wrong once, and it will do it again to the next reader.
+
+### What was measured before designing (2026-08-06, live warehouse)
+
+Four premises this design was handed turned out to be wrong, and the design is
+built on the measurements instead.
+
+**`/v1/o11y/sessions` is not session replay, and it is broken.** It is the
+LLM-observability sessions list — gen_ai spans grouped by the `session.id` span
+ATTRIBUTE — and `sessions.go` rewrites onto `/api/sessions`, an address the
+embedded runtime stopped serving when it dropped prefix-stripping. The request
+lands in the runtime's terminal SPA catch-all and returns `index.html`. The live
+address is `GET /v1/o11y/llm/sessions`. `typed_wire_test.go` already documents
+this exact failure for two sibling proxies that were deleted for it; this one
+kept the stale pin. Neither route has anything to do with browser replay.
+
+**`POST /v1/o11y/services` does not query `o11y_traces`.** It resolves a QBv5
+traces aggregation against `event.span`, plus one literal read of
+`event.operation`. `o11y_traces` survives only in stale prose
+(`apps/o11y/LLM.md:414`), two past-tense comments, and `e2e/telemetry-chain.sh`.
+Whatever is wrong with that route, this is not it.
+
+**Browser session replay is `POST /v1/replay` in `apps/analytics`, and cloud
+never reads it back.** The door produces one Kafka message per rrweb batch onto
+`session_recording_snapshot_item_events` and returns; a downstream ingester
+writes snappy blocks to object storage. Cloud touches neither object storage nor
+the warehouse on that path. The readable artifact is the summary row the
+ingester derives, in `insights.sharded_session_replay_events` — a different
+DATABASE from `event.*`.
+
+**`event.error` is far richer than a message and a stack.** It carries `org`,
+`session_id`, `distinct_id`, `anonymous_id`, `person_id`, `trace_id`, `span_id`,
+`service`, `product`, `release`, `environment`, `url`, `path`, `host`, `class`,
+`handled`, `level`, the autocapture element tuple `el`, the grouping fingerprint
+as `group`, and the stack as five parallel arrays — `frames.function`,
+`frames.file`, `frames.line`, `frames.column`, `frames.own`. Structured frames
+are why attribution below can be mechanical rather than a model reading a blob.
+
+The one premise that held: **`event.log.product` is dead.** 0 of 610,900 rows in
+the last hour. `service` is populated on all of them across 202 services. Scope
+by `service` — the physical column is spelled `service`, and `service.name` is a
+LOGICAL name the read plane promotes onto it (`telemetrylogs/field_mapper.go`
+promotes exactly two: `service.name → service`, `host.name → host`).
+
+**And the plane moved under all of this.** Commit `e5a0712d` (2026-08-01, "event:
+one occurrence table, discriminated by a signal column") merged the five tables
+into ONE — `event.fact`, 39 columns, discriminated by `signal ∈ {act, error, log,
+span, clip, sample}`. `group` was renamed `issue`, `site` → `origin`, `level` +
+`severity_text` + `severity_number` collapsed to `severity UInt8`. The DDL owner
+is the sibling repo `hanzoai/o11y` (`deploy/datastore/migrations/0002_event_fact.sql`);
+cloud holds no `.sql` at all and is a writer and reader, never a creator.
+
+**Both planes are live right now, and they disagree.** Measured today:
+
+| | rows | ingested since 2026-08-01 | last write |
+|---|---|---|---|
+| `event.error` (legacy) | 1,057 | 982 | 2026-08-06 10:48 |
+| `event.fact WHERE signal='error'` (canonical) | **71** | 71 | 2026-08-06 12:46 |
+
+The deployed `analytics` is `ghcr.io/hanzoai/analytics:v3.1.7`, rolled out ~2026-07-29
+— three days OLDER than the merge — so the running binary still writes the legacy
+table. The canonical plane has 7% of the errors. **Anything built on `event.fact`
+today sees 7% of reality, and anything built on `event.error` is building on a
+table the code no longer writes.** Redeploying analytics is a precondition, not a
+detail, and it is cheap.
+
+### The plane, in numbers
+
+| | rows | note |
+|---|---|---|
+| `event.metric` | 146,229,638 | seconds of lag |
+| `event.log` | 132,350,357 | 610,900/hour, `service` 100%, `product` 0%, `trace_id` 11% |
+| `event.span` | 3,364,314 | 1.87M/24h, `trace_id` 100%, `session_id` **0%**, 120 services, 24 orgs |
+| `event.trace` | 1,369,007 | |
+| `event.error` | **1,058** | all-time, since 2026-07-11. 4 orgs, **68 distinct fingerprints** |
+| `event.session` | 1,007 | `session_roll` MV over `event.fact` |
+| `insights.sharded_session_replay_events` | 128 | 2 `team_id`s, live through 2026-08-05 |
+
+`event.error` is a thousand rows, not a hundred million. That single fact decides
+the trigger.
+
+### 1. The trigger
+
+**Evaluate on `event.fact WHERE signal = 'error'` alone, keyed on `issue`, on a
+schedule.** That is the canonical plane and `issue` is the fingerprint column;
+the legacy `event.error`.`group` is the same value under the old spelling and is
+what the numbers below were measured on, because it is where the deployed writer
+still puts them. Read the canonical one and fix the writer — do not build a
+reader that unions both, which would make the split permanent.
+
+Promote a fingerprint to an investigation when it is BOTH new and has reach:
+
+> never investigated before, AND ≥ 3 distinct `person_id`/`distinct_id` in the
+> window, AND at least one occurrence in the last hour.
+
+Novelty and reach are both required because either alone is wrong on measured
+data. Novelty alone fires on our own test junk — the rows whose messages are
+`"0"`, `"13"`, `"test"`, `"data"`, `"undefined"`, `"{}"`. Reach alone re-fires
+forever on `TypeError: Failed to fetch`, which is 151 of 1,058 rows and is
+mostly a user's wifi. Together they select the thing worth a run: something
+nobody has seen that is happening to more than one person.
+
+**It is cheap because the plane was built for exactly this query.** `event.fact`
+is `ORDER BY (org, time, id)` and `PARTITION BY (signal, toYYYYMM(ingested_at))`,
+so scoping to one org, one signal and one hour is a partition prune plus a prefix
+seek. It also carries eleven skip indexes, and five of them are the ones this
+loop needs: **`by_issue`, `by_session`, `by_trace`, `by_person`** (bloom filters)
+and **`by_file`** (a bloom filter on the stack frames' file array). The trigger,
+the join and the attribution step each ride an index that already exists. 68
+distinct fingerprints exist across all of history. At a thousand times today's
+volume this is still a rounding error, and it never touches the 146M-row metric
+store or the 132M-row log store.
+
+The novelty lookback needs no configuring: `event.fact` TTLs the `error` signal at
+**90 days** (act 2y, log/span/clip 30d). Ninety days is the window, because after
+that the plane genuinely does not remember and claiming otherwise would be a
+fingerprint that looks new every quarter.
+
+**What is explicitly NOT a trigger.** Not every error occurrence — occurrences
+are the thing being grouped, not the unit of work. Not `event.log` severity
+`error`: 610,900 rows an hour is the fleet talking to itself, and a loop reading
+it would investigate our own retry chatter forever. Not a metric threshold —
+that is alerting, `apps/o11y/alerts.go` already does it, a second answer to "is
+this service unhealthy" is a second answer, and in any case **`event.metric` has
+no `org` column at all**: its identity is `(env, temporality, metric_name,
+fingerprint)`, so two orgs reporting one metric name hash to one series. A
+per-tenant trigger cannot be built on it, which is why the write core refuses
+metrics rather than landing them. Not latency. Not a customer
+opening a ticket, because the ticket path is a different rung (below) and not
+every ticket is an error.
+
+The two fingerprint widths in the data (64-hex and 16-hex) are two generations of
+the hash. Key on the value, not the width.
+
+### 2. The join
+
+**The join key is `session_id`, on the pair `(org, session_id)`.** It exists in
+schema on `event.fact` and every projection over it, and on the replay summary.
+Whether it JOINS is a separate question, and the measurement is blunt:
+
+| join | overlap |
+|---|---|
+| `event.error` → replay | **0** of 73 |
+| `event.event` → replay | **0** of 1,754 |
+| `event.session` → replay | **120 of 128 (94%)** |
+
+The key space is live and correct — the native session rollup matches replay
+almost perfectly. The error plane is the one thing standing outside it.
+
+**The reason is one missing stamp, and the join is otherwise already built.**
+`event.session_roll` is a materialized view over `event.fact`
+`WHERE session_id != ''`, and it ALREADY computes
+`errors = uniqExactIfState(id, signal = 'error')` per session. The column is
+there, the rollup is there, the replay match is there. It reads zero because the
+browser SDK stamps `session_id` on pageviews and clips and does not stamp it on
+the error signal. For org `hanzo`: 220 errors, 2 with a session.
+
+So the deliverable is not a pipeline. It is one field pair at one emitter:
+
+- **Deliverable A — stamp `session_id` on the error signal in `@hanzo/event`**,
+  the same value the pageview and clip paths already emit. This converts a 0%
+  join into the ~94% the session plane already demonstrates.
+- **Deliverable B — stamp `trace_id` on the error signal.** `event.error.trace_id`
+  is 0 of 1,058, all time, while `event.span` carries `trace_id` on 100% of
+  1.87M spans a day across 120 services. The server-side causal chain is fully
+  recorded and completely unreachable from an error, for want of one stamp.
+  Note that spans carry `session_id` on 0% — so browser-session ↔ server-trace
+  is a stamp on BOTH ends, and B is the half that pays first.
+
+**Tenant safety is a prerequisite, not plumbing.** The replay summary is keyed
+`team_id Int64` (2 teams); the event plane is keyed `org LowCardinality(String)`
+(24 orgs). They are different namespaces. **A join on bare `session_id` with no
+tenant predicate can return another org's replay.** Session ids are UUIDs so a
+collision is unlikely, but "unlikely" is not a tenant boundary, and the loop
+would be reading customer data across orgs. The org ↔ team_id resolution must
+exist and every replay read must carry it. This is deliverable C, and no rung of
+the ladder may touch replay before it lands.
+
+Identity is already there and does not need a deliverable: `distinct_id` on 808
+of 1,058 rows, `person_id` on 195. It is pseudonymous, which is what the agent
+should see (privacy, below).
+
+### 3. The evidence bar — what separates diagnosed from guessed
+
+A confident wrong PR is worse than nothing, so the bar is a property of the
+ARTIFACT, not the model's confidence. An investigation may propose a code change
+only when all three hold:
+
+1. **An owned frame.** At least one `frames.own = true` entry resolving to a
+   file and line that exists in a repo at the revision in question. Frames are
+   columns, so this is a lookup, not an inference. No owned frame → the fault is
+   in someone else's code or the stack was stripped → verdict is
+   `unattributed`, and the ladder stops at notify.
+2. **A bracketing revision.** The fingerprint's first-seen time falls after a
+   known deploy of the implicated service. `release` is populated on 17 of 1,058
+   rows today (1.6%), so this is mostly unavailable — the fallback is the CD
+   App CR revision for that `service`, which is recorded. Where neither resolves,
+   the verdict degrades to `unattributed`.
+3. **A reproduction.** A test that FAILS before the change and PASSES after.
+
+Rung 3 is the whole bar. Rungs 1 and 2 narrow the search; only 3 distinguishes
+diagnosis from a plausible story, because it is the one artifact a confident
+model cannot produce by being confident. "It compiles", "the diff looks right",
+and "the model explained the bug" are not evidence. A run that cannot write a
+failing test has not diagnosed anything, and it says so.
+
+A session replay is CORROBORATION, never attribution. It shows what the user did;
+it cannot show which line is wrong. It may not substitute for rung 1.
+
+### 4. The action ladder, and where the human stands
+
+Every rung is an existing surface. Nothing here is new machinery.
+
+| rung | surface | who |
+|---|---|---|
+| annotate | o11y annotation / `event.fact` | automatic |
+| notify | `apps/notify` | automatic |
+| open an issue | `apps/tracker` | automatic |
+| open a **draft** PR | `tracker.CreateAgentPR` (`Kind:"pr"`, `Source:"agent"`) | automatic, bar met, our repos only |
+| **enqueue for review** | `POST /v1/o11y/reviews/:id/items` | **← the human stands here** |
+| reply to the customer | `apps/help` ticket thread | human first time, automatic on recurrence |
+| merge | forge | **human, always** |
+
+**The review queue is already the right shape and already accepts the right
+object.** `apps/o11y/annotation_queues.go` has `PENDING`/`COMPLETED`, an
+assignee, and `validObjectType = {TRACE, OBSERVATION, SESSION}` — a queue item
+can reference a SESSION today. That is exactly "here is a session that broke, a
+human should look". Do not build a second queue.
+
+**Merge is never automatic.** A merged wrong fix is the one action on this ladder
+with no cheap undo, and the loop's whole value is that it is cheap. The PR is a
+draft; a human merging it is the loop's output, not its failure.
+
+**"Resolve support issues automatically" — where that is actually safe.** The
+honest answer decomplects novelty from recurrence, which is free because the
+trigger is already fingerprint-keyed:
+
+- The **first** occurrence of a fingerprint is answered by a human. The loop
+  drafts, cites, and enqueues; a person sends it.
+- The **Nth** occurrence of that SAME fingerprint is answered automatically,
+  because the reply is a REPLAY of an answer a human already approved for that
+  exact fingerprint — not a generated one.
+
+That is a real automation of the support load (the volume is in recurrence: one
+fingerprint is 151 of 1,058 rows) without ever sending a customer a sentence no
+human has read. A generated first reply is not on the ladder at any rung. The
+gain compounds honestly: every fingerprint a human answers once is answered free
+forever after, and the loop's job is to make that first answer fast and
+well-evidenced.
+
+An auto-reply is withdrawn the moment the fingerprint's shape changes — a new
+`class`, a new owned frame, or a new `service` re-opens it as novel and it goes
+back to a human.
+
+### 5. The privacy boundary
+
+Session replay is customer data, it is unscrubbed, and this is the part where
+being wrong is most expensive.
+
+**What the agent may read:** the `event.error` row, and the replay SUMMARY row
+(`click_count`, `keypress_count`, timestamps, counts, urls). Both are structured
+and bounded.
+
+**What the agent may never read: the raw rrweb blocks.** `replay.go` carries
+recordings VERBATIM by design — "cloud re-encodes nothing and drops no field it
+does not understand" — so the snapshot contains whatever the user typed, on any
+page, including into fields nobody remembered to mask. Cloud does not read
+object storage on this path today, and this loop does not change that. Keeping
+the agent on the summary is what makes the whole design safe by construction
+rather than by a filter someone has to maintain.
+
+**Redaction happens where it already happens, and nowhere new.** Two sites exist
+and both stay:
+
+1. Client-side masking in the recorder — the only place that can stop capture.
+2. `scrubText` / `scrubException` at the fold in `apps/analytics/capture.go` —
+   the ONE server-side scrubber. It drops the credential and PII key families
+   (`password`, `secret`, `authorization`, `api_key`, `ssn`, `cookie`, …), drops
+   name/email/phone keys outright, and redacts email- and token-shaped substrings
+   from free text including stack frames. Error rows reaching the agent are
+   already clean.
+
+**One concrete hole, and it is cheap to close.** The replay summary's `first_url`
+and `all_urls` never pass through the fold — they are derived downstream by the
+ingester, not written through cloud's write core. A URL with `?token=…` or
+`?access_token=…` in it reaches a model unredacted. `secretRe` already matches
+exactly that shape. **Route those two fields through the EXISTING `scrubText`
+at the read, before they reach a model.** Do not write a second scrubber; extend
+the one that exists if it needs extending.
+
+**Identity reaching the model is pseudonymous.** `distinct_id` and `person_id`
+are identifiers, and the scrub already drops names and emails. The agent
+diagnoses for `person_id`, never for a human being's name. Resolving a pseudonym
+to a person is a human action on the reply rung, where a human is already
+standing.
+
+### 6. Cost and blast radius
+
+**One investigation per fingerprint per org, ever.** Dedup on the fingerprint IS
+the cost bound — it is not a quota bolted on beside one. 68 fingerprints exist
+across all of history; the steady-state spend is new fingerprints per day, which
+is a number in the single digits, not a function of the 1,058 occurrences or the
+146M-row plane. A fingerprint that was investigated and closed re-opens only if
+its shape changes.
+
+A per-org ceiling on new investigations per day lives at the same place the
+trigger is evaluated — one site decides whether a run happens, not two.
+
+**Blast radius is bounded by what the rungs can do, not by the agent's
+restraint.** Draft PRs against our own repos, never a customer's. No merge. No
+first-time customer reply. Nothing on the ladder below the human's position is
+irreversible.
+
+**The tool surface already refuses, and it refuses our own agents too.**
+Measured on the live door, `POST https://api.hanzo.ai/v1/mcp` `tools/list`:
+88 tools in 63,468 bytes, the first of them `hanzo_describe`, and
+
+```
+_meta["hanzo.ai/refused"] = {count: 134, rule: "a tool is not projected when its
+  name discloses a bearer secret at any verb, or when a mutating verb acts on an
+  identity or authority object"}
+```
+
+`fleet/surface.go`'s `refuse()` is that rule and it is the only gate. Two
+properties make it worth relying on rather than duplicating:
+
+- **It is a rule over NOUNS and VERBS, not a roster.** Clause 1 refuses a name
+  that handles a bearer secret at *every* verb, because reading
+  `GET …/reset_password_tokens` discloses the secret exactly as the PUT that
+  mints it does. Clause 2 refuses a mutating verb acting on an identity or
+  authority object, while the matching READ survives — `GetRole` and `GetUser`
+  live, because knowing who holds a role is not granting one. So op 1,324 is
+  classified the day it is written, which a hand-maintained list of 36 names
+  cannot do.
+- **It is applied inside `gather()`, where the routing table is written**, so a
+  refused name is absent from BOTH `tools/list` and `tools/call` — unroutable
+  even for a client that cached it. That is a boundary, not a preference. The
+  separate `rank()` is the preference half (it only reorders, because truncating
+  clients keep the head of the list), and the two stay separate.
+
+The withholding is reported rather than silent: a shortened list carries its own
+count and rule, so an operator who wonders where `CreateServiceAccountKey` went
+reads why instead of filing a bug against a subsystem that is serving it
+correctly. The same `_meta` carried `unavailable: [{app: x402, …}]` when I
+measured it — an outage and a policy are told apart on the wire.
+
+The loop gets no second surface and no exemption. A capability denied to a
+customer's agent is denied to this one by the same line of code, and there is no
+second policy site to keep in agreement.
+
+One invariant this still rests on, worth a test rather than an assumption:
+`SanitizeIdentity` deletes every authority header and re-mints it from verified
+IAM claims (org from the signed `orgs` membership set, never the `owner` claim),
+and each typed op's `tenantOf` scopes the read. That holds only while **every
+child runs the full `cloud.Serve` chain** — a subsystem mounted by address that
+skipped it would trust a forwarded `X-User-IsAdmin: true`.
+
+Runs are metered on the existing agents billing path. A run is a billed act and
+is attributed to the org whose error triggered it.
+
+### 7. What this design does NOT build, and why
+
+- **No second ingest door.** `POST /v1/event` is the one door; errors already
+  arrive through it.
+- **No second tool surface.** The fleet MCP door and its `refuse()` are the one
+  policy site.
+- **No replay read door in cloud.** Cloud deliberately does not touch replay
+  object storage. Reading the summary from the warehouse gets the loop what it
+  needs and keeps that property.
+- **No second scrubber.** One scrub site; extend it or route through it.
+- **No new queue, no new tracker, no new notifier.** Reviews, tracker and notify
+  exist.
+- **No new auth, no new "gate".** IAM principal + `tenantOf` on every read, as
+  every typed op already does.
+- **No trigger on `event.log` or `event.metric`.** 132M and 146M rows, and the
+  interesting signal is not there.
+- **No auto-merge and no generated first reply to a customer.** Stated above.
+- **No reader that unions `event.error` and `event.fact`.** Two spellings of one
+  fact is what the merge commit was for; a compatibility union would make the
+  split permanent and would be the second answer this repo keeps deleting. Fix
+  the writer.
+- **Not fixing `/v1/o11y/sessions` or `/v1/o11y/services` here.** Both are real
+  bugs (§ measurements) and neither is on this loop's path — the loop reads the
+  warehouse directly. They are separate one-line fixes and should be filed as
+  such, not absorbed into this design to make it look larger.
+
+### 8. The smallest first increment
+
+**Stamp `session_id` and `trace_id` on the error signal in `@hanzo/event`.**
+
+That is the increment. One field pair, one SDK, no new infrastructure, no new
+route, no agent. It is worth doing before anything else because everything
+downstream is a read over data that does not exist yet, and because the
+machinery it feeds is already built and already correct: the columns are on
+`event.error`, the MV `session_roll` already counts errors per session, and the
+session plane already matches replay at 94%. Today that rollup reports zero
+errors on every session it can match. After this change it reports the truth, and
+"show me the replay of a session that hit this fingerprint" becomes a query
+rather than a project.
+
+**It depends on one thing, and it is already owed:** redeploying `analytics` past
+`e5a0712d` so errors land on `event.fact` at all. That is a version bump, not
+work. No schema change, no migration, no new service.
+
+**It is verifiable the day it ships**, by the query that returns 0 today:
+
+```sql
+SELECT uniqExact(session_id) FROM event.fact
+WHERE signal = 'error' AND session_id != ''
+  AND session_id IN (SELECT session_id FROM insights.sharded_session_replay_events)
+```
+
+Run it against `event.error` too until the writer moves; the two answers
+converging on one plane is how you know the migration finished.
+
+Ship it, watch that number leave zero, and only then build the trigger — which is
+a scheduled `GROUP BY` over a thousand rows, and is the easy part.
+
+**Order after that:** deliverable C (org ↔ team_id, the tenant boundary) before
+any rung reads replay; then the trigger and the annotate/notify/issue rungs;
+then the draft-PR rung once the reproduction bar can actually be enforced by the
+coding backend. The customer-reply rung is last, and its first version is the
+human-approved replay of a blessed answer, never generation.
+
+### 9. How this composes with the agentic coding backend
+
+The loop supplies a BRIEF and consumes a VERDICT; it does not run the model.
+
+What it hands over is fully determined by the sections above: the fingerprint,
+the owned frames (file, line, function — already columns), the implicated
+`service` and `release`, the affected `person_id` count, and a corroborating
+session reference where one joins. What it requires back is the reproduction of
+§3 — a test that failed before and passes after — because that is the artifact
+that decides which rung the ladder stops at. A run that returns a diff without
+one is `unattributed`, and `unattributed` stops at notify.
+
+**Where the loop's agent gets its tools — settled against what exists.**
+`apps/agents/door.go` already routes a run's tool calls through `fleet.Door` over
+the host socket, deliberately so that "an agent CANNOT see a surface an external
+client cannot; there is no second surface to see." Building a second aggregation
+on the tool plane was considered there and rejected for the reason this document
+keeps repeating: it would be a second place for the curation rule to be applied,
+or forgotten. Two properties come free and both matter here:
+
+- the same `refuse()` denylist, enforced in `gather()`, so the loop's agent is
+  bound by clause 1 and clause 2 like anyone else;
+- **identity is stated by the RUN, not by the model** — org and actor are passed
+  as arguments from `executeRun` and written as zip identity headers, while the
+  model contributes only a tool name and an arguments object. There is no path by
+  which a model can name a tenant. Inbound caller headers are deliberately not
+  forwarded, because a scheduled run has no inbound request and a nested one may
+  be running for a different principal.
+
+Every rung of § 4 is already on that door: `hanzo_analytics` publishes
+`get_v1_errors`, `hanzo_o11y` publishes 318 ops including the review queues,
+and `hanzo_tracker` and `hanzo_help` are both projected. So the ladder needs no
+new tool surface — only the policy about which rung may be pulled without a
+human, which is § 4's job and not the door's.
+
+**The division of labour is therefore by role, not by capability.** The TRIGGER
+queries the warehouse directly, because it must: deciding whether to investigate
+IS a warehouse query, and the replay summary lives in `insights.*` — a different
+database, reached by no typed op and therefore by no tool. That data is already
+in hand by the time an agent starts, so passing it as a brief costs nothing and
+re-fetching it through a tool call would be a second retrieval of something
+already retrieved. The AGENT gets that brief plus the door, and reaches for the
+door when the brief turns out to be insufficient.
+
+What is *not* justified is handing the coding backend a licence to roam the
+telemetry plane as its opening move. That is a least-authority preference, not a
+containment claim — containment is `refuse()` plus run-stated identity, and both
+hold whichever way this goes.
+
+## The sandbox sweep is bounded by construction (`apps/sandbox/bound.go`)
+
+An agent's sandbox cleanup deleted every sandbox on a node, **including
+kube-system DaemonSet pods**. They self-healed. That is luck, and the reason it
+was possible is that "which pods are sandboxes" was a selector written at a call
+site — so the answer was only ever as good as whoever was typing, and a cleanup
+gets written exactly when that person is in a hurry.
+
+So the answer stopped being a flag. `Bound` is a TYPE carrying both halves
+together, and there is no constructor that yields one without the other:
+
+- **namespace** — `bindTo` REFUSES `kube-system`, `kube-public`,
+  `kube-node-lease`, `default`, `hanzo`, empty, and anything prefixed `kube-`.
+  The refusal happens in `newRuntime` **before a Kubernetes client is built**, so
+  a deployment that sets `SANDBOX_NAMESPACE=kube-system` gets a subsystem that
+  cannot start a pod, let alone delete one — `ready()` fails closed with the
+  reason, rather than logging a warning nobody reads.
+- **label** — the selector is always `hanzo.ai/sandbox`, which only this
+  package's pods carry.
+
+Either half alone is insufficient and that is the whole design: a label with no
+namespace reaches every namespace in the cluster (this is how a sweep meets
+kube-system), and a namespace with no label reaches whatever else was scheduled
+there.
+
+**A delete is not a selector at all.** `stop` now READS the pod back, checks the
+object carries the label (`Bound.covers`), and deletes BY NAME with a UID
+`Preconditions` — so the label check is not a TOCTOU and a recycled name cannot
+be deleted in place of the object that was inspected. `IsConflict` is treated as
+"already gone", never retried without the precondition.
+
+**The orphan sweep exists so nobody writes it by hand.** Pods whose row is gone —
+a failed `stop`, a process that died between the two deletes, a restored backup —
+used to leak with no remedy but a person at a terminal, and the remedy a person
+at a terminal reaches for is `kubectl delete pods` with a hurried selector. It is
+written down instead, list-by-bound, delete-by-name-and-UID, with two guards that
+are load-bearing:
+
+- `known()` returns **nil** when any store could not be read, and nil aborts the
+  sweep. An unreadable store read as "no sandboxes are claimed" would delete
+  every live sandbox in the fleet.
+- It reads `Store.IDs` and **not** `Store.List`, because `List` is `LIMIT 200` —
+  right for a page a human reads, catastrophic for a set a sweep differences
+  against, where truncation means "delete everything past row 200".
+
+The grace is `idleAfter` (1h), not one reap interval, because the two mistakes
+do not cost the same: a leaked pod costs an hour of a node, a pod deleted out
+from under its owner costs their work.
+
+**ONE DEPLOYMENT PER SANDBOX NAMESPACE.** The sweep's whole claim is "no row of
+ours names this pod", so a second cloud pointed at the same `SANDBOX_NAMESPACE`
+would read the first one's live sandboxes as orphans. Same invariant the stores
+already have; stated where breaking it deletes something.

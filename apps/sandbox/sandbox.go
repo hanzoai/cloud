@@ -54,7 +54,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -125,6 +124,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		rt:     newRuntime(),
 	}}
 	Routes(app, s)
+	// The peer half. Registered beside the routes because they are two adapters
+	// over one domain, and an app that mounted only one of them would be an app
+	// whose answer depends on who asked.
+	mounted.Store(s)
+	expose()
 	// Start the reaper HERE, not from a route and not from a caller. Nothing
 	// else ends a lease: every field it needs was already written on every
 	// create and every call, and for want of this one line a sandbox once
@@ -150,21 +154,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // so — the same shape as the policy that selected no pod and the installer that
 // installed nothing.
 func Routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/sandboxes", cloud.Handle(s, func(s *Service, c *zip.Ctx) error {
-		out, err := List(s, c)
-		if err != nil {
-			return err
-		}
-		return c.JSON(http.StatusOK, map[string]any{"sandboxes": out})
-	}))
-	app.Post("/v1/sandboxes", cloud.Handle(s, Create))
+	app.Get("/v1/sandboxes", cloud.Handle(s, list))
+	app.Post("/v1/sandboxes", cloud.Handle(s, create))
 
 	g := app.Group("/v1/sandboxes")
-	g.Get("/:id", cloud.Handle(s, Get))
-	g.Delete("/:id", cloud.Handle(s, Delete))
-	g.Post("/:id/exec", cloud.Handle(s, ExecIn))
-	g.Get("/:id/fs", cloud.Handle(s, FsRead))
-	g.Post("/:id/fs", cloud.Handle(s, FsWrite))
+	g.Get("/:id", cloud.Handle(s, get))
+	g.Delete("/:id", cloud.Handle(s, del))
+	g.Post("/:id/exec", cloud.Handle(s, execIn))
+	g.Get("/:id/fs", cloud.Handle(s, fsRead))
+	g.Post("/:id/fs", cloud.Handle(s, fsWrite))
 }
 
 func orgOf(c *zip.Ctx) (string, bool) { return principal.Org(c) }
@@ -190,8 +188,13 @@ func New(deps cloud.Deps) (*Service, error) {
 	}}, nil
 }
 
-// Create leases a sandbox. It is the only path that creates cluster objects.
-func Create(s *Service, c *zip.Ctx) error {
+// The ADAPTERS. Each is bind, call, JSON — and nothing else. Every decision they
+// used to make (which class is legal, which org owns the row, what a non-zero exit
+// means) moved to api.go, where a peer app can reach it too. What is left is the
+// part that is genuinely about HTTP: where a value comes from on the wire, and
+// which status carries it back.
+
+func create(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -206,141 +209,54 @@ func Create(s *Service, c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	class := strings.ToLower(strings.TrimSpace(body.Class))
-	if class == "" {
-		class = "exec"
-	}
-	if !classes[class] {
-		return zip.ErrBadRequest("class must be one of exec, dev, desktop")
-	}
-	// A project is what makes a sandbox RESUMABLE — it names the volume. An exec
-	// sandbox has no project and no volume, which is why it can be created and
-	// destroyed freely and why two of them never contend.
-	project := slug(body.Project)
-	if class != "exec" && project == "" {
-		return zip.ErrBadRequest("project required for class " + class)
-	}
-	store, err := storeFor(s, o)
+	m, err := Lease(s, c.Context(), o, Spec{
+		Class: body.Class, Project: body.Project, Image: body.Image, TTLSec: body.TTLSec})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
-
-	// One live sandbox per (org, project), and the refusal is deliberate: the
-	// project volume is single-attach, so a second concurrent sandbox would
-	// either fail to attach or silently get a cold empty disk. "Silently cold" is
-	// the worse of the two — the user sees a sandbox that works and reinstalls
-	// everything on every call — so it is refused in the open, naming the sandbox
-	// that already holds the volume.
-	if project != "" {
-		if live, err := store.Live(c.Context(), o, project); err == nil && live.ID != "" {
-			return zip.Errorf(http.StatusConflict,
-				"project %q already has a live sandbox (%s); delete it first", project, live.ID)
-		}
-	}
-
-	id, err := genID()
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "id: %v", err)
-	}
-	now := time.Now().Unix()
-	m := Sandbox{
-		ID: id, Org: o, Kind: KindSandbox, Class: class, Project: project,
-		Image: firstNonEmpty(body.Image, s.State.rt.imageFor(class)),
-		Pod:   podName(id), Status: "pending",
-		CreatedAt: now, LastUsedAt: now,
-	}
-	if project != "" {
-		m.Volume = volumeName(o, project)
-	}
-	// The lease. Unbounded is not an option for a sandbox running submitted code
-	// on our nodes, so an unset ttl takes the class default rather than forever.
-	ttl := body.TTLSec
-	if ttl <= 0 {
-		ttl = defaultTTL[class]
-	}
-	if ttl > maxTTL {
-		ttl = maxTTL
-	}
-	m.ExpiresAt = now + int64(ttl)
-
-	if err := store.Put(c.Context(), m); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "put: %v", err)
-	}
-	// A failure to start is RECORDED on the row and answered 503 — the row stays
-	// so an operator can see what was asked for and why it did not happen, rather
-	// than the request vanishing with the evidence.
-	if err := s.State.rt.start(c.Context(), m); err != nil {
-		m.Status, m.Error = "error", err.Error()
-		_ = store.Put(c.Context(), m)
-		return zip.Errorf(http.StatusServiceUnavailable, "start sandbox: %v", err)
-	}
-	m.Status = "running"
-	if err := store.Put(c.Context(), m); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "put: %v", err)
+		return err
 	}
 	return c.JSON(http.StatusCreated, m)
 }
 
-// List answers the caller org's sandbox. Returns the slice so a host that also
-// has upstream sources can fold them into one answer.
-func List(s *Service, c *zip.Ctx) ([]Sandbox, error) {
+func list(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return nil, zip.ErrForbidden("X-Org-Id required")
+		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := storeFor(s, o)
+	out, err := List(s, c.Context(), o, c.Query("project"), c.Query("status"))
 	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return err
 	}
-	ms, err := store.List(c.Context(), o, slug(c.Query("project")), strings.TrimSpace(c.Query("status")))
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-	}
-	return ms, nil
+	return c.JSON(http.StatusOK, map[string]any{"sandboxes": out})
 }
 
-// Get answers one sandbox THIS org owns.
-func Get(s *Service, c *zip.Ctx) error {
-	m, _, err := load(s, c)
+func get(s *Service, c *zip.Ctx) error {
+	o, ok := orgOf(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	m, err := Get(s, c.Context(), o, idParam(c))
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, m)
 }
 
-// Delete ends the lease: the pod goes, the volume stays unless purge=1.
-func Delete(s *Service, c *zip.Ctx) error {
-	m, store, err := load(s, c)
-	if err != nil {
+func del(s *Service, c *zip.Ctx) error {
+	o, ok := orgOf(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	if err := End(s, c.Context(), o, idParam(c), c.Query("purge") == "1"); err != nil {
 		return err
-	}
-	if serr := s.State.rt.stop(c.Context(), m); serr != nil {
-		s.Log.Warn("stop sandbox", "id", m.ID, "err", serr)
-	}
-	// purge=1 drops the VOLUME as well, and it is opt-in because the volume holds
-	// the only copy of the checkout and the caches. Ending a lease is cheap and
-	// reversible; deleting someone's uncommitted work is neither.
-	if c.Query("purge") == "1" && m.Volume != "" {
-		if perr := s.State.rt.purge(c.Context(), m); perr != nil {
-			s.Log.Warn("purge volume", "volume", m.Volume, "err", perr)
-		}
-	}
-	if err := store.Delete(c.Context(), m.Org, m.ID); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	c.Status(http.StatusNoContent)
 	return nil
 }
 
-// ExecIn runs argv inside the sandbox and answers its exit code and output.
-//
-// A non-zero exit is a SUCCESSFUL call carrying a failed program: the HTTP
-// status stays 200, because "the tests failed" and "the sandbox is broken" are
-// different facts and a caller has to be able to tell them apart.
-func ExecIn(s *Service, c *zip.Ctx) error {
-	m, store, err := load(s, c)
-	if err != nil {
-		return err
+func execIn(s *Service, c *zip.Ctx) error {
+	o, ok := orgOf(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
 	}
 	var body struct {
 		Argv       []string `json:"argv"`
@@ -352,108 +268,43 @@ func ExecIn(s *Service, c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	argv, err := argvOf(body.Argv, body.Command)
+	r, err := Run(s, c.Context(), o, idParam(c), Cmd{Argv: body.Argv, Command: body.Command,
+		Stdin: body.Stdin, Dir: body.Dir, TimeoutSec: body.TimeoutSec})
 	if err != nil {
 		return err
 	}
-	if body.Dir != "" {
-		argv = append([]string{"sh", "-c", "cd " + shellQuote(body.Dir) + " && exec \"$@\"", "sh"}, argv...)
-	}
-	r, err := s.State.rt.exec(c.Context(), m, argv, strings.NewReader(body.Stdin), body.TimeoutSec)
-	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "exec: %v", err)
-	}
-	touch(c, store, m)
 	return c.JSON(http.StatusOK, r)
 }
 
-// FsRead reads one file, or lists a directory when the path names one. Both go
-// through the same exec channel — there is no second protocol and no daemon in
-// the pod to speak one.
-func FsRead(s *Service, c *zip.Ctx) error {
-	m, store, err := load(s, c)
-	if err != nil {
-		return err
-	}
-	path, err := confine(c.Query("path"))
-	if err != nil {
-		return err
-	}
-	// One call, not two: `cat` a file, and fall back to a listing when the path is
-	// a directory. A stat round-trip first would double the latency of the common
-	// case to save a shell test that costs nothing.
-	argv := []string{"sh", "-c",
-		"if [ -d " + shellQuote(path) + " ]; then ls -1A -- " + shellQuote(path) +
-			"; else cat -- " + shellQuote(path) + "; fi"}
-	r, err := s.State.rt.exec(c.Context(), m, argv, nil, 0)
-	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "fs read: %v", err)
-	}
-	touch(c, store, m)
-	if r.ExitCode != 0 {
-		return zip.ErrNotFound(strings.TrimSpace(firstNonEmpty(r.Stderr, "no such path")))
-	}
-	c.SetHeader("Content-Type", "text/plain; charset=utf-8")
-	return c.String(http.StatusOK, r.Stdout)
-}
-
-// FsWrite writes the request body to one file, creating parents.
-func FsWrite(s *Service, c *zip.Ctx) error {
-	m, store, err := load(s, c)
-	if err != nil {
-		return err
-	}
-	path, err := confine(c.Query("path"))
-	if err != nil {
-		return err
-	}
-	argv := []string{"sh", "-c",
-		"mkdir -p -- \"$(dirname -- " + shellQuote(path) + ")\" && cat > " + shellQuote(path)}
-	r, err := s.State.rt.exec(c.Context(), m, argv, strings.NewReader(string(c.Body())), 0)
-	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "fs write: %v", err)
-	}
-	touch(c, store, m)
-	if r.ExitCode != 0 {
-		return zip.Errorf(http.StatusBadRequest, "write %s: %s", path, strings.TrimSpace(r.Stderr))
-	}
-	return c.JSON(http.StatusOK, map[string]any{"path": path, "bytes": len(c.Body())})
-}
-
-// load resolves :id to a sandbox THIS org owns. The org comes from the validated
-// principal and the query is scoped by it, so a caller cannot address another
-// org's sandbox by guessing an id — a miss is 404 and not 403, because "that
-// sandbox belongs to someone else" is itself a cross-tenant fact.
-func load(s *Service, c *zip.Ctx) (Sandbox, *Store, error) {
+// fsRead answers text, because this address always has: a file as its bytes, a
+// directory as one entry per line. The typed Entry the core returns is what the
+// plane carries; here it is rendered back to the one shape this route has served.
+func fsRead(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return Sandbox{}, nil, zip.ErrForbidden("X-Org-Id required")
+		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := storeFor(s, o)
+	e, err := Read(s, c.Context(), o, idParam(c), c.Query("path"))
 	if err != nil {
-		return Sandbox{}, nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return err
 	}
-	m, err := store.Get(c.Context(), o, idParam(c))
-	if err == errNotFound {
-		return Sandbox{}, nil, zip.ErrNotFound("sandbox not found")
+	c.SetHeader("Content-Type", "text/plain; charset=utf-8")
+	if e.Dir {
+		return c.String(http.StatusOK, strings.Join(e.Entries, "\n")+"\n")
 	}
-	if err != nil {
-		return Sandbox{}, nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
-	}
-	if m.Status != "running" {
-		// Only the routes that reach INTO the sandbox care; get and delete are
-		// happy with a stopped row, and they do not come through here for that
-		// check — this returns the row and the caller decides.
-		return m, store, nil
-	}
-	return m, store, nil
+	return c.String(http.StatusOK, string(e.Data))
 }
 
-// touch records use, so an idle reaper can tell an actively-worked sandbox from
-// one whose owner walked away.
-func touch(c *zip.Ctx, store *Store, m Sandbox) {
-	m.LastUsedAt = time.Now().Unix()
-	_ = store.Put(c.Context(), m)
+func fsWrite(s *Service, c *zip.Ctx) error {
+	o, ok := orgOf(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	path, n, err := Write(s, c.Context(), o, idParam(c), c.Query("path"), c.Body())
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"path": path, "bytes": n})
 }
 
 // argvOf takes the one form or the other. `command` is a convenience for a
@@ -470,26 +321,47 @@ func argvOf(argv []string, command string) ([]string, error) {
 	return nil, zip.ErrBadRequest("argv or command required")
 }
 
-// confine resolves a caller path under the project root. The sandbox mounts the
-// project at workdir and nothing above it is addressable — a path that climbs
+// workdirFor is where a sandbox of this class keeps its files, and it is TWO
+// values because two contracts name two directories.
+//
+//	dev, desktop  /work     the project volume's mount point
+//	exec          /mnt/data the code interpreter's artifact directory
+//
+// /mnt/data is not ours to choose. It is what the code tool TELLS THE MODEL to
+// write to ("Persist handoff artifacts in `/mnt/data`", @hanzochat/agents
+// CodeExecutor), so a run's plots and CSVs land there whatever this package would
+// have preferred. A sandbox that collected /work would have listed an empty
+// directory after every successful run and reported no files at all — the failure
+// would have looked like "the model did not write anything", which is the kind of
+// wrong answer nobody debugs.
+func workdirFor(class string) string {
+	if class == "exec" {
+		return execdir
+	}
+	return workdir
+}
+
+// confine resolves a caller path under the sandbox's own root. The sandbox mounts
+// its files at that root and nothing above it is addressable — a path that climbs
 // out is refused here rather than being sanitized into something else, because
-// silently rewriting a path is how a caller ends up reading a file it did not
-// ask for and never learns.
-func confine(p string) (string, error) {
+// silently rewriting a path is how a caller ends up reading a file it did not ask
+// for and never learns.
+func confine(class, p string) (string, error) {
+	root := workdirFor(class)
 	p = strings.TrimSpace(p)
 	if p == "" {
-		return workdir, nil
+		return root, nil
 	}
 	if strings.Contains(p, "..") {
 		return "", zip.ErrBadRequest("path must not contain ..")
 	}
 	if strings.HasPrefix(p, "/") {
-		if p != workdir && !strings.HasPrefix(p, workdir+"/") {
-			return "", zip.ErrBadRequest("path must be under " + workdir)
+		if p != root && !strings.HasPrefix(p, root+"/") {
+			return "", zip.ErrBadRequest("path must be under " + root)
 		}
 		return p, nil
 	}
-	return workdir + "/" + p, nil
+	return root + "/" + p, nil
 }
 
 // shellQuote makes one argument literal for `sh -c`. Single quotes with the
