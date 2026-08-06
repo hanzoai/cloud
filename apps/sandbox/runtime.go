@@ -41,10 +41,15 @@ import (
 	utilexec "k8s.io/client-go/util/exec"
 )
 
-// workdir is where a sandbox's project lives and where every command runs. One
+// workdir is where a dev sandbox's project lives and where its commands run. One
 // path, named once, because both the pod spec and the path confinement have to
 // mean the same directory.
 const workdir = "/work"
+
+// execdir is the same thing for an `exec` sandbox, and it is a DIFFERENT path
+// because the code-interpreter contract already named one: the tool description the
+// model reads says to persist artifacts in /mnt/data. See workdirFor.
+const execdir = "/mnt/data"
 
 // container is the one container in a sandbox's pod. Named so the exec
 // subresource addresses it explicitly — defaulting to "the first container" is
@@ -91,6 +96,7 @@ type runtime struct {
 	execTimeout  time.Duration
 	dyn          dynamic.Interface
 	str          streamer
+	bound        Bound
 	initErr      string
 }
 
@@ -107,21 +113,32 @@ func newRuntime() *runtime {
 		startTimeout: time.Duration(atoiOr(os.Getenv("SANDBOX_START_TIMEOUT_SEC"), 120)) * time.Second,
 		execTimeout:  time.Duration(atoiOr(os.Getenv("SANDBOX_EXEC_TIMEOUT_SEC"), 900)) * time.Second,
 	}
-	cfg, err := rest.InClusterConfig()
+	// THE NAMESPACE IS CHECKED BEFORE ANYTHING ELSE IS BUILT. A sandbox namespace
+	// whose name is a system namespace is not a misconfiguration to warn about — it
+	// is a runtime that could delete DaemonSets, so it never gets a client at all and
+	// every call through ready() fails closed with the reason. See bound.go.
+	b, err := bindTo(r.ns)
 	if err != nil {
+		r.initErr = err.Error()
+		return r
+	}
+	r.bound = b
+
+	cfg, cerr := rest.InClusterConfig()
+	if cerr != nil {
 		// KUBECONFIG fallback for local development — identical to every other
 		// subsystem that reaches the cluster. One way in, not two.
 		cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 			clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{})
-		if cfg, err = cc.ClientConfig(); err != nil {
-			r.initErr = fmt.Sprintf("no in-cluster config and no kubeconfig: %v", err)
+		if cfg, cerr = cc.ClientConfig(); cerr != nil {
+			r.initErr = fmt.Sprintf("no in-cluster config and no kubeconfig: %v", cerr)
 			return r
 		}
 	}
 	cfg.UserAgent = "hanzo-cloud/sandbox"
-	dyn, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		r.initErr = fmt.Sprintf("dynamic client: %v", err)
+	dyn, derr := dynamic.NewForConfig(cfg)
+	if derr != nil {
+		r.initErr = fmt.Sprintf("dynamic client: %v", derr)
 		return r
 	}
 	r.dyn, r.str = dyn, &spdy{cfg: cfg}
@@ -218,7 +235,7 @@ func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 		// not a program — every lifetime, from a one-shot invoke to a week-long
 		// session, is the same pod entered through the same channel.
 		"command":    []any{"sleep", "infinity"},
-		"workingDir": workdir,
+		"workingDir": workdirFor(m.Class),
 		// EPHEMERAL STORAGE IS REQUESTED AND LIMITED, both, and it is not
 		// optional. A pod that requests less than it uses is permanently first in
 		// line for node-pressure eviction, and node-pressure eviction ignores
@@ -283,7 +300,7 @@ func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 		spec["runtimeClassName"] = r.runtimeClass
 	}
 	if m.Volume != "" {
-		c["volumeMounts"] = []any{map[string]any{"name": "project", "mountPath": workdir}}
+		c["volumeMounts"] = []any{map[string]any{"name": "project", "mountPath": workdirFor(m.Class)}}
 		spec["volumes"] = []any{map[string]any{
 			"name":                  "project",
 			"persistentVolumeClaim": map[string]any{"claimName": m.Volume},
@@ -371,8 +388,26 @@ func (r *runtime) stop(ctx context.Context, m Sandbox) error {
 	if err := r.ready(); err != nil {
 		return err
 	}
-	err := r.pods().Delete(ctx, m.Pod, metav1.DeleteOptions{})
+	// READ, CHECK, THEN DELETE — three steps where one used to do, and the two extra
+	// are the blast radius. The row says which pod this is; the OBJECT says whether
+	// it is one of ours. A name alone is a claim, and a delete that acts on a claim
+	// is how a sweep removes something that merely shares a name.
+	obj, err := r.pods().Get(ctx, m.Pod, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("get pod: %w", err)
+	}
+	if !r.bound.covers(obj) {
+		return fmt.Errorf("refusing to delete %s/%s: it does not carry %s, so it is not a sandbox",
+			obj.GetNamespace(), obj.GetName(), labSandbox)
+	}
+	err = r.pods().Delete(ctx, m.Pod, precondition(obj))
+	if apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
+		// Conflict means the UID moved between the read and the delete: the pod we
+		// inspected is already gone and a different object holds the name. Nothing to
+		// do, and emphatically nothing to retry without the precondition.
 		return nil
 	}
 	return err

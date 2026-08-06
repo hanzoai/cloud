@@ -383,6 +383,27 @@ const (
 
 	// HostStart is the fleet ROUTER's own op, not an app's. See [HostApp].
 	HostStart = "host_start"
+
+	// The SANDBOX ops — the one compute primitive, reachable from a peer.
+	//
+	// They exist for the reason every op above them does: the two ends are two
+	// PROCESSES. apps/exec serves the code-interpreter contract and apps/sandbox
+	// owns the pods, they ship as separate plugin binaries, and a Go import would
+	// not have joined them — it would have given exec its OWN sandbox Service, with
+	// its own per-org SQLite handles on the same files and its own reaper racing the
+	// real one. So the call crosses, and [Ask] already collapses it to a direct
+	// in-process dispatch wherever the fleet happens to fuse the two.
+	//
+	// The op set is the sandbox's whole vocabulary and nothing more: lease one, run
+	// in it, read a path, write a path, end it. There is no "upload", no "download"
+	// and no "session" here, because those are the CALLER's nouns — a session is a
+	// lease and a download is a read, and putting either word on this plane would
+	// publish one product's vocabulary as another's contract.
+	SandboxLease = "sandbox_lease"
+	SandboxRun   = "sandbox_run"
+	SandboxRead  = "sandbox_read"
+	SandboxWrite = "sandbox_write"
+	SandboxEnd   = "sandbox_end"
 )
 
 // HostApp is the socket name the fleet router answers on. It is not an app —
@@ -1792,3 +1813,95 @@ type RunOnBehalfOut struct {
 	RunID  string `json:"runId,omitempty"`
 }
 
+
+// ---- sandbox ---------------------------------------------------------------
+
+// LeaseIn asks for a sandbox. ID names one to RESUME: a lease that is still
+// running comes back as it is, and one that has ended is replaced by a fresh
+// sandbox rather than refused — the caller is resuming a conversation whose lease
+// expired while they were reading, and a working sandbox with a new id is the
+// honest answer to that.
+type LeaseIn struct {
+	ID      string `json:"id,omitempty"`
+	Class   string `json:"class,omitempty"`
+	Project string `json:"project,omitempty"`
+	TTLSec  int    `json:"ttlSec,omitempty"`
+}
+
+// Leased is the sandbox a lease got.
+//
+// Workdir is carried rather than assumed. Where a sandbox keeps its files is a
+// property of its CLASS (/work for a project sandbox, /mnt/data for a code-
+// interpreter one), and a caller that hardcoded either would hold a second copy of
+// a fact only the sandbox knows — which is how a run writes its plots to one
+// directory and the collector lists the other.
+//
+// There is no Pod and no address. A sandbox is reached by asking its owner, never
+// by dialing it, and a peer that could learn a pod name would be a peer that could
+// try.
+type Leased struct {
+	ID      string `json:"id"`
+	Class   string `json:"class"`
+	Status  string `json:"status"`
+	Workdir string `json:"workdir"`
+}
+
+// RunIn runs one command in a sandbox. Argv is the honest form; Command is the
+// convenience for a caller holding a shell line.
+type RunIn struct {
+	ID         string   `json:"id"`
+	Argv       []string `json:"argv,omitempty"`
+	Command    string   `json:"command,omitempty"`
+	Stdin      string   `json:"stdin,omitempty"`
+	Dir        string   `json:"dir,omitempty"`
+	TimeoutSec int      `json:"timeoutSec,omitempty"`
+}
+
+// Ran is what a command produced. A non-zero ExitCode is DATA, not an error: the
+// call succeeded and the program failed, and a caller has to be able to tell those
+// apart.
+type Ran struct {
+	ExitCode int    `json:"exitCode"`
+	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
+}
+
+// PathIn names one path inside a sandbox. An empty Path means the sandbox's own
+// working directory.
+type PathIn struct {
+	ID   string `json:"id"`
+	Path string `json:"path,omitempty"`
+}
+
+// Blob is what a path IS: a file's bytes, or a directory's entries. One answer for
+// both, because one command answers both and a caller that had to stat first would
+// pay two round trips to learn what the first one already knew.
+type Blob struct {
+	Path    string   `json:"path"`
+	Dir     bool     `json:"dir,omitempty"`
+	Data    []byte   `json:"data,omitempty"`
+	Entries []string `json:"entries,omitempty"`
+}
+
+// WriteIn puts bytes at one path inside a sandbox, creating parents.
+type WriteIn struct {
+	ID   string `json:"id"`
+	Path string `json:"path"`
+	Data []byte `json:"data,omitempty"`
+}
+
+// Wrote reports the RESOLVED path and how much landed there. The path is resolved
+// because a caller's path is relative far more often than not, and echoing back
+// what it asked for would tell it nothing it did not already know.
+type Wrote struct {
+	Path  string `json:"path"`
+	Bytes int    `json:"bytes"`
+}
+
+// EndIn ends a lease. Purge drops the project VOLUME as well and is opt-in,
+// because ending a lease is reversible and deleting someone's uncommitted work is
+// not.
+type EndIn struct {
+	ID    string `json:"id"`
+	Purge bool   `json:"purge,omitempty"`
+}

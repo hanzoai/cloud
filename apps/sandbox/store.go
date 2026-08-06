@@ -159,6 +159,32 @@ func (s *Store) Expired(ctx context.Context, org string, now int64) ([]Sandbox, 
 	return out, rows.Err()
 }
 
+// IDs is every sandbox this org still claims, with NO LIMIT — which is the whole
+// reason it is not just List.
+//
+// The orphan sweep subtracts this set from the pods in the cluster, so a truncated
+// answer here does not mean "fewer rows": it means every sandbox past the cutoff is
+// reported as unclaimed and its pod is deleted while its owner is working in it.
+// List's `LIMIT 200` is right for a page a human reads and catastrophic for a set a
+// sweep differences against, so the sweep gets its own query rather than a bigger
+// limit somebody has to keep ahead of the fleet.
+func (s *Store) IDs(ctx context.Context, org string) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM sandbox WHERE org=?`, org)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) Delete(ctx context.Context, org, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sandbox WHERE org=? AND id=?`, org, id)
 	return err

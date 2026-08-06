@@ -200,7 +200,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	routes(app, s)
 	// Register user functions into the unified tool plane (SourceFunction).
 	tools.Register(functionToolProvider{})
-	s.Log.Info("functions mounted", "exec", s.State.exec.configured(), "brand", s.Brand, "billing", s.Bill.Enabled())
+	s.Log.Info("functions mounted", "exec", "sandboxes", "brand", s.Brand, "billing", s.Bill.Enabled())
 	return nil
 }
 

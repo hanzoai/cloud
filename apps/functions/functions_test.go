@@ -1,6 +1,7 @@
 package functions
 
 import (
+	"errors"
 	"context"
 	"testing"
 	"time"
@@ -167,33 +168,15 @@ func TestBuildMetricsBucketsRealRows(t *testing.T) {
 	}
 }
 
-func TestParseExecBodyDefensive(t *testing.T) {
-	cases := []struct {
-		raw     string
-		wantOut string
-		wantErr string
-	}{
-		{`{"stdout":"hello","stderr":""}`, "hello", ""},
-		{`{"run":{"stdout":"nested","stderr":"boom"}}`, "nested", "boom"},
-		{`{"output":"alt"}`, "alt", ""},
-		{`not json at all`, "not json at all", ""},
-		{`{"error":"failed"}`, "", "failed"},
-	}
-	for _, c := range cases {
-		out, errout := parseExecBody([]byte(c.raw))
-		if out != c.wantOut || errout != c.wantErr {
-			t.Fatalf("parseExecBody(%q) = (%q,%q), want (%q,%q)", c.raw, out, errout, c.wantOut, c.wantErr)
-		}
-	}
-}
-
-func TestExecClientFailClosed(t *testing.T) {
-	e := &execClient{} // no upstream configured
-	if e.configured() {
-		t.Fatalf("empty exec client must be unconfigured")
-	}
+// TestInvokeFailsClosedWithNoSandboxesApp: a deployment that does not run the
+// sandboxes app cannot execute customer code, and says so. It never fabricates
+// output, which is the property the old CODE_EXEC_UPSTREAM check existed for — the
+// difference is that "not deployed here" is now a fact plane.Ask ANSWERS rather than
+// a config value this package read.
+func TestInvokeFailsClosedWithNoSandboxesApp(t *testing.T) {
+	e := newExecClient()
 	_, err := e.run(context.Background(), mkFn("maxpower", "f"), "in", 30)
-	if err != errExecUnconfigured {
-		t.Fatalf("unconfigured run must fail closed, got %v", err)
+	if !errors.Is(err, errExecUnconfigured) {
+		t.Fatalf("run with no sandboxes peer = %v, want %v", err, errExecUnconfigured)
 	}
 }
