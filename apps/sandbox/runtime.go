@@ -390,11 +390,42 @@ func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 	if r.runtimeClass != "" {
 		spec["runtimeClassName"] = r.runtimeClass
 	}
-	if m.Volume != "" {
+	// THE WORKDIR IS MOUNTED EITHER WAY, and until now only one of the two ways
+	// existed. A `dev` sandbox gets its project PVC at /work; an `exec` sandbox has
+	// no project and got NOTHING, so /mnt/data was whatever the image shipped —
+	// root:root 0755 — against a pod this file pins to runAsUser 1000. The
+	// interpreter's own contract tells the model to "persist handoff artifacts in
+	// /mnt/data", and every such write failed with EACCES: the one directory the
+	// tool exists to fill was the one directory it could not write.
+	//
+	// It survived because nothing checks. A run that prints its answer looks
+	// perfectly successful; only a run that saves a plot notices, and it notices as
+	// a traceback the model apologises for rather than as an error anyone sees.
+	// (Measured 2026-08-06 in a live exec sandbox: `mkdir /mnt/data/.x` →
+	// Permission denied, `id` → uid=1000(sandbox).)
+	//
+	// emptyDir, not a PVC: a code-interpreter session is exactly as long-lived as
+	// its pod, which is what emptyDir already means. And it is what makes the mount
+	// WRITABLE — the kubelet chowns an emptyDir to the pod's fsGroup, which
+	// securityContext above already sets to 1000, so the fix is the mount itself
+	// rather than a chown in the image.
+	switch {
+	case m.Volume != "":
 		c["volumeMounts"] = []any{map[string]any{"name": "project", "mountPath": workdirFor(m.Class)}}
 		spec["volumes"] = []any{map[string]any{
 			"name":                  "project",
 			"persistentVolumeClaim": map[string]any{"claimName": m.Volume},
+		}}
+	default:
+		c["volumeMounts"] = []any{map[string]any{"name": "work", "mountPath": workdirFor(m.Class)}}
+		spec["volumes"] = []any{map[string]any{
+			"name": "work",
+			// Bounded like everything else the pod can fill. The container's own
+			// ephemeral-storage limit does NOT cover an emptyDir's usage on every
+			// runtime, so the volume states its own ceiling and the kubelet evicts
+			// the pod that exceeds it — which is the sandbox's problem to have,
+			// not the node's.
+			"emptyDir": map[string]any{"sizeLimit": envOr("SANDBOX_WORKDIR_SIZE", "2Gi")},
 		}}
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
