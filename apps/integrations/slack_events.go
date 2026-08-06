@@ -298,7 +298,7 @@ func slackSlashTurn(s *cloud.Service[state], org string, in Inbound, responseURL
 		handleSlackSlashCoding(s, ctx, org, in.ExternalID, in.Channel, in.User, codingText, responseURL)
 		return
 	}
-	text, ephemeral := bridgeReply(s, ctx, org, in.Provider, in.ExternalID, in.User, in.Text)
+	text, ephemeral := bridgeReply(s, org, in.Provider, in.ExternalID, in.User, in.Text)
 	if text == "" {
 		return
 	}
