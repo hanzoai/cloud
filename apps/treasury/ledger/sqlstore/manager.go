@@ -47,16 +47,23 @@ const (
 type Manager struct {
 	dataDir string
 
+	// usageKind is the tenant book's wallet-scoped kind, carried rather than known:
+	// this package sits BELOW the app that writes those entries, so it cannot name
+	// the kind itself. See [Open].
+	usageKind string
+
 	mu    sync.Mutex
 	cache map[namespace.Namespace]*Store
 }
 
-// NewManager roots every ledger under dataDir.
-func NewManager(dataDir string) (*Manager, error) {
+// NewManager roots every ledger under dataDir. usageKind is the tenant ledger's
+// wallet-scoped entry kind (see [Open]); the house book has none, so it is opened
+// without one whatever is passed here.
+func NewManager(dataDir, usageKind string) (*Manager, error) {
 	if strings.TrimSpace(dataDir) == "" {
 		return nil, fmt.Errorf("sqlstore.NewManager: empty data dir")
 	}
-	return &Manager{dataDir: dataDir, cache: map[namespace.Namespace]*Store{}}, nil
+	return &Manager{dataDir: dataDir, usageKind: usageKind, cache: map[namespace.Namespace]*Store{}}, nil
 }
 
 // House opens (once, then cached) the platform's reserve/house ledger — the single
@@ -80,11 +87,11 @@ func (m *Manager) open(ns namespace.Namespace) (*Store, error) {
 	if s, ok := m.cache[ns]; ok {
 		return s, nil
 	}
-	subsystem := tenantSubsystem
+	subsystem, usageKind := tenantSubsystem, m.usageKind
 	if ns.Kind() == namespace.KindSystem {
-		subsystem = houseSubsystem
+		subsystem, usageKind = houseSubsystem, ""
 	}
-	s, err := Open(ns, subsystem, m.dataDir)
+	s, err := Open(ns, subsystem, m.dataDir, usageKind)
 	if err != nil {
 		return nil, err
 	}

@@ -14,7 +14,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/sandbox/wire"
+	"github.com/hanzoai/cloud/apps/exec"
 	"github.com/zap-proto/zip"
 )
 
@@ -100,7 +100,7 @@ func (e *execClient) run(ctx context.Context, f Function, input string, timeoutS
 	// mismatch (the proxy then asks for /v1/v1/exec). One of the two had to move,
 	// and it is this one, because the other cannot: apps/exec forwards whatever
 	// the LibreChat client sends, and that client's contract is not ours.
-	req, err := http.NewRequestWithContext(rctx, http.MethodPost, e.upstream+wire.LibreChatExec, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(rctx, http.MethodPost, e.upstream+exec.Path, bytes.NewReader(body))
 	if err != nil {
 		return execResult{}, err
 	}
