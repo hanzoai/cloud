@@ -9,26 +9,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-// askApp mounts the door with a stubbed books contributor and a stubbed model, on
-// a bare app — the same harness the behaviour suite uses.
+// askApp mounts the door with a stand-in books peer and a stubbed model — the
+// same harness the behaviour suite uses, which is the point: one harness, so a
+// wire proof and a behaviour proof are made against the same door.
 func askApp(t *testing.T) *zip.App {
 	t.Helper()
 	noNetworkSearch(t)
-	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	fakeBooks(app, map[string]string{"acme": "$4,200"})
-	if err := Mount(app, cloud.Deps{
-		Logger: luxlog.New("test"), DataDir: t.TempDir(),
-		AI: &webAI{answer: "Clojure was created by Rich Hickey."},
-	}); err != nil {
-		t.Fatalf("Mount: %v", err)
-	}
-	return app
+	return newAskApp(t, &webAI{answer: "Clojure was created by Rich Hickey."},
+		byOrg{"acme": money("$4,200")}, nil, nil)
 }
 
 func askRaw(t *testing.T, app *zip.App, body string, hdr map[string]string) *http.Response {
