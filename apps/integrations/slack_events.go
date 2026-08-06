@@ -305,9 +305,11 @@ func slackCodingEvent(s *cloud.Service[state], org string, d slackRoute, codingT
 
 // slackSlashTurn is the async slash body dispatched on the bridge. An empty org means
 // the workspace's Hanzo connection was removed. A `code:` prompt branches to the
-// coding flow (slack_coding.go). Otherwise it runs the ONE agent brain (bridgeReply)
-// and delivers via the (host-pinned) response_url: an answer goes in_channel; the
-// account-link prompt goes ephemeral (only the invoker sees it).
+// coding flow (slack_coding.go). A body that NAMES a registry command runs it as the
+// linked user (slack_command.go); anything else runs the ONE agent brain
+// (bridgeReply). Delivery is via the (host-pinned) response_url: an agent answer goes
+// in_channel; a command's result and the account-link prompt go ephemeral (only the
+// invoker sees them).
 func slackSlashTurn(s *cloud.Service[state], org string, in Inbound, responseURL string) {
 	ctx, cancel := context.WithTimeout(context.Background(), bridgeAgentTimeout)
 	defer cancel()
@@ -319,7 +321,24 @@ func slackSlashTurn(s *cloud.Service[state], org string, in Inbound, responseURL
 		handleSlackSlashCoding(s, ctx, org, in.ExternalID, in.Channel, in.User, codingText, responseURL)
 		return
 	}
+	if cmds := commands(s); len(cmds) > 0 {
+		if argv, named := resolve(cmds, in.Text); named {
+			// EPHEMERAL, and decided here because it is one fact about the whole
+			// branch: a command's result is org data the caller asked for and the
+			// link prompt carries a URL, so both belong to the person who typed it.
+			slackSlashReply(s, ctx, in, responseURL, slackCommandTurn(s, ctx, org, in, cmds, argv), true)
+			return
+		}
+	}
 	text, ephemeral := bridgeReply(s, org, in.Provider, in.ExternalID, in.User, in.Text)
+	slackSlashReply(s, ctx, in, responseURL, text, ephemeral)
+}
+
+// slackSlashReply delivers a slash answer through the (host-pinned) response_url.
+// One function for both branches, so what is ephemeral is decided by whoever
+// produced the answer and stated once here — a link prompt or a command result
+// reaches only the person who asked; an agent answer goes to the channel.
+func slackSlashReply(s *cloud.Service[state], ctx context.Context, in Inbound, responseURL, text string, ephemeral bool) {
 	if text == "" {
 		return
 	}
@@ -398,18 +417,21 @@ func routeSlackEvent(raw []byte) slackRoute {
 		return slackRoute{Kind: slackRouteAck}
 	}
 	switch ev.Type {
-	// The Agents & AI Apps surface. SUBSCRIBING to these is one of the three things
-	// that make the app eligible for Slack's "Add Agents" picker (with the
-	// assistant:write scope in slack.go and the toggle in the app config).
+	// The Agents & AI Apps surface. Slack sends assistant_thread_started when a
+	// user opens the agent's thread and assistant_thread_context_changed when they
+	// navigate; SUBSCRIBING to them is one of the three things that make the app
+	// eligible for the "Add Agents" picker (with the assistant:write scope in
+	// slack.go and the toggle in the app config).
 	//
-	// Named explicitly rather than left to `default` even though both merely ack:
-	// the default arm acks every unknown event, so the wire behaviour is identical,
-	// but a reader asking "does this app support agents" must be able to find the
-	// answer here, and a silent default cannot say yes.
+	// Named explicitly rather than left to `default` even though both merely ack.
+	// The default arm acks every unknown event, so the wire behaviour is identical —
+	// but a reader looking for "does this app support agents" needs to find the
+	// answer here, and a silent default cannot say yes. It also gives the greeting /
+	// setSuggestedPrompts call an obvious home when we want one.
 	//
 	// No reply is needed to open the thread: the user's first message arrives as a
 	// normal `message` event with channel_type=="im", which the arm below already
-	// routes to the agent.
+	// routes to the agent. So the conversation works the moment the app is listed.
 	case "assistant_thread_started", "assistant_thread_context_changed":
 		return slackRoute{Kind: slackRouteAck}
 	// The Home tab. Slack shows its OWN "this is still a work in progress"

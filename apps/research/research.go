@@ -137,14 +137,14 @@ type IngestRequest struct {
 // canonical board, or a gateway-generated report page.
 var artifactKinds = map[string]bool{"snapshot": true, "report": true}
 
-// Artifact is one research-diary record — a raw-artifact-class record tied to a run: a
+// ResearchArtifact is one research-diary record — a raw-artifact-class record tied to a run: a
 // snapshot (a PNG of the canonical board) or a report (a generated page). The caller
 // submits the bytes (base64 content); the SERVER hashes them and that sha256 is the
 // identity + ref (sha256:<hash>) — never a client-asserted hash or ref, so it is genuinely
 // content-addressed and un-poisonable. A re-POST of the same bytes is a no-op. Private by
 // default; public only via the separate visibility grant. Carries the same provenance as a
 // run.
-type Artifact struct {
+type ResearchArtifact struct {
 	SHA256         string          `json:"sha256"`            // SERVER-derived on write; the identity
 	Content        string          `json:"content,omitempty"` // base64 bytes on write; the server hashes + stores them (never returned)
 	Kind           string          `json:"kind"`
@@ -604,7 +604,7 @@ type artifactOut struct {
 // no-op that reports created=false.
 //
 // Example: {"kind": "snapshot", "content": "iVBORw0KGgo=", "run_id": "benchmark:zen-1:mmlu"}
-func (o ops) postArtifact(ctx context.Context, in *Artifact) (*artifactOut, error) {
+func (o ops) postArtifact(ctx context.Context, in *ResearchArtifact) (*artifactOut, error) {
 	st, org, err := o.orgStore(ctx)
 	if err != nil {
 		return nil, err
@@ -662,7 +662,7 @@ type artifactsIn struct {
 // artifactsOut is the diary feed.
 type artifactsOut struct {
 	// Data are the artifacts, newest first. Content bytes are never returned here.
-	Data []Artifact `json:"data"`
+	Data []ResearchArtifact `json:"data"`
 	// Total is len(data).
 	Total int `json:"total"`
 }

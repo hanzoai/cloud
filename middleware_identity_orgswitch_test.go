@@ -38,7 +38,7 @@ import (
 //
 // ok is principal.WalletOf's refusal bit: false means the request may not touch
 // money at all. billOrg/billUser are the ledger + wallet the gate checks and the
-// debit drains — read through identityFromCtx, the SAME function BillingGate calls.
+// debit drains — read through identity, the SAME function BillingGate calls.
 func walletProbe(t *testing.T, claims idClaims, selected string) (billOrg, billUser, dataOrg string, ok bool) {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -53,7 +53,7 @@ func walletProbe(t *testing.T, claims idClaims, selected string) (billOrg, billU
 	app := zip.New(zip.Config{})
 	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(c *zip.Ctx) error {
-		in := identityFromCtx(c)
+		in := identity(c, c.Path())
 		billOrg, billUser = in.Org, in.User
 		dataOrg, _ = principal.Org(c)
 		_, ok = principal.WalletOf(c)

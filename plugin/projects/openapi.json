@@ -79,7 +79,7 @@
     },
     "/v1/platform/sites/{slug}": {
       "delete": {
-        "operationId": "delete_v1_platform_sites_slug",
+        "operationId": "delete_v1_platform_sites_by_slug",
         "summary": "Deletes a project and takes its site off the internet.",
         "description": "Deletes a project and takes its site off the internet.\n\nThe metadata delete is authoritative and everything after it is best-effort,\nin this order: the public `\u003cslug\u003e` subdomain binding is released so the slug is\nfree to reclaim, the release rows are dropped so a reclaimed slug never\ninherits the previous owner's rollback menu, the S3 origin is purged under\nBOTH `\u003corg\u003e/\u003cslug\u003e/` and the site's sibling release space, and the edge\ncache-tag is flushed. A failure in any of those is logged and the delete still\nanswers 204 — resurrecting a project because a purge missed would be worse\nthan a leaked prefix.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404 and\nnothing of theirs is touched.",
         "tags": [
@@ -103,7 +103,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_platform_sites_slug",
+        "operationId": "get_v1_platform_sites_by_slug",
         "summary": "Returns one project of yours by slug — its settings, its live URL and the deployment currently serving it.",
         "description": "Returns one project of yours by slug — its settings, its live URL\nand the deployment currently serving it.\n\nScope: a validated principal is required (403 without one) and the lookup is\nkeyed by (org, slug), so another tenant's slug is a 404 exactly like a\nnonexistent one.",
         "tags": [
@@ -134,7 +134,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_platform_sites_slug",
+        "operationId": "patch_v1_platform_sites_by_slug",
         "summary": "Changes a project's settings, and only the settings you send.",
         "description": "Changes a project's settings, and only the settings you send.\n\nEvery field is optional and absent means \"leave it\": `name` may not be blanked,\n`framework` must stay a known build hint, and `cacheControl` is capped at 256\ncharacters with no newlines (it becomes a response header). `visibility` flips\npublic/private under the same rule as create — public is free, private needs a\nfunded org. `upstream` and `license` are free-text credit for third-party work,\nand sending \"\" clears one. Changing anything reconciles the project's canonical\ngit repo, so a visibility change reaches the source and not just the listing.\n\n`hidden`/`hiddenReason` are platform MODERATION and are ignored unless the\ncaller is a platform admin; they remove a project from the public catalogue\nwithout touching the publisher's own visibility choice, so un-hiding restores\nexactly what they asked for.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -197,7 +197,7 @@
     },
     "/v1/platform/sites/{slug}/deployments": {
       "get": {
-        "operationId": "get_v1_platform_sites_slug_deployments",
+        "operationId": "get_v1_platform_sites_by_slug_deployments",
         "summary": "Returns a project's deploy history, newest version first.",
         "description": "Returns a project's deploy history, newest version first.\n\nEvery deploy of the project is a row — uploads, generated sites, and git/CI\nbuilds alike — carrying its version, status, source, commit, live URL, file\ncount and byte count. The short-lived upload grant a queued git deployment was\nhanded is NOT replayed here: it exists only on the 202 that minted it, so a\ngrant cannot outlive its build by being fetched again.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -233,7 +233,7 @@
     },
     "/v1/platform/sites/{slug}/deployments/{id}": {
       "get": {
-        "operationId": "get_v1_platform_sites_slug_deployments_id",
+        "operationId": "get_v1_platform_sites_by_slug_deployments_by_id",
         "summary": "Returns one deployment of a project by id.",
         "description": "Returns one deployment of a project by id.\n\nIt is how a console follows a build: the status (`queued`, `uploading`,\n`live`, `error`), the message a failure left, and the URL and prefix it went\nlive at. Like the history, it never replays the upload grant.\n\nScope: a validated principal is required (403 without one). Both the project\nand the deployment are resolved within that principal's org, so a deployment\nof another project — or of another tenant — is a 404.",
         "tags": [
@@ -275,7 +275,7 @@
     },
     "/v1/platform/sites/{slug}/domains": {
       "get": {
-        "operationId": "get_v1_platform_sites_slug_domains",
+        "operationId": "get_v1_platform_sites_by_slug_domains",
         "summary": "Returns every custom hostname this site holds: the live ones, plus any pending claim with the DNS records it still owes.",
         "description": "Returns every custom hostname this site holds: the live ones, plus\nany pending claim with the DNS records it still owes.\n\n`domains` is the routing answer — the hosts that are verified right now —\nwhile `claims` is the full panel, one row per host, each saying whether it is\nlive or pending and, if pending, exactly what to publish.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -306,7 +306,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_platform_sites_slug_domains",
+        "operationId": "post_v1_platform_sites_by_slug_domains",
         "summary": "Attaches one or more CUSTOM public hostnames to this org's site.",
         "description": "Attaches one or more CUSTOM public hostnames to this org's site.\n\nBinding a host you do not own would let you shadow it at the edge, so which\noutcome you get depends on whether ownership is already established: a SuperAdmin\nvouches (the operator manages the customer's DNS, so its bind IS the proof) and\nbinds VERIFIED immediately; every other caller, INCLUDING an admin of the\ndeployment's own brand org, has the host CLAIMED as pending and gets the DNS\nchallenge back in `bound[].records`. A pending claim HOLDS the name so nobody\nelse can take it, but it does not route until POST .../domains/{host}/verify\nproves control.\n\nA hostname we operate is refused to a non-vouched caller (those are assigned\nby the platform, never claimed), a host another site already holds is a 409,\nand a name the platform holds is a 400 for EVERY caller — a vouch skips the\nownership proof, never the host table's own invariant. Claims and binds are\nidempotent for the same\n(org, slug), and re-claiming returns the SAME token rather than invalidating a\nrecord the customer has already published. The edge cache-tag is flushed\nafterwards so a newly-verified host serves the current build immediately.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -349,7 +349,7 @@
     },
     "/v1/platform/sites/{slug}/domains/{host}": {
       "delete": {
-        "operationId": "delete_v1_platform_sites_slug_domains_host",
+        "operationId": "delete_v1_platform_sites_by_slug_domains_by_host",
         "summary": "Gives a custom hostname back, so the name is free to reuse.",
         "description": "Gives a custom hostname back, so the name is free to reuse.\n\nA claim is FIRST-COME and global, so an add-only surface was not ownership but\na leak: a customer who mistyped a domain, or claimed one they later moved\nelsewhere, could neither reuse it nor let anyone else. This is the third\nwriter that closes it. The release is scoped to (host, org, slug), so it can\nonly ever drop THIS tenant's own claim, and it is IDEMPOTENT: releasing a host\nwe do not hold is a clean 204, never a 404 that would let a caller probe which\nhosts other tenants hold. The edge cache-tag is flushed, since the host stops\nrouting here.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -384,7 +384,7 @@
     },
     "/v1/platform/sites/{slug}/domains/{host}/verify": {
       "post": {
-        "operationId": "post_v1_platform_sites_slug_domains_host_verify",
+        "operationId": "post_v1_platform_sites_by_slug_domains_by_host_verify",
         "summary": "Checks the DNS challenge for a pending custom hostname and, when it passes, promotes the host so it begins routing at the edge.",
         "description": "Checks the DNS challenge for a pending custom hostname and, when\nit passes, promotes the host so it begins routing at the edge.\n\nIt answers 200 either way, with the host's honest current state: verified once\nthe TXT record is found, still pending — with the records to publish and the\nresolver's own explanation in `detail` — when it is not. A not-yet is not an\nerror: the check ran, DNS simply has not propagated, and the customer retries.\nAn already-verified host is returned unchanged without re-resolving. On a\nsuccessful promotion the edge cache-tag is flushed, since the host routes as\nof that moment.\n\nScope: a validated principal is required (403 without one). Both the site and\nthe claim are resolved within that principal's org, so a host claimed by\nanother tenant is \"not claimed by this site\".",
         "tags": [
@@ -426,7 +426,7 @@
     },
     "/v1/platform/sites/{slug}/publish": {
       "post": {
-        "operationId": "post_v1_platform_sites_slug_publish",
+        "operationId": "post_v1_platform_sites_by_slug_publish",
         "summary": "Promotes a build output into a new release AND goes live with it — create+activate in one call, which is the 99% path.",
         "description": "Promotes a build output into a new release AND goes live with it —\ncreate+activate in one call, which is the 99% path.\n\nIt is exactly the two halves in sequence with no extra semantics, so the\nstaged flow and the one-shot flow can never drift apart: `source` is promoted\nunder the same org-relative rule and the same guards CreateRelease applies,\nthen the site's pointer is flipped to it, the public host is claimed and the\nedge is purged. Idempotent on unchanged bytes — same manifest, same release id,\nno copy — and billed once, after the release exists.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -469,7 +469,7 @@
     },
     "/v1/platform/sites/{slug}/purge": {
       "post": {
-        "operationId": "post_v1_platform_sites_slug_purge",
+        "operationId": "post_v1_platform_sites_by_slug_purge",
         "summary": "Flushes the site's edge cache without redeploying anything.",
         "description": "Flushes the site's edge cache without redeploying anything.\n\nIt invalidates the edge cache-tag `site-\u003corg\u003e-\u003cslug\u003e` and stamps `lastPurgeAt`\n(unix seconds), and it NEVER writes or deletes the S3 origin — the live build\nkeeps serving; only stale copies held at the edge drop, so the next request\nre-fetches the current artifact from origin. Idempotent, and an edge that is\nunconfigured or failing is not fatal: `lastPurgeAt` is still stamped and the\nanswer is still the updated project.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -502,7 +502,7 @@
     },
     "/v1/platform/sites/{slug}/releases": {
       "get": {
-        "operationId": "get_v1_platform_sites_slug_releases",
+        "operationId": "get_v1_platform_sites_by_slug_releases",
         "summary": "Returns a site's releases newest-first, marking the active one — the rollback menu.",
         "description": "Returns a site's releases newest-first, marking the active one —\nthe rollback menu.\n\nEach row carries the release id to activate, the source it was promoted from,\nits object and byte counts, and the URL if it is the one serving. Retention\nbounds the list, so it is the set that can actually still be rolled back to,\nnot a full history.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -536,7 +536,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_platform_sites_slug_releases",
+        "operationId": "post_v1_platform_sites_by_slug_releases",
         "summary": "Promotes a build output into a new immutable release WITHOUT serving it — the staged half of publishing, for when you want to check a release before it goes live.",
         "description": "Promotes a build output into a new immutable release WITHOUT\nserving it — the staged half of publishing, for when you want to check a\nrelease before it goes live. Answers 201.\n\n`source` is a path RELATIVE to your org's own storage space: the org segment\nis prepended server-side from the validated principal and the bucket is never\nin the request at all, so a server-side copy can only ever reach bytes your\norg already owns. The prefix is listed, content-addressed (SHA-256 over the\nsorted manifest of key/size/etag), and copied into an immutable\n`\u003corg\u003e/.releases/\u003cslug\u003e/\u003cid\u003e/` prefix; the row is written LAST, so a partial\ncopy is unreachable rather than merely unlikely. Re-publishing an unchanged\nsource is idempotent BY CONSTRUCTION — same bytes, same id, no copy at all.\n\nThe source must contain index.html at its root and stay under the same file\nand byte caps an artifact deploy does (413 past them); a source that changes\nmid-copy is a 409 and the release is abandoned. Each publish also reclaims\nreleases past the retention depth, so a site's release space stays bounded.\nThis is the billable half — the hosting gate runs before any copy, and the\ndebit lands once the release exists.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -579,7 +579,7 @@
     },
     "/v1/platform/sites/{slug}/releases/{release}/activate": {
       "post": {
-        "operationId": "post_v1_platform_sites_slug_releases_release_activate",
+        "operationId": "post_v1_platform_sites_by_slug_releases_by_release_activate",
         "summary": "Points the site at an existing release — the go-live, and equally the ROLLBACK.",
         "description": "Points the site at an existing release — the go-live, and\nequally the ROLLBACK.\n\nAim it at an older release and the site serves that one again: releases are\nimmutable and retained to the retention depth, so nothing is rebuilt or\nre-copied and the flip is one atomic statement. Before the flip, two\nconditions run in the order that gives each its own honest answer — the ROW\nsays whether this release exists for this tenant at all (404, with no signal\nabout a foreign id), and only then do the BYTES say whether it can still serve\n(410 GONE when retention has reclaimed them; that rollback target is not\ncoming back, so publish again). Going live also claims the public host and\npurges the edge, so the release is reachable and no cached predecessor is\nserved. NOT billed: no new content is produced, only a pointer moved.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -708,7 +708,7 @@
     },
     "/v1/projects/{slug}": {
       "delete": {
-        "operationId": "delete_v1_projects_slug",
+        "operationId": "delete_v1_projects_by_slug",
         "summary": "Deletes a project and takes its site off the internet.",
         "description": "Deletes a project and takes its site off the internet.\n\nThe metadata delete is authoritative and everything after it is best-effort,\nin this order: the public `\u003cslug\u003e` subdomain binding is released so the slug is\nfree to reclaim, the release rows are dropped so a reclaimed slug never\ninherits the previous owner's rollback menu, the S3 origin is purged under\nBOTH `\u003corg\u003e/\u003cslug\u003e/` and the site's sibling release space, and the edge\ncache-tag is flushed. A failure in any of those is logged and the delete still\nanswers 204 — resurrecting a project because a purge missed would be worse\nthan a leaked prefix.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404 and\nnothing of theirs is touched.",
         "tags": [
@@ -732,7 +732,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_projects_slug",
+        "operationId": "get_v1_projects_by_slug",
         "summary": "Returns one project of yours by slug — its settings, its live URL and the deployment currently serving it.",
         "description": "Returns one project of yours by slug — its settings, its live URL\nand the deployment currently serving it.\n\nScope: a validated principal is required (403 without one) and the lookup is\nkeyed by (org, slug), so another tenant's slug is a 404 exactly like a\nnonexistent one.",
         "tags": [
@@ -763,7 +763,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_projects_slug",
+        "operationId": "patch_v1_projects_by_slug",
         "summary": "Changes a project's settings, and only the settings you send.",
         "description": "Changes a project's settings, and only the settings you send.\n\nEvery field is optional and absent means \"leave it\": `name` may not be blanked,\n`framework` must stay a known build hint, and `cacheControl` is capped at 256\ncharacters with no newlines (it becomes a response header). `visibility` flips\npublic/private under the same rule as create — public is free, private needs a\nfunded org. `upstream` and `license` are free-text credit for third-party work,\nand sending \"\" clears one. Changing anything reconciles the project's canonical\ngit repo, so a visibility change reaches the source and not just the listing.\n\n`hidden`/`hiddenReason` are platform MODERATION and are ignored unless the\ncaller is a platform admin; they remove a project from the public catalogue\nwithout touching the publisher's own visibility choice, so un-hiding restores\nexactly what they asked for.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -826,7 +826,7 @@
     },
     "/v1/projects/{slug}/deployments": {
       "get": {
-        "operationId": "get_v1_projects_slug_deployments",
+        "operationId": "get_v1_projects_by_slug_deployments",
         "summary": "Returns a project's deploy history, newest version first.",
         "description": "Returns a project's deploy history, newest version first.\n\nEvery deploy of the project is a row — uploads, generated sites, and git/CI\nbuilds alike — carrying its version, status, source, commit, live URL, file\ncount and byte count. The short-lived upload grant a queued git deployment was\nhanded is NOT replayed here: it exists only on the 202 that minted it, so a\ngrant cannot outlive its build by being fetched again.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -862,7 +862,7 @@
     },
     "/v1/projects/{slug}/deployments/{id}": {
       "get": {
-        "operationId": "get_v1_projects_slug_deployments_id",
+        "operationId": "get_v1_projects_by_slug_deployments_by_id",
         "summary": "Returns one deployment of a project by id.",
         "description": "Returns one deployment of a project by id.\n\nIt is how a console follows a build: the status (`queued`, `uploading`,\n`live`, `error`), the message a failure left, and the URL and prefix it went\nlive at. Like the history, it never replays the upload grant.\n\nScope: a validated principal is required (403 without one). Both the project\nand the deployment are resolved within that principal's org, so a deployment\nof another project — or of another tenant — is a 404.",
         "tags": [
@@ -904,7 +904,7 @@
     },
     "/v1/projects/{slug}/deployments/{id}/complete": {
       "post": {
-        "operationId": "post_v1_projects_slug_deployments_id_complete",
+        "operationId": "post_v1_projects_by_slug_deployments_by_id_complete",
         "summary": "CompleteDeployment is the CI completion hook that flips a queued git deployment to live (or error) once CI has synced the built site to S3.",
         "description": "CompleteDeployment is the CI completion hook that flips a queued git\ndeployment to live (or error) once CI has synced the built site to S3.\n\n`status` must be `live` or `error`. On a LIVE completion the public host is\nclaimed FIRST, so the deployment reports the URL it actually OWNS — a\nCI-supplied `liveUrl` is a hint that can refine that URL but can never assert\na subdomain another tenant holds. `keys` is the manifest CI just uploaded,\nrelative to the deployment prefix: cloud reconciles the prefix against it so a\npage deleted from the build actually stops serving. Omit `keys` and nothing is\ndeleted — the prefix only grows. Reconciliation runs only on a live completion\n(pruning against a failed build's manifest would delete the site the last good\nbuild is still serving) and is best-effort, so a stale leftover never turns a\nsuccessful deploy into a 500. A live completion is also the one billable\nmoment on the git path; an error completion bills nothing.\n\nScope: a validated principal is required (403 without one). CI authenticates\nwith an org-scoped token through the gateway, so the deployment is resolved\nwithin that principal's org and another tenant's slug or deployment id is a\n404.",
         "tags": [
@@ -956,7 +956,7 @@
     },
     "/v1/projects/{slug}/domains": {
       "get": {
-        "operationId": "get_v1_projects_slug_domains",
+        "operationId": "get_v1_projects_by_slug_domains",
         "summary": "Returns every custom hostname this site holds: the live ones, plus any pending claim with the DNS records it still owes.",
         "description": "Returns every custom hostname this site holds: the live ones, plus\nany pending claim with the DNS records it still owes.\n\n`domains` is the routing answer — the hosts that are verified right now —\nwhile `claims` is the full panel, one row per host, each saying whether it is\nlive or pending and, if pending, exactly what to publish.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -987,7 +987,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_projects_slug_domains",
+        "operationId": "post_v1_projects_by_slug_domains",
         "summary": "Attaches one or more CUSTOM public hostnames to this org's site.",
         "description": "Attaches one or more CUSTOM public hostnames to this org's site.\n\nBinding a host you do not own would let you shadow it at the edge, so which\noutcome you get depends on whether ownership is already established: a SuperAdmin\nvouches (the operator manages the customer's DNS, so its bind IS the proof) and\nbinds VERIFIED immediately; every other caller, INCLUDING an admin of the\ndeployment's own brand org, has the host CLAIMED as pending and gets the DNS\nchallenge back in `bound[].records`. A pending claim HOLDS the name so nobody\nelse can take it, but it does not route until POST .../domains/{host}/verify\nproves control.\n\nA hostname we operate is refused to a non-vouched caller (those are assigned\nby the platform, never claimed), a host another site already holds is a 409,\nand a name the platform holds is a 400 for EVERY caller — a vouch skips the\nownership proof, never the host table's own invariant. Claims and binds are\nidempotent for the same\n(org, slug), and re-claiming returns the SAME token rather than invalidating a\nrecord the customer has already published. The edge cache-tag is flushed\nafterwards so a newly-verified host serves the current build immediately.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -1030,7 +1030,7 @@
     },
     "/v1/projects/{slug}/domains/{host}": {
       "delete": {
-        "operationId": "delete_v1_projects_slug_domains_host",
+        "operationId": "delete_v1_projects_by_slug_domains_by_host",
         "summary": "Gives a custom hostname back, so the name is free to reuse.",
         "description": "Gives a custom hostname back, so the name is free to reuse.\n\nA claim is FIRST-COME and global, so an add-only surface was not ownership but\na leak: a customer who mistyped a domain, or claimed one they later moved\nelsewhere, could neither reuse it nor let anyone else. This is the third\nwriter that closes it. The release is scoped to (host, org, slug), so it can\nonly ever drop THIS tenant's own claim, and it is IDEMPOTENT: releasing a host\nwe do not hold is a clean 204, never a 404 that would let a caller probe which\nhosts other tenants hold. The edge cache-tag is flushed, since the host stops\nrouting here.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -1065,7 +1065,7 @@
     },
     "/v1/projects/{slug}/domains/{host}/verify": {
       "post": {
-        "operationId": "post_v1_projects_slug_domains_host_verify",
+        "operationId": "post_v1_projects_by_slug_domains_by_host_verify",
         "summary": "Checks the DNS challenge for a pending custom hostname and, when it passes, promotes the host so it begins routing at the edge.",
         "description": "Checks the DNS challenge for a pending custom hostname and, when\nit passes, promotes the host so it begins routing at the edge.\n\nIt answers 200 either way, with the host's honest current state: verified once\nthe TXT record is found, still pending — with the records to publish and the\nresolver's own explanation in `detail` — when it is not. A not-yet is not an\nerror: the check ran, DNS simply has not propagated, and the customer retries.\nAn already-verified host is returned unchanged without re-resolving. On a\nsuccessful promotion the edge cache-tag is flushed, since the host routes as\nof that moment.\n\nScope: a validated principal is required (403 without one). Both the site and\nthe claim are resolved within that principal's org, so a host claimed by\nanother tenant is \"not claimed by this site\".",
         "tags": [
@@ -1107,7 +1107,7 @@
     },
     "/v1/projects/{slug}/purge": {
       "post": {
-        "operationId": "post_v1_projects_slug_purge",
+        "operationId": "post_v1_projects_by_slug_purge",
         "summary": "Flushes the site's edge cache without redeploying anything.",
         "description": "Flushes the site's edge cache without redeploying anything.\n\nIt invalidates the edge cache-tag `site-\u003corg\u003e-\u003cslug\u003e` and stamps `lastPurgeAt`\n(unix seconds), and it NEVER writes or deletes the S3 origin — the live build\nkeeps serving; only stale copies held at the edge drop, so the next request\nre-fetches the current artifact from origin. Idempotent, and an edge that is\nunconfigured or failing is not fatal: `lastPurgeAt` is still stamped and the\nanswer is still the updated project.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -1227,7 +1227,7 @@
     },
     "/v1/sites/{slug}/publish": {
       "post": {
-        "operationId": "post_v1_sites_slug_publish",
+        "operationId": "post_v1_sites_by_slug_publish",
         "summary": "Promotes a build output into a new release AND goes live with it — create+activate in one call, which is the 99% path.",
         "description": "Promotes a build output into a new release AND goes live with it —\ncreate+activate in one call, which is the 99% path.\n\nIt is exactly the two halves in sequence with no extra semantics, so the\nstaged flow and the one-shot flow can never drift apart: `source` is promoted\nunder the same org-relative rule and the same guards CreateRelease applies,\nthen the site's pointer is flipped to it, the public host is claimed and the\nedge is purged. Idempotent on unchanged bytes — same manifest, same release id,\nno copy — and billed once, after the release exists.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -1270,7 +1270,7 @@
     },
     "/v1/sites/{slug}/releases": {
       "get": {
-        "operationId": "get_v1_sites_slug_releases",
+        "operationId": "get_v1_sites_by_slug_releases",
         "summary": "Returns a site's releases newest-first, marking the active one — the rollback menu.",
         "description": "Returns a site's releases newest-first, marking the active one —\nthe rollback menu.\n\nEach row carries the release id to activate, the source it was promoted from,\nits object and byte counts, and the URL if it is the one serving. Retention\nbounds the list, so it is the set that can actually still be rolled back to,\nnot a full history.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -1304,7 +1304,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_sites_slug_releases",
+        "operationId": "post_v1_sites_by_slug_releases",
         "summary": "Promotes a build output into a new immutable release WITHOUT serving it — the staged half of publishing, for when you want to check a release before it goes live.",
         "description": "Promotes a build output into a new immutable release WITHOUT\nserving it — the staged half of publishing, for when you want to check a\nrelease before it goes live. Answers 201.\n\n`source` is a path RELATIVE to your org's own storage space: the org segment\nis prepended server-side from the validated principal and the bucket is never\nin the request at all, so a server-side copy can only ever reach bytes your\norg already owns. The prefix is listed, content-addressed (SHA-256 over the\nsorted manifest of key/size/etag), and copied into an immutable\n`\u003corg\u003e/.releases/\u003cslug\u003e/\u003cid\u003e/` prefix; the row is written LAST, so a partial\ncopy is unreachable rather than merely unlikely. Re-publishing an unchanged\nsource is idempotent BY CONSTRUCTION — same bytes, same id, no copy at all.\n\nThe source must contain index.html at its root and stay under the same file\nand byte caps an artifact deploy does (413 past them); a source that changes\nmid-copy is a 409 and the release is abandoned. Each publish also reclaims\nreleases past the retention depth, so a site's release space stays bounded.\nThis is the billable half — the hosting gate runs before any copy, and the\ndebit lands once the release exists.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [
@@ -1347,7 +1347,7 @@
     },
     "/v1/sites/{slug}/releases/{release}/activate": {
       "post": {
-        "operationId": "post_v1_sites_slug_releases_release_activate",
+        "operationId": "post_v1_sites_by_slug_releases_by_release_activate",
         "summary": "Points the site at an existing release — the go-live, and equally the ROLLBACK.",
         "description": "Points the site at an existing release — the go-live, and\nequally the ROLLBACK.\n\nAim it at an older release and the site serves that one again: releases are\nimmutable and retained to the retention depth, so nothing is rebuilt or\nre-copied and the flip is one atomic statement. Before the flip, two\nconditions run in the order that gives each its own honest answer — the ROW\nsays whether this release exists for this tenant at all (404, with no signal\nabout a foreign id), and only then do the BYTES say whether it can still serve\n(410 GONE when retention has reclaimed them; that rollback target is not\ncoming back, so publish again). Going live also claims the public host and\npurges the edge, so the release is reachable and no cached predecessor is\nserved. NOT billed: no new content is produced, only a pointer moved.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
         "tags": [

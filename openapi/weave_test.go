@@ -13,7 +13,7 @@ package openapi_test
 // What it proves is COMPOSITION and only composition: that the subsets compose
 // without two apps claiming one address or one schema name, and that the golden
 // is what they compose to. Both sides are derived, so it cannot prove either is
-// still the routes — `make -f mk/fleet.mk surface-check` regenerates them from
+// still the routes — `make -f mk/fleet.mk check` regenerates them from
 // source for that, and manifest/router_test.go asks the router whether the fleet
 // delivers what they describe. Three questions, three gates, each answered where
 // its answer lives.
@@ -49,7 +49,7 @@ const (
 )
 
 // fromTree is the WORKING TREE's copy of one app's subset — the files
-// surface-check has just regenerated from source and is about to compare against.
+// check has just regenerated from source and is about to compare against.
 // The host reads the same files through plugin.Spec, embedded at build time;
 // openapi.Subsets decodes either, so there is one decoder and one weave whichever
 // end you enter from.

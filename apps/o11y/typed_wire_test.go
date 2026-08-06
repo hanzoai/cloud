@@ -87,13 +87,11 @@ var untypedByDesign = map[string]string{
 		"typing it would turn that 200 into a 400.",
 	// The /v1/sentry catch-all this package registers (mountSentry). A wildcard has
 	// no operation to type.
-	"GET /v1/sentry/{wildcard1}":     sentryReason,
-	"POST /v1/sentry/{wildcard1}":    sentryReason,
-	"PUT /v1/sentry/{wildcard1}":     sentryReason,
-	"PATCH /v1/sentry/{wildcard1}":   sentryReason,
-	"DELETE /v1/sentry/{wildcard1}":  sentryReason,
-	"OPTIONS /v1/sentry/{wildcard1}": sentryReason,
-	"TRACE /v1/sentry/{wildcard1}":   sentryReason,
+	"GET /v1/sentry/{wildcard1}":    sentryReason,
+	"POST /v1/sentry/{wildcard1}":   sentryReason,
+	"PUT /v1/sentry/{wildcard1}":    sentryReason,
+	"PATCH /v1/sentry/{wildcard1}":  sentryReason,
+	"DELETE /v1/sentry/{wildcard1}": sentryReason,
 
 	// The upstream module's own hatches. hanzoai/o11y no longer registers a
 	// /v1/o11y/* catch-all — every route it serves is named — so the routes a

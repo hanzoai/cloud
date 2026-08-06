@@ -322,7 +322,7 @@ func TestReportSucceedsWithoutTheWarehouse(t *testing.T) {
 	if code != http.StatusAccepted {
 		t.Fatalf("report want 202 with no warehouse, got %d (%s)", code, b)
 	}
-	var got reportResp
+	var got ingestResp
 	_ = json.Unmarshal(b, &got)
 	if got.Accepted != 1 {
 		t.Fatalf("accepted = %d, want 1", got.Accepted)
@@ -375,7 +375,7 @@ func TestDashIsUnavailableNotEmpty(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("dash want 200, got %d (%s)", code, b)
 	}
-	var got dashResp
+	var got boardResp
 	_ = json.Unmarshal(b, &got)
 	if got.Available {
 		t.Fatal("available must be false with no warehouse")
@@ -557,7 +557,7 @@ func TestReportAcceptsOneOrMany(t *testing.T) {
 	if code != http.StatusAccepted {
 		t.Fatalf("batch want 202, got %d (%s)", code, b)
 	}
-	var got reportResp
+	var got ingestResp
 	_ = json.Unmarshal(b, &got)
 	if got.Accepted != 4 {
 		t.Fatalf("accepted = %d, want 4", got.Accepted)

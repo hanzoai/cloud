@@ -22,6 +22,7 @@ import (
 func newApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
@@ -30,14 +31,12 @@ func newApp(t *testing.T) *zip.App {
 	return app
 }
 
-// newAppMCP mounts the subsystem the way the SERVER does: one cloud.Bridge at the
-// app ROOT. zip's own projections of the typed-op registry — the MCP endpoint at
-// /mcp and the call plane at /.well-known/zip/op/ — are ordinary routes on the app
-// itself, so they sit OUTSIDE every subsystem's group and the group's own Bridge
-// never runs for them. cloud.Listen installs the root one (serve.go), which is what
-// gives them a validated org in production; newApp above does not, so a tools/call
-// there refuses before it reaches a handler. Use this harness to exercise an op
-// through MCP.
+// newAppMCP is the entry point for exercising an op through MCP. zip's own
+// projections of the typed-op registry — the MCP endpoint at /mcp and the call
+// plane at /.well-known/zip/op/ — are ordinary routes on the app itself, so
+// nothing scoped to a subsystem's group reaches them; only an enrichment
+// installed at the ROOT does, which is what gives them a validated org in
+// production and what compose installs here.
 func newAppMCP(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -101,6 +100,7 @@ func newAppWithAudit(t *testing.T) (*zip.App, *audit.Recorder) {
 		t.Fatalf("audit.Open: %v", err)
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Audit: rec}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)

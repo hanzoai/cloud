@@ -37,6 +37,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/metering"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -135,6 +136,7 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, project string, projectV
 	if rm == nil || rm.m == nil {
 		return nil
 	}
+	books := booksOf(org)
 	if !rm.Enabled() {
 		// No meter in THIS process, which is the normal case once apps are their own
 		// binaries: the ledger has one writer and it lives with commerce. Ask it.
@@ -146,7 +148,7 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, project string, projectV
 		return rm.gatePeer(ctx, org, project, projectValidated, costCents)
 	}
 	return rm.m.Authorize(ctx, metering.AuthInput{
-		User: org, Org: org, AmountCents: costCents,
+		User: org, Org: books, AmountCents: costCents,
 		// Service (=provider) is server-set → always validated. Project hardens iff
 		// it is claim-bound (projectValidated) — the anti project-spoof gate.
 		Project: project, ProjectValidated: projectValidated, Service: rm.provider,
@@ -258,8 +260,8 @@ func (rm *ResourceMeter) meterUsage(org, kind string, u metering.Usage, posted f
 		rm.meterPeer(org, kind, u, posted)
 		return
 	}
-	u.User = org // per-ORG billing: ledger keyed on the org slug.
-	u.Org = org  // X-Org-Id -> caller's namespace (overrides client default).
+	u.User = org         // the WALLET the debit lands in.
+	u.Org = booksOf(org) // WHICH BOOKS hold it (X-Org-Id; overrides the client default).
 	if u.Provider == "" {
 		u.Provider = rm.provider
 	}
@@ -287,6 +289,29 @@ func (rm *ResourceMeter) meterUsage(org, kind string, u metering.Usage, posted f
 // answers with, and the code+message it carries. Both renderings below read it,
 // so an untyped handler and a typed op can never describe the same refusal two
 // different ways.
+// booksOf names WHICH ORG'S BOOKS hold a wallet, given the wallet's key.
+//
+// THE TWO HALVES OF AN ADDRESS. A debit needs both — the org selects the ledger
+// FILE (finance is per-org SQLite), the wallet key selects the account inside it —
+// and this meter is handed ONE string. It used to use that string for both, which
+// silently asserted "the wallet IS the org": true of a pooled tenant org, false in
+// the shared signup org, where account.Payer resolves a person to <org>/<username>.
+// So a caller that correctly passes principal.Payer would, without this, have
+// written the person's key into the ORG field and opened a ledger file named
+// "hanzo/stranger".
+//
+// It is a PARSE, not a second rule about who pays: account.PayerOf funnels into
+// account.Payer, the one rule, and a key with no "/" is already an org — so a caller
+// still passing a bare org slug gets exactly the value it got before, byte for byte.
+// That is what makes adopting principal.Payer a per-surface decision rather than a
+// flag day.
+func booksOf(payer string) string {
+	if acct := account.PayerOf("", payer); !acct.Zero() {
+		return acct.Org()
+	}
+	return payer
+}
+
 // ErrNoLedger is a priced act with no ledger to charge: there is nobody to bill
 // because there is nobody. It is the ONE value [ResourceMeter.Gate] answers with
 // when it is handed an empty org, so all of its callers refuse identically

@@ -47,9 +47,16 @@ import (
 //
 // Before the graft these were 0 and 35: thirty-five placeholder operations across
 // five wildcard path keys, none with a schema, a tool, a command or a method.
+//
+// They were 94 and 88 at iam v1.33.37, and the ratchet did its job: ten canonical
+// noun addresses arrived as RAW handlers over the releases that followed — account,
+// auth/application, preferences, verification-codes, tokens/issue, keys/mint,
+// keys/revoke, mfa/disable, mfa/preferred, oauth/device/info — and the untyped
+// count reached 98 before anything else noticed. iam v1.34.21 converted thirteen
+// addresses, so both numbers move the only way they may.
 const (
-	typedOps   = 94
-	untypedOps = 88
+	typedOps   = 111
+	untypedOps = 85
 )
 
 // mountApp mounts iam the way plugin/iam does — the whole Mount, so the ledgers below

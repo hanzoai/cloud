@@ -106,12 +106,12 @@ func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte,
 	// The usage read is an OPTIONAL capability (the base FinanceClient is
 	// Balance+Deposit+RecordUsage); a finance impl without it falls back to the proxy.
 	lister, ok := fin.(interface {
-		ListUsage(context.Context, string, int) ([]finance.UsageRow, error)
+		ListUsage(context.Context, string, bool, int) ([]finance.UsageRow, error)
 	})
 	if !ok {
 		return nil, false, nil
 	}
-	rows, err := lister.ListUsage(ctx, org, 2000)
+	rows, err := lister.ListUsage(ctx, org, false, 2000)
 	if err != nil {
 		return nil, false, err
 	}

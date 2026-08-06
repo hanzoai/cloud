@@ -175,7 +175,7 @@
     },
     "/v1/flow/workflows/{workflow}": {
       "delete": {
-        "operationId": "delete_v1_flow_workflows_workflow",
+        "operationId": "delete_v1_flow_workflows_by_workflow",
         "summary": "Deletes one of the caller's workflows and its runs.",
         "description": "Deletes one of the caller's workflows and its runs. Ownership\nis verified first; a foreign id answers 404 and deletes nothing.",
         "tags": [
@@ -204,7 +204,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_flow_workflows_workflow",
+        "operationId": "get_v1_flow_workflows_by_workflow",
         "summary": "Workflow reads one of the caller's workflows — the full record, graph included.",
         "description": "Workflow reads one of the caller's workflows — the full record, graph\nincluded. A workflow outside the caller's org answers 404, indistinguishable\nfrom one that does not exist.",
         "tags": [
@@ -233,7 +233,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_flow_workflows_workflow",
+        "operationId": "patch_v1_flow_workflows_by_workflow",
         "summary": "Patches one of the caller's workflows: name, description, graph, or the locked flag — only the stated fields move.",
         "description": "Patches one of the caller's workflows: name, description,\ngraph, or the locked flag — only the stated fields move. Ownership is\nverified before the patch reaches the product.",
         "tags": [

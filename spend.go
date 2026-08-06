@@ -195,8 +195,10 @@ func creditIn(ctx context.Context, w principal.Wallet) (ok, funded bool) {
 //     exceptions are named there, not guessed here: commerce is the pay path itself
 //     and o11y is telemetry ingest, so both charge nothing and declare cloud.Free.
 func Billable(method, path string) bool {
-	switch method {
-	case "GET", "HEAD", "OPTIONS":
+	// Consumes (price.go) is the ONE place the read/write rule lives, so the
+	// question "does standing apply" and the question "does the edge charge" can
+	// never be answered from two copies of it that drift apart.
+	if !Consumes(method) {
 		return false
 	}
 	if Reachable(path) {
@@ -282,6 +284,7 @@ var meteredApps = []string{
 	"dataset",      // the scan that materialises a set, priced per source row read.
 	"flow",         // flow executions.
 	"functions",    // serverless invoke.
+	"lsp",          // code intelligence: a cold checkout+index is billed, a warm query is not.
 	"ml",           // predict + train (compute).
 	"platform",     // builds and runs (compute).
 	"projects",     // site hosting fee.

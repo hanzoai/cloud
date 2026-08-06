@@ -75,7 +75,7 @@ type Owner func(path string) string
 // by longest prefix exactly as the router separates them. Keyed on the segment,
 // storage was charged with provisioning's POST /v1/s3 — a declaration provisioning
 // both serves and describes — so an app with nothing wrong with it could not
-// project its own document, and `make surface-check` died there.
+// project its own document, and `make check` died there.
 //
 // That is not one awkward pair to special-case: FOURTEEN products are answered by
 // more than one app (billing, catalog, finance, plans, platform, search, usage,

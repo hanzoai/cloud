@@ -496,6 +496,10 @@ func mountRuntime(deps cloud.Deps) error {
 		// metrics exist nowhere, because its single exit was a Prometheus
 		// scrape and Prometheus is gone (metricspush.go).
 		startNativeMetricsPush(embeddedRuntime.TelemetryStore, log)
+		// Project /v1/event errors onto the Sentry plane — fail-soft
+		// (errorsink.go). Requires the in-process runtime's Modules.Sentry, so
+		// it is installed only on this embed-up branch.
+		installErrorSink(log)
 		log.Info("o11y runtime handler installed (in-process runtime)")
 		return nil
 	}
@@ -519,6 +523,9 @@ func mountRuntime(deps cloud.Deps) error {
 // same discipline as the o11y wildcard). No path rewrite: the Sentry routes are
 // literal /v1/sentry/… in the runtime. The DSN-ingest routes are principal-gate-exempt
 // (o11y.IngestWire); the reads stay gated.
+//
+// Raw: it carries Sentry's own protocol — DSN-keyed envelope frames, a third
+// party's shape — through a wildcard that has no single operation to type.
 func mountSentry(a cloud.Router) {
 	a.All("/v1/sentry/*", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := runtimeHandler
@@ -561,7 +568,7 @@ func eventToRuntimePath(method, path string) (string, bool) {
 // one components block: a refusal at the weave (openapi/weave.go — "one name, two
 // shapes: every generated SDK would bind whichever it read last"), and had it not
 // been refused, an SDK binding whichever the merge read last. `make -f
-// mk/fleet.mk openapi-weave` could not run at all, so nobody could regenerate
+// mk/fleet.mk weave` could not run at all, so nobody could regenerate
 // openapi.yaml or add an API surface and prove it.
 //
 // ONE origin for the whole product, not one for the module and none for the rest.
@@ -736,6 +743,10 @@ func mount(a *zip.App, host cloud.Router, deps cloud.Deps) error {
 func ShutdownO11y(ctx context.Context) error {
 	stopProbes()
 	stopNativeMetricsPush()
+	// Detach both analytics fan-outs first so no in-flight ingest dispatches into a
+	// tearing-down runtime or a closing datastore connection. Idempotent and nil-safe.
+	clearErrorSink()
+	clearSpanSink()
 	var firstErr error
 	if err := shutdownAnnotationQueues(); err != nil && firstErr == nil {
 		firstErr = err

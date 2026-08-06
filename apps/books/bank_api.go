@@ -18,10 +18,19 @@ import (
 
 // bankRoutes registers the bank surface on the existing books app (called from routes()).
 // The group is built here, from a literal prefix, because that is what makes each typed
-// op's path — and therefore its identity in every projection — resolvable from this file.
-// It sits under the /v1/books group's Bridge + noStore, which match by prefix.
+// op's path — and therefore its identity in every projection — resolvable from this file:
+// cmd/zipdoc reads the prefix off the assignment, and a router arriving as a parameter
+// carries none it can see.
+//
+// It installs noStore ITSELF rather than inheriting it. The comment here used to say this
+// surface "sits under the /v1/books group's Bridge + noStore, which match by prefix" — they
+// do not. zip scopes a Use to the group INSTANCE it was installed on, so this fresh
+// app.Group was a fresh router with an empty middleware stack and the whole bank surface
+// answered money WITHOUT Cache-Control: no-store. Pinned by
+// TestReadsAnswerTheirFrozenEnvelope.
 func bankRoutes(app cloud.Router, s *cloud.Service[*state]) {
 	g := app.Group("/v1/books/bank")
+	g.Use(noStore())
 	o := booksOps{s: s}
 	zip.Get(g, "/transactions", o.listBankTxns)
 	zip.Get(g, "/unreconciled", o.listUnreconciled)
@@ -36,6 +45,12 @@ func bankRoutes(app cloud.Router, s *cloud.Service[*state]) {
 	// token and exchange always answer 501, and a typed op publishes a SUCCESS
 	// response (its Out schema, or the 204 a void op declares) that neither has ever
 	// sent — an invented contract every generated SDK would carry a return type for.
+	// Registered on the APP with their whole paths, not on g. These three declare
+	// their prose through openapi.Register/Describe below, and a raw handler
+	// registered on a group with a readable prefix is one cmd/zipdoc will describe
+	// FOR them — from the only doc comment at that call site, which is
+	// cloud.Handle's generic "binds a Service-scoped handler to a route". That
+	// adapter's prose would then be published as what /v1/books/bank/import does.
 	app.Post("/v1/books/bank/import", cloud.Handle(s, bankImportHandler))
 	app.Post("/v1/books/bank/token", cloud.Handle(s, bankTokenHandler))
 	app.Post("/v1/books/bank/exchange", cloud.Handle(s, bankExchangeHandler))

@@ -77,7 +77,21 @@ func Backfill(ctx context.Context, in *BackfillIn) (*BackfillOut, error) {
 	if bal == nil {
 		return &BackfillOut{Status: core.Err, Msg: "read commerce balance: commerce answered nothing"}, nil
 	}
-	balanceCents, err := bal.Amount.Minor()
+	// FLOOR, because Minor() REFUSES a sub-cent amount and this is a migration.
+	//
+	// The ledger keeps eighteen decimals and per-token charges are routinely finer
+	// than a cent, so any org that has spent anything carries a sub-cent tail.
+	// Minor() answers "is finer than its minor unit; round explicitly" for exactly
+	// those, and this returned that as an error — so the backfill migrated ZERO for
+	// every active org while reporting an honest-looking failure. Measured against
+	// the live value in balance.go's own comment:
+	//
+	//   149913.078983985999994361  ->  Minor() ERR, Floor 14991307, Round 14991308
+	//
+	// Floor is the direction a migration must take: the amount MOVED must never
+	// exceed the amount held, or the migration mints the difference. The dust stays
+	// behind and settles.
+	balanceCents, err := bal.Amount.FloorMinor()
 	if err != nil {
 		return &BackfillOut{Status: core.Err, Msg: "read commerce balance: " + err.Error()}, nil
 	}

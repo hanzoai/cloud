@@ -1,6 +1,8 @@
 package usage
 
 import (
+	"github.com/hanzoai/cloud/apps/finance"
+
 	"testing"
 	"time"
 )
@@ -34,16 +36,16 @@ func TestCategoryOf(t *testing.T) {
 }
 
 func TestIsSpend(t *testing.T) {
-	if !isSpend(ledgerTxn{Type: "withdraw", Amount: 100}) {
+	if !isSpend(ledgerTxn{Kind: finance.KindUsage, Amount: 100}) {
 		t.Error("a positive withdraw is spend")
 	}
-	if isSpend(ledgerTxn{Type: "deposit", Amount: 100}) {
+	if isSpend(ledgerTxn{Kind: finance.KindDeposit, Amount: 100}) {
 		t.Error("a deposit is NOT spend")
 	}
-	if isSpend(ledgerTxn{Type: "withdraw", Amount: -5}) {
+	if isSpend(ledgerTxn{Kind: finance.KindUsage, Amount: -5}) {
 		t.Error("a non-positive withdraw must never subtract from spend")
 	}
-	if isSpend(ledgerTxn{Type: "withdraw", Amount: 0}) {
+	if isSpend(ledgerTxn{Kind: finance.KindUsage, Amount: 0}) {
 		t.Error("a zero withdraw is not spend")
 	}
 }
@@ -51,17 +53,15 @@ func TestIsSpend(t *testing.T) {
 func TestBuildSpend_WindowingCategoriesAndSeries(t *testing.T) {
 	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 7, 4, 0, 0, 0, 0, time.UTC) // 3-day window, day buckets
-	roll := rollupWire{ConsumedCents: 5000, OverageCents: 100}
-	roll.Balance.BalanceCents = 20000
-	roll.Balance.AvailableCents = 15000
+	roll := rollup{ConsumedCents: 5000, BalanceCents: 20000}
 
 	txns := []ledgerTxn{
-		{Type: "withdraw", Amount: 300, Tags: "gpu-h100", CreatedAt: "2026-07-01T06:00:00Z"},
-		{Type: "withdraw", Amount: 200, Tags: "llm", CreatedAt: "2026-07-01T09:00:00Z"},
-		{Type: "withdraw", Amount: 150, Tags: "gpu-h100", CreatedAt: "2026-07-03T10:00:00Z"},
-		{Type: "deposit", Amount: 9999, Tags: "", CreatedAt: "2026-07-02T00:00:00Z"},    // credit — excluded
-		{Type: "withdraw", Amount: 500, Tags: "llm", CreatedAt: "2026-06-30T23:59:59Z"}, // before window — excluded
-		{Type: "withdraw", Amount: 700, Tags: "llm", CreatedAt: "2026-07-04T00:00:00Z"}, // == end (exclusive) — excluded
+		{Kind: finance.KindUsage, Amount: 300, Tags: "gpu-h100", CreatedAt: "2026-07-01T06:00:00Z"},
+		{Kind: finance.KindUsage, Amount: 200, Tags: "llm", CreatedAt: "2026-07-01T09:00:00Z"},
+		{Kind: finance.KindUsage, Amount: 150, Tags: "gpu-h100", CreatedAt: "2026-07-03T10:00:00Z"},
+		{Kind: finance.KindDeposit, Amount: 9999, Tags: "", CreatedAt: "2026-07-02T00:00:00Z"}, // credit — excluded
+		{Kind: finance.KindUsage, Amount: 500, Tags: "llm", CreatedAt: "2026-06-30T23:59:59Z"}, // before window — excluded
+		{Kind: finance.KindUsage, Amount: 700, Tags: "llm", CreatedAt: "2026-07-04T00:00:00Z"}, // == end (exclusive) — excluded
 	}
 
 	sp := buildSpend(true, roll, txns, start, end, "day")
@@ -73,8 +73,15 @@ func TestBuildSpend_WindowingCategoriesAndSeries(t *testing.T) {
 	if sp.TotalCents != 650 {
 		t.Fatalf("TotalCents = %d, want 650 (windowed withdrawals only)", sp.TotalCents)
 	}
-	if sp.MTDCents != 5000 || sp.OverageCents != 100 || sp.BalanceCents != 20000 || sp.AvailableCents != 15000 {
-		t.Fatalf("rollup figures not carried: %+v", sp)
+	// The wallet is ONE ledger number published under both names it has always
+	// been published under. Overage is zero because a prepaid wallet has no
+	// allowance to be beyond; the figure this replaces came from a JSON body that
+	// never arrived in this binary.
+	if sp.MTDCents != 5000 || sp.BalanceCents != 20000 || sp.AvailableCents != 20000 {
+		t.Fatalf("ledger figures not carried: %+v", sp)
+	}
+	if sp.OverageCents != 0 {
+		t.Fatalf("OverageCents = %d, want 0 — a prepaid wallet has no allowance to exceed", sp.OverageCents)
 	}
 	// Categories: GPU=450 (2 lines), LLM=200 (1 line), GPU first (larger).
 	if len(sp.ByCategory) != 2 {
@@ -98,7 +105,7 @@ func TestBuildSpend_WindowingCategoriesAndSeries(t *testing.T) {
 func TestBuildSpend_HonestZerosWhenUnavailable(t *testing.T) {
 	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC)
-	sp := buildSpend(false, rollupWire{ConsumedCents: 999}, []ledgerTxn{{Type: "withdraw", Amount: 100, CreatedAt: "2026-07-01T00:00:00Z"}}, start, end, "hour")
+	sp := buildSpend(false, rollup{ConsumedCents: 999}, []ledgerTxn{{Kind: finance.KindUsage, Amount: 100, CreatedAt: "2026-07-01T00:00:00Z"}}, start, end, "hour")
 	if sp.Available {
 		t.Fatal("Available must be false")
 	}

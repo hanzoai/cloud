@@ -7,8 +7,8 @@
 // unentitled) and it is scoped to a single product id, whereas the paywall gates on the
 // PLAN TIER regardless of product. So ActivePaidPlan is a distinct read over the SAME
 // org resolver + subscription store, counting ACTIVE *and* TRIALING subscriptions and
-// classifying the tier through @hanzo/plans (clients/plan.Paid) — the single source of
-// truth for which tiers cost money.
+// classifying each on the plan row the subscription itself recorded (plan.Paid) — the
+// record of what the customer bought, which outlives the catalog's for-sale list.
 //
 // It is an OPTIONAL capability on the in-process client (not on the narrow
 // types.CommerceClient interface): the paywall (routers.PlanChecker) resolves it by
@@ -32,16 +32,17 @@ import (
 
 // ActivePaidPlan reports whether org `orgID` holds a LIVE PAID Hanzo plan — the paywall's
 // admit signal — and the resolved tier slug. "Live paid" = an ACTIVE or TRIALING,
-// unexpired subscription whose plan tier is a paid cloud account tier per @hanzo/plans
-// (Pro/Plus/Max/Team/Team-Max/Enterprise/Custom). Money-safety mirrors CheckEntitlement:
-// it NEVER fabricates a grant, and any machinery it cannot resolve returns an ERROR so the
-// paywall fails OPEN (admits) rather than locking a subscriber out.
+// unexpired subscription on a cloud account tier that costs money. A tier RETIRED from
+// the catalog still counts: the customer is still being charged for it. Money-safety
+// mirrors CheckEntitlement: it NEVER fabricates a grant, and any machinery it cannot
+// resolve returns an ERROR so the paywall fails OPEN (admits) rather than locking a
+// subscriber out.
 //
 //   - (tier, true,  nil) — a live paid subscription exists (tier is its plan slug).
 //   - ("",   false, nil) — resolution succeeded, but NO live paid subscription: the
 //     definitive "no plan" answer the paywall turns into a 402.
 //   - (_,    _,     err) — commerce not co-resident, org unresolvable, subscription query
-//     error, or plan-catalog unreadable: the paywall admits (fail open).
+//     error, or a plan row that cannot classify itself: the paywall admits (fail open).
 func (c *inProcessClient) ActivePaidPlan(ctx context.Context, orgID string) (string, bool, error) {
 	orgID = strings.TrimSpace(orgID)
 	if orgID == "" {
@@ -73,6 +74,7 @@ func (c *inProcessClient) ActivePaidPlan(ctx context.Context, orgID string) (str
 	}
 
 	now := time.Now()
+	unclassified := ""
 	for _, s := range subs {
 		if s == nil {
 			continue
@@ -87,15 +89,28 @@ func (c *inProcessClient) ActivePaidPlan(ctx context.Context, orgID string) (str
 		if slug == "" {
 			continue // no resolvable plan tier on this sub — cannot classify it.
 		}
-		paid, perr := plan.Paid(slug)
-		if perr != nil {
-			// Plan catalog unreadable — cannot classify the tier. Surface the error so
-			// the paywall FAILS OPEN, never deny-by-guess on a catalog outage.
-			return "", false, fmt.Errorf("commerce.ActivePaidPlan: classify plan %q: %w", slug, perr)
+		// Classify on the plan row THIS SUBSCRIPTION recorded — the snapshot commerce
+		// froze at subscribe time (billing/engine.StartSubscription: sub.Plan = *p) and
+		// deliberately keeps resolvable after a tier is retired. Asking the for-sale
+		// catalog instead denies every subscriber whose tier has since been retired:
+		// they still pay, the catalog just no longer sells what they bought.
+		if strings.TrimSpace(s.Plan.Category) == "" {
+			// The row cannot classify itself — broken machinery, not a "no". Remember
+			// it and keep looking; if nothing else grants, this becomes a fail-OPEN
+			// error rather than a silent denial.
+			unclassified = slug
+			continue
 		}
-		if paid {
+		if plan.Paid(plan.Tier{
+			Category:     s.Plan.Category,
+			Price:        int64(s.Plan.Price),
+			ContactSales: s.Plan.ContactSales,
+		}) {
 			return slug, true, nil
 		}
+	}
+	if unclassified != "" {
+		return "", false, fmt.Errorf("commerce.ActivePaidPlan: subscription on plan %q carries no category; cannot classify (org=%s)", unclassified, orgID)
 	}
 
 	// Resolution succeeded; the org has no ACTIVE/TRIALING PAID subscription — a real

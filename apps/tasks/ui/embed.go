@@ -27,73 +27,24 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
-	"path"
-	"strings"
+
+	"github.com/hanzoai/cloud/spa"
 )
 
-//go:embed all:dist
+// dist WITHOUT `all:` — the prefix that would also embed dot-files. dist/.sync-stamp
+// is provenance for whoever regenerates this bundle (source repo, branch, commit):
+// a fact for the repo, not a file to publish. `all:dist` embedded it and the SPA
+// handler serves anything it can stat, so the build's origin was readable by anyone
+// who guessed the path. Plain `dist` omits every `.`-prefixed entry.
+//
+//go:embed dist
 var distFS embed.FS
 
 // FS returns the embedded built-UI filesystem rooted at dist/.
-func FS() fs.FS {
-	sub, err := fs.Sub(distFS, "dist")
-	if err != nil {
-		// Impossible at runtime: embed.FS entries are validated at compile
-		// time. If dist/ were missing the binary would carry an empty FS.
-		return distFS
-	}
-	return sub
-}
+func FS() fs.FS { return spa.Sub(distFS) }
 
-// Handler returns an http.Handler that serves the embedded SPA. Mount it under
-// StripPrefix("/tasks", …) so it sees root-relative paths.
-//
-//   - Content-addressed assets under assets/ ship immutable cache hints (Vite
-//     hashes filenames).
-//   - Any path that is not a real file rewrites to index.html so the client-side
-//     router handles the route — the standard SPA fallback that lets a deep-link
-//     reload survive.
-//   - If the build is absent (index.html missing) every request returns 503, so
-//     a missing bundle is loud in staging, never a blank page in production.
-func Handler() http.Handler {
-	root := FS()
-	fileServer := http.FileServer(http.FS(root))
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		reqPath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
-		if reqPath == "" {
-			reqPath = "index.html"
-		}
-
-		if _, err := fs.Stat(root, reqPath); err != nil {
-			serveIndex(w, r, root)
-			return
-		}
-
-		if strings.HasPrefix(reqPath, "assets/") {
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		} else {
-			w.Header().Set("Cache-Control", "no-cache")
-		}
-		fileServer.ServeHTTP(w, r)
-	})
-}
-
-// serveIndex writes index.html with no-cache so a freshly-deployed build
-// replaces the stale shell on the next request.
-func serveIndex(w http.ResponseWriter, r *http.Request, root fs.FS) {
-	data, err := fs.ReadFile(root, "index.html")
-	if err != nil {
-		http.Error(w, "tasks UI not built (see clients/tasks/ui/README.md)", http.StatusServiceUnavailable)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = w.Write(data)
-	_ = r
-}
+// Handler serves the embedded SPA. Mount it under StripPrefix("/tasks", …) so it
+// sees root-relative paths. The serving policy — immutable hashed assets, index
+// fallback for a deep link, 503 for an unsynced bundle — is spa.Handler's, which
+// is the ONE copy of it in this repo.
+func Handler() http.Handler { return spa.Handler(FS(), "tasks") }
