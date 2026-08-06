@@ -165,6 +165,16 @@ const (
 	GitInbound = "git_inbound"
 	GitPublish = "git_publish"
 
+	// GitRev answers which commit a ref names, and nothing else.
+	//
+	// It is separate from GitFiles because the two questions have different
+	// COSTS, not merely different shapes. A caller that pins a revision on every
+	// request — the language-server proxy asks one per position query — would
+	// otherwise have to read a whole tree to learn a sha, which is a monorepo
+	// crossing a socket to answer forty bytes. Resolving is a ref lookup; reading
+	// is a walk. One op each.
+	GitRev = "git_rev"
+
 	// GitStatus reads the per-repo import/sync status the console repo list
 	// renders. Same boundary as GitImport: the app that lists the repos is
 	// integrations, the app that knows whether one is imported is git.
@@ -822,6 +832,20 @@ type Synced struct {
 type Imported struct {
 	// Repo names what was imported.
 	Repo string `json:"repo"`
+}
+
+// RevIn asks which commit a ref names. An empty Ref means the repo's default
+// branch.
+type RevIn struct {
+	Repo string `json:"repo" validate:"required"`
+	Ref  string `json:"ref,omitempty"`
+}
+
+// Rev is a resolved commit and the label it was reached by, so a caller can echo
+// which branch it is looking at without re-deriving it.
+type Rev struct {
+	Rev string `json:"rev"`
+	Ref string `json:"ref,omitempty"`
 }
 
 // FilesIn asks for a repo's files at one ref.

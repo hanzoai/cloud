@@ -35,6 +35,7 @@ var Ops = []string{
 	plane.GitInbound,
 	plane.GitMirror,
 	plane.GitPublish,
+	plane.GitRev,
 	plane.GitStatus,
 }
 
@@ -71,6 +72,13 @@ func GitMirror(ctx context.Context, in *plane.MirrorIn) (*plane.Mirrored, error)
 // Calls plane.GitPublish on git over the peer plane.
 func GitPublish(ctx context.Context, in *plane.Visibility) (*struct{}, error) {
 	return plane.Ask[plane.Visibility, struct{}](ctx, App, plane.GitPublish, in)
+}
+
+// GitRev the commit a ref resolves to.
+//
+// Calls plane.GitRev on git over the peer plane.
+func GitRev(ctx context.Context, in *plane.RevIn) (*plane.Rev, error) {
+	return plane.Ask[plane.RevIn, plane.Rev](ctx, App, plane.GitRev, in)
 }
 
 // GitStatus which of these repos are imported, and which are in conflict.
