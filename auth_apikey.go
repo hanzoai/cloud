@@ -76,6 +76,15 @@ func sharedKeys() *iamKeys {
 	return sharedKeysInst
 }
 
+// ResolvePublishableKeyOrg resolves a publishable (pk-) key to its org slug through
+// the ONE binary-wide resolver, or "" when the key names no org. Exported for the
+// out-of-band ingest paths in sibling packages — the embedded o11y sentry runtime
+// (apps/o11y) — so a key attributes errors to the SAME org it attributes events to,
+// off the SAME warm cache, never a second drifting resolver.
+func ResolvePublishableKeyOrg(ctx context.Context, key string) string {
+	return sharedKeys().resolveOrg(ctx, key)
+}
+
 // maxKeyOrgLen bounds a resolved org key the same way principal.MaxOrgLen does: the
 // org becomes a warehouse partition key, so an over-long value (malformed / hostile)
 // is refused rather than stored.

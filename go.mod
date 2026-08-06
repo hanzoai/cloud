@@ -5,6 +5,7 @@ go 1.26.5
 // Dependencies will be added as subsystems are mounted per HIP-0106.
 
 require (
+	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
 	github.com/coder/websocket v1.8.14
 	github.com/digitalocean/godo v1.197.0
@@ -15,7 +16,7 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.1
 	github.com/hanzoai/cek v0.2.3
-	github.com/hanzoai/commerce v1.50.13
+	github.com/hanzoai/commerce v1.50.16
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
@@ -60,7 +61,6 @@ require (
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
-	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/lightsail v1.53.0 // indirect
 	github.com/btcsuite/btcd/chainhash/v2 v2.0.0 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
@@ -93,6 +93,7 @@ require (
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 	github.com/minio/minio-go/v7 v7.0.100 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
+	github.com/moby/spdystream v0.5.1 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/nats-io/nats-server/v2 v2.12.3 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
@@ -122,6 +123,7 @@ require (
 	k8s.io/controller-manager v0.36.1 // indirect
 	k8s.io/kube-aggregator v0.36.1 // indirect
 	k8s.io/kubectl v0.36.2 // indirect
+	k8s.io/streaming v0.36.2 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
@@ -687,12 +689,12 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.832.30
+	github.com/hanzoai/ai v1.832.31
 	github.com/hanzoai/authz v1.10.29
 	github.com/hanzoai/base v1.5.15
 	github.com/hanzoai/licensing v0.1.10
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.58
+	github.com/hanzoai/o11y v1.5.62
 	github.com/hanzoai/thinking v0.1.1 // indirect
 	github.com/hanzoai/vfs v0.6.6
 	github.com/hanzoai/zen v1.4.11

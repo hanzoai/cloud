@@ -3,6 +3,7 @@ package o11y
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/datastore"
@@ -114,7 +115,35 @@ func queryMetrics(ctx context.Context, q metricsQuery) (metricsResponse, error) 
 // on the plane (event.span). A non-admin is pinned to its own org; an admin sees
 // the whole product.
 func redSeries(ctx context.Context, q metricsQuery, resp *metricsResponse) error {
-	routePrefix := "/v1/" + q.svc.ID
+	// One product can serve SEVERAL subtrees (account serves /v1/orgs and five
+	// more), so the route predicate is built per prefix and OR'd. Every prefix
+	// still rides as a BOUND PARAMETER — the product param reached here through
+	// validProduct and an allowlist, and the manifest is our own table, but the
+	// rule that no name is interpolated into SQL is the reason neither of those
+	// has to be re-argued at this line.
+	routeSQL := make([]string, 0, len(q.svc.Routes))
+	args := []any{q.stepSec}
+	for _, p := range q.svc.Routes {
+		routeSQL = append(routeSQL, "attributes['http.route'] = ? OR startsWith(attributes['http.route'], ?)")
+		args = append(args, p, strings.TrimSuffix(p, "/")+"/")
+	}
+	routeSQL = append(routeSQL, "service = ?")
+	args = append(args, q.svc.App)
+
+	// Longest prefix wins, exactly as the router decided it. Without this an app
+	// that owns an ancestor path (ai owns /v1) counts every nested app's traffic as
+	// its own. See nestedPrefixes in productmap.go.
+	where := "(" + strings.Join(routeSQL, " OR ") + ")"
+	if len(q.svc.Excludes) > 0 {
+		ex := make([]string, 0, len(q.svc.Excludes))
+		for _, p := range q.svc.Excludes {
+			ex = append(ex, "attributes['http.route'] = ? OR startsWith(attributes['http.route'], ?)")
+			args = append(args, p, p+"/")
+		}
+		where += " AND NOT (" + strings.Join(ex, " OR ") + ")"
+	}
+	args = append(args, q.rangeSec)
+
 	sql := "SELECT toStartOfInterval(time, toIntervalSecond(?)) AS bucket, " +
 		"count() AS reqs, " +
 		// The HTTP status is a span attribute (Map values are strings); coerce
@@ -123,9 +152,8 @@ func redSeries(ctx context.Context, q metricsQuery, resp *metricsResponse) error
 		"quantile(0.5)(duration) AS p50, " +
 		"quantile(0.95)(duration) AS p95 " +
 		"FROM event.span " +
-		"WHERE (attributes['http.route'] = ? OR startsWith(attributes['http.route'], ?) OR service = ?) " +
+		"WHERE " + where + " " +
 		"AND time > now64(9) - toIntervalSecond(?)"
-	args := []any{q.stepSec, routePrefix, routePrefix + "/", q.svc.App, q.rangeSec}
 	// THE tenant gate. A non-admin is pinned to its own org (the plane's first
 	// sort-key column); a validated SuperAdmin sees the whole product (no org
 	// predicate).

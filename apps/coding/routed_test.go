@@ -48,7 +48,7 @@ func routedDispatcher(sess *fakeSessions, run *fakeRunner, router *fakeRouter, g
 	var cloneCalls []string
 	d := Dispatcher{
 		Sessions: sess, Tracker: &fakeTracker{}, Runner: run,
-		CloneURL: func(org, repo string) string {
+		CloneURL: func(_ context.Context, org, repo string) string {
 			cloneCalls = append(cloneCalls, org+"/"+repo)
 			return "https://git.test/v1/git/" + org + "/" + repo + ".git"
 		},
@@ -221,7 +221,9 @@ func TestRun_RoutedButRoutingUnwired_FailsClosed(t *testing.T) {
 	run := &fakeRunner{}
 	// No Route / TargetGate seams.
 	d := Dispatcher{Sessions: sess, Tracker: &fakeTracker{}, Runner: run,
-		CloneURL: func(org, repo string) string { return "https://git.test/v1/git/" + org + "/" + repo + ".git" }}
+		CloneURL: func(_ context.Context, org, repo string) string {
+			return "https://git.test/v1/git/" + org + "/" + repo + ".git"
+		}}
 
 	res := d.Run(context.Background(), routedReq())
 	if res.OK || !strings.Contains(res.Error, "routing is not available") {
@@ -351,11 +353,7 @@ func TestNewDispatcher_WiresRoutedFinalizer(t *testing.T) {
 	prev := routedFinalizer
 	t.Cleanup(func() { routedFinalizer = prev })
 	routedFinalizer = nil
-	_ = NewDispatcher(
-		func(_, _ string) string { return "https://git.test" },
-		func(context.Context, string, string, string) (string, bool) { return "", true },
-		nil,
-	)
+	_ = NewDispatcher(nil)
 	if routedFinalizer == nil {
 		t.Fatal("NewDispatcher must wire the routed completion seam (else routed sessions never close)")
 	}

@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -32,23 +33,23 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// recCommerce answers the metering client's balance + usage calls and records,
-// per endpoint, the X-Org-Id org header it saw plus the usage body — the
-// evidence for the per-org / cross-org assertions.
+// recCommerce is the money peer for these tests: it answers the balance READ over HTTP
+// and receives the usage DEBIT over the plane, recording the org each side acted for —
+// the evidence for the per-org / cross-org assertions.
 type recCommerce struct {
 	balanceAvailable int64 // returned as {"available":N} on GET /v1/billing/balance
 	balanceStatus    int   // 0 => 200
 
+	debits planeDebits
+
 	mu           sync.Mutex
 	balanceOrg   string // last X-Org-Id on a balance call
 	balanceCalls int32
-	usageOrg     string // last X-Org-Id on a usage call
-	usageCount   int32
-	usageBody    []byte
 }
 
 func (f *recCommerce) server(t *testing.T) *httptest.Server {
 	t.Helper()
+	f.debits.serve(t)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&f.balanceCalls, 1)
@@ -62,32 +63,25 @@ func (f *recCommerce) server(t *testing.T) *httptest.Server {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]any{"available": f.balanceAvailable})
 	})
-	mux.HandleFunc("/v1/billing/usage", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&f.usageCount, 1)
-		body, _ := io.ReadAll(r.Body)
-		f.mu.Lock()
-		f.usageOrg = r.Header.Get("X-Org-Id")
-		f.usageBody = body
-		f.mu.Unlock()
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, `{"transactionId":"tx_1","type":"usage"}`)
-	})
+	// NO /v1/billing/usage route: the debit crosses the plane now, and a debit that
+	// still went over HTTP would 404 here rather than quietly counting.
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
 }
 
-func (f *recCommerce) usages() int32   { return atomic.LoadInt32(&f.usageCount) }
+func (f *recCommerce) usages() int32   { return f.debits.count() }
 func (f *recCommerce) balances() int32 { return atomic.LoadInt32(&f.balanceCalls) }
 func (f *recCommerce) lastBalanceOrg() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.balanceOrg
 }
-func (f *recCommerce) lastUsage() (string, []byte) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.usageOrg, f.usageBody
+
+// lastUsage is the org the debit was written to and the debit itself.
+func (f *recCommerce) lastUsage() (string, plane.RecordIn) {
+	d, _ := f.debits.last()
+	return d.Org, d.In
 }
 
 // meterFor builds a ResourceMeter whose metering client has DEFAULT org "hanzo"
@@ -289,26 +283,18 @@ func TestResourceMeter_MeterDebitsCallerOrg(t *testing.T) {
 	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
 		t.Fatalf("usage records = %d, want 1 (Meter must debit on success)", fc.usages())
 	}
-	org, body := fc.lastUsage()
+	org, in := fc.lastUsage()
 	if org != "acme" {
 		t.Fatalf("usage billed org %q, want caller %q (must override client default 'hanzo')", org, "acme")
 	}
-	var u struct {
-		User     string `json:"user"`
-		Amount   int64  `json:"amount"`
-		Provider string `json:"provider"`
+	if in.Subject != "acme" {
+		t.Fatalf("usage subject = %q, want caller org %q (per-org billing keys on the org slug)", in.Subject, "acme")
 	}
-	if err := json.Unmarshal(body, &u); err != nil {
-		t.Fatalf("usage body decode: %v (body=%s)", err, body)
+	if cents, err := in.Amount.Minor(); err != nil || cents != 250 {
+		t.Fatalf("usage amount = %+v (%d¢, err %v), want 250¢", in.Amount, cents, err)
 	}
-	if u.User != "acme" {
-		t.Fatalf("usage user = %q, want caller org %q (per-org billing keys on the org slug)", u.User, "acme")
-	}
-	if u.Amount != 250 {
-		t.Fatalf("usage amount = %d, want 250", u.Amount)
-	}
-	if u.Provider != "provisioning" {
-		t.Fatalf("usage provider = %q, want %q", u.Provider, "provisioning")
+	if in.Usage.Provider != "provisioning" {
+		t.Fatalf("usage provider = %q, want %q", in.Usage.Provider, "provisioning")
 	}
 }
 
@@ -612,6 +598,178 @@ func TestMeterPeer_CarriesTheExactDebit(t *testing.T) {
 	}
 }
 
+// oneLedger is the receiving ledger's exactly-once rule, modelled: apps/finance
+// RecordUsage keys a usage debit on (wallet, act ref) and posts a replay of a key it
+// already holds exactly zero more times.
+//
+// The part that MATTERS here is what it does with an arrival carrying NO ref: it mints a
+// fresh one ("no act id → the entry's own, server-minted"), so an anonymous debit can
+// never match anything and ALWAYS posts again. That is why dropping the name on the way
+// across does not merely lose attribution — it converts a retry into a second charge.
+type oneLedger struct {
+	mu     sync.Mutex
+	posted map[string]bool
+	debits int
+	minted int
+}
+
+func (l *oneLedger) observe(_ string, in plane.RecordIn) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.posted == nil {
+		l.posted = map[string]bool{}
+	}
+	ref := in.Usage.Ref
+	if ref == "" {
+		l.minted++
+		ref = fmt.Sprintf("server-minted-%d", l.minted)
+	}
+	key := in.Subject + "\x00" + ref
+	if l.posted[key] {
+		return // idempotent replay — this act is already paid for
+	}
+	l.posted[key] = true
+	l.debits++
+}
+
+func (l *oneLedger) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.debits
+}
+
+// A metered act keeps the name the SERVER gave it across BOTH crossings, so one act is
+// one charge whichever process holds the ledger.
+//
+// apps/company mints a formation ref and hands that same value to the debit precisely so
+// the formation and its charge are one thing under one name; MeterUsage documents the
+// debit as exactly-once on it. That promise held only while the ledger was co-resident.
+// In the SHIPPED split topology the debit goes out through meterPeer, which built its
+// plane.Usage from Project and Service alone — the ref never boarded — so the receiver
+// minted a new name per arrival and a re-driven formation charged the customer TWICE for
+// one company.
+//
+// The two topologies are asserted TOGETHER because the defect was precisely that they
+// disagreed: the fix seals the act above the branch, so neither path can name it
+// differently from the other.
+func TestMeterUsage_OneActIsChargedOnceInEitherTopology(t *testing.T) {
+	// The formation's own name, as apps/company mints it. Re-driven under the same name
+	// — a retried job, a replayed queue entry — it is still ONE act.
+	const formationRef = "pay_7f3ac2e1"
+
+	drive := func(rm *ResourceMeter) {
+		for range 2 {
+			rm.MeterUsage("acme", "company-formation", metering.Usage{
+				User:        "acme",
+				AmountCents: 12900,
+				Model:       "company-formation",
+				Ref:         formationRef,
+			})
+		}
+	}
+
+	// THE SHIPPED TOPOLOGY: the ledger is in another process, so the debit leaves through
+	// meterPeer. No BaseURL means metering is configured but DISABLED, which is the state
+	// of every process that does not hold the ledger.
+	t.Run("split deploy", func(t *testing.T) {
+		led := &oneLedger{}
+		peer := &planeDebits{}
+		peer.serveWith(t, led.observe)
+
+		m, err := metering.New(metering.Config{Org: "hanzo"})
+		if err != nil {
+			t.Fatalf("metering.New: %v", err)
+		}
+		rm := NewResourceMeter(Deps{Logger: luxlog.New("test"), Metering: m, Env: "mainnet"}, "company")
+		if rm.Enabled() {
+			t.Fatal("fixture broken: metering must be DISABLED so the debit takes the peer path")
+		}
+
+		drive(rm)
+
+		if !waitFor(func() bool { return peer.count() == 2 }, 5*time.Second) {
+			t.Fatalf("crossings = %d, want 2 — both drives must reach the peer before the "+
+				"count means anything", peer.count())
+		}
+		if got, _ := peer.last(); got.In.Usage.Ref != formationRef {
+			t.Errorf("the act crossed as ref %q, want %q — meterPeer must carry the name the "+
+				"caller sealed", got.In.Usage.Ref, formationRef)
+		}
+		if n := led.count(); n != 1 {
+			t.Errorf("one formation, re-driven, was debited %d times; want exactly 1 — the "+
+				"customer is charged once per company", n)
+		}
+	})
+
+	// THE CO-RESIDENT TOPOLOGY, unchanged: sealing above the branch must not move it.
+	t.Run("co-resident", func(t *testing.T) {
+		led := &oneLedger{}
+		peer := &planeDebits{}
+		peer.serveWith(t, led.observe)
+
+		// A BaseURL is what ENABLES the client; MeterUsage never reads it (only the
+		// balance gate does), so it is never dialled.
+		m, err := metering.New(metering.Config{BaseURL: "http://127.0.0.1:1", Token: "svc-token", Org: "hanzo"})
+		if err != nil {
+			t.Fatalf("metering.New: %v", err)
+		}
+		rm := NewResourceMeter(Deps{Logger: luxlog.New("test"), Metering: m, Env: "mainnet"}, "company")
+		if !rm.Enabled() {
+			t.Fatal("fixture broken: metering must be ENABLED so the debit takes the local path")
+		}
+
+		drive(rm)
+
+		if !waitFor(func() bool { return peer.count() == 2 }, 5*time.Second) {
+			t.Fatalf("crossings = %d, want 2", peer.count())
+		}
+		if got, _ := peer.last(); got.In.Usage.Ref != formationRef {
+			t.Errorf("the act crossed as ref %q, want %q", got.In.Usage.Ref, formationRef)
+		}
+		if n := led.count(); n != 1 {
+			t.Errorf("one formation, re-driven, was debited %d times; want exactly 1", n)
+		}
+	})
+}
+
+// An UNNAMED act still stands alone: two calls are two acts, and sealing above the
+// topology branch must not fold them into one.
+//
+// This is the other half of the seal's contract and the regression the fix could
+// plausibly have introduced — a shared or reused ref would make two distinct inferences
+// bill once, which is a revenue leak pointing the other way.
+func TestMeterUsage_TwoUnnamedActsAreTwoCharges(t *testing.T) {
+	led := &oneLedger{}
+	peer := &planeDebits{}
+	peer.serveWith(t, led.observe)
+
+	m, err := metering.New(metering.Config{Org: "hanzo"})
+	if err != nil {
+		t.Fatalf("metering.New: %v", err)
+	}
+	rm := NewResourceMeter(Deps{Logger: luxlog.New("test"), Metering: m, Env: "mainnet"}, "company")
+	if rm.Enabled() {
+		t.Fatal("fixture broken: metering must be DISABLED so the debit takes the peer path")
+	}
+
+	// No Ref: two ordinary metered calls, which are two acts however identical they look.
+	for range 2 {
+		rm.MeterUsage("acme", "zen", metering.Usage{User: "acme", AmountCents: 100, Model: "zen-1"})
+	}
+
+	if !waitFor(func() bool { return peer.count() == 2 }, 5*time.Second) {
+		t.Fatalf("crossings = %d, want 2", peer.count())
+	}
+	if n := led.count(); n != 2 {
+		t.Errorf("two distinct acts were debited %d times; want 2 — sealing names an act, it "+
+			"does not merge them", n)
+	}
+	if got, _ := peer.last(); got.In.Usage.Ref == "" {
+		t.Error("an unnamed act crossed with no ref at all — the seal must mint one, so the " +
+			"receiver dedups on a name the SERVER chose rather than on nothing")
+	}
+}
+
 // A debit must not be able to quote ANOTHER caller's bytes.
 //
 // A Usage assembled in a handler carries zero-copy views into the server's
@@ -641,15 +799,10 @@ func TestResourceMeter_MeterOwnsTheStringsItRetains(t *testing.T) {
 	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
 		t.Fatalf("usage records = %d, want 1", fc.usages())
 	}
-	_, body := fc.lastUsage()
-	var u struct {
-		RequestID string `json:"requestId"`
-	}
-	if err := json.Unmarshal(body, &u); err != nil {
-		t.Fatalf("usage body decode: %v (body=%s)", err, body)
-	}
-	if u.RequestID != "req-mine" {
+	_, in := fc.lastUsage()
+	if in.Usage.RequestID != "req-mine" {
 		t.Fatalf("the debit recorded requestId %q, want %q — the meter retained a view into the "+
-			"caller's request arena, so the row quotes whoever used that connection next", u.RequestID, "req-mine")
+			"caller's request arena, so the row quotes whoever used that connection next",
+			in.Usage.RequestID, "req-mine")
 	}
 }

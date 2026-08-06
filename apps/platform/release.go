@@ -386,7 +386,7 @@ func launchRelease(s *cloud.Service[state], ctx context.Context, ref, repo, dock
 func releaseFor(s *cloud.Service[state], repoURL, sha, image, tag, dockerfile, bldID string) releasePlan {
 	return releasePlan{
 		build: func(ctx context.Context) error {
-			job, err := s.State.k8s.launchDirectBuild(ctx, repoURL, sha, image, dockerfile, bldID)
+			job, err := s.State.k8s.launchDirectBuild(ctx, platformBuildOrg, repoURL, sha, image, dockerfile, bldID)
 			if err != nil {
 				return fmt.Errorf("launch build: %w", err)
 			}

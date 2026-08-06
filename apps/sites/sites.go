@@ -193,6 +193,36 @@ func currentResolver() Resolver {
 // was added to close, one layer down.
 func CurrentResolver() Resolver { return currentResolver() }
 
+// VerifiedHost reports the org that owns host as a VERIFIED public site host.
+//
+// It is the SAME read the site edge serves from — Resolver.Resolve, which is
+// Store.ResolveHost, which filters `status='verified'` — asked for the one fact a
+// caller outside this package can need about a hostname: whose is it, and has the
+// owner PROVED it. A host with only a pending claim resolves to nothing here,
+// because a pending row holds its name against the PK but never routes; that
+// filter is the hostname-hijack boundary, and asking through this function is what
+// keeps every caller on the right side of it instead of growing a second lookup
+// that could forget the status.
+//
+// found=false on a miss AND on a resolver error, which is deliberate and is the
+// difference between this and Resolve: the serve path must tell "no such site"
+// (404) from "could not ask" (503), because serving a 404 for a live customer site
+// during a transient failure looks exactly like deletion. A caller asking "is this
+// host proven" has no such distinction to make — an answer we could not obtain is
+// not a proof — so the error collapses into "no", and a caller cannot forget to
+// check a second return.
+func VerifiedHost(ctx context.Context, host string) (string, bool) {
+	r := currentResolver()
+	if r == nil {
+		return "", false
+	}
+	site, ok, err := r.Resolve(ctx, host)
+	if err != nil || !ok || site.Org == "" {
+		return "", false
+	}
+	return site.Org, true
+}
+
 // Config configures the site host-router. Apex is the zone whose subdomains are
 // site hosts (hanzo.app). Reserved is the set of subdomain labels that are NOT
 // sites (they belong to real app hosts) and must fall through to the normal

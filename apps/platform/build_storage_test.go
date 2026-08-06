@@ -90,8 +90,9 @@ func TestTheCacheBackendFollowsWhatIsReachable(t *testing.T) {
 		"use_path_style=true",
 		// Keyed per repository inside the shared bucket.
 		"name=hanzoai-cloud",
-		// The intermediate stages are where the expensive steps live.
-		"mode=max",
+		// min, not max: max re-compressed and re-uploaded the whole build stage
+		// (221.3s on cloud) to cache four steps worth 4.6s.
+		"mode=min",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("s3 cache missing %q: %s", want, got)

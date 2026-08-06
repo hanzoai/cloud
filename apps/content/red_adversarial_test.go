@@ -24,6 +24,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // ── counting commerce meter ───────────────────────────────────────────────────────
@@ -42,14 +44,18 @@ type redMeter struct {
 	closeOnce sync.Once
 }
 
-// redDebit captures a POST /v1/billing/usage. `user` (the body) is the per-org billing
-// destination; the tenant namespace rides the X-Org-Id HEADER (Usage.Org is json:"-"),
-// captured into OrgHeader so a test can assert BOTH.
+// redDebit captures one debit off the money plane. `User` is the per-org billing
+// destination (the debit's subject); the tenant namespace rides the CALLER, captured
+// into OrgHeader so a test can assert BOTH.
+//
+// It used to capture a POST /v1/billing/usage. The debit left HTTP — metering.Usage.Ref
+// is `json:"-"` and could not survive a JSON body — so it now arrives typed, over the
+// plane. See internal/planetest.
 type redDebit struct {
-	User        string `json:"user"`
-	AmountCents int64  `json:"amount"`
-	Model       string `json:"model"`
-	OrgHeader   string `json:"-"`
+	User        string
+	AmountCents int64
+	Model       string
+	OrgHeader   string
 }
 
 func newRedMeter(t *testing.T, availableCents int64) *redMeter {
@@ -61,15 +67,16 @@ func newRedMeter(t *testing.T, availableCents int64) *redMeter {
 		user := r.URL.Query().Get("user")
 		writeJSON(w, http.StatusOK, map[string]any{"user": user, "currency": "usd", "available": m.available})
 	})
-	mux.HandleFunc("/v1/billing/usage", func(w http.ResponseWriter, r *http.Request) {
-		var d redDebit
-		_ = json.NewDecoder(r.Body).Decode(&d)
-		d.OrgHeader = r.Header.Get("X-Org-Id")
+	// The DEBIT arrives on the plane, not here. The observer runs inside the peer's
+	// handler, so the debit has landed by the time the op answers.
+	planetest.ServeWith(t, func(org string, in plane.RecordIn) {
 		select {
-		case m.debits <- d:
+		case m.debits <- redDebit{
+			User: in.Subject, AmountCents: planetest.Cents(in.Amount),
+			Model: in.Usage.Model, OrgHeader: org,
+		}:
 		default:
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	})
 	// Everything else (tier, alerts/authorize) 404s → cap overlay fails open.
 	srv := httptest.NewServer(mux)

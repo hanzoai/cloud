@@ -224,12 +224,43 @@ func (k *k8sClient) ready() error {
 // so the namespace is not attacker-controlled. The slug is produced by the ONE
 // hardened, INJECTIVE org normalizer (namespace.Sanitize — identity on a
 // clean DNS label, else fold + a SHA-256 suffix of the raw owner), so two
-// distinct owners can NEVER collapse onto the same namespace (CRIT-2). Reusing
-// that single function keeps cloud's whole tenant→namespace/bucket/DB boundary
-// consistent, rather than forking a third, lossy slug rule.
+// distinct owners can NEVER collapse onto the same namespace (CRIT-2).
+//
+// ★ org MUST ALREADY BE THAT SLUG, and this only prepends the prefix.
+//
+// It used to sanitize again, and Sanitize is NOT idempotent — it is the identity
+// only on a clean label, and re-folding its own <fold>-<hash> output appends a
+// SECOND hash (looksSuffixed denies the fast path deliberately, so no name can
+// squat on the rendered form of another). Every handler receives an
+// already-sanitized slug from tenant(s, c), so for every org whose name is not
+// already clean this wrote App CRs into tenant-<double> while apps/deploy
+// (scope.go tenantNS) and apps/provisioning (dedicated.go) both scanned
+// tenant-<single>. It fails closed — nothing crosses a tenant boundary — but the
+// org's board is silently EMPTY and its CRs are orphaned in a namespace nothing
+// lists. This was the outlier of three copies of one rule; the other two already
+// took the slug, and provisioning's even documents why.
+//
+// Same class as the confinement asymmetry: Sanitize applied an unequal number of
+// times on two sides of one comparison. TestTenantNamespaceIsDerivedExactlyOnce
+// holds the three together.
+//
+// ⚠ MIGRATION: any dirty-org namespace created before this fix is already
+// double-suffixed on the cluster and is NOT what this now derives. Those are
+// orphans either way — nothing has ever read them — but they must be reaped
+// deliberately, not left to look like a live tenant.
 func tenantNamespace(org string) string {
-	org = namespace.Sanitize(org)
-	if org == "" {
+	// FAIL CLOSED ON A CONTRACT VIOLATION. The input must already be a slug, and
+	// "already sanitized" is NOT detectable by re-sanitizing — that is the very
+	// non-idempotence this fix is about. What IS checkable is the property a
+	// namespace must have anyway: a DNS-1123 label. Every namespace.Sanitize
+	// output is one; a raw or hostile owner claim ("acme/../hanzo", "  spaced  ",
+	// "org:with:colons") is not, and such a caller has skipped tenant(s, c).
+	//
+	// It resolves to the inert "unknown" rather than a malformed namespace, so a
+	// missed sanitize can never render a path-bearing or space-bearing namespace
+	// into a manifest — and, being inert, never lands in a real tenant's either.
+	// TestSanitizeIsInjective holds this: the output is always a clean label.
+	if org == "" || !appNameRE.MatchString(org) {
 		org = "unknown"
 	}
 	// NAMING(gated): rename tenant-<org> → org-<org> requires migrating live
@@ -812,6 +843,23 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	// privileged Jobs in the shared build namespace. Counted just-in-time from the
 	// live Jobs the org owns; refuse with errTooManyBuilds (→ HTTP 429) when at
 	// the ceiling.
+	// The ceiling is SOFT, and that is a decision rather than an oversight.
+	//
+	// This is check-then-act: two requests that count concurrently both see room
+	// and both create, so the true bound is the ceiling plus the number of
+	// requests in flight. Making it hard needs an atomic reservation, and the only
+	// atom available here is the Job NAME — which is already spent on idempotency
+	// (jobIDSuffix(buildID), so a retry of one build collides at 409 instead of
+	// building twice). A name cannot carry both properties, and a counter object
+	// with optimistic concurrency would be a second source of truth about how many
+	// builds are running, which drifts from the Jobs it counts.
+	//
+	// The overrun is bounded and CONFINED: the label is the caller's own org, so
+	// an org can only ever exceed ITS OWN share and never take another's. What a
+	// soft ceiling does not do is bound the cluster, and that bound belongs where
+	// bounds are enforced atomically — a ResourceQuota on the build namespace,
+	// which the apiserver applies at admission and no race can widen. This check
+	// stays as the fast, attributable refusal; the quota is the wall behind it.
 	active, err := k.countActiveBuilds(ctx, org)
 	if err != nil {
 		return "", fmt.Errorf("count active builds: %w", err)
@@ -945,18 +993,47 @@ func buildFrontendCmdRev(buildCtx, dockerfile, image, revision string) []any {
 	// `buildcache` tag (the standard convention) so it is per-repo, needs no extra
 	// credentials, and is garbage-collected with the package.
 	//
-	// mode=max exports intermediate stages too, which is what makes a one-line code
-	// change reuse the dependency layers instead of rebuilding them. Both flags are
-	// ADVISORY in buildkit: a missing or unreadable cache ref is a cache miss, never
-	// a build failure, so a first build (or a registry hiccup) behaves exactly as it
-	// does today. Skipped for a digest-pinned ref, which names no tag to hang the
-	// cache off.
+	// What the cache can and cannot buy is measured, not assumed — see cacheArgs.
+	// Both flags are ADVISORY in buildkit: a missing or unreadable cache ref is a
+	// cache miss, never a build failure, so a first build (or a registry hiccup)
+	// behaves exactly as it does today. Skipped for a digest-pinned ref, which
+	// names no tag to hang the cache off.
 	if repo, tag := splitImageRef(image); tag != "" && !strings.Contains(tag, ":") {
 		for _, a := range cacheArgs(repo) {
 			cmd = append(cmd, a)
 		}
 	}
-	return append(cmd, "--output", "type=image,name="+image+",push=true")
+	// ZSTD, not buildkit's default gzip. This image is ONE 1.63GB layer — the
+	// per-app plugin binaries, 98.8% of its 1.65GB — and gzip writes a layer as a
+	// single stream on a single core, so the export ran at 23.7MB/s with seven of
+	// the runner's eight CPUs idle: 175.0s and 174.7s on two consecutive builds.
+	// Measured on those same bytes, both orderings, 2026-08-06: gzip 245.5s/256.1s
+	// against zstd 58.1s/53.3s. The zstd result is also 1.2% SMALLER (1,626,561,616
+	// vs 1,646,830,883 bytes), so every pull gets slightly cheaper too.
+	//
+	// oci-mediatypes is the enabling half, not decoration: a zstd layer is
+	// application/vnd.oci.image.layer.v1.tar+zstd, and the Docker schema2 manifest
+	// this lane emitted before has no media type that can name one. Setting the
+	// compression without it would push layers no client could read.
+	//
+	// force-compression is load-bearing, not belt-and-braces. Without it buildkit
+	// treats any already-compressed blob as good enough and reuses it: asked for
+	// zstd over layers it had itself just written as gzip, it published an OCI
+	// manifest whose layers were still ...layer.v1.tar+gzip, having done no
+	// compression work at all. That failure is silent and lands in the "still
+	// works, only slow" direction — the kind that survives review and quietly gives
+	// back the whole saving. Forcing it means what ships is what was measured. The
+	// price is re-compressing ~11MB of alpine base layers, under a second.
+	//
+	// Verified before shipping rather than assumed, because the blast radius is
+	// "nothing in the fleet can pull our images": ghcr.io stores the zstd blobs,
+	// and kubelet/containerd 1.7.28 pulled and RAN the resulting image on two
+	// different node pools, including one that had never seen the bytes.
+	//
+	// One caller had to change WITH this and is not optional: imagePullable in
+	// pin.go negotiates the manifest by Accept, and ghcr answers a type it was not
+	// offered with 404. See the note there.
+	return append(cmd, "--output", "type=image,name="+image+",push=true,compression=zstd,force-compression=true,oci-mediatypes=true")
 }
 
 // cacheBucket is the object-store bucket the layer cache lives in. One bucket for
@@ -987,15 +1064,41 @@ func cacheArgs(repo string) []string {
 			",region=" + getenv("S3_REGION", "us-east-1") +
 			",endpoint_url=" + s3CacheEndpoint(ep) +
 			",use_path_style=true,name=" + cacheKey(repo)
-		// mode=max exports the intermediate stages too, which is where the Go
-		// compiles live; without it a multi-stage build caches only its final
-		// layers and the expensive steps rerun anyway.
-		return []string{"--import-cache", common, "--export-cache", common + ",mode=max"}
+		// mode=min, for the reason spelled out on the registry branch below: max
+		// re-compresses and re-uploads the whole build stage to buy back a few
+		// seconds of `apk add`.
+		return []string{"--import-cache", common, "--export-cache", common + ",mode=min,compression=zstd"}
 	}
 	ref := repo + ":buildcache"
+	// mode=min. The claim this used to carry — that max keeps the Go compiles warm
+	// — is not what the builds do. Two independent cloud builds imported this cache
+	// and got the SAME eight cached steps: `apk add`, `adduser`, the libsqlcipher
+	// symlink and WORKDIR, once per stage. Every expensive step missed both times
+	// and had to: `COPY . .` sits in front of them and its digest changes with
+	// every commit, and the compiles write into `--mount=type=cache`, which is
+	// worker-local and never travels in an exported cache at all — a build pod is
+	// fresh, so it starts them cold no matter what this flag says.
+	//
+	// What max charged for those eight steps: it exports every intermediate stage,
+	// and the build stage holds the same 4.2GB of plugin binaries the image does,
+	// so buildkit compressed them a SECOND time and pushed a second 1.6GB blob.
+	// Measured 2026-08-06 — 221.3s and 225.2s of a 17-minute build, reproduced at
+	// 212.1s on a synthetic build of the same shape, against 1.8s for min.
+	//
+	// Four of the eight steps are stage-2, i.e. layers of the FINAL image, so min
+	// still exports them. Only the four build-stage records are given up, and those
+	// are worth 4.6s cold (measured: 4.4 + 0.1 + 0.1 + 0.0).
+	//
+	// compression matches the image's, which is what keeps min cheap: min exports
+	// the final image's layers, so if the two settings disagree buildkit has to
+	// re-compress all of them here and the saving is handed straight back.
+	//
+	// Both flags stay ADVISORY in buildkit — a missing or unreadable cache ref is a
+	// cache miss, never a build failure — so --import-cache keeps working unchanged
+	// against a ref written either way, including one written by the old mode.
 	return []string{
 		"--import-cache", "type=registry,ref=" + ref,
-		"--export-cache", "type=registry,ref=" + ref + ",mode=max",
+		"--export-cache", "type=registry,ref=" + ref + ",mode=min,compression=zstd",
 	}
 }
 
@@ -1251,14 +1354,26 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 	}}
 }
 
-// launchDirectBuild launches a privileged /v1/runner build. It takes explicit
+// launchDirectBuild launches a privileged build. It takes explicit
 // (repo, ref, image, dockerfile) rather than a tenant Application, validates
 // them at this single choke point (validateBuildInputs), and launches the same
 // moby/buildkit Job with the caller's forced output image. Frontend defaults to
 // hanzoai/pack; a non-empty dockerfile is the escape hatch. buildID is the
 // idempotency key: a retry of the same build collides on the Job name (409)
 // rather than spawning a duplicate.
-func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, dockerfile, buildID string) (string, error) {
+//
+// `org` is WHO THE BUILD IS CHARGED TO, and it is a parameter because the
+// concurrency ceiling is per-org: the Job carries hanzo.ai/org=<org> and
+// countActiveBuilds selects on it, so one org's builds can only ever exhaust its
+// own share. It was the constant platformBuildOrg for every caller, which put
+// fabric builds and every tenant's builds in ONE pool of 3 — so a single org
+// looping deploys locked every other org out of building, with no attribution in
+// the Job labels to see it by. /v1/runner still passes platformBuildOrg (its
+// builds ARE the fabric's); a tenant deploy passes the tenant.
+func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, image, dockerfile, buildID string) (string, error) {
+	if strings.TrimSpace(org) == "" {
+		return "", fmt.Errorf("a build must be attributed to an org")
+	}
 	if err := k.ready(); err != nil {
 		return "", err
 	}
@@ -1270,7 +1385,24 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, 
 		return "", fmt.Errorf("invalid build input: %w", err)
 	}
 	image = cleanImage
-	active, err := k.countActiveBuilds(ctx, platformBuildOrg)
+	// The ceiling is SOFT, and that is a decision rather than an oversight.
+	//
+	// This is check-then-act: two requests that count concurrently both see room
+	// and both create, so the true bound is the ceiling plus the number of
+	// requests in flight. Making it hard needs an atomic reservation, and the only
+	// atom available here is the Job NAME — which is already spent on idempotency
+	// (jobIDSuffix(buildID), so a retry of one build collides at 409 instead of
+	// building twice). A name cannot carry both properties, and a counter object
+	// with optimistic concurrency would be a second source of truth about how many
+	// builds are running, which drifts from the Jobs it counts.
+	//
+	// The overrun is bounded and CONFINED: the label is the caller's own org, so
+	// an org can only ever exceed ITS OWN share and never take another's. What a
+	// soft ceiling does not do is bound the cluster, and that bound belongs where
+	// bounds are enforced atomically — a ResourceQuota on the build namespace,
+	// which the apiserver applies at admission and no race can widen. This check
+	// stays as the fast, attributable refusal; the quota is the wall behind it.
+	active, err := k.countActiveBuilds(ctx, org)
 	if err != nil {
 		return "", fmt.Errorf("count active builds: %w", err)
 	}
@@ -1284,7 +1416,7 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, 
 	if err != nil {
 		return "", err
 	}
-	job := k.buildJobSpec(jobName, platformBuildOrg, "runner", pushSecret, command)
+	job := k.buildJobSpec(jobName, org, "runner", pushSecret, command)
 	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}

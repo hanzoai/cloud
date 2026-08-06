@@ -1,6 +1,11 @@
 package o11y
 
-import "strings"
+import (
+	"sort"
+	"strings"
+
+	"github.com/hanzoai/cloud/manifest"
+)
 
 // productmap is the ONE server-side table that resolves a client-supplied
 // `product` query param into the concrete infra identities the scoped o11y
@@ -71,6 +76,112 @@ var knownServices = map[string]bool{
 	"visor": true,
 }
 
+// knownServices answers "does a WORKLOAD answer at an address"; manifest.Apps
+// answers "does an APP serve routes". They are different questions, and for most
+// of the fleet only the second has a yes.
+//
+// Every routed app's requests are already on the plane: cloud's TracingMiddleware
+// stamps `http.route` on every request span, and manifest.Apps is the table the
+// host builds its router from — so the RED signal for all 119 apps has been in
+// event.span the whole time. The only thing standing between it and a caller was
+// this file's hand-maintained workload list, which had heard of 12 of them. An
+// app that nobody probes still has no address and is still not probed (URL stays
+// empty, status answers honest-empty); what it gains is its own logs and metrics,
+// which never needed an address.
+//
+// This is why the fleet surface is DERIVED rather than a second list to maintain:
+// a new plugin gets metrics/logs/status the moment it has a manifest row, which
+// it must have to be routable at all (TestEveryPluginNameIsInTheManifest).
+func fleetRoutes(name string) []string {
+	ps := manifest.PrefixesFor(name)
+	for _, p := range ps {
+		if strings.TrimSuffix(p, "/") == apiRoot {
+			// An app that declares the API ROOT is the router's FALLBACK — it is
+			// handed whatever no other app claimed. That is a routing role, not a
+			// product boundary, and "every request in the fleet minus everyone
+			// else's" is not a RED series anyone should read as this product's
+			// traffic. ai is the only such app (it serves the OpenAI-compatible
+			// surface at top level so zen's c.Next() has somewhere to fall through
+			// to), and it has no bounded route scope for the same reason zen has
+			// none: zen routes nothing, ai routes everything.
+			//
+			// Measured, in case anyone is tempted to compute it anyway: expressing
+			// it as "/v1 minus the 251 nested prefixes" costs 15.5s against six
+			// hours of live spans, versus a ~4-5s baseline for a bounded app — three
+			// times the cost, for a number that would have counted KMS's 161,705
+			// requests as inference.
+			return nil
+		}
+	}
+	return ps
+}
+
+// apiRoot is the prefix every routed app is under, so declaring it claims
+// everything and bounds nothing.
+const apiRoot = "/v1"
+
+// nestedPrefixes is the LONGEST-PREFIX-WINS half, and it is not optional.
+//
+// manifest.OwnerOf says it plainly: "Anything deciding policy from a bare
+// HasPrefix scan will attribute those paths to the wrong app." A RED query is
+// deciding policy. ai declares `/v1` — the catch-all it serves the
+// OpenAI-compatible surface from — so a bare startsWith('/v1') scan hands ai every
+// request in the fleet. Measured over six hours of live spans: /v1/kms/* alone is
+// 161,705 of 434,765, and ai would have reported all of them as its own.
+//
+// So a product's spans are the ones under its prefixes MINUS the ones a strictly
+// longer prefix belonging to a DIFFERENT app claims — the same rule the router
+// used to route them in the first place. For nearly every app this list is empty
+// (nothing nests inside /v1/kms) and the exclusion costs nothing.
+func nestedPrefixes(own []string) []string {
+	roots := make([]string, 0, len(own))
+	for _, p := range own {
+		if r := strings.TrimSuffix(p, "/"); r != "" {
+			roots = append(roots, r)
+		}
+	}
+	seen := map[string]bool{}
+	var nested []string
+	for _, a := range manifest.Apps {
+		for _, q := range a.Prefixes {
+			qr := strings.TrimSuffix(q, "/")
+			if qr == "" || seen[qr] {
+				continue
+			}
+			for _, pr := range roots {
+				// STRICTLY longer and genuinely nested. An app's own prefixes are
+				// never longer than themselves, so this cannot exclude the product
+				// from its own subtree.
+				if len(qr) > len(pr) && strings.HasPrefix(qr, pr+"/") {
+					seen[qr] = true
+					nested = append(nested, qr)
+					break
+				}
+			}
+		}
+	}
+	// Keep only the MINIMAL set. Excluding /v1/platform already excludes
+	// /v1/platform/fleet, and carrying both puts two predicates in the query where
+	// one decides. For ai this is the difference between 282 exclusions and a set
+	// small enough to read.
+	sort.Slice(nested, func(i, j int) bool { return len(nested[i]) < len(nested[j]) })
+	var out []string
+	for _, q := range nested {
+		covered := false
+		for _, kept := range out {
+			if strings.HasPrefix(q, kept+"/") {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			out = append(out, q)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // service is the resolved infra identity for a product.
 type service struct {
 	// ID is the canonical product id (== the product param, validated).
@@ -84,6 +195,19 @@ type service struct {
 	// addresses (probes.go). Empty when the fleet does not watch this workload,
 	// and the scoped status read then probes nothing.
 	URL string
+	// Excludes is the set of longer prefixes owned by OTHER apps that nest inside
+	// Routes. Without it a product that owns an ancestor path absorbs its
+	// children's traffic — see nestedPrefixes.
+	Excludes []string
+	// Routes is the set of path prefixes whose request spans belong to this
+	// product — the manifest's own answer where there is one.
+	//
+	// It is NOT `/v1/<id>` by convention, because for ~20 apps that convention is
+	// simply wrong: plan serves /v1/plans, storage serves /v1/s3/buckets, account
+	// serves /v1/orgs (and five more), knowledge serves /v1/kb/*. Reading the RED
+	// series off `/v1/<name>` for those scopes the query to a subtree nobody
+	// serves, which returns zero and looks exactly like a healthy idle service.
+	Routes []string
 }
 
 // resolveService validates + resolves a product param. ok=false means the product
@@ -98,8 +222,31 @@ func resolveService(product string) (service, bool) {
 	if a, ok := productAlias[p]; ok {
 		workload = a
 	}
-	if !knownServices[workload] {
+	// Routes come from the PRODUCT id, not the aliased workload, because the alias
+	// answers a different question. productAlias maps a console slug to the k8s
+	// workload that ANSWERS (for probing and the prom `service` label); the routing
+	// table is keyed by APP NAME. For analytics the two disagree in both
+	// directions — the app is `analytics` and serves five prefixes
+	// (/v1/analytics, /v1/errors, /v1/event, /v1/insights/*), while the workload is
+	// `insights-capture` and is not a routed app at all. Looking the routes up by
+	// workload silently lost four of those five prefixes.
+	routes := fleetRoutes(p)
+	if len(routes) == 0 {
+		routes = fleetRoutes(workload)
+	}
+	// EITHER answer admits the product: a verified workload (it has an address, so
+	// status can probe it) or a routed app (it has request spans, so metrics and
+	// logs can read it). Requiring both would keep 107 routed apps dark for want of
+	// a probe they never needed.
+	if !knownServices[workload] && len(routes) == 0 {
 		return service{}, false
+	}
+	if len(routes) == 0 {
+		// A verified workload with no manifest row is not a routed app — it is a
+		// bare k8s service (chat, studio, nats, vector). `/v1/<id>` is what this
+		// file has always assumed for those, and it stays their answer; the
+		// manifest simply has nothing better to say about them.
+		routes = []string{"/v1/" + p}
 	}
 	// A workload the fleet does not watch has no address, and the miss is not an
 	// error: it emits logs and metrics we can still query, we have just never
@@ -110,6 +257,8 @@ func resolveService(product string) (service, bool) {
 		App:         workload,
 		PromService: workload,
 		URL:         url,
+		Routes:      routes,
+		Excludes:    nestedPrefixes(routes),
 	}, true
 }
 

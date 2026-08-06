@@ -151,8 +151,7 @@ func (s *Service) Register(ctx context.Context, org, domainName string, years in
 	}
 
 	// 5. Capture — charge the customer's prepaid wallet now that the domain is theirs.
-	ref := "domain:register:" + domainName
-	s.bill.Capture(org, q.PriceCents, ref)
+	s.bill.Capture(org, q.PriceCents)
 
 	// 6. Record ownership.
 	rec := Record{
@@ -223,7 +222,7 @@ func (s *Service) Renew(ctx context.Context, org, domainName string, years int) 
 	if err != nil {
 		return nil, fmt.Errorf("domain: registrar renew failed: %w", err)
 	}
-	s.bill.Capture(org, priceCents, "domain:renew:"+domainName)
+	s.bill.Capture(org, priceCents)
 
 	if renewed.Domain != nil && renewed.Domain.ExpireDate != "" {
 		rec.ExpiresAt = renewed.Domain.ExpireDate
@@ -281,7 +280,7 @@ func (s *Service) Transfer(ctx context.Context, org, domainName, authCode string
 	if err != nil {
 		return nil, fmt.Errorf("domain: registrar transfer failed: %w", err)
 	}
-	s.bill.Capture(org, q.PriceCents, "domain:transfer:"+domainName)
+	s.bill.Capture(org, q.PriceCents)
 
 	rec := Record{
 		Org:          org,
