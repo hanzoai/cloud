@@ -74,13 +74,54 @@ type caller struct {
 	org     string
 	project string
 	actor   string
+	// principal is whether a validated identity named this tenant. An actor is
+	// an EMAIL and a principal need not carry one, so authorship is asserted by
+	// this fact rather than inferred from a field that can legitimately be empty.
+	principal bool
 }
 
-// The refusal names what would satisfy it. A verdict is org-scoped, and this
-// surface reads the tenant from the request alone, so a caller holding only a
-// project key has no way in here — saying "X-Org-Id required" to an SDK that
-// never sends one reads as a bug in the SDK rather than the shape of this door.
-const errNoTenant = "a signed-in principal is required: this surface reads the tenant from the request, and a project key does not carry one"
+// The refusal names what would satisfy it, because the two ways in are not
+// interchangeable: a signed-in principal carries an org AND an actor, a project
+// key carries only an org.
+const errNoTenant = "no tenant: present a signed-in principal, or a project key as ?api_key= / x-api-key"
+
+// resolveKeyOrg maps a presented project key to its org through the ONE IAM key
+// seam, exactly as the event door does. Package var ONLY so a test can substitute
+// a resolver without standing up IAM; production is always cloud.OrgForKey.
+var resolveKeyOrg = cloud.OrgForKey
+
+// keyOrg is the SECOND way a caller names its tenant, and it is READ-ONLY by
+// construction: it returns no actor, and every write op below records one, so a
+// key can evaluate flags and can never author a definition or an audit row.
+//
+// The key is read from the request (query or header) and never from a decoded In
+// field — an In field is caller-supplied, so a tenant read from one is a
+// cross-tenant read the caller asserted for itself. Resolution FAILS CLOSED: a
+// presented-but-unresolvable key is refused rather than falling back to the host,
+// which is the same rule the event door holds.
+func keyOrg(ctx context.Context, c *zip.Ctx) (string, bool) {
+	key := trim(c.Query("api_key"))
+	if key == "" {
+		key = trim(c.Header("x-api-key"))
+	}
+	if key == "" {
+		return "", false
+	}
+	return resolveKeyOrg(ctx, key)
+}
+
+func trim(s string) string { return strings.TrimSpace(s) }
+
+// authoring refuses a caller that named its tenant with a key. Reading a verdict
+// and changing what everyone reads are different powers, and only a principal
+// carries the actor an audited write is recorded under — so this is asserted at
+// each write rather than left to the empty actor to imply.
+func (cl caller) authoring() error {
+	if !cl.principal {
+		return zip.ErrForbidden("a project key can evaluate flags; changing a definition needs a signed-in principal")
+	}
+	return nil
+}
 
 // callerOf resolves the caller for a TYPED op, which receives a context and its
 // decoded In and nothing else. The three facts here are all REQUEST facts and
@@ -92,11 +133,15 @@ func callerOf(ctx context.Context) (caller, error) {
 	if !ok {
 		return caller{}, zip.ErrForbidden(errNoTenant)
 	}
-	org, project, ok := tenant(c)
-	if !ok {
-		return caller{}, zip.ErrForbidden(errNoTenant)
+	if org, project, ok := tenant(c); ok {
+		return caller{org: org, project: project, actor: c.UserEmail(), principal: true}, nil
 	}
-	return caller{org: org, project: project, actor: c.UserEmail()}, nil
+	// No principal: a project key names the org for a READ. It carries no actor,
+	// and authoring() refuses on that fact — see keyOrg.
+	if org, ok := keyOrg(ctx, c); ok {
+		return caller{org: org}, nil
+	}
+	return caller{}, zip.ErrForbidden(errNoTenant)
 }
 
 // ── inputs and outputs ──────────────────────────────────────────────────────
@@ -303,6 +348,10 @@ func (o ops) putDef(ctx context.Context, in *putDefIn) (*DefRow, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if err := cl.authoring(); err != nil {
+		return nil, err
+	}
 	key := strings.TrimSpace(in.Key)
 	if key == "" {
 		return nil, zip.ErrBadRequest("key is required")
@@ -330,6 +379,10 @@ func (o ops) putDef(ctx context.Context, in *putDefIn) (*DefRow, error) {
 func (o ops) deleteDef(ctx context.Context, in *keyIn) (*deletedOut, error) {
 	cl, err := callerOf(ctx)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := cl.authoring(); err != nil {
 		return nil, err
 	}
 	key := strings.TrimSpace(in.Key)
