@@ -155,7 +155,7 @@ func (m *meteredAI) settle(payer string, req *types.ChatRequest, resp *types.Cha
 		total = resp.PromptTokens + resp.CompletionTokens
 	}
 	if total <= 0 {
-		total = EstTokens(req.Prompt)
+		total = EstTokens(req.Text())
 	}
 	m.record(payer, req.Project, req.Model, metering.Usage{
 		PromptTokens:     resp.PromptTokens,
@@ -258,7 +258,9 @@ func atMost(req *types.ChatRequest) int {
 	if out <= 0 {
 		out = completionCeiling(req.Model)
 	}
-	return EstTokens(req.Prompt) + out
+	// Text, not Prompt: a tool loop carries its turn in Messages and leaves Prompt
+	// empty, and reserving for an empty prompt is reserving for nothing.
+	return EstTokens(req.Text()) + out
 }
 
 // ceilingOf resolves a model's max completion length. Installed at wire-up from

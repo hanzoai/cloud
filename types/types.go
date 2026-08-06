@@ -13,7 +13,9 @@ package types
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/hanzoai/cloud/money"
 )
@@ -126,6 +128,68 @@ type ChatRequest struct {
 	// prompt. Zero means the caller stated no ceiling and the meter reserves the
 	// policy default (CLOUD_AI_MAX_COMPLETION_TOKENS) — never zero.
 	MaxTokens int
+
+	// Messages is the conversation, when there IS one. Prompt is the degenerate
+	// case of it — a single user turn — and stays the only field a caller with
+	// nothing to remember fills in, so every existing call site is unchanged. A
+	// caller that sets Messages owns the whole transcript including its system
+	// turn; Prompt is then only text the prepaid gate prices (see Text), and the
+	// wire carries Messages.
+	//
+	// It exists because a tool call cannot be expressed as a string. The model's
+	// request to run a tool and the result it is handed back are linked by
+	// ToolCall.ID, and that linkage IS the loop — flatten it into prose and the
+	// model is guessing which answer belongs to which question.
+	Messages []ChatMessage
+	// Tools is what the model may call this turn. Empty means it may call
+	// nothing, which is what every caller before tool support asked for and
+	// still gets: no tools field reaches the gateway at all, so the completion is
+	// the one it produced before.
+	Tools []ToolDef
+}
+
+// Chat roles — the OpenAI-compatible vocabulary the gateway speaks.
+const (
+	RoleSystem    = "system"
+	RoleUser      = "user"
+	RoleAssistant = "assistant"
+	RoleTool      = "tool"
+)
+
+// ChatMessage is one turn of a conversation. An assistant turn that decided to
+// call tools carries ToolCalls and usually no Content; the result of one such
+// call comes back as a RoleTool turn whose ToolCallID names the call it answers.
+type ChatMessage struct {
+	Role    string // RoleSystem | RoleUser | RoleAssistant | RoleTool
+	Content string
+	// ToolCalls are the calls an assistant turn asked for; only ever set on a
+	// RoleAssistant message.
+	ToolCalls []ToolCall
+	// ToolCallID names the ToolCall this RoleTool message answers. A tool result
+	// without it is a result no call claims, and the gateway refuses it.
+	ToolCallID string
+	// Name is the tool a RoleTool message answers for — legibility in a
+	// transcript, optional on the wire.
+	Name string
+}
+
+// ToolDef is one tool offered to the model: its name, the prose it decides on,
+// and the JSON Schema of its arguments. Schema is passed through VERBATIM — it is
+// the tool plane's own inputSchema, never a re-derivation of it here.
+type ToolDef struct {
+	Name        string
+	Description string
+	Schema      json.RawMessage
+}
+
+// ToolCall is the model asking for one tool to run. Arguments is the raw JSON
+// object it emitted, UNPARSED: it belongs to the tool that declared the schema,
+// which is the only thing that knows how to read it, and a model that emits
+// malformed JSON is told so rather than having its intent guessed at here.
+type ToolCall struct {
+	ID        string
+	Name      string
+	Arguments string
 }
 
 // ChatResponse mirrors the AI subsystem's chat-completion response. The token
@@ -136,6 +200,38 @@ type ChatResponse struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	// ToolCalls are the calls the model wants run before it can answer. Non-empty
+	// means this is NOT the final answer: the caller runs them, appends each
+	// result as a RoleTool message, and completes again.
+	ToolCalls []ToolCall
+	// FinishReason is why the model stopped — "stop", "tool_calls", "length", …
+	// Empty when the gateway omits it.
+	FinishReason string
+}
+
+// Text is everything this request will be charged tokens for, flattened: the
+// prompt plus every message's content and every tool call it carries. The
+// prepaid gate estimates against it, so a conversation reserves for what it
+// actually sends rather than for a Prompt field a tool loop leaves empty.
+func (r *ChatRequest) Text() string {
+	if r == nil {
+		return ""
+	}
+	if len(r.Messages) == 0 {
+		return r.Prompt
+	}
+	var b strings.Builder
+	b.WriteString(r.Prompt)
+	for _, m := range r.Messages {
+		b.WriteString(m.Content)
+		b.WriteByte('\n')
+		for _, tc := range m.ToolCalls {
+			b.WriteString(tc.Name)
+			b.WriteString(tc.Arguments)
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
 }
 
 // ErrUpstreamBusy marks a TRANSIENT upstream inference failure that a caller may

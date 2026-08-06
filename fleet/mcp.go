@@ -115,12 +115,21 @@ func (d *Door) serve(c *zip.Ctx) error {
 // list answers tools/list from the subsystems themselves, and NAMES the ones it
 // could not reach.
 func (d *Door) list(c *zip.Ctx, req message) error {
-	tools, down := d.gather(c)
+	tools, down, held := d.gather(c)
 	result := map[string]any{"tools": tools}
+	meta := map[string]any{}
+	if held > 0 {
+		// The same obligation as Unavailable, for a different cause: a list
+		// shortened by POLICY must say so too. See fleet/surface.go.
+		meta[Refused] = map[string]any{"count": held, "rule": TheRule}
+	}
 	if len(down) > 0 {
-		result["_meta"] = map[string]any{Unavailable: down}
+		meta[Unavailable] = down
 		d.host.Logger().Warn("fleet mcp: tools/list is INCOMPLETE — subsystems did not answer",
 			"unavailable", len(down), "apps", len(d.apps), "tools", len(tools))
+	}
+	if len(meta) > 0 {
+		result["_meta"] = meta
 	}
 	return c.JSON(200, rpcResult(req.ID, result))
 }
@@ -144,6 +153,10 @@ func (d *Door) call(c *zip.Ctx, req message) error {
 		app = d.ownerOf(p.Name)
 	}
 	if app == "" {
+		// Either nobody serves it, or refuse() withheld it — and the caller gets
+		// the same answer for both. Telling a client which of the two it hit would
+		// turn the door into an oracle for the identity surface it just declined
+		// to expose.
 		return c.JSON(200, rpcErr(req.ID, -32602, "unknown tool: "+p.Name))
 	}
 	// The caller's OWN message, at the child's own door. The child's registry
@@ -171,14 +184,21 @@ type named struct {
 	raw  json.RawMessage
 }
 
-// gather asks every app what it serves, right now, and returns the union plus
-// the outages.
+// gather asks every app what it serves, right now, and returns the PROJECTABLE
+// union, the outages, and how many tools policy withheld.
 //
 // The request it sends is the CALLER's, with the body replaced by a canonical
 // tools/list: the headers ride along, so a child whose tools depend on who is
 // asking answers for this caller, while the body cannot be a tools/call the
 // discovery path would otherwise execute on every child in the fleet.
-func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage) {
+//
+// This is also where the tool surface is GATED, and it is the only place, on
+// purpose. The routing table [Door.owner] is written here and nowhere else, so a
+// name that refuse() rejects is never written, is never routable, and a
+// tools/call naming it gets the same -32602 as a tool that does not exist —
+// including from a client that cached the name before the rule existed. A filter
+// applied in list() instead would have been a suggestion.
+func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage, int) {
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 	c.Fiber().Request().CopyTo(req)
@@ -188,6 +208,7 @@ func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage) {
 
 	var all []named
 	var down []Outage
+	held := 0
 	owner := map[string]string{}
 	for _, a := range Ask(d.at, d.apps, req, manifest.FrameworkMCPPath) {
 		if a.Err != nil {
@@ -200,6 +221,11 @@ func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage) {
 			continue
 		}
 		for _, t := range tools {
+			// The gate, before the routing table. See fleet/surface.go.
+			if refuse(t.name) {
+				held++
+				continue
+			}
 			// One name is one dispatch, so two owners would make it unroutable. The
 			// manifest's order is the router's order, so the first claimant wins here
 			// exactly as it wins a prefix — and the loser is logged rather than
@@ -214,7 +240,16 @@ func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage) {
 			all = append(all, t)
 		}
 	}
-	sort.Slice(all, func(i, j int) bool { return all[i].name < all[j].name })
+	// Product surface FIRST, then alphabetical — because clients truncate, and a
+	// list sorted only by name put 128 o11y console ops in front of every product
+	// tool the fleet has. rank() states the mechanism; nothing is hidden by it.
+	sort.Slice(all, func(i, j int) bool {
+		ri, rj := rank(all[i].name), rank(all[j].name)
+		if ri != rj {
+			return ri < rj
+		}
+		return all[i].name < all[j].name
+	})
 
 	d.mu.Lock()
 	d.owner = owner
@@ -226,7 +261,7 @@ func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage) {
 	for _, t := range all {
 		out = append(out, t.raw)
 	}
-	return out, down
+	return out, down, held
 }
 
 func (d *Door) ownerOf(tool string) string {

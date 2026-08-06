@@ -7,11 +7,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/agents"
 	"github.com/hanzoai/cloud/apps/coding"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // slack_coding.go turns the @hanzo Slack front-door into an ENGINEER: a message
@@ -69,19 +70,27 @@ var codingRepoRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 // once in slackBridgeReady.
 var codingLim *orgLimiter
 
-// codingDispatcher is the assembled coding orchestrator, injected by the
-// composition root (which alone can import clients/git for the CloneURL/VerifyRef
-// seams). Zero until SetCodingDispatcher runs; codingConfigured gates use.
+// codingDispatcher is the assembled coding orchestrator.
+//
+// It used to be INJECTED by the composition root, because coding could not
+// import git for the clone-url/verify-ref seams without a cycle. Those seams are
+// peer calls now — coding asks git over the plane — so the reason is gone and so
+// is the injection: the surface that triggers a coding run builds the thing that
+// runs it, once, here. One way to do it, and no window in which a deployment is
+// mounted but the dispatcher is still nil.
 var (
+	codingOnce       sync.Once
 	codingDispatcher coding.Dispatcher
-	codingConfigured bool
 )
 
-// SetCodingDispatcher injects the coding orchestrator. Called once at wiring time
-// by the composition root; production never reassigns it.
-func SetCodingDispatcher(d coding.Dispatcher) {
-	codingDispatcher = d
-	codingConfigured = true
+// codingRunner returns the process's one Dispatcher, built on first use. The
+// logger seam carries coding's best-effort mirror failures into this
+// subsystem's log rather than dropping them.
+func codingRunner(s *cloud.Service[state]) coding.Dispatcher {
+	codingOnce.Do(func() {
+		codingDispatcher = coding.NewDispatcher(func(msg string, kv ...any) { s.Log.Warn(msg, kv...) })
+	})
+	return codingDispatcher
 }
 
 // codingIntent reports whether a prompt is a coding request and returns the text
@@ -177,13 +186,21 @@ func handleSlackCoding(s *cloud.Service[state], ctx context.Context, org, botTok
 // non-empty reference that resolves to no target in THIS org is an honest error
 // (never a silent local fallback, never another tenant's machine). The returned
 // error's message is the user-facing text.
+//
+// It ASKS AGENTS over the plane rather than calling agents.ResolveTarget, which
+// reads that package's `mounted` global. A plugin is a process: the global is nil
+// here, so the direct call answered "not mounted" for every `on <machine>` and
+// every routed run died at the parse step — the same failure the chat turn had
+// until it moved onto the plane. The org still comes from THIS side, resolved
+// from the Slack-verified team_id, and is never a field the human can set.
 func resolveCodingTarget(ctx context.Context, org, ref string) (string, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return "", nil // no `on <machine>` — the ordinary cloud-sandbox run
 	}
-	t, err := agents.ResolveTarget(ctx, org, ref)
-	if err != nil {
+	t, err := plane.Ask[plane.TargetRefIn, plane.TargetRef](ctx, "agents", plane.AgentsResolveTarget,
+		&plane.TargetRefIn{Org: org, Ref: ref})
+	if err != nil || t == nil || strings.TrimSpace(t.ID) == "" {
 		return "", fmt.Errorf("No linked machine named `%s` — check `hanzo code --serve` is running and the name is right.", slackEscape(ref))
 	}
 	return t.ID, nil
@@ -237,9 +254,7 @@ func handleSlackSlashCoding(s *cloud.Service[state], ctx context.Context, org, t
 // git with its own already-held credential, so the KMS agent-credential fetch is
 // skipped and a workspace without one can still route to a linked machine.
 func startCodingJob(s *cloud.Service[state], org, userSub, botToken, channel, threadTS, repo, task, targetID string) (ack string, started bool) {
-	if !codingConfigured {
-		return "Coding tasks aren't enabled on this deployment yet.", false
-	}
+	dispatch := codingRunner(s)
 	var user, token string
 	if strings.TrimSpace(targetID) == "" {
 		var err error
@@ -272,7 +287,7 @@ func startCodingJob(s *cloud.Service[state], org, userSub, botToken, channel, th
 		}()
 		ctx, cancel := context.WithTimeout(context.Background(), codingTaskTimeout())
 		defer cancel()
-		res := codingDispatcher.Run(ctx, req)
+		res := dispatch.Run(ctx, req)
 		summary, blocks := codingResultCard(s.Brand, org, repo, res)
 		if perr := PostSlackBlocksThread(ctx, botToken, channel, threadTS, summary, blocks); perr != nil {
 			s.Log.Warn("slack coding: result post", "org", org, "repo", repo, "err", perr)
