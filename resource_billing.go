@@ -163,6 +163,13 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, project string, projectV
 // exists, so the charge must never block or corrupt the response the caller
 // received, and a request-context cancellation must not cancel the debit (mirror
 // of BillingGate). A debit failure is logged for reconciliation, not swallowed.
+//
+// requestID is the CORRELATION id (c.RequestID()) and nothing more — it traces the
+// debit back to the call. It is NOT the ledger's key: that header is the client's to
+// choose, and keying money on it billed a caller who pinned it exactly once for every
+// call it ever made. The ledger's key is [metering.Usage.Ref], which the meter mints;
+// a caller holding a server-assigned act id (a registration ref, a settlement id) sets
+// it through MeterUsage instead.
 func (rm *ResourceMeter) Meter(org, project, kind string, amountCents int64, requestID, clientIP string) {
 	rm.MeterUsage(org, kind, metering.Usage{
 		Model:       kind, // the billed unit within the product (e.g. "sql", "invoke", "op") — per-item ledger attribution.
@@ -188,6 +195,12 @@ func (rm *ResourceMeter) Meter(org, project, kind string, amountCents int64, req
 // token counts, ClientIP) flows through so a metered surface can attribute spend
 // richly. Like Meter it is fire-and-forget on a background context and a no-op
 // when billing is unconfigured or AmountCents<=0. kind is for the failure log.
+//
+// This is also the entry point for a surface that already HOLDS the act's
+// server-assigned name (a domain registration ref, a company formation ref): it sets
+// [metering.Usage.Ref] and the debit is exactly-once on it. Left unset, the meter mints
+// a fresh name and the debit stands alone — which is what every per-request meter
+// wants, since two calls are two acts.
 func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
 	rm.meterUsage(org, kind, u, nil)
 }

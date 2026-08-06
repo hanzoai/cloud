@@ -20,11 +20,13 @@
 // float); a usage debit is wallet → revenue:platform (debit the customer, credit
 // platform revenue) — so every customer debit IS a platform-revenue credit in one atomic
 // entry, and a file's postings always sum to zero. Both writes are idempotent on their ref
-// (the ledger's (kind,program,ref) idempotency): a usage debit on RequestID and a deposit
-// on DepositInput.Ref, so a retried debit or a fixed-ref backfill posts AT MOST ONCE; a
-// deposit with an empty Ref takes a fresh ref and stays additive (grants stack). That key
-// carries no subject and no amount, so a deposit reusing a ref for a DIFFERENT payment is
-// refused rather than answered with the first one's entry — same key is not same payment.
+// (the ledger's (kind,program,ref) idempotency): a usage debit on UsageInput.Ref and a
+// deposit on DepositInput.Ref, so a retried debit or a fixed-ref backfill posts AT MOST
+// ONCE; an empty Ref takes a fresh, server-minted one and stays additive (grants stack,
+// metered calls each bill). A usage ref is unique WITHIN THE WALLET it debits, so one
+// subject's key can never swallow another's, and a ref that already names a posting of a
+// DIFFERENT amount is refused rather than answered with the first one's entry — same key
+// is not same act.
 // Amounts are int64 minor units (USD cents) — no float ever touches a balance. A balance
 // read is the settled ledger balance, clamped at zero; transient holds are the caller's
 // in-pod concern, never persisted here.
@@ -41,9 +43,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
 	"github.com/hanzoai/cloud/apps/treasury/ledger/sqlstore"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 	"github.com/hanzoai/namespace"
 )
@@ -384,12 +386,59 @@ func (f *ledgerFinance) SumUsageSince(ctx context.Context, org string, test bool
 }
 
 // RecordUsage posts a balanced usage debit (wallet → revenue:platform) from subject's
-// wallet. Idempotent on in.RequestID: a replay of the same request is a no-op inside the
-// same transaction as the insert, so a retry debits AT MOST ONCE. A non-positive amount is
-// a no-op.
+// wallet. Idempotent on in.Ref WITHIN THAT WALLET: a replay of the same act is a no-op
+// inside the same transaction as the insert, so a retry debits AT MOST ONCE. A
+// non-positive amount is a no-op.
 func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) error {
 	_, _, err := f.RecordUsageOnce(ctx, in)
 	return err
+}
+
+// usageProgram is the SCOPE a usage ref is unique within: the wallet the money leaves.
+//
+// The ledger keys an entry by (kind, program, ref), and usage used to leave program
+// empty — so one org-wide namespace held every subject's refs and the FIRST subject to
+// take a ref owned it for everyone. Two people in one org sharing a ref meant the second
+// one's call debited nobody.
+//
+// It is [walletAcct], not a second rule about who pays: the scope a ref is unique within
+// is exactly the account the posting debits, so the key and the money can never name two
+// different wallets.
+func usageProgram(subject string) string { return walletAcct(subject) }
+
+// ErrRefReused is a usage ref that already names a DIFFERENT charge in this wallet.
+// Answered rather than silently deduped: a key that means "this is the act I already
+// paid for" is a lie when the amount differs, and answering the first entry would hand
+// back free work for the price of a repeated key.
+//
+// EXPORTED because a surface that lets a caller NAME the act — the GPU charge — has to
+// tell that caller its key is taken, and a conflict rendered as a billing outage sends
+// it into a retry that will never clear. It is the usage twin of the deposit's own
+// refusal, so the money plane answers a reused key one way.
+var ErrRefReused = errors.New("names a different charge")
+
+// usageByRef answers the entry THIS usage is already posted under, inside the caller's
+// own transaction, or ("", nil) when the ref is free.
+//
+// THE WHOLE POSTING, not the key — the same rule [depositByRef] states for a payment: a
+// replay is the same money out of the same wallet, and a ref hit that differs in the
+// amount is another charge, however identical the key. The wallet cannot differ here
+// (it IS the program the ref was looked up in), so the amount is what is left to check.
+//
+// An empty ref matches nothing: the debit takes a fresh, server-minted ref and stands
+// alone.
+func usageByRef(tx ledger.Tx, in types.UsageInput) (string, error) {
+	if in.Ref == "" {
+		return "", nil
+	}
+	e, ok, err := tx.EntryByRef(string(KindUsage), usageProgram(in.Subject), in.Ref)
+	if err != nil || !ok {
+		return "", err
+	}
+	if e.Amount.Cmp(in.Amount) != 0 {
+		return "", fmt.Errorf("finance: usage ref %q %w", in.Ref, ErrRefReused)
+	}
+	return e.ID, nil
 }
 
 // RecordUsageOnce is RecordUsage with the ledger's idempotency ANSWERED rather than
@@ -406,6 +455,10 @@ func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) er
 // ONE body and one place the idempotency lives. Callers that need the answer resolve
 // this method by interface assertion, the same widening ListUsage and SumUsageSince use.
 // A non-positive amount is a no-op ("", false, nil): nothing was posted.
+//
+// The key is (usage, THIS WALLET, in.Ref) — see [usageProgram]. in.Ref names ONE act and
+// is the SERVER's word for it, never a header the caller chose: an idempotency key a
+// payer can pick is a payer who can pick to be billed once for a thousand calls.
 func (f *ledgerFinance) RecordUsageOnce(ctx context.Context, in types.UsageInput) (entryID string, posted bool, err error) {
 	if in.Amount.Sign() <= 0 {
 		return "", false, nil
@@ -415,27 +468,26 @@ func (f *ledgerFinance) RecordUsageOnce(ctx context.Context, in types.UsageInput
 		return "", false, serr
 	}
 	if terr := store.Tx(ctx, func(tx ledger.Tx) error {
-		if in.RequestID != "" {
-			existing, ok, ferr := tx.EntryByRef(string(KindUsage), "", in.RequestID)
-			if ferr != nil {
-				return ferr
-			}
-			if ok {
-				entryID, posted = existing.ID, false
-				return nil // idempotent replay — already debited once
-			}
+		replay, ferr := usageByRef(tx, in)
+		if ferr != nil {
+			return ferr
+		}
+		if replay != "" {
+			entryID, posted = replay, false
+			return nil // idempotent replay — already debited once
 		}
 		id, gerr := genID("use")
 		if gerr != nil {
 			return gerr
 		}
-		ref := in.RequestID
+		ref := in.Ref
 		if ref == "" {
-			ref = id // no request id → fresh ref (non-idempotent, still a single debit)
+			ref = id // no act id → the entry's own, server-minted (a single debit that stands alone)
 		}
 		e := ledger.JournalEntry{
 			ID:        id,
 			Kind:      string(KindUsage),
+			Program:   usageProgram(in.Subject),
 			Ref:       ref,
 			Memo:      in.Model,
 			Amount:    in.Amount,

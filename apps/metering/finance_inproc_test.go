@@ -16,7 +16,7 @@ import (
 // native ledger and NEVER touches HTTP. It also locks the anti-leak invariant — a micros-only
 // debit (the AI meter prices sub-cent) lands EXACTLY in the 18-decimal ledger (not dropped to
 // zero); the RecordResult reports the ceiled whole cents while the ledger stays exact — and
-// RequestID idempotency.
+// that a repeated RequestID is NOT a replay.
 func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 	ctx := context.Background()
 	fin := finance.New(t.TempDir())
@@ -61,12 +61,16 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 		t.Fatalf("balance after cents debit = %s; want 0.485 (98.5-50)", bal)
 	}
 
-	// Idempotent replay on RequestID m2 → no second debit.
-	if _, err := c.Record(ctx, metering.Usage{User: "acme", Org: "acme", AmountCents: 50, RequestID: "m2"}); err != nil {
-		t.Fatalf("record replay: %v", err)
+	// A REPEATED RequestID IS NOT A REPLAY. RequestID is the call's correlation header —
+	// the caller's to choose — so two calls carrying one are two acts and both bill:
+	// 48.5¢ − 20¢ = 28.5¢. This line used to assert the opposite, and that assertion WAS
+	// the leak: pin the header once and every call after the first was free.
+	if _, err := c.Record(ctx, metering.Usage{User: "acme", Org: "acme", AmountCents: 20, RequestID: "m2"}); err != nil {
+		t.Fatalf("record with a repeated correlation id: %v", err)
 	}
+	wantBal, _ = money.ParseUSD("0.285")
 	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cmp(wantBal) != 0 {
-		t.Fatalf("balance after replay = %s; want 0.485 (idempotent)", bal)
+		t.Fatalf("balance after a repeated correlation id = %s; want 0.285 (it billed)", bal)
 	}
 
 	// Not one byte of HTTP: the finance seam intercepted every debit.

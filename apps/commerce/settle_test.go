@@ -202,7 +202,7 @@ func TestSettle_ASettledTopUpFundsTheWalletTheSpendGateReads(t *testing.T) {
 	org, subject := gateOrg, wallet(gateOrg)
 	if err := fin.RecordUsage(context.Background(), types.UsageInput{
 		Org: org, Subject: subject, Amount: money.FromCents(gateCents),
-		Currency: "usd", Model: "zen", RequestID: "spend-1",
+		Currency: "usd", Model: "zen", Ref: "spend-1",
 	}); err != nil {
 		t.Fatalf("spend the credited balance: %v", err)
 	}

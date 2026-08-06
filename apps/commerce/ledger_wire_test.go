@@ -118,7 +118,7 @@ func seedBooks(t *testing.T, fin finance.Client, org string) {
 	}
 	if err := fin.RecordUsage(ctx, types.UsageInput{
 		Org: org, Subject: org, Amount: money.FromCents(1_200), Currency: "usd",
-		Model: "zen", RequestID: "use-1",
+		Model: "zen", Ref: "use-1",
 	}); err != nil {
 		t.Fatalf("record usage: %v", err)
 	}

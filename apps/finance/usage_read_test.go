@@ -21,10 +21,10 @@ func TestListUsage(t *testing.T) {
 		t.Fatalf("deposit: %v", err)
 	}
 	// Two usage debits.
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(150), Model: "gpt-x", RequestID: "r1"}); err != nil {
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(150), Model: "gpt-x", Ref: "r1"}); err != nil {
 		t.Fatalf("usage r1: %v", err)
 	}
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(75), Model: "embed-y", RequestID: "r2"}); err != nil {
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(75), Model: "embed-y", Ref: "r2"}); err != nil {
 		t.Fatalf("usage r2: %v", err)
 	}
 
@@ -52,7 +52,7 @@ func TestListUsage(t *testing.T) {
 	}
 
 	// Idempotent replay of a recorded request must not double-count.
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(150), Model: "gpt-x", RequestID: "r1"}); err != nil {
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: money.FromCents(150), Model: "gpt-x", Ref: "r1"}); err != nil {
 		t.Fatalf("usage r1 replay: %v", err)
 	}
 	rows2, err := f.ListUsage(ctx, org, 100)
