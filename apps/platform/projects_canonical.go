@@ -1,157 +1,99 @@
 // projects_canonical.go — the ProjectStore over the CANONICAL IAM.
 //
-// Split-horizon deployments run IAM as its own service (IAM_URL, e.g.
-// http://iam.hanzo.svc) — the store that mints every token and serves
-// /v1/iam/projects at the edge. Platform used to read projects from cloud's
-// EMBEDDED copy of the iam store instead: a second database for the same noun,
-// so a project created at /v1/iam was invisible to the PaaS and vice versa.
+// Split-horizon deployments run IAM as its own process — the store that mints
+// every token and serves /v1/iam/projects at the edge. Platform used to read
+// projects from cloud's EMBEDDED copy of the iam store instead: a second
+// database for the same noun, so a project created at /v1/iam was invisible to
+// the PaaS and vice versa.
 //
-// This client reads the canonical store over HTTP, authenticated AS THE ORG:
-// each read presents client_secret_basic for that org's own
-// "<org>-platform-kms" identity — the same credential the KMS sync uses, minted
-// on first need by kmsOrgIdentity — and IAM's authorize admits exactly that
-// identity, read-only, own-org-only (iam internal/authz). One identity per
-// tenant, one grant, both stated once.
+// So platform reads the canonical store, and the ONLY question left is how it
+// reaches a process it does not share. It is a peer, so it is reached over the
+// peer plane: iamplane.IAMProjects, a ZAP call by NAME on iam's own socket.
 //
-// When IAM_URL is absent the process IS the IAM (single-binary: the embedded
-// subsystem serves /v1/iam), so the in-process store remains the canonical one
-// and iamProjects is used unchanged. The selector is newProjectStore.
+// # What went away with the URL
+//
+// The HTTP client this replaces authenticated AS THE ORG: each read presented
+// client_secret_basic for that org's own "<org>-platform-kms" identity, minted
+// on first need, sealed into KMS, cached for a minute, and admitted by IAM's
+// authorize as read-only/own-org-only. Every part of that existed to tell IAM
+// which tenant was asking — over a transport that had no way to say so.
+//
+// The plane says so. The org rides the CALL (cloud.For), forwarded from the
+// gateway's assertion, and it is not an argument the caller can set — so the
+// callee reads its tenant from the same place it reads a request's, and there is
+// nothing left for a per-org credential to prove. A minted secret, a KMS seal, a
+// cache and a grant, all standing in for a field the transport now carries.
+//
+// It also took the workaround with it. IAM frames its single-project read as a
+// POST, which the machine grant rightly refused, so Get was derived from List and
+// the reaper logged "projects: get hanzo/index: status 403" every cycle. One op,
+// one verb, no wall to route around.
+//
+// When this binary IS the IAM the store is in-process and iamProjects is used
+// unchanged — a Go call beats any transport. The selector is newProjectStore.
 
 package platform
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"strings"
-	"sync"
-	"time"
 
 	"github.com/hanzoai/cloud"
+	iamplane "github.com/hanzoai/cloud/plane/iam"
 	model "github.com/hanzoai/iam/pkg/model"
 )
 
-// newProjectStore selects the canonical project source: the external IAM when
-// the deployment names one (IAM_URL), the in-process store when this binary IS
-// the IAM. ident may be nil (no KMS plane) — the canonical client then fails
-// closed per read, which iamStore's 503 convention already covers.
-func newProjectStore(iamIssuer string, ident tenantKMSIdentity) ProjectStore {
+// newProjectStore selects the canonical project source: the in-process store
+// when this binary IS the IAM, the iam peer when it is not.
+func newProjectStore() ProjectStore {
 	if !cloud.IAMExternal() {
-		// No external IAM named: the embedded subsystem is the canonical store.
+		// No external IAM named: the embedded subsystem is the canonical store,
+		// and reading it is a function call.
 		return iamProjects{}
 	}
-	base := cloud.IAMBaseURL(iamIssuer)
-	return &canonicalProjects{
-		base:  base,
-		ident: ident,
-		hc:    &http.Client{Timeout: 10 * time.Second},
-		creds: map[string]orgCred{},
-	}
+	return canonicalProjects{}
 }
 
-type orgCred struct {
-	id, secret string
-	exp        time.Time
-}
+// canonicalProjects reads projects from the process that owns them.
+//
+// It holds nothing — no address, no credential, no cache. That is the shape of a
+// peer call: the name is the address and the tenant rides the context, so there
+// is no state for a constructor to carry and none to go stale.
+type canonicalProjects struct{}
 
-type canonicalProjects struct {
-	base  string
-	ident tenantKMSIdentity
-	hc    *http.Client
-
-	mu    sync.Mutex
-	creds map[string]orgCred
-}
-
-// cred returns the org's machine credential, minting the identity itself on
-// first use (EnsureOrgIdentity provisions when configured) and caching briefly
-// so a burst of reads is one KMS read, not many.
-func (c *canonicalProjects) cred(ctx context.Context, org string) (string, string, error) {
-	c.mu.Lock()
-	if cr, ok := c.creds[org]; ok && time.Now().Before(cr.exp) {
-		c.mu.Unlock()
-		return cr.id, cr.secret, nil
-	}
-	c.mu.Unlock()
-	if c.ident == nil {
-		return "", "", fmt.Errorf("projects: no identity provider for org %q (KMS plane absent)", org)
-	}
-	id, secret, err := c.ident.EnsureOrgIdentity(ctx, org)
-	if err != nil {
-		return "", "", fmt.Errorf("projects: org identity: %w", err)
-	}
-	c.mu.Lock()
-	c.creds[org] = orgCred{id: id, secret: secret, exp: time.Now().Add(time.Minute)}
-	c.mu.Unlock()
-	return id, secret, nil
-}
-
-func (c *canonicalProjects) do(ctx context.Context, org, method, path string, body any, out any) (int, error) {
-	id, secret, err := c.cred(ctx, org)
-	if err != nil {
-		return 0, err
-	}
-	var rd io.Reader
-	if body != nil {
-		b, _ := json.Marshal(body)
-		rd = strings.NewReader(string(b))
-	}
-	req, err := http.NewRequestWithContext(ctx, method, c.base+path, rd)
-	if err != nil {
-		return 0, err
-	}
-	// client_secret_basic, not a minted bearer: IAM's app() path resolves this
-	// to Principal{App: name, Org: served-org} — exactly the shape the
-	// projects-read grant admits. A client_credentials BEARER resolves its org
-	// from the SUBJECT's owner half (the app row's owner, "admin"), which the
-	// grant rightly refuses — measured live before this client switched.
-	req.SetBasicAuth(id, secret)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := c.hc.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if out != nil && resp.StatusCode == http.StatusOK {
-		if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(out); err != nil {
-			return resp.StatusCode, fmt.Errorf("projects: decode: %w", err)
-		}
-	}
-	return resp.StatusCode, nil
-}
-
-func (c *canonicalProjects) List(ctx context.Context, org string) ([]*model.Project, error) {
-	var out struct {
-		Projects []*model.Project `json:"projects"`
-	}
-	code, err := c.do(ctx, org, http.MethodGet, "/v1/iam/projects?owner="+url.QueryEscape(org), nil, &out)
+// List asks iam for the org's projects and rebuilds IAM's own model from the
+// contract, exactly as marketing's roster read does. The plane carries the
+// PROJECTION (package plane), never IAM's record — a caller depends on the
+// contract or it depends on the callee's implementation, and only one of those
+// survives the two being deployed separately.
+func (canonicalProjects) List(ctx context.Context, org string) ([]*model.Project, error) {
+	out, err := iamplane.IAMProjects(cloud.For(ctx, org))
 	if err != nil {
 		return nil, err
 	}
-	if code != http.StatusOK {
-		return nil, fmt.Errorf("projects: list %s: status %d", org, code)
+	if out == nil {
+		return nil, nil
 	}
-	return out.Projects, nil
+	rows := make([]*model.Project, 0, len(out.Projects))
+	for _, p := range out.Projects {
+		rows = append(rows, &model.Project{
+			Owner:       p.Owner,
+			Name:        p.Name,
+			DisplayName: p.DisplayName,
+			Description: p.Description,
+			CreatedTime: p.CreatedTime,
+		})
+	}
+	return rows, nil
 }
 
 // Get returns nil (no error) when the project does not exist — the convention
 // requireProject's 404 mapping depends on.
 //
-// It is derived from List, not from IAM's POST /v1/iam/projects/get: the
-// machine grant this client authenticates under admits exactly one thing —
-// GET on the org's own projects — and IAM frames its single-project read as a
-// POST, which that grant rightly refuses. The reaper logged the result every
-// cycle ("projects: get hanzo/index: status 403"): the client tripping the
-// wall it came through. Widening the grant to a POST would hand the identity
-// a write-shaped door; reading through the one granted verb keeps the wall
-// exactly as narrow as its negatives pin. Org project counts are small and
-// the credential is cached, so the extra rows cost nothing.
-func (c *canonicalProjects) Get(ctx context.Context, org, name string) (*model.Project, error) {
+// Still derived from List, now because it is cheap rather than because a grant
+// forbade the direct read: an org's project count is small and the whole list is
+// one frame. A second op to select one row from a list the caller can already
+// hold would be a second way to ask one question.
+func (c canonicalProjects) Get(ctx context.Context, org, name string) (*model.Project, error) {
 	rows, err := c.List(ctx, org)
 	if err != nil {
 		return nil, err
@@ -164,7 +106,7 @@ func (c *canonicalProjects) Get(ctx context.Context, org, name string) (*model.P
 	return nil, nil
 }
 
-func (c *canonicalProjects) Exists(ctx context.Context, org, name string) (bool, error) {
+func (c canonicalProjects) Exists(ctx context.Context, org, name string) (bool, error) {
 	p, err := c.Get(ctx, org, name)
 	if err != nil {
 		return false, err

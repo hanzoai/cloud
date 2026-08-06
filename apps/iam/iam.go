@@ -153,8 +153,9 @@ func Shutdown() error {
 // prefixes identity owns (Prefixes). Called once by cloud.MountAll when "iam" is
 // enabled.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	// The identity store lives here, so the roster read is published here.
+	// The identity store lives here, so every read of it is published here.
 	exposeRoster()
+	exposeProjects()
 
 	log := deps.Logger.New("subsystem", "iam")
 
