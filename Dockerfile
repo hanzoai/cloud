@@ -56,13 +56,19 @@
 # about tags, not about tag SHAPE: a cut tag is never re-pointed. Cut the next
 # patch instead — that is cheap, and it keeps "which console is in v1.801.N"
 # answerable from git alone.
-# 8.5.50 is the release whose assistant actually sends its credential: the
-# streamed completion rides the client's one authorized door, preferences moved
-# to cloud's /v1/prefs, the 401 card stopped claiming an expired session, and
-# exactly one composer mounts per viewport. Cut as a release tag because a tag
-# build publishes its name verbatim — which console is in this image is
-# answerable from this line alone.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:8.5.55
+# 8.5.58 is the LAUNCH console: the sidebar carries only chat, the builder,
+# models, keys, usage, billing and settings, and every other product moved
+# behind the beta flag; the playground offers only models the gateway actually
+# routes and holds frontier prices behind a plan; an org can wear its own logo;
+# search reaches the whole catalog, not just the favourites.
+#
+# console.hanzo.ai IS THIS BINARY, and that is the fact this pin exists to make
+# operational. The host routes to `service: cloud` (universe hanzo-domains.yaml)
+# and NO host routes to the standalone `console` Deployment — so a console
+# release reaches users only when this line moves and a cloud image is cut.
+# Learned the expensive way: console:v8.5.59 was built, pinned and rolled to
+# Ready, and served no one.
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:8.5.58
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
