@@ -18,7 +18,7 @@
   "paths": {
     "/v1/x402/settlements/{id}": {
       "get": {
-        "operationId": "get_v1_x402_settlements_id",
+        "operationId": "get_v1_x402_settlements_by_id",
         "summary": "Settlement reads one x402 payment receipt by id.",
         "description": "Settlement reads one x402 payment receipt by id.\n\nIt is scoped to the caller's PAYER org — the ledger that was debited — so one\ntenant can never read another's settlement, and an id that exists but belongs\nto somebody else is a 404 exactly like one that does not exist. A caller with\nno billable identity is refused outright.",
         "tags": [

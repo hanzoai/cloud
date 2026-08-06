@@ -85,6 +85,21 @@ var Apps = []App{
 	// This is NOT commerce.Prefixes imported (that would re-fatten the host): the
 	// app states its fail-closed set once (apps/commerce/mount.go); this row states
 	// what the ROUTER may hand it, and router_test.go's oracle keeps the two honest.
+	// /v1/cart is the first step of a sale, and the fleet published the last three
+	// without it: /v1/store/:storeid/{authorize,capture,charge} have always been
+	// served here, while the cart they operate on had no address at all. The
+	// capability was never missing — hanzoai/commerce implements the whole noun —
+	// only the route was, so this row is what makes the documented flow completable
+	// rather than a new product. Named here or it falls to ai's bare "/v1"
+	// remainder, whose prepaid balance gate would make filling a basket require the
+	// balance the basket exists to create.
+	// /v1/billing/topup is the stem, not /v1/billing/topup/token, because commerce
+	// serves BOTH top-up doors and a prefix owns its whole subtree — naming the stem
+	// states that once instead of twice. The saved-card door was added beside the
+	// token one but never named here, so the fleet published it and routed it to
+	// ai's bare "/v1" remainder, whose prepaid balance gate would have made topping
+	// up require the balance the top-up exists to create — the same trap /v1/cart
+	// describes above, on the door that funds it.
 	// The customer's own ledger — transactions, credit-balance, accounts (and its
 	// /:id/members child, which the accounts prefix covers) — is named here because
 	// naming it in mount.go is only half an address. mount.go says what the APP will
@@ -94,7 +109,7 @@ var Apps = []App{
 	// which is what made this bug survive a correct mount — the binary held the route
 	// and the host never delivered to it. credit-balance is its own entry and not
 	// covered by credits: they are sibling prefixes, not parent and child.
-	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/accounts", "/v1/billing/credit-balance", "/v1/billing/transactions", "/v1/billing/credits", "/v1/billing/crypto", "/v1/billing/recharge", "/v1/billing/invoices", "/v1/billing/settings", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/alerts", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/mode", "/v1/billing/methods", "/v1/billing/portal/methods", "/v1/billing/topup/token", "/v1/billing/webhooks", "/v1/billing/wire", "/v1/payments", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/collection", "/v1/commerce/currencies", "/v1/commerce/disclosure", "/v1/commerce/discount", "/v1/commerce/movie", "/v1/commerce/note", "/v1/commerce/product", "/v1/commerce/return", "/v1/commerce/saleschannel", "/v1/commerce/stocklocation", "/v1/commerce/submission", "/v1/commerce/subscriber", "/v1/commerce/tenant", "/v1/commerce/tokentransaction", "/v1/commerce/transfer", "/v1/commerce/variant", "/v1/commerce/wallet", "/v1/commerce/watchlist", "/v1/commerce/webhook", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
+	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/accounts", "/v1/billing/alerts", "/v1/billing/credit-balance", "/v1/billing/credits", "/v1/billing/crypto", "/v1/billing/invoices", "/v1/billing/methods", "/v1/billing/mode", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/portal/methods", "/v1/billing/recharge", "/v1/billing/settings", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/topup", "/v1/billing/transactions", "/v1/billing/webhooks", "/v1/billing/wire", "/v1/cart", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/collection", "/v1/commerce/currencies", "/v1/commerce/disclosure", "/v1/commerce/discount", "/v1/commerce/movie", "/v1/commerce/note", "/v1/commerce/product", "/v1/commerce/return", "/v1/commerce/saleschannel", "/v1/commerce/stocklocation", "/v1/commerce/submission", "/v1/commerce/subscriber", "/v1/commerce/tenant", "/v1/commerce/tokentransaction", "/v1/commerce/transfer", "/v1/commerce/variant", "/v1/commerce/wallet", "/v1/commerce/watchlist", "/v1/commerce/webhook", "/v1/payments", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plans"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing"}},
@@ -108,10 +123,19 @@ var Apps = []App{
 	// /v1/vector/collections (product). No route moves.
 	{Name: "storage", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
 	{Name: "provisioning", Prefixes: []string{"/v1/datastore", "/v1/docdb", "/v1/kv", "/v1/s3", "/v1/search", "/v1/sql", "/v1/vector"}},
-	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/gpu/charge", "/v1/billing/gpu/eligibility", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
+	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	{Name: "do", Prefixes: []string{"/v1/balancers", "/v1/vpcs"}},
-	{Name: "platform", Prefixes: []string{"/v1/builds", "/v1/environments", "/v1/pipelines", "/v1/platform/fleet", "/v1/platform/health", "/v1/platform/projects", "/v1/releases", "/v1/run", "/v1/runner"}},
+	// /v1/platform/apps is the DELIVERY surface — declarations in universe git
+	// reconciled by cd.hanzo.ai — and /v1/platform/cd is what that plane did with
+	// them. Both are deeper than nothing this row already holds, and neither
+	// collides with projects' /v1/platform/sites below: the router resolves nested
+	// static prefixes by specificity, so the three /v1/platform families reach the
+	// two apps that serve them regardless of order. /v1/platform/ci is named here
+	// though it answers 501 — an address the fleet publishes and routes nowhere is
+	// the defect this table exists to prevent, and a 501 that names what is missing
+	// is a better answer than commerce's bare-"/v1" 404.
+	{Name: "platform", Prefixes: []string{"/v1/builds", "/v1/environments", "/v1/pipelines", "/v1/platform/apps", "/v1/platform/cd", "/v1/platform/ci", "/v1/platform/fleet", "/v1/platform/health", "/v1/platform/projects", "/v1/releases", "/v1/run", "/v1/runner"}},
 	{Name: "projects", Prefixes: []string{"/v1/platform/sites", "/v1/projects", "/v1/sites"}},
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
@@ -129,7 +153,20 @@ var Apps = []App{
 	{Name: "x402", Prefixes: []string{"/v1/x402"}},
 	{Name: "deploy", Prefixes: []string{"/v1/deploy/account/can-i", "/v1/deploy/applications", "/v1/deploy/callback", "/v1/deploy/clusters", "/v1/deploy/gitops", "/v1/deploy/health", "/v1/deploy/login", "/v1/deploy/logout", "/v1/deploy/projects", "/v1/deploy/reconcile", "/v1/deploy/session/userinfo", "/v1/deploy/settings", "/v1/deploy/stream/applications", "/v1/deploy/version"}},
 	{Name: "functions", Prefixes: []string{"/v1/functions"}},
-	{Name: "tracker", Prefixes: []string{"/v1/tracker"}},
+	// /tracker is the BOARD ITSELF — the SPA embedded in this app's binary
+	// (apps/tracker/ui), which is the whole point of tracker.hanzo.ai. It must be
+	// claimed here or the fleet routes the host's page to whoever owns "/" (the
+	// console), and the visitor gets the console's HTML shell where the board
+	// should be: a 200 that is not the product. An app-level static prefix beside
+	// the API it reads, exactly as git claims /explore and team claims
+	// /collaborator.
+	//
+	// It could NOT be caught by the published-path oracle: a static bundle is
+	// served by an untyped All() route, so it appears in no openapi.json and
+	// router_test's gate had nothing to compare. The gate that does catch it is
+	// internal/manifesttest, which reads the app's LIVE router declaration
+	// (untyped routes included) rather than its published document.
+	{Name: "tracker", Prefixes: []string{"/tracker", "/v1/tracker"}},
 	{Name: "templates", Prefixes: []string{"/v1/templates"}},
 	{Name: "blueprint", Prefixes: []string{"/v1/blueprint"}},
 	{Name: "framework", Prefixes: []string{"/v1/framework"}},
@@ -262,13 +299,23 @@ var Apps = []App{
 	// mistake. That was invisible for as long as plugin/analytics/openapi.json went
 	// unregenerated: the path was in the router and not in the artifact this table
 	// is checked against, so the check had nothing to disagree with.
-	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health"}},
+	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/replay", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health"}},
 	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/clusters", "/v1/compute/bots", "/v1/compute/regions", "/v1/compute/sizes", "/v1/fleet", "/v1/gpus", "/v1/k8s/clusters", "/v1/k8s/nodes", "/v1/machines"}},
 	{Name: "venue", Prefixes: []string{"/v1/cloud"}},
 	{Name: "captable", Prefixes: []string{"/v1/captable"}},
 	{Name: "code", Prefixes: []string{"/v1/code"}},
+	// lsp lives UNDER code, at /v1/code/lsp, because they are two reads of one
+	// repository: code is the static index, lsp the live language server that
+	// resolves through dependencies. One home for code intelligence means one
+	// place to look for it, in the document and in the MCP tool list alike.
+	//
+	// The nesting is not a routing hazard, it is how routing works: nested static
+	// prefixes resolve by SPECIFICITY, so /v1/code/lsp beats code's /v1/code and
+	// both beat ai's bare "/v1" — the same relation storage's /v1/s3/buckets has
+	// to provisioning's /v1/s3. Adjacency in this list is documentation.
+	{Name: "lsp", Prefixes: []string{"/v1/code/lsp"}},
 	// zt held "/v1/edge/nodes" — a top-level name for something that was never a
 	// product. Four unrelated things wore "edge": the on-device inference runtime
 	// (hanzoai/edge, a binary a customer runs on their own machine, so it has no cloud
@@ -294,7 +341,13 @@ var Apps = []App{
 	// and the typed RPC — published in openapi.yaml and therefore in every generated
 	// SDK and the MCP tool list — reached no app at all.
 	{Name: "team", Prefixes: []string{"/collaborator", "/v1/team"}},
-	{Name: "meet", Prefixes: []string{"/v1/meet/getToken", "/v1/meet/health"}},
+	// /meet is the native call client, embedded in meet's own binary and served
+	// from the same origin as its API — the same one-binary/one-origin shape
+	// tasks has just above. The API side is the whole /v1/meet subtree now that
+	// there are three routes under it and the client reads two of them; naming
+	// each leaf was a list that had to be edited every time a route was added,
+	// and an unnamed leaf falls to whichever row holds the bare remainder.
+	{Name: "meet", Prefixes: []string{"/meet", "/v1/meet"}},
 	{Name: "settings", Prefixes: []string{"/v1/settings"}},
 	{Name: "prefs", Prefixes: []string{"/v1/prefs"}},
 	{Name: "notify", Prefixes: []string{"/v1/notify"}},
@@ -302,6 +355,7 @@ var Apps = []App{
 	{Name: "gateway", Prefixes: []string{"/v1/gateway"}},
 	{Name: "entitlements", Prefixes: []string{"/v1/entitlements", "/v1/orgs/:org/entitlements"}},
 	{Name: "exec", Prefixes: []string{"/v1/download", "/v1/exec", "/v1/files", "/v1/upload"}},
+	{Name: "sandboxes", Prefixes: []string{"/v1/sandboxes"}},
 	{Name: "websearch", Prefixes: []string{"/v1/websearch", "/v1/scrape"}},
 	{Name: "crawl", Prefixes: []string{"/v1/crawl"}},
 	{Name: "index", Prefixes: []string{"/v1/index"}},

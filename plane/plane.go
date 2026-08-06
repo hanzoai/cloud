@@ -68,11 +68,31 @@ const (
 	// the key lives in the project store.
 	ProjectsResolveKey = "projects_resolve_key"
 
+	// ProjectsOwnership answers "does this org own the project this request
+	// claims?" for the identity trust boundary. The boundary is cloud edge
+	// middleware in EVERY process; the registry is the projects app's alone. With
+	// no resolver the guard returned "not foreign" — so the cross-org project
+	// impersonation check was off wherever projects was not co-resident, which is
+	// everywhere. Absence of an ANSWER may never read as permission.
+	ProjectsOwnership = "projects_ownership"
+
 	FinanceAuthorize = "finance_authorize" // the prepaid gate
 	FinanceBalance   = "finance_balance"
 	FinanceRecord    = "finance_record" // the meter
 	FinanceTxns      = "finance_txns"
 	FinanceUsage     = "finance_usage"
+
+	// FinanceSpend is the org's TOTAL over a window — what it consumed, beside
+	// what its wallet still holds. It is the qualify signal three attributed-
+	// credit programs read (referrals, affiliates, authors), the month-to-date
+	// figure on the usage page, and the per-org money row every admin aggregator
+	// folds over.
+	//
+	// It is one op rather than each caller summing FinanceUsage, because the
+	// total and the rows are DIFFERENT questions with different costs: the cap
+	// already reads the ledger's own windowed sum, and a caller that re-derived
+	// it from a page of rows would silently answer for one page.
+	FinanceSpend = "finance_spend"
 
 	// FinanceScopeRules reads the org's per-scope request-rate ceilings — the
 	// rate-limited subset of its spend-alert rows. It is on the plane for the
@@ -92,6 +112,28 @@ const (
 
 	IAMMailable = "iam_mailable"
 
+	// IAMApproval answers "is this person off the waitlist?" about the CALLER.
+	//
+	// It is on the plane because the alternative was worse than a URL. admission
+	// asked IAM over HTTP and, having no way to say who was asking, REPLAYED the
+	// caller's own Cookie and Authorization header to do it — cloud presenting a
+	// user's raw credential to another service so that service would answer about
+	// that user. The plane carries the validated principal, so the credential
+	// never has to be handled, let alone forwarded.
+	IAMApproval = "iam_approval"
+
+	// IAMProjects lists the projects an org owns, from the store that owns them.
+	//
+	// A project is IAM's noun. Platform reads it because a PaaS app is scoped to
+	// one, and platform used to reach for it two different ways depending on where
+	// IAM was: the in-process store when this binary IS the IAM, and — when it is
+	// not — an HTTP GET to /v1/iam/projects authenticated as a per-org machine
+	// identity that platform MINTED for the purpose. The second one is what this
+	// replaces, and the credential goes with it: the plane already carries the
+	// caller's tenant, so an org-scoped read needs no identity of its own to
+	// present. The narrowest possible grant is the one you never have to issue.
+	IAMProjects = "iam_projects"
+
 	// TeamMember answers "what is this person's role in that workspace?" for a
 	// caller that holds an IAM identity and no workspace claim.
 	//
@@ -102,10 +144,36 @@ const (
 	// had nowhere else to come from.
 	TeamMember = "team_member"
 
+	// TeamWorkspaces answers "which workspaces is this person in?" — the same
+	// rows TeamMember reads, asked without already knowing the answer.
+	//
+	// A caller that must DECIDE a join asks TeamMember, because it already holds
+	// the workspace the room named. A caller that must OFFER a join has nothing
+	// to name yet: the meet lobby has to show a person the workspaces they can
+	// open a room in, and a room is bound to its tenant by its name's leading
+	// workspace segment, so without this the native client could only ask the
+	// user to type a uuid it has no way to know.
+	//
+	// It is a person's OWN memberships and never a workspace's roster: the
+	// subject is the caller's, the org rides the call, and the answer is the
+	// list of rows that person holds. Nothing here tells one member about
+	// another.
+	TeamWorkspaces = "team_workspaces"
+
 	GitFiles   = "git_files"
 	GitImport  = "git_import"
 	GitInbound = "git_inbound"
 	GitPublish = "git_publish"
+
+	// GitRev answers which commit a ref names, and nothing else.
+	//
+	// It is separate from GitFiles because the two questions have different
+	// COSTS, not merely different shapes. A caller that pins a revision on every
+	// request — the language-server proxy asks one per position query — would
+	// otherwise have to read a whole tree to learn a sha, which is a monorepo
+	// crossing a socket to answer forty bytes. Resolving is a ref lookup; reading
+	// is a walk. One op each.
+	GitRev = "git_rev"
 
 	// GitStatus reads the per-repo import/sync status the console repo list
 	// renders. Same boundary as GitImport: the app that lists the repos is
@@ -147,14 +215,6 @@ const (
 	// shape as PlatformPush and the same former silence: a nil error meant "rolled
 	// out" to a caller whose CR was never touched.
 	PlatformRelease = "platform_release"
-
-	// ProjectsOwnership answers "does this org own the project this request
-	// claims?" for the identity trust boundary. The boundary is cloud edge
-	// middleware in EVERY process; the registry is the projects app's alone. With
-	// no resolver the guard returned "not foreign" — so the cross-org project
-	// impersonation check was off wherever projects was not co-resident, which is
-	// everywhere. Absence of an ANSWER may never read as permission.
-	ProjectsOwnership = "projects_ownership"
 
 	PlatformFleet   = "platform_fleet"
 	TreasuryReserve = "treasury_reserve"
@@ -330,6 +390,27 @@ const (
 
 	// HostStart is the fleet ROUTER's own op, not an app's. See [HostApp].
 	HostStart = "host_start"
+
+	// The SANDBOX ops — the one compute primitive, reachable from a peer.
+	//
+	// They exist for the reason every op above them does: the two ends are two
+	// PROCESSES. apps/exec serves the code-interpreter contract and apps/sandbox
+	// owns the pods, they ship as separate plugin binaries, and a Go import would
+	// not have joined them — it would have given exec its OWN sandbox Service, with
+	// its own per-org SQLite handles on the same files and its own reaper racing the
+	// real one. So the call crosses, and [Ask] already collapses it to a direct
+	// in-process dispatch wherever the fleet happens to fuse the two.
+	//
+	// The op set is the sandbox's whole vocabulary and nothing more: lease one, run
+	// in it, read a path, write a path, end it. There is no "upload", no "download"
+	// and no "session" here, because those are the CALLER's nouns — a session is a
+	// lease and a download is a read, and putting either word on this plane would
+	// publish one product's vocabulary as another's contract.
+	SandboxLease = "sandbox_lease"
+	SandboxRun   = "sandbox_run"
+	SandboxRead  = "sandbox_read"
+	SandboxWrite = "sandbox_write"
+	SandboxEnd   = "sandbox_end"
 )
 
 // HostApp is the socket name the fleet router answers on. It is not an app —
@@ -443,6 +524,18 @@ type Usage struct {
 	// that made it. Attribution only: it is NOT the idempotency key (see Ref).
 	RequestID string `json:"requestId,omitempty"`
 	ClientIP  string `json:"clientIp,omitempty"`
+	// Actor is WHO acted, when that is not the wallet being billed — an admin or an
+	// agent running on behalf of the payer. The subject says whose money moved; this
+	// says whose hand moved it, and a ledger entry without it cannot answer the only
+	// question an audit asks. It crossed on the old HTTP body (`actor`) and had no
+	// field here, so the split-deploy debit landed unattributed.
+	Actor string `json:"actor,omitempty"`
+	// The token counts the charge was computed from. They are the WORK the amount
+	// prices, so a debit without them can be re-read but not re-derived — and they
+	// likewise had no field here.
+	PromptTokens     int `json:"promptTokens,omitempty"`
+	CompletionTokens int `json:"completionTokens,omitempty"`
+	TotalTokens      int `json:"totalTokens,omitempty"`
 }
 
 // RecordIn debits one metered act.
@@ -500,9 +593,52 @@ type Txn struct {
 	CreatedAt int64  `json:"createdAt"`
 }
 
+// TxnsIn selects which books to read and how much of them.
+//
+// Test picks the SANDBOX ledger. Sandbox money and real money live in
+// physically separate files and must never mix, so the selector travels rather
+// than being inferred at the far end: a reader that posts test rows into real
+// revenue has restated the company's income, and nothing downstream can tell.
+//
+// Limit is a page size; 0 takes the ledger's own default. There is no org and
+// no subject, for the usual reason — the tenant rides the caller.
+type TxnsIn struct {
+	Test  bool `json:"test,omitempty"`
+	Limit int  `json:"limit,omitempty"`
+}
+
 // Txns is a page of ledger entries.
 type Txns struct {
 	Rows []Txn `json:"rows"`
+}
+
+// ---- finance.spend — the totals -------------------------------------------
+
+// SpendIn asks what an org has consumed, and since when.
+//
+// There is no subject and no org, for the usual reason: the tenant rides the
+// caller. Since is a unix second and 0 means the calendar month to date, which
+// is the window every existing reader of this figure asks for.
+type SpendIn struct {
+	Since int64 `json:"since,omitempty"`
+}
+
+// Spend is one org's metered consumption over that window, beside the wallet it
+// is drawn from.
+//
+// Consumed is the LEDGER'S OWN windowed sum — the same figure the rolling
+// spend cap reads, so a program that qualifies on spend and a gate that stops
+// it cannot disagree about how much was spent. The ledger reports that sum to
+// the cent and this carries it as an exact decimal rather than inventing a
+// precision it never had.
+//
+// There is ONE balance field because the ledger has one number: what it calls
+// available IS the settled balance (a hold is the caller's own in-pod
+// reservation, never a ledger row). Two fields would be two names for one
+// value, which is how a reader comes to subtract one from the other.
+type Spend struct {
+	Consumed Money `json:"consumed"`
+	Balance  Money `json:"balance"`
 }
 
 // ScopeRule is one scope's request-rate ceiling: the axes it covers and the
@@ -555,6 +691,49 @@ type Roster struct {
 	Recipients []Recipient `json:"recipients"` // everyone in the org who may be mailed; empty is a real answer, not an error
 }
 
+// ---- iam.approval ----------------------------------------------------------
+
+// Approval is the caller's waitlist state, as the identity store holds it.
+//
+// Status is the RAW approvalStatus string, not a verdict. What the value MEANS —
+// that only the exact word "pending" gates a person, and an absent value reads as
+// approved — is admission's policy, and it stays in admission next to the gate it
+// decides. A boolean here would move that rule into the identity store and leave
+// two places able to disagree about who is on a waitlist.
+//
+// An empty Status is a real answer: the person has no approvalStatus recorded.
+// "I could not tell" is an error from the call, never a value in this struct.
+type Approval struct {
+	Status string `json:"status"`
+}
+
+// ---- iam.projects ----------------------------------------------------------
+
+// Project is one project, projected to what a caller outside IAM can act on:
+// the (org, name) key that scopes an app, the display name and description a
+// console renders, and when it was made.
+//
+// The identity record's other columns — workspace, tags, metadata, the default
+// flag — stay in IAM. A peer that needed one of them would be reaching past the
+// question it asked, and every field added here is a field the wire's positional
+// layout pins forever (see zapenc: a field IS its offset).
+type Project struct {
+	Owner       string `json:"owner"`       // the org that owns it — the tenancy key
+	Name        string `json:"name"`        // the slug, unique within the org
+	DisplayName string `json:"displayName"` // the human name; may be empty, and the caller falls back to Name
+	Description string `json:"description"`
+	CreatedTime string `json:"createdTime"` // RFC3339, as IAM stores it; empty when IAM has none, never a fabricated time
+}
+
+// Projects is every project one org owns.
+//
+// The org is not in the reply and is not an argument: it is the caller's own
+// tenant, taken from the call. An empty list is a real answer — an org with no
+// projects — and never the shape a failed read takes.
+type Projects struct {
+	Projects []Project `json:"projects"`
+}
+
 // ---- team ------------------------------------------------------------------
 
 // MemberIn names the workspace and the person a membership question is about.
@@ -580,6 +759,57 @@ type Member struct {
 	// Account is the team AccountUuid the subject resolved to — the identity the
 	// asking process attributes the person by, so it never derives one itself.
 	Account string `json:"account"`
+}
+
+// WorkspacesIn names the person a workspace list is about. The ORG is absent for
+// the same reason it is absent from MemberIn: it is the tenancy key of every
+// workspace row, so a caller able to pass it could enumerate another tenant's.
+type WorkspacesIn struct {
+	// Subject is the IAM subject, NOT a team account id — team owns the join from
+	// one to the other, exactly as in MemberIn.
+	Subject string `json:"subject"`
+}
+
+// Space is one workspace a person holds a member row in.
+//
+// The ROLE is on it because the asking process decides with it: meet admits a
+// privileged member and refuses a guest, and it applies that rule to the list it
+// offers as well as to the join it grants, so a person is never shown a room
+// they would then be refused.
+type Space struct {
+	// UUID is the workspace's stable id — and, in meet, the leading segment of
+	// every room name bound to it.
+	UUID string `json:"uuid"`
+	// Name is the human label for a picker.
+	Name string `json:"name"`
+	// Role is the role on the caller's member row (owner | admin | member | guest).
+	Role string `json:"role"`
+}
+
+// Spaces is what the rows say about one person: the account they resolved to and
+// the workspaces they are in.
+//
+// The invariant is ONE-WAY: a non-empty Items implies a non-empty Account, so
+// every workspace offered has an identity to seat the person under. The converse
+// does NOT hold and must not be assumed — a subject that resolves to an account
+// while holding no current membership row answers with the account and an empty
+// list, which is the honest "we know who you are, and you are in nothing".
+//
+// (This doc used to claim the biconditional — "Account is empty exactly when
+// there are no workspaces" — which the implementation never satisfied, because it
+// resolves the account BEFORE walking the rows. A doc that overstates an
+// invariant is worse than none: it is the one a caller writes an `if` against.)
+type Spaces struct {
+	// Account is the team AccountUuid the subject resolved to — the same identity
+	// Member.Account carries, from the same derivation.
+	Account string `json:"account"`
+	// Name is the display name on the caller's member rows, empty when they have
+	// not set one. A DISPLAY name only: meet passes it as the LiveKit participant
+	// label, which is decoration, never identity.
+	Name string `json:"name"`
+	// Items is every workspace the person is in, newest membership first. Empty is
+	// a real answer, not an error.
+	Items []Space `json:"items"`
 }
 
 // ---- git -------------------------------------------------------------------
@@ -684,6 +914,20 @@ type RevokeIn struct {
 
 // Revoked is the empty receipt for a withdrawal.
 type Revoked struct{}
+
+// RevIn asks which commit a ref names. An empty Ref means the repo's default
+// branch.
+type RevIn struct {
+	Repo string `json:"repo" validate:"required"`
+	Ref  string `json:"ref,omitempty"`
+}
+
+// Rev is a resolved commit and the label it was reached by, so a caller can echo
+// which branch it is looking at without re-deriving it.
+type Rev struct {
+	Rev string `json:"rev"`
+	Ref string `json:"ref,omitempty"`
+}
 
 // FilesIn asks for a repo's files at one ref.
 type FilesIn struct {
@@ -1654,6 +1898,97 @@ type RunOnBehalfOut struct {
 	RunID  string `json:"runId,omitempty"`
 }
 
+// ---- sandbox ---------------------------------------------------------------
+
+// LeaseIn asks for a sandbox. ID names one to RESUME: a lease that is still
+// running comes back as it is, and one that has ended is replaced by a fresh
+// sandbox rather than refused — the caller is resuming a conversation whose lease
+// expired while they were reading, and a working sandbox with a new id is the
+// honest answer to that.
+type LeaseIn struct {
+	ID      string `json:"id,omitempty"`
+	Class   string `json:"class,omitempty"`
+	Project string `json:"project,omitempty"`
+	TTLSec  int    `json:"ttlSec,omitempty"`
+}
+
+// Leased is the sandbox a lease got.
+//
+// Workdir is carried rather than assumed. Where a sandbox keeps its files is a
+// property of its CLASS (/work for a project sandbox, /mnt/data for a code-
+// interpreter one), and a caller that hardcoded either would hold a second copy of
+// a fact only the sandbox knows — which is how a run writes its plots to one
+// directory and the collector lists the other.
+//
+// There is no Pod and no address. A sandbox is reached by asking its owner, never
+// by dialing it, and a peer that could learn a pod name would be a peer that could
+// try.
+type Leased struct {
+	ID      string `json:"id"`
+	Class   string `json:"class"`
+	Status  string `json:"status"`
+	Workdir string `json:"workdir"`
+}
+
+// RunIn runs one command in a sandbox. Argv is the honest form; Command is the
+// convenience for a caller holding a shell line.
+type RunIn struct {
+	ID         string   `json:"id"`
+	Argv       []string `json:"argv,omitempty"`
+	Command    string   `json:"command,omitempty"`
+	Stdin      string   `json:"stdin,omitempty"`
+	Dir        string   `json:"dir,omitempty"`
+	TimeoutSec int      `json:"timeoutSec,omitempty"`
+}
+
+// Ran is what a command produced. A non-zero ExitCode is DATA, not an error: the
+// call succeeded and the program failed, and a caller has to be able to tell those
+// apart.
+type Ran struct {
+	ExitCode int    `json:"exitCode"`
+	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
+}
+
+// PathIn names one path inside a sandbox. An empty Path means the sandbox's own
+// working directory.
+type PathIn struct {
+	ID   string `json:"id"`
+	Path string `json:"path,omitempty"`
+}
+
+// Blob is what a path IS: a file's bytes, or a directory's entries. One answer for
+// both, because one command answers both and a caller that had to stat first would
+// pay two round trips to learn what the first one already knew.
+type Blob struct {
+	Path    string   `json:"path"`
+	Dir     bool     `json:"dir,omitempty"`
+	Data    []byte   `json:"data,omitempty"`
+	Entries []string `json:"entries,omitempty"`
+}
+
+// WriteIn puts bytes at one path inside a sandbox, creating parents.
+type WriteIn struct {
+	ID   string `json:"id"`
+	Path string `json:"path"`
+	Data []byte `json:"data,omitempty"`
+}
+
+// Wrote reports the RESOLVED path and how much landed there. The path is resolved
+// because a caller's path is relative far more often than not, and echoing back
+// what it asked for would tell it nothing it did not already know.
+type Wrote struct {
+	Path  string `json:"path"`
+	Bytes int    `json:"bytes"`
+}
+
+// EndIn ends a lease. Purge drops the project VOLUME as well and is opt-in,
+// because ending a lease is reversible and deleting someone's uncommitted work is
+// not.
+type EndIn struct {
+	ID    string `json:"id"`
+	Purge bool   `json:"purge,omitempty"`
+}
 
 // ---- coding: every seam one autonomous coding run reaches across ------------
 //

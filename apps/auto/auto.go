@@ -364,11 +364,21 @@ func (o ops) start(ctx context.Context, in *autoStart) (*autoResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Pay before the compute is scheduled, not after — a run the caller cannot
+	// afford must never reach the tasks plane (billing.go).
+	if err := o.gate(ctx); err != nil {
+		return nil, err
+	}
 	body := map[string]any{"flowId": id}
 	if len(in.Input) > 0 {
 		body["input"] = json.RawMessage(in.Input)
 	}
-	return relay(ctx, http.MethodPost, "/v1/runs", org, body)
+	res, err := relay(ctx, http.MethodPost, "/v1/runs", org, body)
+	if err != nil {
+		return nil, err // the run never started; nothing is owed.
+	}
+	o.meter(ctx)
+	return res, nil
 }
 
 // Run reads one run record: status, input, output (each executed node's

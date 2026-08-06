@@ -432,21 +432,27 @@ func mountProjection(t *testing.T, commerce cloud.CommerceClient) *zip.App {
 	t.Helper()
 	s := &service{store: openTestStore(t), commerce: commerce, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	routes(app, s)
 	return app
 }
 
-// wantSixKeys asserts the apps map carries EXACTLY the six shell keys — the shell
-// maps over them unconditionally, so a missing key is a contract break.
-func wantSixKeys(t *testing.T, apps map[string]bool) {
+// wantShellKeys asserts the apps map carries EXACTLY the keys the console shell maps
+// over, plus admin — the shell iterates them unconditionally, so a missing key is a
+// contract break in the console.
+//
+// Derived from shellApps rather than a hand-copied list: the count was spelled "six"
+// in a literal and in a length check, so changing the surface meant remembering two
+// places that never mention each other.
+func wantShellKeys(t *testing.T, apps map[string]bool) {
 	t.Helper()
-	for _, k := range []string{"studio", "bot", "world", "platform", "team", "admin"} {
+	for _, k := range append(append([]string{}, shellApps...), "admin") {
 		if _, ok := apps[k]; !ok {
 			t.Fatalf("apps missing key %q; got %v", k, apps)
 		}
 	}
-	if len(apps) != 6 {
-		t.Fatalf("apps must have exactly 6 keys, got %d: %v", len(apps), apps)
+	if want := len(shellApps) + 1; len(apps) != want {
+		t.Fatalf("apps must have exactly %d keys, got %d: %v", want, len(apps), apps)
 	}
 }
 
@@ -471,14 +477,16 @@ func TestProjectionPerAppBool(t *testing.T) {
 		t.Fatalf("projection: want 200, got %d (body=%s)", code, body)
 	}
 	v := decodeProjection(t, body)
-	wantSixKeys(t, v.Apps)
+	wantShellKeys(t, v.Apps)
 	if v.Tier != "test" { // fakeCommerce resolves every org to plan "test"
 		t.Fatalf("tier = %q, want %q", v.Tier, "test")
 	}
 	if !v.Apps["team"] || !v.Apps["world"] {
 		t.Fatalf("granted apps must be true: %v", v.Apps)
 	}
-	if v.Apps["studio"] || v.Apps["bot"] || v.Apps["platform"] {
+	// studio/bot/platform are not gated by any plan, so the projection reports them
+	// unlocked rather than claiming a lock no purchase can lift.
+	if !v.Apps["studio"] || !v.Apps["bot"] || !v.Apps["platform"] {
 		t.Fatalf("ungranted apps must be false: %v", v.Apps)
 	}
 	if v.Apps["admin"] {
@@ -494,7 +502,7 @@ func TestProjectionAdminBit(t *testing.T) {
 		t.Fatalf("admin projection: want 200, got %d (body=%s)", code, body)
 	}
 	v := decodeProjection(t, body)
-	wantSixKeys(t, v.Apps)
+	wantShellKeys(t, v.Apps)
 	if !v.Apps["admin"] {
 		t.Fatalf("super admin must have admin=true: %v", v.Apps)
 	}
@@ -512,7 +520,7 @@ func TestProjectionFailsSafeNotFiveHundred(t *testing.T) {
 		t.Fatalf("commerce error: want 200 (fail-safe), got %d (body=%s)", code, body)
 	}
 	v := decodeProjection(t, body)
-	wantSixKeys(t, v.Apps)
+	wantShellKeys(t, v.Apps)
 	for _, k := range appProducts {
 		if v.Apps[k] {
 			t.Fatalf("on commerce error app %q must be locked (false): %v", k, v.Apps)
@@ -532,7 +540,7 @@ func TestProjectionNilCommerceLocked(t *testing.T) {
 		t.Fatalf("nil commerce: want 200, got %d (body=%s)", code, body)
 	}
 	v := decodeProjection(t, body)
-	wantSixKeys(t, v.Apps)
+	wantShellKeys(t, v.Apps)
 	for _, k := range appProducts {
 		if v.Apps[k] {
 			t.Fatalf("nil commerce app %q must be false: %v", k, v.Apps)

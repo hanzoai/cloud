@@ -224,12 +224,43 @@ func (k *k8sClient) ready() error {
 // so the namespace is not attacker-controlled. The slug is produced by the ONE
 // hardened, INJECTIVE org normalizer (namespace.Sanitize — identity on a
 // clean DNS label, else fold + a SHA-256 suffix of the raw owner), so two
-// distinct owners can NEVER collapse onto the same namespace (CRIT-2). Reusing
-// that single function keeps cloud's whole tenant→namespace/bucket/DB boundary
-// consistent, rather than forking a third, lossy slug rule.
+// distinct owners can NEVER collapse onto the same namespace (CRIT-2).
+//
+// ★ org MUST ALREADY BE THAT SLUG, and this only prepends the prefix.
+//
+// It used to sanitize again, and Sanitize is NOT idempotent — it is the identity
+// only on a clean label, and re-folding its own <fold>-<hash> output appends a
+// SECOND hash (looksSuffixed denies the fast path deliberately, so no name can
+// squat on the rendered form of another). Every handler receives an
+// already-sanitized slug from tenant(s, c), so for every org whose name is not
+// already clean this wrote App CRs into tenant-<double> while apps/deploy
+// (scope.go tenantNS) and apps/provisioning (dedicated.go) both scanned
+// tenant-<single>. It fails closed — nothing crosses a tenant boundary — but the
+// org's board is silently EMPTY and its CRs are orphaned in a namespace nothing
+// lists. This was the outlier of three copies of one rule; the other two already
+// took the slug, and provisioning's even documents why.
+//
+// Same class as the confinement asymmetry: Sanitize applied an unequal number of
+// times on two sides of one comparison. TestTenantNamespaceIsDerivedExactlyOnce
+// holds the three together.
+//
+// ⚠ MIGRATION: any dirty-org namespace created before this fix is already
+// double-suffixed on the cluster and is NOT what this now derives. Those are
+// orphans either way — nothing has ever read them — but they must be reaped
+// deliberately, not left to look like a live tenant.
 func tenantNamespace(org string) string {
-	org = namespace.Sanitize(org)
-	if org == "" {
+	// FAIL CLOSED ON A CONTRACT VIOLATION. The input must already be a slug, and
+	// "already sanitized" is NOT detectable by re-sanitizing — that is the very
+	// non-idempotence this fix is about. What IS checkable is the property a
+	// namespace must have anyway: a DNS-1123 label. Every namespace.Sanitize
+	// output is one; a raw or hostile owner claim ("acme/../hanzo", "  spaced  ",
+	// "org:with:colons") is not, and such a caller has skipped tenant(s, c).
+	//
+	// It resolves to the inert "unknown" rather than a malformed namespace, so a
+	// missed sanitize can never render a path-bearing or space-bearing namespace
+	// into a manifest — and, being inert, never lands in a real tenant's either.
+	// TestSanitizeIsInjective holds this: the output is always a clean label.
+	if org == "" || !appNameRE.MatchString(org) {
 		org = "unknown"
 	}
 	// NAMING(gated): rename tenant-<org> → org-<org> requires migrating live
@@ -565,7 +596,7 @@ func serviceCR(ns, org, project string, a Application, image string) *unstructur
 			map[string]any{"name": "data", "mountPath": volumeMount},
 		}
 	}
-	if ing := ingressSpec(domainList(a.DomainsJSON)); ing != nil {
+	if ing := ingressSpec(activeHosts(a.DomainsJSON)); ing != nil {
 		spec["ingress"] = ing
 	}
 	// Container-serverless autoscaling: the /v1/run path sets MaxScale>0 to declare an
@@ -812,6 +843,23 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	// privileged Jobs in the shared build namespace. Counted just-in-time from the
 	// live Jobs the org owns; refuse with errTooManyBuilds (→ HTTP 429) when at
 	// the ceiling.
+	// The ceiling is SOFT, and that is a decision rather than an oversight.
+	//
+	// This is check-then-act: two requests that count concurrently both see room
+	// and both create, so the true bound is the ceiling plus the number of
+	// requests in flight. Making it hard needs an atomic reservation, and the only
+	// atom available here is the Job NAME — which is already spent on idempotency
+	// (jobIDSuffix(buildID), so a retry of one build collides at 409 instead of
+	// building twice). A name cannot carry both properties, and a counter object
+	// with optimistic concurrency would be a second source of truth about how many
+	// builds are running, which drifts from the Jobs it counts.
+	//
+	// The overrun is bounded and CONFINED: the label is the caller's own org, so
+	// an org can only ever exceed ITS OWN share and never take another's. What a
+	// soft ceiling does not do is bound the cluster, and that bound belongs where
+	// bounds are enforced atomically — a ResourceQuota on the build namespace,
+	// which the apiserver applies at admission and no race can widen. This check
+	// stays as the fast, attributable refusal; the quota is the wall behind it.
 	active, err := k.countActiveBuilds(ctx, org)
 	if err != nil {
 		return "", fmt.Errorf("count active builds: %w", err)
@@ -1306,14 +1354,26 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 	}}
 }
 
-// launchDirectBuild launches a privileged /v1/runner build. It takes explicit
+// launchDirectBuild launches a privileged build. It takes explicit
 // (repo, ref, image, dockerfile) rather than a tenant Application, validates
 // them at this single choke point (validateBuildInputs), and launches the same
 // moby/buildkit Job with the caller's forced output image. Frontend defaults to
 // hanzoai/pack; a non-empty dockerfile is the escape hatch. buildID is the
 // idempotency key: a retry of the same build collides on the Job name (409)
 // rather than spawning a duplicate.
-func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, dockerfile, buildID string) (string, error) {
+//
+// `org` is WHO THE BUILD IS CHARGED TO, and it is a parameter because the
+// concurrency ceiling is per-org: the Job carries hanzo.ai/org=<org> and
+// countActiveBuilds selects on it, so one org's builds can only ever exhaust its
+// own share. It was the constant platformBuildOrg for every caller, which put
+// fabric builds and every tenant's builds in ONE pool of 3 — so a single org
+// looping deploys locked every other org out of building, with no attribution in
+// the Job labels to see it by. /v1/runner still passes platformBuildOrg (its
+// builds ARE the fabric's); a tenant deploy passes the tenant.
+func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, image, dockerfile, buildID string) (string, error) {
+	if strings.TrimSpace(org) == "" {
+		return "", fmt.Errorf("a build must be attributed to an org")
+	}
 	if err := k.ready(); err != nil {
 		return "", err
 	}
@@ -1325,7 +1385,24 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, 
 		return "", fmt.Errorf("invalid build input: %w", err)
 	}
 	image = cleanImage
-	active, err := k.countActiveBuilds(ctx, platformBuildOrg)
+	// The ceiling is SOFT, and that is a decision rather than an oversight.
+	//
+	// This is check-then-act: two requests that count concurrently both see room
+	// and both create, so the true bound is the ceiling plus the number of
+	// requests in flight. Making it hard needs an atomic reservation, and the only
+	// atom available here is the Job NAME — which is already spent on idempotency
+	// (jobIDSuffix(buildID), so a retry of one build collides at 409 instead of
+	// building twice). A name cannot carry both properties, and a counter object
+	// with optimistic concurrency would be a second source of truth about how many
+	// builds are running, which drifts from the Jobs it counts.
+	//
+	// The overrun is bounded and CONFINED: the label is the caller's own org, so
+	// an org can only ever exceed ITS OWN share and never take another's. What a
+	// soft ceiling does not do is bound the cluster, and that bound belongs where
+	// bounds are enforced atomically — a ResourceQuota on the build namespace,
+	// which the apiserver applies at admission and no race can widen. This check
+	// stays as the fast, attributable refusal; the quota is the wall behind it.
+	active, err := k.countActiveBuilds(ctx, org)
 	if err != nil {
 		return "", fmt.Errorf("count active builds: %w", err)
 	}
@@ -1339,7 +1416,7 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, 
 	if err != nil {
 		return "", err
 	}
-	job := k.buildJobSpec(jobName, platformBuildOrg, "runner", pushSecret, command)
+	job := k.buildJobSpec(jobName, org, "runner", pushSecret, command)
 	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}
@@ -1647,7 +1724,11 @@ func renderEnv(secretName, envJSON string) []any {
 	return out
 }
 
-func domainList(domainsJSON string) []string {
+// activeHosts is the app's ACTIVE ingress host set, decoded from the record. It
+// is named for what it returns rather than for the column it reads, so the type
+// that answers the domains route can be called domainList without the two
+// colliding.
+func activeHosts(domainsJSON string) []string {
 	var hosts []string
 	if domainsJSON == "" {
 		return nil

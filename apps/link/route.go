@@ -21,25 +21,43 @@ import (
 // RouteCandidate is one account the policy would route to, in preference order,
 // annotated with how it bills and whether it currently has rate-limit headroom.
 type RouteCandidate struct {
-	Provider    string  `json:"provider"`
-	Account     string  `json:"account,omitempty"`
-	Plan        string  `json:"plan,omitempty"`
-	Kind        string  `json:"kind"`    // subscription | apikey
-	Billing     string  `json:"billing"` // plan | commerce (BillingMode(Kind))
-	Available   bool    `json:"available"`
-	HeadroomPct float64 `json:"headroomPct"` // remaining capacity 0..100
-	Machine     string  `json:"machine,omitempty"`
-	Host        string  `json:"host,omitempty"`
-	LinkID      string  `json:"linkId"`
-	Reason      string  `json:"reason,omitempty"` // why unavailable, when Available=false
+	// Provider is the AI provider the candidate account belongs to.
+	Provider string `json:"provider"`
+	// Account is the provider-side account identifier.
+	Account string `json:"account,omitempty"`
+	// Plan is the provider plan label the account is on.
+	Plan string `json:"plan,omitempty"`
+	// Kind is how the account authenticates: subscription or apikey.
+	Kind string `json:"kind"`
+	// Billing is the cost consequence of dialing this candidate: plan (the
+	// user's own subscription) or commerce (the metered gateway path).
+	Billing string `json:"billing"`
+	// Available reports whether the candidate is routable right now.
+	Available bool `json:"available"`
+	// HeadroomPct is the remaining rate-limit capacity, 0..100. A link with no
+	// snapshot counts as full headroom.
+	HeadroomPct float64 `json:"headroomPct"`
+	// Machine is the machine the account is signed in on.
+	Machine string `json:"machine,omitempty"`
+	// Host is that machine's hostname label.
+	Host string `json:"host,omitempty"`
+	// LinkID is the underlying link's opaque handle.
+	LinkID string `json:"linkId"`
+	// Reason says why the candidate is not routable, when Available is false.
+	Reason string `json:"reason,omitempty"`
 }
 
 // RoutePlan is the ordered redundancy plan for a user's accounts: the candidates
 // in preference order plus the primary the caller would try first.
 type RoutePlan struct {
-	Candidates  []RouteCandidate `json:"candidates"`
-	Primary     *RouteCandidate  `json:"primary,omitempty"`
-	GeneratedAt string           `json:"generatedAt"`
+	// Candidates is every linked account in preference order: subscriptions
+	// first, then metered api-key accounts as the backstop.
+	Candidates []RouteCandidate `json:"candidates"`
+	// Primary is the first available candidate; absent when every account is
+	// rate-limited.
+	Primary *RouteCandidate `json:"primary,omitempty"`
+	// GeneratedAt is when the plan was computed, RFC 3339 UTC.
+	GeneratedAt string `json:"generatedAt"`
 }
 
 // parseUsage decodes a Link's stored usage JSON, or nil when there is none / it

@@ -850,7 +850,7 @@ func (s *store) setGrant(ctx context.Context, project, id string, visibility *st
 // diary never loads blobs. project is the SERVER's value; visibility is FORCED
 // private (a grant is separate). Returns 1 when a new artifact was recorded, 0 on a
 // dup (same bytes → same hash → a no-op).
-func (s *store) putArtifact(ctx context.Context, project string, a Artifact, content []byte) (int, error) {
+func (s *store) putArtifact(ctx context.Context, project string, a ResearchArtifact, content []byte) (int, error) {
 	created := 0
 	err := s.db.RunInTransactionWith(ctx, &orm.TxOptions{}, func(tx orm.DB) error {
 		created = 0
@@ -899,12 +899,12 @@ func (s *store) artifactContent(ctx context.Context, project, sha256Hex string) 
 // listArtifacts returns the chronological diary feed newest-first, filtered by
 // project, optional run_id, and an optional `since` unix-seconds lower bound.
 // Bounded by limit.
-func (s *store) listArtifacts(ctx context.Context, project, runID string, since int64, limit int) ([]Artifact, error) {
+func (s *store) listArtifacts(ctx context.Context, project, runID string, since int64, limit int) ([]ResearchArtifact, error) {
 	recs, err := s.allArt(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var out []Artifact
+	var out []ResearchArtifact
 	for _, r := range recs {
 		if project != "" && r.Project != project {
 			continue
@@ -929,8 +929,8 @@ func (s *store) listArtifacts(ctx context.Context, project, runID string, since 
 	return out, nil
 }
 
-func (r artRecord) toArtifact() Artifact {
-	return Artifact{
+func (r artRecord) toArtifact() ResearchArtifact {
+	return ResearchArtifact{
 		SHA256: r.SHA256, Kind: r.Kind, Ref: r.Ref, RunID: r.RunID, Project: r.Project,
 		Visibility: r.Visibility, RetentionClass: r.RetentionClass,
 		GitSHA: r.GitSHA, GitBranch: r.GitBranch, GitDirty: r.GitDirty, LibVersions: r.LibVersions, TS: r.TS,

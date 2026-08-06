@@ -631,7 +631,9 @@ func init() {
 			"signed state a console connect minted or from the workspace's existing connection. "+
 			"Minting an org for an anonymous click is the one thing that would break tenant "+
 			"isolation, so an install begun here finishes under exactly the rules every other "+
-			"install obeys.")
+			"install obeys.\n\n"+
+			"Where the app is not configured it answers 503, rather than a consent URL carrying "+
+			"an empty client_id that Slack would render as its own dead-end error page.")
 
 	// ── inbound platform webhooks ────────────────────────────────────────────
 	openapi.Describe("/v1/integrations/slack/events", http.MethodPost,
@@ -834,6 +836,11 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	app.Use(zip.H(bridgeFacts))
 
 	zip.Get(zapp, "/v1/integrations", o.list)
+	// Slack adapter (slack_events.go / slack_link.go), every route raw on purpose.
+	// The two webhooks speak Slack's own protocol: the HMAC covers the RAW bytes,
+	// which an op handed the decoded In could not re-verify. The three link legs
+	// drive a browser — a 302 to the Slack / hanzo.id sign-in, then a short HTML
+	// confirmation page — and never answer JSON.
 	// The Marketplace / "Add to Slack" entry point. A literal, so it is matched
 	// before the /:provider wildcards below, and Terminal like its siblings: it
 	// carries no principal by design and must not be gated into a 403, because the
@@ -853,6 +860,8 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// commerce /v1 ErrorHandlerJSON (co-mounted ahead of us) cannot flatten a bad-sig
 	// 401 / malformed-body 400 to 500. repos/import register BEFORE the /:provider
 	// wildcards (registration-order matching) and are org-authed via the principal.
+	// It stays raw because it speaks GitHub's webhook protocol: the HMAC covers
+	// the raw body, which an op handed the decoded In could not re-verify.
 	app.Post("/v1/connector/github/webhook", cloud.Terminal(cloud.Handle(s, githubWebhook)))
 	zip.Get(zapp, "/v1/integrations/github/repos", o.githubRepos)
 	// 202: the import runs in a bounded background worker, so the op DECLARES the
@@ -879,6 +888,10 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// Framework JWT, Telegram secret-token; the link legs use signed __Host- cookies +
 	// state. Telegram's /connect is org-authed via the principal (like the framework
 	// connect). They must NOT sit behind any principal/tenant gate.
+	// Every route here is raw on purpose: each event door speaks its platform's
+	// own webhook protocol over the raw request (Discord's Ed25519 signs the raw
+	// bytes; Teams and Telegram answer in their platform's envelope), and every
+	// link leg drives a browser with a 302 or an HTML page, never JSON.
 	app.Post("/v1/integrations/discord/interactions", cloud.Terminal(cloud.Handle(s, discordInteractions)))
 	app.Get("/v1/integrations/discord/link", cloud.Handle(s, discordLink))
 	app.Get("/v1/integrations/discord/link/discord", cloud.Handle(s, discordLinkDiscord))

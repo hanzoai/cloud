@@ -87,7 +87,7 @@
     },
     "/v1/networks/{id}": {
       "get": {
-        "operationId": "get_v1_networks_id",
+        "operationId": "get_v1_networks_by_id",
         "summary": "Returns one overlay network by id, scoped to the caller's org.",
         "description": "Returns one overlay network by id, scoped to the caller's org.\n\nThe org has exactly one overlay network and its id is derived from the org, so\nany other id — another tenant's, or one that does not exist — is 404 rather than\na peek across the tenant boundary. An org whose network exists but has no\nedge-routers is 404 too, for the same reason the list is empty: there is no\noverlay until something is on it.",
         "tags": [

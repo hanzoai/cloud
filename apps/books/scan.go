@@ -46,10 +46,21 @@ const maxScanUpload = 8 << 20
 
 // scannerRoutes registers the scanner + inbox + vendors/rules + transactions surface on the
 // books app (called from routes()). The group is rebuilt here, from a literal prefix,
-// because that is what makes each typed op's path resolvable from this file; it is the same
-// /v1/books subtree routes() already installed Bridge + noStore on.
+// because that is what makes each typed op's path resolvable from this file — cmd/zipdoc
+// files a doc comment by the prefix it can READ in the file, and a router arriving as a
+// parameter has none, so passing routes() its group would drop every leaf below out of the
+// document and the MCP tool list.
+//
+// It therefore installs noStore ITSELF. The middleware does not arrive with the prefix:
+// zip scopes a Use to the group INSTANCE it was installed on, so a second
+// app.Group("/v1/books") is a second router with its own empty stack — which is exactly
+// what went wrong, and why every route in this file answered money WITHOUT
+// Cache-Control: no-store while the ops in books.go carried it. One noStore, named once
+// and applied to each router that serves money. Pinned by
+// TestReadsAnswerTheirFrozenEnvelope.
 func scannerRoutes(app cloud.Router, s *cloud.Service[*state]) {
 	g := app.Group("/v1/books")
+	g.Use(noStore())
 	o := booksOps{s: s}
 	zip.Get(g, "/inbox", o.listInbox)
 	zip.Get(g, "/vendors", o.listVendors)
@@ -67,6 +78,11 @@ func scannerRoutes(app cloud.Router, s *cloud.Service[*state]) {
 	// body as JSON, so a PDF upload would answer 400 instead of scanning — there is no
 	// JSON In that names a file. They still DECLARE what they take and answer, in the
 	// init below.
+	// Registered on the APP with their whole paths, not on g: a raw handler on a
+	// group with a readable prefix is one cmd/zipdoc will describe FOR it, from the
+	// only doc comment at the call site — cloud.Handle's generic "binds a
+	// Service-scoped handler to a route" — which would then be published as what
+	// /v1/books/scan does. Their real prose is the openapi.Register/Describe below.
 	app.Post("/v1/books/scan", cloud.Handle(s, scanHandler))
 	app.Post("/v1/books/inbox", cloud.Handle(s, inboxUploadHandler))
 }

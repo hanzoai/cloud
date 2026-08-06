@@ -82,6 +82,8 @@ func mountScope(a *zip.App) {
 	zip.Get(a, o11yPrefix+"/traces", handleTraces)
 	// Flat, org-gated LLM-obs sessions list (sessions.go): pins the runtime's
 	// /api/sessions route and refuses an org-less caller at the cloud boundary.
+	// Raw: it relays the runtime's own envelope byte-for-byte, and a relay has
+	// no Go shape to declare.
 	a.Get("/v1/o11y/sessions", sessionsHandler)
 }
 

@@ -2,7 +2,6 @@ package cloud_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -10,11 +9,26 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The plane's bytes are ZAP. A recognisable value goes across and the field
-// NAMES must not appear anywhere on the wire — under JSON they would, which is
-// what makes this a positive identification rather than an inference from the
-// call having worked.
-func TestPlaneWireCarriesNoFieldNames(t *testing.T) {
+// A peer that is THIS process is reached without a wire.
+//
+// This test used to assert the opposite shape: it observed the bytes crossing
+// the socket and proved they were ZAP rather than JSON — the field NAMES absent,
+// the values present. That assertion was right and it is still made, in the one
+// place it belongs: internal/zapenc's TestNothingIsJSON and TestBytesAreAZAPMessage
+// pin the encoding at the encoder. Restating it here bought a second copy of a
+// fact zip already owns.
+//
+// What is true HERE, and was not true before zip v1.27.0, is that a co-resident
+// call has no bytes to inspect at all. [zip.Serving] answers with the App bound
+// to a name in this process, and Ask hands the call to that op's own invoke seam
+// instead of dialling its socket. Nothing about the call needed a wire; only the
+// addressing did.
+//
+// So the middleware below is the instrument, and an EMPTY observation is the
+// result: if a body ever appears, cloud has started serialising a value, handing
+// it to the kernel, reading it back and parsing a fresh copy, to reach a function
+// pointer that was in memory the whole time.
+func TestCoresidentCallTakesNoWire(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", runDir(t))
 	cloud.ResetPlane()
 
@@ -37,20 +51,15 @@ func TestPlaneWireCarriesNoFieldNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("call: %v", err)
 	}
+
+	// The answer is the op's answer, so the op ran — the seam is the same
+	// validate → authorize → run core every other door lands on.
 	if out.Amount.Decimal != "50.00" {
 		t.Fatalf("reply lost its value: %+v", out)
 	}
-	if len(seen) == 0 {
-		t.Fatal("no body was observed")
-	}
-	body := string(seen)
-	for _, name := range []string{`"subject"`, `"currency"`, `{`, `}`} {
-		if strings.Contains(body, name) {
-			t.Fatalf("the request body contains %s — that is JSON, not ZAP: %q", name, body)
-		}
-	}
-	// The VALUES are there verbatim, because ZAP stores text as text.
-	if !strings.Contains(body, "acme") || !strings.Contains(body, "usd") {
-		t.Fatalf("the request body did not carry its values: %q", body)
+	// And it ran without a byte crossing the socket that is bound and listening
+	// three lines up.
+	if len(seen) != 0 {
+		t.Fatalf("a co-resident call went over the wire: %d bytes, %q", len(seen), seen)
 	}
 }

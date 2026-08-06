@@ -309,6 +309,32 @@ func Listen(plugins []Plugin, enable []string) error {
 	// One reader, one answer, and the kill switch always wins.
 	app.Use(SpendGate(deps.Commerce))
 
+	// The same two gates, asked about the OPERATION instead of the request.
+	//
+	// Both of the above are middleware, and middleware reads the path the TRANSPORT
+	// carried. That is the operation only over plain REST: an MCP tools/call arrives
+	// as POST /mcp and a plane call as POST /.well-known/zip/op/<name>, and neither
+	// names a declared surface — so both priced at zero and required no standing,
+	// however the operation inside them was declared. Toll asks DefaultPrice and
+	// Billable about op.Method and op.Path at zip's op-invoke seam, which every
+	// projection of a typed handler funnels through, so an operation costs the same
+	// whichever door it came in by. It stands down for a request whose own path names
+	// a declared surface, because that is exactly when the two gates above have
+	// already answered — one operation, one answer. See toll.go.
+	//
+	// The peer sibling is a SEPARATE zip.App with its own hook (peer.go), so it gets
+	// the gate explicitly. It binds no socket until something registers a peer op, so
+	// this costs a struct today and closes the seam the day one appears.
+	app.Authorize(Toll(deps.Metering, deps.Commerce))
+	app.Peer().Authorize(Toll(deps.Metering, deps.Commerce))
+
+	// A typed op cannot write a response body — zip stamps the op's declared status
+	// over a hand-written one — so it refuses through an error, and this is what turns
+	// that error back into the money wire's own bytes. It is mounted at the root
+	// because Toll refuses ops fleet-wide; the four subsystems that mount it on their
+	// own groups are inside this one and unaffected.
+	app.Use(DenyEnvelope())
+
 	// HIP-0106 liveness contract: every enabled subsystem answers
 	// GET /v1/<name>/health uniformly, registered at the compose root before
 	// MountAll so it precedes subsystem /v1/<n>/* wildcards.

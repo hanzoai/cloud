@@ -48,16 +48,18 @@ func TestMigrateOverLegacyIssuesTable(t *testing.T) {
 			}
 			return st, nil
 		},
-		// The forward-added spine columns must now exist and be usable — create an
-		// issue carrying a repo + kind (the write ix_issues_org_repo /
-		// ix_issues_org_kind index), then read it back scoped by org.
+		// The forward-added columns must now exist and be usable — create an issue
+		// carrying a repo + kind (the write ix_issues_org_repo / ix_issues_org_kind
+		// index) AND a schedule (the write ix_issues_org_project_due index), then
+		// read it back scoped by org.
 		Probe: func(t *testing.T, c io.Closer) {
 			st := c.(*Store)
 			ctx := context.Background()
 			iss, err := st.CreateIssue(ctx, Issue{
 				ID: "iss_1", ProjectID: "proj_1", Org: "acme",
 				Kind: "pr", Source: "git", Repo: "cloud", ExtRef: "feat/x",
-				Title: "t", Status: "backlog", CreatedAt: 1, UpdatedAt: 1,
+				Title: "t", Status: "backlog", StartAt: 1700, DueAt: 1900,
+				CreatedAt: 1, UpdatedAt: 1,
 			})
 			if err != nil {
 				t.Fatalf("create issue after migrate: %v", err)
@@ -68,6 +70,25 @@ func TestMigrateOverLegacyIssuesTable(t *testing.T) {
 			}
 			if got.Repo != "cloud" || got.Kind != "pr" {
 				t.Fatalf("issue spine columns = (repo=%q, kind=%q), want (cloud, pr)", got.Repo, got.Kind)
+			}
+			if got.StartAt != 1700 || got.DueAt != 1900 {
+				t.Fatalf("issue schedule columns = (%d,%d), want (1700,1900)", got.StartAt, got.DueAt)
+			}
+			// A row that predates the schedule reads as unscheduled rather than as a
+			// bar at the epoch, and the timeline filter therefore leaves it alone.
+			legacy, err := st.CreateIssue(ctx, Issue{
+				ID: "iss_2", ProjectID: "proj_1", Org: "acme",
+				Title: "predates the timeline", Status: "backlog", CreatedAt: 1, UpdatedAt: 1,
+			})
+			if err != nil {
+				t.Fatalf("create undated issue: %v", err)
+			}
+			if legacy.StartAt != 0 || legacy.DueAt != 0 {
+				t.Fatalf("undated issue = (%d,%d), want (0,0)", legacy.StartAt, legacy.DueAt)
+			}
+			timeline, err := st.ListIssues(ctx, "acme", "proj_1", IssueFilter{Scheduled: true})
+			if err != nil || len(timeline) != 1 || timeline[0].ID != "iss_1" {
+				t.Fatalf("timeline after migrate: %+v err=%v, want just iss_1", timeline, err)
 			}
 		},
 	}.Run(t)

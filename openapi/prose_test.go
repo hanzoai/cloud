@@ -118,7 +118,7 @@ func TestCompleteReadsAWildcardDeclarationThroughTheSameTranslation(t *testing.T
 // apps/provisioning/provisioning.go:257, the prose at :341 — while storage serves
 // the deeper /v1/s3/buckets and /v1/s3/health. By product segment both are "s3",
 // so storage was charged with a declaration that is provisioning's and correct,
-// and `make surface-check` died on an app with nothing wrong with it:
+// and `make check` died on an app with nothing wrong with it:
 //
 //	storage: 1 description(s) name no operation:
 //	  POST /v1/s3

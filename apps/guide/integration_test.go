@@ -28,6 +28,7 @@ import (
 func mountFullPlane(t *testing.T, ai cloud.AIClient) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
 	log := luxlog.New("test")
 	if err := framework.Mount(app, cloud.Deps{Logger: log, DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("framework.Mount: %v", err)

@@ -22,10 +22,14 @@
 //	PATCH  /v1/tracker/projects/:key                     update a project        -> Project
 //	DELETE /v1/tracker/projects/:key                     delete a project (+ issues)
 //	POST   /v1/tracker/projects/:key/issues              create an issue         -> Issue (201)
-//	GET    /v1/tracker/projects/:key/issues[?status=&kind=&repo=&source=]  list  -> [Issue]
+//	GET    /v1/tracker/projects/:key/issues[?status=&kind=&repo=&source=&scheduled=]  -> [Issue]
 //	GET    /v1/tracker/projects/:key/issues/:num         issue detail            -> Issue
 //	PATCH  /v1/tracker/projects/:key/issues/:num         update an issue         -> Issue
 //	DELETE /v1/tracker/projects/:key/issues/:num         delete an issue
+//
+// And the UI the surface exists for, embedded in this binary (ui/):
+//
+//	GET    /tracker, /tracker/*                          the board + timeline SPA
 //
 // Order 129: binds /v1/tracker/* before the AI subsystem's /v1/* catch-all
 // (150). serve.go auto-registers GET /v1/tracker/health.
@@ -44,7 +48,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
+	trackerui "github.com/hanzoai/cloud/apps/tracker/ui"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -206,6 +212,12 @@ func init() {
 			"kind=issue&source=helpdesk. `status` defaults to backlog, `priority` to none. A value "+
 			"outside one of these closed sets is 400, never silently defaulted. `labels` may not "+
 			"contain a comma, the storage separator.\n\n"+
+			"`startAt` and `dueAt` place the item on the TIMELINE, in unix seconds, and both "+
+			"default to unset. A due date on its own is a milestone — an interval of zero length "+
+			"— and the two together are a bar; a start with no due date is work under way with no "+
+			"deadline. There is no separate milestone resource: a milestone is this row, dated. A "+
+			"negative bound, or a due date before its start, is 400 rather than a silently "+
+			"reordered interval.\n\n"+
 			"`repo` and `extRef` RECORD an external binding; they do not create one. Filing here "+
 			"writes to your tracker and reaches no external system — nothing is pushed to GitHub. The "+
 			"GitHub integration runs the other way, mirroring upstream issues INTO this tracker.\n\n"+
@@ -214,6 +226,11 @@ func init() {
 			"validated org. Free by default, on the same balance gate as the board create — an epic, "+
 			"a pull request and an issue are priced identically, since the fee is per work item rather "+
 			"than per kind.")
+
+	// The board's two addresses. Bound with All(), so they publish every method
+	// the generator knows and none of them can lift prose from a handler — a
+	// static bundle has no typed op. The ONE helper every embedded SPA uses.
+	openapi.DescribeSPA("/tracker", "tracker board")
 }
 
 // routes registers the tracker surface. Literal routes register before their
@@ -227,7 +244,7 @@ func init() {
 // above instead, through the registry openapi.Register shares.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
-	g := app.Group("/v1/tracker")
+	g := app.Group("/v1/tracker", requireCSRFOnWrites())
 	// cloud.Bridge is not installed here: the composer installs it once at the
 	// root, after the identity check that mints the validated org and before any
 	// subsystem registers a route — an order only the whole program can assert.
@@ -248,6 +265,62 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/projects/:key/issues/:num", o.getIssue)
 	zip.Patch(g, "/projects/:key/issues/:num", o.updateIssue)
 	zip.Delete(g, "/projects/:key/issues/:num", o.deleteIssue)
+
+	// The UI is a static asset bundle embedded in THIS binary (ui/) — the board
+	// and timeline over the surface above. Serving it here is what lets cloud
+	// front tracker.hanzo.ai and retire the Huly tracker that answered that host.
+	//
+	// NOT a typed op and never will be: these routes answer HTML and hashed
+	// assets under their own content types and cache hints, plus index.html for
+	// every path the client router owns. A typed op publishes JSON. ui/
+	// embed_test.go pins the bytes.
+	//
+	// Same origin as /v1/tracker above, which is the point rather than a
+	// convenience: the SPA sends no tenancy of its own because the composer's
+	// identity check has already minted the validated org for both halves.
+	ui := zip.AdaptNetHTTP(http.StripPrefix("/tracker", trackerui.Handler()))
+	app.All("/tracker", ui)
+	app.All("/tracker/*", ui)
+}
+
+// unsafe is the set of methods that CHANGE a board. Everything else is a read.
+var unsafe = map[string]bool{
+	http.MethodPost: true, http.MethodPut: true,
+	http.MethodPatch: true, http.MethodDelete: true,
+}
+
+// requireCSRFOnWrites is the anti-CSRF gate for every tracker write, installed
+// ONCE on the group rather than six times on the routes.
+//
+// THREAT. A browser authenticates this surface from an httpOnly session COOKIE,
+// which is AMBIENT: a page on any other origin that can reach us carries it too.
+// The deployment's CORS policy reflects `*.hanzo.ai` with credentials, and that
+// wildcard covers hosts that serve arbitrary user content — so a page there can
+// read and write another org's boards with the visitor's own session. The
+// positive control is a token the caller can only obtain by READING a same-origin
+// response (GET /v1/csrf; the Same-Origin Policy stops a cross-site page reading
+// it) and must echo in a CUSTOM header (which a simple form POST cannot set
+// without a preflight we do not grant).
+//
+// The gate itself is apps/account's — the estate has ONE anti-CSRF token, minted
+// by GET /v1/csrf and bound to the caller's validated identity, and it verifies
+// here byte-identically because both processes key it from the same KMS-sourced
+// CONSOLE_CSRF_KEY. This does not re-implement any of that; it only decides WHEN
+// to apply it.
+//
+// ON THE GROUP, BY METHOD, not per route: a gate written six times is a gate the
+// seventh write forgets. Reads pass through untouched (a GET changes nothing, and
+// requiring a token to list a board would break every server-side reader), and
+// account's own gate is a no-op for a Bearer/gateway caller, which cannot be
+// CSRF'd — so this costs an API client nothing.
+func requireCSRFOnWrites() zip.Handler {
+	gate := account.RequireCSRF()
+	return func(c *zip.Ctx) error {
+		if !unsafe[c.Method()] {
+			return c.Next()
+		}
+		return gate(c)
+	}
 }
 
 // ---- HTTP response shapes (the published contract) ----
@@ -284,6 +357,8 @@ type issueView struct {
 	Priority    string   `json:"priority"`
 	Assignee    string   `json:"assignee,omitempty"`
 	Labels      []string `json:"labels"`
+	StartAt     int64    `json:"startAt,omitempty"` // unix seconds; absent = unscheduled
+	DueAt       int64    `json:"dueAt,omitempty"`   // unix seconds; absent = no due date
 	CreatedAt   int64    `json:"createdAt"`
 	UpdatedAt   int64    `json:"updatedAt"`
 }
@@ -297,7 +372,8 @@ func toIssueView(projectKey string, i Issue) issueView {
 		Kind:       i.Kind, Source: i.Source, Repo: i.Repo, ExtRef: i.ExtRef,
 		Title: i.Title, Description: i.Description,
 		Status: i.Status, Priority: i.Priority, Assignee: i.Assignee,
-		Labels:    splitLabels(i.Labels),
+		Labels:  splitLabels(i.Labels),
+		StartAt: i.StartAt, DueAt: i.DueAt,
 		CreatedAt: i.CreatedAt, UpdatedAt: i.UpdatedAt,
 	}
 }
@@ -388,6 +464,8 @@ type createIssueReq struct {
 	Priority    string   `json:"priority"`
 	Assignee    string   `json:"assignee"`
 	Labels      []string `json:"labels"`
+	StartAt     int64    `json:"startAt"` // unix seconds; 0/omitted = unscheduled
+	DueAt       int64    `json:"dueAt"`   // unix seconds; 0/omitted = no due date
 }
 
 func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
@@ -447,6 +525,9 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(extRef) > maxField {
 		return zip.ErrBadRequest("extRef too long")
 	}
+	if err := checkSchedule(body.StartAt, body.DueAt); err != nil {
+		return err
+	}
 
 	// Billing category is the constant "issue" tracker row — an issue costs the
 	// same whatever kind it discriminates into, and ops prices it via
@@ -467,7 +548,9 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 		ID: id, ProjectID: p.ID, Org: org,
 		Kind: kind, Source: source, Repo: repo, ExtRef: extRef,
 		Title: title, Description: desc, Status: status, Priority: priority,
-		Assignee: assignee, Labels: labels, CreatedAt: now, UpdatedAt: now,
+		Assignee: assignee, Labels: labels,
+		StartAt: body.StartAt, DueAt: body.DueAt,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	created, err := store.CreateIssue(c.Context(), i)
 	if err != nil {
@@ -530,6 +613,49 @@ func normSource(s string) (string, error) {
 		return "", zip.ErrBadRequest("unknown source")
 	}
 	return s, nil
+}
+
+// maxScheduleAt is the far edge of the interval this tracker will store:
+// 2200-01-01T00:00:00Z. A project plan does not reach past it, and the number
+// beyond it is never a date — it is a value that got into a date field.
+//
+// It exists because "non-negative" was not a bound. A caller could store
+// dueAt = 2^63-1, which is a legal int64 and a nonsense instant, and the
+// timeline then tried to draw a grid from today to the year 292 billion: one
+// accepted write, and every member of that org loading the board's timeline hit
+// an unrecoverable render. A stored value that breaks the reader for everyone
+// who looks at it is the write's fault, so it is refused at the write.
+//
+// The client clamps too (ui timeline.ts domainOf) — the two are not redundant.
+// This stops the row existing; that stops any row, however it arrived, from
+// taking the view down. Neither is load-bearing alone.
+const maxScheduleAt int64 = 7258118400
+
+// checkSchedule validates the timeline interval an issue carries. Both bounds
+// are unix seconds and 0 means unset, so the three legal shapes are: neither
+// (unscheduled), a due date alone (a milestone — an interval of zero length),
+// and both (a bar). The refusals are the ones an interval cannot survive:
+//
+//   - a negative bound, which is not a point in time this tracker recognises and
+//     would render a bar reaching off the left edge of every viewport;
+//   - a bound past maxScheduleAt, which is not a plan (see above);
+//   - an end before its beginning, which is not an interval at all. Refused at
+//     the boundary rather than normalised, because silently swapping a caller's
+//     dates is a mutation they did not ask for and cannot see.
+//
+// A start with no due date IS legal: work that has begun and has no deadline is
+// a real state, and the timeline draws it from its start to today.
+func checkSchedule(startAt, dueAt int64) error {
+	if startAt < 0 || dueAt < 0 {
+		return zip.ErrBadRequest("startAt and dueAt are unix seconds and cannot be negative")
+	}
+	if startAt > maxScheduleAt || dueAt > maxScheduleAt {
+		return zip.ErrBadRequest("startAt and dueAt must be before 2200-01-01")
+	}
+	if startAt > 0 && dueAt > 0 && dueAt < startAt {
+		return zip.ErrBadRequest("dueAt cannot be before startAt")
+	}
+	return nil
 }
 
 // normLabels trims, validates and comma-joins labels for storage. A label is a

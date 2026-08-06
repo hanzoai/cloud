@@ -18,18 +18,23 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
 // AccountsTotal is the summed usage across a caller's linked accounts.
 type AccountsTotal struct {
-	Accounts         int   `json:"accounts"`
-	Requests         int64 `json:"requests"`
-	PromptTokens     int64 `json:"promptTokens"`
+	// Accounts is how many linked accounts the total folds.
+	Accounts int `json:"accounts"`
+	// Requests is the total request count the gateway routed.
+	Requests int64 `json:"requests"`
+	// PromptTokens is the total prompt-token count.
+	PromptTokens int64 `json:"promptTokens"`
+	// CompletionTokens is the total completion-token count.
 	CompletionTokens int64 `json:"completionTokens"`
-	TotalTokens      int64 `json:"totalTokens"`
-	CostCents        int64 `json:"costCents"`
+	// TotalTokens is the total token count.
+	TotalTokens int64 `json:"totalTokens"`
+	// CostCents is the total cost in cents.
+	CostCents int64 `json:"costCents"`
 }
 
 // AccountsUsage is the per-account breakdown response. Source is always "routed" —
@@ -37,9 +42,13 @@ type AccountsTotal struct {
 // snapshots (/v1/links/usage/summary) and from the org money ledger
 // (/v1/billing/usage). Scope is always "user": the caller's own linked accounts.
 type AccountsUsage struct {
-	Scope    string        `json:"scope"`  // user
-	Source   string        `json:"source"` // routed
-	Total    AccountsTotal `json:"total"`
+	// Scope is always "user": the caller's own linked accounts.
+	Scope string `json:"scope"`
+	// Source is always "routed": the gateway's own routed ledger.
+	Source string `json:"source"`
+	// Total is the honest sum across the rows.
+	Total AccountsTotal `json:"total"`
+	// Accounts is one row per linked account the gateway actually routed through.
 	Accounts []RoutedUsage `json:"accounts"`
 }
 
@@ -61,18 +70,26 @@ func routedAccountsView(rows []RoutedUsage) AccountsUsage {
 	return out
 }
 
-// usageAccounts serves GET /v1/links/usage/accounts: the caller's own per-account
-// routed-usage breakdown.
-func usageAccounts(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.store.RoutedTotals(c.Context(), org, user)
+// UsageAccounts breaks down what the gateway routed through each of your accounts.
+//
+// It answers one row per linked account the GATEWAY actually routed through,
+// plus their total — requests, prompt and completion tokens, and cost. This is
+// the routed ledger, the read twin of the counter the router writes, and it is
+// distinct from both of its neighbours: not the device collector's plan
+// snapshots, and not the org money ledger. The source and scope fields on the
+// response say so on every payload. The same shape answers in the billing
+// namespace, from one shaping function, so the two mounts cannot drift.
+func (o ops) usageAccounts(ctx context.Context, _ *noIn) (*AccountsUsage, error) {
+	org, user, err := scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "routed usage: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, routedAccountsView(rows))
+	rows, err := o.s.State.store.RoutedTotals(ctx, org, user)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "routed usage: %v", err)
+	}
+	v := routedAccountsView(rows)
+	return &v, nil
 }
 
 // RoutedBreakdown is the package-level read the billing surface (clients/billing)

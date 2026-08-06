@@ -200,3 +200,149 @@ func TestOwnerOfPrefersTheMoreSpecificApp(t *testing.T) {
 		t.Errorf("OwnerOf(outside every prefix) = %q, want empty", got)
 	}
 }
+
+// ── the next question: does a Metered surface hold a meter at all? ───────────────
+
+// TestMeteredSurfacesHoldAMeter asks the thing every check above assumes and none of
+// them verify. cloud.Metered means ONE thing — "the charge for this surface is owned
+// by a meter DOWNSTREAM of the edge" (price.go) — and the edge charges nothing on that
+// promise. Three surfaces made the promise and kept no meter, so every request to them
+// was free in a way no test could see: the price was declared, the standing was
+// required, the meter did not exist.
+//
+// It is the same walk as the two tests above, asking the next question, and it reads
+// SOURCE for the same reason they do: a composition root is a source fact.
+//
+// The two lists below are the honest coverage report, in code. A surface may only be
+// absent from its own package's meter by being NAMED in one of them, with the reason —
+// so the gap is a line somebody has to write, not an absence nobody can see.
+func TestMeteredSurfacesHoldAMeter(t *testing.T) {
+	metered := meteredSurfaces(t)
+	if len(metered) == 0 {
+		t.Fatal("found no Price: cloud.Metered composition root — asserting nothing")
+	}
+
+	var held int
+	for _, name := range metered {
+		charges, zeroed := packageCharges(t, filepath.Join("apps", name))
+		switch {
+		case charges:
+			held++
+			if zeroed {
+				t.Errorf("apps/%s: every Meter call passes a literal 0 — the seam is wired and "+
+					"records nothing.\nA debit of zero posts no ledger entry, so the surface "+
+					"is free while reading as metered. Charge the fee the deployment "+
+					"configures (cloud.ResourceFeeCents), or declare the surface Free.", name)
+			}
+		case meteredByAIWrapper[name]:
+			// Correct, and deliberately not its own meter: these surfaces spend on
+			// INFERENCE, and inference is metered once, where the tokens are counted —
+			// build.go wraps Deps.AI/Deps.Embed in meteredAIClient. A second meter here
+			// would bill the same tokens twice.
+		case meteredWithoutAMeter[name]:
+			t.Logf("apps/%s: declared Metered, charges nothing — known gap", name)
+		default:
+			t.Errorf("apps/%s declares Price: cloud.Metered but its package calls no meter "+
+				"(Gate/Meter/MeterUsage/RecordUsage).\nMetered means a meter downstream of "+
+				"the edge owns the charge, and the edge charges nothing on that promise — so "+
+				"with no meter the surface is silently free. Wire the meter, or name it in "+
+				"meteredWithoutAMeter with the reason.", name)
+		}
+	}
+
+	// CONTROL. A matcher that stops recognising a call would turn every case above
+	// into the "named" branch and pass. Pin the floor we measured.
+	if held < 20 {
+		t.Fatalf("only %d metered surfaces were seen to hold a meter; 20 do. The call "+
+			"matcher has moved and this test is asserting nothing", held)
+	}
+	t.Logf("%d of %d metered surfaces hold their own meter; %d meter through the AI wrapper; "+
+		"%d charge nothing", held, len(metered), len(meteredByAIWrapper), len(meteredWithoutAMeter))
+}
+
+// meteredByAIWrapper are the surfaces whose spend is INFERENCE, metered once by the
+// wrapped AI client build.go installs (meteredAIClient → metered_ai.go), not by a
+// meter of their own. A second meter would double-bill the same tokens.
+var meteredByAIWrapper = map[string]bool{
+	"ai":    true, // the completions surface itself.
+	"ask":   true, // holds deps.AI and answers questions with it.
+	"agent": true, // replays /v1/chat/completions in-process (aiCompleter).
+}
+
+// meteredWithoutAMeter is THE GAP, named so it is countable. Each entry declares
+// cloud.Metered — the platform requires standing before its handlers run — and then
+// charges nothing at all. They are not free by decision; nobody has priced them. The
+// list must only ever shrink.
+//
+// IT IS NOW EMPTY, and that is the assertion: every surface that promises a meter
+// keeps one. auto and flow were the last two — both are typed passthroughs whose RUN
+// op schedules real compute, so each grew the meter its declaration had been claiming
+// (apps/auto/billing.go, apps/flow/billing.go: gate before the upstream call, debit
+// after it succeeds, one ResourceFeeCents knob read by both).
+//
+// An empty map still has to be DECLARED rather than deleted: the switch below needs
+// the branch, and a future surface that cannot be priced today must land here with
+// its reason instead of quietly failing the default case.
+var meteredWithoutAMeter = map[string]bool{}
+
+// packageCharges reports whether dir's non-test sources call a meter, and whether
+// EVERY positional Meter call in them passes a literal zero amount (a wired seam that
+// records nothing — apps/security shipped exactly that).
+func packageCharges(t *testing.T, dir string) (charges, allZero bool) {
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
+	if err != nil {
+		t.Fatalf("glob %s: %v", dir, err)
+	}
+	// Sub-packages hold handlers too (apps/<name>/<sub>/…), so walk the whole tree.
+	_ = filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() && filepath.Ext(p) == ".go" && filepath.Dir(p) != dir {
+			files = append(files, p)
+		}
+		return nil
+	})
+
+	meters, zeros := 0, 0
+	for _, f := range files {
+		if len(f) > 8 && f[len(f)-8:] == "_test.go" {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), f, src, 0)
+		if err != nil {
+			continue // generated or build-tagged oddity; the other files answer.
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			switch sel.Sel.Name {
+			// Gate/Meter/MeterUsage are ResourceMeter's names; Authorize/Record are the
+			// metering client's own, which zen calls directly because it supplies the
+			// upstream module's Gate/Meter as function values rather than calling ours.
+			case "Gate", "Meter", "MeterUsage", "RecordUsage", "Authorize", "Record":
+				charges = true
+			default:
+				return true
+			}
+			// Meter(org, project, kind, amountCents, requestID, clientIP): a literal 0
+			// in the amount slot posts nothing.
+			if sel.Sel.Name == "Meter" && len(call.Args) == 6 {
+				meters++
+				if lit, ok := call.Args[3].(*ast.BasicLit); ok && lit.Kind == token.INT && lit.Value == "0" {
+					zeros++
+				}
+			}
+			return true
+		})
+	}
+	return charges, meters > 0 && meters == zeros
+}
