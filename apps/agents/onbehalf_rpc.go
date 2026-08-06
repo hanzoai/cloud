@@ -58,7 +58,7 @@ func planeRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunO
 	if strings.TrimSpace(in.Subject) == "" {
 		return nil, fmt.Errorf("agents: run-on-behalf requires a linked subject")
 	}
-	run, err := runOnBehalf(mounted, ctx, in.Org, in.Subject, in.Ref, in.Input)
+	run, err := runOnBehalfModel(mounted, ctx, in.Org, in.Subject, in.Ref, in.Input, in.Model)
 	if err != nil {
 		return nil, err
 	}
