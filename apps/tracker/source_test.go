@@ -613,3 +613,142 @@ func TestPerProjectStoreFileIsolation(t *testing.T) {
 		t.Fatalf("another org read %d of acme's projects: %+v", len(rows), rows)
 	}
 }
+
+// ── the brand gate ───────────────────────────────────────────────────────────
+
+// A principal vouched by ANOTHER brand's IAM must not reach this deployment's
+// forge, on any route.
+//
+// THE ATTACK. One cloud binary serves every brand's API host, and its validator
+// trusts every white-label issuer — so a lux.id-issued token is genuinely valid
+// here on the hanzo deployment. It arrives with an attested org and an attested
+// username. Both controls this surface relies on then do exactly what they were
+// built to do: the org scopes the query, and the username is Sudo'd against the
+// forge. But the forge is git.hanzo.ai — the DEPLOYMENT's, resolved from its own
+// domain — so "alice" there is a different human from lux.id's alice, and the
+// forge answers with that person's private issues.
+//
+// Two individually-sound controls composing into a cross-brand private-repo read
+// is the whole lesson: neither of them asked WHO VOUCHED.
+func TestForgeBrandGate_AnotherBrandsPrincipalIsRefusedEverywhere(t *testing.T) {
+	f := newForge(t)
+	f.visible["alice"] = []string{"acme"}
+	f.repo("acme", "api", issue(1, "acme private work", "open", "todo"))
+	f.milestones["acme/api"] = []map[string]any{{"id": 1, "title": "v1", "state": "open"}}
+	app := mountForgeBranded(t, f, "hanzo")
+
+	// EVERY route, read and write and the rollup — the gate lives in the one
+	// resolver they all pass through, and this proves none of them bypasses it.
+	for _, tc := range []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodGet, "/v1/tracker/projects", nil},
+		{http.MethodGet, "/v1/tracker/projects/api", nil},
+		{http.MethodGet, "/v1/tracker/projects/api/issues", nil},
+		{http.MethodGet, "/v1/tracker/milestones", nil},
+		{http.MethodPost, "/v1/tracker/projects/api/issues", map[string]any{"title": "x"}},
+		{http.MethodPatch, "/v1/tracker/projects/api/issues/1", map[string]any{"status": "done"}},
+	} {
+		code, raw := asBrandedUser(t, app, tc.method, tc.path, "acme", "alice", "lux", tc.body)
+		if code != http.StatusForbidden {
+			t.Errorf("%s %s with a lux-vouched principal = %d, want 403", tc.method, tc.path, code)
+		}
+		if strings.Contains(string(raw), "acme private work") {
+			t.Errorf("CROSS-BRAND READ: %s %s leaked another brand's private issue: %s",
+				tc.method, tc.path, raw)
+		}
+	}
+
+	// Nothing reached the forge — the refusal is before the call, not after it.
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.writes) != 0 {
+		t.Fatalf("%d cross-brand writes reached the forge: %+v", len(f.writes), f.writes)
+	}
+}
+
+// The gate must not break the deployment's OWN principals: the brand that
+// matches passes, and a principal with NO vouching brand (an hk-/sk- key minted
+// by this deployment's own IAM, which is by construction this brand) passes too.
+func TestForgeBrandGate_OwnBrandAndUnbrandedStillWork(t *testing.T) {
+	f := newForge(t)
+	f.visible["alice"] = []string{"acme"}
+	f.repo("acme", "api", issue(1, "acme work", "open", "todo"))
+	app := mountForgeBranded(t, f, "hanzo")
+
+	t.Run("the deployment's own brand passes", func(t *testing.T) {
+		code, raw := asBrandedUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues",
+			"acme", "alice", "hanzo", nil)
+		if code != http.StatusOK {
+			t.Fatalf("own-brand principal = %d %s, want 200", code, raw)
+		}
+		if !strings.Contains(string(raw), "acme work") {
+			t.Fatalf("own-brand principal saw nothing: %s", raw)
+		}
+	})
+
+	t.Run("a case difference does not decide tenancy", func(t *testing.T) {
+		code, _ := asBrandedUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues",
+			"acme", "alice", "HANZO", nil)
+		if code != http.StatusOK {
+			t.Fatalf("own brand in a different case = %d, want 200", code)
+		}
+	})
+
+	t.Run("no vouching brand passes — an own-IAM key has no second fact", func(t *testing.T) {
+		code, raw := asBrandedUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues",
+			"acme", "alice", "", nil)
+		if code != http.StatusOK {
+			t.Fatalf("unbranded principal = %d %s, want 200", code, raw)
+		}
+	})
+}
+
+// mountForgeBranded is mountForge for a deployment with a declared brand, which
+// is what the brand gate compares the principal's vouching brand against.
+func mountForgeBranded(t *testing.T, f *stubForge, brand string) *zip.App {
+	t.Helper()
+	t.Setenv("CLOUD_FORGE_HOST", f.URL)
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
+	err := Mount(app, cloud.Deps{
+		Logger: luxlog.New("test"), DataDir: t.TempDir(),
+		Brand: brand,
+		KMS:   kmsStub{token: f.token},
+	})
+	if err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown() })
+	return app
+}
+
+// asBrandedUser is asUser plus X-User-Brand — the brand whose IAM vouched for
+// the principal, minted by the identity boundary from the token's VERIFIED iss
+// and stripped on ingress like every authority header.
+func asBrandedUser(t *testing.T, app *zip.App, method, path, org, user, brand string, body any) (int, []byte) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	rq := httptest.NewRequest(method, path, r)
+	if body != nil {
+		rq.Header.Set("Content-Type", "application/json")
+	}
+	rq.Header.Set("X-Org-Id", org)
+	rq.Header.Set("X-User-Id", "u_"+user)
+	rq.Header.Set(authz.HeaderUserName, user)
+	if brand != "" {
+		rq.Header.Set(cloud.HeaderUserBrand, brand)
+	}
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, raw
+}
