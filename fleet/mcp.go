@@ -74,9 +74,26 @@ type Door struct {
 // for the same reason it must not publish its routes.
 func Mount(host *zip.App, path string, apps []string, at At) *Door {
 	d := &Door{host: host, at: at, apps: apps, owner: map[string]string{}}
-	host.Post(path, d.serve)
+	d.Serve(host, path)
 	return d
 }
+
+// Serve publishes THIS door at another address — the same gather, the same
+// routing table, the same [refuse] gate.
+//
+// It exists because the fleet's own subsystems need the door too, and the
+// address a subsystem can reach is not the edge's. An agent inside `agents`
+// that asked api.hanzo.ai for its tools would leave the fleet, re-enter through
+// the front door and arrive back one process away carrying whatever credential
+// it could find; the host's internal socket is one hop with no edge on it (see
+// cmd/cloud/wake.go, which is the one caller).
+//
+// A SECOND Door over the same children would be a second routing table and,
+// worse, a second place the curation rule could be applied — or forgotten. This
+// is the same object reached from another direction: one aggregation, one
+// policy, one owner map. Which is also why an internal caller cannot be offered
+// a wider surface than an external one: there is no wider surface to offer.
+func (d *Door) Serve(on *zip.App, path string) { on.Post(path, d.serve) }
 
 // message is one JSON-RPC 2.0 envelope, in the shape this door reads it.
 type message struct {
@@ -116,7 +133,10 @@ func (d *Door) serve(c *zip.Ctx) error {
 // could not reach.
 func (d *Door) list(c *zip.Ctx, req message) error {
 	tools, down, held := d.gather(c)
-	result := map[string]any{"tools": tools}
+	// ONE TOOL PER SUBSYSTEM, the operation carried in an argument. The flat
+	// projection was 1,189 tools in 977 KB, which no model holds and every client
+	// truncates. See fleet/grouped.go.
+	result := map[string]any{"tools": group(tools)}
 	meta := map[string]any{}
 	if held > 0 {
 		// The same obligation as Unavailable, for a different cause: a list
@@ -143,9 +163,29 @@ func (d *Door) list(c *zip.Ctx, req message) error {
 // none of them serves it.
 func (d *Door) call(c *zip.Ctx, req message) error {
 	var p struct {
-		Name string `json:"name"`
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
 	}
 	_ = json.Unmarshal(req.Params, &p)
+
+	// [Describe] is the door's OWN tool — the fetch half of a surface whose enums
+	// carry names and no schemas — so it is answered here rather than routed.
+	if p.Name == Describe {
+		return d.describe(c, req, p.Arguments)
+	}
+
+	// A subsystem tool is an ENVELOPE over one operation. Unwrapping it yields
+	// exactly the name and message a direct call carries, so everything below is
+	// ONE dispatch for both spellings: the same routing table, the same gate on
+	// the way into it, the same hop, the same reply.
+	msg := c.Fiber().Request().Body()
+	if composed(p.Name) {
+		op, body, ok := unwrap(req.ID, p.Arguments)
+		if !ok {
+			return c.JSON(200, rpcErr(req.ID, -32602, p.Name+` needs {"op":"<operation>","input":{}}`))
+		}
+		p.Name, msg = op, body
+	}
 
 	app := d.ownerOf(p.Name)
 	if app == "" {
@@ -159,10 +199,16 @@ func (d *Door) call(c *zip.Ctx, req message) error {
 		// to expose.
 		return c.JSON(200, rpcErr(req.ID, -32602, "unknown tool: "+p.Name))
 	}
-	// The caller's OWN message, at the child's own door. The child's registry
-	// invokes it, so the host can only ever name a tool and never invoke one the
-	// child did not declare.
-	ans := Ask(d.at, []string{app}, c.Fiber().Request(), manifest.FrameworkMCPPath)[0]
+	// The caller's own REQUEST — its headers, so identity propagates — carrying
+	// msg, which for a direct call is the caller's own body byte for byte and for
+	// an envelope is that same call spelled out. The child's registry invokes it,
+	// so the host can only ever name a tool and never invoke one the child did
+	// not declare.
+	hop := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(hop)
+	c.Fiber().Request().CopyTo(hop)
+	hop.SetBody(msg)
+	ans := Ask(d.at, []string{app}, hop, manifest.FrameworkMCPPath)[0]
 	if ans.Err != nil {
 		// A hop failure is MCP isError content, per the spec: the model reads "this
 		// tool is not available right now" and reacts, where a 503 body is a
@@ -176,10 +222,11 @@ func (d *Door) call(c *zip.Ctx, req message) error {
 	return c.Bytes(200, ans.Body)
 }
 
-// named is one tool with its name lifted out, so the composed list sorts without
-// re-parsing and each descriptor is carried VERBATIM — the bytes the child's own
-// registry projected, never a re-encoding.
+// named is one tool with its name and its OWNER lifted out, so the composed list
+// sorts and groups without re-parsing and each descriptor is carried VERBATIM —
+// the bytes the child's own registry projected, never a re-encoding.
 type named struct {
+	app  string
 	name string
 	raw  json.RawMessage
 }
@@ -198,7 +245,11 @@ type named struct {
 // tools/call naming it gets the same -32602 as a tool that does not exist —
 // including from a client that cached the name before the rule existed. A filter
 // applied in list() instead would have been a suggestion.
-func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage, int) {
+//
+// It returns the tools themselves rather than their bytes because every caller
+// needs the OWNER too: list() groups by it (fleet/grouped.go) and describe()
+// answers out of the same gated set.
+func (d *Door) gather(c *zip.Ctx) ([]named, []Outage, int) {
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 	c.Fiber().Request().CopyTo(req)
@@ -237,6 +288,7 @@ func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage, int) {
 				continue
 			}
 			owner[t.name] = a.App
+			t.app = a.App
 			all = append(all, t)
 		}
 	}
@@ -255,13 +307,7 @@ func (d *Door) gather(c *zip.Ctx) ([]json.RawMessage, []Outage, int) {
 	d.owner = owner
 	d.mu.Unlock()
 
-	// Never nil: `"tools": null` is a client-visible difference from an empty
-	// fleet, and JSON has one way to say "no tools".
-	out := make([]json.RawMessage, 0, len(all))
-	for _, t := range all {
-		out = append(out, t.raw)
-	}
-	return out, down, held
+	return all, down, held
 }
 
 func (d *Door) ownerOf(tool string) string {

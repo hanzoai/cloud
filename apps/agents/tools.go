@@ -22,28 +22,32 @@ package agents
 // An agent with an empty Tools list never enters any of this: executeRun takes
 // the same single completion it always did.
 //
-// ── WHERE THE TOOLS COME FROM, and the hole that is left ──────────────────────
+// ── WHERE THE TOOLS COME FROM ─────────────────────────────────────────────────
 //
-// The tool plane (apps/tools) is the ONE registry of an org's callable things,
-// and A PLUGIN IS A PROCESS: `agents` ships as its own binary (plugin/agents/
-// main.go) and `tools` as another (manifest/apps.go:110 and :322), so
-// tools.Default() HERE holds only what agents itself registered — the
-// agentToolProvider at agents.go:399 — and its activation store is nil, which
-// makes ActivationStore.IsActivated report false for everything
-// (apps/tools/activation.go:83) and Registry.Dispatch refuse every name.
+// A PLUGIN IS A PROCESS. `agents` ships as its own binary (plugin/agents/main.go)
+// and `tools` as another (manifest/apps.go), so tools.Default() HERE holds only
+// what agents itself registered — the agentToolProvider at agents.go:399 — and
+// its activation store is nil, which makes ActivationStore.IsActivated report
+// false for everything (apps/tools/activation.go:83) and Registry.Dispatch
+// refuse every name. In the split fleet this process's own registry is not an
+// answer; it is a fact about this process.
 //
-// So toolPlane is the seam, registryTools is the co-resident implementation
-// (single-binary deploys and tests, where the answer is real), and the split
-// fleet needs ONE more thing that does not exist yet: a typed plane op on the
-// tools peer — a `tools_catalog` and a `tools_call` registered with
-// zip.Post(cloud.Plane(), …) in apps/tools, whose In carries the arguments as a
-// JSON STRING because the encoder refuses a map at the plane boundary (which is
-// also why the existing typed callTool — apps/tools/http.go:78, Arguments
-// map[string]any — cannot simply be lifted onto the plane). Until that op is
-// served, catalog answers empty in the split fleet and a run takes the plain
-// completion. That degradation is honest and it is VISIBLE: every run's step span
-// carries both hanzo.agent.tools_declared and hanzo.agent.tools, so "declared 3,
-// offered 0" is a number in o11y rather than a silence.
+// The thing that CAN answer already exists, and it was already deployed: the
+// fleet's composed agent door (fleet/mcp.go), which asks every app what it
+// serves right now, merges the union, and forwards a call to the app that listed
+// the name. It is what api.hanzo.ai/v1/mcp is. So there is one tool surface in
+// this fleet and an agent reads THAT one — door.go is the client, over the
+// host's own socket, and it is the plane a real deployment uses.
+//
+// registryTools stays as what this process's own registry says, which is the
+// whole answer exactly where this process is the whole fleet: a single-app
+// binary, a dev box, a test. doorTools falls back to it there and nowhere else,
+// on the one signal that means it — nothing listening on the router's socket.
+//
+// The degradation that remains is an OUTAGE, and it is visible: every run's step
+// span carries both hanzo.agent.tools_declared and hanzo.agent.tools, so
+// "declared 3, offered 0" is a number in o11y rather than a silence, and the
+// door's own error is recorded beside it.
 
 import (
 	"context"
@@ -129,8 +133,8 @@ func callableTools(a Agent) []string {
 // It is an interface for the reason the package comment gives — the answer is
 // per-DEPLOYMENT, not per-run — and it is deliberately narrow: names, prose,
 // schemas, and one call that takes raw JSON in and returns text out. Nothing in
-// it is a map, so the same shape crosses a process boundary unchanged when the
-// plane op lands.
+// it is a map, which is what let the same shape cross a process boundary
+// unchanged (door.go) rather than being redesigned at the seam.
 type toolPlane interface {
 	// catalog resolves the tool NAMES an agent declares into definitions the
 	// model can be offered. A name that resolves to nothing is simply absent —
@@ -141,10 +145,12 @@ type toolPlane interface {
 	call(ctx context.Context, org, actor, name, args string) (string, error)
 }
 
-// runTools is the tool plane a run uses. A package var so a test can substitute
-// a deterministic one; there is no exported setter, because which plane answers
-// is a property of the deployment and not something a caller may choose.
-var runTools toolPlane = registryTools{}
+// runTools is the tool plane a run uses: the fleet's own agent door, which
+// answers with this process's registry wherever this process IS the fleet
+// (door.go). A package var so a test can substitute a deterministic one; there
+// is no exported setter, because which plane answers is a property of the
+// deployment and not something a caller may choose.
+var runTools toolPlane = doorTools{}
 
 // registryTools is the tool plane read IN THIS PROCESS: tools.Default(), the same
 // registry POST /v1/tools/call dispatches through, with the same activation gate,
