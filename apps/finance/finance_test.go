@@ -2,6 +2,7 @@ package finance
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -98,6 +99,136 @@ func TestDepositRefIdempotent(t *testing.T) {
 		t.Fatalf("deposit additive #2: %v", err)
 	}
 	mustBalance(t, f, "acme", "acme", 2000) // 1000 + 500 + 500.
+}
+
+// TestDepositRefIsOnePaymentAndNotJustOneKey — the swallow.
+//
+// The idempotency key is (kind, program, ref) and carries NEITHER subject NOR amount, so
+// two DIFFERENT payments naming one ref in one org's books collide. The replay branch
+// answered the second of them with the FIRST one's entry id: alice's $1 posted, bob's
+// $500 was told SUCCESS, bob's wallet stayed at zero, and nothing anywhere said a payment
+// had been dropped. It has never fired only because the settlement ref is a Square payment
+// id and no two payments share one — a replayed webhook, a backfill, or the credit RPC
+// choosing a ref of its own is all it takes.
+//
+// A ref hit is a REPLAY only when it is the same money to the same wallet. Anything else
+// is a different payment wearing this one's key, and the only honest answer is an error:
+// crediting anyway breaks the exactly-once the ref exists to give, and handing back the
+// other payment's entry IS the swallow.
+//
+// Mutation proof: drop the (subject, amount) comparison from [depositByRef] — answer
+// e.ID for any ref hit, the shipped behaviour — and all three conflict rows answer
+// SUCCESS with alice's entry id over a wallet holding nothing. The first row is the
+// other direction and equally load-bearing: refuse a genuine replay and exactly-once
+// becomes at-most-zero, so a retrying settlement 500s on a card that cleared.
+func TestDepositRefIsOnePaymentAndNotJustOneKey(t *testing.T) {
+	// alice's payment lands first and owns the ref.
+	const org, ref = "acme", "SHARED"
+	alice := types.DepositInput{Org: org, Subject: "acme/alice", Amount: money.FromCents(100), Ref: ref}
+	under := func(subject string, cents int64) types.DepositInput {
+		return types.DepositInput{Org: org, Subject: subject, Amount: money.FromCents(cents), Ref: ref}
+	}
+
+	for _, tc := range []struct {
+		name string
+		// second is the deposit posted after alice's, naming her ref.
+		second types.DepositInput
+		// replay says it IS alice's payment again: same money, same wallet.
+		replay bool
+	}{
+		{"the same money to the same wallet IS the replay the ref exists for", under("acme/alice", 100), true},
+		{"a different PAYER on one ref", under("acme/bob", 100), false},
+		{"a different AMOUNT on one ref", under("acme/alice", 50000), false},
+		{"a different payer AND amount — the measured case", under("acme/bob", 50000), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			f := New(t.TempDir())
+			defer func() { _ = f.Close() }()
+
+			posted, err := f.Deposit(ctx, alice)
+			if err != nil {
+				t.Fatalf("alice's deposit: %v", err)
+			}
+			mustBalance(t, f, org, alice.Subject, 100)
+
+			got, err := f.Deposit(ctx, tc.second)
+
+			if tc.replay {
+				if err != nil {
+					t.Fatalf("a genuine replay was refused (%v) — exactly-once has become at-most-zero "+
+						"and a retried settlement 500s on a card that cleared", err)
+				}
+				if got != posted {
+					t.Errorf("the replay answered entry %q, want the original %q", got, posted)
+				}
+				mustBalance(t, f, org, alice.Subject, 100) // ONE credit, not two.
+				return
+			}
+
+			if err == nil {
+				t.Fatalf("%s of %s under ANOTHER payment's ref answered SUCCESS with entry %q — the "+
+					"caller is told money landed that this ledger never credited",
+					tc.second.Subject, tc.second.Amount, got)
+			}
+			if !errors.Is(err, errRefTaken) {
+				t.Errorf("it failed with %v, want a conflict on the ref (%v)", err, errRefTaken)
+			}
+			if got != "" {
+				t.Errorf("the conflict answered entry %q, want none — that id is the OTHER payment's", got)
+			}
+			// AND NEITHER WALLET IS WRONG: alice keeps her credit, and the payment that was
+			// refused credited nobody.
+			mustBalance(t, f, org, alice.Subject, 100)
+			if tc.second.Subject != alice.Subject {
+				mustBalance(t, f, org, tc.second.Subject, 0)
+			}
+		})
+	}
+}
+
+// TestDepositRecoveryIsNotSomebodyElsesCredit — the same rule on the recovery path.
+//
+// [creditedUnder] exists so a deposit that could not RUN, over money already in the books,
+// answers with the money rather than with a 500 on a settled card
+// ([TestDepositAlreadyCreditedIsNotAFailure]). It asked only whether the REF was posted,
+// so a transaction that died over a ref belonging to a DIFFERENT payment was handed that
+// payment's entry and reported success — the same swallow as the replay branch, on the one
+// path whose whole job is not to lie about where money is.
+//
+// The context is CANCELLED, so the transaction cannot begin and the answer comes from the
+// recovery read and from nothing else.
+//
+// Mutation proof: give creditedUnder back its ref-only lookup and this answers alice's
+// entry id for bob's $500 over a wallet holding nothing.
+func TestDepositRecoveryIsNotSomebodyElsesCredit(t *testing.T) {
+	const org, ref = "acme", "SHARED"
+	f := New(t.TempDir())
+	defer func() { _ = f.Close() }()
+
+	alice := types.DepositInput{Org: org, Subject: "acme/alice", Amount: money.FromCents(100), Ref: ref}
+	if _, err := f.Deposit(context.Background(), alice); err != nil {
+		t.Fatalf("alice's deposit: %v", err)
+	}
+
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	bob := types.DepositInput{Org: org, Subject: "acme/bob", Amount: money.FromCents(50000), Ref: ref}
+	got, err := f.Deposit(dead, bob)
+	if err == nil {
+		t.Fatalf("bob's $500 answered SUCCESS with entry %q over alice's $1 — a payment was swallowed "+
+			"and its payer told it landed", got)
+	}
+	// It names the REF as the reason, not the dead context: a retry under this ref can
+	// never succeed, so the caller must be told to stop retrying it rather than to loop.
+	if !errors.Is(err, errRefTaken) {
+		t.Errorf("it failed with %v, want a conflict on the ref (%v)", err, errRefTaken)
+	}
+	if got != "" {
+		t.Errorf("it answered entry %q, want none", got)
+	}
+	mustBalance(t, f, org, alice.Subject, 100)
+	mustBalance(t, f, org, bob.Subject, 0)
 }
 
 // TestDepositAlreadyCreditedIsNotAFailure — a deposit that cannot RUN, on money that is
