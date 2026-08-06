@@ -44,7 +44,7 @@ func TestAnAgentBranchCannotBeRewrittenUnderAReviewer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if err := checkRefPolicy(cmds, "main"); err == nil {
+	if err := checkRefPolicy(cmds, "main", ""); err == nil {
 		t.Fatal("a force-push over an existing agent branch was allowed; a reviewer can be shown one diff and merged another")
 	}
 }
@@ -55,7 +55,7 @@ func TestAnAgentBranchCannotBeDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if err := checkRefPolicy(cmds, "main"); err == nil {
+	if err := checkRefPolicy(cmds, "main", ""); err == nil {
 		t.Fatal("an agent branch delete was allowed")
 	}
 }
@@ -66,7 +66,7 @@ func TestTheDefaultBranchCannotBeDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if err := checkRefPolicy(cmds, "main"); err == nil {
+	if err := checkRefPolicy(cmds, "main", ""); err == nil {
 		t.Fatal("the default branch was deletable by a push")
 	}
 }
@@ -78,7 +78,7 @@ func TestARunMayCreateItsOwnBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if err := checkRefPolicy(cmds, "main"); err != nil {
+	if err := checkRefPolicy(cmds, "main", ""); err != nil {
 		t.Fatalf("a run could not create its own branch: %v", err)
 	}
 	// The pack must still be reachable behind the commands, byte for byte —
@@ -102,7 +102,7 @@ func TestOrdinaryPushesAreUntouched(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse %q: %v", line, err)
 		}
-		if err := checkRefPolicy(cmds, "main"); err != nil {
+		if err := checkRefPolicy(cmds, "main", ""); err != nil {
 			t.Errorf("ordinary push %q was refused: %v", line, err)
 		}
 	}
@@ -118,7 +118,7 @@ func TestAForbiddenCommandCannotHideBehindAPermittedOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if err := checkRefPolicy(cmds, "main"); err == nil {
+	if err := checkRefPolicy(cmds, "main", ""); err == nil {
 		t.Fatal("a rewrite smuggled in behind a legitimate create was allowed")
 	}
 }
@@ -185,7 +185,7 @@ func TestAnUnknownDefaultBranchStillProtectsAgentRefs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if err := checkRefPolicy(cmds, ""); err == nil {
+	if err := checkRefPolicy(cmds, "", ""); err == nil {
 		t.Fatal("agent refs lost their protection when the default branch was unknown")
 	}
 }

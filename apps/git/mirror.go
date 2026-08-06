@@ -36,6 +36,28 @@ import (
 // destination ref. HEAD (not under refs/) is set separately by mirrorInto.
 const mirrorRefSpec = "+refs/*:refs/*"
 
+// mirrorExcludeAgent removes the machine namespace from every mirror fetch.
+//
+// A mirror is the most powerful ref writer in the forge: `+refs/*:refs/*` with
+// --prune force-overwrites every ref from a source the CALLER chose, and deletes
+// any ref that source does not have. Pointed at an attacker-chosen upstream it
+// therefore does, in one call, everything the ref policy refuses at the push
+// door — including replacing the branch under a PR a human is reading, and
+// deleting one outright.
+//
+// The policy cannot be applied to it command-by-command, because the commands
+// are whatever the remote turns out to advertise. So the refusal is structural
+// instead: a negative refspec takes refs/heads/agent/* out of the fetch's refmap
+// entirely, which removes it from --prune's consideration too. The mirror
+// cannot write a machine ref and cannot delete one, because it can no longer
+// see them. Verified against git 2.43: with this present, an agent branch
+// survives a mirror from a source that lacks it, and an agent branch the SOURCE
+// carries is not created.
+//
+// (Negative refspecs are git >= 2.29. An older git ignores nothing and errors on
+// the unknown refspec, which fails the mirror closed — the safe direction.)
+const mirrorExcludeAgent = "^" + agentRefPrefix + "*"
+
 // mirrorEnvToken names the env var — KMS-injected via a KMSSecret sync, never
 // hardcoded, never logged — holding the credential for mirroring a PRIVATE
 // https source. Empty means an anonymous fetch (public sources need none).
@@ -160,7 +182,7 @@ func (s *storage) mirrorInto(ctx context.Context, org, project, name, srcURL str
 	args := append(packConfigArgs(""),
 		"-c", "protocol.version=2", "-c", "credential.helper=",
 		"--git-dir="+bareDir, "fetch", "--prune", "--tags", "--no-write-fetch-head",
-		srcURL, mirrorRefSpec)
+		srcURL, mirrorRefSpec, mirrorExcludeAgent)
 	fetch, err := gitCmd(ctx, env, args...)
 	if err != nil {
 		return err
@@ -171,6 +193,11 @@ func (s *storage) mirrorInto(ctx context.Context, org, project, name, srcURL str
 		return fmt.Errorf("git fetch: %w: %s", err, sanitizeGitErr(stderr.String()))
 	}
 
+	// The source chooses this, so it is checked: HEAD is outside refs/ and the
+	// refspec above does not reach it (writer 5 in refpolicy.go).
+	if head != "" && checkHeadRef(head) != nil {
+		head = ""
+	}
 	if head != "" {
 		set, err := gitCmd(ctx, env, "--git-dir="+bareDir, "symbolic-ref", "HEAD", head)
 		if err != nil {

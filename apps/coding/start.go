@@ -62,14 +62,17 @@ const (
 	defaultConcurrency    = 8
 	defaultOrgConcurrency = 2
 
-	// agentCredProvider / agentCredToken / agentCredUser name the per-org agent
-	// git credential in the integrations KMS namespace. An operator seals the
-	// org's key there; the engine reads it fail-closed, at the one moment it
-	// dispatches, and never logs it.
-	agentCredProvider = "agent"
-	agentCredToken    = "git-token"
-	agentCredUser     = "git-user"
-	defaultAgentUser  = "x-access-token"
+	// agentCredUser is the basic-auth username a git client must send beside the
+	// grant. git ignores it — the password is the whole credential — but it must
+	// be something, and naming it here means the sandbox is not inventing one.
+	agentCredUser = "x-access-token"
+
+	// maxRunBudget is the longest run the engine will admit, whatever a caller
+	// asks for. Without it TimeoutSeconds was unbounded: a caller could hold a
+	// pool slot — one of two its org has — for a day, and ask the forge to
+	// delegate a push for just as long. A budget nobody bounds is a resource
+	// nobody bounds.
+	maxRunBudget = 30 * time.Minute
 )
 
 // Accepted is what a door returns the instant a run is admitted. A run takes
@@ -117,9 +120,9 @@ func Engine(log func(msg string, kv ...any)) Dispatcher {
 func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg string, kv ...any)) (Accepted, error) {
 	org = strings.TrimSpace(org)
 	if !OrgRE.MatchString(org) {
-		// Shape-checked, not merely non-empty. The org becomes a KMS PATH SEGMENT
-		// (credRef) and a git namespace, so an org carrying a separator or a dot
-		// segment would address another tenant's secret. It arrives from the
+		// Shape-checked, not merely non-empty. The org becomes a git namespace and
+		// the tenant every seam call authorizes on, so an org carrying a separator
+		// or a dot segment would address another tenant. It arrives from the
 		// gateway or the plane already validated; this is the second lock, on the
 		// side that would actually be harmed if the first ever failed.
 		return Accepted{}, fmt.Errorf("coding: a run needs a tenant")
@@ -141,6 +144,24 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 		// another org's namespace. Same rule the git subsystem's own name check uses.
 		return Accepted{}, fmt.Errorf("coding: %q is not a repo name", repo)
 	}
+	// Base and Project are shape-checked for the same reason Repo and Org are,
+	// and they were the two that were not.
+	//
+	// Base is the worse of the two. It travels to RunRequest.BaseBranch and, on
+	// the routed path, onto a CUSTOMER'S machine, where it lands in a `git clone
+	// -b <base>` argument position. A value beginning with '-' is then not a
+	// branch but a FLAG — `--upload-pack=...` or `--config=core.fsmonitor=...`
+	// makes git run a command of the caller's choosing on the executor. BaseRE
+	// is git's own branch shape, which is alnum-led and therefore cannot begin
+	// with a dash; that is the property doing the work, not the length bound.
+	base := strings.TrimSpace(in.Base)
+	if base != "" && !BaseRE.MatchString(base) {
+		return Accepted{}, fmt.Errorf("coding: %q is not a branch name", base)
+	}
+	project := strings.TrimSpace(in.Project)
+	if project != "" && !RepoRE.MatchString(project) {
+		return Accepted{}, fmt.Errorf("coding: %q is not a project name", project)
+	}
 	if len(prompt) > maxPromptLen {
 		prompt = prompt[:maxPromptLen]
 	}
@@ -159,23 +180,8 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 
 	req := Req{
 		Org: org, UserID: subject, AgentRef: in.AgentRef, Repo: repo,
-		Project: strings.TrimSpace(in.Project), Base: strings.TrimSpace(in.Base),
+		Project: project, Base: base,
 		Prompt: prompt, TimeoutSeconds: in.TimeoutSeconds, TargetID: strings.TrimSpace(in.TargetID),
-	}
-
-	// THE CREDENTIAL IS RESOLVED HERE AND NOWHERE ELSE.
-	//
-	// A routed run needs none — the machine authenticates git with its own — so
-	// the fetch is skipped and a workspace with no sealed credential can still
-	// route. A sandbox run without one fails closed: an empty token is an error,
-	// never a run that proceeds and discovers at push time it cannot write.
-	if req.TargetID == "" {
-		user, token, err := agentCredential(ctx, org)
-		if err != nil {
-			pool.release(org)
-			return Accepted{}, err
-		}
-		req.CredUser, req.CredToken = user, token
 	}
 
 	// The session is opened on the DOOR's context, which already carries the
@@ -190,6 +196,32 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 	req.SessionID = sessionID
 	branch := BranchFor(sessionID)
 
+	// THE CREDENTIAL IS RESOLVED HERE AND NOWHERE ELSE, and it is resolved AFTER
+	// the session, because the session id is what names the branch and the branch
+	// is what the grant is FOR. A credential that had to be fetched before we knew
+	// what it was for is a credential that could not have been bounded.
+	//
+	// A routed run needs none — the machine authenticates git with its own — so
+	// the request is skipped and a workspace whose repo the forge does not hold
+	// can still route. A sandbox run without one fails closed: an empty token is
+	// an error, never a run that proceeds and discovers at push time it cannot
+	// write.
+	var credHandle string
+	if req.TargetID == "" {
+		// The grant lasts exactly as long as the run may — the run's own bounded
+		// budget, plus a minute so a push at the very end of it still lands. Tying
+		// the two together is what makes "the capability dies with the run" true
+		// even when nothing gets to withdraw it.
+		token, handle, err := agentCredential(ctx, repo, project, "refs/heads/"+branch,
+			budget(req.TimeoutSeconds)+time.Minute)
+		if err != nil {
+			_ = d.Sessions.Close(ctx, org, sessionID, statusError)
+			pool.release(org)
+			return Accepted{}, err
+		}
+		req.CredUser, req.CredToken, credHandle = agentCredUser, token, handle
+	}
+
 	// Detach, and state the tenant again on the way out.
 	//
 	// Both halves are load-bearing. DETACHED because the run outlives the door's
@@ -202,6 +234,12 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 	go func() {
 		defer cancel()
 		defer pool.release(org)
+		// The grant dies with the run rather than with its TTL. Registered before
+		// the panic guard so it runs after it — a run that panicked still gives
+		// the capability back — and on a cancel-immune context, because the run
+		// that most needs its credential withdrawn is the one that hit its
+		// deadline, and that is exactly when runCtx is already dead.
+		defer releaseCredential(context.WithoutCancel(runCtx), credHandle)
 		defer func() {
 			// A run executes untrusted model output through a long seam chain. An
 			// unrecovered panic here would take down every tenant sharing this
@@ -234,44 +272,52 @@ func runContext(org string, timeoutSeconds int) (context.Context, context.Cancel
 	return context.WithTimeout(cloud.For(context.Background(), org), budget(timeoutSeconds))
 }
 
-// agentCredential reads the org's agent git credential from KMS over the plane,
-// fail-closed: an unreachable KMS, an absent secret, or an empty value each
-// return an error and NEVER a value. The username is a fixed basic-auth label
-// (git ignores it; the token is the secret) unless an operator sealed one.
+// agentCredential asks the forge to delegate ONE ref write, and returns the
+// bearer plus the handle that withdraws it.
 //
-// The org is NOT an argument to KMS. plane.SecretIn has no org field, on purpose:
-// the tenant rides the caller, so this reads the caller's own namespace and a
-// run can never address another tenant's secret by naming it.
-func agentCredential(ctx context.Context, org string) (user, token string, err error) {
-	sec, err := plane.Ask[plane.SecretIn, plane.Secret](ctx, "kms", plane.KMSGet,
-		&plane.SecretIn{Ref: credRef(org, agentCredToken)})
+// It used to read the org's sealed `agent` git token out of KMS. That token was
+// an ordinary IAM secret key, so IAM resolved it to a user and cloud minted a
+// full org principal from it: the process running untrusted model output held a
+// credential that opened /v1/kms/secrets — every other secret the org has,
+// including the one that posts to its Slack — and every other org-scoped API.
+// The push was confined and the credential was not, and the credential is what a
+// compromised run actually holds.
+//
+// A grant is not an identity. It resolves to no principal at all, so every gate
+// in the platform refuses it by default, and the one exception is the pack
+// protocol on the single repository it names (apps/git/grant.go). It also
+// removes an org-wide standing secret from the world rather than guarding it
+// better: there is nothing left for an operator to seal, and nothing left to
+// leak.
+//
+// Fail-closed, exactly as the KMS read was: an unreachable forge, a repository
+// that is not there, or an empty token each return an error and never a value.
+//
+// The org is NOT an argument. plane.GrantIn has no org field, on purpose: the
+// tenant rides the caller, so this delegates within the caller's own namespace
+// and a run can never reach another tenant's repository by naming it.
+func agentCredential(ctx context.Context, repo, project, ref string, ttl time.Duration) (token, handle string, err error) {
+	g, err := plane.Ask[plane.GrantIn, plane.Granted](ctx, "git", plane.GitGrant,
+		&plane.GrantIn{Repo: repo, Project: project, Ref: ref, TTLSeconds: int(ttl.Seconds())})
 	if err != nil {
-		return "", "", fmt.Errorf("coding: no agent git credential for this org: %w", err)
+		return "", "", fmt.Errorf("coding: the forge would not delegate a push for %s: %w", repo, err)
 	}
-	if sec == nil {
-		return "", "", fmt.Errorf("coding: no agent git credential for this org")
+	if g == nil || strings.TrimSpace(g.Token) == "" {
+		return "", "", fmt.Errorf("coding: the forge returned no push grant for %s", repo)
 	}
-	token = strings.TrimSpace(string(sec.Value))
-	if token == "" {
-		return "", "", fmt.Errorf("coding: the agent git credential for this org is empty")
-	}
-	user = defaultAgentUser
-	if u, uerr := plane.Ask[plane.SecretIn, plane.Secret](ctx, "kms", plane.KMSGet,
-		&plane.SecretIn{Ref: credRef(org, agentCredUser)}); uerr == nil && u != nil {
-		if v := strings.TrimSpace(string(u.Value)); v != "" {
-			user = v
-		}
-	}
-	return user, token, nil
+	return g.Token, g.Handle, nil
 }
 
-// credRef addresses the org's sealed agent credential. org is shape-checked by
-// Start before it ever reaches here, which is what makes this concatenation safe. It mirrors the
-// integrations KMS layout, which is where an operator seals it today, so this
-// reads the credential that already exists rather than minting a second path
-// for the same secret.
-func credRef(org, name string) string {
-	return "/orgs/" + org + "/integrations/" + agentCredProvider + "/" + name
+// releaseCredential withdraws the grant when the run is over, so a grant's life
+// is the RUN's life and not its TTL. Best-effort: the TTL is what makes this
+// safe to miss, and a run that already finished must not fail because the forge
+// was slow to hear about it.
+func releaseCredential(ctx context.Context, handle string) {
+	if strings.TrimSpace(handle) == "" {
+		return
+	}
+	_, _ = plane.Ask[plane.RevokeIn, plane.Revoked](ctx, "git", plane.GitRevoke,
+		&plane.RevokeIn{Handle: handle})
 }
 
 // ---- the bounded pool ------------------------------------------------------
@@ -332,14 +378,20 @@ func (l *limiter) release(org string) {
 
 // ---- config (env, read at call time — operator-injected from KMS) ----------
 
+// budget is how long ONE run may take, and therefore how long its delegated
+// push stays usable. Capped at maxRunBudget: a caller names a timeout, it does
+// not name an unbounded one.
 func budget(timeoutSeconds int) time.Duration {
-	if timeoutSeconds > 0 {
-		return time.Duration(timeoutSeconds) * time.Second
+	d := defaultRunBudget
+	switch {
+	case timeoutSeconds > 0:
+		d = time.Duration(timeoutSeconds) * time.Second
+	default:
+		if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("CODING_TIMEOUT_SEC"))); err == nil && v > 0 {
+			d = time.Duration(v) * time.Second
+		}
 	}
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("CODING_TIMEOUT_SEC"))); err == nil && v > 0 {
-		return time.Duration(v) * time.Second
-	}
-	return defaultRunBudget
+	return min(d, maxRunBudget)
 }
 
 func concurrency() int {
