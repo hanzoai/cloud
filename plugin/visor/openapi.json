@@ -1359,7 +1359,7 @@
       "bindingList": {
         "properties": {
           "agentBindings": {
-            "description": "AgentBindings is one row per bound machine, emitted verbatim as vm reports\nit so vm stays the single source of truth for the binding shape.",
+            "description": "AgentBindings is one row per bound machine, emitted verbatim as vm reports\nit.",
             "items": {
               "$ref": "#/components/schemas/agentBinding"
             },
