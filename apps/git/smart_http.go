@@ -196,8 +196,39 @@ func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
 	if ct := c.Header("Content-Type"); ct != "application/x-"+svcReceivePack+"-request" {
 		return zip.ErrBadRequest("unexpected content-type for " + svcReceivePack)
 	}
-	body := packRequestBody(c)
 	bareDir := s.State.storage.absRepoPath(org, project, name)
+
+	// THE REF POLICY, applied before a single object is indexed.
+	//
+	// It runs here because this is the point every push passes through and none
+	// can decline to — a rule in the client, the sandbox or the orchestrator is a
+	// rule the compromised party gets to skip. Refusing BEFORE receive-pack runs
+	// also means a refused push costs no disk: the pack is never unpacked.
+	//
+	// The body is read once and reused: packRequestBody already copies it out of
+	// the framework's reused buffer, so the policy reads the same bytes git will,
+	// and there is no window in which the two could disagree about what was asked.
+	raw := append([]byte(nil), c.Body()...)
+	cmds, _, caps, perr := parseRefCommandsCaps(raw)
+	if perr != nil {
+		// A push whose commands we could not read is refused, not waved through:
+		// a policy applied to commands you could not parse is not a policy. This
+		// one IS an HTTP error, because a body that is not the protocol has no
+		// report-status framing to answer in.
+		return zip.ErrBadRequest("unreadable push: " + perr.Error())
+	}
+	if verr := checkRefPolicy(cmds, defaultBranchOf(c.Context(), bareDir)); verr != nil {
+		s.Log.Warn("git push refused by ref policy", "org", org, "repo", name, "reason", verr.Error())
+		// 200 with a report-status, NOT a 403. The push is refused either way;
+		// the difference is whether the human reads the reason or reads
+		// "RPC failed; HTTP 403" and concludes the forge is broken. Nothing is
+		// applied — receive-pack never runs and the pack is never unpacked.
+		c.SetHeader("Content-Type", "application/x-"+svcReceivePack+"-result")
+		setGitNoCache(c)
+		return c.Bytes(http.StatusOK, refusalReport(cmds, caps, verr.Error()))
+	}
+
+	body := bytes.NewReader(raw)
 	before := branchTips(c.Context(), bareDir)
 
 	cmd, err := gitCmd(c.Context(), gitProtocolEnv(gitProtocol(c)),
