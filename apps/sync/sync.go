@@ -82,6 +82,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	registerProvider(gitProvider{})
 	cloud.RegisterSync(reconcileEvent)
+	// The same reconcile, offered to the processes the triggers actually land in —
+	// integrations and git, neither of which is this one (run_plane.go).
+	exposeRun()
 	schedStop = startScheduler(s) // freshness: periodic reconcile of every poll sync (env-gated)
 
 	b.Log.Info("sync mounted", "brand", deps.Brand, "providers", "git")

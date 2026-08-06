@@ -31,6 +31,8 @@ const App = "platform"
 // plane_registry_test.go.
 var Ops = []string{
 	plane.PlatformFleet,
+	plane.PlatformPush,
+	plane.PlatformRelease,
 }
 
 // PlatformFleet every app this org can observe.
@@ -38,4 +40,18 @@ var Ops = []string{
 // Calls plane.PlatformFleet on platform over the peer plane.
 func PlatformFleet(ctx context.Context) (*plane.Fleet, error) {
 	return plane.Ask[struct{}, plane.Fleet](ctx, App, plane.PlatformFleet, &struct{}{})
+}
+
+// PlatformPush turn a landed push into a build for every app tracking it.
+//
+// Calls plane.PlatformPush on platform over the peer plane.
+func PlatformPush(ctx context.Context, in *plane.PushIn) (*plane.Built, error) {
+	return plane.Ask[plane.PushIn, plane.Built](ctx, App, plane.PlatformPush, in)
+}
+
+// PlatformRelease roll a proven, clean-semver image onto its operator Service CR.
+//
+// Calls plane.PlatformRelease on platform over the peer plane.
+func PlatformRelease(ctx context.Context, in *plane.ReleaseIn) (*plane.Released, error) {
+	return plane.Ask[plane.ReleaseIn, plane.Released](ctx, App, plane.PlatformRelease, in)
 }

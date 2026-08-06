@@ -9,11 +9,28 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/webui"
 	"github.com/zap-proto/zip"
 )
+
+// consoleBundle is the console this host mounts under test: the SPA shell and
+// nothing else.
+//
+// In production the bytes are a PUBLISHED SITE RELEASE, loaded at boot and kept
+// current by a poll (webui/release), which is why webui takes them as an argument
+// rather than embedding them. These tests are about the ROUTER — what wins at "/"
+// against an app prefix, an absent subsystem, the agent door, the spec door — so
+// they need only that a console is mounted at all, and would say nothing useful
+// about the release loader. It is shared by every host-shaped test in this
+// package so all of them mount the same thing.
+func consoleBundle() fstest.MapFS {
+	return fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><head><title>Hanzo Cloud Console</title></head><body></body></html>")},
+	}
+}
 
 // This file is about ONE property: a subsystem that cannot start must not take
 // the others down with it.
@@ -156,8 +173,8 @@ func TestAnAbsentPrefixBeatsTheConsoleCatchAll(t *testing.T) {
 				t.Fatal(err)
 			}
 			health(app, absent)
-			if err := webui.Mount(app); err != nil {
-				t.Skipf("console embed unavailable in this build: %v", err)
+			if err := webui.Mount(app, consoleBundle()); err != nil {
+				t.Fatalf("mount console: %v", err)
 			}
 
 			code, ctype, body := do(t, app, tc.probe)
