@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 // TestAPIPrefixNeverRendersHTML pins the house rule: we version at /v1/ and
@@ -13,7 +14,9 @@ import (
 // prefix saw a console page instead of an error, and /api/<nonsense> answered
 // 200 too. Anything under /api/ must be a real 404, never the shell.
 func TestAPIPrefixNeverRendersHTML(t *testing.T) {
-	h := &consoleHandler{index: []byte("<!DOCTYPE html><title>shell</title>")}
+	h := &consoleHandler{fsys: fstest.MapFS{
+		"index.html": {Data: []byte("<!DOCTYPE html><title>shell</title>")},
+	}}
 	for _, p := range []string{"/api/", "/api/v1/user", "/api/health", "/api/totally-made-up-nonsense"} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
