@@ -325,7 +325,7 @@ var Apps = []App{
 	{Name: "gateway", Prefixes: []string{"/v1/gateway"}},
 	{Name: "entitlements", Prefixes: []string{"/v1/entitlements", "/v1/orgs/:org/entitlements"}},
 	{Name: "exec", Prefixes: []string{"/v1/download", "/v1/exec", "/v1/files", "/v1/upload"}},
-	{Name: "sandbox", Prefixes: []string{"/v1/sandboxes"}},
+	{Name: "sandboxes", Prefixes: []string{"/v1/sandboxes"}},
 	{Name: "websearch", Prefixes: []string{"/v1/websearch", "/v1/scrape"}},
 	{Name: "crawl", Prefixes: []string{"/v1/crawl"}},
 	{Name: "index", Prefixes: []string{"/v1/index"}},
