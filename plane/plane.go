@@ -411,6 +411,25 @@ const (
 	SandboxRead  = "sandbox_read"
 	SandboxWrite = "sandbox_write"
 	SandboxEnd   = "sandbox_end"
+
+	// The FIGURES seam: one question — "what are this org's headline numbers?" —
+	// asked of every domain that can answer it, at one address each.
+	//
+	// It is one op repeated rather than one op shared because the answer is each
+	// app's OWN: books alone knows what a dollar of revenue is, git alone knows
+	// what a repository is, projects alone knows what deployed means. What they
+	// share is the SHAPE of the reply ([FiguresOut]), so the advisor that reads
+	// them needs no per-domain branch — a new domain is a new op and a new line,
+	// never an edit to the reader.
+	//
+	// They are on the PLANE, not in a package, because /v1/ask is its own plugin
+	// process: the pod forks one process per app, so the advisor and every domain
+	// it asks are separate pids. An in-process read reaches only routes the ASK
+	// binary mounts, which is /v1/ask and nothing else — which is why the advisor
+	// answered every question from its fallback while books sat healthy next door.
+	BooksFigures    = "books_figures"
+	GitFigures      = "git_figures"
+	ProjectsFigures = "projects_figures"
 )
 
 // HostApp is the socket name the fleet router answers on. It is not an app —
@@ -2276,4 +2295,41 @@ type CodingStarted struct {
 	Repo      string `json:"repo"`
 	Routed    bool   `json:"routed,omitempty"`
 	TargetID  string `json:"targetId,omitempty"`
+}
+
+// ---- ask.figures -----------------------------------------------------------
+
+// Figure is ONE grounded number a domain read for the caller's own org: what it
+// is called, its value ALREADY FORMATTED by the domain that owns it, and the
+// window it covers.
+//
+// The value is a string, and that is the whole point. books owns what a dollar
+// looks like, git owns what a byte count looks like; a float on this wire would
+// invite the reader to format it a second way, and two spellings of one number
+// is how a figure starts disagreeing with the page it came from.
+type Figure struct {
+	Label  string `json:"label"`
+	Value  string `json:"value"`
+	Period string `json:"period,omitempty"`
+}
+
+// FiguresIn is empty, and stays empty.
+//
+// There is nothing to ask for because there is nothing a caller may choose. The
+// org is the CALLER's — forwarded from the gateway's assertion by [Ask] — so the
+// one field this struct might plausibly grow is exactly the field that would let
+// one tenant read another's books. An empty In is that rule made structural: not
+// "we validate the org argument", but "there is no org argument".
+type FiguresIn struct{}
+
+// FiguresOut is a domain's headline figures for the caller's org, in the order
+// the domain thinks they should be read.
+//
+// An org with nothing in it answers an EMPTY slice, never an error: "you have no
+// projects" is a true answer to "what have I deployed", and an outage that
+// arrived as a zero would be indistinguishable from it. The domains keep the two
+// apart — absence is an empty slice, failure is an error — because the advisor
+// above them states figures verbatim and cannot audit what it is handed.
+type FiguresOut struct {
+	Figures []Figure `json:"figures"`
 }

@@ -139,23 +139,31 @@ func init() {
 			"under the caller's own credentials, and only then is the result narrated. So the "+
 			"figures and their sources are the domain's, resolved before any model call and never "+
 			"altered by one — a wrong answer is a wrong query, never an invention.\n\n"+
-			"Domains: books (the org's ledger) and web (search, news, research, deep). A validated "+
-			"principal is required; the answer is scoped to that principal's org and nothing else.")
+			"Domains: books (the org's ledger), projects (what is built and what of it is deployed), "+
+			"git (the org's repositories and what changed in them), and web (search, news, research, "+
+			"deep). A validated principal is required; the answer is scoped to that principal's org "+
+			"and nothing else.")
 }
 
-// Mount wires POST /v1/ask into cloud, building the contributor registry (books today) over the
-// SAME app so a contributor's Gather replays a domain's grounded read in-process. The narration
-// model comes from deps.AI. Mount is a distinct route, so it wins Fiber's first-match over the
-// ai /v1/* catch-all.
+// Mount wires POST /v1/ask into cloud, building the contributor registry from domains() —
+// every domain a PEER asked over the internal plane, because this app ships as its own
+// process and the domains it grounds in do not run in it. The narration model comes from
+// deps.AI. Mount is a distinct route, so it wins Fiber's first-match over the ai /v1/*
+// catch-all.
+//
+// app is not handed to the registry: a contributor reaches its domain by NAME over the
+// plane, so there is nothing for it to do with this process's router. Keeping the router
+// out of the seam is what makes "which process owns that data" stop being the advisor's
+// problem.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "ask")
 	svc := &cloud.Service[*state]{Base: b, State: &state{
-		registry: NewRegistry(newBooksContributor(app)),
+		registry: NewRegistry(domains()...),
 		ai:       deps.AI,
 		model:    cloud.DefaultModel,
 	}}
 	app.Post("/v1/ask", cloud.Handle(svc, askHandler))
-	b.Log.Info("ask mounted", "prefix", "/v1/ask", "domains", "books,web", "web_modes", "search,news,research,deep")
+	b.Log.Info("ask mounted", "prefix", "/v1/ask", "domains", "books,projects,git,web", "web_modes", "search,news,research,deep")
 	return nil
 }
 
@@ -196,10 +204,19 @@ func askHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 		return askJSON(c, honestFallback())
 	}
 
-	// Gather the REAL figures in-process, under the caller's OWN credentials (so the read is
-	// scoped to the caller's org and no other). A gather error degrades to the honest fallback —
-	// never a guessed number.
-	facts, sources, err := domain.Gather(c.Context(), credential(c))
+	// Gather the REAL figures from the domain, AS THIS CALLER — so the read is scoped to the
+	// caller's own org and no other. A gather error degrades to the honest fallback — never a
+	// guessed number.
+	//
+	// cloud.As(c, "") and not c.Context(), and the difference is the whole tenancy story on
+	// this path. This is an UNTYPED handler: zip attaches the in-flight request to the context
+	// it hands a TYPED op, not to this one, so c.Context() answers "nobody is calling" and a
+	// domain that correctly refuses an anonymous read would refuse every question ever asked.
+	// As carries THIS request's principal — read off the headers the edge already validated,
+	// which is also what the gate above just checked — onto a context the peer can read it
+	// from. The empty org argument is "keep the caller's own tenant": there is no widening
+	// here, and no place for one, because a question is only ever asked about the asker.
+	facts, sources, err := domain.Gather(cloud.As(c, ""), credential(c))
 	if err != nil {
 		s.Log.Warn("ask gather failed", "domain", domain.Name(), "err", err)
 		return askJSON(c, honestFallback())
@@ -305,22 +322,28 @@ func templateAnswer(facts []Fact) string {
 // figure the advisor cannot ground is a figure it must not state.
 func honestFallback() askAnswer {
 	return askAnswer{
-		Answer:    "I can answer questions about your finances today — MRR, revenue, burn, runway, margin, cash, and P&L. Infra and usage advisors are coming.",
+		Answer: "I can answer questions about your finances (MRR, revenue, burn, runway, margin, cash, P&L), " +
+			"your projects and what of them is deployed, and your repositories and what changed in them.",
 		Figures:   []Fact{},
-		Followups: []string{"What's my MRR?", "How long is my runway?", "What is my gross margin?"},
+		Followups: []string{"What's my MRR?", "What have I deployed?", "How many repositories do I have?"},
 		Sources:   []string{},
 		Domain:    "",
 	}
 }
 
 // followups returns sharp next questions for a domain — deterministic, so the advisor always
-// offers a path forward. Extended per domain as new contributors join.
+// offers a path forward. One case per contributor; the default is the cross-domain menu, which
+// is also what a caller sees when no domain matched.
 func followups(domain string) []string {
 	switch domain {
 	case "books":
 		return []string{"How long is my runway?", "What is my gross margin?", "How much of revenue is recurring?"}
+	case "projects":
+		return []string{"Which projects are live?", "What did I deploy most recently?", "How many repositories do I have?"}
+	case "git":
+		return []string{"Which repositories changed recently?", "What have I deployed?", "How much code do I have?"}
 	default:
-		return []string{"What's my MRR?", "How long is my runway?"}
+		return []string{"What's my MRR?", "What have I deployed?", "How many repositories do I have?"}
 	}
 }
 
