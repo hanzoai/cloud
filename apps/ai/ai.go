@@ -215,7 +215,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			return f(ctx, cloud.UsageEvent{
 				Subject: u.Subject, Namespace: u.Namespace, USD: u.USD,
 				Currency: u.Currency, Model: u.Model, Provider: u.Provider,
-				RequestID: u.RequestID,
+				// The module's field is spelled RequestID; the VALUE is the message
+				// row's id — the act's server-assigned name. It rides as such.
+				Ref: u.RequestID,
 			})
 		})
 	} else {
@@ -230,7 +232,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 					Subject: u.Subject,
 					Amount:  plane.Money{Decimal: u.USD, Currency: cur},
 					Usage: plane.Usage{
-						Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
+						// Same value, named for what it is: the message row's id is
+						// the act, so the peer's debit is exactly-once on it.
+						Model: u.Model, Provider: u.Provider, Ref: u.RequestID,
 					},
 				})
 			if err != nil {
