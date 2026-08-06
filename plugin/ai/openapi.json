@@ -5167,46 +5167,6 @@
           }
         },
         "type": "object"
-      },
-      "crawlDocument": {
-        "type": "object",
-        "properties": {
-          "markdown": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {}
-          },
-          "title": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          }
-        }
-      },
-      "crawlRequest": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string"
-          }
-        }
-      },
-      "crawlResult": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/crawlDocument"
-          },
-          "error": {
-            "type": "string"
-          },
-          "success": {
-            "type": "boolean"
-          }
-        }
       }
     }
   }
