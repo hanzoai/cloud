@@ -29,9 +29,38 @@ package cloud
 // per request. With no registry mounted, nothing is ever "foreign", so the guard
 // is a no-op passthrough (an unmounted registry owns nothing), never a crash.
 
+// THE HOLE THIS CLOSED. "With no registry mounted, nothing is ever foreign" was
+// written as a safe default and was not one, because no registry is EVER mounted
+// where this is read. The boundary is edge middleware in every process; the
+// registry belongs to `projects`, which runs as its own plugin. So the guard
+// consulted an empty list, concluded "not foreign", and passed every asserted
+// X-Project-Id through — the cross-org project impersonation check was off
+// fleet-wide, and its own passing tests only ever exercised the co-resident case.
+//
+// Absence of an ANSWER may never read as permission. The registry is now ASKED,
+// over the plane, and the three outcomes stay three:
+//
+//	the answer says mine        keep      (provably the caller's own)
+//	the answer says other       refuse    (a cross-org claim)
+//	the answer says neither     keep      (an unregistered within-org label)
+//	no registry in the fleet    keep      — and this is now PROVEN rather than
+//	                                       assumed: ErrNoPeer means no projects
+//	                                       app exists anywhere, so no project id
+//	                                       is registered and none can be foreign
+//	the registry failed         REFUSE    (fail closed, as before)
+//
+// The read is cached per (org, project) with a short TTL, on a detached context,
+// exactly like the scope-rule read in middleware_ratelimit.go — this runs on
+// every request that asserts a project, and a client disconnect must not poison
+// what the cache holds.
+
 import (
 	"context"
+	"errors"
 	"sync"
+	"time"
+
+	"github.com/hanzoai/cloud/plane"
 )
 
 // OrgScopeResolver reports the ownership of a project identifier relative to
@@ -66,11 +95,96 @@ func RegisterOrgScopeResolver(r OrgScopeResolver) {
 	orgResolverMu.Unlock()
 }
 
+// ResetOrgScopeResolvers drops every registered registry. TEST-ONLY: a test
+// mounts and unmounts repeatedly, and registration APPENDS, so without this a
+// later test is answered by an earlier one's registry. Production registers once
+// at Mount.
+func ResetOrgScopeResolvers() {
+	orgResolverMu.Lock()
+	orgResolvers = nil
+	orgResolverMu.Unlock()
+	ownershipCache.Lock()
+	ownershipCache.at = nil
+	ownershipCache.Unlock()
+}
+
 func currentOrgResolvers() []OrgScopeResolver {
 	orgResolverMu.RLock()
 	rs := orgResolvers
 	orgResolverMu.RUnlock()
 	return rs
+}
+
+// ownershipTTL bounds how long one verdict is reused. Short, because it gates a
+// cross-org claim: a project moved between orgs must stop being "mine" quickly.
+// Long enough that a burst of requests from one caller costs one plane call.
+const ownershipTTL = 30 * time.Second
+
+var ownershipCache struct {
+	sync.Mutex
+	at map[string]ownershipEntry
+}
+
+type ownershipEntry struct {
+	mine, other bool
+	expiry      time.Time
+}
+
+// ProjectOwnership answers whether org owns the project named by idOrSlug, and
+// whether some other org does.
+//
+// It is TOTAL: co-resident registries answer directly, and otherwise the
+// projects app is asked over the plane. There is no third state where it
+// silently declines to look — the only way it produces no answer is by
+// returning an error, and ErrNoPeer specifically means no registry exists in
+// this fleet at all.
+//
+// Both booleans false with a nil error is a real answer: nobody has registered
+// this identifier, so it is a free-form within-org label.
+func ProjectOwnership(ctx context.Context, org, idOrSlug string) (mine, other bool, err error) {
+	if rs := currentOrgResolvers(); len(rs) > 0 {
+		var hadErr error
+		for _, r := range rs {
+			m, o, rerr := r.ProjectOwnership(ctx, org, idOrSlug)
+			if rerr != nil {
+				hadErr = rerr
+				continue
+			}
+			mine = mine || m
+			other = other || o
+		}
+		if mine || other {
+			return mine, other, nil
+		}
+		return false, false, hadErr
+	}
+
+	key := org + "\x00" + idOrSlug
+	ownershipCache.Lock()
+	e, ok := ownershipCache.at[key]
+	ownershipCache.Unlock()
+	if ok && time.Now().Before(e.expiry) {
+		return e.mine, e.other, nil
+	}
+
+	// The org is STATED rather than forwarded: this may run on a detached context,
+	// and the question is "does THIS org own it", which the callee must be told.
+	out, err := Ask[plane.OwnerIn, plane.Ownership](For(ctx, org), "projects",
+		plane.ProjectsOwnership, &plane.OwnerIn{IDOrSlug: idOrSlug})
+	if err != nil {
+		return false, false, err
+	}
+	if out == nil {
+		return false, false, errors.New("cloud: projects answered nothing about project ownership")
+	}
+
+	ownershipCache.Lock()
+	if ownershipCache.at == nil {
+		ownershipCache.at = map[string]ownershipEntry{}
+	}
+	ownershipCache.at[key] = ownershipEntry{mine: out.Mine, other: out.Other, expiry: time.Now().Add(ownershipTTL)}
+	ownershipCache.Unlock()
+	return out.Mine, out.Other, nil
 }
 
 // projectIsForeign reports whether project is a cross-org impersonation for org:
@@ -85,22 +199,22 @@ func projectIsForeign(ctx context.Context, org, project string) bool {
 	if org == "" || project == "" {
 		return false
 	}
-	var mine, other, hadErr bool
-	for _, r := range currentOrgResolvers() {
-		m, o, err := r.ProjectOwnership(ctx, org, project)
-		if err != nil {
-			hadErr = true
-			continue
-		}
-		mine = mine || m
-		other = other || o
-	}
+	mine, other, err := ProjectOwnership(ctx, org, project)
 	switch {
 	case mine:
 		return false // provably the caller's own project → keep
 	case other:
 		return true // only another org's registered project → refuse
+	case err == nil:
+		return false // nobody registered it → a free-form within-org label → keep
+	case errors.Is(err, ErrNoPeer):
+		// No projects app anywhere in this fleet, so no project identifier is
+		// registered and none can belong to another org. This is the ONE case the
+		// old passthrough was right about, and it is the only one it could tell
+		// apart from a registry that simply was not in this process — which was
+		// every other case, and why the guard was off.
+		return false
 	default:
-		return hadErr // unregistered free-form label → keep, unless a lookup failed
+		return true // the registry is there and could not answer → fail CLOSED
 	}
 }

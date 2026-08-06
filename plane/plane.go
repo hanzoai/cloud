@@ -68,6 +68,14 @@ const (
 	// the key lives in the project store.
 	ProjectsResolveKey = "projects_resolve_key"
 
+	// ProjectsOwnership answers "does this org own the project this request
+	// claims?" for the identity trust boundary. The boundary is cloud edge
+	// middleware in EVERY process; the registry is the projects app's alone. With
+	// no resolver the guard returned "not foreign" — so the cross-org project
+	// impersonation check was off wherever projects was not co-resident, which is
+	// everywhere. Absence of an ANSWER may never read as permission.
+	ProjectsOwnership = "projects_ownership"
+
 	FinanceAuthorize = "finance_authorize" // the prepaid gate
 	FinanceBalance   = "finance_balance"
 	FinanceRecord    = "finance_record" // the meter
@@ -1441,4 +1449,29 @@ type LiveSite struct {
 	UpdatedAt  int64  `json:"updatedAt,omitempty"`
 	Upstream   string `json:"upstream,omitempty"`
 	License    string `json:"license,omitempty"`
+}
+
+// ---- projects: the org-scope ownership answer ------------------------------
+
+// OwnerIn names a project identifier — a slug or an opaque id — to be judged
+// against the CALLER's org. It carries no org for the usual reason, and here the
+// reason is sharper than usual: the org is exactly what the answer is relative
+// to, so a caller that could state it could ask the question about somebody else
+// and act on the answer.
+type OwnerIn struct {
+	IDOrSlug string `json:"idOrSlug"`
+}
+
+// Ownership is the registry's verdict on one project identifier.
+//
+// Mine and Other are SEPARATE booleans rather than one enum because three
+// distinct facts have to survive the trip: the caller's org owns it (keep), some
+// OTHER org owns it (refuse), or NOBODY has registered it — a free-form
+// within-org label, which is neither and must be kept. Collapsing the third into
+// either of the first two breaks a working surface or opens the guard.
+type Ownership struct {
+	// Mine is true when the caller's own org owns a project with this id/slug.
+	Mine bool `json:"mine"`
+	// Other is true when some org OTHER than the caller's owns one.
+	Other bool `json:"other"`
 }
