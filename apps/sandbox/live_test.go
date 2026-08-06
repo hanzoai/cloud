@@ -34,15 +34,15 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 		t.Fatalf("no cluster: %v", err)
 	}
 
-	m := Machine{
+	m := Sandbox{
 		ID:  "live-proof",
 		Org: "hanzo",
-		// exec() refuses a machine that is not running, and start() cannot set
-		// this for us — Machine is a value, so the caller owns the status the
+		// exec() refuses a sandbox that is not running, and start() cannot set
+		// this for us — Sandbox is a value, so the caller owns the status the
 		// same way the handler does after it writes the row.
 		Status: "running",
 		Class:  "exec",
-		Pod:   fmt.Sprintf("sandbox-live-proof-%d", time.Now().Unix()),
+		Pod:    fmt.Sprintf("sandbox-live-proof-%d", time.Now().Unix()),
 		// The FULL image reference, not imageFor(). imageFor builds our own
 		// one-image-three-tags naming (repo:class-tag), which is right in
 		// production and wrong here: proving the mechanism must not require our

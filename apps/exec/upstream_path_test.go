@@ -18,7 +18,7 @@ import (
 // could see it, because each package only ever measured itself.
 //
 // These tests pin the SAME constant from both sides. apps/functions has the
-// mirror (invoke_upstream_path_test.go). Move exec.Path and both
+// mirror (invoke_upstream_path_test.go). Move Path and both
 // follow; move one consumer and one goes red.
 
 // TestProxyAsksUpstreamForLibreChatExec measures the real proxy against a
@@ -36,12 +36,12 @@ func TestProxyAsksUpstreamForLibreChatExec(t *testing.T) {
 		t.Fatalf("newProxy: %v", err)
 	}
 	rec := httptest.NewRecorder()
-	p.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, exec.Path,
+	p.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, Path,
 		strings.NewReader(`{"lang":"py","code":"print(1)"}`)))
 
-	if got != exec.Path {
+	if got != Path {
 		t.Fatalf("upstream saw %q, want %q — the two CODE_EXEC_UPSTREAM consumers "+
-			"must ask for the SAME path or no single env value serves both", got, exec.Path)
+			"must ask for the SAME path or no single env value serves both", got, Path)
 	}
 }
 
@@ -60,10 +60,10 @@ func TestUpstreamValueNeedsNoPathSuffix(t *testing.T) {
 		t.Fatalf("newProxy: %v", err)
 	}
 	rec := httptest.NewRecorder()
-	p.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, exec.Path, nil))
+	p.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, Path, nil))
 
-	if got != "/v1"+exec.Path {
-		t.Fatalf("got %q, want %q", got, "/v1"+exec.Path)
+	if got != "/v1"+Path {
+		t.Fatalf("got %q, want %q", got, "/v1"+Path)
 	}
 	// Documented so the failure mode is written down where an operator setting
 	// the env var will meet it: a path on CODE_EXEC_UPSTREAM is doubled, not
