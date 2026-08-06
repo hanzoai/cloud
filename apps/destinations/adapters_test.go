@@ -439,7 +439,7 @@ func TestLinkedInBuild(t *testing.T) {
 	}
 }
 
-func TestXBuildAndScaffold(t *testing.T) {
+func TestXBuild(t *testing.T) {
 	convs := xBuild([]Conversion{{Standard: EventPurchase, Value: 9, Currency: "USD", User: UserData{Email: "a@b.com", Clicks: map[string]string{"twclid": "tw1"}}}})
 	if len(convs[0].Identifiers) != 2 || convs[0].Identifiers[0].HashedEmail != sha("a@b.com") {
 		t.Errorf("identifiers: %+v", convs[0].Identifiers)
@@ -447,10 +447,15 @@ func TestXBuildAndScaffold(t *testing.T) {
 	if convs[0].Value != "9.00" {
 		t.Errorf("value = %q", convs[0].Value)
 	}
-	// Send is an honest scaffold: it refuses (OAuth1 not wired) rather than faking.
+	// The four OAuth1 parts ride as ONE composite JSON secret; a non-JSON blob is refused.
 	if _, err := (xDest{}).Send(context.Background(), Config{"pixelId": "o1"}, "tok",
 		[]Conversion{{Standard: EventPurchase, User: UserData{Email: "a@b.com"}}}); err == nil {
-		t.Fatal("x Send must return the honest not-enabled error")
+		t.Fatal("x Send must reject a non-JSON credential blob")
+	}
+	// Incomplete OAuth1 credentials are refused rather than sent unsigned.
+	if _, err := (xDest{}).Send(context.Background(), Config{"pixelId": "o1"}, `{"consumer_key":"ck"}`,
+		[]Conversion{{Standard: EventPurchase, User: UserData{Email: "a@b.com"}}}); err == nil {
+		t.Fatal("x Send must reject incomplete OAuth1 credentials")
 	}
 }
 
