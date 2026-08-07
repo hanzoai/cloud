@@ -12,6 +12,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/cloud/openapi"
@@ -1089,8 +1090,15 @@ func CtxShutdown(f func() error) ShutdownFunc {
 }
 
 // MountMetrics adapts hanzoai/metrics into a MountFunc. metrics declares its OWN
-// narrow Deps (Logger, DataDir, Brand) and does not import hanzoai/cloud, so Typed
-// cannot bridge it; this builds that Deps from cloud's and calls metrics.Mount.
+// narrow Deps (Logger, DataDir, Brand, Org) and does not import hanzoai/cloud, so
+// Typed cannot bridge it; this builds that Deps from cloud's and calls metrics.Mount.
+//
+// Org is the load-bearing one, and it points the other way: metrics used to
+// decide its own tenant by reading X-Org-Id, which is a header a caller sends,
+// so an anonymous request could read and write any org's telemetry. The org
+// rule belongs to the boundary that authenticates and lives once, in
+// principal.Org; handing it down is how a module that cannot import cloud still
+// applies cloud's rule instead of a weaker copy of it.
 //
 // It lives here rather than in package apps for exactly CtxShutdown's reason: an
 // apps-local identifier in a Wire entry is unreachable from the generated
@@ -1111,7 +1119,10 @@ func MountMetrics(app Router, deps Deps) error {
 	if a == nil {
 		return fmt.Errorf("metrics: router is not a zip app")
 	}
-	return metrics.Mount(a, metrics.Deps{Logger: deps.Logger, DataDir: deps.DataDir, Brand: deps.Brand})
+	return metrics.Mount(a, metrics.Deps{
+		Logger: deps.Logger, DataDir: deps.DataDir, Brand: deps.Brand,
+		Org: principal.Org,
+	})
 }
 
 // The prose for the operations this repo PUBLISHES but does not REGISTER.

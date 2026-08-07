@@ -1060,6 +1060,8 @@ github.com/hanzoai/licensing v0.1.10 h1:0z6A+g5/lJbBDb+6AyrwkDmL7UkVagkvCaupET0k
 github.com/hanzoai/licensing v0.1.10/go.mod h1:GT+YjWptmDkXnFJ6F9qkdQPCEfC97HpOs0YMrZirkhk=
 github.com/hanzoai/metrics v1.110.2 h1:Q79loK4YKNF255hIaf0CJsd5oq+yMRTsxZyoZREwTwQ=
 github.com/hanzoai/metrics v1.110.2/go.mod h1:+XOENte7ldQwSEsY/ASrvCifQqhIG+PFqTGzLxBLvYY=
+github.com/hanzoai/metrics v1.110.6 h1:DtF1nq1hqMZVQCpmmb9lk0DbDPKiUSxc3ArE/zqMEp8=
+github.com/hanzoai/metrics v1.110.6/go.mod h1:ZXjnuuvk/TivxMzPUuhgcUcogHVXJNXRCw0Nw8ygl1k=
 github.com/hanzoai/money v0.2.5 h1:rNtrr9rtcGSf48zFpB/xKVgyhgn7cQIt9f5PiKldcw4=
 github.com/hanzoai/money v0.2.5/go.mod h1:V1/RwypNNDjOArVFkkbNrgUXNUKorAiV1WtDNqfx95Q=
 github.com/hanzoai/namespace v1.2.0 h1:FLEHzR/GyE/OltXozMvT2n2FfUUxTuVVbILKZBkEjLI=
