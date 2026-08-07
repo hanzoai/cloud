@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
@@ -109,7 +110,12 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u_"+org)
 	}
-	resp, err := app.Test(req)
+	// A budget only a HANG can exceed. zip's Test defaults to one second, and
+	// creating a document decodes and stores a real PDF inside that second — so on a
+	// loaded box the deadline expired and the suite failed with "i/o timeout" at a
+	// route that was working. Nothing here crosses a socket, so this is not guarding
+	// against a slow peer; `go test -timeout` is what bounds a hang.
+	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
