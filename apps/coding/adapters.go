@@ -53,9 +53,14 @@ const seamTimeout = 20 * time.Second
 // exactly as the local path does.
 func NewDispatcher(log func(msg string, kv ...any)) Dispatcher {
 	d := Dispatcher{
-		Sessions:   planeSessions{},
-		Tracker:    planeTracker{},
-		Runner:     runner{},
+		Sessions: planeSessions{},
+		Tracker:  planeTracker{},
+		// The SANDBOX runner. The docker-CLI path it replaces could not run at all:
+		// bot-gateway has neither that binary nor a socket, so every dispatch 503d
+		// while the chain read as configured. Same gVisor/Kata boundary, asked of the
+		// apiserver instead of a CLI that is not installed — and over the plane, so
+		// there is no HTTP hop to port.
+		Runner:     sandboxRunner{},
 		CloneURL:   planeCloneURL,
 		VerifyRef:  planeVerifyRef,
 		Log:        log,
