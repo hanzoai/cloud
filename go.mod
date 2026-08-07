@@ -16,7 +16,7 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.1
 	github.com/hanzoai/cek v0.2.3
-	github.com/hanzoai/commerce v1.50.25
+	github.com/hanzoai/commerce v1.50.26
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
@@ -30,7 +30,7 @@ require (
 	github.com/hanzoai/pubsub v1.4.5
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
-	github.com/hanzoai/sqlite v0.5.1
+	github.com/hanzoai/sqlite v0.5.2
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
 	github.com/luxfi/log v1.6.0
@@ -77,7 +77,7 @@ require (
 	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
-	github.com/hanzoai/csqlite v0.1.0 // indirect
+	github.com/hanzoai/csqlite v0.1.2 // indirect
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
@@ -155,7 +155,7 @@ require (
 	github.com/grafana/regexp v0.0.0-20250905093917-f7b3be9d1853 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/hanzoai/govaluate v0.1.0 // indirect
-	github.com/hanzoai/ha v0.1.1
+	github.com/hanzoai/ha v0.2.0
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/huandu/go-clone v1.7.3 // indirect
@@ -691,7 +691,7 @@ require (
 	github.com/hanzoai/agent v0.1.3
 	github.com/hanzoai/ai v1.832.37
 	github.com/hanzoai/authz v1.10.29
-	github.com/hanzoai/base v1.5.15
+	github.com/hanzoai/base v1.5.17
 	github.com/hanzoai/licensing v0.1.10
 	github.com/hanzoai/metrics v1.110.2
 	github.com/hanzoai/o11y v1.5.62
