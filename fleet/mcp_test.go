@@ -143,7 +143,7 @@ func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 // tool's `op` enum (fleet/grouped.go), so the operations are read out of the
 // enums rather than off the tool names. That is the same question these tests
 // always asked — "what can be called through this door" — put to the surface
-// that now answers it. hanzo_describe has no enum and contributes nothing.
+// that now answers it. describe has no enum and contributes nothing.
 func offered(res map[string]any) []string {
 	var out []string
 	for _, tl := range published(res) {
@@ -160,7 +160,7 @@ func offered(res map[string]any) []string {
 	return out
 }
 
-// published is the TOOLS the door publishes — the hanzo_<app> envelopes
+// published is the TOOLS the door publishes — the per-subsystem envelopes
 // themselves, not the operations inside them.
 func published(res map[string]any) []any {
 	tools, _ := res["tools"].([]any)
