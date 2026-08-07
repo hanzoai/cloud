@@ -200,4 +200,4 @@ func TestCASFencerConcurrentClaimsUniqueRoundPerOwner(t *testing.T) {
 	}
 }
 
-var _ ha.Fencer = (*CASFencer)(nil)
+var _ ha.Leases = (*CASFencer)(nil)
