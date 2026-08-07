@@ -229,10 +229,10 @@ func TestWindowReportsTheLatestSizeAndThenEnds(t *testing.T) {
 	w.close()
 }
 
-// The shell must not require anything of the image beyond /bin/sh. The three
-// sandbox classes are three different images and the exec one is stock node
-// today, so a command that assumed a tool would be a terminal that opens and
-// immediately dies with a message nobody can read through a closed socket.
+// The shell must not require anything of the image beyond /bin/sh. The sandbox
+// classes are different images and the exec one is stock node today, so a
+// command that assumed a tool would be a terminal that opens and immediately
+// dies with a message nobody can read through a closed socket.
 func TestShellRequiresOnlySh(t *testing.T) {
 	argv := shell("")
 	if len(argv) != 3 || argv[0] != "/bin/sh" || argv[1] != "-lc" {
@@ -245,6 +245,36 @@ func TestShellRequiresOnlySh(t *testing.T) {
 	if strings.Contains(argv[2], "hanzo") {
 		t.Errorf("the shell names the hanzo CLI: %q — the CLI is a command the user "+
 			"types, not a precondition for getting a prompt", argv[2])
+	}
+}
+
+// THE CHAIN IS AN ORDER AND EVERY LINK IS OPTIONAL.
+//
+// zsh is what the admin image ships and what an operator expects to land in;
+// bash is what the toolchain images have; sh is what everything has. Two
+// properties, and the second is the one that is easy to lose: each step must be
+// asked for and not required, so a class that carries no zsh gets bash and a
+// stock node image still gets a prompt.
+//
+// It is checked by ORDER rather than by matching the whole string, because the
+// string is a shell fragment and asserting it verbatim would make every future
+// edit a test edit. What must not change is which shell wins when two are there.
+func TestShellPrefersZshAndFallsAllTheWayDown(t *testing.T) {
+	cmd := shell("")[2]
+	z, b, s := strings.Index(cmd, "exec zsh"), strings.Index(cmd, "exec bash"), strings.Index(cmd, "exec sh")
+	if z < 0 || b < 0 || s < 0 {
+		t.Fatalf("%q does not name all three of zsh, bash and sh", cmd)
+	}
+	if !(z < b && b < s) {
+		t.Errorf("%q does not prefer zsh, then bash, then sh — an operator's terminal "+
+			"lands in whichever shell comes first", cmd)
+	}
+	// Each step SETTLES. `||` is what makes a missing shell cost the next one on
+	// the list rather than the terminal; a chain joined by `&&` or `;` would open
+	// a socket into an image that has no zsh and close it again.
+	if strings.Count(cmd, "||") < 2 {
+		t.Errorf("%q does not fall through: every shell here is a preference, and an "+
+			"image that lacks one must still give a prompt", cmd)
 	}
 }
 

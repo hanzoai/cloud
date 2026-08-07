@@ -297,7 +297,11 @@ func create(s *Service, c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	m, err := Lease(s, c.Context(), o, Spec{
+	// principal.IsSuperAdmin is THE predicate — membership of the reserved `admin`
+	// org, attested by the identity middleware. It is read here and nowhere else in
+	// this package: what it decides is which image a `dev` sandbox runs (imageFor),
+	// and a second caller of it would be a second answer to drift from.
+	m, err := Lease(s, c.Context(), o, principal.IsSuperAdmin(c), Spec{
 		Class: body.Class, Project: body.Project, Image: body.Image,
 		Runtime: body.Runtime, TTLSec: body.TTLSec})
 	if err != nil {
@@ -565,7 +569,8 @@ func init() {
 			"many terminals as a caller has names for. It is 1-64 characters of letters, digits, "+
 			"`-` or `_` and may not begin with `-`; anything else is 400. Without `arg` the shell "+
 			"is unnamed and unmultiplexed.\n\n"+
-			"The shell is `bash -l`, falling back to `sh -l`, and to the plain shell again when "+
-			"the image has no tmux. Whatever else the image carries — the hanzo CLI included — is "+
-			"a command to type, never a requirement to get a prompt.")
+			"The shell is `zsh -l`, falling back to `bash -l` and then to `sh -l`, and to the "+
+			"plain shell again when the image has no tmux. Every step is a preference and none "+
+			"is a requirement: whatever else the image carries — the hanzo CLI included — is a "+
+			"command to type, never a condition for getting a prompt.")
 }

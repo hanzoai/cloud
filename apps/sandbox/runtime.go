@@ -229,10 +229,41 @@ func (r *runtime) ready() error {
 	return nil
 }
 
-// imageFor is the tag chain: one image, three tags. The deployment pins the
+// imageFor is the tag chain: one image, four tags. The deployment pins the
 // version; nothing here resolves `latest`, because an image decided by WHEN the
 // pod started rather than by what was shipped is not a deployment.
-func (r *runtime) imageFor(class string) string {
+//
+// `super` IS THE ONE PLACE AN IDENTITY REACHES THE IMAGE, and it reaches it for
+// exactly one class. A SuperAdmin's `dev` sandbox runs the `admin` image — dev
+// plus zsh, kubectl and doctl (hanzoai/bot Dockerfile.box) — and every other
+// caller's `dev` sandbox runs `dev`, byte for byte what it ran before.
+//
+// IT IS A SUBSTITUTION AND NOT A FOURTH CLASS. A class is a word in the request:
+// `classes` is the closed set a caller may ask for, and it stays three. Which
+// bytes a caller is handed is a fact about the CALLER, so it is answered where
+// the caller is known and never offered as a field. The row still says class
+// `dev`, the pod still carries the `dev` label, and only Image differs — which
+// is the honest record of what happened.
+//
+// ONLY `dev`, because `admin` is BUILT from dev and a substitute has to be a
+// superset of what it replaces or the swap quietly changes what the class means.
+// `exec` stays the throwaway a tool call spends fifteen minutes in — swapping it
+// would put a bigger image behind every function invocation this identity makes
+// — and `desktop` keeps the screen `admin` has no X server for.
+//
+// THE ADMIN IMAGE CARRIES NO CREDENTIAL, which is what keeps this one line
+// rather than a gate. kubectl with no kubeconfig and doctl with no token are
+// argument parsers; they reach nothing until a POD is handed something, and what
+// a pod is handed is decided by the identity that leased it, not by the bytes it
+// booted. So there is nothing here to defend against a caller who names the
+// admin image by hand — which checkImage already permits for every platform
+// image, for precisely this reason. That invariant is load-bearing: the day a
+// kubeconfig is wired in, it arrives at the pod from the identity, and it must
+// never arrive in a layer.
+func (r *runtime) imageFor(class string, super bool) string {
+	if super && class == "dev" {
+		class = "admin"
+	}
 	if d := r.digestFor(class); d != "" {
 		return r.image + "@" + d
 	}
@@ -275,10 +306,11 @@ func (r *runtime) imageFor(class string) string {
 //
 // SANDBOX_IMAGE_DIGEST is therefore honoured ahead of any tag: `repo@sha256:…`
 // names bytes, and bytes do not change under a running fleet.
-// It is PER CLASS, because the three classes are three different images and one
-// digest names one of them. A single SANDBOX_IMAGE_DIGEST would have quietly
-// given every class the exec image — the same shape of bug as a tag that looks
-// pinned and is not, which is what this function exists to end.
+// It is PER IMAGE — SANDBOX_IMAGE_DIGEST_EXEC, _DEV, _DESKTOP, _ADMIN — because
+// those are four different images and one digest names one of them. A single
+// SANDBOX_IMAGE_DIGEST would have quietly given every class the exec image: the
+// same shape of bug as a tag that looks pinned and is not, which is what this
+// function exists to end.
 func (r *runtime) digestFor(class string) string {
 	return strings.TrimSpace(os.Getenv("SANDBOX_IMAGE_DIGEST_" + strings.ToUpper(class)))
 }
