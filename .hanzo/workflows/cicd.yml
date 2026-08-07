@@ -556,8 +556,17 @@ jobs:
               echo "v${CAND} is held by ${HAVE:-another ref} — trying the next number"
               continue
             fi
+            if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
+              # Say which credential and which scope, because the symptom
+              # otherwise reads as "the claim is broken" and the cause is one
+              # secret. FORGE_TOKEN has only ever been READ with in this
+              # workflow — go module fetches and ls-remote — so the first
+              # release to write with it is the first test of its scope.
+              echo "::error::the forge refused the claim for v${CAND} with $CODE. FORGE_TOKEN must carry write:repository on hanzoai/cloud — it creates refs/tags/v<N> and the refs/smoked/<digest> receipt. Re-issue it with that scope and set it as the hanzoai org actions secret; nothing else here needs changing."
+              cat /tmp/claim.json; exit 1
+            fi
             if [ "$CODE" != "201" ]; then
-              echo "::error::claiming v${CAND} returned $CODE (expected 201 or 422) — refusing to build a version this run cannot prove it owns"
+              echo "::error::claiming v${CAND} returned $CODE (expected 201 created or 409 taken) — refusing to build a version this run cannot prove it owns"
               cat /tmp/claim.json; exit 1
             fi
             echo "claimed v${CAND} at ${SHA}"
