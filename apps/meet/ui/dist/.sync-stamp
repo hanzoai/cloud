@@ -7,5 +7,5 @@ idp=brand registry: hostname -> hanzo.id | lux.id | zoolabs.id (VITE_IAM_BRAND p
 callback=/meet/callback
 mint=POST /v1/meet/getToken CARRIES the bearer (sessionHeaders) — meet.hanzo.ai
      is bearer-only (host-only cookies), so without it every room join 401s
-source=hanzoai/admin:apps/meet@d1fb463 (main)
-built=vitest 20/20 + pkgs/admin 408/408
+source=hanzoai/admin:apps/meet@a4495ce (main)
+built=typecheck 11/11 + vitest 696
