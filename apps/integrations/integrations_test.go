@@ -529,11 +529,16 @@ func TestIntegrationsDisconnectNoPrincipal403(t *testing.T) {
 	}
 }
 
-// TestIntegrationsGithubScaffoldCallbackFailsClosed proves vector 9: even with a
-// GENUINE signed state + live nonce for the unconfigured github scaffold, the
-// callback fails closed at the Configured gate BEFORE any exchange — no connection
-// row, no fabricated success. githubExchange is unreachable in production.
-func TestIntegrationsGithubScaffoldCallbackFailsClosed(t *testing.T) {
+// TestIntegrationsGithubCallbackFailsClosed proves vector 9: a GENUINE signed
+// state and live nonce still buy nothing on the github callback — no connection
+// row, no fabricated success.
+//
+// The comment this replaced said githubExchange was unreachable in production
+// because the App had no creds. That stopped being true the day the App was
+// configured, and the exchange it guarded turned a caller-supplied installation id
+// into a real binding. Nothing here rests on the creds now: github trades nothing
+// on the callback at all.
+func TestIntegrationsGithubCallbackFailsClosed(t *testing.T) {
 	// github has NO creds in env → Configured()==false.
 	app := newApp(t, newKMS(t))
 	ctx := context.Background()
