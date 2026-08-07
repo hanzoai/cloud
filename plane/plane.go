@@ -112,6 +112,16 @@ const (
 
 	IAMMailable = "iam_mailable"
 
+	// NotifySend delivers ONE message on the org's configured provider (Twilio for
+	// SMS today). It is on the plane because the alternative was a credential: a
+	// sibling subsystem calling the HTTP send surface must authenticate as a
+	// principal, and notify derives the sending tenant FROM that principal — so a
+	// service could only ever send as its own org, while IAM answers for every
+	// white-label identity host. Here the org is an argument a peer is trusted to
+	// name, which is what lets one process send for every tenant with no secret to
+	// mint, mount or rotate.
+	NotifySend = "notify_send"
+
 	// IAMApproval answers "is this person off the waitlist?" about the CALLER.
 	//
 	// It is on the plane because the alternative was worse than a URL. admission
@@ -709,6 +719,27 @@ type Recipient struct {
 // Roster is who an org may mail.
 type Roster struct {
 	Recipients []Recipient `json:"recipients"` // everyone in the org who may be mailed; empty is a real answer, not an error
+}
+
+// ---- notify.send -----------------------------------------------------------
+
+// Send is one message to deliver: who it goes to, over which channel, on whose
+// behalf. The provider is chosen by notify from the ORG's own credentials, so it
+// is deliberately absent — a caller able to name one could route another tenant's
+// message through an account it does not own.
+type Send struct {
+	Org     string `json:"org"`               // the tenant to send as; notify resolves ITS provider credential
+	Channel string `json:"channel"`           // "sms" or "email"
+	To      string `json:"to"`                // phone number for sms, address for email
+	Subject string `json:"subject,omitempty"` // carried on email only
+	Body    string `json:"body"`              // the message, sent verbatim
+}
+
+// Sent names the provider that carried the message, for the caller's audit trail.
+// A delivery that FAILED is an error from the call, never a Sent with an empty
+// provider — that would read as success.
+type Sent struct {
+	Provider string `json:"provider"`
 }
 
 // ---- iam.approval ----------------------------------------------------------
