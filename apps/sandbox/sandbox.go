@@ -157,9 +157,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// created ran forever — a proof pod was found still Running 64 minutes
 	// after its test had finished.
 	go reap(context.Background(), s)
+	// A runtime that cannot serve says so ONCE AND IN FULL, at startup. `cluster:
+	// false` alone is a symptom with the cause stripped off, and the two causes
+	// read nothing alike: a cluster we cannot reach is an outage to page on, a
+	// SANDBOX_RUNTIME_CLASS the table has never heard of is a typo to fix. Both
+	// fail every lease closed; only one of them is anybody's fault.
+	if err := s.State.rt.ready(); err != nil {
+		s.Log.Error("sandbox cannot serve", "why", err)
+	}
 	s.Log.Info("sandbox mounted",
 		"namespace", s.State.rt.ns, "image", s.State.rt.image,
-		"runtimeClass", s.State.rt.runtimeClass, "cluster", s.State.rt.ready() == nil,
+		"runtimeClass", s.State.rt.runtimeClass, "bare", s.State.rt.bare,
+		"cluster", s.State.rt.ready() == nil,
 		"reapEvery", reapEvery, "idleAfter", idleAfter)
 	return nil
 }
@@ -261,18 +270,24 @@ func New(deps cloud.Deps) (*Service, error) {
 // part that is genuinely about HTTP: where a value comes from on the wire, and
 // which status carries it back.
 
+// createBody is what a request may state about a sandbox. Named rather than
+// anonymous so the fields it does NOT carry are checkable: no org and no
+// runtime, which are the two facts runtimeFor derives from and the two a caller
+// must never be able to hand in. See trust_test.go.
+type createBody struct {
+	Kind    string `json:"kind"`
+	Class   string `json:"class"`
+	Project string `json:"project"`
+	Image   string `json:"image"`
+	TTLSec  int    `json:"ttlSec"`
+}
+
 func create(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	var body struct {
-		Kind    string `json:"kind"`
-		Class   string `json:"class"`
-		Project string `json:"project"`
-		Image   string `json:"image"`
-		TTLSec  int    `json:"ttlSec"`
-	}
+	var body createBody
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
