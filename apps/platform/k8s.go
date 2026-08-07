@@ -921,6 +921,31 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 	return buildFrontendCmdRev(buildCtx, dockerfile, image, "")
 }
 
+// buildFrontendCmdArgs is buildFrontendCmdRev plus the image's declared
+// `--build-arg`s. They are appended AFTER the derived ones, and that order is
+// the policy: buildkit takes the LAST value for a repeated build-arg, so a
+// declaration cannot overwrite... which is exactly why VERSION and REVISION are
+// filtered out of the declared set instead of relying on position. Those two are
+// receipts — the tag the image is published under and the commit it was built
+// from — and an image that can name a different commit than it was built from is
+// the one lie the whole digest-pinned lane exists to prevent.
+func buildFrontendCmdArgs(buildCtx, dockerfile, image, revision string, args map[string]string) ([]any, error) {
+	cmd := buildFrontendCmdRev(buildCtx, dockerfile, image, revision)
+	declared := make(map[string]string, len(args))
+	for k, v := range args {
+		switch k {
+		case "VERSION", "GIT_VERSION", "REVISION":
+			continue
+		}
+		declared[k] = v
+	}
+	extra, err := buildArgs(declared)
+	if err != nil {
+		return nil, err
+	}
+	return append(cmd, extra...), nil
+}
+
 // buildFrontendCmdRev is buildFrontendCmd plus the commit being built, which is
 // the difference between an image that can be traced back to source and one that
 // cannot.
@@ -1370,7 +1395,7 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 // looping deploys locked every other org out of building, with no attribution in
 // the Job labels to see it by. /v1/runner still passes platformBuildOrg (its
 // builds ARE the fabric's); a tenant deploy passes the tenant.
-func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, image, dockerfile, buildID string) (string, error) {
+func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, image, dockerfile, buildID string, args map[string]string) (string, error) {
 	if strings.TrimSpace(org) == "" {
 		return "", fmt.Errorf("a build must be attributed to an org")
 	}
@@ -1411,7 +1436,10 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, im
 	}
 	jobName := truncate("pf-runner-"+jobIDSuffix(buildID), 63)
 	buildCtx := strings.TrimSuffix(cleanURL, ".git") + ".git#" + cleanRef
-	command := buildFrontendCmdRev(buildCtx, cleanDockerfile, image, cleanRef)
+	command, err := buildFrontendCmdArgs(buildCtx, cleanDockerfile, image, cleanRef, args)
+	if err != nil {
+		return "", fmt.Errorf("invalid build input: %w", err)
+	}
 	pushSecret, err := buildPushSecret(image)
 	if err != nil {
 		return "", err
