@@ -717,6 +717,10 @@ func (s *Server) streamObject(c *zip.Ctx, site Site, obj *s3.Object, size int64,
 	for _, h := range crossOriginIsolation(site.CrossOriginIsolation, contentType) {
 		c.SetHeader(h[0], h[1])
 	}
+	// Who may READ a subresource, decided the same way, from the same content type.
+	for _, h := range cors(site.CrossOriginIsolation, contentType) {
+		c.SetHeader(h[0], h[1])
+	}
 	c.Status(status)
 	return c.Fiber().SendStream(obj, int(size))
 }
@@ -869,6 +873,33 @@ func crossOriginIsolation(enabled bool, contentType string) [][2]string {
 		}
 	}
 	return [][2]string{{"Cross-Origin-Resource-Policy", "same-origin"}}
+}
+
+// cors is the ONE cross-origin READ policy for a site's subresources, keyed off
+// the same content type as the two policies above.
+//
+// It grants nothing that was not already public. These bytes are served on the
+// unauthenticated edge with no credentials, so anyone can fetch them today; a
+// CORS header decides whether a script may READ the response it already
+// received, and for public files that distinction protects nobody.
+//
+// What it buys is the builder. hanzo.app previews a project inside a frame
+// sandboxed WITHOUT allow-same-origin — deliberately, so untrusted generated
+// HTML cannot reach the IAM tokens — which makes the frame an opaque origin. A
+// Vite build's entry is `<script type="module" crossorigin>`, and a module
+// ALWAYS fetches in CORS mode, so with no Access-Control-Allow-Origin the bundle
+// is refused, nothing mounts into `<div id="root">`, and a perfectly healthy
+// deployed site previews as a blank white page.
+//
+//   - a DOCUMENT is navigated to, not read cross-origin, and the preview brings
+//     its own; it gets nothing.
+//   - a site that opted into cross-origin ISOLATION asked for same-origin
+//     subresources, and this must not quietly widen that back out.
+func cors(isolated bool, contentType string) [][2]string {
+	if isolated || strings.HasPrefix(contentType, "text/html") {
+		return nil
+	}
+	return [][2]string{{"Access-Control-Allow-Origin", "*"}}
 }
 
 // CacheControlFor is the ONE canonical cache policy by asset class, used both when
