@@ -163,6 +163,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		model:    cloud.DefaultModel,
 	}}
 	app.Post("/v1/ask", cloud.Handle(svc, askHandler))
+	// The SAME answer engine, at an address an agent can speak. See web.go.
+	if err := mountWeb(app, svc.State, b); err != nil {
+		return err
+	}
 	b.Log.Info("ask mounted", "prefix", "/v1/ask", "domains", "books,projects,git,web", "web_modes", "search,news,research,deep")
 	return nil
 }
