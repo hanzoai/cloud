@@ -8406,6 +8406,7 @@
             "type": "string"
           },
           "enableCodeSignin": {
+            "description": "EnableCodeSignin offers sign-in by an emailed or texted one-time code\nbeside the password. A POINTER for the same reason as IsShared: a plain\nbool reads as false on every reconcile that says nothing and would switch\nthe method off for every app whose caller never mentioned it.",
             "type": "boolean"
           },
           "expireInHours": {
