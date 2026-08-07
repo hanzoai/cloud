@@ -5363,3 +5363,83 @@ from under its owner costs their work.
 ours names this pod", so a second cloud pointed at the same `SANDBOX_NAMESPACE`
 would read the first one's live sandboxes as orphans. Same invariant the stores
 already have; stated where breaking it deletes something.
+
+## Metasearch: an engine that says nothing is either empty or BLIND
+
+The browser service is REAL and the code said it was not. `apps/crawl` opened
+with "that service was named in config but did not exist —
+crawl.hanzo.svc.cluster.local was NXDOMAIN", and browser.go promised escalation
+was best-effort "while the browser is not deployed, which is the state this ships
+in". Measured: `svc/crawl` 10.124.54.223:11235, pod Running, `/health` 200,
+image `ghcr.io/hanzoai/crawl:sha-7b8dc59`. It has been up for days. It needs the
+bearer token that reaches both pods from KMS as `crawl-secrets/CRAWL_API_TOKEN` —
+unauthenticated it answers `{"detail":"Authentication required"}`, so a missing
+token is not a degraded render, it is no render.
+
+**The defect that hid everything else: zero results was not a value.**
+`fetchEngine` returned `([]webResult, error)` and a bot-challenge page came back
+`(nil, nil)` — the same value as a query the web has no answer for. An engine
+could stop working entirely and the only symptom was a slightly shorter page.
+That is how Brave was dropped rather than fixed and how DDG sat in the default
+set contributing nothing. `outcome.go` gives an engine's turn three states:
+`answered`, `blind` (the fetch succeeded and the parser read NOTHING), `failed`
+(never reached, so it says nothing about the parser).
+
+**Zero is blind per engine, always, because no engine can be trusted to report
+its own emptiness.** Bing has no zero state at all: asked three distinct nonsense
+strings it returned ten results each time — Edmonton property tax, Bastille Day,
+Microsoft support — and for a fourth, pornography. DDG and Mojeek do return zero,
+but also return zero when serving a captcha, which is the case worth catching.
+The genuine-empty case is recovered where its evidence actually lives, ACROSS
+engines: blind while a sibling answered the same query is proof the query has
+results and that engine cannot see them.
+
+Two instruments, deliberately different widths. The counter
+`hanzo_websearch_engine_total{engine,outcome}` records every turn (nine series,
+bounded by construction — the query is never an attribute); an operator reads the
+RATIO. The Warn line fires only on the confirmed fault, so it stays worth
+reading. `browsed` rides along because it decides who is woken: false is
+configuration, true means a real browser drew the page and our parser still read
+nothing — selector rot, the loudest signal this package has.
+
+**DDG's challenge is an HTTP 202, and that one fact cost us the engine.** The
+fetch accepted only 200, so the challenge became a transport error, the transport
+error short-circuited past the escalation, and the engine the browser was
+deployed to rescue was the one that could never reach it — `ddg=failed` on every
+live query. Any 2xx is now parsed, and there is ONE remedy for "nothing readable
+came back" whichever way it happened: render it. Live, from cluster egress, that
+turned `[bing=answered(10) ddg=failed(0) mojeek=answered(20)]` into all three
+answering, and pushed `post.ca.gov/Training` off the top of "post quantum
+cryptography lattice" (now redhat's lattice-based-cryptography, then Wikipedia).
+
+**GOOGLE IS NOT VIABLE FROM THIS NETWORK. Do not add it.** Every path returns the
+`/sorry/` interstitial — ~6KB, 19 captcha markers, "unusual traffic", zero
+results: headless Crawl with stealth on, `&udm=14`, `&gbv=1`, and a HEADFUL
+Chrome 150 on a real X display (`bot-browser`) from a second egress IP. The
+control rules out the technique — that same headful browser reads DDG's ten
+results and loads google.com's homepage normally (268KB, title "Google", no
+captcha). Only `/search` is refused, from two different node IPs, headless and
+headful alike. That is reputation attached to datacenter addresses, so no browser
+flag reaches it; the fix would be residential egress, which is a different
+decision than a parser.
+
+**crawl, not bot-browser, is the instrument.** They measured IDENTICALLY on both
+engines, so bot-browser buys nothing on capability and costs concurrency (one
+shared headful Chrome behind a single CDP endpoint), tenancy (one cookie jar for
+every caller) and a websocket client cloud does not have. bot-browser is an
+interactive instrument — VNC 5900 / noVNC 6080 exist so a person can watch a bot
+session — and driving search through it would serialize every query through one
+browser.
+
+Costs, measured from cluster egress: a browser render of a DDG result page is
+**~1.13s** (1119/1137/1160ms, 10 results each), against 400ms–1.4s for a whole
+static three-engine blend. Escalation is worth paying on zero and not before,
+which is what render.go already did. A REFUSAL is still worth a render because
+the browser leaves the cluster from a different node than cloud does — but it
+will not rescue a refusal aimed at the browser's own address (asked to render a
+URL that had just answered it 403, Crawl returned 0 bytes).
+
+Watch for `WEBSEARCH_ENGINES` in universe: it is set to `bing,ddg`, which
+excludes Mojeek — an independent index and, with DDG, one of the two engines that
+honours `site:` (`site:x.com openai` → 20 real x.com URLs on Mojeek, 10 on DDG,
+`blind` on Bing). The in-code default is now all three.
