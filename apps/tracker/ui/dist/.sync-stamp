@@ -10,5 +10,5 @@ idp=brand registry: hostname -> hanzo.id | lux.id | zoolabs.id (VITE_IAM_BRAND p
 callback=/tracker/callback
 chrome=OrgSwitcher (left) + UserMenu (right); no nav rail, no env/version/clock/theme
 org_scope=X-Org-Id, resolved against the token's signed `orgs` claim; cloud re-mints it
-source=hanzoai/admin:apps/tracker@d1fb463 (main)
-built=vitest 12/12 + pkgs/admin 408/408
+source=hanzoai/admin:apps/tracker@a4495ce (main)
+built=typecheck 11/11 + vitest 696 + tracker e2e 5/5
