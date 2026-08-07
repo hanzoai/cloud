@@ -78,13 +78,13 @@ func begin(ctx context.Context, s *cloud.Service[state], org, user, label string
 // provider-side ban that breaks device sign-in globally). Terminal outcomes
 // delete the grant. Returned errors are transport-class (retryable; grant
 // intact) or saveUser's ready-made *zip.HTTPError values.
-func poll(ctx context.Context, s *cloud.Service[state], p *Provider, g Grant) (*DevicePoll, Connector, error) {
+func poll(ctx context.Context, s *cloud.Service[state], p *Provider, g Grant) (*DevicePoll, Connection, error) {
 	unlock := s.State.flight.lock("poll\x00" + g.ID)
 	defer unlock()
 
 	g2, found, err := s.State.store.GetGrant(ctx, g.ID, g.Org, g.User)
 	if err != nil {
-		return nil, Connector{}, err
+		return nil, Connection{}, err
 	}
 	if !found {
 		// A concurrent poll may have finalized this grant between the caller's
@@ -93,41 +93,41 @@ func poll(ctx context.Context, s *cloud.Service[state], p *Provider, g Grant) (*
 		// grant was minted — where the grant then TTL-expired — false-adopts as
 		// "connected". It answers with a real connected row; accepted over adding
 		// a grant→connector linkage column.
-		conn, ok, _ := s.State.store.GetConnector(ctx, g.Org, g.User, g.Provider, g.Label)
+		conn, ok, _ := s.State.store.Get(ctx, g.Org, g.User, g.Provider, g.Label)
 		if ok && conn.UpdatedAt >= g.CreatedAt {
 			return &DevicePoll{Status: pollDone}, conn, nil
 		}
-		return &DevicePoll{Status: pollExpired}, Connector{}, nil
+		return &DevicePoll{Status: pollExpired}, Connection{}, nil
 	}
 
 	now := time.Now().Unix()
 	if now-g2.LastPollAt < g2.Interval {
 		// Inside the cadence window: answer pending WITHOUT an upstream call.
-		return &DevicePoll{Status: pollPending, Interval: g2.Interval}, Connector{}, nil
+		return &DevicePoll{Status: pollPending, Interval: g2.Interval}, Connection{}, nil
 	}
 	// Touch BEFORE the upstream call so even a failed provider call holds the
 	// cadence. A touch failure means the DB is broken — nothing else would work.
 	if err := s.State.store.TouchGrant(ctx, g.ID, now); err != nil {
-		return nil, Connector{}, err
+		return nil, Connection{}, err
 	}
 
 	dp, err := p.Device.Poll(ctx, g2)
 	if err != nil {
-		return nil, Connector{}, err // retryable: grant intact, client retries after interval
+		return nil, Connection{}, err // retryable: grant intact, client retries after interval
 	}
 	// The engine is provider-blind; a buggy provider must be an error, not a panic.
 	if dp == nil || (dp.Status == pollDone && dp.Result == nil) {
-		return nil, Connector{}, fmt.Errorf("provider returned no poll result")
+		return nil, Connection{}, fmt.Errorf("provider returned no poll result")
 	}
 
 	switch dp.Status {
 	case pollPending:
-		return dp, Connector{}, nil
+		return dp, Connection{}, nil
 	case pollSlow:
 		if err := s.State.store.SetGrantInterval(ctx, g.ID, dp.Interval); err != nil {
 			s.Log.Warn("grant interval update", "provider", p.ID, "err", err)
 		}
-		return dp, Connector{}, nil
+		return dp, Connection{}, nil
 	case pollDone:
 		conn, err := saveUser(ctx, s, g.Org, g.User, g.Label, p, dp.Result)
 		if err != nil {
@@ -136,7 +136,7 @@ func poll(ctx context.Context, s *cloud.Service[state], p *Provider, g Grant) (*
 			if derr := s.State.store.DeleteGrant(ctx, g.ID); derr != nil {
 				s.Log.Warn("grant delete", "provider", p.ID, "err", derr)
 			}
-			return nil, Connector{}, err
+			return nil, Connection{}, err
 		}
 		if derr := s.State.store.DeleteGrant(ctx, g.ID); derr != nil {
 			s.Log.Warn("grant delete", "provider", p.ID, "err", derr)
@@ -146,8 +146,8 @@ func poll(ctx context.Context, s *cloud.Service[state], p *Provider, g Grant) (*
 		if derr := s.State.store.DeleteGrant(ctx, g.ID); derr != nil {
 			s.Log.Warn("grant delete", "provider", p.ID, "err", derr)
 		}
-		return dp, Connector{}, nil
+		return dp, Connection{}, nil
 	default:
-		return nil, Connector{}, fmt.Errorf("provider returned unknown poll status %q", dp.Status)
+		return nil, Connection{}, fmt.Errorf("provider returned unknown poll status %q", dp.Status)
 	}
 }

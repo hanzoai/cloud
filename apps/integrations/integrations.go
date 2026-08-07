@@ -671,7 +671,7 @@ func init() {
 	openapi.Describe("/v1/integrations/teams/events", http.MethodPost,
 		"Microsoft Teams Bot Framework webhook",
 		"The messaging endpoint for the Teams bot. A message activity is routed to an agent "+
-			"turn and answered proactively through the Bot Connector; anything that is not a "+
+			"turn and answered proactively through the Bot Connection; anything that is not a "+
 			"message with text is acknowledged and ignored.\n\n"+
 			"Authentication is the Bot Framework's RS256 JWT, verified against its published "+
 			"keys and bound BOTH to this deployment's app id and to the activity's own "+
@@ -1153,7 +1153,7 @@ func connectByCredential(s *cloud.Service[state], ctx context.Context, org strin
 		// the first and silently replaces it — the failure the key exists to
 		// prevent. AccountLabel is the same value, which is why the migration could
 		// recover it for rows written before the key was widened.
-		Owner:        connOwner(p, res),
+		Label:        connOwner(p, res),
 		ExternalID:   res.ExternalID,
 		AccountLabel: res.AccountLabel,
 		BotUserID:    res.BotUserID,
@@ -1298,7 +1298,7 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 	conn := Connection{
 		Org:      payload.Org,
 		Provider: p.ID,
-		Owner:    connOwner(p, res), // part of the key — see the connect path
+		Label:    connOwner(p, res), // part of the key — see the connect path
 
 		ExternalID:   res.ExternalID,
 		AccountLabel: res.AccountLabel,
@@ -1358,7 +1358,7 @@ func (o ops) disconnect(ctx context.Context, in *providerRef) (*disconnectOut, e
 			}
 		}
 	}
-	if _, derr := s.State.store.Delete(ctx, org, p.ID); derr != nil {
+	if _, derr := s.State.store.Disconnect(ctx, org, "", p.ID); derr != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", derr)
 	}
 	return &disconnectOut{Disconnected: true}, nil
@@ -1584,16 +1584,16 @@ func sealTokens(s *cloud.Service[state], path string, tokens map[string]string) 
 // userPath (deterministic, refresh-first), then UpsertConnector. Errors are
 // ready-made *zip.HTTPError values (400 invalid path / 503 "secret custody
 // failed" / 500 "persist failed") so callers propagate them untouched.
-func saveUser(ctx context.Context, s *cloud.Service[state], org, user, label string, p *Provider, res *ExchangeResult) (Connector, error) {
+func saveUser(ctx context.Context, s *cloud.Service[state], org, user, label string, p *Provider, res *ExchangeResult) (Connection, error) {
 	sanitizeResult(res)
 	path, err := userPath(org, user, p.ID, label)
 	if err != nil {
-		return Connector{}, err
+		return Connection{}, err
 	}
 	if err := sealTokens(s, path, res.Tokens); err != nil {
-		return Connector{}, zip.Errorf(http.StatusServiceUnavailable, "secret custody failed")
+		return Connection{}, zip.Errorf(http.StatusServiceUnavailable, "secret custody failed")
 	}
-	conn := Connector{
+	conn := Connection{
 		Org:          org,
 		User:         user,
 		Provider:     p.ID,
@@ -1603,14 +1603,14 @@ func saveUser(ctx context.Context, s *cloud.Service[state], org, user, label str
 		Scopes:       res.Scopes,
 		ExpiresAt:    res.ExpiresAt,
 	}
-	if err := s.State.store.UpsertConnector(ctx, conn); err != nil {
+	if err := s.State.store.Upsert(ctx, conn); err != nil {
 		s.Log.Warn("connector upsert failed", "provider", p.ID, "org", org, "user", user, "label", label, "err", err)
-		return Connector{}, zip.Errorf(http.StatusInternalServerError, "persist failed")
+		return Connection{}, zip.Errorf(http.StatusInternalServerError, "persist failed")
 	}
-	saved, found, err := s.State.store.GetConnector(ctx, org, user, p.ID, label)
+	saved, found, err := s.State.store.Get(ctx, org, user, p.ID, label)
 	if err != nil || !found {
 		s.Log.Warn("connector readback failed", "provider", p.ID, "org", org, "user", user, "label", label, "err", err)
-		return Connector{}, zip.Errorf(http.StatusInternalServerError, "persist failed")
+		return Connection{}, zip.Errorf(http.StatusInternalServerError, "persist failed")
 	}
 	s.Log.Info("connector connected", "provider", p.ID, "org", org, "user", user, "label", label, "account", res.AccountLabel)
 	return saved, nil
@@ -1708,7 +1708,7 @@ func ConnectionFor(org, provider, owner string) (Connection, bool) {
 	if mounted == nil {
 		return Connection{}, false
 	}
-	conn, ok, err := mounted.State.store.Get(context.Background(), org, provider, owner)
+	conn, ok, err := mounted.State.store.Get(context.Background(), org, "", provider, owner)
 	if err != nil || !ok {
 		return Connection{}, false
 	}

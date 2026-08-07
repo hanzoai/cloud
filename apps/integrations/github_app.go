@@ -170,7 +170,7 @@ func githubConnection(org, owner string) (Connection, error) {
 	default:
 		names := make([]string, 0, len(conns))
 		for _, c := range conns {
-			names = append(names, c.Owner)
+			names = append(names, c.Label)
 		}
 		return Connection{}, fmt.Errorf("integrations: this org has %d connected github accounts (%s); name the one to use",
 			len(conns), strings.Join(names, ", "))
@@ -355,7 +355,7 @@ func (o ops) githubInstallations(ctx context.Context, _ *noArgs) (*githubInstall
 	// connected=false rather than vanishing: an unreachable GitHub must not read
 	// as "you have no integrations".
 	for _, c := range conns {
-		v := githubInstallationView{Login: c.Owner, Connected: false}
+		v := githubInstallationView{Login: c.Label, Connected: false}
 		if id, perr := strconv.ParseInt(strings.TrimSpace(c.ExternalID), 10, 64); perr == nil {
 			if in, ok := live[id]; ok {
 				v.Connected = true
@@ -465,13 +465,13 @@ func (o ops) githubClaim(ctx context.Context, in *githubClaimIn) (*githubClaimOu
 
 	out := &githubClaimOut{Claimed: []string{}, Already: []string{}}
 	for _, ins := range want {
-		_, bound, gerr := o.s.State.store.Get(ctx, org, "github", ins.Login)
+		_, bound, gerr := o.s.State.store.Get(ctx, org, "", "github", ins.Login)
 		if gerr != nil {
 			return nil, gerr
 		}
 		// Written even when bound, so a reinstalled account's new id lands.
 		if uerr := o.s.State.store.Upsert(ctx, Connection{
-			Org: org, Provider: "github", Owner: ins.Login,
+			Org: org, Provider: "github", Label: ins.Login,
 			ExternalID: strconv.FormatInt(ins.ID, 10), AccountLabel: ins.Login,
 		}); uerr != nil {
 			return nil, uerr
@@ -823,7 +823,7 @@ func reachableRepos(ctx context.Context, org string) ([]githubRepo, error) {
 				return
 			}
 			out[i].repos, out[i].err = installationRepos(ctx, tok)
-		}(i, c.Owner)
+		}(i, c.Label)
 	}
 	wg.Wait()
 

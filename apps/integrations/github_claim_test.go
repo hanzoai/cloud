@@ -122,7 +122,7 @@ func TestClaimIsIdempotent(t *testing.T) {
 	if len(first.Claimed) != 2 || len(first.Already) != 0 {
 		t.Fatalf("first claim should bind both, got %+v", first)
 	}
-	before, _, err := mounted.State.store.Get(context.Background(), "hanzo", "github", "hanzoai")
+	before, _, err := mounted.State.store.Get(context.Background(), "hanzo", "", "github", "hanzoai")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestClaimIsIdempotent(t *testing.T) {
 	if conns := Connections("hanzo", "github"); len(conns) != 2 {
 		t.Fatalf("re-claiming must not duplicate rows, got %d", len(conns))
 	}
-	after, _, err := mounted.State.store.Get(context.Background(), "hanzo", "github", "hanzoai")
+	after, _, err := mounted.State.store.Get(context.Background(), "hanzo", "", "github", "hanzoai")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestClaimRefreshesReinstalledAccount(t *testing.T) {
 	withGithubApp(t, mockInstallations(t, twoAccounts()))
 	app := newApp(t, newKMS(t))
 	if err := mounted.State.store.Upsert(context.Background(), Connection{
-		Org: "hanzo", Provider: "github", Owner: "hanzoai",
+		Org: "hanzo", Provider: "github", Label: "hanzoai",
 		ExternalID: "999", AccountLabel: "hanzoai", // the dead installation
 	}); err != nil {
 		t.Fatalf("upsert: %v", err)
@@ -198,7 +198,7 @@ func TestClaimRefreshesReinstalledAccount(t *testing.T) {
 	if len(got.Already) != 1 {
 		t.Fatalf("an existing binding reports already, got %+v", got)
 	}
-	after, _, err := mounted.State.store.Get(context.Background(), "hanzo", "github", "hanzoai")
+	after, _, err := mounted.State.store.Get(context.Background(), "hanzo", "", "github", "hanzoai")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}

@@ -29,7 +29,7 @@ func TestOneOrgHoldsSeveralGithubAccounts(t *testing.T) {
 	}
 	for owner, inst := range accounts {
 		if err := s.Upsert(ctx, Connection{
-			Org: "hanzo", Provider: "github", Owner: owner,
+			Org: "hanzo", Provider: "github", Label: owner,
 			ExternalID: inst, AccountLabel: owner,
 		}); err != nil {
 			t.Fatalf("upsert %s: %v", owner, err)
@@ -45,7 +45,7 @@ func TestOneOrgHoldsSeveralGithubAccounts(t *testing.T) {
 	// Each account keeps its OWN installation. Sharing one would mean a token
 	// minted for one org granting nothing on the repos of another.
 	for owner, inst := range accounts {
-		c, ok, err := s.Get(ctx, "hanzo", "github", owner)
+		c, ok, err := s.Get(ctx, "hanzo", "", "github", owner)
 		if err != nil || !ok {
 			t.Fatalf("get %s: ok=%v err=%v", owner, ok, err)
 		}
@@ -60,15 +60,15 @@ func TestOneOrgHoldsSeveralGithubAccounts(t *testing.T) {
 func TestASecondAccountDoesNotReplaceTheFirst(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
-	first := Connection{Org: "hanzo", Provider: "github", Owner: "hanzoai", ExternalID: "143007410"}
-	second := Connection{Org: "hanzo", Provider: "github", Owner: "hanzo-apps", ExternalID: "143008414"}
+	first := Connection{Org: "hanzo", Provider: "github", Label: "hanzoai", ExternalID: "143007410"}
+	second := Connection{Org: "hanzo", Provider: "github", Label: "hanzo-apps", ExternalID: "143008414"}
 	if err := s.Upsert(ctx, first); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Upsert(ctx, second); err != nil {
 		t.Fatal(err)
 	}
-	c, ok, err := s.Get(ctx, "hanzo", "github", "hanzoai")
+	c, ok, err := s.Get(ctx, "hanzo", "", "github", "hanzoai")
 	if err != nil || !ok {
 		t.Fatalf("the first account must survive the second: ok=%v err=%v", ok, err)
 	}
@@ -83,7 +83,7 @@ func TestReconnectingAnAccountUpdatesInPlace(t *testing.T) {
 	ctx := context.Background()
 	for _, inst := range []string{"111", "222"} {
 		if err := s.Upsert(ctx, Connection{
-			Org: "hanzo", Provider: "github", Owner: "hanzoai", ExternalID: inst,
+			Org: "hanzo", Provider: "github", Label: "hanzoai", ExternalID: inst,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -110,7 +110,7 @@ func TestSingleAccountProviderIsUnchanged(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	c, ok, err := s.Get(ctx, "acme", "slack", "")
+	c, ok, err := s.Get(ctx, "acme", "", "slack", "")
 	if err != nil || !ok {
 		t.Fatalf("slack: ok=%v err=%v", ok, err)
 	}
@@ -124,11 +124,11 @@ func TestDisconnectRemovesEveryAccount(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	for _, o := range []string{"hanzoai", "hanzo-apps", "hanzo-docs"} {
-		if err := s.Upsert(ctx, Connection{Org: "hanzo", Provider: "github", Owner: o, ExternalID: "1"}); err != nil {
+		if err := s.Upsert(ctx, Connection{Org: "hanzo", Provider: "github", Label: o, ExternalID: "1"}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	gone, err := s.Delete(ctx, "hanzo", "github")
+	gone, err := s.Disconnect(ctx, "hanzo", "", "github")
 	if err != nil || !gone {
 		t.Fatalf("delete: gone=%v err=%v", gone, err)
 	}
@@ -146,10 +146,10 @@ func TestDisconnectRemovesEveryAccount(t *testing.T) {
 func TestEachInstallationResolvesToItsOrg(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
-	if err := s.Upsert(ctx, Connection{Org: "hanzo", Provider: "github", Owner: "hanzo-apps", ExternalID: "143008414"}); err != nil {
+	if err := s.Upsert(ctx, Connection{Org: "hanzo", Provider: "github", Label: "hanzo-apps", ExternalID: "143008414"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Upsert(ctx, Connection{Org: "lux", Provider: "github", Owner: "luxfi", ExternalID: "143008606"}); err != nil {
+	if err := s.Upsert(ctx, Connection{Org: "lux", Provider: "github", Label: "luxfi", ExternalID: "143008606"}); err != nil {
 		t.Fatal(err)
 	}
 	for inst, want := range map[string]string{"143008414": "hanzo", "143008606": "lux"} {
@@ -188,7 +188,7 @@ func TestOneAccountAnswersForAnyOwner(t *testing.T) {
 
 func (s *Store) mustGet(t *testing.T, org, provider, owner string) (Connection, bool) {
 	t.Helper()
-	c, ok, err := s.Get(context.Background(), org, provider, owner)
+	c, ok, err := s.Get(context.Background(), org, "", provider, owner)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestThreeGithubAccountsSurviveTogether(t *testing.T) {
 		res := &ExchangeResult{AccountLabel: owner, ExternalID: inst}
 		if err := s.Upsert(ctx, Connection{
 			Org: "hanzo", Provider: "github",
-			Owner: connOwner(gh, res), ExternalID: res.ExternalID, AccountLabel: owner,
+			Label: connOwner(gh, res), ExternalID: res.ExternalID, AccountLabel: owner,
 		}); err != nil {
 			t.Fatal(err)
 		}
