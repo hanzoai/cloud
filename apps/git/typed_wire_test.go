@@ -350,8 +350,17 @@ func TestRefusedRoutesDeclareTheBodyTheyRead(t *testing.T) {
 // spelling keeps the segments before the first path parameter and after the last
 // one while dropping everything between — so `mirrors` and `subscriptions`, the
 // words that say WHICH thing a DELETE removes, never reach the name. All three
-// DELETEs below land on `repos-delete`, which means two of git's 24 typed ops
-// have no command a caller can reach: the runner has one name and three routes.
+// DELETEs below land on `repos-delete`, and reading ONE pull request lands on
+// `repos-get` beside reading one repo, because `pulls` sits between two
+// parameters and is dropped. Three of git's 28 typed ops therefore have no
+// command a caller can reach.
+//
+// The two families differ in one way worth stating: the DELETEs collide with
+// each other, so which one `repos-delete` reaches is arbitrary. `repos-get`
+// collides a two-segment route with a four-segment one, and the shorter wins on
+// specificity — so reading a repo works from the CLI and reading a pull request
+// is the projection that is lost. The wire and the document are unaffected: both
+// are served and published under their own operationId.
 //
 // Neither the wire nor the document is involved — every one of these is served,
 // published and described under its own operationId. It is a projection defect
@@ -367,6 +376,10 @@ var cliNameCollisions = map[string][]string{
 		"DELETE /v1/git/repos/:name",
 		"DELETE /v1/git/repos/:name/mirrors/:id",
 		"DELETE /v1/git/repos/:name/subscriptions/:id",
+	},
+	"repos-get": {
+		"GET /v1/git/repos/:name",
+		"GET /v1/git/repos/:name/pulls/:number",
 	},
 }
 

@@ -118,6 +118,37 @@ CREATE TABLE IF NOT EXISTS inbound_conflicts (
   PRIMARY KEY (org, project, repo, branch)
 );
 CREATE INDEX IF NOT EXISTS ix_inbound_conflicts_repo ON inbound_conflicts(org, project, repo);
+
+-- pulls is the proposal to move one branch into another, and the ONLY row in this
+-- schema that outlives the two refs it names: a branch is deleted by forgetting
+-- it, and the record of what was proposed and what happened to it must not be.
+-- number is per-repo and dense from 1 — the handle a person and an agent both use
+-- ("#4"), allocated under the same (org, project, repo) tuple every other table
+-- keys on, so #4 of project A and #4 of project B are different rows.
+--
+-- The partial unique index is the structural half of "one open proposal per
+-- (base, head)": CreatePull also checks inside its transaction, and this is what
+-- holds if that check ever races. Merged and closed rows are outside the index,
+-- so the same branch may be proposed again after its first proposal resolves.
+CREATE TABLE IF NOT EXISTS pulls (
+  id         TEXT PRIMARY KEY,
+  org        TEXT NOT NULL,
+  project    TEXT NOT NULL DEFAULT '',
+  repo       TEXT NOT NULL,
+  number     INTEGER NOT NULL,
+  title      TEXT NOT NULL,
+  body       TEXT NOT NULL DEFAULT '',
+  base       TEXT NOT NULL,
+  head       TEXT NOT NULL,
+  state      TEXT NOT NULL DEFAULT 'open',
+  author     TEXT NOT NULL DEFAULT '',
+  merged_rev TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pulls_number ON pulls(org, project, repo, number);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pulls_open ON pulls(org, project, repo, base, head) WHERE state='open';
+CREATE INDEX IF NOT EXISTS ix_pulls_repo ON pulls(org, project, repo, state);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -292,6 +323,10 @@ func (s *Store) Delete(ctx context.Context, org, project, name string) (bool, er
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM inbound_conflicts WHERE org=? AND project=? AND repo=?`, org, project, name); err != nil {
 		return false, fmt.Errorf("delete repo inbound conflicts: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM pulls WHERE org=? AND project=? AND repo=?`, org, project, name); err != nil {
+		return false, fmt.Errorf("delete repo pulls: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("delete repo: commit: %w", err)
@@ -483,6 +518,163 @@ func (s *Store) ClearRepoConflicts(ctx context.Context, org, project, repo strin
 		return fmt.Errorf("clear repo inbound conflicts: %w", err)
 	}
 	return nil
+}
+
+// ── pull requests (propose a branch, merge it) ───────────────────────────────
+
+// The two states a proposal can be in. There is no third: a pull is the
+// OUTSTANDING question "may head go into base", and merging is the only thing
+// this app does to it. A proposal nobody wants is abandoned by deleting the
+// branch, which is how it already worked before there was a row to look at.
+const (
+	pullOpen   = "open"
+	pullMerged = "merged"
+)
+
+// Pull is one proposal to move head into base, and the answer to it.
+//
+// Number is the per-repo handle ("#4"), dense from 1 and allocated by
+// CreatePull. Base and Head are BRANCH SHORT NAMES (main, agent/x), never refs
+// and never revisions: the branches move while the proposal is open, and a
+// proposal that pinned a revision would be answering a question nobody asked by
+// the time it is merged. MergedRev is the one revision worth keeping — what base
+// pointed at once the merge landed — and is empty while the pull is open.
+type Pull struct {
+	ID        string
+	Org       string
+	Project   string
+	Repo      string
+	Number    int64
+	Title     string
+	Body      string
+	Base      string
+	Head      string
+	State     string
+	Author    string // the validated user who opened it; "" for a caller with no user
+	MergedRev string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+const pullCols = `id,org,project,repo,number,title,body,base,head,state,author,merged_rev,created_at,updated_at`
+
+func scanPull(sc interface{ Scan(...any) error }) (Pull, error) {
+	var v Pull
+	err := sc.Scan(&v.ID, &v.Org, &v.Project, &v.Repo, &v.Number, &v.Title, &v.Body,
+		&v.Base, &v.Head, &v.State, &v.Author, &v.MergedRev, &v.CreatedAt, &v.UpdatedAt)
+	return v, err
+}
+
+// CreatePull allocates the next per-repo number and inserts the proposal,
+// returning the stored row. errConflict when an OPEN proposal of the same
+// (base, head) already exists — the answer a retried agent run gets, and the
+// reason a run that proposes twice does not produce two rows to review.
+//
+// Both statements run in ONE transaction against a single-connection store, so
+// the number is read and taken indivisibly: two proposals opened at once cannot
+// be handed the same number.
+func (s *Store) CreatePull(ctx context.Context, v Pull) (Pull, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Pull{}, fmt.Errorf("create pull: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var dup int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT number FROM pulls WHERE org=? AND project=? AND repo=? AND base=? AND head=? AND state=?`,
+		v.Org, v.Project, v.Repo, v.Base, v.Head, pullOpen).Scan(&dup)
+	switch {
+	case err == nil:
+		return Pull{}, errConflict
+	case !errors.Is(err, sql.ErrNoRows):
+		return Pull{}, fmt.Errorf("create pull: check open: %w", err)
+	}
+
+	var high int64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(number),0) FROM pulls WHERE org=? AND project=? AND repo=?`,
+		v.Org, v.Project, v.Repo).Scan(&high); err != nil {
+		return Pull{}, fmt.Errorf("create pull: next number: %w", err)
+	}
+	v.Number = high + 1
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO pulls (`+pullCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		v.ID, v.Org, v.Project, v.Repo, v.Number, v.Title, v.Body, v.Base, v.Head,
+		v.State, v.Author, v.MergedRev, v.CreatedAt, v.UpdatedAt); err != nil {
+		if isUnique(err) {
+			return Pull{}, errConflict
+		}
+		return Pull{}, fmt.Errorf("insert pull: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Pull{}, fmt.Errorf("create pull: commit: %w", err)
+	}
+	return v, nil
+}
+
+// GetPull returns one proposal by its per-repo number, or errNotFound. The
+// (org, project, repo) tuple is part of the key, so a number from another
+// tenant's repo does not name a row here.
+func (s *Store) GetPull(ctx context.Context, org, project, repo string, number int64) (Pull, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+pullCols+` FROM pulls WHERE org=? AND project=? AND repo=? AND number=?`,
+		org, project, repo, number)
+	v, err := scanPull(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Pull{}, errNotFound
+	}
+	if err != nil {
+		return Pull{}, fmt.Errorf("get pull: %w", err)
+	}
+	return v, nil
+}
+
+// ListPulls returns a repo's proposals, newest number first. An empty state
+// returns every one; a state returns only those in it.
+func (s *Store) ListPulls(ctx context.Context, org, project, repo, state string) ([]Pull, error) {
+	q := `SELECT ` + pullCols + ` FROM pulls WHERE org=? AND project=? AND repo=?`
+	args := []any{org, project, repo}
+	if state != "" {
+		q += ` AND state=?`
+		args = append(args, state)
+	}
+	rows, err := s.db.QueryContext(ctx, q+` ORDER BY number DESC`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list pulls: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Pull
+	for rows.Next() {
+		v, err := scanPull(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan pull: %w", err)
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// MarkMerged records that base now points at rev because of this proposal, and
+// reports whether THIS call is the one that did it.
+//
+// The `state=open` in the WHERE is the whole point: it makes the transition
+// indivisible, so two concurrent merges of one proposal cannot both come back
+// having merged it. The caller moves the ref first and calls this second — a
+// crash between the two leaves a row that says open about a branch that already
+// contains head, which the next merge attempt recognises and settles. The
+// reverse order would leave a row claiming a merge that never happened, and that
+// is not recoverable by looking at the repository.
+func (s *Store) MarkMerged(ctx context.Context, org, project, repo string, number int64, rev string, at int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE pulls SET state=?, merged_rev=?, updated_at=? WHERE org=? AND project=? AND repo=? AND number=? AND state=?`,
+		pullMerged, rev, at, org, project, repo, number, pullOpen)
+	if err != nil {
+		return false, fmt.Errorf("mark merged: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }
 
 // ConflictRepoSet returns the set of repos (by name) with ≥1 unresolved inbound

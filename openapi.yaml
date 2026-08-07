@@ -34481,6 +34481,30 @@ components:
             carries.
           type: string
       type: object
+    openReq:
+      properties:
+        base:
+          description: |-
+            Base is the branch the work is proposed INTO, by short name. Defaults to
+            the repo's default branch, which is where a proposal goes when nobody says
+            otherwise.
+          type: string
+        body:
+          description: Body is the longer description. Optional.
+          type: string
+        head:
+          description: |-
+            Head is the branch holding the work, by short name (agent/fix-503).
+            Required, and must already exist.
+          type: string
+        name:
+          description: Name is the repo the proposal belongs to, from the :name path
+            segment.
+          type: string
+        title:
+          description: Title is the one-line summary of what is being proposed. Required.
+          type: string
+      type: object
     operatorUser:
       properties:
         created:
@@ -36719,6 +36743,53 @@ components:
           description: |-
             Tool is the registry name of the capability being offered. It must already
             resolve in the publisher's own scope — there are no phantom listings.
+          type: string
+      type: object
+    pullList:
+      properties:
+        data:
+          description: Data holds the repo's pull requests, newest number first.
+          items:
+            $ref: '#/components/schemas/pullView'
+          type: array
+      type: object
+    pullView:
+      properties:
+        author:
+          description: Author is the user who opened it; empty for a caller with no
+            user.
+          type: string
+        base:
+          description: Base is the branch the work is proposed into.
+          type: string
+        body:
+          description: Body is the longer description; empty when none was given.
+          type: string
+        createdAt:
+          description: CreatedAt is RFC 3339 UTC.
+          type: string
+        head:
+          description: Head is the branch holding the work.
+          type: string
+        mergedRev:
+          description: |-
+            MergedRev is what base points at now that the merge landed. Empty while
+            the proposal is open.
+          type: string
+        number:
+          description: Number is the proposal's per-repo handle, dense from 1.
+          type: integer
+        repo:
+          description: Repo is the repository the proposal belongs to.
+          type: string
+        state:
+          description: State is "open" or "merged".
+          type: string
+        title:
+          description: Title is the one-line summary.
+          type: string
+        updatedAt:
+          description: UpdatedAt is RFC 3339 UTC.
           type: string
       type: object
     purgeIn:
@@ -70164,6 +70235,171 @@ paths:
           description: no content
       summary: Removes one outbound mirror target; later pushes stop being forwarded
         to it.
+      tags:
+      - git
+      x-app: git
+  /v1/git/repos/{name}/pulls:
+    get:
+      description: |-
+        Returns a repo's pull requests, newest number first — what is
+        waiting to be reviewed, and what has already landed. Narrow it with
+        ?state=open or ?state=merged; omit state for every proposal.
+      operationId: get_v1_git_repos_by_name_pulls
+      parameters:
+      - description: Name is the repo, from the :name path segment.
+        example: widgets
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: State narrows the list to "open" or "merged". Omit it for every
+          proposal.
+        example: open
+        in: query
+        name: state
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                data:
+                - base: main
+                  createdAt: "2026-08-07T10:00:00Z"
+                  head: agent/cache-catalog
+                  number: 4
+                  repo: widgets
+                  state: open
+                  title: cache the catalog read
+                  updatedAt: "2026-08-07T10:00:00Z"
+              schema:
+                $ref: '#/components/schemas/pullList'
+          description: ok
+      summary: Returns a repo's pull requests, newest number first — what is waiting
+        to be reviewed, and what has already landed.
+      tags:
+      - git
+      x-app: git
+    post:
+      description: |-
+        Proposes a branch for merging and returns it with its number. Answers
+        201. Both branches must already exist — a proposal naming a branch nobody
+        pushed is a typo, not a plan — and base defaults to the repo's default branch.
+
+        Proposing the same head into the same base twice is a 409 while the first
+        proposal is still open, so a retried agent run leaves ONE thing to review
+        rather than a pile of identical ones. A repo outside the caller's scope is a
+        404, exactly as reading it is.
+      operationId: post_v1_git_repos_by_name_pulls
+      parameters:
+      - description: Name is the repo the proposal belongs to, from the :name path
+          segment.
+        example: widgets
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              base: main
+              head: agent/cache-catalog
+              name: widgets
+              title: cache the catalog read
+            schema:
+              $ref: '#/components/schemas/openReq'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pullView'
+          description: created
+      summary: Proposes a branch for merging and returns it with its number.
+      tags:
+      - git
+      x-app: git
+  /v1/git/repos/{name}/pulls/{number}:
+    get:
+      description: |-
+        Returns one pull request by its per-repo number. A number belonging to
+        another tenant's repo is not found, exactly as the repo itself is not.
+      operationId: get_v1_git_repos_by_name_pulls_by_number
+      parameters:
+      - description: Name is the repo, from the :name path segment.
+        example: widgets
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Number is the proposal's per-repo number, from the :number path
+          segment.
+        example: 4
+        in: path
+        name: number
+        required: true
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pullView'
+          description: ok
+      summary: Returns one pull request by its per-repo number.
+      tags:
+      - git
+      x-app: git
+  /v1/git/repos/{name}/pulls/{number}/merge:
+    post:
+      description: |-
+        Merges an open pull request by FAST-FORWARDING base to head, and
+        answers the proposal in its merged state with the revision base now points at.
+
+        It merges only when base is already an ancestor of head — the case where head
+        contains every commit base has, so moving the branch loses nothing and invents
+        nothing. When base has moved on independently, this REFUSES with 409 and says
+        so: a real three-way merge is not implemented here, and reporting one would
+        claim a result these bytes do not produce. Rebase head onto base and merge
+        again.
+
+        The move is judged by the same ref policy a `git push` of it would face, and
+        fires the same build and notify reactions, so merging is not a way around
+        either. Merging an already-merged proposal is a 409.
+      operationId: post_v1_git_repos_by_name_pulls_by_number_merge
+      parameters:
+      - description: Name is the repo, from the :name path segment.
+        example: widgets
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Number is the proposal's per-repo number, from the :number path
+          segment.
+        example: 4
+        in: path
+        name: number
+        required: true
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pullView'
+          description: ok
+      summary: Merges an open pull request by FAST-FORWARDING base to head, and answers
+        the proposal in its merged state with the revision base now points at.
       tags:
       - git
       x-app: git
