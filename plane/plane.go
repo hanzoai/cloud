@@ -1929,6 +1929,16 @@ type LeaseIn struct {
 	ID      string `json:"id,omitempty"`
 	Class   string `json:"class,omitempty"`
 	Project string `json:"project,omitempty"`
+	// Runtime is the isolation boundary asked for: `gvisor` shares a filesystem
+	// and holds a project volume, `kata-fc` is a microVM that boots slower and
+	// reads files faster but has no shared filesystem at all. Empty asks for the
+	// fleet's default, which is the right answer unless you are measuring.
+	//
+	// It is a REQUEST. The owner decides, and refuses a combination it cannot
+	// honour — a volume under a runtime with no shared filesystem would write
+	// into a tmpfs and lose the bytes at exit. Read Leased.Runtime for what the
+	// sandbox actually got.
+	Runtime string `json:"runtime,omitempty"`
 	TTLSec  int    `json:"ttlSec,omitempty"`
 }
 
@@ -1944,8 +1954,13 @@ type LeaseIn struct {
 // by dialing it, and a peer that could learn a pod name would be a peer that could
 // try.
 type Leased struct {
-	ID      string `json:"id"`
-	Class   string `json:"class"`
+	ID    string `json:"id"`
+	Class string `json:"class"`
+	// Runtime is the boundary this sandbox GOT, which need not be the one asked
+	// for — carried for the same reason Workdir is, that it is a fact only the
+	// owner knows and a caller assuming it would be holding a second copy. Empty
+	// is the node's default runtime, and a real answer.
+	Runtime string `json:"runtime,omitempty"`
 	Status  string `json:"status"`
 	Workdir string `json:"workdir"`
 }
