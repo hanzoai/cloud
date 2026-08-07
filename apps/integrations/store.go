@@ -24,30 +24,27 @@ import (
 // is NEVER here — it lives in KMS, keyed by (org,provider); this row holds only
 // the metadata needed to render the card and route inbound events.
 type Connection struct {
-	Org      string
+	Org string
+	// User is the person this connection belongs to, or "" when the ORG owns it
+	// and every member may use it. It is the whole of scope: not a column beside
+	// the key but part of it, so the same provider connected both ways is two
+	// rows and neither shadows the other.
+	User     string
 	Provider string
-	// Owner is the provider-side account this connection is FOR — a GitHub org
-	// login, empty for a provider with one account per org. Part of the key, so
-	// one Hanzo org can hold several accounts of the same provider.
-	Owner        string
+	// Label tells several accounts of one provider apart — a GitHub org login,
+	// "" for a provider with a single account.
+	Label        string
 	ExternalID   string
 	AccountLabel string
 	BotUserID    string
 	Scopes       []string
+	ExpiresAt    int64 // access-token expiry, unix seconds; 0 = non-expiring
 	ConnectedAt  int64
 	UpdatedAt    int64
 }
 
-// Connector is a user's non-secret link to a provider account — the per-user
+// Connection is a user's non-secret link to a provider account — the per-user
 // sibling of Connection (the /v1/connectors plane). The credential itself lives
-// ONLY in KMS at userPath(org,user,provider,label); this row holds metadata.
-type Connector struct {
-	Org, User, Provider, Label string
-	ExternalID, AccountLabel   string
-	Scopes                     []string
-	ExpiresAt                  int64 // access-token expiry, unix seconds; 0 = non-expiring
-	ConnectedAt, UpdatedAt     int64
-}
 
 // Grant is one in-flight device authorization. Code/UserCode come from the
 // provider; Interval (seconds) is raised by slow_down; LastPollAt gates the
@@ -83,21 +80,28 @@ func openStore(dir string) (*Store, error) {
 func (s *Store) migrate() error {
 	const ddl = `
 -- One row per (org, provider, owner). The owner is the provider-side account a
--- connection is FOR: a GitHub App is installed per account, so one org that owns
--- several GitHub organizations holds one row each and mints a separate
--- installation token per row. A provider with a single account per org (Slack,
--- Linear) carries owner='' — not a special case, just one owner.
+-- connection is FOR: a GitHub App is installed per account, so one org holding
+-- several GitHub organizations keeps one row each and mints a separate
+-- installation token per row. A provider with one account carries label=''.
+--
+-- user='' means the ORG owns this connection and every member may use it;
+-- otherwise it is that person's alone. That is the whole of scope — not a
+-- column, a convention, and the same one label='' already carried for accounts.
+-- A provider may be connected BOTH ways at once: two rows, neither shadowing
+-- the other, which is what "connect Google for the org or just me" asks for.
 CREATE TABLE IF NOT EXISTS connections (
   org           TEXT NOT NULL,
+  user          TEXT NOT NULL DEFAULT '',
   provider      TEXT NOT NULL,
-  owner         TEXT NOT NULL DEFAULT '',
+  label         TEXT NOT NULL DEFAULT '',
   external_id   TEXT NOT NULL DEFAULT '',
   account_label TEXT NOT NULL DEFAULT '',
   bot_user_id   TEXT NOT NULL DEFAULT '',
   scopes_csv    TEXT NOT NULL DEFAULT '',
+  expires_at    INTEGER NOT NULL DEFAULT 0,
   connected_at  INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL,
-  PRIMARY KEY (org, provider, owner)
+  PRIMARY KEY (org, user, provider, label)
 );
 CREATE INDEX IF NOT EXISTS ix_conn_provider_extid ON connections(provider, external_id);
 CREATE INDEX IF NOT EXISTS ix_conn_org_provider ON connections(org, provider);
@@ -129,20 +133,6 @@ CREATE INDEX IF NOT EXISTS ix_bridge_events_created ON bridge_events(created_at)
 -- ONLY in KMS at /orgs/{org}/users/{user}/connectors/{provider}/{label}; this
 -- row is non-secret metadata. label allows multiple accounts per provider;
 -- expires_at (unix seconds, 0 = non-expiring) lets the refresh engine decide
--- without touching KMS.
-CREATE TABLE IF NOT EXISTS connectors (
-  org           TEXT NOT NULL,
-  user          TEXT NOT NULL,
-  provider      TEXT NOT NULL,
-  label         TEXT NOT NULL,
-  external_id   TEXT NOT NULL DEFAULT '',
-  account_label TEXT NOT NULL DEFAULT '',
-  scopes_csv    TEXT NOT NULL DEFAULT '',
-  expires_at    INTEGER NOT NULL DEFAULT 0,
-  connected_at  INTEGER NOT NULL,
-  updated_at    INTEGER NOT NULL,
-  PRIMARY KEY (org, user, provider, label)
-);
 
 -- grants are in-flight device authorizations (poll-until-done, TTL <= 15 min).
 -- code is the provider device handle (secret-adjacent): it lives HERE, not in
@@ -176,87 +166,18 @@ CREATE INDEX IF NOT EXISTS ix_grants_expires ON grants(expires_at);
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-	return s.widenConnectionKey()
-}
-
-// widenConnectionKey moves an existing connections table from PRIMARY KEY
-// (org,provider) to (org,provider,owner). SQLite cannot alter a primary key, so
-// the table is rebuilt.
-//
-// The owner is RECOVERED, not defaulted: account_label already holds the
-// provider-side account name — for GitHub, the installation's org login — so
-// every existing GitHub row keeps working under the key it should always have
-// had. Every other provider takes owner=”, which is what a single-account
-// provider means and what its callers pass.
-//
-// Idempotent: it returns immediately once the column exists, so it runs once and
-// every later boot skips it.
-func (s *Store) widenConnectionKey() error {
-	rows, err := s.db.Query(`SELECT name FROM pragma_table_info('connections')`)
-	if err != nil {
-		return fmt.Errorf("migrate connections: read columns: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return fmt.Errorf("migrate connections: scan column: %w", err)
-		}
-		if name == "owner" {
-			return rows.Err()
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("migrate connections: columns: %w", err)
-	}
-
-	const rebuild = `
-CREATE TABLE connections_wide (
-  org           TEXT NOT NULL,
-  provider      TEXT NOT NULL,
-  owner         TEXT NOT NULL DEFAULT '',
-  external_id   TEXT NOT NULL DEFAULT '',
-  account_label TEXT NOT NULL DEFAULT '',
-  bot_user_id   TEXT NOT NULL DEFAULT '',
-  scopes_csv    TEXT NOT NULL DEFAULT '',
-  connected_at  INTEGER NOT NULL,
-  updated_at    INTEGER NOT NULL,
-  PRIMARY KEY (org, provider, owner)
-);
-INSERT INTO connections_wide
-  (org,provider,owner,external_id,account_label,bot_user_id,scopes_csv,connected_at,updated_at)
-  SELECT org, provider,
-         CASE WHEN provider='github' THEN account_label ELSE '' END,
-         external_id, account_label, bot_user_id, scopes_csv, connected_at, updated_at
-    FROM connections;
-DROP TABLE connections;
-ALTER TABLE connections_wide RENAME TO connections;
-CREATE INDEX IF NOT EXISTS ix_conn_provider_extid ON connections(provider, external_id);
-CREATE INDEX IF NOT EXISTS ix_conn_org_provider ON connections(org, provider);
-`
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("migrate connections: begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.Exec(rebuild); err != nil {
-		return fmt.Errorf("migrate connections: rebuild: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("migrate connections: commit: %w", err)
-	}
 	return nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
 
-const connCols = `org,provider,owner,external_id,account_label,bot_user_id,scopes_csv,connected_at,updated_at`
+const connCols = `org,user,provider,label,external_id,account_label,bot_user_id,scopes_csv,expires_at,connected_at,updated_at`
 
 func scanConnection(sc interface{ Scan(...any) error }) (Connection, error) {
 	var c Connection
 	var scopes string
-	err := sc.Scan(&c.Org, &c.Provider, &c.Owner, &c.ExternalID, &c.AccountLabel, &c.BotUserID,
-		&scopes, &c.ConnectedAt, &c.UpdatedAt)
+	err := sc.Scan(&c.Org, &c.User, &c.Provider, &c.Label, &c.ExternalID, &c.AccountLabel,
+		&c.BotUserID, &scopes, &c.ExpiresAt, &c.ConnectedAt, &c.UpdatedAt)
 	c.Scopes = decodeScopes(scopes)
 	return c, err
 }
@@ -266,15 +187,16 @@ func scanConnection(sc interface{ Scan(...any) error }) (Connection, error) {
 func (s *Store) Upsert(ctx context.Context, c Connection) error {
 	now := time.Now().Unix()
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO connections (`+connCols+`) VALUES (?,?,?,?,?,?,?,?,?)
-		 ON CONFLICT(org,provider,owner) DO UPDATE SET
+		`INSERT INTO connections (`+connCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+		 ON CONFLICT(org,user,provider,label) DO UPDATE SET
 		   external_id=excluded.external_id,
 		   account_label=excluded.account_label,
 		   bot_user_id=excluded.bot_user_id,
 		   scopes_csv=excluded.scopes_csv,
+		   expires_at=excluded.expires_at,
 		   updated_at=excluded.updated_at`,
-		c.Org, c.Provider, c.Owner, c.ExternalID, c.AccountLabel, c.BotUserID,
-		encodeScopes(c.Scopes), now, now)
+		c.Org, c.User, c.Provider, c.Label, c.ExternalID, c.AccountLabel, c.BotUserID,
+		encodeScopes(c.Scopes), c.ExpiresAt, now, now)
 	if err != nil {
 		return fmt.Errorf("upsert connection: %w", err)
 	}
@@ -287,9 +209,9 @@ func (s *Store) Upsert(ctx context.Context, c Connection) error {
 // The owner is part of the key, not a filter: a provider installed per account
 // has one connection per account, and asking without naming one cannot have a
 // single right answer once an org holds more than one.
-func (s *Store) Get(ctx context.Context, org, provider, owner string) (Connection, bool, error) {
+func (s *Store) Get(ctx context.Context, org, user, provider, label string) (Connection, bool, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT `+connCols+` FROM connections WHERE org=? AND provider=? AND owner=?`, org, provider, owner)
+		`SELECT `+connCols+` FROM connections WHERE org=? AND user=? AND provider=? AND label=?`, org, user, provider, label)
 	c, err := scanConnection(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Connection{}, false, nil
@@ -301,9 +223,10 @@ func (s *Store) Get(ctx context.Context, org, provider, owner string) (Connectio
 }
 
 // List returns every connection for org, newest-connected first.
-func (s *Store) List(ctx context.Context, org string) ([]Connection, error) {
+func (s *Store) List(ctx context.Context, org, user string) ([]Connection, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+connCols+` FROM connections WHERE org=? ORDER BY connected_at DESC, provider ASC`, org)
+		`SELECT `+connCols+` FROM connections WHERE org=? AND (user='' OR user=?)
+		 ORDER BY connected_at DESC, provider ASC`, org, user)
 	if err != nil {
 		return nil, fmt.Errorf("list connections: %w", err)
 	}
@@ -324,7 +247,7 @@ func (s *Store) List(ctx context.Context, org string) ([]Connection, error) {
 // accounts, such as listing the repositories of every connected GitHub org.
 func (s *Store) ListFor(ctx context.Context, org, provider string) ([]Connection, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+connCols+` FROM connections WHERE org=? AND provider=? ORDER BY owner ASC`, org, provider)
+		`SELECT `+connCols+` FROM connections WHERE org=? AND provider=? ORDER BY user ASC, label ASC`, org, provider)
 	if err != nil {
 		return nil, fmt.Errorf("list connections for provider: %w", err)
 	}
@@ -343,13 +266,44 @@ func (s *Store) ListFor(ctx context.Context, org, provider string) ([]Connection
 // Delete disconnects a provider for an org, removing EVERY owner's connection.
 // Disconnecting is a statement about the provider, not about one of its accounts.
 // Reports whether any row went (idempotent caller).
-func (s *Store) Delete(ctx context.Context, org, provider string) (bool, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM connections WHERE org=? AND provider=?`, org, provider)
+func (s *Store) Delete(ctx context.Context, org, user, provider, label string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM connections WHERE org=? AND user=? AND provider=? AND label=?`, org, user, provider, label)
 	if err != nil {
 		return false, fmt.Errorf("delete connection: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+// Disconnect removes EVERY account this principal holds for one provider.
+//
+// Distinct from Delete on purpose: disconnecting GitHub means all of it, and an
+// org that installed the app on four accounts expects one action to end four
+// rows. Delete names one account; a caller that means "all" says so rather than
+// passing a label that happens to be empty.
+func (s *Store) Disconnect(ctx context.Context, org, user, provider string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM connections WHERE org=? AND user=? AND provider=?`, org, user, provider)
+	if err != nil {
+		return false, fmt.Errorf("disconnect: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// Count reports how many connections a principal holds for one provider — what
+// a caller asks before minting another label, so a per-provider limit is decided
+// against the same rows the reads use.
+func (s *Store) Count(ctx context.Context, org, user, provider string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM connections WHERE org=? AND user=? AND provider=?`,
+		org, user, provider).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count connections: %w", err)
+	}
+	return n, nil
 }
 
 // ResolveOrgByExternalID maps a provider account id back to the connecting org.
@@ -434,6 +388,8 @@ func (s *Store) ClaimNonce(ctx context.Context, nonce, provider string) (string,
 
 // GCNonces deletes nonces created before `before` (unix seconds). Returns how
 // many were reaped. Called opportunistically on connect so abandoned flows don't
+// GCNonces deletes nonces created before `before` (unix seconds). Returns how
+// many were reaped. Called opportunistically on connect so abandoned flows don't
 // accrete.
 func (s *Store) GCNonces(ctx context.Context, before int64) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM oauth_nonces WHERE created_at < ?`, before)
@@ -444,108 +400,10 @@ func (s *Store) GCNonces(ctx context.Context, before int64) (int64, error) {
 	return n, nil
 }
 
-// ── connectors (per-user plane) ────────────────────────────────────────────────
-
-const connectorCols = `org,user,provider,label,external_id,account_label,scopes_csv,expires_at,connected_at,updated_at`
-
-func scanConnector(sc interface{ Scan(...any) error }) (Connector, error) {
-	var c Connector
-	var scopes string
-	err := sc.Scan(&c.Org, &c.User, &c.Provider, &c.Label, &c.ExternalID, &c.AccountLabel,
-		&scopes, &c.ExpiresAt, &c.ConnectedAt, &c.UpdatedAt)
-	c.Scopes = decodeScopes(scopes)
-	return c, err
-}
-
-// UpsertConnector stores (or refreshes) a connector. On a re-connect or token
-// refresh the original connected_at is PRESERVED ("connected since"), only the
-// metadata and updated_at advance — Upsert (connections) parity.
-func (s *Store) UpsertConnector(ctx context.Context, c Connector) error {
-	now := time.Now().Unix()
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO connectors (`+connectorCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)
-		 ON CONFLICT(org,user,provider,label) DO UPDATE SET
-		   external_id=excluded.external_id,
-		   account_label=excluded.account_label,
-		   scopes_csv=excluded.scopes_csv,
-		   expires_at=excluded.expires_at,
-		   updated_at=excluded.updated_at`,
-		c.Org, c.User, c.Provider, c.Label, c.ExternalID, c.AccountLabel,
-		encodeScopes(c.Scopes), c.ExpiresAt, now, now)
-	if err != nil {
-		return fmt.Errorf("upsert connector: %w", err)
-	}
-	return nil
-}
-
-// GetConnector returns the connector for (org,user,provider,label). found=false
-// (nil error) when there is no row.
-func (s *Store) GetConnector(ctx context.Context, org, user, provider, label string) (Connector, bool, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT `+connectorCols+` FROM connectors WHERE org=? AND user=? AND provider=? AND label=?`,
-		org, user, provider, label)
-	c, err := scanConnector(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Connector{}, false, nil
-	}
-	if err != nil {
-		return Connector{}, false, fmt.Errorf("get connector: %w", err)
-	}
-	return c, true, nil
-}
-
-// ListConnectors returns every connector for (org,user), newest-connected first,
-// with a deterministic (provider,label) tiebreak.
-func (s *Store) ListConnectors(ctx context.Context, org, user string) ([]Connector, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+connectorCols+` FROM connectors WHERE org=? AND user=?
-		 ORDER BY connected_at DESC, provider ASC, label ASC`, org, user)
-	if err != nil {
-		return nil, fmt.Errorf("list connectors: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var out []Connector
-	for rows.Next() {
-		c, err := scanConnector(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan connector: %w", err)
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
-}
-
-// CountConnectors counts (org,user,provider) rows — the maxConnectors intake cap.
-func (s *Store) CountConnectors(ctx context.Context, org, user, provider string) (int, error) {
-	var n int
-	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM connectors WHERE org=? AND user=? AND provider=?`,
-		org, user, provider).Scan(&n)
-	if err != nil {
-		return 0, fmt.Errorf("count connectors: %w", err)
-	}
-	return n, nil
-}
-
-// DeleteConnector removes a connector. Reports whether a row went (idempotent caller).
-func (s *Store) DeleteConnector(ctx context.Context, org, user, provider, label string) (bool, error) {
-	res, err := s.db.ExecContext(ctx,
-		`DELETE FROM connectors WHERE org=? AND user=? AND provider=? AND label=?`,
-		org, user, provider, label)
-	if err != nil {
-		return false, fmt.Errorf("delete connector: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
-}
-
-// ── grants (in-flight device authorizations) ───────────────────────────────────
-
 const grantCols = `id,org,user,provider,label,code,user_code,interval,last_poll_at,created_at,expires_at`
 
-// PutGrant records a started device authorization. A duplicate 128-bit id
-// (astronomically unlikely) is a conflict, surfaced so the flow fails rather
-// than silently overwriting an in-flight one (PutNonce parity).
+// PutGrant stores one in-flight device authorization. The row is written once
+// and polled until the provider answers or it expires.
 func (s *Store) PutGrant(ctx context.Context, g Grant) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO grants (`+grantCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,

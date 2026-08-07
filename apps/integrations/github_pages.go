@@ -290,11 +290,11 @@ func resolveGrantedRepo(ctx context.Context, org, repoName string) (pagesRepo, e
 		return pagesRepo{}, zip.Errorf(http.StatusConflict, "github is not connected for this organization")
 	}
 	for _, c := range conns {
-		tok, herr := githubTokenFor(ctx, org, c.Owner)
+		tok, herr := githubTokenFor(ctx, org, c.Label)
 		if herr != nil {
 			continue // this account is unreachable; another may grant the repo
 		}
-		instID, herr := installationID(org, c.Owner)
+		instID, herr := installationID(org, c.Label)
 		if herr != nil {
 			continue
 		}

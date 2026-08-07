@@ -78,7 +78,7 @@ func TestAnthropicSetupToken(t *testing.T) {
 	spaced := "  sk-ant-oat01-" + strings.Repeat("a", 40) + "\n\t" + strings.Repeat("a", 40) + " \n"
 	res := asOK(t, app, http.MethodPost, credPath("anthropic"), "acme", userEmail, map[string]any{"token": spaced})
 	cr := decode[credResp](t, res)
-	if !cr.Connected || cr.Connector == nil || cr.Connector.ID != "anthropic:default" {
+	if !cr.Connected || cr.Connection == nil || cr.Connection.ID != "anthropic:default" {
 		t.Fatalf("setup-token connect: %+v", cr)
 	}
 	got := m.snapshot()
@@ -102,7 +102,7 @@ func TestAnthropicAPIKey(t *testing.T) {
 	app := newApp(t, kc)
 
 	cr := decode[credResp](t, asOK(t, app, http.MethodPost, credPath("anthropic"), "acme", userUUID, map[string]any{"token": antAPIKey}))
-	if cr.Connector == nil || cr.Connector.ID != "anthropic:default" {
+	if cr.Connection == nil || cr.Connection.ID != "anthropic:default" {
 		t.Fatalf("api-key connect: %+v", cr)
 	}
 	got := m.snapshot()
@@ -197,7 +197,7 @@ func TestAnthropicAccountHint(t *testing.T) {
 	// ExternalID source.
 	cr := decode[credResp](t, asOK(t, app, http.MethodPost, credPath("anthropic"), "acme", userEmail,
 		map[string]any{"token": antAPIKey, "accountId": "acct-1"}))
-	if cr.Connector == nil || cr.Connector.ExternalID != "acct-1" {
+	if cr.Connection == nil || cr.Connection.ExternalID != "acct-1" {
 		t.Fatalf("account hint must ride into externalId: %+v", cr)
 	}
 }

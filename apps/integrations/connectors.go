@@ -170,14 +170,14 @@ func labelIn(raw string) (string, error) {
 // is always allowed, so a completing device flow or a re-auth can never
 // dead-end; only a NEW label past the cap is refused.
 func room(ctx context.Context, s *cloud.Service[state], org, user, provider, label string) error {
-	_, found, err := s.State.store.GetConnector(ctx, org, user, provider, label)
+	_, found, err := s.State.store.Get(ctx, org, user, provider, label)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	}
 	if found {
 		return nil
 	}
-	n, err := s.State.store.CountConnectors(ctx, org, user, provider)
+	n, err := s.State.store.Count(ctx, org, user, provider)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	}
@@ -260,24 +260,24 @@ type devicePollOut struct {
 	// Interval is the seconds to wait before the next poll. Present only while
 	// pending, and it may rise when the provider asks the client to slow down.
 	Interval *int64 `json:"interval,omitempty"`
-	// Connector is the connected connector. Present only on "connected".
-	Connector *connView `json:"connector,omitempty"`
+	// Connection is the connected connector. Present only on "connected".
+	Connection *connView `json:"connector,omitempty"`
 }
 
 // credentialOut acknowledges a verified, sealed credential.
 type credentialOut struct {
 	// Connected is always true — a failed verification is a 400 and stores nothing.
 	Connected bool `json:"connected"`
-	// Connector is the connector as it now stands.
-	Connector connView `json:"connector"`
+	// Connection is the connector as it now stands.
+	Connection connView `json:"connector"`
 }
 
 // refreshOut acknowledges a forced token rotation.
 type refreshOut struct {
 	// Refreshed is always true — a failed rotation is an HTTP error.
 	Refreshed bool `json:"refreshed"`
-	// Connector is the connector with its new expiry.
-	Connector connView `json:"connector"`
+	// Connection is the connector with its new expiry.
+	Connection connView `json:"connector"`
 }
 
 // connectorTokenOut is the ONE place custody exits: the live access token, handed
@@ -295,7 +295,7 @@ type connectorTokenOut struct {
 
 // connViewFor is the ONE view builder for a connected connector — credential,
 // pollDevice(done), and refreshConn all answer this same wire shape.
-func connViewFor(conn Connector) connView {
+func connViewFor(conn Connection) connView {
 	return connView{
 		ID:          connID(conn.Provider, conn.Label),
 		Provider:    conn.Provider,
@@ -337,7 +337,7 @@ func (o ops) connectors(ctx context.Context, _ *noArgs) (*connectorsOut, error) 
 	if err != nil {
 		return nil, err
 	}
-	list, err := o.s.State.store.ListConnectors(ctx, org, user)
+	list, err := o.s.State.store.List(ctx, org, user)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
@@ -474,7 +474,7 @@ func (o ops) pollDevice(ctx context.Context, in *devicePollIn) (*devicePollOut, 
 		return &devicePollOut{Status: "pending", Interval: &dp.Interval}, nil
 	case pollDone:
 		view := connViewFor(conn)
-		return &devicePollOut{Status: "connected", Connector: &view}, nil
+		return &devicePollOut{Status: "connected", Connection: &view}, nil
 	case pollDenied:
 		return &devicePollOut{Status: "denied"}, nil
 	case pollExpired:
@@ -548,7 +548,7 @@ func (o ops) credential(ctx context.Context, in *credentialIn) (*credentialOut, 
 	if err != nil {
 		return nil, err
 	}
-	return &credentialOut{Connected: true, Connector: connViewFor(conn)}, nil
+	return &credentialOut{Connected: true, Connection: connViewFor(conn)}, nil
 }
 
 // refreshConn forces a token rotation for a connected connector, ahead of the
@@ -571,7 +571,7 @@ func (o ops) refreshConn(ctx context.Context, in *connectorRef) (*refreshOut, er
 	if !ok {
 		return nil, zip.ErrNotFound("unknown provider")
 	}
-	conn, found, err := s.State.store.GetConnector(ctx, org, user, p.ID, label)
+	conn, found, err := s.State.store.Get(ctx, org, user, p.ID, label)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	}
@@ -592,7 +592,7 @@ func (o ops) refreshConn(ctx context.Context, in *connectorRef) (*refreshOut, er
 		s.Log.Warn("token refresh failed", "provider", p.ID, "org", org, "user", user, "label", label, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "token refresh failed")
 	}
-	return &refreshOut{Refreshed: true, Connector: connViewFor(conn)}, nil
+	return &refreshOut{Refreshed: true, Connection: connViewFor(conn)}, nil
 }
 
 // tokenConn hands the custodied access token to its owner — the ONE place
@@ -617,7 +617,7 @@ func (o ops) tokenConn(ctx context.Context, in *connectorRef) (*connectorTokenOu
 	if !ok {
 		return nil, zip.ErrNotFound("unknown provider")
 	}
-	conn, found, err := s.State.store.GetConnector(ctx, org, user, p.ID, label)
+	conn, found, err := s.State.store.Get(ctx, org, user, p.ID, label)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	}
@@ -675,7 +675,7 @@ func (o ops) dropConn(ctx context.Context, in *connectorRef) (*disconnectOut, er
 			}
 		}
 	}
-	if _, derr := s.State.store.DeleteConnector(ctx, org, user, p.ID, label); derr != nil {
+	if _, derr := s.State.store.Delete(ctx, org, user, p.ID, label); derr != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", derr)
 	}
 	return &disconnectOut{Disconnected: true}, nil
