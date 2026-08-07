@@ -1,0 +1,348 @@
+package coding
+
+// sandboxrunner_test.go drives the REAL sandboxRunner against a fake sandbox on a
+// real socket, and asserts the exact sequence of commands a run sends into the
+// pod.
+//
+// That sequence IS the product. A run whose edits never leave the checkout is a
+// model talking to itself: the sandbox is reaped when the lease ends and the work
+// dies with it. So the assertions here are about commands and not about a return
+// value — a runner can be made to answer Changed:true with no test noticing that
+// nothing was ever pushed.
+//
+// The worse of the two failures is the FALSE POSITIVE. A run that reports "no
+// changes" when it changed something is a lost afternoon; a run that reports
+// changes when it made none files a PR against an empty branch, and a reviewer
+// learns to distrust every PR the agent opens. Both are covered, and the
+// no-changes case is first.
+
+import (
+	"context"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/hanzoai/cloud/plane"
+	"github.com/zap-proto/zip"
+)
+
+// theGrant is the push credential a run holds. Spelled once so every assertion
+// about where it may and may not appear is asking about the same string.
+const theGrant = "hgg_LIVEGRANTVALUE"
+
+const (
+	cleanURL = "https://git.test/v1/git/acme/api.git"
+	theSHA   = "1111111111111111111111111111111111111111"
+	newSHA   = "2222222222222222222222222222222222222222"
+)
+
+// pod is a fake sandbox that records every command and answers whatever the test
+// scripts. It records the argv VERBATIM, because the questions worth asking of
+// this file are all questions about arguments.
+type pod struct {
+	mu     sync.Mutex
+	ran    [][]string
+	answer func(argv []string) plane.Ran
+}
+
+func (p *pod) exec(argv []string) plane.Ran {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.ran = append(p.ran, append([]string(nil), argv...))
+	if p.answer == nil {
+		return plane.Ran{}
+	}
+	return p.answer(argv)
+}
+
+// lines renders every command as one string, which is how a human reads a
+// transcript and how these assertions read it too.
+func (p *pod) lines() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]string, 0, len(p.ran))
+	for _, argv := range p.ran {
+		out = append(out, strings.Join(argv, " "))
+	}
+	return out
+}
+
+// did returns the first command containing want, and whether there was one.
+func (p *pod) did(want string) (string, bool) {
+	for _, l := range p.lines() {
+		if strings.Contains(l, want) {
+			return l, true
+		}
+	}
+	return "", false
+}
+
+// gitVerb reports whether any command asked git to do verb — matched on the
+// argv, so "push" the verb is not confused with "push" inside a URL or a prompt.
+func (p *pod) gitVerb(verb string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, argv := range p.ran {
+		for i, a := range argv {
+			if a == verb && i > 0 && argv[0] == "git" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// servePod stands up the two peers a sandbox run reaches — the sandbox itself and
+// the prepaid gate — on real unix sockets, so the runner under test is the
+// production one with a production transport.
+func servePod(t *testing.T, p *pod) {
+	t.Helper()
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+
+	sandboxes := zip.New(zip.Config{AppName: "sandboxes", DisableStartupMessage: true})
+	zip.Post[plane.LeaseIn, plane.Leased](sandboxes, "/sandbox/lease",
+		func(_ context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
+			return &plane.Leased{ID: "sbx_1", Class: in.Class, Status: "ready", Workdir: "/work"}, nil
+		}, zip.WithOperationID(plane.SandboxLease))
+	zip.Post[plane.RunIn, plane.Ran](sandboxes, "/sandbox/run",
+		func(_ context.Context, in *plane.RunIn) (*plane.Ran, error) {
+			r := p.exec(in.Argv)
+			return &r, nil
+		}, zip.WithOperationID(plane.SandboxRun))
+	zip.Post[plane.EndIn, struct{}](sandboxes, "/sandbox/end",
+		func(_ context.Context, _ *plane.EndIn) (*struct{}, error) {
+			return &struct{}{}, nil
+		}, zip.WithOperationID(plane.SandboxEnd))
+
+	commerce := zip.New(zip.Config{AppName: "commerce", DisableStartupMessage: true})
+	zip.Post[plane.AuthorizeIn, plane.Verdict](commerce, "/commerce/authorize",
+		func(_ context.Context, _ *plane.AuthorizeIn) (*plane.Verdict, error) {
+			return &plane.Verdict{OK: true}, nil
+		}, zip.WithOperationID(plane.FinanceAuthorize))
+
+	for name, app := range map[string]*zip.App{"sandboxes": sandboxes, "commerce": commerce} {
+		app := app
+		plane.Bind()
+		go func(path string) { _ = app.Listen(path) }(zip.SocketPath(name))
+		t.Cleanup(func() { _ = app.Shutdown() })
+		waitListening(t, name)
+	}
+}
+
+// aRun is the request a real dispatch builds: a checkout, the branch cloud issued
+// for the session, and the grant that may write exactly that one ref.
+func aRun() RunRequest {
+	return RunRequest{
+		CloneURL: cleanURL, BaseBranch: "main", Branch: "agent/abc123def456",
+		Prompt: "fix the flake", SessionID: "sess_abc123def456",
+		RunTimeoutSeconds: 60, CredUser: "x-access-token", CredToken: theGrant,
+	}
+}
+
+// steps collects what the run said out loud, which is what a person watching in
+// Slack actually reads.
+func steps(out *[]string) func(Step) {
+	return func(s Step) { *out = append(*out, s.Step+" "+s.Message+" "+s.Status) }
+}
+
+// A run that edited NOTHING says so, and touches no ref. This is the first test
+// because the false PR is the worse failure: a branch with no commits, filed as
+// work, teaches a reviewer to ignore the agent.
+func TestSandboxRun_NoEditsReportNoChangesAndWriteNoRef(t *testing.T) {
+	p := &pod{answer: func(argv []string) plane.Ran {
+		switch {
+		case has(argv, "rev-parse"):
+			return plane.Ran{Stdout: theSHA + "\n"} // the tip never moves
+		case has(argv, "commit"):
+			return plane.Ran{ExitCode: 1, Stdout: "nothing to commit, working tree clean\n"}
+		}
+		return plane.Ran{}
+	}}
+	servePod(t, p)
+
+	var said []string
+	res, err := sandboxRunner{}.Run(context.Background(), "acme", "u_1", aRun(), steps(&said))
+	if err != nil {
+		t.Fatalf("a clean run is not an error: %v", err)
+	}
+	if !res.OK {
+		t.Fatalf("a run that changed nothing still succeeded: %+v", res)
+	}
+	if res.Changed || res.CommitSha != "" || res.Diffstat != "" {
+		t.Fatalf(`"no changes" must mean no changes: %+v`, res)
+	}
+	if p.gitVerb("push") {
+		t.Fatalf("nothing changed and something was pushed:\n%s", strings.Join(p.lines(), "\n"))
+	}
+}
+
+// A run that edited something commits it, pushes it to its own ref, and reports
+// what it actually did — the tip it created and the diffstat it measured.
+func TestSandboxRun_EditsAreCommittedPushedAndReportedHonestly(t *testing.T) {
+	tip := theSHA
+	p := &pod{}
+	p.answer = func(argv []string) plane.Ran {
+		switch {
+		case has(argv, "commit"):
+			tip = newSHA // the commit is what moves it
+			return plane.Ran{}
+		case has(argv, "rev-parse"):
+			return plane.Ran{Stdout: tip + "\n"}
+		case has(argv, "diff"):
+			return plane.Ran{Stdout: " 2 files changed, 9 insertions(+), 1 deletion(-)\n"}
+		}
+		return plane.Ran{}
+	}
+	servePod(t, p)
+
+	var said []string
+	res, err := sandboxRunner{}.Run(context.Background(), "acme", "u_1", aRun(), steps(&said))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !res.OK || !res.Changed {
+		t.Fatalf("the run changed something and must say so: %+v", res)
+	}
+	if res.CommitSha != newSHA {
+		t.Fatalf("the reported tip is not the one that was created: %q", res.CommitSha)
+	}
+	if !strings.Contains(res.Diffstat, "2 files changed") {
+		t.Fatalf("the diffstat was not measured: %q", res.Diffstat)
+	}
+
+	// THE BRANCH IS THE RUN'S OWN, and it is created before the first edit so
+	// nothing is ever committed onto the base.
+	if _, ok := p.did("switch -c agent/abc123def456"); !ok {
+		t.Fatalf("the run never left the base branch:\n%s", strings.Join(p.lines(), "\n"))
+	}
+	push, ok := p.did(" push ")
+	if !ok {
+		t.Fatalf("nothing was pushed:\n%s", strings.Join(p.lines(), "\n"))
+	}
+	// ONE ref, named in full, never a branch name git could resolve to something
+	// else and never a force.
+	if !strings.HasSuffix(push, "HEAD:refs/heads/agent/abc123def456") {
+		t.Fatalf("the push does not name exactly one ref: %q", push)
+	}
+	for _, forbidden := range []string{"--force", "-f ", "--mirror", "--all", "--delete"} {
+		if strings.Contains(push, forbidden) {
+			t.Fatalf("the push carries %q: %q", forbidden, push)
+		}
+	}
+}
+
+// The branch is the one cloud issued, and the runner will not write anywhere
+// else even when it is handed a name that says otherwise. The forge refuses this
+// too (apps/git/refpolicy.go); neither is the other's backstop.
+func TestSandboxRun_RefusesToWriteOutsideTheAgentNamespace(t *testing.T) {
+	p := &pod{}
+	servePod(t, p)
+
+	req := aRun()
+	req.Branch = "main"
+	r := sandboxRunner{}
+	if _, err := r.Run(context.Background(), "acme", "u_1", req, nil); err == nil {
+		t.Fatal("a run pointed at main must be refused")
+	}
+	if len(p.lines()) != 0 {
+		t.Fatalf("a refused run still did work:\n%s", strings.Join(p.lines(), "\n"))
+	}
+}
+
+// A tool that failed has produced nothing anyone should review, so its checkout
+// stays in the sandbox and dies there.
+func TestSandboxRun_AFailedToolWritesNoRef(t *testing.T) {
+	p := &pod{answer: func(argv []string) plane.Ran {
+		if has(argv, "rev-parse") {
+			return plane.Ran{Stdout: theSHA + "\n"}
+		}
+		if has(argv, "dev") {
+			return plane.Ran{ExitCode: 3, Stderr: "the model gave up\n"}
+		}
+		return plane.Ran{}
+	}}
+	servePod(t, p)
+
+	res, err := sandboxRunner{}.Run(context.Background(), "acme", "u_1", aRun(), nil)
+	if err != nil {
+		t.Fatalf("a failed tool is a reported failure, not a transport error: %v", err)
+	}
+	if res.OK || res.Changed {
+		t.Fatalf("a failed run must not report work: %+v", res)
+	}
+	if p.gitVerb("push") {
+		t.Fatalf("a failed run pushed:\n%s", strings.Join(p.lines(), "\n"))
+	}
+}
+
+// THE GRANT NEVER TOUCHES DISK AND IS NEVER SAID OUT LOUD.
+//
+// It may appear in exactly one place — the git option that applies it to a single
+// invocation — and nowhere else: not as a URL operand (git writes those into
+// .git/config), not in a config write, and not in a step, a log line or the tail
+// a run hands back for a person to read.
+func TestSandboxRun_TheGrantStaysOffDiskAndOutOfWhatIsSaid(t *testing.T) {
+	p := &pod{answer: func(argv []string) plane.Ran {
+		if has(argv, "rev-parse") {
+			return plane.Ran{Stdout: theSHA + "\n"}
+		}
+		return plane.Ran{Stdout: "done\n"}
+	}}
+	servePod(t, p)
+
+	var said []string
+	res, err := sandboxRunner{}.Run(context.Background(), "acme", "u_1", aRun(), steps(&said))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	for _, argv := range p.ran {
+		for i, a := range argv {
+			if !strings.Contains(a, theGrant) {
+				continue
+			}
+			// Only ever an option applied to THIS invocation. `git -c` before the
+			// subcommand is not written into the new repository's config, which is
+			// what makes the clone leave nothing behind.
+			if i == 0 || argv[i-1] != "-c" || !strings.HasPrefix(a, "url.") || !strings.Contains(a, ".insteadOf=") {
+				t.Fatalf("the grant is in argv[%d] as something other than a per-invocation option: %q", i, strings.Join(argv, " "))
+			}
+		}
+		// Nothing may persist it. A `git config` write, a credential helper with a
+		// store behind it, or a redirect into a file each survive the command.
+		line := strings.Join(argv, " ")
+		for _, persists := range []string{"git config", "credential.helper=store", "credential.helper=cache", ".git/config"} {
+			if strings.Contains(line, persists) {
+				t.Fatalf("a command persists a credential: %q", line)
+			}
+		}
+	}
+
+	// The URL OPERAND — what git records as the remote — is the clean one.
+	for _, argv := range p.ran {
+		for _, a := range argv {
+			if strings.HasPrefix(a, "https://") && strings.Contains(a, "@") {
+				t.Fatalf("a credential rode a URL operand: %q", a)
+			}
+		}
+	}
+
+	// Nothing a person reads carries it.
+	for _, s := range said {
+		if strings.Contains(s, theGrant) {
+			t.Fatalf("the grant was narrated: %q", s)
+		}
+	}
+	if strings.Contains(res.LogTail, theGrant) || strings.Contains(res.Error, theGrant) {
+		t.Fatalf("the grant came back in the result: %+v", res)
+	}
+}
+
+func has(argv []string, want string) bool {
+	for _, a := range argv {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
