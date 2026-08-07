@@ -41,6 +41,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -76,7 +77,22 @@ const (
 	labSandbox = "hanzo.ai/sandbox"
 	labOrg     = "hanzo.ai/sandbox-org"
 	labClass   = "hanzo.ai/sandbox-class"
+	labProject = "hanzo.ai/sandbox-project"
 )
+
+// annLeased is the DATE a disk was last leased, UTC, on the disk itself.
+//
+// A disk outlives every object that could account for it — the pod by an hour,
+// the row by the lease — so "is this still wanted?" has no other place to be
+// asked. Without it the answer has to come from a hash: the name ends in
+// sha256(org, project), which identifies a disk only to whoever already knows
+// the project that made it, and that is nobody a month later.
+//
+// A DATE and not a timestamp, so the write is idempotent within a day: a disk
+// leased forty times before lunch is patched once. The question it answers is
+// counted in days, so the precision that would cost a write per lease would buy
+// nothing.
+const annLeased = "hanzo.ai/sandbox-leased"
 
 // defaultTTL is the lease a class gets when the caller names none. Unbounded is
 // not an option for a pod running submitted code on our nodes.
@@ -540,9 +556,29 @@ func (r *runtime) start(ctx context.Context, m Sandbox, rc string) error {
 // OUTLIVES the sandbox that mounts it — it holds the checkout and the dependency
 // caches, which is the whole reason a second session is cheap — so this creates
 // and never deletes. Only an explicit purge does that.
+//
+// Because it outlives everything else, it is also the only place its own
+// accounting can live, so every lease stamps the disk with the day it was
+// wanted (annLeased) and every disk is born saying which project it belongs to.
+// Nothing here reclaims anything — this writes the facts a reclaim would need,
+// which is the part that was missing: a disk whose project is a hash and whose
+// last use is unrecorded cannot be shown to be dead, so it is kept forever by
+// default. Measured 2026-08-07: 15 disks, 300GiB, every one of them in exactly
+// that state.
 func (r *runtime) ensureVolume(ctx context.Context, m Sandbox) error {
 	vols := r.dyn.Resource(k8s.Volumes).Namespace(r.ns)
-	if _, err := vols.Get(ctx, m.Volume, metav1.GetOptions{}); err == nil {
+	today := time.Now().UTC().Format(time.DateOnly)
+	if have, err := vols.Get(ctx, m.Volume, metav1.GetOptions{}); err == nil {
+		if have.GetAnnotations()[annLeased] == today {
+			return nil
+		}
+		// A merge patch of the one key, so dating the disk cannot clobber a
+		// concurrent write of anything else on it. The error is dropped on purpose:
+		// a tenant's sandbox does not owe its existence to our bookkeeping, and a
+		// lease that failed because a disk could not be dated would be the rare
+		// outage caused entirely by the thing meant to save money.
+		_, _ = vols.Patch(ctx, m.Volume, types.MergePatchType,
+			[]byte(`{"metadata":{"annotations":{"`+annLeased+`":"`+today+`"}}}`), metav1.PatchOptions{})
 		return nil
 	} else if !apierrors.IsNotFound(err) {
 		return fmt.Errorf("get volume: %w", err)
@@ -551,9 +587,10 @@ func (r *runtime) ensureVolume(ctx context.Context, m Sandbox) error {
 		"apiVersion": "v1",
 		"kind":       "PersistentVolumeClaim",
 		"metadata": map[string]any{
-			"name":      m.Volume,
-			"namespace": r.ns,
-			"labels":    map[string]any{labOrg: slug(m.Org)},
+			"name":        m.Volume,
+			"namespace":   r.ns,
+			"labels":      map[string]any{labOrg: slug(m.Org), labProject: slug(m.Project)},
+			"annotations": map[string]any{annLeased: today},
 		},
 		"spec": map[string]any{
 			"accessModes": []any{"ReadWriteOnce"},
