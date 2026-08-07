@@ -140,15 +140,15 @@ func TestWebSearchProjectsAsATool(t *testing.T) {
 		t.Fatalf("POST /mcp did not answer MCP: %d — %.200s", resp.StatusCode, raw)
 	}
 	for _, tool := range env.Result.Tools {
-		if tool.Name != "post_v1_websearch" {
+		if tool.Name != "search_web" {
 			continue
 		}
 		if tool.Description == "" {
-			t.Fatal("post_v1_websearch projects with NO description — a tool a model cannot " +
+			t.Fatal("search_web projects with NO description — a tool a model cannot " +
 				"read is a tool it will not call; run `go generate -run zipdoc ./...`")
 		}
-		t.Logf("post_v1_websearch projects: %.90s…", tool.Description)
+		t.Logf("search_web projects: %.90s…", tool.Description)
 		return
 	}
-	t.Fatalf("post_v1_websearch is not in this subsystem's tools/list — %.300s", raw)
+	t.Fatalf("search_web is not in this subsystem's tools/list — %.300s", raw)
 }
