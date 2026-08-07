@@ -32,11 +32,12 @@ import (
 // what ARRIVED on the far side rather than what was sent.
 type peers struct {
 	sessions *fakeSessions
-	tracker  *fakeTracker
+	tracker  *fakePR
 	clone    string
 	tip      string
 	found    bool
 	gated    []string
+	proposed string
 }
 
 func servePeers(t *testing.T, p *peers) {
@@ -82,13 +83,18 @@ func servePeers(t *testing.T, p *peers) {
 		func(_ context.Context, _ *plane.RefIn) (*plane.RefTip, error) {
 			return &plane.RefTip{SHA: p.tip, Found: p.found}, nil
 		}, zip.WithOperationID(plane.GitVerifyRef))
+	zip.Post[plane.ProposeIn, plane.Proposed](gitApp, "/git/propose",
+		func(_ context.Context, in *plane.ProposeIn) (*plane.Proposed, error) {
+			p.proposed = in.Head
+			return &plane.Proposed{URL: "https://git.test/git/acme/api?ref=" + in.Head}, nil
+		}, zip.WithOperationID(plane.GitPropose))
 
 	trackerApp := zip.New(zip.Config{AppName: "tracker", DisableStartupMessage: true})
 	zip.Post[plane.AgentPRIn, plane.AgentPROut](trackerApp, "/tracker/agent-pr",
 		func(ctx context.Context, in *plane.AgentPRIn) (*plane.AgentPROut, error) {
 			// No in.Org: the org is the caller's plane identity, mirroring the real
 			// handler (plugin/tracker/seams.go) after the cross-tenant write was closed.
-			ref, err := p.tracker.CreatePR(ctx, PRInput{
+			ref, err := p.tracker.Open(ctx, PRInput{
 				Org: zip.CallerOf(ctx).Org, Project: in.Project, Repo: in.Repo, Base: in.Base,
 				Head: in.Head, Title: in.Title, Body: in.Body, Assignee: in.Assignee,
 			})
@@ -123,7 +129,7 @@ func waitListening(t *testing.T, app string) {
 // runner faked — the runner was always an HTTP client and never had a boundary.
 func planeDispatcher(run *fakeRunner) Dispatcher {
 	return Dispatcher{
-		Sessions: planeSessions{}, Tracker: planeTracker{}, Runner: run,
+		Sessions: planeSessions{}, PR: planePR{}, Runner: run,
 		CloneURL: planeCloneURL, VerifyRef: planeVerifyRef, TargetGate: planeTargetGate,
 	}
 }
@@ -132,7 +138,7 @@ func planeDispatcher(run *fakeRunner) Dispatcher {
 func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 	p := &peers{
 		sessions: &fakeSessions{id: "sess_abc123def456"},
-		tracker:  &fakeTracker{ref: PRRef{Identifier: "API-7", ProjectKey: "API", Number: 7}},
+		tracker:  &fakePR{ref: PRRef{Identifier: "API-7", ProjectKey: "API", Number: 7}},
 		tip:      "verifiedsha", found: true,
 	}
 	servePeers(t, p)
@@ -151,6 +157,15 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 	}
 	if res.PR.Identifier != "API-7" {
 		t.Fatalf("the PR must be filed through tracker's door, got %q", res.PR.Identifier)
+	}
+	// ONE seam, both backends: the row landed on the board AND git answered where
+	// the proposal is read. A run whose result carries no address gives a person
+	// in a thread nothing to click.
+	if p.proposed != "agent/abc123def456" {
+		t.Fatalf("git was never asked to propose the branch, got %q", p.proposed)
+	}
+	if res.PR.URL != "https://git.test/git/acme/api?ref=agent/abc123def456" {
+		t.Fatalf("the address did not come back with the run: %q", res.PR.URL)
 	}
 	if res.CommitSha != "verifiedsha" {
 		t.Fatalf("the tip must come from git's own storage, got %q", res.CommitSha)
@@ -192,7 +207,7 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 func TestRun_OverThePlane_UnverifiedRefFilesNoPR(t *testing.T) {
 	p := &peers{
 		sessions: &fakeSessions{id: "sess_abc123def456"},
-		tracker:  &fakeTracker{ref: PRRef{Identifier: "API-8"}},
+		tracker:  &fakePR{ref: PRRef{Identifier: "API-8"}},
 		found:    false,
 	}
 	servePeers(t, p)

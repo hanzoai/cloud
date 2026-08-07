@@ -188,6 +188,27 @@ func TestEveryTerminalGetsTheLastWord(t *testing.T) {
 	}
 }
 
+// The last word carries the ADDRESS. A run that pushed a branch and filed a PR
+// is finished work, and a thread that names it without saying where to read it
+// leaves the person who asked to go hunting for their own change.
+func TestTheLastWordSaysWhereToReadIt(t *testing.T) {
+	line, _ := renderLine(kindStatus, []byte(
+		`{"status":"done","changed":true,"branch":"agent/abc","pr":"ENG-1","url":"https://github.com/hanzo-inc/api/pull/7"}`))
+	if !strings.Contains(line, "https://github.com/hanzo-inc/api/pull/7") {
+		t.Fatalf("the address never reached the thread: %q", line)
+	}
+	// BARE, so Slack links it on its own. A `<url|text>` element is the one piece
+	// of mrkdwn that carries an arbitrary destination, and nothing a run emits may
+	// construct one.
+	if strings.Contains(line, "<") || strings.Contains(line, ">") {
+		t.Fatalf("the address was wrapped in a link element: %q", line)
+	}
+	// And a run with no address still gets its last word.
+	if l, _ := renderLine(kindStatus, []byte(`{"status":"done","changed":true,"branch":"agent/abc"}`)); !strings.Contains(l, "agent/abc") {
+		t.Fatalf("a run without an address lost its ending: %q", l)
+	}
+}
+
 // The sink reads untrusted payloads. A malformed one must be ignored, never
 // panic a run that has already pushed a branch.
 func TestProgressSurvivesAHostilePayload(t *testing.T) {
