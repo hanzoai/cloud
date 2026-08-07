@@ -127,9 +127,6 @@ func Lease(s *Service, ctx context.Context, org string, spec Spec) (Sandbox, err
 	if err := checkImage(org, spec.Image); err != nil {
 		return Sandbox{}, zip.ErrBadRequest(err.Error())
 	}
-	if err := checkRuntime(spec.RuntimeClass); err != nil {
-		return Sandbox{}, zip.ErrBadRequest(err.Error())
-	}
 	project := slug(spec.Project)
 	if class != "exec" && project == "" {
 		return Sandbox{}, zip.ErrBadRequest("project required for class " + class)
@@ -188,6 +185,13 @@ func Lease(s *Service, ctx context.Context, org string, spec Spec) (Sandbox, err
 	if project != "" {
 		m.Volume = volumeName(org, project)
 	}
+	// THE ISOLATION BOUNDARY, derived from the volume the line above just decided.
+	// Asked here rather than at start() so that a request which cannot be honoured
+	// leaves nothing behind — no row, no PVC, no pod.
+	rc, err := s.State.rt.runtimeFor(m, spec.RuntimeClass)
+	if err != nil {
+		return Sandbox{}, zip.ErrBadRequest(err.Error())
+	}
 	// The lease. Unbounded is not an option for a sandbox running submitted code on
 	// our nodes, so an unset ttl takes the class default rather than forever.
 	ttl := spec.TTLSec
@@ -205,7 +209,7 @@ func Lease(s *Service, ctx context.Context, org string, spec Spec) (Sandbox, err
 	// A failure to start is RECORDED on the row and answered 503 — the row stays so
 	// an operator can see what was asked for and why it did not happen, rather than
 	// the request vanishing with the evidence.
-	if err := s.State.rt.start(ctx, m, spec.RuntimeClass); err != nil {
+	if err := s.State.rt.start(ctx, m, rc); err != nil {
 		m.Status, m.Error = "error", err.Error()
 		_ = store.Put(ctx, m)
 		return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "start sandbox: %v", err)
