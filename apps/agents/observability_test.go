@@ -24,6 +24,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/types"
@@ -134,6 +135,9 @@ type stubPlane struct {
 	offer  []string
 	fail   map[string]bool
 	called []string
+	// result is what a named tool returns; anything unnamed returns a default so
+	// the common case stays a one-line fixture.
+	result map[string]string
 }
 
 func (p *stubPlane) catalog(context.Context, string, string, []string) []types.ToolDef {
@@ -151,7 +155,32 @@ func (p *stubPlane) call(_ context.Context, _, _, name, _ string) (string, error
 	if p.fail[name] {
 		return "", fmt.Errorf("upstream refused %s", name)
 	}
+	if out, ok := p.result[name]; ok {
+		return out, nil
+	}
 	return "result of " + name, nil
+}
+
+// toolGatewayArgs answers with ONE tool call carrying the given arguments
+// verbatim, then a final answer — so a test can pin what a dispatch records about
+// arguments it did not choose.
+func toolGatewayArgs(t *testing.T, name, args string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(string(body), `"role":"tool"`) || !strings.Contains(string(body), `"tools":[`) {
+			fmt.Fprint(w, `{"id":"c2","model":"gpt-4o-mini","choices":[{"index":0,"finish_reason":"stop",`+
+				`"message":{"role":"assistant","content":"the answer"}}],`+
+				`"usage":{"prompt_tokens":40,"completion_tokens":9,"total_tokens":49}}`)
+			return
+		}
+		call, _ := json.Marshal(args) // the arguments ride as a JSON *string*, as the wire has them
+		fmt.Fprintf(w, `{"id":"c1","model":"gpt-4o-mini","choices":[{"index":0,"finish_reason":"tool_calls",`+
+			`"message":{"role":"assistant","tool_calls":[`+
+			`{"id":"tc0","type":"function","function":{"name":%q,"arguments":%s}}]}}],`+
+			`"usage":{"prompt_tokens":11,"completion_tokens":22,"total_tokens":33}}`, name, call)
+	}))
 }
 
 // toolGateway answers the REQUEST rather than a call counter: a turn already
@@ -251,7 +280,7 @@ func TestOneRunIsObservableEndToEnd(t *testing.T) {
 	if got := attr(root, "hanzo.user"); got != "u-acme" {
 		t.Fatalf("run span must name the user, got %q", got)
 	}
-	if got := attr(root, "hanzo.agent.org"); got != "acme" {
+	if got := attr(root, "hanzo.org"); got != "acme" {
 		t.Fatalf("run span must name the org, got %q", got)
 	}
 
@@ -449,5 +478,204 @@ func TestToolSubsystemReadsTheNameNotAnIndex(t *testing.T) {
 		if got := toolSubsystem(in); got != want {
 			t.Fatalf("toolSubsystem(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestToolCallRecordsWhatItDidWithoutItsCredential is the "exactly what steps it
+// took" contract, and the one place where getting observability right and getting
+// security right are the same edit.
+//
+// A dispatch used to record WHICH tool ran and nothing about what it ran WITH, so
+// a trace could say an agent called post_v1_exec_run six times and never say what
+// it executed. Recording the arguments closes that. But a tool argument routinely
+// carries a live credential — a clone URL with a token in its userinfo is the
+// ordinary shape apps/coding builds — and a span store is built to be queried and
+// kept, so a trace that records one is worse than no trace.
+//
+// Both halves are asserted here together, because either alone is a bug: capture
+// with no redaction leaks, redaction with no capture is the silence we started
+// from.
+func TestToolCallRecordsWhatItDidWithoutItsCredential(t *testing.T) {
+	sink := traced(t)
+
+	const token = "ghp_LIVE_TOKEN_VALUE"
+	const args = `{"cloneUrl":"https://x-access-token:` + token + `@github.com/acme/repo","branch":"main"}`
+
+	// The tool hands back a credential too — a result is as capable of carrying one
+	// as an argument, and it is recorded on the same span.
+	plane := &stubPlane{offer: []string{"post_v1_exec_run"}, result: map[string]string{
+		"post_v1_exec_run": `{"ok":true,"remote":"https://deploy:s3cr3t@git.example.com/x"}`,
+	}}
+	old := runTools
+	runTools = plane
+	t.Cleanup(func() { runTools = old })
+
+	gw := toolGatewayArgs(t, "post_v1_exec_run", args)
+	defer gw.Close()
+
+	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
+	do(t, app, http.MethodPost, "/v1/agents", "acme", map[string]any{
+		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_v1_exec_run"}})
+	if code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "go"}); code != http.StatusOK {
+		t.Fatalf("run want 200, got %d (%s)", code, body)
+	}
+
+	sp, ok := sink.find("agent.tool post_v1_exec_run")
+	if !ok {
+		t.Fatal("the dispatch produced no span")
+	}
+
+	// CAPTURED: the call is legible as a call.
+	gotArgs := attr(sp, "gen_ai.tool.call.arguments")
+	if gotArgs == "" {
+		t.Fatal("the dispatch recorded no arguments — the trace cannot say what the tool was called with")
+	}
+	if !strings.Contains(gotArgs, "github.com/acme/repo") || !strings.Contains(gotArgs, "main") {
+		t.Fatalf("the recorded arguments lost the detail that makes them worth reading: %s", gotArgs)
+	}
+	gotResult := attr(sp, "gen_ai.tool.call.result")
+	if gotResult == "" {
+		t.Fatal("the dispatch recorded no result — the trace cannot say what came back")
+	}
+
+	// REDACTED: no credential reached the span, from either half.
+	for _, secret := range []string{token, "s3cr3t"} {
+		for _, where := range []struct{ name, v string }{{"arguments", gotArgs}, {"result", gotResult}} {
+			if strings.Contains(where.v, secret) {
+				t.Fatalf("a live credential reached the span in %s: %s", where.name, where.v)
+			}
+		}
+	}
+	// The non-secret half of the userinfo survives — it names HOW the call
+	// authenticated, which is worth reading and is not the secret.
+	if !strings.Contains(gotArgs, "x-access-token") {
+		t.Fatalf("redaction removed the authenticating user, not just its secret: %s", gotArgs)
+	}
+}
+
+// TestRecordedValueIsCutAndSaysSo: a tool argument larger than a span records is
+// bounded, and the value itself states that it was — a silently clipped argument
+// reads as the whole one, which is how an operator concludes a tool was called
+// with something it never saw.
+func TestRecordedValueIsCutAndSaysSo(t *testing.T) {
+	big := `{"blob":"` + strings.Repeat("x", maxRecorded*2) + `"}`
+	got := recordable(big)
+	if len(got) > maxRecorded+64 {
+		t.Fatalf("recorded value is %d bytes, want it bounded near %d", len(got), maxRecorded)
+	}
+	if !strings.Contains(got, "cut") {
+		t.Fatalf("a cut value must say it was cut, got tail %q", got[max(0, len(got)-40):])
+	}
+	if !utf8.ValidString(got) {
+		t.Fatal("cutting produced invalid UTF-8")
+	}
+	// A value that fits is returned whole, with no marker inviting a reader to
+	// wonder what is missing.
+	if small := recordable(`{"a":"b"}`); small != `{"a":"b"}` {
+		t.Fatalf("a value within the bound must pass through unchanged, got %q", small)
+	}
+}
+
+// TestEverySpanOfARunIsFiledUnderItsTenant is the one that decides whether any of
+// the rest is visible.
+//
+// The trace plane files each row under ONE attribute — hanzo.org — read per span
+// by apps/o11y/planesink.go planeOrg, which falls back to the PLATFORM's own org
+// ("hanzo") when it is absent. OTel children do not inherit a parent's
+// attributes, so a correctly stamped HTTP server span above the run buys its
+// children nothing: every span states its own tenant or is filed under the
+// platform.
+//
+// A run whose spans miss it fails twice over. The tenant opens the console and
+// sees a trace with a hole where its agent was, because the org-scoped read never
+// returns those rows; and the tenant's tool names, run ids and user subjects sit
+// in the platform's bucket instead. That is why this asserts on EVERY exported
+// span rather than on the root: one unstamped span is one missing branch of the
+// waterfall.
+func TestEverySpanOfARunIsFiledUnderItsTenant(t *testing.T) {
+	sink := traced(t)
+
+	plane := &stubPlane{offer: []string{"post_v1_search_query"}}
+	old := runTools
+	runTools = plane
+	t.Cleanup(func() { runTools = old })
+
+	gw := toolGateway(t, []string{"post_v1_search_query"})
+	defer gw.Close()
+
+	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
+	do(t, app, http.MethodPost, "/v1/agents", "acme", map[string]any{
+		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_v1_search_query"}})
+	if code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"}); code != http.StatusOK {
+		t.Fatalf("run want 200, got %d (%s)", code, body)
+	}
+
+	// The spans a run IS. Named explicitly so a span that stops being produced
+	// fails here rather than silently shrinking the set under assertion.
+	want := []string{"agent.run a", "agent.step", "agent.tool post_v1_search_query", "chat gpt-4o-mini"}
+	for _, name := range want {
+		spans := sink.all(name)
+		if len(spans) == 0 {
+			t.Fatalf("no %q span was exported", name)
+		}
+		for _, sp := range spans {
+			if got := attr(sp, "hanzo.org"); got != "acme" {
+				t.Fatalf("%s carries hanzo.org=%q, want \"acme\" — the plane files this span "+
+					"under the platform org, so the tenant cannot see its own run", name, got)
+			}
+		}
+	}
+}
+
+// TestOneOrgsRunNeverCarriesAnothersTenant proves the org stamp PARTITIONS the
+// spans: two tenants running the same agent name against the same process produce
+// two disjoint sets of rows, and neither names the other.
+//
+// Tenancy on the trace plane is exactly this attribute — the org-scoped read binds
+// it as its first predicate — so a run that stamped the wrong tenant, or stamped
+// none and fell back to the platform, would disclose one org's tool calls and user
+// subjects to a reader scoped to another. The gate is fail-closed downstream; this
+// asserts the value it closes on is right at the source.
+func TestOneOrgsRunNeverCarriesAnothersTenant(t *testing.T) {
+	sink := traced(t)
+
+	plane := &stubPlane{offer: []string{"post_v1_search_query"}}
+	old := runTools
+	runTools = plane
+	t.Cleanup(func() { runTools = old })
+
+	gw := toolGateway(t, []string{"post_v1_search_query"})
+	defer gw.Close()
+
+	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
+	for _, org := range []string{"acme", "globex"} {
+		do(t, app, http.MethodPost, "/v1/agents", org, map[string]any{
+			"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_v1_search_query"}})
+		if code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", org, map[string]any{"input": "hi"}); code != http.StatusOK {
+			t.Fatalf("%s run want 200, got %d (%s)", org, code, body)
+		}
+	}
+
+	// Every span belongs to exactly one of the two tenants, and the user subject it
+	// names is that tenant's own. A span filed under the platform default is
+	// counted as neither and fails the total below.
+	seen := map[string]int{}
+	for _, name := range []string{"agent.run a", "agent.step", "agent.tool post_v1_search_query", "chat gpt-4o-mini"} {
+		for _, sp := range sink.all(name) {
+			org := attr(sp, "hanzo.org")
+			seen[org]++
+			if org != "acme" && org != "globex" {
+				t.Fatalf("%s is filed under %q — neither tenant ran it", name, org)
+			}
+			// The person is scoped to the same tenant. "acme" carrying globex's
+			// subject would be a cross-tenant disclosure inside a correctly
+			// stamped row, which the org assertion alone cannot catch.
+			if sub := attr(sp, "hanzo.user"); sub != "" && sub != "u-"+org {
+				t.Fatalf("%s is filed under org %q but names user %q", name, org, sub)
+			}
+		}
+	}
+	if seen["acme"] == 0 || seen["globex"] == 0 {
+		t.Fatalf("want spans from both tenants, got acme=%d globex=%d", seen["acme"], seen["globex"])
 	}
 }

@@ -25,6 +25,7 @@ package audit
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 )
 
@@ -72,6 +73,68 @@ var secretKeyParts = []string{
 	"bearer",
 	"signing_key",
 	"encryption_key",
+}
+
+// urlCredential matches the userinfo of a URL — the "user:password@" between the
+// scheme and the host.
+//
+// This is the one credential the key denylist above cannot see, because it is in
+// the VALUE and the key naming it is innocent: a clone URL arrives as
+// {"cloneUrl": "https://x-access-token:<token>@github.com/org/repo"} (the shape
+// apps/coding builds to check a repo out), and "cloneUrl" matches nothing in
+// secretKeyParts. Every one of those characters would otherwise be recorded
+// verbatim.
+//
+// Stripping on the value alone is safe HERE and nowhere else in this file,
+// because userinfo in a URL is a credential BY CONSTRUCTION (RFC 3986 3.2.1) —
+// a structural fact, not a guess that a string "looks secret". The deliberate
+// choice this file already documents, to match key names rather than sniff
+// values, is unchanged: this adds one structural rule, not a heuristic.
+var urlCredential = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)([^/?#\s@]+)@`)
+
+// stripURLCredential replaces the secret half of any URL userinfo in s.
+//
+// The USER is kept and only the password is replaced, because the user names how
+// the call authenticated ("x-access-token", "oauth2") and is worth reading in a
+// trace, while the part after the colon is the credential. Userinfo with no colon
+// IS the token — nothing there is a name — so it goes whole.
+func stripURLCredential(s string) string {
+	if !strings.Contains(s, "@") {
+		return s // no userinfo is possible; skip the scan
+	}
+	return urlCredential.ReplaceAllStringFunc(s, func(m string) string {
+		g := urlCredential.FindStringSubmatch(m)
+		scheme, userinfo := g[1], g[2]
+		if user, _, found := strings.Cut(userinfo, ":"); found {
+			return scheme + user + ":" + redactedMarker + "@"
+		}
+		return scheme + redactedMarker + "@"
+	})
+}
+
+// RedactText returns s with credentials removed, whether or not s is JSON.
+//
+// It exists because not everything worth recording is a structured diff. A tool
+// call's ARGUMENTS are a JSON object and get the full treatment — the secret-key
+// denylist plus the URL strip. A tool's RESULT is whatever the tool returned,
+// commonly prose or a log tail, and running that through Redact would hand back
+// the fail-closed marker for the whole thing: correct for a mutation diff that
+// must parse, useless for text that was never meant to.
+//
+// So the shape decides the pass. JSON gets both; text gets the structural URL
+// strip alone, which is the only rule that can be applied to a value with no keys
+// to judge. Text is therefore redacted LESS than JSON, and that is a real limit
+// rather than an oversight: a credential written into prose by the tool that
+// returned it ("your token is X") is not something key-name matching can see.
+// Callers that can supply structure should.
+func RedactText(s string) string {
+	if s == "" {
+		return s
+	}
+	if json.Valid([]byte(s)) {
+		return string(Redact(json.RawMessage(s)))
+	}
+	return stripURLCredential(s)
 }
 
 // isSecretKey reports whether a JSON key names a credential-bearing field.
@@ -134,6 +197,9 @@ func redactValue(key string, v any) any {
 			out[i] = redactValue("", val) // array elements inherit no key
 		}
 		return out
+	case string:
+		// The one credential a key name cannot reveal (see urlCredential).
+		return stripURLCredential(t)
 	default:
 		return v
 	}

@@ -919,9 +919,18 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, acto
 	// row and on the money, which is the whole of "drill into this run".
 	id, _ := genID("run")
 
+	// hanzo.org, not a name of this package's own, because the TRACE PLANE reads
+	// exactly this key: apps/o11y/planesink.go planeOrg files each row under
+	// attrs["hanzo.org"] and falls back to the PLATFORM's org when it is absent.
+	// It is a per-span read — OTel children do not inherit a parent's attributes —
+	// so the correctly stamped HTTP span above this one buys the run nothing. A
+	// run that named its tenant in a private spelling was stored as the platform's
+	// own telemetry: invisible to the org-scoped read the console issues, and
+	// sitting in the platform's bucket with this tenant's tool names and users in
+	// it. One tenant attribute, the one the plane already reads.
 	span.SetAttributes(
 		attribute.String("hanzo.agent.name", a.Name),
-		attribute.String("hanzo.agent.org", a.Org),
+		attribute.String("hanzo.org", a.Org),
 		attribute.String("gen_ai.request.model", a.Model),
 		attribute.String("hanzo.agent.run_id", id),
 	)
@@ -1042,6 +1051,11 @@ func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Age
 	span.SetAttributes(
 		attribute.String("gen_ai.request.model", a.Model),
 		attribute.String("hanzo.agent.run_id", runID),
+		// The tenant, on this span too. A step that named no org was filed under
+		// the platform's, which put the middle of every run's waterfall in a
+		// bucket the tenant cannot read — the run above it and the tool calls
+		// below it were visible and the step joining them was not.
+		attribute.String("hanzo.org", org),
 	)
 
 	prompt := a.Instructions
@@ -1122,9 +1136,23 @@ func completeWithFailover(ctx context.Context, ai types.AIClient, req *types.Cha
 		models = append(models, f)
 	}
 	var lastErr error
-	for _, m := range models {
+	for i, m := range models {
 		req.Model = m
-		resp, err := completeWithRetry(ctx, ai, req)
+		resp, attempts, err := completeWithRetry(ctx, ai, req)
+		// A model call that did not succeed first time, said out loud. Retries and
+		// failovers were previously invisible AS SUCH: each attempt produced its own
+		// chat span, so three attempts looked like three unrelated calls and the
+		// switch to the reliable model looked like an agent that had simply asked
+		// for a different one. The waterfall showed the cost and never the reason.
+		//
+		// It is an EVENT, not an attribute, because completeWithFailover runs once
+		// per ROUND of the tool loop — an attribute would be overwritten by every
+		// later round and the span would report only the last one, while events
+		// accumulate. And nothing at all is recorded for the ordinary case, so the
+		// presence of one of these always means something happened.
+		if attempts > 1 || i > 0 {
+			noteRetry(ctx, m, attempts, i > 0, err)
+		}
 		if err == nil {
 			return resp, m, nil
 		}
@@ -1141,25 +1169,48 @@ func completeWithFailover(ctx context.Context, ai types.AIClient, req *types.Cha
 // completeWithRetry calls the completion up to maxAttempts times, retrying ONLY a
 // transient upstream overload (types.ErrUpstreamBusy) with jittered backoff and
 // respecting context cancellation. A non-transient error returns immediately.
-func completeWithRetry(ctx context.Context, ai types.AIClient, req *types.ChatRequest) (*types.ChatResponse, error) {
+// It returns how many attempts it MADE alongside the outcome, so the caller can
+// record a retry as a retry. Counting inside is the only place the number is
+// known — from outside, three attempts and three unrelated calls look identical.
+func completeWithRetry(ctx context.Context, ai types.AIClient, req *types.ChatRequest) (*types.ChatResponse, int, error) {
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		resp, err := ai.ChatCompletion(ctx, req)
 		if err == nil {
-			return resp, nil
+			return resp, attempt + 1, nil
 		}
 		lastErr = err
 		if !errors.Is(err, types.ErrUpstreamBusy) {
-			return nil, err // permanent — do not burn retries repeating it
+			return nil, attempt + 1, err // permanent — do not burn retries repeating it
 		}
 		if attempt == maxAttempts-1 {
 			break
 		}
 		if err := sleepBackoff(ctx, attempt); err != nil {
-			return nil, err // context cancelled/expired mid-backoff
+			return nil, attempt + 1, err // context cancelled/expired mid-backoff
 		}
 	}
-	return nil, lastErr
+	return nil, maxAttempts, lastErr
+}
+
+// noteRetry records one model call that needed more than a first attempt, on
+// whichever span is current — the step for a plain run, the same step for every
+// round of a tool loop.
+//
+// The reason is carried when there is one: "it retried three times" and "it
+// retried three times because the gateway kept answering 429" are different
+// facts, and only the second tells an operator whether to look at us or at the
+// upstream.
+func noteRetry(ctx context.Context, model string, attempts int, failover bool, err error) {
+	attrs := []attribute.KeyValue{
+		attribute.String("gen_ai.request.model", model),
+		attribute.Int("hanzo.agent.model_attempts", attempts),
+		attribute.Bool("hanzo.agent.failover", failover),
+	}
+	if err != nil {
+		attrs = append(attrs, attribute.String("hanzo.agent.retry_reason", err.Error()))
+	}
+	trace.SpanFromContext(ctx).AddEvent("model retry", trace.WithAttributes(attrs...))
 }
 
 // sleepBackoff waits an exponential, equal-jittered delay before the next

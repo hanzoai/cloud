@@ -56,8 +56,10 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -85,6 +87,14 @@ const (
 	// maxToolArgs bounds the arguments a model may emit for one call, before they
 	// are ever parsed.
 	maxToolArgs = 32 * 1024
+	// maxRecorded bounds what ONE tool call may put on its span — its arguments or
+	// its result. A trace is for READING, not for replay, and this is deliberately
+	// far tighter than maxToolResult: that bound is paid once as prompt tokens,
+	// this one is stored for every call of every run and kept for the life of the
+	// trace. 4 KiB is a page of evidence. What exceeds it is cut and SAID to be
+	// cut — a silently clipped value reads as the whole argument, which is how an
+	// operator concludes a tool was called with something it never saw.
+	maxRecorded = 4 * 1024
 	// maxAgentDepth bounds how deep AGENTS may nest, which is a different bound
 	// from maxToolRounds and is not covered by it: an agent is itself a tool
 	// (agentToolProvider, agents.go:399), so A calling B calling A is a cycle in
@@ -243,6 +253,33 @@ func actorSub(org, actor string) string {
 	return actor
 }
 
+// recordable is what a tool call may put on a span: credentials stripped, size
+// bounded, and the bound stated.
+//
+// Both halves are load-bearing. A tool ARGUMENT routinely carries a live
+// credential — a clone URL with a token in the userinfo is the ordinary shape
+// (apps/coding builds exactly that) — and a trace that records one is worse than
+// no trace at all, because the token outlives the sandbox that used it and sits
+// in a store built to be queried. audit.RedactText is the fleet's ONE redactor;
+// this adds no second policy, it just applies it at the moment of recording.
+//
+// The order matters: redact FIRST, then cut. Cutting first can split a credential
+// and leave the front half of it on the span, which is both a leak and unreadable.
+func recordable(s string) string {
+	s = audit.RedactText(s)
+	if len(s) <= maxRecorded {
+		return s
+	}
+	// Cut on a rune boundary so the value stays valid UTF-8; a span store that
+	// rejects or mangles invalid UTF-8 would lose the whole attribute over the
+	// last byte of a multi-byte character.
+	cut := maxRecorded
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "\u2026[cut: longer than a span records]"
+}
+
 // renderToolResult turns whatever a tool returned into the text the model reads.
 // A string is already text; anything else is its JSON, which is the shape the
 // tool's own schema describes. A value that will not marshal is reported as that
@@ -346,10 +383,18 @@ func dispatchOne(ctx context.Context, org, actor string, tc types.ToolCall, runI
 	span.SetAttributes(
 		attribute.String("gen_ai.tool.name", tc.Name),
 		attribute.String("gen_ai.tool.call.id", tc.ID),
-		attribute.String("hanzo.agent.org", org),
+		// The tenant under the key the trace plane files rows by (planeOrg,
+		// apps/o11y/planesink.go) — see the note on the run span in agents.go.
+		attribute.String("hanzo.org", org),
 		attribute.String("hanzo.agent.run_id", runID),
 		attribute.String("hanzo.agent.tool_subsystem", toolSubsystem(tc.Name)),
 		attribute.Int("hanzo.agent.tool_round", round),
+		// WHAT it was called with. Without this a trace says an agent called
+		// "post_v1_exec_run" six times and cannot say what it ran — which is the
+		// difference between knowing a run touched a tool and knowing what it did.
+		// The convention's own name for this (opt-in precisely because it can carry
+		// user data), redacted and bounded by recordable.
+		attribute.String("gen_ai.tool.call.arguments", recordable(tc.Arguments)),
 	)
 	if sub := actorSub(org, actor); sub != "" {
 		span.SetAttributes(attribute.String("hanzo.user", sub))
@@ -376,6 +421,10 @@ func dispatchOne(ctx context.Context, org, actor string, tc types.ToolCall, runI
 		span.SetStatus(codes.Error, "tool call failed")
 		return "error: " + err.Error()
 	}
+	// WHAT came back — the other half of the dispatch, and the half that explains
+	// what the model did next. A tool that "succeeded" while returning an error
+	// document is invisible without it.
+	span.SetAttributes(attribute.String("gen_ai.tool.call.result", recordable(out)))
 	span.SetStatus(codes.Ok, "")
 	if strings.TrimSpace(out) == "" {
 		// An empty result and a failure look identical to a model reading a blank
