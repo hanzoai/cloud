@@ -79,8 +79,8 @@ func tiktokBuild(cfg Config, batch []Conversion) tiktokBody {
 		if cv.URL != "" {
 			e.Page = map[string]any{"url": cv.URL}
 		}
-		if cv.Value > 0 {
-			e.Properties = map[string]any{"value": cv.Value, "currency": cv.Currency}
+		if props := tiktokProperties(cv); len(props) > 0 {
+			e.Properties = props
 		}
 		data = append(data, e)
 	}
@@ -110,6 +110,47 @@ func tiktokUser(u UserData) map[string]any {
 		user["user_agent"] = u.UserAgent
 	}
 	return user
+}
+
+// tiktokProperties renders a conversion's commerce fields into TikTok's Events API
+// properties: value/currency, and — for an ecommerce event — the native product signals
+// (contents[{content_id,content_name,content_category,brand,price,quantity}] +
+// content_type) TikTok's Value-Based Optimization reads. Empty when the event carries
+// neither value nor items.
+func tiktokProperties(cv Conversion) map[string]any {
+	p := map[string]any{}
+	if cv.Value > 0 {
+		p["value"] = cv.Value
+		p["currency"] = cv.Currency
+	}
+	if len(cv.Items) > 0 {
+		contents := make([]map[string]any, 0, len(cv.Items))
+		for _, it := range cv.Items {
+			c := map[string]any{}
+			if it.ID != "" {
+				c["content_id"] = it.ID
+			}
+			if it.Name != "" {
+				c["content_name"] = it.Name
+			}
+			if it.Category != "" {
+				c["content_category"] = it.Category
+			}
+			if it.Brand != "" {
+				c["brand"] = it.Brand
+			}
+			if it.Price > 0 {
+				c["price"] = it.Price
+			}
+			if it.Quantity > 0 {
+				c["quantity"] = it.Quantity
+			}
+			contents = append(contents, c)
+		}
+		p["contents"] = contents
+		p["content_type"] = "product"
+	}
+	return p
 }
 
 func (d tiktok) Send(ctx context.Context, cfg Config, secret string, batch []Conversion) (Result, error) {
