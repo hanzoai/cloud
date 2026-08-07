@@ -55,8 +55,17 @@ export GOFLAGS ?= -p=$(NPROC)
 DEV_KMS_KEY := AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 TEST_ENV     = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)}"
 
-# The release image builds with -tags "libsqlite3 sqlite_fts5". sqlite_fts5 needs
-# no cgo, and without it any store whose migration declares an FTS5 table fails
-# to open — so a subsystem built on full-text search cannot be tested at all.
-# Carry the tag the shipped build carries.
-TEST_TAGS ?= sqlite_fts5
+# Carry the tags the SHIPPED build carries. The release image builds and tests
+# with -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" (Dockerfile:213), and
+# its own comment says sqlite_math_functions "is not optional under cgo" because
+# hanzoai/base's search layer calls the math functions.
+#
+# This line said sqlite_fts5 alone, so a local `make test` linked a SQLite the
+# shipped one is not. apps/base, apps/code and apps/commerce failed on `no such
+# function: acos` — for months read as "this box's SQLite is old", which it never
+# was: the tag list here and the tag list in the Dockerfile were two statements
+# of one fact, and they disagreed. Anything added there belongs here the same day.
+#
+# sqlite_fts5 needs no cgo; without it any store whose migration declares an FTS5
+# table fails to open, so a full-text subsystem cannot be tested at all.
+TEST_TAGS ?= sqlite_fts5 sqlite_math_functions
