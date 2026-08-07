@@ -15,8 +15,9 @@
 //	POST   /v1/sandboxes/:id/exec    {argv|command, stdin?, timeoutSec?} -> {exitCode,stdout,stderr}
 //	GET    /v1/sandboxes/:id/fs      ?path=  read a file, or list a directory
 //	POST   /v1/sandboxes/:id/fs      ?path=  write a file
-//	POST   /v1/sandboxes/:id/terminal        a single-use ticket for one terminal
-//	GET    /v1/sandboxes/:id/terminal/ws     ?ticket=  the terminal itself
+//	POST   /v1/sandboxes/:id/terminal/ticket a single-use ticket for one terminal
+//	GET    /v1/sandboxes/:id/terminal        ?ticket=&arg=  the terminal, as a page
+//	GET    /v1/sandboxes/:id/terminal/ws     ?ticket=&arg=  the terminal, as a socket
 //
 // THERE IS EXACTLY ONE WAY INTO A SANDBOX, and it is the Kubernetes exec
 // subresource. fs read/list/write are not a second channel — they are `cat`,
@@ -483,25 +484,45 @@ func init() {
 		"Write a file",
 		"Writes the request body to one file in the sandbox's project directory, creating "+
 			"parent directories. Same confinement as the read above.")
-	openapi.Describe("/v1/sandboxes/:id/terminal", http.MethodPost,
+	openapi.Describe("/v1/sandboxes/:id/terminal/ticket", http.MethodPost,
 		"Open a terminal",
 		"Mints a SINGLE-USE ticket for one interactive terminal in this sandbox and returns "+
-			"`{ticket, url}`, where url is the socket's path with the ticket already on it.\n\n"+
-			"It exists because a browser's WebSocket carries no Authorization header, so the "+
-			"socket cannot be authenticated the way every other route here is. The ticket is a "+
-			"credential MINTED for that one socket: bound to this org and this sandbox, valid "+
-			"for thirty seconds, and gone the first time it is presented. A long-lived bearer in "+
-			"a query string would instead be written into every access log on the path.")
+			"`{ticket, expiresIn, url}`, where url is the terminal PAGE with the ticket already "+
+			"on it.\n\n"+
+			"It exists because a browser carries no Authorization header into a WebSocket or an "+
+			"iframe, so a terminal cannot be authenticated the way every other route here is. "+
+			"The ticket is a credential MINTED for that one terminal: bound to this org and this "+
+			"sandbox, valid for thirty seconds, and gone the first time it is presented. A "+
+			"long-lived bearer in a query string would instead be written into every access log "+
+			"on the path.\n\n"+
+			"Mint one per terminal, and mint a fresh one to reconnect.")
+	openapi.Describe("/v1/sandboxes/:id/terminal", http.MethodGet,
+		"The terminal, as a page",
+		"A complete, self-contained terminal — xterm inline, no other origin — that opens its "+
+			"own socket and runs a shell in this sandbox. Embed it in an iframe and there is "+
+			"nothing else to build.\n\n"+
+			"`ticket` is the credential from the POST above and `arg` names the session (see "+
+			"the socket below); both are simply carried through to the socket. The page is NOT "+
+			"gated — it is inert markup and does not redeem the ticket, because a ticket is spent "+
+			"once and a page that spent it would hold a credential that no longer opens anything.\n\n"+
+			"When the terminal is up it posts `{source:\"hanzo-term\", ready:true}` to its parent "+
+			"frame, so a host can tell a live terminal from a page that failed into something "+
+			"else. `frame-ancestors` admits our own brands' hosts and nothing further.")
 	openapi.Describe("/v1/sandboxes/:id/terminal/ws", http.MethodGet,
-		"The terminal itself",
+		"The terminal, as a socket",
 		"Upgrades to a WebSocket carrying a login shell on a pseudo-terminal inside the "+
-			"sandbox. Requires `ticket` from the POST above; a missing, expired or already-spent "+
-			"ticket answers 401 without upgrading.\n\n"+
+			"sandbox — for a host that brings its own emulator. Requires `ticket`; a missing, "+
+			"expired or already-spent one answers 401 without upgrading.\n\n"+
 			"THE WIRE. A text frame is stdin, unless it is the one control object "+
 			"`{\"resize\":{\"cols\":N,\"rows\":M}}`; a binary frame is always stdin. Output comes "+
 			"back as BINARY frames, because a pty emits arbitrary bytes cut at arbitrary offsets "+
 			"and a text frame carrying half a rune is one the browser closes the connection over.\n\n"+
-			"The shell is `bash -l`, falling back to `sh -l`. Whatever else the sandbox image "+
-			"carries — the hanzo CLI included — is a command to type, never a requirement to get "+
-			"a prompt.")
+			"`arg` names a SESSION: the shell runs under `tmux new -A -s <arg>`, which attaches "+
+			"to that session if it exists and creates it if it does not — so one sandbox holds as "+
+			"many terminals as a caller has names for. It is 1-64 characters of letters, digits, "+
+			"`-` or `_` and may not begin with `-`; anything else is 400. Without `arg` the shell "+
+			"is unnamed and unmultiplexed.\n\n"+
+			"The shell is `bash -l`, falling back to `sh -l`, and to the plain shell again when "+
+			"the image has no tmux. Whatever else the image carries — the hanzo CLI included — is "+
+			"a command to type, never a requirement to get a prompt.")
 }
