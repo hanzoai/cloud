@@ -202,6 +202,93 @@ func (e Engine) Serve(c *zip.Ctx, in Request, q string) error {
 	})
 }
 
+// Report is one researched answer held as a VALUE: the grounded prose and the
+// sources it cites. It carries what Serve writes as JSON minus the two keys that
+// only mean anything to the advisor contract — `figures`, which the web domain
+// leaves empty by construction, and `domain`, which is always "web" here.
+type Report struct {
+	// Answer is the grounded prose, with inline markdown citations. Every link in
+	// it points at a page in Sources: the citation check runs on the text before
+	// it leaves the engine, so a cited URL is one THIS call fetched.
+	Answer string `json:"answer"`
+	// Sources are the pages the answer was written from, deduplicated and ranked.
+	// Always an array, never null.
+	Sources []Source `json:"sources"`
+	// FollowUps are the questions worth asking next. Best-effort — an empty list
+	// is a normal outcome, not a fault.
+	FollowUps []string `json:"follow_ups"`
+	// Mode is the profile that ran: search, news, research or deep.
+	Mode string `json:"mode"`
+	// Model is the model that synthesized the answer.
+	Model string `json:"model"`
+}
+
+// Answer runs the SAME bounded loop Serve runs and hands back its outcome as a
+// value instead of writing it to a response.
+//
+// It exists because the loop's only door was an HTTP handler, and a handler is
+// the one shape an agent cannot reach: a typed op — and so an MCP tool, a CLI
+// command and an SDK method — is invoked with a context and no request at all.
+// So the engine that already separated Run (transport-free) from Serve (HTTP)
+// gains its second transport-free door rather than a second engine. Serve keeps
+// streaming; this returns one value; Run is still the only loop.
+//
+// The identity facts Serve reads off the request are read off the CONTEXT here,
+// which is where cloud.Bridge parks the server-minted ones. There is no ledger
+// claim on a context, so the caller's own org pays — the same fallback Serve
+// takes when no billing org was minted.
+func (e Engine) Answer(ctx context.Context, in Request, q string) (*Report, error) {
+	org, _ := principal.OrgFrom(ctx)
+	project := principal.ProjectFrom(ctx)
+
+	m := resolveMode(in.Mode)
+	fee := feeCents(m.name, m.feeCents)
+
+	// MONEY GATE — the same refusal Serve makes, before any work, so an
+	// out-of-funds caller is told so rather than handed a half answer.
+	capValidated := principal.ValidatedFrom(ctx) && !principal.IsDefaultProject(project)
+	if err := e.Bill.Gate(ctx, org, project, capValidated, "web", fee); err != nil {
+		return nil, err
+	}
+
+	models := synthModels(in.Model, m, e.Model)
+	p := Params{
+		q:            q,
+		webQuery:     buildQuery(q, m, in.Sources),
+		mode:         m,
+		model:        models[0],
+		fallbacks:    models[1:],
+		language:     strings.TrimSpace(in.Language),
+		maxSources:   clampPositive(in.MaxSources, m.maxSources),
+		maxQueries:   clampPositive(in.MaxQueries, m.maxQueries),
+		readTop:      m.readTop,
+		rounds:       min(m.rounds, maxRounds),
+		hostCap:      m.hostCap,
+		deadline:     m.deadline,
+		tokenCeiling: m.tokenCeiling,
+		followUps:    in.FollowUps == nil || *in.FollowUps,
+		system:       pickSystem(in.System, m.system),
+		dataOrg:      org,
+		payer:        org,
+		project:      project,
+		projectScope: project,
+		fee:          fee,
+	}
+
+	rctx, cancel := context.WithTimeout(ctx, p.deadline)
+	defer cancel()
+	buf := &bufferSink{}
+	e.Run(rctx, p, buf)
+
+	return &Report{
+		Answer:    buf.answer,
+		Sources:   nonNilSrc(buf.srcs),
+		FollowUps: nonNilStr(buf.follow),
+		Mode:      p.mode.name,
+		Model:     p.model,
+	}, nil
+}
+
 // Run is the bounded loop, parameterized by mode — the ONE code path for
 // search/news/research/deep. It emits the SearchEvent envelope through out, then
 // meters the caller ONCE. A failed step degrades (fewer sources, snippets instead
