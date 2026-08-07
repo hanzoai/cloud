@@ -17,10 +17,10 @@ import (
 // refresh token on rotation, so a second refresh call would kill the
 // credential (the refresh_token-reuse storm). Errors are token-free end to
 // end; nothing secret is logged.
-func fresh(ctx context.Context, s *cloud.Service[state], p *Provider, conn Connector, force bool) (Connector, []byte, error) {
+func fresh(ctx context.Context, s *cloud.Service[state], p *Provider, conn Connection, force bool) (Connection, []byte, error) {
 	path, err := userPath(conn.Org, conn.User, conn.Provider, conn.Label)
 	if err != nil {
-		return Connector{}, nil, err
+		return Connection{}, nil, err
 	}
 	stale := conn.ExpiresAt != 0 && time.Until(time.Unix(conn.ExpiresAt, 0)) <= refreshSkew
 	if p.Refresh == nil || (!force && !stale) {
@@ -28,7 +28,7 @@ func fresh(ctx context.Context, s *cloud.Service[state], p *Provider, conn Conne
 		// to a plain custody read — one endpoint shape for every provider.
 		tok, err := kmsGet(s, path, p.Secrets[0])
 		if err != nil || len(tok) == 0 {
-			return Connector{}, nil, fmt.Errorf("stored credential unavailable")
+			return Connection{}, nil, fmt.Errorf("stored credential unavailable")
 		}
 		return conn, tok, nil
 	}
@@ -36,19 +36,19 @@ func fresh(ctx context.Context, s *cloud.Service[state], p *Provider, conn Conne
 	unlock := s.State.flight.lock("refresh\x00" + path)
 	defer unlock()
 
-	cur, found, err := s.State.store.GetConnector(ctx, conn.Org, conn.User, conn.Provider, conn.Label)
+	cur, found, err := s.State.store.Get(ctx, conn.Org, conn.User, conn.Provider, conn.Label)
 	if err != nil {
-		return Connector{}, nil, err
+		return Connection{}, nil, err
 	}
 	if !found {
-		return Connector{}, nil, fmt.Errorf("connector gone")
+		return Connection{}, nil, fmt.Errorf("connector gone")
 	}
 	if !force && cur.ExpiresAt > conn.ExpiresAt && time.Until(time.Unix(cur.ExpiresAt, 0)) > refreshSkew {
 		// A concurrent flight already rotated while we waited for the lock: adopt
 		// its result — a second provider call would spend the rotated refresh token.
 		tok, err := kmsGet(s, path, p.Secrets[0])
 		if err != nil || len(tok) == 0 {
-			return Connector{}, nil, fmt.Errorf("stored credential unavailable")
+			return Connection{}, nil, fmt.Errorf("stored credential unavailable")
 		}
 		return cur, tok, nil
 	}
@@ -64,13 +64,13 @@ func fresh(ctx context.Context, s *cloud.Service[state], p *Provider, conn Conne
 		// ("you asked to rotate something unrotatable"), not a 502 — a gateway
 		// error would read as "upstream is broken" and invite a retry that can
 		// never succeed.
-		return Connector{}, nil, zip.ErrBadRequest("refresh not supported")
+		return Connection{}, nil, zip.ErrBadRequest("refresh not supported")
 	}
 	res, err := p.Refresh(ctx, string(ref))
 	if err != nil || res == nil {
 		// Provider errors are token-free by the Provider.Refresh contract.
 		s.Log.Warn("token refresh failed", "provider", p.ID, "org", cur.Org, "user", cur.User, "label", cur.Label, "err", err)
-		return Connector{}, nil, fmt.Errorf("token refresh failed")
+		return Connection{}, nil, fmt.Errorf("token refresh failed")
 	}
 	// Fallback metadata BEFORE admission: a refresh response may omit identity.
 	if res.ExternalID == "" {
@@ -89,11 +89,11 @@ func fresh(ctx context.Context, s *cloud.Service[state], p *Provider, conn Conne
 	// refresh that adopts under this lock.
 	next, err := saveUser(ctx, s, cur.Org, cur.User, cur.Label, p, res)
 	if err != nil {
-		return Connector{}, nil, err
+		return Connection{}, nil, err
 	}
 	tok := res.Tokens[p.Secrets[0]]
 	if tok == "" {
-		return Connector{}, nil, fmt.Errorf("provider returned no access token")
+		return Connection{}, nil, fmt.Errorf("provider returned no access token")
 	}
 	return next, []byte(tok), nil
 }

@@ -184,17 +184,17 @@ type startResp struct {
 type pollResp struct {
 	Status    string    `json:"status"`
 	Interval  int64     `json:"interval"`
-	Connector *connView `json:"connector"`
+	Connection *connView `json:"connector"`
 }
 
 type credResp struct {
 	Connected bool      `json:"connected"`
-	Connector *connView `json:"connector"`
+	Connection *connView `json:"connector"`
 }
 
 type refreshResp struct {
 	Refreshed bool      `json:"refreshed"`
-	Connector *connView `json:"connector"`
+	Connection *connView `json:"connector"`
 }
 
 type tokenResp struct {
@@ -383,7 +383,7 @@ func TestDeviceFlow(t *testing.T) {
 		}}, nil
 	}
 	p2 := decode[pollResp](t, asOK(t, app, http.MethodPost, devPollPath("fake", st.Flow), "acme", userUUID, nil))
-	if p2.Status != "connected" || p2.Connector == nil || p2.Connector.ID != "fake:default" {
+	if p2.Status != "connected" || p2.Connection == nil || p2.Connection.ID != "fake:default" {
 		t.Fatalf("done poll want connected fake:default, got %+v", p2)
 	}
 	mu.Lock()
@@ -534,7 +534,7 @@ func TestCredentialLabelAndID(t *testing.T) {
 
 	// Explicit label rides into the connector id; empty label means "default".
 	cr := decode[credResp](t, asOK(t, app, http.MethodPost, credPath("fake"), "acme", userEmail, map[string]any{"token": "tok", "label": "work"}))
-	if !cr.Connected || cr.Connector == nil || cr.Connector.ID != "fake:work" {
+	if !cr.Connected || cr.Connection == nil || cr.Connection.ID != "fake:work" {
 		t.Fatalf("labeled connect want fake:work, got %+v", cr)
 	}
 	asOK(t, app, http.MethodPost, credPath("fake"), "acme", userEmail, map[string]any{"token": "tok"})
@@ -727,12 +727,12 @@ func TestRefreshSkew(t *testing.T) {
 	}
 	// POST /refresh forces a rotation regardless of expiry.
 	rr := decode[refreshResp](t, asOK(t, app, http.MethodPost, refreshPath("fake:default"), "acme", userUUID, nil))
-	if !rr.Refreshed || rr.Connector == nil || refreshes.Load() != 1 {
+	if !rr.Refreshed || rr.Connection == nil || refreshes.Load() != 1 {
 		t.Fatalf("force refresh want one rotation, got %+v (calls=%d)", rr, refreshes.Load())
 	}
-	exp, err := time.Parse(time.RFC3339, rr.Connector.ExpiresAt)
+	exp, err := time.Parse(time.RFC3339, rr.Connection.ExpiresAt)
 	if err != nil || time.Until(exp) < 90*time.Minute {
-		t.Fatalf("refresh must advance expiresAt: %q err=%v", rr.Connector.ExpiresAt, err)
+		t.Fatalf("refresh must advance expiresAt: %q err=%v", rr.Connection.ExpiresAt, err)
 	}
 }
 
@@ -793,7 +793,7 @@ func TestKMSNotReady(t *testing.T) {
 	app := newApp(t, nil)
 	// token/refresh check custody readiness AFTER row lookup — seed a row
 	// directly so the 503 (not a 404) is what the caller sees.
-	if err := mounted.State.store.UpsertConnector(context.Background(), Connector{
+	if err := mounted.State.store.Upsert(context.Background(), Connection{
 		Org: "acme", User: userUUID, Provider: "fake", Label: "default",
 	}); err != nil {
 		t.Fatalf("seed connector: %v", err)

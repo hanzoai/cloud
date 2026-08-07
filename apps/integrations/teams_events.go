@@ -21,7 +21,7 @@ import (
 //	inbound-auth : verifyBotFrameworkJWT (RS256 JWT against Bot Framework's JWKS,
 //	               audience = MICROSOFT_APP_ID, serviceurl-bound) — NOT HMAC
 //	parse        : parseTeamsActivity (pure)
-//	reply        : teamsSendActivity (POST the Bot Connector at the activity's serviceUrl,
+//	reply        : teamsSendActivity (POST the Bot Connection at the activity's serviceUrl,
 //	               authed with an AAD client-credentials app token)
 //
 // — delegating dedupe/org-resolve/pool/brain/link to the core. ISOLATION ROOT: the
@@ -38,7 +38,7 @@ import (
 // teamsEvents is the Bot Framework messaging webhook. It parses the activity (to
 // obtain serviceUrl), verifies the Bot Framework JWT (audience-bound + serviceurl-
 // bound), and routes a message to an on-behalf-of agent run — acking 200 fast and
-// replying proactively via the Bot Connector async, deduped durably on activity id.
+// replying proactively via the Bot Connection async, deduped durably on activity id.
 func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	bridgeReady()
 	if !teamsConfigured() {
@@ -69,7 +69,7 @@ func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		return c.NoContent(http.StatusOK)
 	}
 	// SHED BEFORE the dedupe write (Red M-1): acquire a pool slot first; if the pool
-	// is full, record NOTHING and return a retriable NON-2xx so the Bot Connector
+	// is full, record NOTHING and return a retriable NON-2xx so the Bot Connection
 	// re-delivers when a slot frees (no lost message, no double-run).
 	if !bridgeLim.acquire(org) {
 		s.Log.Warn("teams: at capacity, shedding for retry", "org", org)
@@ -105,7 +105,7 @@ func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 // teamsReplier builds the reply closure: POST a message activity to the Bot
-// Connector at the (JWT-verified) serviceUrl, authed with an AAD app token. Teams
+// Connection at the (JWT-verified) serviceUrl, authed with an AAD app token. Teams
 // has no per-user ephemeral in a channel; a link prompt is safe because when Teams
 // linking is unconfigured the prompt carries no URL (bridgeReply), and when it is
 // configured the link re-verifies the AAD user.
@@ -115,7 +115,7 @@ func teamsReplier(serviceURL, conversationID string) replyFunc {
 	}
 }
 
-// ── Bot Connector reply (serviceUrl + AAD app token) ────────────────────────
+// ── Bot Connection reply (serviceUrl + AAD app token) ────────────────────────
 
 var (
 	teamsTokMu  sync.Mutex
@@ -123,7 +123,7 @@ var (
 	teamsTokExp time.Time
 )
 
-// teamsReplyToken returns a cached AAD app token for the Bot Connector
+// teamsReplyToken returns a cached AAD app token for the Bot Connection
 // (client-credentials, scope api.botframework.com/.default). Cached until ~1 min
 // before expiry.
 func teamsReplyToken(ctx context.Context) (string, error) {
@@ -169,7 +169,7 @@ func teamsReplyToken(ctx context.Context) (string, error) {
 	return teamsTok, nil
 }
 
-// teamsSendActivity posts a message activity to the Bot Connector at serviceUrl. The
+// teamsSendActivity posts a message activity to the Bot Connection at serviceUrl. The
 // app token is never logged.
 func teamsSendActivity(ctx context.Context, serviceURL, conversationID, text string) error {
 	tok, err := teamsReplyToken(ctx)
