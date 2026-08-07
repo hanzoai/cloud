@@ -97,6 +97,9 @@ func SendSlackAt(ctx context.Context, org, channel, threadTS, updateTS, text str
 	if err != nil {
 		return "", err
 	}
+	// Progress text comes from a run in another process and is Markdown for the
+	// same reason the reply is. Same translation, same edge.
+	text = mrkdwn(text)
 	if strings.TrimSpace(updateTS) != "" {
 		return slackChatUpdate(ctx, string(tok), channel, updateTS, text)
 	}
