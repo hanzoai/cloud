@@ -51,6 +51,7 @@ const (
 	bingName   = "bing"
 	ddgName    = "ddg"
 	mojeekName = "mojeek"
+	braveName  = "brave"
 
 	// mojeekCount is how many hits Mojeek is asked for. It honours `t` exactly
 	// (measured: t=20 → 20 results, t=30 → 30), so this is the one knob that
@@ -126,10 +127,24 @@ type webSearchResults struct {
 // engine is one keyless public web-search backend: build a request URL for a
 // query, parse the returned HTML into results. Pure functions — unit-testable
 // against fixture HTML with no network.
+//
+// `fetch` is the one variation, and it is a seam rather than an adapter: an
+// engine that is a JSON API instead of a page answers for itself. Brave sells
+// one, and reshaping JSON into an *html.Node so it could reach `parse` is
+// exactly the shim this package keeps deleting. When fetch is set, parse is
+// unused; build still names the full request so the cache keys on the question
+// like every other engine.
 type engine struct {
 	name  string
 	build func(query, lang string) string
 	parse func(root *html.Node) []webResult
+	fetch func(ctx context.Context, query, lang string) ([]webResult, error)
+}
+
+// errStatus is the one shape an engine reports a refusing endpoint with, so a
+// 202 challenge and a 429 quota read the same to whatever counts them.
+func errStatus(engine string, code int) error {
+	return fmt.Errorf("%s: http %d", engine, code)
 }
 
 // ── engine endpoints (functions, not vars, so tests override via env) ────────
@@ -199,6 +214,7 @@ var engineByName = map[string]engine{
 	bingEngine.name:   bingEngine,
 	ddgEngine.name:    ddgEngine,
 	mojeekEngine.name: mojeekEngine,
+	braveEngine.name:  braveEngine,
 }
 
 // defaultEngines is what a deployment that configures nothing searches: every
@@ -311,6 +327,22 @@ func fetchEngine(ctx context.Context, e engine, query, lang string) answer {
 	url := e.build(query, lang)
 	if hit, ok := cacheGet(url); ok {
 		return answer{engine: e.name, results: hit, outcome: answered}
+	}
+
+	// A JSON engine answers for itself. It is cached like the others — a PAID
+	// API is the one we least want to ask twice for the same question — and it
+	// reports the same outcomes, so a quota refusal reads as `blind` rather than
+	// as an engine that had nothing to say.
+	if e.fetch != nil {
+		out, err := e.fetch(ctx, query, lang)
+		if len(out) > 0 {
+			cachePut(url, out)
+			return answer{engine: e.name, results: out, outcome: answered}
+		}
+		if err != nil {
+			return answer{engine: e.name, outcome: failed}
+		}
+		return answer{engine: e.name, outcome: blind}
 	}
 
 	out, err := fetchEngineStatic(ctx, e, query, lang)
