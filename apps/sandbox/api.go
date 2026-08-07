@@ -98,7 +98,16 @@ const dirExit = 10
 // Resuming is checked against the STORE and against the row's status, so a session
 // whose pod the reaper already ended comes back as a fresh sandbox rather than as a
 // 502 from the first command sent into a pod that is gone.
-func Lease(s *Service, ctx context.Context, org string, spec Spec) (Sandbox, error) {
+//
+// `super` is the caller's platform sudo, and it is a PARAMETER rather than a field
+// on Spec or a read off the context. Both of the alternatives were worse in the
+// same way. On Spec it would sit beside Class and Project — things the caller asks
+// for — one refactor away from being bound off a request body, which is the whole
+// hazard trust_test.go exists to catch. Read from the context it would make this
+// core read identity, and the reason every function in this file takes `org` as an
+// argument is that none of them may. So it arrives the way org does: named by the
+// adapter that knows it, from the one predicate that answers it.
+func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (Sandbox, error) {
 	if strings.TrimSpace(org) == "" {
 		return Sandbox{}, zip.ErrForbidden("org required")
 	}
@@ -184,7 +193,7 @@ func Lease(s *Service, ctx context.Context, org string, spec Spec) (Sandbox, err
 	now := time.Now().Unix()
 	m := Sandbox{
 		ID: id, Org: org, Kind: KindSandbox, Class: class, Project: project,
-		Image: firstNonEmpty(spec.Image, s.State.rt.imageFor(class)),
+		Image: firstNonEmpty(spec.Image, s.State.rt.imageFor(class, super)),
 		Pod:   podName(id), Status: "pending",
 		CreatedAt: now, LastUsedAt: now,
 	}

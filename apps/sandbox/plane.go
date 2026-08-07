@@ -81,8 +81,12 @@ func planeLease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := Lease(s, ctx, org, Spec{ID: in.ID, Class: in.Class, Project: in.Project,
-		Runtime: in.Runtime, TTLSec: in.TTLSec})
+	// The same fact the HTTP door reads off the principal, read here off the caller
+	// the plane already carries — cloud.Who is how this door spells identity, and
+	// zip.Caller.Admin is the same attestation X-User-IsAdmin carries. One rule,
+	// stated once in imageFor; each door names the caller in its own vocabulary.
+	m, err := Lease(s, ctx, org, cloud.Who(ctx).Admin, Spec{ID: in.ID, Class: in.Class,
+		Project: in.Project, Runtime: in.Runtime, TTLSec: in.TTLSec})
 	if err != nil {
 		return nil, err
 	}

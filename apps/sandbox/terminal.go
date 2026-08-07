@@ -75,11 +75,16 @@ const ticketTTL = 30 * time.Second
 
 // shell is what a terminal runs, and everything it needs is `/bin/sh`.
 //
-// It asks for bash and settles for sh, because the three sandbox images are not
-// one image and a shell that must exist is a shell that will one day not — the
-// exec class is a stock node image today. Whatever tools the image carries, the
-// hanzo CLI included, are commands the user types; none is a requirement for a
-// prompt.
+// It asks for zsh, settles for bash, and settles again for sh, because the
+// sandbox images are not one image and a shell that must exist is a shell that
+// will one day not — the exec class is a stock node image today and only the
+// admin image carries zsh. Whatever tools the image carries, the hanzo CLI
+// included, are commands the user types; none is a requirement for a prompt.
+//
+// A PREFERENCE AND NOT A REQUIREMENT, all the way down. Asking the image what
+// it has costs nothing when the answer is no — the next `exec` in the chain
+// simply runs — whereas naming one shell would make the terminal a feature of
+// the image rather than of the sandbox.
 //
 // A NAMED session is the same shell under tmux: `new -A` attaches to the session
 // if it is there and creates it if it is not, which is what lets ONE sandbox hold
@@ -95,7 +100,7 @@ func shell(session string) []string {
 		"command -v tmux >/dev/null 2>&1 && exec tmux new -A -s " + shellQuote(session) + "; " + plain}
 }
 
-const plain = "exec bash -l 2>/dev/null || exec sh -l"
+const plain = "exec zsh -l 2>/dev/null || exec bash -l 2>/dev/null || exec sh -l"
 
 // sessionOK is what a session name may be. It is an allowlist and not an escape,
 // because a name reaches a command line: `-` would be read by tmux as a flag and
