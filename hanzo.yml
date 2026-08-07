@@ -145,7 +145,7 @@ test:
     # it runs the raw-go steps in this file — so that check has never once executed
     # in CI. app-contract cannot cover it either: it regenerates these files as a
     # side effect (mk/plugin.mk: describe → build → generate) and then scopes its
-    # porcelain check to openapi.yaml, openapi/floor.json and plugin/, so a stale
+    # porcelain check to openapi.yaml, public.yaml, openapi/floor.json and plugin/, so a stale
     # lift is silently repaired in the runner's tree and never reported. Main went
     # stale straight through that gap — plane.go documents RunOnBehalfIn.Model and
     # apps/agents/zipdoc_gen.go did not carry a word of it.

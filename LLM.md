@@ -1164,8 +1164,8 @@ one before it.
   judged only inside the products that app publishes, because every app binary
   links cloud's core and therefore carries other subsystems' declarations.
   **1491 of 1491 operations carry prose; 0 orphans.**
-- **`openapi.yaml` is a GOLDEN, woven from the per-app subsets, and the ONE
-  artifact cloud publishes.** `make openapi` writes it (through the weave,
+- **`openapi.yaml` is a GOLDEN, woven from the per-app subsets.** `make openapi`
+  writes it (through the weave,
   `-weave`); `make test`, and therefore CI, verifies it with the same weave and no
   flag (`TestFleetIsTheWeaveOfItsApps`, openapi/weave_test.go). Same code path both ways — there is no second
   generator to disagree with, and no way to change a route without either
@@ -1173,6 +1173,51 @@ one before it.
   because JSON is what the document IS (the same value served at
   `/v1/openapi.json`); YAML is a rendering, and `encoding/json` orders object
   keys so the bytes are stable run to run.
+- **TWO PROJECTIONS OF THAT ONE DOCUMENT, AND THE SPLIT IS DECLARED**
+  (openapi/public.go). `openapi.yaml` is the INTERNAL document — everything the
+  fleet serves, admin included, and what our own clients are cut from.
+  `public.yaml` beside it is the PUBLIC contract: the operations that DECLARED
+  themselves part of it, and nothing else. Both are written by ONE run of the
+  weave (`-weave` writes the second beside whatever path it names), so they can
+  never describe two different commits.
+  - **`openapi.Public(path, method)` is the seam, and it is DEFAULT-DENY.**
+    `Register` declares an operation's bodies, `Describe` declares its prose,
+    `Public` declares its AUDIENCE — same law, same init, same inability to
+    invent an address. Silence means INTERNAL, so a product cannot reach a
+    published SDK by anyone forgetting; a whole product ships publicly only when
+    somebody writes the line. There is **no prefix list in the emitter**, and
+    that is the point: a prefix list is a second copy of the routing table, which
+    is how a case-sensitive path list let `/V1/EXEC` walk past a credential guard
+    and how a manifest prefix row disagreed with what an app served until
+    `/v1/tags` 404'd in production. `Publish` reads ONE per-operation fact and
+    knows nothing about paths, products, prefixes or case.
+  - **Keyed by the DOCUMENT's address, not the fiber pattern**, because the
+    largest public product has no fiber pattern here: hanzoai/ai reaches its whole
+    surface through one `All("/v1/*")`, so `/v1/models` exists only as an address
+    in the document its door hands over. Declarations are normalised through the
+    same `translate` the document is built with, so `:id` and `{id}` are one key.
+  - **Stamped once, at the END of `Spec`** — after `Fold` (which replaces a
+    structural operation with the typed one) and after `Project` (which replaces a
+    door with the registry behind it), both of which would discard a mark written
+    earlier. It rides as `x-public`, an extension rather than a tag, because the
+    tag axis already means PRODUCT and `compat` had to be filtered back out of it.
+  - **v1 is INFERENCE: 18 operations, 10 products** (apps/ai/public.go) — the
+    model catalog (`/v1/models`, `/v1/models/providers`) plus every model call:
+    chat/completions, completions, responses, messages (+count_tokens),
+    embeddings, rerank, images, videos (async create + poll + fetch) and the five
+    audio verbs. Against 1782 internal paths. The junk a route table carries and a
+    product surface does not — `/v1/openapi.json`, `/v1/event.js`, `/health`,
+    `/v1/commands` — is gone for FREE: nothing excludes it, it was never included.
+  - **The ratchet, split correctly.** `openapi/floor.json` keeps guarding the
+    INTERNAL document and only it; measuring the public projection would either
+    wedge CI on a shrink that is not a shrink, or re-base the floor to eighteen
+    paths and let every internal product vanish unnoticed.
+    `TestTheFloorGuardsTheInternalDocument` asserts both halves — the floor
+    accepts the internal document and REFUSES the public one. The public surface
+    needs no counting scheme of its own: it is small enough to compare WHOLE, so
+    the committed `public.yaml` is the ratchet, and the drift gate
+    (`mk/fleet.mk check`, porcelain-scoped to it) catches a shrink and a LEAK
+    alike.
 - **SDK repos PULL; cloud does not push.** A stale spec does not stop at cloud —
   it ships wrong clients to four package registries. The repos read
   `openapi.yaml`, regenerate, and release on their own cadence.
