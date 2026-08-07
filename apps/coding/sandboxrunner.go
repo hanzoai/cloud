@@ -43,6 +43,7 @@ package coding
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
@@ -164,7 +165,8 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	// The checkout, when there is one. No repo means no clone and no credential —
 	// the request shape already guarantees the second (CredToken must be empty
 	// when CloneURL is), so there is nothing to strip here.
-	in := sandbox{ctx: ctx, id: id, ttl: ttl, session: req.SessionID, token: req.CredToken}
+	in := sandbox{ctx: ctx, id: id, ttl: ttl, session: req.SessionID,
+		token: req.CredToken, basic: basicOf(req)}
 	base := ""
 	if u := strings.TrimSpace(req.CloneURL); u != "" {
 		step("clone", "cloning "+u, "running")
@@ -262,7 +264,11 @@ type sandbox struct {
 	id      string
 	ttl     int
 	session string
-	token   string
+	// Both spellings of the grant, because both exist: the token as the forge
+	// issued it, and the base64 git presents it as. Scrubbing one and not the
+	// other would leave the credential in the output in the only form that
+	// actually travelled.
+	token, basic string
 }
 
 // deliver commits what the tool left behind, pushes it to the run's ref, and
@@ -328,31 +334,49 @@ func pushArgv(req RunRequest, branch string) []string {
 	return append(gitAs(req), "push", req.CloneURL, "HEAD:refs/heads/"+branch)
 }
 
-// gitAs is `git`, carrying the grant when there is one — as a URL rewrite that
-// applies to this invocation ALONE.
+// gitAs is `git`, carrying the grant when there is one — as an Authorization
+// header CONFINED to the one URL it is for, applied to this invocation alone.
 //
-// The credential used to ride the clone URL, on the argument that "nothing
-// survives the process that used it". That was false: git writes the URL it was
-// given into .git/config verbatim, userinfo and all, so the grant sat readable in
-// the checkout for every later step of the run — including the one that executes
-// untrusted model output. A rewrite given with `git -c` BEFORE the subcommand is
-// not persisted (unlike `git clone -c`, which is), so the remote git records is
-// the plain URL and the grant lives only in the environment of the one command
-// that needed it.
+// Three properties, each of which cost a bug to learn. All three were verified
+// against git 2.43 with a server that answers like the forge.
 //
-// It is one function because clone and push are the same act — reach that URL as
-// this bearer — and a second spelling of it is a second place to get it wrong.
+// IT ARRIVES. The credential used to ride the clone URL, and git does not send a
+// URL-embedded credential until it is CHALLENGED: it makes an anonymous request
+// first and waits for 401 WWW-Authenticate. The forge answers a caller it does
+// not recognise with 403 (smart_http.go resolvePackRepo), never 401 — so the
+// grant was never sent at all, and a clone of any private repo could only 403.
+// Presented as a header it is on the FIRST request, which is the same thing
+// apps/git's own wire test does and the reason that test passes.
+//
+// IT DOES NOT PERSIST. `git -c` before the subcommand is not written into the new
+// repository's config — unlike `git clone -c`, which is — so the checkout the
+// model then edits holds no credential. The URL form wrote one into .git/config
+// verbatim, where every later step of the run could read it, including the step
+// that executes untrusted model output.
+//
+// IT GOES NOWHERE ELSE. The key is scoped to the URL, so git attaches the header
+// to that repository and to nothing else. A bare http.extraHeader is sent to
+// WHATEVER the command reaches — a redirect, another host — and what a repository
+// makes git reach is chosen by whoever wrote the repository.
+//
+// One function, because clone and push are the same act — reach that URL as this
+// bearer — and a second spelling is a second place to get it wrong.
 func gitAs(req RunRequest) []string {
-	rest, https := strings.CutPrefix(req.CloneURL, "https://")
-	if req.CredToken == "" || !https {
+	if req.CredToken == "" || !strings.HasPrefix(req.CloneURL, "https://") {
 		return []string{"git"}
 	}
+	return []string{"git", "-c", "http." + req.CloneURL + ".extraHeader=Authorization: Basic " + basicOf(req)}
+}
+
+// basicOf is the grant as git presents it: base64 of user:token. The user is
+// ignored by the forge — the password is the whole credential — but basic auth
+// has a shape and it has to be filled.
+func basicOf(req RunRequest) string {
 	user := req.CredUser
 	if user == "" {
 		user = "x-access-token"
 	}
-	return []string{"git", "-c",
-		"url.https://" + user + ":" + req.CredToken + "@" + rest + ".insteadOf=" + req.CloneURL}
+	return base64.StdEncoding.EncodeToString([]byte(user + ":" + req.CredToken))
 }
 
 // tip reads the checkout's current commit.
@@ -411,8 +435,10 @@ func (in sandbox) scrub(s string) string {
 	if strings.TrimSpace(in.token) == "" {
 		return s
 	}
-	return strings.ReplaceAll(s, in.token, "[redacted]")
+	return strings.NewReplacer(in.token, redacted, in.basic, redacted).Replace(s)
 }
+
+const redacted = "[redacted]"
 
 // runIn runs one command in the sandbox and narrates it into the run's session.
 //

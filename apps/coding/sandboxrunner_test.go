@@ -18,6 +18,7 @@ package coding
 
 import (
 	"context"
+	"encoding/base64"
 	"strings"
 	"sync"
 	"testing"
@@ -296,16 +297,27 @@ func TestSandboxRun_TheGrantStaysOffDiskAndOutOfWhatIsSaid(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
+	// The grant travels as base64, which is how git presents basic auth. Both
+	// spellings are asked about: the literal must appear NOWHERE, and the one
+	// that actually travels must appear only where it is confined.
+	basic := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + theGrant))
+	wantOpt := "http." + cleanURL + ".extraHeader=Authorization: Basic " + basic
+
 	for _, argv := range p.ran {
 		for i, a := range argv {
-			if !strings.Contains(a, theGrant) {
+			if strings.Contains(a, theGrant) {
+				t.Fatalf("the grant appears verbatim in argv[%d]: %q", i, strings.Join(argv, " "))
+			}
+			if !strings.Contains(a, basic) {
 				continue
 			}
-			// Only ever an option applied to THIS invocation. `git -c` before the
-			// subcommand is not written into the new repository's config, which is
-			// what makes the clone leave nothing behind.
-			if i == 0 || argv[i-1] != "-c" || !strings.HasPrefix(a, "url.") || !strings.Contains(a, ".insteadOf=") {
-				t.Fatalf("the grant is in argv[%d] as something other than a per-invocation option: %q", i, strings.Join(argv, " "))
+			// Exactly one shape: an option applied to THIS invocation, scoped to the
+			// ONE url it is for. `git -c` before the subcommand is not written into
+			// the new repository's config, so the checkout the model then edits holds
+			// no credential; the url scope is what stops git attaching it to a
+			// redirect or another host the repository's own contents point at.
+			if i == 0 || argv[i-1] != "-c" || a != wantOpt {
+				t.Fatalf("the credential is in argv[%d] as %q, want the confined option %q", i, a, wantOpt)
 			}
 		}
 		// Nothing may persist it. A `git config` write, a credential helper with a
@@ -327,14 +339,42 @@ func TestSandboxRun_TheGrantStaysOffDiskAndOutOfWhatIsSaid(t *testing.T) {
 		}
 	}
 
-	// Nothing a person reads carries it.
+	// Nothing a person reads carries it, in either spelling.
 	for _, s := range said {
-		if strings.Contains(s, theGrant) {
+		if strings.Contains(s, theGrant) || strings.Contains(s, basic) {
 			t.Fatalf("the grant was narrated: %q", s)
 		}
 	}
-	if strings.Contains(res.LogTail, theGrant) || strings.Contains(res.Error, theGrant) {
-		t.Fatalf("the grant came back in the result: %+v", res)
+	if strings.Contains(res.LogTail, theGrant) || strings.Contains(res.LogTail, basic) {
+		t.Fatalf("the grant came back in the log tail: %q", res.LogTail)
+	}
+}
+
+// A command's output is scrubbed of BOTH spellings on the way out, so a git that
+// ever echoed what it was given cannot put a live credential in a session event,
+// a span or a Slack thread.
+func TestSandboxRun_AnEchoedCredentialIsScrubbedOnTheWayOut(t *testing.T) {
+	basic := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + theGrant))
+	p := &pod{answer: func(argv []string) plane.Ran {
+		if has(argv, "rev-parse") {
+			return plane.Ran{Stdout: theSHA + "\n"}
+		}
+		if has(argv, "dev") {
+			return plane.Ran{Stdout: "used " + theGrant + " and header " + basic + "\n"}
+		}
+		return plane.Ran{}
+	}}
+	servePod(t, p)
+
+	res, err := sandboxRunner{}.Run(context.Background(), "acme", "u_1", aRun(), nil)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if strings.Contains(res.LogTail, theGrant) || strings.Contains(res.LogTail, basic) {
+		t.Fatalf("an echoed credential survived: %q", res.LogTail)
+	}
+	if !strings.Contains(res.LogTail, "[redacted]") {
+		t.Fatalf("nothing was scrubbed: %q", res.LogTail)
 	}
 }
 
