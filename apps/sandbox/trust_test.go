@@ -214,16 +214,78 @@ func TestRuntimeForNeverAnswersABoundaryTheClusterCannotPlace(t *testing.T) {
 // Spec.RuntimeClass are what a Go caller in this process may state; the WIRE
 // types carry neither an org nor a runtime, so no request can reach either
 // axis of the derivation.
-func TestNothingOnTheWireCanNameAnOrgOrARuntime(t *testing.T) {
+// IDENTITY IS NOT A REQUEST, and that is the whole of this rule.
+//
+// An org on the body would BE the escalation. There is no second source of
+// truth to check it against — the value the derivation reads would be the value
+// the caller typed — so accepting the field is accepting the claim, and no code
+// downstream can undo it. Hence: never on the wire, enforced by shape rather
+// than by remembering.
+//
+// A RUNTIME IS A DIFFERENT AXIS and it is deliberately not in this list, though
+// it was. The server holds the entire policy: runtimeFor derives `kernel` from
+// m.Org — the validated principal, never a field — and `shares` from the volume,
+// and answers a request it cannot honour with a refusal rather than with a
+// substitution. So a caller may ASK for runc and cannot GET it, which is not the
+// same shape of hazard at all.
+//
+// Barring the field outright had a cost and no benefit. The benefit was
+// imaginary: `want` still flows into runtimeFor from the deployment, and every
+// refusal branch under `want != ""` — the two runc ones directly above — became
+// unreachable by any real caller, which is to say untested in production
+// forever. The cost was real: comparing two boundaries on one task needed a
+// redeploy, so nobody compared them.
+//
+// What replaces it is the test below, which asserts the thing actually worth
+// asserting — that asking does not get.
+func TestNoWireFieldCanNameAnOrg(t *testing.T) {
 	for _, in := range []any{plane.LeaseIn{}, createBody{}} {
 		ty := reflect.TypeOf(in)
 		for i := 0; i < ty.NumField(); i++ {
 			switch n := strings.ToLower(ty.Field(i).Name); {
 			case strings.Contains(n, "org"), strings.Contains(n, "owner"),
-				strings.Contains(n, "runtime"), strings.Contains(n, "tenant"):
+				strings.Contains(n, "tenant"):
 				t.Fatalf("%s.%s would let a caller state its own %s", ty.Name(), ty.Field(i).Name, n)
 			}
 		}
+	}
+}
+
+// ASKING IS NOT GETTING — the trust axis, held at the DOOR.
+//
+// runc is the node's own kernel. The derivation refuses it to anyone outside the
+// reserved org, and this proves the refusal survives the trip through a request
+// body: a stranger POSTing `{"runtime":"runc"}` is answered 400 with the reason,
+// not 201 with a pod beside every other tenant's.
+//
+// The controls are what make it a proof rather than a coincidence. The SAME body
+// from the SAME org without `runtime` reaches the cluster (503, there is none
+// here) — so the 400 is a refusal of the ASK and not of the route or the org. And
+// the reserved org is refused too, because this cluster keeps no pool of its own
+// (`bare` is empty), which is the second half of the derivation: even ours only
+// gets that boundary where the topology holds.
+func TestAskingForTheNodesKernelOverHTTPDoesNotGetIt(t *testing.T) {
+	app := door(t)
+	for _, c := range []struct {
+		name, org, body string
+		want            int
+	}{
+		{"a stranger asks for the node's kernel", "acme", `{"class":"exec","runtime":"runc"}`, http.StatusBadRequest},
+		{"ours asks, on a cluster that keeps no pool", authz.AdminOrg, `{"class":"exec","runtime":"runc"}`, http.StatusBadRequest},
+		{"an invented runtime", "acme", `{"class":"exec","runtime":"firecracker"}`, http.StatusBadRequest},
+		{"a volume under a boundary that shares nothing", "acme", `{"class":"dev","project":"p","runtime":"kata-fc"}`, http.StatusBadRequest},
+
+		// THE CONTROLS. Both reach the cluster, which this test does not have —
+		// so 503 is "the request was fine", and it is what makes every 400 above
+		// a statement about the runtime rather than about the request at large.
+		{"the control: no runtime named", "acme", `{"class":"exec"}`, http.StatusServiceUnavailable},
+		{"the control: a boundary anyone may take", "acme", `{"class":"exec","runtime":"gvisor"}`, http.StatusServiceUnavailable},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if code := ask(t, app, c.org, "u-"+c.org, c.body); code != c.want {
+				t.Fatalf("POST /v1/sandboxes org=%q body=%s = %d, want %d", c.org, c.body, code, c.want)
+			}
+		})
 	}
 }
 
