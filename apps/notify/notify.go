@@ -112,6 +112,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &service{log: log, kms: deps.KMS}
 	s.send = s.sendReal
 	routes(app, s)
+	// Publish delivery on the internal plane so a sibling subsystem can send for
+	// ANY tenant without holding a credential — see send_rpc.go. The HTTP surface
+	// above is untouched: principal-derived org, customers only.
+	exposeSend(s)
 
 	if log != nil {
 		log.Info("notify send surface mounted", "prefix", "/v1/notify")
