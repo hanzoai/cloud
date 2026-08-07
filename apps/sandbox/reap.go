@@ -50,6 +50,23 @@ const reapEvery = time.Minute
 // quiet for longer than its own maximum command is not working, it is abandoned.
 const idleAfter = time.Hour
 
+// extendWhenUnder is how close to expiry a BUSY sandbox has to be before its
+// lease is pushed out. Ten minutes: comfortably more than one reap sweep, so a
+// working run is never a tick away from losing its pod, and short enough that a
+// lease still means something.
+const extendWhenUnder = int64(10 * 60)
+
+// extendBy is how much runway a busy sandbox is granted each time. One hour —
+// the same span as idleAfter, so the two rules read against the same clock: an
+// hour of silence ends a sandbox, an hour of runway is what work buys.
+const extendBy = int64(60 * 60)
+
+// maxLifetime is the absolute ceiling from CREATION, whatever the activity. A
+// day. Without it, extension is not a lease renewal but a lease abolition — and
+// a sandbox that has been working for 24 hours is a job that wants a Deployment,
+// not a session that wants another hour.
+const maxLifetime = int64(24 * 60 * 60)
+
 // reap runs until ctx is done. It is started once by Mount and never returns a
 // value — a sweep that fails is logged and retried next minute, because the
 // alternative is a reaper that dies quietly and a fleet that looks fine while
@@ -103,6 +120,36 @@ func sweep(ctx context.Context, s *cloud.Service[state]) {
 		for _, m := range running {
 			if m.LastUsedAt > 0 && now.Sub(time.Unix(m.LastUsedAt, 0)) > idleAfter {
 				end(ctx, s, st, m, "idle")
+				continue
+			}
+			// A SANDBOX THAT IS WORKING KEEPS ITS COMPUTER.
+			//
+			// LastUsedAt already tells us the difference between a run that is
+			// progressing and one that is abandoned — it is stamped by every exec
+			// and every fs call, and the branch above already trusts it to kill.
+			// Trusting it in ONE direction only was the bug: activity could
+			// shorten a lease and never lengthen it, so a deep-research run or a
+			// long build that was demonstrably alive still died at its TTL. That
+			// is the one case where reaping destroys the most work, and it fired
+			// on exactly the runs worth keeping.
+			//
+			// So a busy sandbox gets its lease pushed to now+extendBy, bounded by
+			// maxLifetime from CREATION. It stays a lease: the ceiling is absolute
+			// and measured from the start, so no amount of activity turns a
+			// sandbox into a permanent resident. The idle rule above still
+			// outranks this — untouched for an hour ends it whatever the lease
+			// says — and Extend only ever moves a lease FORWARD, so this can never
+			// cut one short.
+			if m.ExpiresAt > 0 && m.ExpiresAt-now.Unix() < extendWhenUnder {
+				want := now.Unix() + extendBy
+				if ceiling := m.CreatedAt + maxLifetime; want > ceiling {
+					want = ceiling
+				}
+				if want > m.ExpiresAt {
+					if err := st.Extend(ctx, ns.ID(), m.ID, want); err != nil {
+						s.Log.Warn("reap: extend busy lease", "id", m.ID, "err", err)
+					}
+				}
 			}
 		}
 	})
