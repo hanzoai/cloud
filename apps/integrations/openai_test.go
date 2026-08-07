@@ -172,16 +172,16 @@ func TestOpenAIDevice(t *testing.T) {
 		}
 		rewind(t, st.Flow)
 		p2 := decode[pollResp](t, asOK(t, app, http.MethodPost, devPollPath("openai", st.Flow), "acme", userUUID, nil))
-		if p2.Status != "connected" || p2.Connector == nil {
+		if p2.Status != "connected" || p2.Connection == nil {
 			t.Fatalf("authorized poll want connected, got %+v", p2)
 		}
 		// Identity comes from the access JWT claims; expiry from expires_in.
-		if p2.Connector.ID != "openai:default" || p2.Connector.ExternalID != oaAccount || p2.Connector.Account != oaEmail {
-			t.Fatalf("connector identity: %+v", p2.Connector)
+		if p2.Connection.ID != "openai:default" || p2.Connection.ExternalID != oaAccount || p2.Connection.Account != oaEmail {
+			t.Fatalf("connector identity: %+v", p2.Connection)
 		}
-		exp, err := time.Parse(time.RFC3339, p2.Connector.ExpiresAt)
+		exp, err := time.Parse(time.RFC3339, p2.Connection.ExpiresAt)
 		if err != nil {
-			t.Fatalf("expiresAt parse: %v (%q)", err, p2.Connector.ExpiresAt)
+			t.Fatalf("expiresAt parse: %v (%q)", err, p2.Connection.ExpiresAt)
 		}
 		if d := exp.Unix() - (time.Now().Unix() + 3600); d < -5 || d > 5 {
 			t.Fatalf("expiresAt want now+3600±5s, off by %ds", d)
@@ -247,8 +247,8 @@ func TestOpenAIAdopt(t *testing.T) {
 	res := asOK(t, app, http.MethodPost, credPath("openai"), "acme", userEmail,
 		map[string]any{"oauth": map[string]any{"access": "ignored", "refresh": "R0", "account": "acct-hint"}})
 	cr := decode[credResp](t, res)
-	if !cr.Connected || cr.Connector == nil || cr.Connector.ID != "openai:default" ||
-		cr.Connector.ExternalID != "acct-hint" || cr.Connector.Account != oaEmail {
+	if !cr.Connected || cr.Connection == nil || cr.Connection.ID != "openai:default" ||
+		cr.Connection.ExternalID != "acct-hint" || cr.Connection.Account != oaEmail {
 		t.Fatalf("adopt response: %+v", cr)
 	}
 	// Adoption is ONE live refresh with the submitted refresh token.
@@ -314,16 +314,16 @@ func TestOpenAIRefreshRotates(t *testing.T) {
 
 	st := decode[startResp](t, asOK(t, app, http.MethodPost, devStartPath("openai"), "acme", userUUID, nil))
 	p := decode[pollResp](t, asOK(t, app, http.MethodPost, devPollPath("openai", st.Flow), "acme", userUUID, nil))
-	if p.Status != "connected" || p.Connector == nil {
+	if p.Status != "connected" || p.Connection == nil {
 		t.Fatalf("device connect: %+v", p)
 	}
-	exp0, err := time.Parse(time.RFC3339, p.Connector.ExpiresAt)
+	exp0, err := time.Parse(time.RFC3339, p.Connection.ExpiresAt)
 	if err != nil {
 		t.Fatalf("expiresAt parse: %v", err)
 	}
 
 	rr := decode[refreshResp](t, asOK(t, app, http.MethodPost, refreshPath("openai:default"), "acme", userUUID, nil))
-	if !rr.Refreshed || rr.Connector == nil {
+	if !rr.Refreshed || rr.Connection == nil {
 		t.Fatalf("force refresh: %+v", rr)
 	}
 	rf := m.forms("refresh_token")
@@ -342,7 +342,7 @@ func TestOpenAIRefreshRotates(t *testing.T) {
 	if v, err := userHas(t, kc, "acme", userUUID, "openai", "default", refreshSecret); err != nil || string(v) != "R2" {
 		t.Fatalf("rotated refresh custody: %q err=%v", v, err)
 	}
-	exp1, err := time.Parse(time.RFC3339, rr.Connector.ExpiresAt)
+	exp1, err := time.Parse(time.RFC3339, rr.Connection.ExpiresAt)
 	if err != nil || exp1.Before(exp0) {
 		t.Fatalf("refresh must advance expiresAt: %v -> %v (err=%v)", exp0, exp1, err)
 	}

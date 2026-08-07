@@ -29,18 +29,18 @@ func TestStoreOrgScopeIsolation(t *testing.T) {
 	}
 
 	// Each org sees only its own row.
-	if list, err := s.List(ctx, "acme"); err != nil || len(list) != 1 || list[0].ExternalID != "TA" {
+	if list, err := s.List(ctx, "acme", ""); err != nil || len(list) != 1 || list[0].ExternalID != "TA" {
 		t.Fatalf("acme list must be exactly its own: %v %+v", err, list)
 	}
-	if c, found, err := s.Get(ctx, "globex", "slack", ""); err != nil || !found || c.AccountLabel != "Globex" {
+	if c, found, err := s.Get(ctx, "globex", "", "slack", ""); err != nil || !found || c.AccountLabel != "Globex" {
 		t.Fatalf("globex get: %v found=%v %+v", err, found, c)
 	}
 	// A provider acme never connected is not-found (no cross-row bleed).
-	if _, found, err := s.Get(ctx, "acme", "github", ""); err != nil || found {
+	if _, found, err := s.Get(ctx, "acme", "", "github", ""); err != nil || found {
 		t.Fatalf("acme github must be not-found, got found=%v err=%v", found, err)
 	}
 	// Scopes round-trip.
-	if c, _, _ := s.Get(ctx, "acme", "slack", ""); len(c.Scopes) != 1 || c.Scopes[0] != "chat:write" {
+	if c, _, _ := s.Get(ctx, "acme", "", "slack", ""); len(c.Scopes) != 1 || c.Scopes[0] != "chat:write" {
 		t.Fatalf("scopes round-trip failed: %+v", c.Scopes)
 	}
 }
@@ -51,12 +51,12 @@ func TestStoreUpsertPreservesConnectedAt(t *testing.T) {
 	if err := s.Upsert(ctx, Connection{Org: "acme", Provider: "slack", AccountLabel: "v1"}); err != nil {
 		t.Fatal(err)
 	}
-	first, _, _ := s.Get(ctx, "acme", "slack", "")
+	first, _, _ := s.Get(ctx, "acme", "", "slack", "")
 	time.Sleep(1100 * time.Millisecond) // cross a unix-second boundary
 	if err := s.Upsert(ctx, Connection{Org: "acme", Provider: "slack", AccountLabel: "v2"}); err != nil {
 		t.Fatal(err)
 	}
-	second, _, _ := s.Get(ctx, "acme", "slack", "")
+	second, _, _ := s.Get(ctx, "acme", "", "slack", "")
 	if second.AccountLabel != "v2" {
 		t.Fatalf("re-connect must update label, got %q", second.AccountLabel)
 	}
@@ -183,13 +183,13 @@ func TestStoreDeleteIdempotent(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 	_ = s.Upsert(ctx, Connection{Org: "acme", Provider: "slack"})
-	if gone, err := s.Delete(ctx, "acme", "slack"); err != nil || !gone {
+	if gone, err := s.Delete(ctx, "acme", "", "slack", ""); err != nil || !gone {
 		t.Fatalf("first delete: gone=%v err=%v", gone, err)
 	}
-	if _, found, _ := s.Get(ctx, "acme", "slack", ""); found {
+	if _, found, _ := s.Get(ctx, "acme", "", "slack", ""); found {
 		t.Fatal("row must be gone after delete")
 	}
-	if gone, err := s.Delete(ctx, "acme", "slack"); err != nil || gone {
+	if gone, err := s.Delete(ctx, "acme", "", "slack", ""); err != nil || gone {
 		t.Fatalf("second delete must report gone=false: gone=%v err=%v", gone, err)
 	}
 }
