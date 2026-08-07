@@ -120,3 +120,17 @@ func TestXSendEndToEnd(t *testing.T) {
 		t.Errorf("body: %+v", gotBody)
 	}
 }
+
+func TestXNumItems(t *testing.T) {
+	convs := xBuild([]Conversion{{Standard: EventPurchase, Value: 30, Currency: "USD",
+		User:  UserData{Email: "a@b.com"},
+		Items: []Item{{ID: "s1", Quantity: 2}, {ID: "s2", Quantity: 1}}}})
+	if convs[0].NumberItems != 3 {
+		t.Errorf("number_items = %d, want 3 (2+1)", convs[0].NumberItems)
+	}
+	// No items ⇒ number_items omitted (0).
+	none := xBuild([]Conversion{{Standard: EventLead, User: UserData{Email: "a@b.com"}}})
+	if none[0].NumberItems != 0 {
+		t.Errorf("no items ⇒ number_items 0, got %d", none[0].NumberItems)
+	}
+}
