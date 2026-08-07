@@ -1317,7 +1317,23 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 						// scheduler avoid a full node; the limit bounds a runaway build
 						// instead of letting it take the node down for everything else.
 						"resources": map[string]any{
-							"requests": map[string]any{"ephemeral-storage": "50Gi"},
+							// 32Gi, not 50: the request has to FIT beside buildkitd. Each
+							// runner-pool-32g node allocates ~88Gi of ephemeral storage and
+							// the buildkitd DaemonSet reserves 48Gi of it on every one, so a
+							// 50Gi request left no node able to hold the pod and every build
+							// sat Pending forever — "0/34 nodes are available … 3 Insufficient
+							// ephemeral-storage", with the autoscaler declining to scale up
+							// because no larger node matched either. Six builds queued for
+							// five days and a whole repo stopped publishing images, with
+							// nothing failing anywhere to say so.
+							//
+							// The reason the request exists is unchanged and still right: a
+							// best-effort pod gets placed on a full node and is evicted first.
+							// It just has to be a number the pool can actually satisfy. 32Gi
+							// leaves headroom on the 40Gi a node has free beside buildkitd,
+							// and matches what cloud's own builds already request and
+							// schedule with. The limit stays 80Gi so a big build still bursts.
+							"requests": map[string]any{"ephemeral-storage": "32Gi"},
 							"limits":   map[string]any{"ephemeral-storage": "80Gi"},
 						},
 						"securityContext": map[string]any{
