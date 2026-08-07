@@ -174,7 +174,7 @@ func TestLiveTerminalNamedSession(t *testing.T) {
 	}
 	defer func() { _ = r.stop(context.Background(), m) }()
 
-	has, err := r.exec(ctx, m, []string{"sh", "-c", "command -v tmux >/dev/null 2>&1 && echo yes || echo no"}, nil, 60)
+	has, err := r.exec(ctx, m, []string{"sh", "-c", "command -v tmux >/dev/null 2>&1 && echo yes || echo no"}, nil, 60, nil)
 	if err != nil {
 		t.Fatalf("probe tmux: %v", err)
 	}

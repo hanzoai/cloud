@@ -19,6 +19,14 @@
 //	GET    /v1/sandboxes/:id/terminal        ?ticket=&arg=  the terminal, as a page
 //	GET    /v1/sandboxes/:id/terminal/ws     ?ticket=&arg=  the terminal, as a socket
 //
+// A RUN IS WATCHABLE AND IT IS STOPPABLE. Name a session on a run and the
+// command's output is appended to that session's live log as it is produced, so
+// a surface reading GET /v1/agents/sessions/stream watches the work happen
+// instead of a blank pause; `stop_run` interrupts what a sandbox is running and
+// leaves the sandbox leased, because a run that went wrong is one somebody still
+// wants to look at. See work.go — both are the same fact, that a command in
+// flight is addressable.
+//
 // THERE IS EXACTLY ONE WAY INTO A SANDBOX, and it is the Kubernetes exec
 // subresource. fs read/list/write are not a second channel — they are `cat`,
 // `ls` and `tee` over that one channel, which is also how `kubectl cp` has
@@ -96,6 +104,10 @@ type state struct {
 	// to open a terminal. Per service and in memory — see terminal.go for why
 	// the one credential a WebSocket can carry is minted rather than borrowed.
 	tickets *tickets
+	// work is every command in flight, by the sandbox running it, so a caller can
+	// stop one. In memory for the same reason the tickets are: it holds a live
+	// goroutine's cancel, which exists nowhere but here. See work.go.
+	work *work
 }
 
 // storeFor is the ONE way this package reaches a store, through
@@ -131,6 +143,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		stores:  cloud.NewOrgStore(b, "sandbox", openStore),
 		rt:      newRuntime(),
 		tickets: newTickets(),
+		work:    newWork(),
 	}}
 	Routes(app, s)
 	// The peer half. Registered beside the routes because they are two adapters
@@ -204,6 +217,13 @@ func Routes(app cloud.Router, s *cloud.Service[state]) {
 		zip.Post[plane.WriteIn, plane.Wrote](reg, "/v1/sandboxes/write", planeWrite,
 			zip.WithOperationID("write_sandbox_file"),
 			zip.WithSummary("Write a file into a sandbox you hold"))
+		// STOP ENDS THE WORK; END ENDS THE RESOURCE. They are two verbs because a
+		// run that has gone wrong is one somebody still wants to look at, and an
+		// agent told to "stop" that deleted the pod would take the checkout, the
+		// logs and the half-written file with it.
+		zip.Post[plane.StopIn, plane.Stopped](reg, "/v1/sandboxes/stop", planeStop,
+			zip.WithOperationID("stop_run"),
+			zip.WithSummary("Stop what a sandbox is running, and keep the sandbox"))
 		zip.Post[plane.EndIn, struct{}](reg, "/v1/sandboxes/end", planeEnd,
 			zip.WithOperationID("end_sandbox"),
 			zip.WithSummary("End a sandbox and release it"))
@@ -231,6 +251,7 @@ func New(deps cloud.Deps) (*Service, error) {
 		stores:  cloud.NewOrgStore(b, "sandbox", openStore),
 		rt:      newRuntime(),
 		tickets: newTickets(),
+		work:    newWork(),
 	}}, nil
 }
 
