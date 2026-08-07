@@ -63,43 +63,41 @@ on:
 concurrency:
   # ONE release at a time, queued not cancelled: the image is pushed early and
   # the tag and pin come last, so killing a run midway leaves an orphan — ten of
-  # them between v1.801.335 and v1.801.350. Pull requests are a different ref, so
-  # they neither queue behind a release nor hold one up, and a new push to a PR
-  # cancels its own stale run.
+  # them between v1.801.335 and v1.801.350. A pull request gets a slot of its
+  # own, so it neither queues behind a release nor holds one up, and a new push
+  # to it cancels its own stale run.
   #
-  # cancel-in-progress is a LITERAL false, and the evidence for that is a run
-  # whose gate had already PASSED. Run 895 (41a0e5a3, event push, branch main):
-  # gate, cicd and containment all completed `success` at 09:46:45Z after 39
-  # minutes, and image, rollout, reach, fanout and receipt were then `cancelled`
-  # at 10:25:26Z having never started. The run's own conclusion is `cancelled`.
-  # On a push this expression is supposed to be false, so nothing should have
-  # cancelled anything — the forge does not evaluate it to a boolean, and a
-  # non-empty string is truthy.
+  # Two earlier readings of this are worth not repeating, because both blamed the
+  # setting and the setting was never what acted. One argued cancel-in-progress
+  # was "a literal false the forge cannot evaluate, and a non-empty string is
+  # truthy"; the other argued the cancelled runs "were superseded while still
+  # QUEUED, so cancel-in-progress was never the thing acting on them". The second
+  # is right about the mechanism and neither found the cause, which is one line
+  # lower and is the GROUP, not the flag.
+  # ── THE GROUP MUST NOT BE KEYED ON A VALUE THIS FORGE DOES NOT SET ──────────
   #
-  # This was landed once as 2f9ffc2d and reverted by 0d7011e2, which argued the
-  # cancelled runs "were superseded while still QUEUED, not killed mid-gate, so
-  # cancel-in-progress was never the thing acting on them". That is true of the
-  # runs it measured (889-892, which never received a runner) and false of run
-  # 895: a run that never started cannot contain a job that completed
-  # successfully. Both failure modes are real; only this one is a line in this
-  # file, and it is the one that throws away work the gate already did.
+  # It was `cicd-${{ github.ref }}`, and act_runner leaves the ref EMPTY: the API
+  # returns head_branch null and no ref field on ordinary pushes to main. So the
+  # group rendered as the constant `cicd-` and EVERY run in the repository — main
+  # pushes, pull requests, tag pushes — shared ONE slot.
   #
-  # Measured over runs 891-909, every one of them a push to main: 16 cancelled,
-  # 3 failure, 0 success. The one run that earned a release lost it 39 minutes
-  # after the gate went green. That is the whole of "the gate is green and
-  # nothing ships".
+  # That is the mechanism behind the cancellations above, and it is not the
+  # cancel-in-progress setting the paragraphs above blame. Gitea coalesces a
+  # concurrency queue to depth one: an in-progress run is left alone (which is
+  # what cancel-in-progress: false buys), but a QUEUED run is cancelled when a
+  # newer one arrives for the same group. That is correct behaviour — nobody
+  # wants an image per intermediate commit — and it only became destructive
+  # because one constant group meant every pull request coalesced away the
+  # release queued behind it, and vice versa. The tell is in the API: those runs
+  # carry started_at 1970-01-01, so they were never given a runner at all.
   #
-  # This does not queue without bound. One run holds the group and the rest
-  # collapse into a single pending run, so pushes arriving during a release are
-  # coalesced rather than accumulated — which is what the paragraph above always
-  # meant by "queued, not cancelled".
-  #
-  # The cost, stated plainly: a stale PR run is no longer cancelled by its own
-  # next push, because the setting can no longer ask what event it is. A PR that
-  # is pushed to repeatedly holds more than one run. That is cheap next to a
-  # release lane that cannot finish.
-  group: cicd-${{ github.ref }}
-  cancel-in-progress: false
+  # Keyed properly, the original intent holds without depending on the ref.
+  # Releases share one slot and queue; each pull request gets its own slot and a
+  # new push to it cancels only its own stale run. cancel-in-progress is now an
+  # expression that evaluates to a real boolean rather than a literal whose
+  # truthiness was being argued about.
+  group: cicd-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ══ CAR 0 ══ THE DOCUMENT EQUALS THE CODE. Everything below `needs:` this.
@@ -394,75 +392,26 @@ jobs:
           username: ${{ secrets.GHCR_USER }}
           password: ${{ secrets.GHCR_TOKEN }}
 
-      - name: The commit must exist on github before a tag can name it
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
-          SHA: ${{ github.sha }}
-        # The claim below reserves a version by creating refs/tags/v<N> AT THIS
-        # COMMIT on github.com. A ref can only point at an object that is there,
-        # so the claim answers 404 — "Object does not exist" — for a commit github
-        # has never seen, and refuses to build.
-        #
-        # It routinely has not seen it. CI runs on git.hanzo.ai, which is canonical
-        # and where the push lands; github is fed by a PUSH MIRROR on an 8-HOUR
-        # interval, and the claim runs seconds later. So the object the tag must
-        # name is normally hours away, and every release in that window fails on a
-        # 404 that reads like a permissions problem and is really a race. It cost
-        # the fleet four days of releases stacked behind one.
-        #
-        # Publishing the commit here closes the race at its cause: after this step
-        # github HAS the object, whatever the mirror's schedule. It goes to a ref
-        # of its own rather than to main, because main is the mirror's to move and
-        # the two lineages do diverge — this step's job is to make the object
-        # exist, not to decide what main is.
-        #
-        # THE REPO IT PUBLISHES TO IS PRIVATE, and that is the whole point of
-        # naming it explicitly. This lane used to push here — the full private
-        # tree, every release — to github.com/hanzoai/cloud, which is PUBLIC: it
-        # holds the Apache-2.0 OSS core. `refs/heads/forge-head` on a public repo
-        # is a world-readable copy of everything, published automatically, which
-        # nobody chose and nothing announced.
-        #
-        # It stopped being merely wrong and started being visible when GitHub's
-        # push protection refused the ref: two commits carry deliberately
-        # fake-shaped credentials (apps/platform/secretshape_test.go and
-        # declare_secret_test.go) that exist to prove the secret-shape detector
-        # catches them, and GitHub's scanner reads them as real. Every release
-        # after that died here, because the fixtures are ancestors of main and so
-        # ride every future push. The tempting fix is the unblock URL in the log.
-        # That is the wrong fix twice over: it re-opens the leak, and it teaches
-        # the scanner to ignore exactly the shape we want it to catch.
-        #
-        # So the private repo is both the correct home and the working one. The
-        # version claim below reserves refs/tags/v<N> in the SAME repo the build
-        # clones from, which is the property that was actually missing: a release
-        # name and the bytes it names now live in one place.
-        run: |
-          set -euo pipefail
-          api="https://api.github.com/repos/hanzo-inc/cloud"
-          if curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" "${api}/commits/${SHA}" 2>/dev/null; then
-            echo "commit ${SHA} is already on github — nothing to publish"
-            exit 0
-          fi
-          echo "commit ${SHA} is not on github yet (push mirror runs every 8h); publishing it now"
-          git push --force "https://x-access-token:${GH_PAT}@github.com/hanzo-inc/cloud" \
-            "${SHA}:refs/heads/forge-head"
-          for i in 1 2 3 4 5 6 7 8 9 10; do
-            if curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" "${api}/commits/${SHA}" 2>/dev/null; then
-              echo "github now resolves ${SHA}"
-              exit 0
-            fi
-            sleep 3
-          done
-          echo "::error::pushed ${SHA} to github but it still does not resolve — the claim below would 404 on an object that is not there"
-          exit 1
-
+      # THE CLAIM IS MADE WHERE THE CODE IS. There used to be a step here that
+      # published the commit to github first, because the claim was made against
+      # github and a ref can only point at an object the server has. That step is
+      # gone, and so is the race it existed to close: CI runs on git.hanzo.ai, so
+      # the commit is already there — being there is what started this run.
+      #
+      # It was also the last thing forcing the private tree onto a github repo on
+      # every release, and the thing that broke the lane twice: once when the repo
+      # it pushed to was public, and once when the credential could not see the
+      # private one it was moved to ("Repository not found", run 38319). A step
+      # that cannot fail is better than a step with two known ways to fail.
       - name: Claim a version — atomically, before anything is built
         id: ver
         env:
           GHCR_USER: ${{ secrets.GHCR_USER }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          GH_PAT: ${{ secrets.GH_PAT }}
+          # The claim is written to git.hanzo.ai, so it is the forge credential
+          # that has to be able to write it. GH_PAT is gone from this step: it
+          # authenticated a register that no longer lives on github.
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
           # The commit being released, named explicitly rather than read from
           # GITHUB_SHA: that variable is the runner's to set, this claim is the
           # workflow's to make, and a claim that silently reads an empty string
@@ -527,7 +476,7 @@ jobs:
           # direction to fail (a hole is inert; a reused number serves wrong
           # bytes). They are not carried over, because a name nothing published
           # is not a release.
-          GIT=$(git ls-remote --tags "https://x-access-token:${GH_PAT}@github.com/hanzo-inc/cloud" \
+          GIT=$(git ls-remote --tags "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/cloud" \
             | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' || true)
 
@@ -577,11 +526,11 @@ jobs:
 
             # THE COMPARE-AND-SWAP.
             CODE=$(curl -s -o /tmp/claim.json -w '%{http_code}' -X POST \
-              -H "Authorization: Bearer $GH_PAT" \
-              -H 'Accept: application/vnd.github+json' \
-              "https://api.github.com/repos/hanzo-inc/cloud/git/refs" \
-              -d "{\"ref\":\"refs/tags/v${CAND}\",\"sha\":\"${SHA}\"}")
-            if [ "$CODE" = "422" ]; then
+              -H "Authorization: token $FORGE_TOKEN" \
+              -H 'Content-Type: application/json' \
+              "https://git.hanzo.ai/v1/repos/hanzoai/cloud/tags" \
+              -d "{\"tag_name\":\"v${CAND}\",\"target\":\"${SHA}\"}")
+            if [ "$CODE" = "409" ]; then
               # TWO DIFFERENT FAILURES SHARE THIS STATUS, and treating them alike
               # would turn one of them into a ten-attempt loop that ends in the
               # wrong diagnosis. "Reference already exists" is the collision this
@@ -592,14 +541,14 @@ jobs:
               # a name to skip past; it is a repo that has not been published, and
               # the next number would fail identically.
               WHY=$(jq -r '.message // empty' /tmp/claim.json)
-              if [ "$WHY" != "Reference already exists" ]; then
-                echo "::error::claiming v${CAND} was refused with: ${WHY:-unknown}. If this is 'Object does not exist', commit ${SHA} is on the forge but not on github.com — the release lane claims versions against GitHub, so the mirror must carry the commit first."
-                exit 1
-              fi
+              case "$WHY" in *"already exists"*) : ;; *)
+                echo "::error::claiming v${CAND} was refused with: ${WHY:-unknown}"
+                exit 1 ;;
+              esac
               # Taken. By us, or by somebody else? The distinction is the whole
               # difference between a resume and a collision, and it is one GET.
-              HAVE=$(curl -fsS -H "Authorization: Bearer $GH_PAT" \
-                "https://api.github.com/repos/hanzo-inc/cloud/git/ref/tags/v${CAND}" | jq -r '.object.sha // empty')
+              HAVE=$(curl -fsS -H "Authorization: token $FORGE_TOKEN" \
+                "https://git.hanzo.ai/v1/repos/hanzoai/cloud/tags/v${CAND}" | jq -r '.commit.sha // empty')
               if [ "$HAVE" = "${SHA}" ]; then
                 echo "v${CAND} is already claimed at our sha — this release, resumed"
                 CLAIMED="$CAND"; break
@@ -731,7 +680,7 @@ jobs:
         env:
           GHCR_USER: ${{ secrets.GHCR_USER }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          GH_PAT: ${{ secrets.GH_PAT }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
         run: |
           set -euo pipefail
           img="ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}"
@@ -787,8 +736,7 @@ jobs:
           # so the receipt says "these bytes, from this source, booted" and stays
           # false the moment the bytes change under the name.
           SMOKED=0
-          if curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" \
-            "https://api.github.com/repos/hanzo-inc/cloud/git/ref/${RECEIPT}" 2>/dev/null; then
+          if git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/cloud" "refs/${RECEIPT}" >/dev/null 2>&1; then
             echo "$DIGEST already has a smoke receipt — these exact bytes have booted"
             SMOKED=1
           fi
@@ -863,19 +811,23 @@ jobs:
       - name: Record that these bytes booted
         if: steps.img.outputs.smoked == '0'
         env:
-          GH_PAT: ${{ secrets.GH_PAT }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
         run: |
           set -euo pipefail
-          CODE=$(curl -s -o /tmp/receipt.json -w '%{http_code}' -X POST \
-            -H "Authorization: Bearer ${GH_PAT}" -H 'Accept: application/vnd.github+json' \
-            "https://api.github.com/repos/hanzo-inc/cloud/git/refs" \
-            -d "$(jq -nc --arg r "refs/${{ steps.img.outputs.receipt }}" --arg s "${{ github.sha }}" '{ref:$r, sha:$s}')")
-          case "$CODE" in
-            201) echo "recorded: ${{ steps.img.outputs.digest }} booted, built from ${{ github.sha }}" ;;
-            422) echo "already recorded by another run — same digest, same statement" ;;
-            *)   echo "::error::could not record the smoke receipt for ${{ steps.img.outputs.digest }} (HTTP $CODE). These bytes booted and nothing can prove it, so a resume would smoke them again at best and skip them at worst — refusing to leave that state."
-                 cat /tmp/receipt.json; exit 1 ;;
-          esac
+          # A push IS the compare-and-swap: the server refuses to move a ref that
+          # already names something else, and re-pushing the identical value is a
+          # no-op. Gitea has no POST for a ref outside refs/tags, and it does not
+          # need one — this is the operation that endpoint would have wrapped.
+          if git push "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/cloud" \
+               "${{ github.sha }}:refs/${{ steps.img.outputs.receipt }}" 2>/tmp/receipt.err; then
+            echo "recorded: ${{ steps.img.outputs.digest }} booted, built from ${{ github.sha }}"
+          elif git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/cloud" \
+                 "refs/${{ steps.img.outputs.receipt }}" >/dev/null 2>&1; then
+            echo "already recorded by another run — same digest, same statement"
+          else
+            echo "::error::could not record the smoke receipt for ${{ steps.img.outputs.digest }}. These bytes booted and nothing can prove it, so a resume would smoke them again at best and skip them at worst — refusing to leave that state."
+            cat /tmp/receipt.err; exit 1
+          fi
 
       # NOTHING LEAVES THIS JOB UNSMOKED, re-asked of the authority rather than
       # remembered from a step output. Cheap, and it is the assertion `rollout`
@@ -884,11 +836,11 @@ jobs:
       # unproven image becomes a pin.
       - name: These bytes have a smoke receipt
         env:
-          GH_PAT: ${{ secrets.GH_PAT }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
         run: |
           set -euo pipefail
-          curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" \
-            "https://api.github.com/repos/hanzo-inc/cloud/git/ref/${{ steps.img.outputs.receipt }}" \
+          git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/cloud" \
+            "refs/${{ steps.img.outputs.receipt }}" >/dev/null 2>&1 \
             || { echo "::error::no smoke receipt for ${{ steps.img.outputs.digest }} — these bytes have never been proven to boot. Nothing downstream may pin them."; exit 1; }
           echo "${{ steps.img.outputs.digest }} is smoked"
 
@@ -918,12 +870,12 @@ jobs:
       # because the one thing worse than a moved tag is a moved tag that shipped.
       - name: The claimed tag still names this commit
         env:
-          GH_PAT: ${{ secrets.GH_PAT }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
         run: |
           set -euo pipefail
           TAG="v${{ needs.image.outputs.version }}"
-          HAVE=$(curl -fsS -H "Authorization: Bearer ${GH_PAT}" \
-            "https://api.github.com/repos/hanzo-inc/cloud/git/ref/tags/${TAG}" | jq -r '.object.sha // empty')
+          HAVE=$(curl -fsS -H "Authorization: token ${FORGE_TOKEN}" \
+            "https://git.hanzo.ai/v1/repos/hanzoai/cloud/tags/${TAG}" | jq -r '.commit.sha // empty')
           if [ -z "$HAVE" ]; then
             echo "::error::${TAG} was claimed by this run but no longer exists — refusing to ship a release whose receipt was deleted"; exit 1
           fi
@@ -1283,7 +1235,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Write release.json onto the tag
         env:
-          GH_PAT: ${{ secrets.GH_PAT }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
         run: |
           set -euo pipefail
           TAG="v${{ needs.image.outputs.version }}"
@@ -1308,15 +1260,15 @@ jobs:
                         (.|tostring) + "\n```"' /tmp/release.json)
 
           # Idempotent: create, or update the one that a previous attempt left.
-          ID=$(curl -fsS -H "Authorization: Bearer ${GH_PAT}" \
-            "https://api.github.com/repos/hanzo-inc/cloud/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
+          ID=$(curl -fsS -H "Authorization: token ${FORGE_TOKEN}" \
+            "https://git.hanzo.ai/v1/repos/hanzoai/cloud/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
           if [ -n "$ID" ]; then
-            curl -fsS -X PATCH -H "Authorization: Bearer ${GH_PAT}" \
-              "https://api.github.com/repos/hanzo-inc/cloud/releases/${ID}" \
+            curl -fsS -X PATCH -H "Authorization: token ${FORGE_TOKEN}" \
+              "https://git.hanzo.ai/v1/repos/hanzoai/cloud/releases/${ID}" \
               -d "$(jq -nc --arg b "$BODY" '{body:$b}')" >/dev/null
           else
-            curl -fsS -X POST -H "Authorization: Bearer ${GH_PAT}" \
-              "https://api.github.com/repos/hanzo-inc/cloud/releases" \
+            curl -fsS -X POST -H "Authorization: token ${FORGE_TOKEN}" \
+              "https://git.hanzo.ai/v1/repos/hanzoai/cloud/releases" \
               -d "$(jq -nc --arg t "$TAG" --arg b "$BODY" '{tag_name:$t, name:$t, body:$b}')" >/dev/null
           fi
           echo "receipt written to the ${TAG} release"
