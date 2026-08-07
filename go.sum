@@ -998,6 +998,8 @@ github.com/hanzoai/authz v1.10.29 h1:b4vWtI9g4Mvay1zizW7cwly/hDk06r+oAdA/y+317Do
 github.com/hanzoai/authz v1.10.29/go.mod h1:xkzFdiIFx4UQMlU0NkmSRz0dgRQYqSXpKgVjn8ijn3E=
 github.com/hanzoai/base v1.5.15 h1:IWPoiNpAyEdrRgvwm03LCPEyWaaqkpuahmCnTvSNyZU=
 github.com/hanzoai/base v1.5.15/go.mod h1:7EZLNm3z8nZhNNFyM4V3Zp9S0uMUyQQyYkA/Tw3qD94=
+github.com/hanzoai/base v1.5.17 h1:qlT5OO+KffXCfzZYg2EekJL0Unf/nNO7sy4mlo9tleA=
+github.com/hanzoai/base v1.5.17/go.mod h1:UD/Ni4treigqU/d4D0+yGMdKPd0Dw2UYPtiSYnNgdl8=
 github.com/hanzoai/captable v1.0.0 h1:utXPsOaPL+QV0rJaoNDFHvWFv7etf2kfm1bsFh6JRD0=
 github.com/hanzoai/captable v1.0.0/go.mod h1:czdMnzEvb8FWNKCzmh+z8PmwYeQp4MGyTPgo+Q5O+mk=
 github.com/hanzoai/cd/gitops-engine v0.7.3 h1:NmPf8v3Ti8ejSI8M96wFmzOchQ2fgxZHhVA7F9RgAyI=
@@ -1010,8 +1012,12 @@ github.com/hanzoai/commerce v1.50.23 h1:jla445GyV3l7MtxNpd5GLpfik3fB6WPjalXOFORI
 github.com/hanzoai/commerce v1.50.23/go.mod h1:uSIgQKPa1QXPIgTBkNMLZ3PK0B9EfkKBkH+t25EmvB8=
 github.com/hanzoai/commerce v1.50.25 h1:uMSpn61bPOHX68eBcIBlL1YizZ/qwICU/7U7jz0ZEIw=
 github.com/hanzoai/commerce v1.50.25/go.mod h1:uSIgQKPa1QXPIgTBkNMLZ3PK0B9EfkKBkH+t25EmvB8=
+github.com/hanzoai/commerce v1.50.26 h1:dAT8qCFo8Wd76wZ0i2Vh9ozZ0nYt3+LGkv812y7yBN8=
+github.com/hanzoai/commerce v1.50.26/go.mod h1:BUr5bLwbLhZYebEi6Dc9X75/FhH8EPcI0EsjvbJh+9c=
 github.com/hanzoai/csqlite v0.1.0 h1:suwC3dh0INlfP/U0Es6cDf6JNQ+2+GVLLATPWCUux6k=
 github.com/hanzoai/csqlite v0.1.0/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
+github.com/hanzoai/csqlite v0.1.2 h1:4DzdgUfKADhzEP66Y30/HwepuBLrwt7NsemJMfrPGl4=
+github.com/hanzoai/csqlite v0.1.2/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
 github.com/hanzoai/dashscopego v0.6.0/go.mod h1:ciV938pktk0Tw6ssGYzEdxwS8OaHgv3xCWiy7W5664E=
 github.com/hanzoai/dbx v1.17.2 h1:EBADhGuOMxCsc4eHj5cJmtE9c7tSKaviyl8URx31NOQ=
@@ -1042,6 +1048,8 @@ github.com/hanzoai/govaluate v0.1.0 h1:8Ajg4pNw2zFssXO2Ixj3fa73HawZUQiMwcP2NakUj
 github.com/hanzoai/govaluate v0.1.0/go.mod h1:0kZEEPJJmWLx67swZ7wAbE7xahX+CQzm9u/O4dNF5u4=
 github.com/hanzoai/ha v0.1.1 h1:FyiD6mRAdAKbPRlzSqOWujvDG/O9OgZ3CHvqO+XRfsY=
 github.com/hanzoai/ha v0.1.1/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
+github.com/hanzoai/ha v0.2.0 h1:zgIbr3mjeuFfF26lkIKf/47ZM5kYBubWIPjEA24Yu7g=
+github.com/hanzoai/ha v0.2.0/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
 github.com/hanzoai/iam v1.34.21 h1:g9eNiAZlpi77I6ROfPngow7b6grbbB/cyA99UEkDFU0=
 github.com/hanzoai/iam v1.34.21/go.mod h1:qfUXW8LhH+BkgBt1csXfJrDebFvNWgvL/7i1ZP7N42A=
 github.com/hanzoai/kafka v1.3.1 h1:wGzQZyz4SXlTwIhDoguE+lJbTSjxC7f8AeIppJr4++c=
@@ -1084,6 +1092,8 @@ github.com/hanzoai/sqlcipher v0.1.1 h1:GARjSiUEa1lwhd1/f87XRaujZBG5s1ZwxrZW2Es/A
 github.com/hanzoai/sqlcipher v0.1.1/go.mod h1:F0soUYM1i4sawOZUpRvVnWoUayPbeGVlGq01VXy9Aqg=
 github.com/hanzoai/sqlite v0.5.1 h1:vGoBPfYppd6bCxc8y5wwXvfY66WOH3HAUcSu04FmuA0=
 github.com/hanzoai/sqlite v0.5.1/go.mod h1:7hlAtZspL0Ggx/j0cSo6npPFtUeikvIxnMDb7yTaJD0=
+github.com/hanzoai/sqlite v0.5.2 h1:hXHOwYi6vm2emrStqfIvahx8qUr6v2AFiyWOqsTtc8w=
+github.com/hanzoai/sqlite v0.5.2/go.mod h1:6MOvr13PLL+ajbg6SGf1nSvqDsCNzKIvwrLo429LFUY=
 github.com/hanzoai/tasks v1.52.9 h1:HneORQe/7KF5orVirmHfweFMFTMeuAmRRj8daUhqQQM=
 github.com/hanzoai/tasks v1.52.9/go.mod h1:2GdohcUvJa39vef4Y1xYys90iUDCEuadbQjO4XAEqR8=
 github.com/hanzoai/thinking v0.1.1 h1:JuJ9s3q53NRSHSU+/zEdg089vppuNUKK/9BG7bairLw=
