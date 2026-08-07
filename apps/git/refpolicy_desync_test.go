@@ -69,6 +69,39 @@ func TestAGrantMayNotWriteNothing(t *testing.T) {
 	}
 }
 
+// The sentence the whole coding path leans on, stated head-on: a run's grant is
+// for its own branch, and refs/heads/main is not it.
+//
+// apps/coding pushes with this grant now (sandboxrunner.go), so this is no longer
+// a claim about a credential nobody uses — it is the rule that stands between a
+// prompt-injected model and the trunk. It is asserted for a CREATE, which is the
+// friendliest thing a push can ask for and therefore the last shape anyone would
+// think to refuse: main already exists, so a create against it would be refused
+// anyway, and the point is that the GRANT refuses it first and would refuse it in
+// a repository where main did not exist yet.
+func TestAGrantMayNotWriteTheTrunk(t *testing.T) {
+	for _, ref := range []string{"refs/heads/main", "refs/heads/master", "refs/heads/release/2.1", "refs/tags/v1"} {
+		cmds := []refCommand{{
+			Old: "0000000000000000000000000000000000000000",
+			New: "1111111111111111111111111111111111111111",
+			Ref: ref,
+		}}
+		if err := checkRefPolicy(cmds, "main", "refs/heads/agent/abc123def456"); err == nil {
+			t.Fatalf("a grant confined to an agent branch wrote %s", ref)
+		}
+	}
+	// The control that gives it meaning: its OWN ref still goes through, or the
+	// rule is just an outage.
+	own := []refCommand{{
+		Old: "0000000000000000000000000000000000000000",
+		New: "1111111111111111111111111111111111111111",
+		Ref: "refs/heads/agent/abc123def456",
+	}}
+	if err := checkRefPolicy(own, "main", "refs/heads/agent/abc123def456"); err != nil {
+		t.Fatalf("a run cannot write its own branch: %v", err)
+	}
+}
+
 // The same emptiness stays harmless for a principal: an empty push is a no-op
 // and always was. Refusing it would break ordinary clients for no gain.
 func TestAPrincipalMayPushNothing(t *testing.T) {
