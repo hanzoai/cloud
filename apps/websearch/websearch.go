@@ -321,7 +321,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if reg == nil {
 		return fmt.Errorf("websearch.Mount: router carries no typed-op registry")
 	}
-	zip.Post(reg, Path, webSearch, zip.WithSummary("Search the live web"))
+	// Named, not derived. The id a POST to /v1/websearch derives is
+	// `create_websearch`, which reads as "make a websearch" — a resource this
+	// subsystem does not have — and a model choosing from an `op` enum picks by
+	// that name before it reads any description. It is a verb over a noun, like
+	// every other op an agent is offered (lease_sandbox, run_in_sandbox).
+	zip.Post(reg, Path, webSearch,
+		zip.WithOperationID("search_web"),
+		zip.WithSummary("Search the live web"))
 
 	native := http.HandlerFunc(searchNative)
 	searchDirect := zip.AdaptNetHTTP(native)
