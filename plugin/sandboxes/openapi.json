@@ -151,6 +151,37 @@
         }
       }
     },
+    "/v1/sandboxes/stop": {
+      "post": {
+        "operationId": "stop_run",
+        "summary": "Stop what a sandbox is running, and keep the sandbox",
+        "tags": [
+          "sandboxes"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StopIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stopped"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/sandboxes/write": {
       "post": {
         "operationId": "write_sandbox_file",
@@ -449,10 +480,29 @@
           "id": {
             "type": "string"
           },
+          "session": {
+            "type": "string"
+          },
           "stdin": {
             "type": "string"
           },
           "timeoutSec": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "StopIn": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Stopped": {
+        "properties": {
+          "stopped": {
             "type": "integer"
           }
         },

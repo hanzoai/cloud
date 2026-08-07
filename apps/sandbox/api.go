@@ -62,6 +62,11 @@ type Cmd struct {
 	Stdin      string
 	Dir        string
 	TimeoutSec int
+	// Session is where this command NARRATES. Its output is appended to that
+	// session's live log as the program produces it, so a surface watching the run
+	// sees the work happen instead of a blank pause with a verdict at the end.
+	// Empty means nothing is watching, and then nothing is sent — see work.go.
+	Session string
 }
 
 // Entry is what a path IS: a file's bytes, or a directory's entries. One read
@@ -254,12 +259,49 @@ func Run(s *Service, ctx context.Context, org, id string, cmd Cmd) (ExecResult, 
 		argv = append([]string{"sh", "-c", "cd " + shellQuote(cmd.Dir) + " && exec \"$@\"", "sh"}, argv...)
 	}
 	touched(ctx, store, m) // a call is in flight — see touched
-	r, err := s.State.rt.exec(ctx, m, argv, strings.NewReader(cmd.Stdin), cmd.TimeoutSec)
+
+	// THE COMMAND BECOMES ADDRESSABLE the moment it starts, in the two ways a
+	// caller needs it to be: its cancel is held under the sandbox so Stop can
+	// reach it, and its output is narrated into the session that asked to watch.
+	// Both end when the command does. See work.go.
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
+	forget := s.State.work.start(m.ID, stop)
+	defer forget()
+	say := newTell(org, cmd.Session)
+
+	r, err := s.State.rt.exec(ctx, m, argv, strings.NewReader(cmd.Stdin), cmd.TimeoutSec, say)
+	// The last word is said on EVERY path, including the one a stop took. A run
+	// that vanishes mid-sentence leaves a watcher reading "working…" forever.
+	say.done(r.ExitCode, err)
 	if err != nil {
 		return ExecResult{}, zip.Errorf(http.StatusBadGateway, "exec: %v", err)
 	}
 	touched(ctx, store, m)
 	return r, nil
+}
+
+// Stop interrupts whatever the caller's sandbox is running right now, and leaves
+// the sandbox leased.
+//
+// It is a different act from End, deliberately: STOP ENDS THE WORK, END ENDS THE
+// RESOURCE. A run that has gone wrong is usually one somebody still wants to look
+// at — the checkout, the logs, the half-written file are all in there — and a
+// stop that also deleted the pod would take the evidence with it. Two verbs, no
+// overlap, and nothing that has to be undone.
+//
+// It answers HOW MANY commands it interrupted, and zero is a true answer rather
+// than a failure: a command that finished a moment ago is one there is nothing
+// left to stop. What a caller must be able to tell apart is "already over" from
+// "not yours", and the second is a 404 out of find below — the same org gate
+// every other operation here walks through, applied before the in-flight set is
+// consulted at all.
+func Stop(s *Service, ctx context.Context, org, id string) (int, error) {
+	m, _, err := find(s, ctx, org, id)
+	if err != nil {
+		return 0, err
+	}
+	return s.State.work.stop(m.ID), nil
 }
 
 // Read reads one file, or lists a directory when the path names one. Both go through
@@ -276,7 +318,7 @@ func Read(s *Service, ctx context.Context, org, id, path string) (Entry, error) 
 	}
 	q := shellQuote(p)
 	r, err := s.State.rt.exec(ctx, m, []string{"sh", "-c",
-		"if [ -d " + q + " ]; then ls -1A -- " + q + "; exit " + strconv.Itoa(dirExit) + "; fi; cat -- " + q}, nil, 0)
+		"if [ -d " + q + " ]; then ls -1A -- " + q + "; exit " + strconv.Itoa(dirExit) + "; fi; cat -- " + q}, nil, 0, nil)
 	if err != nil {
 		return Entry{}, zip.Errorf(http.StatusBadGateway, "fs read: %v", err)
 	}
@@ -304,7 +346,7 @@ func Write(s *Service, ctx context.Context, org, id, path string, data []byte) (
 	}
 	q := shellQuote(p)
 	r, err := s.State.rt.exec(ctx, m, []string{"sh", "-c",
-		"mkdir -p -- \"$(dirname -- " + q + ")\" && cat > " + q}, bytes.NewReader(data), 0)
+		"mkdir -p -- \"$(dirname -- " + q + ")\" && cat > " + q}, bytes.NewReader(data), 0, nil)
 	if err != nil {
 		return "", 0, zip.Errorf(http.StatusBadGateway, "fs write: %v", err)
 	}
