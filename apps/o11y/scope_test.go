@@ -242,7 +242,14 @@ func TestScopedReadsOwnTheirAddressesAndOnlyTheirs(t *testing.T) {
 
 	sentinel := func(t *testing.T, path string) bool {
 		t.Helper()
-		resp, err := app.Test(scopeReq("GET", path, "acme"))
+		// THE DEADLINE MUST EXCEED THE HANDLER'S OWN BUDGET, or this asks a question
+		// it has not left time to answer. /v1/o11y/status probes each deployment over
+		// HTTP with a healthProbeTimeout budget (status.go), and zip's Test defaults to
+		// ONE second — so the handler is permitted to take twice as long as the test
+		// waits for it. Under load, or wherever those probes are unreachable, this
+		// failed with "i/o timeout" at an address that had ROUTED perfectly well, which
+		// is the one thing this test is about.
+		resp, err := app.Test(scopeReq("GET", path, "acme"), zip.TestConfig{Timeout: 4 * healthProbeTimeout})
 		if err != nil {
 			t.Fatalf("Test %s: %v", path, err)
 		}
