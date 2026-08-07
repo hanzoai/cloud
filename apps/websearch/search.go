@@ -14,10 +14,11 @@
 //
 // Composable by construction: an engine is {name, build(query)→URL, parse(HTML)
 // →results}. metaSearch runs the ENABLED engines concurrently and merges+dedupes
-// by normalized URL. WEBSEARCH_ENGINES selects them (default "bing", verified
-// datacenter-tolerant from the cluster egress); adding one is a registry entry,
-// not new plumbing. Any engine that fails or gets bot-challenged contributes zero
-// and never fails the request — search degrades to fewer results, never to a 5xx.
+// by normalized URL. WEBSEARCH_ENGINES selects them; unset means defaultEngines,
+// which is every engine measured to survive the cluster egress (bing + mojeek).
+// Adding one is a registry entry, not new plumbing. Any engine that fails or is
+// bot-challenged contributes zero and never fails the request — search degrades
+// to fewer results, never to a 5xx.
 
 package websearch
 
@@ -40,14 +41,21 @@ const (
 	// A realistic desktop UA. Keyless engines serve datacenter IPs a bot-challenge
 	// page (not results) when the UA looks automated; this one gets real results.
 	browserUA = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
-	// maxResults caps the merged set — parity with a typical SearXNG first page and
-	// plenty for the chat web_search agent tool.
-	maxResults = 20
+	// maxResults caps the merged set. Bing's first page is 10 and Mojeek is asked
+	// for 20, so the cap is what the two of them can actually reach rather than a
+	// number one engine could never fill.
+	maxResults = 30
 
 	// Engine names as constants: the parsers stamp result.Engine with them, so
 	// they must NOT read <engine>.name (that closes an init cycle engine→parse→engine).
-	bingName = "bing"
-	ddgName  = "ddg"
+	bingName   = "bing"
+	ddgName    = "ddg"
+	mojeekName = "mojeek"
+
+	// mojeekCount is how many hits Mojeek is asked for. It honours `t` exactly
+	// (measured: t=20 → 20 results, t=30 → 30), so this is the one knob that
+	// raises the answer's size without adding an engine.
+	mojeekCount = "20"
 )
 
 // searchClient is dedicated to engine fetches: a tight timeout so one slow engine
@@ -87,7 +95,7 @@ type webSearchResults struct {
 	// estimate of what the web holds.
 	NumberOfResults int `json:"number_of_results"`
 	// Results are the merged hits, deduplicated by normalised URL and capped at
-	// 20. Always an array and never null: no hits is an ANSWER, not a fault.
+	// 30. Always an array and never null: no hits is an ANSWER, not a fault.
 	Results []webResult `json:"results"`
 }
 
@@ -102,8 +110,9 @@ type engine struct {
 
 // ── engine endpoints (functions, not vars, so tests override via env) ────────
 
-func bingURL() string { return envOr("WEBSEARCH_BING_URL", "https://www.bing.com/search") }
-func ddgURL() string  { return envOr("WEBSEARCH_DDG_URL", "https://lite.duckduckgo.com/lite/") }
+func bingURL() string   { return envOr("WEBSEARCH_BING_URL", "https://www.bing.com/search") }
+func ddgURL() string    { return envOr("WEBSEARCH_DDG_URL", "https://lite.duckduckgo.com/lite/") }
+func mojeekURL() string { return envOr("WEBSEARCH_MOJEEK_URL", "https://www.mojeek.com/search") }
 
 func envOr(key, def string) string {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
@@ -138,19 +147,52 @@ var ddgEngine = engine{
 	parse: parseDDG,
 }
 
-var engineByName = map[string]engine{
-	bingEngine.name: bingEngine,
-	ddgEngine.name:  ddgEngine,
+// mojeek is an INDEPENDENT crawler rather than a front end onto someone else's
+// index, so its hits are genuinely additive to Bing's instead of the same ten
+// pages in a different order. Two properties earned it the default slot, both
+// measured from cluster egress rather than assumed:
+//
+//   - it serves a datacenter IP real results, where DuckDuckGo serves the
+//     anomaly page on both of its endpoints;
+//   - it honours `site:`, and Bing does not. A site:x.com query answers 10 on
+//     Mojeek and 0 on Bing, which makes this the engine that carries every
+//     scoped search — X, GitHub, Reddit — and not merely a second opinion.
+var mojeekEngine = engine{
+	name: mojeekName,
+	build: func(query, lang string) string {
+		v := url.Values{}
+		v.Set("q", query)
+		v.Set("t", mojeekCount)
+		if lang != "" {
+			v.Set("lb", lang)
+		}
+		return mojeekURL() + "?" + v.Encode()
+	},
+	parse: parseMojeek,
 }
 
+var engineByName = map[string]engine{
+	bingEngine.name:   bingEngine,
+	ddgEngine.name:    ddgEngine,
+	mojeekEngine.name: mojeekEngine,
+}
+
+// defaultEngines is what a deployment that configures nothing searches. It is
+// every engine measured to survive datacenter egress, and it is a LIST rather
+// than one name because production ran with WEBSEARCH_ENGINES unset — so this
+// default was the whole engine set, and it was Bing alone: one index, ten
+// results, and no `site:` operator. DDG stays coded and out of the default; it
+// is served the bot-challenge page from the cluster and contributes zero.
+var defaultEngines = []engine{bingEngine, mojeekEngine}
+
 // enabledEngines resolves WEBSEARCH_ENGINES (comma list) to the engine set,
-// defaulting to bing. Unknown names are ignored; an empty result falls back to
-// bing so search is never engine-less. DDG is opt-in (bot-challenged from some
-// datacenter egress) but ships coded so `bing,ddg` needs no new plumbing.
+// defaulting to [defaultEngines]. Unknown names are ignored, and a spec that
+// names none of the known engines falls back to the same default so search is
+// never engine-less.
 func enabledEngines() []engine {
 	spec := strings.TrimSpace(os.Getenv("WEBSEARCH_ENGINES"))
 	if spec == "" {
-		spec = bingEngine.name
+		return defaultEngines
 	}
 	var out []engine
 	for _, name := range strings.Split(spec, ",") {
@@ -159,7 +201,7 @@ func enabledEngines() []engine {
 		}
 	}
 	if len(out) == 0 {
-		out = append(out, bingEngine)
+		return defaultEngines
 	}
 	return out
 }
@@ -369,6 +411,37 @@ func ddgRealURL(href string) string {
 		return href
 	}
 	return ""
+}
+
+// ── Mojeek: one <li> per hit, <a class="title"> + <p class="s"> ──────────────
+// Mojeek links straight at the destination — there is no click-tracking redirect
+// to unwrap, which is why this parser has no counterpart to bingRealURL. The
+// result classes are semantic (title, s) rather than build-hashed, so they
+// survive a redeploy; that is what makes this engine parseable at all where
+// Brave, whose classes are Svelte hashes like `svelte-1rq4ngz`, is not.
+
+func parseMojeek(root *html.Node) []webResult {
+	var out []webResult
+	forEach(root, func(n *html.Node) {
+		if n.Type != html.ElementNode || n.Data != "li" {
+			return
+		}
+		a := findFirst(n, func(x *html.Node) bool {
+			return x.Type == html.ElementNode && x.Data == "a" && hasClass(x, "title")
+		})
+		if a == nil {
+			return
+		}
+		u, title := attr(a, "href"), textContent(a)
+		if title == "" || !strings.HasPrefix(u, "http") {
+			return
+		}
+		snip := findFirst(n, func(x *html.Node) bool {
+			return x.Type == html.ElementNode && x.Data == "p" && hasClass(x, "s")
+		})
+		out = append(out, webResult{URL: u, Title: title, Content: textContent(snip), Engine: mojeekName})
+	})
+	return out
 }
 
 // normalizeURL is the dedupe key: lowercased host + path (trailing slash and
