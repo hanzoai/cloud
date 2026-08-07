@@ -348,12 +348,32 @@ jobs:
   # what makes a tag a receipt for an image that booted.
   image:
     needs: [gate, containment]
-    # github.ref arrives NULL on an API rerun (act_runner drops it), which
-    # skipped the image on the first fully green gate pass this pipeline ever
-    # had. A rerun keeps event_name and the workflow only triggers from main
-    # pushes/tags/dispatch, so refuse PRs and accept ref==main OR the rerun's
-    # null-ref shape.
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == '' || github.ref == null)
+    # NAME WHAT IS REFUSED, NOT WHAT IS ALLOWED — because this job's ref is not
+    # reliably knowable and its absence must not read as "no".
+    #
+    # act_runner does not populate the ref on these runs: the API returns
+    # head_branch NULL and no ref field at all, on ordinary pushes to main and
+    # not merely on the API reruns the previous note blamed. The old condition
+    # allowed ref=='refs/heads/main' OR ''  OR null, which looks like it covers
+    # exactly that — and does not, because an absent value satisfies none of the
+    # three, so the whole predicate is false and the job is SKIPPED.
+    #
+    # Skipped, not failed, is the entire reason this was invisible. Run 38052
+    # (7fbafa54a) is the proof: gate success, containment success, and then
+    # image/rollout/reach/fanout/receipt all `skipped`. A green tick on a run
+    # that shipped nothing, with no error anywhere to read. That is "the gate is
+    # green and nothing ships", and it had outlasted several fixes aimed at the
+    # gate, which was never the thing failing.
+    #
+    # Inverting it removes the dependence. `on:` already decides what reaches
+    # this workflow — pushes to main, v* tags, PRs, dispatch — so the job does
+    # not need to re-derive that, and re-deriving it is what broke. Two things
+    # must be refused: pull requests, and TAG pushes (the tag is minted BY the
+    # claim below, so building on a tag would take the next number and publish a
+    # second image for a commit that already has one). Everything else — main,
+    # dispatch, and the ref-less shape — is a release. startsWith() on an absent
+    # ref is false, so the missing value now means "not a tag", which is true.
+    if: github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/')
     runs-on: [hanzo-build-linux-amd64]
     # cloud builds ~28 subsystems and has run 15m, 17m and 20m42s.
     timeout-minutes: 60
