@@ -24,8 +24,9 @@ import (
 // exactly one handler at this address and not two chained by the router).
 //
 // Every method below is answered from the children. Nothing is remembered
-// between requests except which app listed a tool name, and that is a routing
-// table, not a catalogue: see [Door.owner].
+// between requests except how to ROUTE a name — which app listed it, and which
+// operation the door published it as. Both are written by one gather and neither
+// is a catalogue: see [Door.owner].
 
 // protocolVersion is the MCP spec revision this door speaks. It is zip's
 // (mcpProtocolVersion) — the children answer initialize with the same string,
@@ -64,8 +65,15 @@ type Door struct {
 	// registry decides whether the tool exists, and a name it no longer serves
 	// yields that child's own -32602 rather than a mis-dispatch. A name nobody
 	// listed is discovered by asking, not by guessing.
+	//
+	// alias is the same kind of fact and rides with it: the name the door
+	// PUBLISHED for an operation → the id its owner knows it by. It holds only the
+	// operations whose published name differs, it is rewritten by the same gather,
+	// and it is read at exactly two places — [Door.lookup] and [Door.describe]. See
+	// fleet/verbs.go for why the name it undoes is not the name the gate judged.
 	mu    sync.RWMutex
 	owner map[string]string
+	alias map[string]string
 }
 
 // Mount serves the fleet's agent door at path, over apps, reaching one with at.
@@ -208,30 +216,36 @@ func (d *Door) call(c *zip.Ctx, req message) error {
 		return d.describe(c, req, p.Arguments)
 	}
 
-	// A subsystem tool is an ENVELOPE over one operation. Unwrapping it yields
-	// exactly the name and message a direct call carries, so everything below is
-	// ONE dispatch for both spellings: the same routing table, the same gate on
-	// the way into it, the same hop, the same reply.
+	// Two DECODINGS stand between what a client sends and what a child is asked,
+	// and neither is a second route. A subsystem tool is an ENVELOPE over one
+	// operation; a published name is that operation's id spelled as a verb. Undo
+	// both and what is left is the name and message a direct tools/call carries,
+	// so everything below is ONE dispatch for every spelling: the same routing
+	// table, the same gate on the way into it, the same hop, the same reply.
+	//
+	// The caller's own body is forwarded BYTE FOR BYTE when neither decoding fired
+	// — which is every call that already names an operation as its owner does.
 	msg := c.Fiber().Request().Body()
-	if composed(p.Name) {
-		op, body, ok := unwrap(req.ID, p.Arguments)
+	if d.composed(p.Name) {
+		op, input, ok := unwrap(p.Arguments)
 		if !ok {
 			return c.JSON(200, rpcErr(req.ID, -32602, p.Name+` needs {"op":"<operation>","input":{}}`))
 		}
-		p.Name, msg = op, body
+		p.Name, p.Arguments, msg = op, input, nil
 	}
 
-	app := d.ownerOf(p.Name)
-	if app == "" {
-		d.gather(c)
-		app = d.ownerOf(p.Name)
-	}
+	op, app := d.find(c, p.Name)
 	if app == "" {
 		// Either nobody serves it, or refuse() withheld it — and the caller gets
 		// the same answer for both. Telling a client which of the two it hit would
 		// turn the door into an oracle for the identity surface it just declined
 		// to expose.
 		return c.JSON(200, rpcErr(req.ID, -32602, "unknown tool: "+p.Name))
+	}
+	// A published name is not the name its owner answers to, so a call that
+	// carried one is spelled out again as the call it decodes to.
+	if msg == nil || op != p.Name {
+		msg = callBody(req.ID, op, p.Arguments)
 	}
 	// The caller's own REQUEST — its headers, so identity propagates — carrying
 	// msg, which for a direct call is the caller's own body byte for byte and for
@@ -256,12 +270,18 @@ func (d *Door) call(c *zip.Ctx, req message) error {
 	return c.Bytes(200, ans.Body)
 }
 
-// named is one tool with its name and its OWNER lifted out, so the composed list
-// sorts and groups without re-parsing and each descriptor is carried VERBATIM —
-// the bytes the child's own registry projected, never a re-encoding.
+// named is one tool with its name, its OWNER and its one-line documentation
+// lifted out, so the composed list sorts, groups and reads without re-parsing —
+// and each descriptor is still carried VERBATIM, the bytes the child's own
+// registry projected, never a re-encoding.
 type named struct {
 	app  string
 	name string
+	// as is the name the door PUBLISHES for this operation: its id read back as
+	// a verb on an object (fleet/verbs.go), or the id itself when that reading
+	// would be ambiguous. Written by [offer], never by the child.
+	as   string
+	desc string
 	raw  json.RawMessage
 }
 
@@ -337,17 +357,58 @@ func (d *Door) gather(c *zip.Ctx) ([]named, []Outage, int) {
 		return all[i].name < all[j].name
 	})
 
+	// AFTER the gate and after the sort, because both read the CHILD's own name:
+	// [refuse] must judge the route it was given, and [rank] matches route stems.
+	// Naming is the last thing that happens to a surviving operation. See
+	// fleet/verbs.go.
+	offer(all)
+	alias := make(map[string]string, len(all))
+	for _, t := range all {
+		if t.as != t.name {
+			alias[t.as] = t.name
+		}
+	}
+
 	d.mu.Lock()
-	d.owner = owner
+	d.owner, d.alias = owner, alias
 	d.mu.Unlock()
 
 	return all, down, held
 }
 
-func (d *Door) ownerOf(tool string) string {
+// find reads whatever a tools/call named into the operation id its owner knows,
+// and the app that owns it — asking the fleet ONCE if the tables are cold.
+//
+// Both halves have to be answered by one lookup, and that is the whole reason
+// this is a function. The tables are written together by [Door.gather] and a
+// process remembers nothing between requests, so a door that has just started —
+// or has just answered a tools/call for a client that cached tools/list across a
+// reconnect — holds neither. Resolving the name first and discovering second
+// would resolve against an empty table, then look up an unresolved name in a
+// full one, and answer "unknown tool" for an operation it publishes.
+//
+// The resolution is a DECODING and not a second route, in exactly the sense the
+// envelope is: what comes out is the name a direct tools/call carries, and
+// everything after it — the owner map, the gate that wrote it, the hop — is what
+// it always was. A name nobody published is returned unchanged, so an
+// operation's own id still arrives at its own handler; it must, because describe
+// hands back the child's descriptor bytes verbatim and those carry the child's
+// own name.
+func (d *Door) find(c *zip.Ctx, name string) (op, app string) {
+	if op, app = d.lookup(name); app != "" {
+		return op, app
+	}
+	d.gather(c)
+	return d.lookup(name)
+}
+
+func (d *Door) lookup(name string) (op, app string) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-	return d.owner[tool]
+	if id, published := d.alias[name]; published {
+		name = id
+	}
+	return name, d.owner[name]
 }
 
 // toolsOf lifts the descriptors out of one child's tools/list reply.
@@ -374,11 +435,15 @@ func toolsOf(body []byte) ([]named, error) {
 	for _, raw := range env.Result.Tools {
 		var hdr struct {
 			Name string `json:"name"`
+			// The op's own doc comment, as zip's generator lifted it into the
+			// descriptor. The flat list carried it and the grouped list threw it
+			// away; [summary] keeps the first sentence so an enum reads.
+			Description string `json:"description"`
 		}
 		if err := json.Unmarshal(raw, &hdr); err != nil || hdr.Name == "" {
 			return nil, errNamelessTool
 		}
-		out = append(out, named{name: hdr.Name, raw: raw})
+		out = append(out, named{name: hdr.Name, desc: hdr.Description, raw: raw})
 	}
 	return out, nil
 }

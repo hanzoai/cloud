@@ -26,7 +26,7 @@ package fleet_test
 //
 // It asserts the OPERATIONS, not the tool count. The door projects one tool per
 // subsystem and carries the operations in that tool's `op` enum (fleet/grouped.go),
-// so `hanzo_websearch` existing is not the claim — `post_v1_websearch` being
+// so a `websearch` tool existing is not the claim — `post_v1_websearch` being
 // inside it is.
 
 import (
@@ -38,6 +38,7 @@ import (
 	"github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/exec"
 	"github.com/hanzoai/cloud/apps/websearch"
+	"github.com/hanzoai/cloud/fleet"
 )
 
 // reach is one capability the agent needs, and the operation that is its door.
@@ -80,12 +81,33 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 	offering := offered(res)
 	sort.Strings(offering)
 	for _, w := range want {
-		if !contains(offering, w.op) {
-			t.Errorf("%s does NOT project — so the assistant still cannot %s.\n"+
-				"  the door offers: %s", w.op, w.why, strings.Join(offering, " "))
+		// The enum carries the name the door PUBLISHES for an operation, so that
+		// is what a model reads and that is what is asked for here. `create_crawl`
+		// is what `post_v1_crawl` is called; fleet/verbs.go is why.
+		as := fleet.Phrase(w.op)
+		if !contains(offering, as) {
+			t.Errorf("%s (offered as %s) does NOT project — so the assistant still cannot %s.\n"+
+				"  the door offers: %s", w.op, as, w.why, strings.Join(offering, " "))
 			continue
 		}
-		t.Logf("%-20s projects, so the assistant can %s", w.op, w.why)
+		// …and the name resolves back to the operation the subsystem actually
+		// serves. describe answers out of the gathered set, so this is the door
+		// mapping a published name onto a REAL child's own descriptor — not a
+		// string this test computed twice.
+		desc := rpc(t, h, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"`+
+			fleet.Describe+`","arguments":{"op":"`+as+`"}}}`)
+		content, _ := desc["content"].([]any)
+		if len(content) == 0 {
+			t.Errorf("%s describes to nothing: %v", as, desc)
+			continue
+		}
+		first, _ := content[0].(map[string]any)
+		text, _ := first["text"].(string)
+		if !strings.Contains(text, `"name":"`+w.op+`"`) {
+			t.Errorf("%s describes to something that is not %s: %s", as, w.op, text)
+			continue
+		}
+		t.Logf("%-16s → %-24s projects and resolves, so the assistant can %s", w.op, as, w.why)
 	}
 
 	// The tools themselves, for the record: one per subsystem, the operations
