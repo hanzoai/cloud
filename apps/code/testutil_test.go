@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
@@ -110,9 +111,19 @@ func doAuth(t *testing.T, app *zip.App, method, path, org string, body any) (int
 	return runReq(t, app, req)
 }
 
+// requestBudget is what these tests allow ONE in-process request, and it is large
+// on purpose. zip's Test defaults to one second, and POST /v1/code/index does real
+// work inside it — parse every file, extract symbols, chunk them and embed the
+// chunks — so on a loaded box the deadline expired mid-index and the suite failed
+// with "i/o timeout" at a route that was working. Nothing here crosses a socket, so
+// this bound is not protecting against a slow peer; the only thing it can catch is a
+// HANG, and `go test -timeout` already catches that with a bound that fits the whole
+// package. Sized so that only a hang trips it.
+const requestBudget = 30 * time.Second
+
 func runReq(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 	t.Helper()
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, zip.TestConfig{Timeout: requestBudget})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", req.Method, req.URL.Path, err)
 	}
