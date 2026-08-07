@@ -390,9 +390,20 @@ var flagsOnce sync.Once
 // LoadConfig reads flags + env into a Config. Flags override env.
 func LoadConfig() *Config {
 	cfg := &Config{
-		ListenAddr:           getenv("CLOUD_LISTEN", listenDefault()),
-		ZAPListenAddr:        getenv("CLOUD_ZAP_LISTEN", ":9653"),
-		HealthListenAddr:     getenv("CLOUD_HEALTH_LISTEN", ":9090"),
+		ListenAddr: getenv("CLOUD_LISTEN", listenDefault()),
+		// LOOPBACK BY DEFAULT. serve.go says the ZAP transport is "PLAINTEXT TCP over
+		// :9653" that "needs mesh mTLS", and that it serves the IDENTICAL route surface
+		// as HTTP. A bare ":9653" binds every interface, so on a laptop that is
+		// /v1/functions/{name}/invoke — arbitrary process execution — reachable from
+		// the LAN with no credential. Proven: a bash function created and invoked from
+		// another host on the subnet, unauthenticated.
+		//
+		// A cluster has NetworkPolicy and a mesh and sets these explicitly. A developer
+		// has neither and sets nothing, so the default is the one that must be safe.
+		// CLOUD_LISTEN was already honoured for HTTP; these two were not, which is why
+		// binding the front door to 127.0.0.1 left two other doors open.
+		ZAPListenAddr:        getenv("CLOUD_ZAP_LISTEN", "127.0.0.1:9653"),
+		HealthListenAddr:     getenv("CLOUD_HEALTH_LISTEN", "127.0.0.1:9090"),
 		AdminListenAddr:      getenv("CLOUD_ADMIN_LISTEN", ":8081"),
 		ReadBufferSize:       getenvInt("GATEWAY_READ_BUFFER_SIZE", 32768),
 		BodyLimit:            getenvInt("GATEWAY_BODY_LIMIT", 16<<20),
