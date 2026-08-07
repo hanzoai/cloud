@@ -14,7 +14,11 @@ import (
 // the UI serves HTML. Change this number only by moving a route between the two.
 // 24 since the four creators (repo, ssh key, subscription, mirror target) went
 // typed — they answer 201, which zip.WithStatus has declared since v1.18.2.
-const typedOpCount = 24
+// 28 since the pull request became a noun here (pulls.go): open, list, get,
+// merge. It is the last thing an agent could not do on the native plane — a run
+// could push its branch and had no way to propose it — so the four are the door
+// that used to require mirroring the repository to GitHub to have one.
+const typedOpCount = 28
 
 // TestTypedOpsProject pins the payoff of registering ops instead of handlers:
 // zip's registry — the single value REST, OpenAPI, MCP and the CLI are each

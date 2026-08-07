@@ -165,6 +165,46 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets"}`),
 		Response: json.RawMessage(`{"data":[{"id":"mir_2d90","repo":"widgets","host":"github.com","url":"https://github.com/acme/widgets.git","createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
+	zip.Describe("GET /v1/git/repos/:name/pulls", zip.Doc{
+		Description: "Returns a repo's pull requests, newest number first — what is\nwaiting to be reviewed, and what has already landed. Narrow it with\n?state=open or ?state=merged; omit state for every proposal.",
+		Fields: map[string]string{
+			"pullFilter.name":    "Name is the repo, from the :name path segment.",
+			"pullFilter.state":   "State narrows the list to \"open\" or \"merged\". Omit it for every proposal.",
+			"pullList.data":      "Data holds the repo's pull requests, newest number first.",
+			"pullView.author":    "Author is the user who opened it; empty for a caller with no user.",
+			"pullView.base":      "Base is the branch the work is proposed into.",
+			"pullView.body":      "Body is the longer description; empty when none was given.",
+			"pullView.createdAt": "CreatedAt is RFC 3339 UTC.",
+			"pullView.head":      "Head is the branch holding the work.",
+			"pullView.mergedRev": "MergedRev is what base points at now that the merge landed. Empty while\nthe proposal is open.",
+			"pullView.number":    "Number is the proposal's per-repo handle, dense from 1.",
+			"pullView.repo":      "Repo is the repository the proposal belongs to.",
+			"pullView.state":     "State is \"open\" or \"merged\".",
+			"pullView.title":     "Title is the one-line summary.",
+			"pullView.updatedAt": "UpdatedAt is RFC 3339 UTC.",
+		},
+		Example:  json.RawMessage(`{"name":"widgets","state":"open"}`),
+		Response: json.RawMessage(`{"data":[{"number":4,"repo":"widgets","title":"cache the catalog read","head":"agent/cache-catalog","base":"main","state":"open","createdAt":"2026-08-07T10:00:00Z","updatedAt":"2026-08-07T10:00:00Z"}]}`),
+	})
+	zip.Describe("GET /v1/git/repos/:name/pulls/:number", zip.Doc{
+		Description: "Returns one pull request by its per-repo number. A number belonging to\nanother tenant's repo is not found, exactly as the repo itself is not.",
+		Fields: map[string]string{
+			"pullRef.name":       "Name is the repo, from the :name path segment.",
+			"pullRef.number":     "Number is the proposal's per-repo number, from the :number path segment.",
+			"pullView.author":    "Author is the user who opened it; empty for a caller with no user.",
+			"pullView.base":      "Base is the branch the work is proposed into.",
+			"pullView.body":      "Body is the longer description; empty when none was given.",
+			"pullView.createdAt": "CreatedAt is RFC 3339 UTC.",
+			"pullView.head":      "Head is the branch holding the work.",
+			"pullView.mergedRev": "MergedRev is what base points at now that the merge landed. Empty while\nthe proposal is open.",
+			"pullView.number":    "Number is the proposal's per-repo handle, dense from 1.",
+			"pullView.repo":      "Repo is the repository the proposal belongs to.",
+			"pullView.state":     "State is \"open\" or \"merged\".",
+			"pullView.title":     "Title is the one-line summary.",
+			"pullView.updatedAt": "UpdatedAt is RFC 3339 UTC.",
+		},
+		Example: json.RawMessage(`{"name":"widgets","number":4}`),
+	})
 	zip.Describe("GET /v1/git/repos/:name/readme", zip.Doc{
 		Description: "Returns the README at the tree root as plain text — unrendered, so\nthe caller decides how to present it. A repo with no README is not found.",
 		Fields: map[string]string{
@@ -425,6 +465,47 @@ func init() {
 			"mirrorTargetView.url":       "URL is the canonical https remote, with any embedded credentials stripped.",
 		},
 		Example: json.RawMessage(`{"name":"widgets","url":"https://github.com/acme/widgets.git"}`),
+	})
+	zip.Describe("POST /v1/git/repos/:name/pulls", zip.Doc{
+		Description: "Proposes a branch for merging and returns it with its number. Answers\n201. Both branches must already exist — a proposal naming a branch nobody\npushed is a typo, not a plan — and base defaults to the repo's default branch.\n\nProposing the same head into the same base twice is a 409 while the first\nproposal is still open, so a retried agent run leaves ONE thing to review\nrather than a pile of identical ones. A repo outside the caller's scope is a\n404, exactly as reading it is.",
+		Fields: map[string]string{
+			"openReq.base":       "Base is the branch the work is proposed INTO, by short name. Defaults to\nthe repo's default branch, which is where a proposal goes when nobody says\notherwise.",
+			"openReq.body":       "Body is the longer description. Optional.",
+			"openReq.head":       "Head is the branch holding the work, by short name (agent/fix-503).\nRequired, and must already exist.",
+			"openReq.name":       "Name is the repo the proposal belongs to, from the :name path segment.",
+			"openReq.title":      "Title is the one-line summary of what is being proposed. Required.",
+			"pullView.author":    "Author is the user who opened it; empty for a caller with no user.",
+			"pullView.base":      "Base is the branch the work is proposed into.",
+			"pullView.body":      "Body is the longer description; empty when none was given.",
+			"pullView.createdAt": "CreatedAt is RFC 3339 UTC.",
+			"pullView.head":      "Head is the branch holding the work.",
+			"pullView.mergedRev": "MergedRev is what base points at now that the merge landed. Empty while\nthe proposal is open.",
+			"pullView.number":    "Number is the proposal's per-repo handle, dense from 1.",
+			"pullView.repo":      "Repo is the repository the proposal belongs to.",
+			"pullView.state":     "State is \"open\" or \"merged\".",
+			"pullView.title":     "Title is the one-line summary.",
+			"pullView.updatedAt": "UpdatedAt is RFC 3339 UTC.",
+		},
+		Example: json.RawMessage(`{"name":"widgets","title":"cache the catalog read","head":"agent/cache-catalog","base":"main"}`),
+	})
+	zip.Describe("POST /v1/git/repos/:name/pulls/:number/merge", zip.Doc{
+		Description: "Merges an open pull request by FAST-FORWARDING base to head, and\nanswers the proposal in its merged state with the revision base now points at.\n\nIt merges only when base is already an ancestor of head — the case where head\ncontains every commit base has, so moving the branch loses nothing and invents\nnothing. When base has moved on independently, this REFUSES with 409 and says\nso: a real three-way merge is not implemented here, and reporting one would\nclaim a result these bytes do not produce. Rebase head onto base and merge\nagain.\n\nThe move is judged by the same ref policy a `git push` of it would face, and\nfires the same build and notify reactions, so merging is not a way around\neither. Merging an already-merged proposal is a 409.",
+		Fields: map[string]string{
+			"pullRef.name":       "Name is the repo, from the :name path segment.",
+			"pullRef.number":     "Number is the proposal's per-repo number, from the :number path segment.",
+			"pullView.author":    "Author is the user who opened it; empty for a caller with no user.",
+			"pullView.base":      "Base is the branch the work is proposed into.",
+			"pullView.body":      "Body is the longer description; empty when none was given.",
+			"pullView.createdAt": "CreatedAt is RFC 3339 UTC.",
+			"pullView.head":      "Head is the branch holding the work.",
+			"pullView.mergedRev": "MergedRev is what base points at now that the merge landed. Empty while\nthe proposal is open.",
+			"pullView.number":    "Number is the proposal's per-repo handle, dense from 1.",
+			"pullView.repo":      "Repo is the repository the proposal belongs to.",
+			"pullView.state":     "State is \"open\" or \"merged\".",
+			"pullView.title":     "Title is the one-line summary.",
+			"pullView.updatedAt": "UpdatedAt is RFC 3339 UTC.",
+		},
+		Example: json.RawMessage(`{"name":"widgets","number":4}`),
 	})
 	zip.Describe("POST /v1/git/repos/:name/push", zip.Doc{
 		Description: "Lands a set of files as one commit without a git client — the\nhanzo.app builder's push. The repo is CREATED on first push, the files are\nmerged onto the branch tip (unlisted files survive), and the same\npush-to-deploy hook a real receive-pack fires is fired, so downstream this is\nindistinguishable from a `git push`.",
