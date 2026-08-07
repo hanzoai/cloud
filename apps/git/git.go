@@ -352,6 +352,16 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/repos/:name/mirrors", o.listMirrors)
 	zip.Delete(g, "/repos/:name/mirrors/:id", o.deleteMirror)
 
+	// Pull requests (pulls.go): propose a branch, read what is waiting, merge it.
+	// The noun that closes the agent loop — a run pushes refs/heads/agent/<run>
+	// and this is where it says what the branch is for and where a person says
+	// yes. Distinct trailing segments, so they never shadow the :org/:repo
+	// smart-HTTP routes below. Org-scoped like every repo op.
+	zip.Post(g, "/repos/:name/pulls", o.openPull, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/repos/:name/pulls", o.listPulls)
+	zip.Get(g, "/repos/:name/pulls/:number", o.getPull)
+	zip.Post(g, "/repos/:name/pulls/:number/merge", o.mergePull)
+
 	// Read/browse surface (JSON) for the console repo-browser: refs, tree, blob,
 	// commits, readme. ref + path ride as ?ref=&path= query params (the UI's own
 	// convention), so a slashed branch is unambiguous. Distinct trailing segments —

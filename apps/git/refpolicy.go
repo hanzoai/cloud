@@ -36,8 +36,11 @@ package git
 //
 //  1. The credential stopped being an identity (grant.go). A run now holds a
 //     grant — a bounded permission to create ONE ref in ONE repository, which
-//     resolves to no principal at all — so seven of those eight doors are shut
-//     to it by the ordinary authorization it already had, not by a new check.
+//     resolves to no principal at all — so every one of those doors but the wire
+//     receive-pack is shut to it by the ordinary authorization it already had,
+//     not by a new check. That is also why the merge door (writer 9) needs no
+//     rule of its own about runs: it reads its org from the validated principal,
+//     and a grant is not one.
 //  2. This policy moved to ALL of the writers, not one (see refwriters.go for
 //     the enumeration and where each states its intent).
 //
@@ -82,7 +85,7 @@ import (
 
 // # Every writer, and where each states its intent
 //
-// The rule is only as good as the count of doors it stands in. There are eight
+// The rule is only as good as the count of doors it stands in. There are nine
 // ways a ref in one of our bare repositories can change, and they are:
 //
 //  1. HTTP receive-pack      smart_http.go receivePack — parses the commands off
@@ -108,8 +111,14 @@ import (
 //     unguarded.
 //  8. Import HEAD            github_import.go setHeadIfPresent — checkHeadRef.
 //     Was unguarded.
+//  9. Merge a pull request   merge.go fastForward — advancing base is a ref
+//     write, so it states its one command as a refCommand and calls the same
+//     function. Guarded from the start: it was written after this list existed,
+//     which is the list working. It is also the only writer that COMPARE-AND-SETS
+//     — it read base to judge the merge, so it hands that value back to go-git
+//     and the write fails rather than discarding a push that landed in between.
 //
-// A ninth door is a change to this list, not just a new function.
+// A tenth door is a change to this list, not just a new function.
 
 // agentRefPrefix is the machine namespace. It matches the branch coding derives
 // from a session id (coding.BranchFor), spelled here rather than imported
