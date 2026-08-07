@@ -6728,6 +6728,8 @@ components:
           type: string
         id:
           type: string
+        session:
+          type: string
         stdin:
           type: string
         timeoutSec:
@@ -7679,6 +7681,16 @@ components:
           type: string
         triggerName:
           type: string
+      type: object
+    StopIn:
+      properties:
+        id:
+          type: string
+      type: object
+    Stopped:
+      properties:
+        stopped:
+          type: integer
       type: object
     StorefrontResult:
       properties:
@@ -100429,6 +100441,26 @@ paths:
                 $ref: '#/components/schemas/Ran'
           description: ok
       summary: Run a command in a sandbox you hold and read its output
+      tags:
+      - sandboxes
+      x-app: sandboxes
+  /v1/sandboxes/stop:
+    post:
+      operationId: stop_run
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StopIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stopped'
+          description: ok
+      summary: Stop what a sandbox is running, and keep the sandbox
       tags:
       - sandboxes
       x-app: sandboxes
