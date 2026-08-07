@@ -8405,6 +8405,9 @@
           "displayName": {
             "type": "string"
           },
+          "enableCodeSignin": {
+            "type": "boolean"
+          },
           "expireInHours": {
             "description": "ExpireInHours and RefreshExpireInHours are the application's token\nlifetimes. They are the ONLY declarative way to say that a refresh token\nmust OUTLIVE its access token: with neither stated, oidc.refreshTTL clamps\nthe refresh lifetime to the access lifetime, so the refresh_token grant the\nregistration advertises expires at the same instant as the token it was\nmeant to renew and can never be exercised. `hanzo-cli` sat in exactly that\nstate — a browser re-login every hour, and a live refresh returning 401.\n\nPOINTERS, for the same reason as IsShared: a plain float would read as 0 on\nevery reconcile that says nothing and reset a deliberate lifetime back to\nthe default. Nil means \"not stated, leave it\".",
             "type": "number"
