@@ -86,6 +86,20 @@ func describeAdmin() {
 			"only the identity and timestamps, never the provider records the caller just sent, "+
 			"and the mutation is audited by hash rather than by content so a credential that slips "+
 			"into the body is not replayable from the log.")
+
+	openapi.Describe("/_/commerce/deposits", http.MethodGet,
+		"Read the crypto deposit watcher's runtime state, asset by asset",
+		"Reports whether the deposit watcher is running, its poll interval, and one row per armed "+
+			"asset: chain, token, contract, pooled address and the last block that asset's cursor "+
+			"reached. That last block is the only way to see a watcher that is up but no longer "+
+			"advancing, which is what a stalled deposit rail looks like from outside. SuperAdmin "+
+			"only — the reserved admin org's owner claim; an authenticated caller without it is "+
+			"refused 403 and an anonymous one 401. It is READ-ONLY by design: arming an asset "+
+			"stays a CRYPTO_DEPOSIT_* deployment act and is deliberately not a button here, so "+
+			"there is nothing on this surface that can start crediting a customer's balance. The "+
+			"asset's RPC endpoint is reduced to scheme://host before it is returned, because a "+
+			"managed node URL carries its API key in the path or query and echoing it verbatim "+
+			"would publish that credential to every reader of this status.")
 }
 
 // ---- /v1/billing — the console's money surface ----

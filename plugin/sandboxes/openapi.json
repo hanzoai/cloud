@@ -353,7 +353,7 @@
       "get": {
         "operationId": "get_v1_sandboxes_by_id_terminal_ws",
         "summary": "The terminal, as a socket",
-        "description": "Upgrades to a WebSocket carrying a login shell on a pseudo-terminal inside the sandbox — for a host that brings its own emulator. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.\n\nTHE WIRE. A text frame is stdin, unless it is the one control object `{\"resize\":{\"cols\":N,\"rows\":M}}`; a binary frame is always stdin. Output comes back as BINARY frames, because a pty emits arbitrary bytes cut at arbitrary offsets and a text frame carrying half a rune is one the browser closes the connection over.\n\n`arg` names a SESSION: the shell runs under `tmux new -A -s \u003carg\u003e`, which attaches to that session if it exists and creates it if it does not — so one sandbox holds as many terminals as a caller has names for. It is 1-64 characters of letters, digits, `-` or `_` and may not begin with `-`; anything else is 400. Without `arg` the shell is unnamed and unmultiplexed.\n\nThe shell is `bash -l`, falling back to `sh -l`, and to the plain shell again when the image has no tmux. Whatever else the image carries — the hanzo CLI included — is a command to type, never a requirement to get a prompt.",
+        "description": "Upgrades to a WebSocket carrying a login shell on a pseudo-terminal inside the sandbox — for a host that brings its own emulator. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.\n\nTHE WIRE. A text frame is stdin, unless it is the one control object `{\"resize\":{\"cols\":N,\"rows\":M}}`; a binary frame is always stdin. Output comes back as BINARY frames, because a pty emits arbitrary bytes cut at arbitrary offsets and a text frame carrying half a rune is one the browser closes the connection over.\n\n`arg` names a SESSION: the shell runs under `tmux new -A -s \u003carg\u003e`, which attaches to that session if it exists and creates it if it does not — so one sandbox holds as many terminals as a caller has names for. It is 1-64 characters of letters, digits, `-` or `_` and may not begin with `-`; anything else is 400. Without `arg` the shell is unnamed and unmultiplexed.\n\nThe shell is `zsh -l`, falling back to `bash -l` and then to `sh -l`, and to the plain shell again when the image has no tmux. Every step is a preference and none is a requirement: whatever else the image carries — the hanzo CLI included — is a command to type, never a condition for getting a prompt.",
         "tags": [
           "sandboxes"
         ],
@@ -415,6 +415,9 @@
           "project": {
             "type": "string"
           },
+          "runtime": {
+            "type": "string"
+          },
           "ttlSec": {
             "type": "integer"
           }
@@ -427,6 +430,9 @@
             "type": "string"
           },
           "id": {
+            "type": "string"
+          },
+          "runtime": {
             "type": "string"
           },
           "status": {

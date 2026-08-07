@@ -13,9 +13,6 @@
   "tags": [
     {
       "name": "destinations"
-    },
-    {
-      "name": "tags"
     }
   ],
   "paths": {
@@ -76,8 +73,8 @@
       },
       "get": {
         "operationId": "get_v1_destinations_by_platform",
-        "summary": "Reports one destination's card for the caller's org \u2014 its config fields, its connection state, and whether a credential resolves right now.",
-        "description": "Reports one destination's card for the caller's org \u2014 its config fields,\nits connection state, and whether a credential resolves right now. A platform\nthis deployment does not carry is not found.",
+        "summary": "Reports one destination's card for the caller's org — its config fields, its connection state, and whether a credential resolves right now.",
+        "description": "Reports one destination's card for the caller's org — its config fields,\nits connection state, and whether a credential resolves right now. A platform\nthis deployment does not carry is not found.",
         "tags": [
           "destinations"
         ],
@@ -109,7 +106,7 @@
       "post": {
         "operationId": "post_v1_destinations_by_platform",
         "summary": "Connect one conversion destination for your org, or update the one you have",
-        "description": "Stores the addressed platform's non-secret ids (its measurement, pixel or dataset ids) and seals its API credential into KMS under a path scoped to the caller's own org, then answers the same status card the read routes do \u2014 with live telling you whether the credential actually resolves right now. The body's property NAMES are the platform's own: each field the platform declares, plus each secret under its camelCase name, so the accepted keys differ per platform and a missing REQUIRED field is refused. Connecting is an ORG ADMIN action \u2014 a validated member without the admin bit gets 403 \u2014 and it fails closed with 503 when the KMS master key is unavailable rather than persisting a destination whose secret was never sealed. The secret itself never appears in the response, in the store, or in a log line; only its NAME is ever published. Set enabled to false to keep the connection but stop the analytics fan-out to it.",
+        "description": "Stores the addressed platform's non-secret ids (its measurement, pixel or dataset ids) and seals its API credential into KMS under a path scoped to the caller's own org, then answers the same status card the read routes do — with live telling you whether the credential actually resolves right now. The body's property NAMES are the platform's own: each field the platform declares, plus each secret under its camelCase name, so the accepted keys differ per platform and a missing REQUIRED field is refused. Connecting is an ORG ADMIN action — a validated member without the admin bit gets 403 — and it fails closed with 503 when the KMS master key is unavailable rather than persisting a destination whose secret was never sealed. The secret itself never appears in the response, in the store, or in a log line; only its NAME is ever published. Set enabled to false to keep the connection but stop the analytics fan-out to it.",
         "tags": [
           "destinations"
         ],
@@ -151,7 +148,7 @@
       "post": {
         "operationId": "post_v1_destinations_by_platform_test",
         "summary": "Sends ONE synthetic pageview through the connected destination end to end and reports what the platform said.",
-        "description": "Sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata \u2014 {\"ok\": false, \"error\": \u2026} at 200 \u2014 so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",
+        "description": "Sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",
         "tags": [
           "destinations"
         ],
@@ -219,11 +216,11 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "Config is the org's stored NON-SECRET configuration \u2014 the measurement/pixel\nids keyed by DestinationField.Key. A secret is never in here; secrets live in\nKMS and only their names are published, in Secrets.",
+            "description": "Config is the org's stored NON-SECRET configuration — the measurement/pixel\nids keyed by DestinationField.Key. A secret is never in here; secrets live in\nKMS and only their names are published, in Secrets.",
             "type": "object"
           },
           "connected": {
-            "description": "Connected is true when this org has a stored row for the platform \u2014 it has\nbeen configured here at least once. It says nothing about whether a\ncredential still resolves; that is Live.",
+            "description": "Connected is true when this org has a stored row for the platform — it has\nbeen configured here at least once. It says nothing about whether a\ncredential still resolves; that is Live.",
             "type": "boolean"
           },
           "enabled": {
@@ -238,7 +235,7 @@
             "type": "array"
           },
           "live": {
-            "description": "Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this\norg, else the integrations connection named by the platform's Fallback, else\nno credential needed at all (a public-ingest sink like Umami). False on a\nconnected destination whose secret has gone missing \u2014 Connected && !Live is\nexactly the \"reconnect me\" state.",
+            "description": "Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this\norg, else the integrations connection named by the platform's Fallback, else\nno credential needed at all (a public-ingest sink like Umami). False on a\nconnected destination whose secret has gone missing — Connected \u0026\u0026 !Live is\nexactly the \"reconnect me\" state.",
             "type": "boolean"
           },
           "name": {
@@ -250,7 +247,7 @@
             "type": "string"
           },
           "secrets": {
-            "description": "Secrets are the KMS secret NAMES this platform custodies for the org \u2014 names\nonly, never values. The connect body accepts each under its camelCase form.",
+            "description": "Secrets are the KMS secret NAMES this platform custodies for the org — names\nonly, never values. The connect body accepts each under its camelCase form.",
             "items": {
               "type": "string"
             },
@@ -258,20 +255,6 @@
           }
         },
         "type": "object"
-      },
-      "browserTagOut": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "platform": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        }
       },
       "destinationDisconnected": {
         "properties": {
@@ -314,17 +297,6 @@
           }
         },
         "type": "object"
-      },
-      "tagConfig": {
-        "type": "object",
-        "properties": {
-          "tags": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/browserTagOut"
-            }
-          }
-        }
       }
     }
   }
