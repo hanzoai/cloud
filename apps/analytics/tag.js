@@ -181,5 +181,69 @@
   window.__hanzoEvent = true
   window.hanzo = { track: track, identify: identify, page: page, error: error, flush: flush }
 
+  // ── config-driven tag injection (the hosted twin of track.js) ─────────────
+  // Fetch the SITE's connected browser pixels (/v1/tags, dual-resolved per site by
+  // this key or the host) and inject them first-party. Every event then also fires
+  // the native pixel — translated through the SAME taxonomy the server-side CAPI uses
+  // (destinations/translate.go), stamped with a shared event_id carried on the
+  // /v1/event row too — so the browser pixel and the server CAPI DEDUPLICATE instead
+  // of double-counting. Keyless already returned above, so this only runs when keyed.
+  var STD = {
+    $pageview: 'page_view', pricing_viewed: 'view_content', signup_viewed: 'view_content',
+    product_viewed: 'view_content', plan_clicked: 'lead', signup_submitted: 'lead',
+    waitlist_joined: 'lead', referral_used: 'lead', signup_completed: 'signup',
+    product_added: 'add_to_cart', add_to_cart: 'add_to_cart', checkout_started: 'start_checkout',
+    begin_checkout: 'start_checkout', order_completed: 'purchase', purchase: 'purchase'
+  }
+  var NATIVE = {
+    ga: { page_view: 'page_view', view_content: 'view_item', add_to_cart: 'add_to_cart', lead: 'generate_lead', signup: 'sign_up', start_checkout: 'begin_checkout', purchase: 'purchase' },
+    meta: { page_view: 'PageView', view_content: 'ViewContent', add_to_cart: 'AddToCart', lead: 'Lead', signup: 'CompleteRegistration', start_checkout: 'InitiateCheckout', purchase: 'Purchase' },
+    tiktok: { page_view: 'Pageview', view_content: 'ViewContent', add_to_cart: 'AddToCart', lead: 'SubmitForm', signup: 'CompleteRegistration', start_checkout: 'InitiateCheckout', purchase: 'CompletePayment' },
+    x: { page_view: 'PageView', view_content: 'ViewContent', add_to_cart: 'AddToCart', lead: 'Lead', signup: 'SignUp', start_checkout: 'InitiateCheckout', purchase: 'Purchase' }
+  }
+  function nativeName(t, n) { var s = STD[n]; return s ? (NATIVE[t] || {})[s] || null : null }
+  function loadJS(u) { var e = document.createElement('script'); e.async = true; e.src = u; document.head.appendChild(e) }
+  function eid() { try { return crypto.randomUUID() } catch (e) { return 'e-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10) } }
+  var INJECT = {
+    ga: {
+      load: function (id) { loadJS('https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id)); window.dataLayer = window.dataLayer || []; window.gtag = window.gtag || function () { dataLayer.push(arguments) }; gtag('js', new Date()); gtag('config', id) },
+      fire: function (n, p, id) { if (!window.gtag) return; var name = nativeName('ga', n) || n; var o = {}; for (var k in p) o[k] = p[k]; o.event_id = id; if (STD[n] === 'purchase') o.transaction_id = id; gtag('event', name, o) }
+    },
+    meta: {
+      load: function (id) { if (!window.fbq) { var n = window.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments) }; if (!window._fbq) window._fbq = n; n.push = n; n.loaded = true; n.version = '2.0'; n.queue = []; loadJS('https://connect.facebook.net/en_US/fbevents.js') } fbq('init', id); fbq('track', 'PageView') },
+      fire: function (n, p, id) { if (!window.fbq) return; var name = nativeName('meta', n); if (name) fbq('track', name, p || {}, { eventID: id }); else fbq('trackCustom', n, p || {}) }
+    },
+    tiktok: {
+      load: function (id) { var q = window.ttq = window.ttq || []; if (!q.methods) { q.methods = ['page', 'track', 'identify', 'instances', 'debug', 'on', 'off', 'once', 'ready', 'alias', 'group', 'enableCookie', 'disableCookie']; q.setAndDefer = function (t, e) { t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } }; for (var i = 0; i < q.methods.length; i++) q.setAndDefer(q, q.methods[i]); loadJS('https://analytics.tiktok.com/i18n/pixel/events.js?sdkid=' + encodeURIComponent(id) + '&lib=ttq') } if (q.load) q.load(id); if (q.page) q.page() },
+      fire: function (n, p, id) { if (!window.ttq || !window.ttq.track) return; var name = nativeName('tiktok', n) || n; window.ttq.track(name, p || {}, { event_id: id }) }
+    },
+    x: {
+      load: function (id) { if (!window.twq) { var s = window.twq = function () { s.exe ? s.exe.apply(s, arguments) : s.queue.push(arguments) }; s.version = '1.1'; s.queue = []; loadJS('https://static.ads-twitter.com/uwt.js') } twq('config', id) },
+      fire: function (n, p, id) { if (!window.twq) return; var name = nativeName('x', n) || n; var o = {}; for (var k in p) o[k] = p[k]; o.conversion_id = id; twq('event', name, o) }
+    }
+  }
+  var active = []
+  try {
+    fetch(src.origin + '/v1/tags?key=' + encodeURIComponent(key))
+      .then(function (r) { return r.ok ? r.json() : { tags: [] } })
+      .then(function (cfg) {
+        var tags = (cfg && cfg.tags) || []
+        for (var i = 0; i < tags.length; i++) {
+          var t = tags[i]
+          if (INJECT[t.type]) { try { INJECT[t.type].load(t.id); active.push(t) } catch (e) {} }
+        }
+        if (active.length) {
+          var base = window.hanzo.track
+          window.hanzo.track = function (n, p) {
+            var id = eid()
+            for (var j = 0; j < active.length; j++) { try { INJECT[active[j].type].fire(n, p, id) } catch (e) {} }
+            var o = {}; if (p) for (var k in p) o[k] = p[k]; o.event_id = id
+            base(n, o)
+          }
+        }
+      })
+      .catch(function () {})
+  } catch (e) {}
+
   page()
 })()

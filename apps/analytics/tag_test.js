@@ -118,12 +118,14 @@ function anonOf(r) {
   assert.strictEqual(ev.event, undefined, 'naming is resolveEventName server-side')
 }
 
-// 4. Without sendBeacon the fetch path carries the key as a bearer.
+// 4. Without sendBeacon the fetch path carries the key as a bearer. (A keyed tag also
+//    fetches /v1/tags for its browser pixels; the /v1/event POST is the one asserted.)
 {
   const r = run({ 'data-key': 'pk-live-abc' }, { noBeacon: true })
   r.fire('pagehide')
-  assert.strictEqual(r.sent.fetch.length, 1)
-  const init = r.sent.fetch[0].init
+  const posts = r.sent.fetch.filter((f) => f.url.indexOf('/v1/event') !== -1)
+  assert.strictEqual(posts.length, 1)
+  const init = posts[0].init
   assert.strictEqual(init.headers.authorization, 'Bearer pk-live-abc')
   assert.strictEqual(init.keepalive, true)
   assert.ok(JSON.parse(init.body).batch.length === 1)
@@ -199,4 +201,22 @@ function anonOf(r) {
   assert.strictEqual(err.error.handled, false)
 }
 
-console.log('tag.js: 10/10 behavioral checks passed')
+// 11. Config-driven injection: a keyed tag fetches its site's browser pixels from
+//     /v1/tags (dual-resolved per site by this key or the host), so the hosted
+//     one-liner injects GA/Meta/TikTok/X first-party. The pixels + the deduping
+//     event_id are unit-tested in track.js; here we prove the hosted tag makes the
+//     request — and that a keyless tag never does.
+{
+  const r = run({ 'data-key': 'pk-live-abc' })
+  assert.ok(
+    r.sent.fetch.some((f) => f.url.indexOf('/v1/tags?key=pk-live-abc') !== -1),
+    'keyed tag fetches /v1/tags for its browser pixels'
+  )
+  const keyless = run({})
+  assert.ok(
+    !keyless.sent.fetch.some((f) => f.url.indexOf('/v1/tags') !== -1),
+    'keyless tag never fetches /v1/tags'
+  )
+}
+
+console.log('tag.js: 11/11 behavioral checks passed')
