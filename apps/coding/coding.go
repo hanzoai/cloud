@@ -114,6 +114,19 @@ type PRRef struct {
 
 // RunRequest / Step / RunResult mirror the bot coding contract.
 type RunRequest struct {
+	// Tool names what runs inside the sandbox: dev | claude | codex | python |
+	// node. Empty means dev. The runtime owns the name→argv table; cloud only
+	// carries the name, so adding a tool is one edit over there and none here.
+	Tool string
+
+	// Desktop selects the xvfb IMAGE VARIANT — a tag, not a mode. A desktop run
+	// gets an X server, so a real browser window exists to drive; every class can
+	// already drive a headless one.
+	Desktop bool
+
+	// The repo is OPTIONAL. CloneURL empty means the run has no checkout — and
+	// then CredUser/CredToken MUST be empty too, because a credential a run can
+	// never use only exists to leak. The runtime refuses the combination.
 	CloneURL          string
 	BaseBranch        string
 	Branch            string
