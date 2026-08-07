@@ -58,6 +58,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -163,6 +164,40 @@ func Routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/:id/exec", cloud.Handle(s, execIn))
 	g.Get("/:id/fs", cloud.Handle(s, fsRead))
 	g.Post("/:id/fs", cloud.Handle(s, fsWrite))
+
+	// THE AGENT'S DOOR. Everything above is a RAW route, and a raw route is
+	// invisible to every projection zip derives from its typed registry — REST is
+	// the only one it reaches. So an agent asking the fleet door what it can do
+	// was told nothing about sandboxes, while the child answered tools/list
+	// happily with an empty array: absent from the tool list AND absent from the
+	// outage list. Silent absence, which is the shape that cost the most today.
+	//
+	// The typed ops are registered here rather than written fresh, because they
+	// already exist one file over — expose() puts these exact five on
+	// cloud.Plane() (apps/sandbox/plane.go), which is a DIFFERENT zip.App on a
+	// DIFFERENT socket that the door never asks. Same handlers, same types, now
+	// also on the server the door does ask. Nothing new is invented and there is
+	// no second implementation to drift.
+	//
+	// This is what stands between "@hanzo can run code" and "@hanzo can lease a
+	// computer": the run path was built and reachable, and no agent could name it.
+	if reg := cloud.ZipApp(app); reg != nil {
+		zip.Post[plane.LeaseIn, plane.Leased](reg, "/v1/sandboxes/lease", planeLease,
+			zip.WithOperationID("lease_sandbox"),
+			zip.WithSummary("Lease a sandbox — a real computer — or resume one you hold"))
+		zip.Post[plane.RunIn, plane.Ran](reg, "/v1/sandboxes/run", planeRun,
+			zip.WithOperationID("run_in_sandbox"),
+			zip.WithSummary("Run a command in a sandbox you hold and read its output"))
+		zip.Post[plane.PathIn, plane.Blob](reg, "/v1/sandboxes/read", planeRead,
+			zip.WithOperationID("read_sandbox_file"),
+			zip.WithSummary("Read a file from a sandbox you hold"))
+		zip.Post[plane.WriteIn, plane.Wrote](reg, "/v1/sandboxes/write", planeWrite,
+			zip.WithOperationID("write_sandbox_file"),
+			zip.WithSummary("Write a file into a sandbox you hold"))
+		zip.Post[plane.EndIn, struct{}](reg, "/v1/sandboxes/end", planeEnd,
+			zip.WithOperationID("end_sandbox"),
+			zip.WithSummary("End a sandbox and release it"))
+	}
 }
 
 func orgOf(c *zip.Ctx) (string, bool) { return principal.Org(c) }
