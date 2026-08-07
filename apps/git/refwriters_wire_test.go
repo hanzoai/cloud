@@ -580,3 +580,35 @@ func TestAGrantAuthenticatesTheWayTheSandboxPresentsIt(t *testing.T) {
 	}
 	t.Logf("REFUSED: %s", firstRejectLine(string(out)))
 }
+
+// ── writer 9: the merge door ─────────────────────────────────────────────────
+
+// TestMergeObeysTheRefPolicy proves merging is not a door around checkRefPolicy:
+// an agent branch may be created and never rewritten, and that holds whether the
+// rewrite arrives as a push or as a merge.
+func TestMergeObeysTheRefPolicy(t *testing.T) {
+	app := mountApp(t)
+
+	a := pushTo(t, app, "acme", "code", "main", "README.md", "hello")
+	forkBranch(t, "acme", "code", "agent/run-1", a) // as a run's push would leave it
+	forkBranch(t, "acme", "code", "feature", a)
+	pushTo(t, app, "acme", "code", "feature", "x.go", "package x")
+
+	// feature IS a fast-forward of agent/run-1 — only the policy stands in the way.
+	code, body := do(t, app, http.MethodPost, "/v1/git/repos/code/pulls", "acme", map[string]any{
+		"title": "rewrite the run", "head": "feature", "base": "agent/run-1",
+	})
+	if code != http.StatusCreated {
+		t.Fatalf("open: %d %s", code, body)
+	}
+	code, body = do(t, app, http.MethodPost, "/v1/git/repos/code/pulls/1/merge", "acme", nil)
+	if code != http.StatusBadRequest {
+		t.Fatalf("merge into an agent branch: %d %s, want 400", code, body)
+	}
+	if !strings.Contains(string(body), "agent branch") {
+		t.Fatalf("refusal does not name the policy: %s", body)
+	}
+	if now := branchAt(t, "acme", "code", "agent/run-1"); now != a {
+		t.Fatalf("agent/run-1 moved to %s past the ref policy, want %s", now, a)
+	}
+}

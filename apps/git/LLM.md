@@ -1,6 +1,6 @@
 # apps/git — typed-op status
 
-COMPLETE at **24 typed / 30 refused**, and that partition is now a **GATE, not
+COMPLETE at **28 typed / 30 refused**, and that partition is now a **GATE, not
 prose**: `untypedByDesign` (typed_wire_test.go) is the closed list of the 30
 refusals with the wire fact behind each, and `TestEveryRouteIsTypedOrNamed`
 fails three ways — a served operation that is neither typed nor named, a name
@@ -72,7 +72,7 @@ gives, is prose, an MCP tool and a CLI command.
    /v1 ops frame-for-frame (see zap.go's header comment); retiring these is a
    client migration, not a typing task.
 
-## The ref policy stands in EIGHT doors, not one
+## The ref policy stands in NINE doors, not one
 
 `refpolicy.go` used to say receive-pack was "the point every path that changes a
 ref passes through and no client can decline to". That was false, and it was the
@@ -83,16 +83,68 @@ a **fast-forward child** on the branch a reviewer just approved and so trips no
 "the branch was rewritten" signal anywhere.
 
 The writers, and how each states its intent, are enumerated in `refpolicy.go`'s
-own doc comment (writers 1–8) so the list lives beside the rule. Two of them
+own doc comment (writers 1–9) so the list lives beside the rule. Two of them
 cannot be judged command-by-command and are refused **structurally** instead:
 the mirror's `+refs/*:refs/*` takes a negative refspec (`^refs/heads/agent/*`,
 git ≥ 2.29) so the machine namespace is outside its refmap and therefore outside
 `--prune`; and `HEAD` is not under `refs/`, so the two importers and the
 client-less push run it past `checkHeadRef`.
 
-**A ninth door is a change to that list, not just a new function.** The proof
+Writer 9 is the newest: **merging a pull request** (`merge.go fastForward`)
+advances base, which is a ref write, so it states its one command as a
+`refCommand` and calls the same `checkRefPolicy`. It arrived guarded rather than
+being retrofitted, which is this list doing its job. It is also the only writer
+that COMPARE-AND-SETS: it read base in order to judge the merge, so it hands
+that value back to go-git and the write fails rather than silently discarding a
+push that landed in between.
+
+**A tenth door is a change to that list, not just a new function.** The proof
 that each is closed is `refwriters_wire_test.go` — real git CLI, real SSH
 listener, real server, one test per door.
+
+## The pull request is a native noun, not a GitHub round trip
+
+`pulls.go` (the noun + its four ops) and `merge.go` (the one thing it does to
+the repository). Before it, an agent could push a branch and had nowhere to
+propose it: `propose.go` answers "where do I read this" by opening a REAL pull
+request on GitHub when the repo mirrors there, and by returning a branch URL when
+it does not — so a repository living only in the forge had no door at all.
+
+Four typed ops under the address shape every other repo op uses (org from the
+validated principal, repo from `:name`, never from a body field):
+
+    POST   /v1/git/repos/{name}/pulls                open   → 201
+    GET    /v1/git/repos/{name}/pulls?state=          list
+    GET    /v1/git/repos/{name}/pulls/{number}        get
+    POST   /v1/git/repos/{name}/pulls/{number}/merge  merge
+
+Three decisions worth keeping:
+
+- **A pull is metadata plus two BRANCH NAMES, not a snapshot.** base and head
+  keep moving while it is open, so merging asks the question again against the
+  refs as they are now. A pinned revision would answer a question nobody asked.
+
+- **Fast-forward only, and it says so.** go-git v5 has no tree-level three-way
+  merge; writing one would be writing a merge engine, not a pull request. So base
+  moves to head exactly when base is already an ancestor of head, and every other
+  case is a 409 naming the reason and the fix. `TestMergeRefusesNonFastForward`
+  asserts the branch did NOT move on the refusal — the alternative is an op that
+  reports a merge for a base whose commits are nowhere in the result.
+
+- **The ref moves BEFORE the row is settled.** A crash between them leaves a row
+  saying `open` about a branch that already contains head, which the next merge
+  recognises (base == head ⇒ nothing to move) and settles. The reverse order
+  leaves a row claiming a merge that never happened, and nothing in the
+  repository can correct that.
+
+Numbering is per-repo and dense from 1, allocated inside `CreatePull`'s
+transaction against the single-connection org store. One OPEN pull per
+(base, head) — checked in that transaction and backed by a partial unique index —
+so a retried agent run leaves one thing to review rather than a pile.
+
+Not built: closing a pull without merging. The loop is open→merge; a proposal
+nobody wants is abandoned by deleting its branch, which is how it worked before
+there was a row to look at.
 
 ## A coding run holds a GRANT, not a credential
 
@@ -210,7 +262,7 @@ this copy; typing more apps that carry a project scope will keep re-finding it.
 - **NEW: THREE of git's typed ops project to ONE CLI command name.** `git
   repos-delete` is the name zip derives for `DELETE /v1/git/repos/{name}`, for
   `DELETE /v1/git/repos/{name}/mirrors/{id}` AND for `DELETE
-  /v1/git/repos/{name}/subscriptions/{id}`, so two of the 24 typed ops are
+  /v1/git/repos/{name}/subscriptions/{id}`, so two of the 28 typed ops are
   **unreachable from the CLI projection** — the runner has one name and three
   routes behind it. `commandName` (zip/cli.go:253-311) keeps the path segments
   BEFORE the first parameter and AFTER the last one and drops everything
@@ -220,6 +272,17 @@ this copy; typing more apps that carry a project scope will keep re-finding it.
   operationId. It is the CLI, and only the CLI, that cannot spell them apart —
   which is exactly the failure only TYPING can surface, because an untyped route
   has no command at all to collide.
+
+  Reading ONE pull request joined the same class: `GET
+  /v1/git/repos/{name}/pulls/{number}` spells `repos-get`, the name `GET
+  /v1/git/repos/{name}` already had, because `pulls` sits BETWEEN two parameters
+  and is dropped. This pair differs from the DELETEs in one way worth knowing —
+  the DELETEs collide with each other so which one answers is arbitrary, whereas
+  here the two-segment route wins on specificity, so reading a repo works from
+  the CLI and reading a pull request is the projection that is lost. Three of the
+  28 typed ops now have no reachable command. Both families are pinned in
+  `cliNameCollisions` (typed_wire_test.go) in BOTH directions, so the zip fix
+  retires the list instead of outliving it.
 
   git holds the worst instance in the fleet (three ops on one name). The class is
   **20 colliding names hiding 23 ops across 11 packages**, in four shapes:
