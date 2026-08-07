@@ -225,32 +225,6 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 		req.CredUser, req.CredToken, credHandle = agentCredUser, token, handle
 	}
 
-	// THE RIGHT TO BUY INFERENCE, resolved here for the same reasons and on the
-	// same terms as the push grant above: after the session, because the session
-	// names the run it is for, and bounded by the run's own budget so it dies with
-	// the work rather than outliving it.
-	//
-	// A ROUTED RUN GETS NONE. It executes on a machine the customer registered and
-	// operates, using whatever model access that machine already has; minting a
-	// grant it will never present would be a capability created only to expire.
-	// That is the same reading as the push grant on the line above.
-	//
-	// A sandbox run fails CLOSED without one. A run that reached the box and then
-	// could not call a model would burn a lease, a clone and a person's attention
-	// to arrive at "Authentication required" — the failure this whole path exists
-	// to remove — so it is refused before anything is leased.
-	var modelHandle string
-	if req.TargetID == "" {
-		token, handle, err := modelCredential(ctx, sessionID, budget(req.TimeoutSeconds)+time.Minute)
-		if err != nil {
-			releaseCredential(ctx, credHandle)
-			_ = d.Sessions.Close(ctx, org, sessionID, statusError)
-			pool.release(org)
-			return Accepted{}, err
-		}
-		req.ModelToken, modelHandle = token, handle
-	}
-
 	// Detach, and state the tenant again on the way out.
 	//
 	// Both halves are load-bearing. DETACHED because the run outlives the door's
@@ -269,9 +243,6 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 		// that most needs its credential withdrawn is the one that hit its
 		// deadline, and that is exactly when runCtx is already dead.
 		defer releaseCredential(context.WithoutCancel(runCtx), credHandle)
-		// And the right to spend, withdrawn on the same terms — a finished run must
-		// not still be able to buy inference on its org's ledger.
-		defer releaseModel(context.WithoutCancel(runCtx), modelHandle)
 		defer func() {
 			// A run executes untrusted model output through a long seam chain. An
 			// unrecovered panic here would take down every tenant sharing this
@@ -338,45 +309,6 @@ func agentCredential(ctx context.Context, repo, project, ref string, ttl time.Du
 		return "", "", fmt.Errorf("coding: the forge returned no push grant for %s", repo)
 	}
 	return g.Token, g.Handle, nil
-}
-
-// modelCredential asks the inference door to delegate SPENDING for this run, and
-// returns the bearer plus the handle that withdraws it.
-//
-// It is agentCredential's twin and states the same three things. The org is NOT
-// an argument — plane.RunGrantIn has no org field, so a run spends inside the
-// caller's own tenant and can never be aimed at another's balance. It is not an
-// identity — the bearer resolves to no principal, so every gate in the platform
-// refuses it and the single exception is the inference path (apps/ai/run.go). And
-// it is fail-closed: an unreachable door or an empty token is an error, never a
-// run that proceeds and discovers at the first model call that it cannot pay.
-//
-// This is what replaces putting a model key on the sandbox's environment. A key
-// IAM can resolve is a user, and a user in a box running model output opens
-// /v1/kms/secrets; it would also miss the per-org meter, so the org would never be
-// billed for its own agent's tokens.
-func modelCredential(ctx context.Context, run string, ttl time.Duration) (token, handle string, err error) {
-	g, err := plane.Ask[plane.RunGrantIn, plane.RunGranted](ctx, "ai", plane.AIGrant,
-		&plane.RunGrantIn{Run: run, TTLSeconds: int(ttl.Seconds())})
-	if err != nil {
-		return "", "", fmt.Errorf("coding: inference would not be delegated for this run: %w", err)
-	}
-	if g == nil || strings.TrimSpace(g.Token) == "" {
-		return "", "", fmt.Errorf("coding: no inference grant was returned for this run")
-	}
-	return g.Token, g.Handle, nil
-}
-
-// releaseModel withdraws the inference grant when the run is over. Best-effort for
-// the same reason releaseCredential is: the TTL is what makes this safe to miss,
-// and a run that already finished must not fail because the door was slow to hear
-// about it.
-func releaseModel(ctx context.Context, handle string) {
-	if strings.TrimSpace(handle) == "" {
-		return
-	}
-	_, _ = plane.Ask[plane.RevokeIn, plane.Revoked](ctx, "ai", plane.AIRevoke,
-		&plane.RevokeIn{Handle: handle})
 }
 
 // releaseCredential withdraws the grant when the run is over, so a grant's life
