@@ -52,9 +52,21 @@ import (
 
 const (
 	// repoFresh is how long an entry is served without touching the forge.
-	// A repository list changes when someone creates or archives a repo, which
-	// is rare next to how often a board is opened.
-	repoFresh = 60 * time.Second
+	//
+	// Minutes rather than seconds because of what a refresh COSTS and what it
+	// buys. A repository list changes when someone creates or archives a repo —
+	// weekly, against a board opened many times an hour — while re-reading it
+	// for the 250-repo org is fifty requests to the estate's slowest endpoint.
+	// At a one-minute window an open board would put that load on the forge
+	// every minute, per actor, to learn nothing had changed, and this endpoint
+	// has been measured degrading from 13s to 22s under load.
+	//
+	// Nothing a board renders is stale for it: issues are not cached at all, so
+	// cards, columns and assignees are always the forge's current answer. What
+	// waits out this window is only a repository CREATED in the last few minutes
+	// that has no work on it yet — and one that does have work appears at once,
+	// because the board list is built from issues.
+	repoFresh = 5 * time.Minute
 
 	// repoStale is how long a fresh-expired entry may still be SERVED while a
 	// refresh runs behind it. Past this an entry is not an answer any more and
