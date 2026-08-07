@@ -174,12 +174,12 @@ func TestCopilotDevice(t *testing.T) {
 	}
 	rewind(t, st.Flow)
 	p2 := decode[pollResp](t, asOK(t, app, http.MethodPost, devPollPath("github-copilot", st.Flow), "acme", userUUID, nil))
-	if p2.Status != "connected" || p2.Connector == nil || p2.Connector.ID != "github-copilot:default" {
+	if p2.Status != "connected" || p2.Connection == nil || p2.Connection.ID != "github-copilot:default" {
 		t.Fatalf("authorized poll want connected, got %+v", p2)
 	}
 	// The long-lived gh token has no known expiry.
-	if p2.Connector.ExpiresAt != "" {
-		t.Fatalf("copilot connector must carry no expiry, got %q", p2.Connector.ExpiresAt)
+	if p2.Connection.ExpiresAt != "" {
+		t.Fatalf("copilot connector must carry no expiry, got %q", p2.Connection.ExpiresAt)
 	}
 	tf := gh.lastTokenForm(t)
 	if tf.Get("grant_type") != "urn:ietf:params:oauth:grant-type:device_code" ||

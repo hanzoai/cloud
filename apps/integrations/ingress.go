@@ -112,7 +112,7 @@ func SendTelegram(ctx context.Context, chatID, replyTo int64, text string) error
 	return telegramSend(ctx, chatID, replyTo, text)
 }
 
-// SendTeams posts a message activity to conversationID at the Bot Connector
+// SendTeams posts a message activity to conversationID at the Bot Connection
 // serviceURL (teamsSendActivity, teams_events.go).
 func SendTeams(ctx context.Context, serviceURL, conversationID, text string) error {
 	return teamsSendActivity(ctx, serviceURL, conversationID, text)
