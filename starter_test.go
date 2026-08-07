@@ -97,8 +97,15 @@ func (b *books) Credit(ctx context.Context, in creditledger.CreditInput) (string
 	return id, bal.Cents(), nil
 }
 
-func (b *books) Balance(ctx context.Context, org, currency string) (int64, error) {
-	bal, err := b.fin.Balance(ctx, org, org, currency, false)
+// Balance mirrors apps/commerce.ledger's own: the WHOLE address, because an empty
+// subject is the org's pool and a named one is the member's wallet, and a fake that
+// collapses the two would let a read answer about a different account without
+// erroring — the shape of a balance bug nobody notices.
+func (b *books) Balance(ctx context.Context, org, subject, currency string, test bool) (int64, error) {
+	if subject == "" {
+		subject = org // pooled org: the slug IS the pool account
+	}
+	bal, err := b.fin.Balance(ctx, org, subject, currency, test)
 	if err != nil {
 		return 0, err
 	}
