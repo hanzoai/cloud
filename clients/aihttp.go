@@ -248,6 +248,22 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 		return nil, fmt.Errorf("cloud: chat completion (model %q): upstream returned no choices: %w", model, types.ErrUpstreamBusy)
 	}
 	choice := resp.Choices[0]
+	// WHY the model stopped, which is the difference between an answer and a
+	// sentence that ran out of room. It was read off the wire and returned to the
+	// caller from the first day and recorded nowhere, so a truncated reply
+	// ("length") and a finished one ("stop") were the same span, and a run that
+	// ended mid-tool-call was indistinguishable from one that chose to stop. The
+	// convention spells it as a list because a multi-choice response has one per
+	// choice; this client reads choice 0, so the list has one element and says so
+	// rather than flattening to a scalar the reader would have to special-case.
+	if fr := string(choice.FinishReason); fr != "" {
+		span.SetAttributes(attribute.StringSlice("gen_ai.response.finish_reasons", []string{fr}))
+	}
+	if marker := unparsed(choice.Message.Content); marker != "" {
+		span.SetAttributes(attribute.String("hanzo.ai.unparsed", marker))
+		span.SetStatus(codes.Error, "unparsed tool call")
+		return nil, fmt.Errorf("cloud: chat completion (model %q): upstream returned a tool call it had not parsed: %w", model, types.ErrUpstreamBusy)
+	}
 	return &types.ChatResponse{
 		Content:          choice.Message.Content,
 		PromptTokens:     resp.Usage.PromptTokens,
@@ -317,6 +333,41 @@ func wireTools(defs []types.ToolDef) []openai.Tool {
 	return out
 }
 
+// unparsed names the tool-call markup a completion's CONTENT carries, or "" for
+// content that carries none.
+//
+// These strings are SPECIAL TOKENS. A model emits them so the stack serving it
+// can turn them into structured tool_calls; arriving here as prose means that
+// stack did not, and what we hold is serialization internals rather than an
+// answer. The caller refuses the completion, so the one thing that must never
+// happen — pasting a model's own wire format to the person waiting on a reply —
+// cannot.
+//
+// It RECOGNISES and does not read. Lifting the call out of the text would make
+// this a second tool-call parser, divergent from every real one by construction
+// and stale the first time a family changed its syntax. The parse belongs to the
+// stack that owns the model; this is only the net under it, and a net that
+// started interpreting would quietly become the thing it is catching.
+//
+// The set is the families this gateway routes to, each token taken from that
+// family's own chat template.
+func unparsed(content string) string {
+	for _, marker := range []string{
+		"<｜DSML｜tool_calls>",   // U+FF5C — deepseek's agentic markup
+		"<｜tool▁call▁begin｜>",  // U+FF5C, U+2581 — deepseek's fenced form
+		"<｜tool▁calls▁begin｜>", //   …and its plural opener
+		"<tool_call>",          // qwen / hermes
+		"[TOOL_CALLS]",         // mistral
+		"<|python_tag|>",       // llama
+		"<|tool_call>",         // gemma
+	} {
+		if strings.Contains(content, marker) {
+			return marker
+		}
+	}
+	return ""
+}
+
 // readToolCalls lifts the model's tool calls off a choice. Only function calls
 // are carried: they are the only kind this gateway serves, and a call of some
 // other type has no arguments this side could dispatch.
@@ -378,6 +429,13 @@ func (a *httpAI) ChatStream(ctx context.Context, req *types.ChatRequest, emit fu
 
 	var content strings.Builder
 	out := &types.ChatResponse{}
+	// What the STREAM says about itself, accumulated as it arrives. Both facts
+	// come in frames the delta loop below otherwise skips — the model on any
+	// frame, the finish reason on a terminal one that carries no text — so they
+	// are read before the "no content, move on" shortcuts rather than after.
+	// Falling back to the requested model is honest: a gateway that never names
+	// one has not told us it served something else.
+	streamModel := model
 	for {
 		frame, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -399,8 +457,17 @@ func (a *httpAI) ChatStream(ctx context.Context, req *types.ChatRequest, emit fu
 		if u := frame.Usage; u != nil {
 			out.PromptTokens, out.CompletionTokens, out.TotalTokens = u.PromptTokens, u.CompletionTokens, u.TotalTokens
 		}
+		if m := strings.TrimSpace(frame.Model); m != "" {
+			streamModel = m
+		}
 		if len(frame.Choices) == 0 {
 			continue // usage-only terminal frame
+		}
+		// The stop reason rides a frame whose delta is empty, which the shortcut
+		// below skips — so it is read here or not at all. Without it a stream that
+		// was CUT at the token ceiling returned exactly like one that finished.
+		if fr := strings.TrimSpace(string(frame.Choices[0].FinishReason)); fr != "" {
+			out.FinishReason = fr
 		}
 		delta := frame.Choices[0].Delta.Content
 		if delta == "" {
@@ -421,10 +488,30 @@ func (a *httpAI) ChatStream(ctx context.Context, req *types.ChatRequest, emit fu
 		span.SetStatus(codes.Error, "no content")
 		return nil, fmt.Errorf("cloud: chat stream (model %q): upstream returned no content: %w", model, types.ErrUpstreamBusy)
 	}
+	// The same refusal as ChatCompletion, at the other exit of the same boundary:
+	// streaming is a delivery property, so a completion that is internals rather
+	// than an answer is one here too. The deltas have already been emitted, which
+	// is the honest limit of a net placed after the fact — returning the error
+	// still stops this text from being stored and replayed as the run's answer.
+	if marker := unparsed(out.Content); marker != "" {
+		span.SetAttributes(attribute.String("hanzo.ai.unparsed", marker))
+		span.SetStatus(codes.Error, "unparsed tool call")
+		return nil, fmt.Errorf("cloud: chat stream (model %q): upstream returned a tool call it had not parsed: %w", model, types.ErrUpstreamBusy)
+	}
 	span.SetAttributes(
 		attribute.Int("gen_ai.usage.input_tokens", out.PromptTokens),
 		attribute.Int("gen_ai.usage.output_tokens", out.CompletionTokens),
+		// The model that ANSWERED, on the streaming path too. The buffered path has
+		// always recorded it; a stream did not, so the one shape a reader uses to
+		// tell "the model I asked for" from "the model that served me" was missing
+		// from exactly the calls a user watches arrive. streamModel falls back to
+		// the requested name when the frames never name one, which is honest: a
+		// gateway that does not say is not a gateway that served something else.
+		attribute.String("gen_ai.response.model", streamModel),
 	)
+	if out.FinishReason != "" {
+		span.SetAttributes(attribute.StringSlice("gen_ai.response.finish_reasons", []string{out.FinishReason}))
+	}
 	return out, nil
 }
 
