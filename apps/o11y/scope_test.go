@@ -57,32 +57,54 @@ func do(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 	return resp.StatusCode, b
 }
 
-// ── the typed ops need the Bridge, and o11y is its own process ─────────────────
+// ── identity reaches a typed op through EVERY door ─────────────────────────────
 
-// A typed op receives a context and its decoded input — never the request — so the
-// validated org reaches it ONLY because cloud.Bridge parked it on the context.
-// cloud.Serve installs one app-wide, but o11y also runs as its OWN binary
-// (plugin/o11y/main.go builds a bare zip.App and calls MountO11y), and a context
-// value does not cross the socket between host and plugin: the host's Bridge parks
-// the org in the HOST. So the process that composes this app has to install one of
-// its own — MountO11y does not, because a subsystem cannot know the identity
-// boundary has already run — and this pins what happens either way: with no Bridge
-// in front, every typed o11y op answers 403 to a caller the host had already
-// validated, which is a total outage of the surface, not a degradation.
-func TestTypedOpsResolveTheirOrgThroughTheBridge(t *testing.T) {
+// A typed op receives a context and its decoded input — never the request — so it
+// sees its caller only because something parked the principal on the context.
+// cloud.Bridge does that for a routed request, and it used to be the ONLY thing
+// that did: a bare app answered 403 to a caller the host had already validated,
+// which is what this test pinned.
+//
+// That was a total outage wherever the Bridge is not in front, and there are two
+// such places: o11y as its OWN binary (plugin/o11y/main.go builds a bare zip.App
+// and calls MountO11y — a context value does not cross the host↔plugin socket),
+// and MCP's tools/call, which invokes an op DIRECTLY so no route middleware runs.
+// principal.ValidatedFrom now falls back to zip's own caller, which crosses every
+// door, so both are served.
+//
+// The fallback widens the DOOR, not the TRUST, and the distinction is load-bearing:
+// cloud installs SanitizeIdentity app-wide (app.go, `app.Use(IdentityMiddleware)`),
+// and it DELETES every client-sent authority header before any handler reads one.
+// So an X-User-Id a typed op sees was minted by cloud from a verified token.
+//
+// That reasoning covers cloud's OWN handlers and nothing else. It does not extend
+// to a subsystem cloud PROXIES to — hanzoai/metrics resolved its own tenant from
+// the raw X-Org-Id and was reachable unauthenticated, which is a different defect
+// with a different fix (build.go hands it principal.Org). A trust boundary is a
+// property of a process, not of a header name.
+func TestTypedOpsSeeTheirCallerThroughEveryDoor(t *testing.T) {
 	const path = "/v1/o11y/status?product=not-a-real-service"
 
-	// No Bridge: a fully validated caller is refused, because nothing parked the
-	// org where a typed op can read it.
+	// No Bridge — the standalone binary, and the tools/call door.
 	bare := zip.New(zip.Config{Logger: luxlog.New("test")})
 	mountScopedReads(bare)
-	if code, body := do(t, bare, scopeReq("GET", path, "acme")); code != http.StatusForbidden {
-		t.Fatalf("without cloud.Bridge: want 403 (the typed op cannot see an org), got %d %s", code, body)
+	if code, body := do(t, bare, scopeReq("GET", path, "acme")); code != http.StatusOK {
+		t.Fatalf("without cloud.Bridge: want 200 (the principal rides zip's caller), got %d %s", code, body)
 	}
 
 	// With it — the shape MountO11y installs — the SAME request is served.
 	if code, body := do(t, scopeApp(t), scopeReq("GET", path, "acme")); code != http.StatusOK {
 		t.Fatalf("with cloud.Bridge: want 200 for a validated caller, got %d %s", code, body)
+	}
+
+	// And with NO principal, both shapes refuse. This is the assertion that must
+	// never flip: the door got wider, the trust did not.
+	for _, app := range []*zip.App{bare, scopeApp(t)} {
+		req := httptest.NewRequest("GET", path, nil)
+		req.Header.Set("X-Org-Id", "acme") // an org with nobody behind it
+		if code, body := do(t, app, req); code != http.StatusForbidden {
+			t.Fatalf("no validated principal: want 403, got %d %s", code, body)
+		}
 	}
 }
 
