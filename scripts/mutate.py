@@ -68,6 +68,8 @@ LR = "apps/label/resolve.go"
 PL = "./apps/label/"
 RB = "resource_billing.go"
 PRB = "."
+CL = "cmd/closure/main.go"
+PCL = "./cmd/closure/"
 RT = "apps/risk/typed.go"
 OD = "orgdb.go"
 PC = "."
@@ -740,6 +742,64 @@ MUTANTS = [
         (ML, 'runtimeGVR = schema.GroupVersionResource{Group: "serving.kserve.io", Version: "v1alpha1", Resource: "clusterservingruntimes"}',
              'runtimeGVR = schema.GroupVersionResource{Group: "serving.kserve.io", Version: "v1beta1", Resource: "clusterservingruntimes"}')],
      "TestGVRs", PML),
+
+    # ── closure: the witness that says what a document was generated FROM ────
+    # A go.mod bump silently invalidates a committed document, and nothing in the
+    # tree could see it: hanzoai/iam v1.34.21 -> v1.34.29 added EnableCodeSignin,
+    # the commit touched go.mod and apps/iam only, and plugin/iam/openapi.json went
+    # stale on main. Every row here breaks one property that detection rests on.
+    ("closure: witness the main module too", [
+        (CL, '\treturn p != nil && p.Module != nil && p.Module.Path != mainModule',
+             '\treturn p != nil && p.Module != nil')],
+     "TestMainModuleSourceIsNotWitnessed", PCL),
+
+    ("closure: witness the module VERSION instead of its source", [
+        (CL, '\th := sha256.New()\n\tfor _, f := range files {',
+             '\th := sha256.New()\n\tfmt.Fprint(h, p.Module.Version)\n\tfor _, f := range files[:0] {')],
+     "TestVersionAloneIsNotStaleness", PCL),
+
+    ("closure: stop recording the module versions the message names", [
+        (CL, '\t\t\tw.Modules[d.Module.Path] = d.Module.Version\n', '')],
+     "TestVersionAloneIsNotStaleness", PCL),
+
+    ("closure: report only the FIRST stale app (the masking this replaces)", [
+        (CL, '\tsort.Strings(stale)\n',
+             '\tsort.Strings(stale)\n\tif len(stale) > 1 {\n\t\tstale = stale[:1]\n\t}\n')],
+     "TestEveryStaleAppIsReportedInOnePass", PCL),
+
+    ("closure: name the fleet sweep however little moved", [
+        (CL, '\tif len(stale)*3 > total {', '\tif true {')],
+     "TestReportCarriesTheScopedRepair", PCL),
+
+    ("closure: hash contents without filenames, so a rename is invisible", [
+        (CL, '\t\tfmt.Fprintf(h, "%s\\x00%d\\x00", f, len(b))',
+             '\t\tfmt.Fprintf(h, "%d\\x00", len(b))')],
+     "TestARenameMovesTheDigest", PCL),
+
+    ("closure: witness an app that has no document", [
+        (CL, '\t\tif _, err := os.Stat(filepath.Join(root, "plugin", app, "openapi.json")); err != nil {\n\t\t\tcontinue // no document to be stale\n\t\t}\n', '')],
+     "TestAppWithoutADocumentIsNotWitnessed", PCL),
+
+    ("closure: witness an app that cannot regenerate its own document", [
+        (CL, '\t\tif !can[app] {\n\t\t\tcontinue\n\t\t}\n', '')],
+     "TestAnAppThatCannotDescribeItselfIsNotWitnessed", PCL),
+
+    ("closure: default the describable set instead of refusing", [
+        (CL, '\tif len(describable) == 0 {', '\tif false {')],
+     "TestWritingTheWitnessRefusesWithoutTheDescribableSet", PCL),
+
+    ("closure: let an empty comparison report green", [
+        (CL, '\tif len(have.Apps) == 0 {\n\t\treturn fmt.Errorf("no app documents were compared — the gate has nothing to check, which is a defect in the gate and never a pass")\n\t}\n\n', '')],
+     "TestAnEmptyComparisonIsNotAPass", PCL),
+
+    ("closure: hash an unplaceable package to a constant instead of failing", [
+        (CL, '\tif p.Dir == "" {\n\t\treturn "", fmt.Errorf("%s: the toolchain could not locate this package — run `go mod download` (a missing module cannot be witnessed, and hashing nothing would compare equal)", p.ImportPath)\n\t}\n\n', '')],
+     "TestAnUnresolvedDependencyIsAnErrorNotADigest", PCL),
+
+    ("closure: walk only DIRECT imports, never the closure", [
+        (CL, '\t\tif p := byPath[path]; p != nil {\n\t\t\tfor _, imp := range p.Imports {\n\t\t\t\twalk(imp)\n\t\t\t}\n\t\t}\n', '')],
+     "TestReachWalksTransitivelyAndTerminates", PCL),
+
 ]
 
 RUN_RE = re.compile(r"^=== RUN\s+(\S+)", re.M)
