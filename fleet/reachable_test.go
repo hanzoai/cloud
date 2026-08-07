@@ -26,7 +26,7 @@ package fleet_test
 //
 // It asserts the OPERATIONS, not the tool count. The door projects one tool per
 // subsystem and carries the operations in that tool's `op` enum (fleet/grouped.go),
-// so a `websearch` tool existing is not the claim — `post_v1_websearch` being
+// so a `websearch` tool existing is not the claim — `search_web` being
 // inside it is.
 
 import (
@@ -54,7 +54,7 @@ type reach struct {
 // is the composition a client meets: a single tools/list over the whole fleet.
 func TestTheAgentCanReachTheWeb(t *testing.T) {
 	want := []reach{
-		{"websearch", websearch.Mount, "post_v1_websearch",
+		{"websearch", websearch.Mount, "search_web",
 			"answer any question about what is happening now — the weather, an outage, a release"},
 		{"crawl", crawl.Mount, "post_v1_crawl",
 			"read a page it was given the URL of"},
