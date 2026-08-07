@@ -52,11 +52,17 @@ type Outage struct {
 	Error string `json:"error"`
 }
 
-// Door is the composed agent door: the apps it fronts, how to reach one, and the
-// tool→app routing it learned from the last time it asked.
+// Door is the composed agent door: the apps it fronts, and the tool→app routing
+// it learned from the last time it asked.
+//
+// HOW to reach one is deliberately NOT here. The same door is published at two
+// addresses with two different populations behind them — the edge, and the
+// fleet's own internal socket — and a subsystem's door is likewise two doors
+// (see [At]). Holding one reach on the Door would make the routing table and the
+// hop one fact, so publishing the door anywhere would publish the edge's hop
+// everywhere.
 type Door struct {
 	host *zip.App
-	at   At
 	apps []string
 
 	// owner is tool name → the app that LISTED it, written by every gather and
@@ -97,8 +103,8 @@ type Door struct {
 // A signpost is only true where the door actually moved, and this is the one
 // place that knows it did — the same call that registers the target names it.
 func Mount(host *zip.App, path string, apps []string, at At) *Door {
-	d := &Door{host: host, at: at, apps: apps, owner: map[string]string{}}
-	d.Serve(host, path)
+	d := &Door{host: host, apps: apps, owner: map[string]string{}}
+	d.Serve(host, path, at)
 	if path != manifest.FrameworkMCPPath {
 		host.All(manifest.FrameworkMCPPath, signpost(path))
 	}
@@ -120,7 +126,16 @@ func Mount(host *zip.App, path string, apps []string, at At) *Door {
 // is the same object reached from another direction: one aggregation, one
 // policy, one owner map. Which is also why an internal caller cannot be offered
 // a wider surface than an external one: there is no wider surface to offer.
-func (d *Door) Serve(on *zip.App, path string) { on.Post(path, d.serve) }
+//
+// at is how a caller who reached THIS address may reach a subsystem, and it is
+// per-address for the reason the two addresses exist at all — see [At]. The edge
+// forwards into a subsystem's edge door, where the identity boundary judges what
+// arrived; the fleet's own socket forwards into its plane door, where the caller
+// is a sibling and its statement of who it acts for is what the socket makes it
+// worth. Same routing table, same curation, same hop — one value apart.
+func (d *Door) Serve(on *zip.App, path string, at At) {
+	on.Post(path, func(c *zip.Ctx) error { return d.serve(c, at) })
+}
 
 // signpost answers the framework default on a host that moved its door.
 //
@@ -144,7 +159,7 @@ type message struct {
 	Params json.RawMessage `json:"params"`
 }
 
-func (d *Door) serve(c *zip.Ctx) error {
+func (d *Door) serve(c *zip.Ctx, at At) error {
 	var req message
 	if err := json.Unmarshal(c.Body(), &req); err != nil {
 		return c.JSON(200, rpcErr(nil, -32700, "parse error"))
@@ -157,9 +172,9 @@ func (d *Door) serve(c *zip.Ctx) error {
 			"serverInfo":      map[string]any{"name": "cloud", "version": protocolVersion},
 		}))
 	case "tools/list":
-		return d.list(c, req)
+		return d.list(c, req, at)
 	case "tools/call":
-		return d.call(c, req)
+		return d.call(c, req, at)
 	case "ping":
 		return c.JSON(200, rpcResult(req.ID, map[string]any{}))
 	default:
@@ -173,8 +188,8 @@ func (d *Door) serve(c *zip.Ctx) error {
 
 // list answers tools/list from the subsystems themselves, and NAMES the ones it
 // could not reach.
-func (d *Door) list(c *zip.Ctx, req message) error {
-	tools, down, held := d.gather(c)
+func (d *Door) list(c *zip.Ctx, req message, at At) error {
+	tools, down, held := d.gather(c, at)
 	// ONE TOOL PER SUBSYSTEM, the operation carried in an argument. The flat
 	// projection was 1,189 tools in 977 KB, which no model holds and every client
 	// truncates. See fleet/grouped.go.
@@ -203,7 +218,7 @@ func (d *Door) list(c *zip.Ctx, req message) error {
 // ask tools/list makes — rather than a guess or a fan-out per call. If it is
 // still nobody's, that is a -32602 and not an outage: every app answered, and
 // none of them serves it.
-func (d *Door) call(c *zip.Ctx, req message) error {
+func (d *Door) call(c *zip.Ctx, req message, at At) error {
 	var p struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
@@ -213,7 +228,7 @@ func (d *Door) call(c *zip.Ctx, req message) error {
 	// [Describe] is the door's OWN tool — the fetch half of a surface whose enums
 	// carry names and no schemas — so it is answered here rather than routed.
 	if p.Name == Describe {
-		return d.describe(c, req, p.Arguments)
+		return d.describe(c, req, p.Arguments, at)
 	}
 
 	// Two DECODINGS stand between what a client sends and what a child is asked,
@@ -234,7 +249,7 @@ func (d *Door) call(c *zip.Ctx, req message) error {
 		p.Name, p.Arguments, msg = op, input, nil
 	}
 
-	op, app := d.find(c, p.Name)
+	op, app := d.find(c, p.Name, at)
 	if app == "" {
 		// Either nobody serves it, or refuse() withheld it — and the caller gets
 		// the same answer for both. Telling a client which of the two it hit would
@@ -256,7 +271,7 @@ func (d *Door) call(c *zip.Ctx, req message) error {
 	defer fasthttp.ReleaseRequest(hop)
 	c.Fiber().Request().CopyTo(hop)
 	hop.SetBody(msg)
-	ans := Ask(d.at, []string{app}, hop, manifest.FrameworkMCPPath)[0]
+	ans := Ask(at, []string{app}, hop)[0]
 	if ans.Err != nil {
 		// A hop failure is MCP isError content, per the spec: the model reads "this
 		// tool is not available right now" and reacts, where a 503 body is a
@@ -303,7 +318,7 @@ type named struct {
 // It returns the tools themselves rather than their bytes because every caller
 // needs the OWNER too: list() groups by it (fleet/grouped.go) and describe()
 // answers out of the same gated set.
-func (d *Door) gather(c *zip.Ctx) ([]named, []Outage, int) {
+func (d *Door) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 	c.Fiber().Request().CopyTo(req)
@@ -315,7 +330,7 @@ func (d *Door) gather(c *zip.Ctx) ([]named, []Outage, int) {
 	var down []Outage
 	held := 0
 	owner := map[string]string{}
-	for _, a := range Ask(d.at, d.apps, req, manifest.FrameworkMCPPath) {
+	for _, a := range Ask(at, d.apps, req) {
 		if a.Err != nil {
 			down = append(down, Outage{App: a.App, Error: a.Err.Error()})
 			continue
@@ -394,11 +409,11 @@ func (d *Door) gather(c *zip.Ctx) ([]named, []Outage, int) {
 // operation's own id still arrives at its own handler; it must, because describe
 // hands back the child's descriptor bytes verbatim and those carry the child's
 // own name.
-func (d *Door) find(c *zip.Ctx, name string) (op, app string) {
+func (d *Door) find(c *zip.Ctx, name string, at At) (op, app string) {
 	if op, app = d.lookup(name); app != "" {
 		return op, app
 	}
-	d.gather(c)
+	d.gather(c, at)
 	return d.lookup(name)
 }
 
