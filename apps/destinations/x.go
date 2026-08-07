@@ -92,6 +92,20 @@ type xIDent struct {
 	TwClickID   string `json:"twclid,omitempty"`
 }
 
+// xNumItems is the total quantity across an event's line items (each item's quantity,
+// or 1 when unspecified) — X's number_items. 0 for a non-commerce event.
+func xNumItems(items []Item) int {
+	n := 0
+	for _, it := range items {
+		if it.Quantity > 0 {
+			n += int(it.Quantity)
+		} else {
+			n++
+		}
+	}
+	return n
+}
+
 // xBuild renders the batch into X's conversions payload. Pure — tests assert the hashed
 // identifiers + value formatting without a network call.
 func xBuild(batch []Conversion) []xConversion {
@@ -104,7 +118,7 @@ func xBuild(batch []Conversion) []xConversion {
 		if tw := cv.User.click("twclid"); tw != "" {
 			ids = append(ids, xIDent{TwClickID: tw})
 		}
-		c := xConversion{ConversionTime: redditTime(cv.Time), EventID: cv.EventID, Identifiers: ids}
+		c := xConversion{ConversionTime: redditTime(cv.Time), EventID: cv.EventID, Identifiers: ids, NumberItems: xNumItems(cv.Items)}
 		if cv.Value > 0 {
 			c.Value = fmt.Sprintf("%.2f", cv.Value)
 			c.PriceCurrency = cv.Currency
