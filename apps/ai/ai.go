@@ -398,6 +398,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// reading order is the routing order (see mcp.go — the router would pick the
 	// static path over All("/v1/*") either way).
 	mountMCP(zapp)
+	// The run grant: the internal door that delegates spending, and the resolver
+	// the inference path reads it through. See run.go.
+	exposeRun()
 	// The door: ONE `app.All("/v1/*")` (hanzoai/ai mount.go) adapting the legacy
 	// beego ControllerRegister through zip.AdaptNetHTTP, so ai's ~200 real routes —
 	// /v1/chat/completions, /v1/models, /v1/messages and the rest — reach the wire
