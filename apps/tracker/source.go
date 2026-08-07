@@ -49,6 +49,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -138,6 +139,11 @@ func (f *forgeSource) resolve(ctx context.Context, s *cloud.Service[state]) (*fo
 	if err != nil {
 		return nil, err
 	}
+	// Carry the warm repository list across the rotation. Without this the
+	// credential's 5-minute lifetime would silently become the read cache's,
+	// and one board load every five minutes would pay the full cold-path wait
+	// for no reason anyone reading either constant could see.
+	c.Reuse(f.client)
 	f.client, f.fresh = c, time.Now()
 	return c, nil
 }
@@ -149,6 +155,89 @@ func (f *forgeSource) invalidate() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.client = nil
+}
+
+// forgeOwners maps an IAM org to the org that owns its work ON THE FORGE.
+//
+// The two names are not the same fact, and this deployment is the proof. The IAM
+// tenant is `hanzo`; its work lives under `hanzoai`, which is the name the estate
+// writes wherever a namespace is written down — github.com/hanzoai,
+// ghcr.io/hanzoai, git.hanzo.ai/hanzoai. Measured on git.hanzo.ai:
+//
+//	forge org `hanzo`     64 repos, 0 issues, and hanzo/cloud is 404
+//	forge org `hanzoai`   250 repos, the actual work, hanzoai/cloud is 200
+//
+// A NEAR-EMPTY NAMESAKE also exists, which is why mapping by name did not fail
+// loudly: the forge answered 200 with an empty list, and an empty board reads as
+// "you have no work" rather than as "we asked the wrong org". That is the whole
+// hazard — a wrong answer that looks like a healthy one.
+//
+// A declared table rather than a branch inside the resolver: the mapping is a
+// VALUE, so it can be read, tested and added to without touching the code that
+// applies it. Identity by default, so a tenant whose two names already agree
+// needs no entry.
+var forgeOwners = map[string]string{"hanzo": "hanzoai"}
+
+// forgeOwner is the forge org for a VALIDATED IAM org.
+//
+// It is applied to the principal's own org and never to anything a caller sent:
+// this decides WHICH ORG is asked about, and a caller-supplied value here would
+// be a tenant selecting its own tenancy.
+//
+// It does not touch WHO the forge answers as. That remains the Sudo actor, so
+// the forge's own ACL still decides what comes back — which means a wrong entry
+// in this table can show a user an empty board, but cannot show them anything
+// they are not entitled to see. The two controls stay independent.
+func forgeOwner(org string) string {
+	if o, ok := forgeOwners[strings.ToLower(strings.TrimSpace(org))]; ok {
+		return o
+	}
+	return org
+}
+
+// budget bounds a forge-backed request end to end.
+//
+// It had to EXIST, which is the half that was missing and the reason a board
+// could hang forever. The forge client's own 30s timeout bounds ONE request,
+// and a read here makes many — up to maxPages of them for a list, plus one per
+// repository for a rollup — so with no deadline over the whole operation a slow
+// forge is an unbounded wait. The browser gets no response and no error, and
+// renders its loading skeleton indefinitely: the failure never becomes visible
+// to anyone, which is the worst shape a failure can take.
+//
+// It also has to be GENEROUS ENOUGH THAT THE COLD PATH SUCCEEDS, which is the
+// non-obvious half. The cache behind these reads is filled by a request that
+// COMPLETES, so a budget under the cold-path cost would abort the very requests
+// that would have warmed it, and the surface would be permanently slow instead
+// of slow once. Measured on git.hanzo.ai: ~22s worst case for the repository
+// list, plus ~4s of milestone fan-out behind it.
+//
+// A var only so a test can shorten it: asserting that a wedged forge becomes a
+// 504 rather than a hang is the regression test for this whole file, and at the
+// production value that test would take half a minute to make its point.
+var budget = 30 * time.Second
+
+// onForge runs a forge-backed operation under a deadline, with a client scoped
+// to the validated tenant and actor.
+//
+// It is the ONE place the budget is applied, and the closure is what makes that
+// unforgettable: the bounded context SHADOWS the request's inside fn, so a call
+// site cannot reach the unbounded one even by accident. Every op below is
+// written in terms of this for the same reason every forge call is written in
+// terms of do() — a control that each call site has to remember is a control
+// that one of them will eventually be written without.
+func onForge[T any](o ops, ctx context.Context, fn func(context.Context, *forge.Client, string) (T, error)) (T, error) {
+	var zero T
+	// Before scopeForge, not after: the credential read it makes is itself a
+	// call that can be slow, and a deadline that started after it would leave
+	// the one step nobody bounded.
+	ctx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	cl, org, err := o.scopeForge(ctx)
+	if err != nil {
+		return zero, err
+	}
+	return fn(ctx, cl, org)
 }
 
 // scopeForge resolves the two facts every forge-backed read needs: the validated
@@ -204,7 +293,9 @@ func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
 		o.s.Log.Error("forge credential unavailable", "err", err)
 		return nil, "", zip.Errorf(http.StatusServiceUnavailable, "forge unavailable")
 	}
-	return cl.As(actor), org, nil
+	// The ORG is translated here, at the one place the validated tenant becomes a
+	// forge coordinate, so no call site can ask the forge about an IAM name.
+	return cl.As(actor), forgeOwner(org), nil
 }
 
 // actorOf is the IAM username the forge should act as.
@@ -232,6 +323,21 @@ func actorOf(c *zip.Ctx) string {
 // the deployment is broken, not the request.
 func (o ops) answer(err error) error {
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		// The budget ran out. 504 rather than 502: the forge did not refuse us
+		// and did not answer wrongly, it did not answer IN TIME, which is a
+		// different fact and the only one of the three a caller can usefully
+		// retry. It must reach the wire as an error and never as an empty list —
+		// a board rendering "no work" because the forge was slow is exactly the
+		// silent failure this path exists to remove.
+		o.s.Log.Error("forge read exceeded its budget", "budget", budget)
+		return zip.Errorf(http.StatusGatewayTimeout, "the forge did not answer within %s", budget)
+	case errors.Is(err, context.Canceled):
+		// The CALLER went away — a closed tab, a navigation. Nothing is broken
+		// and nobody is listening, so this is not an error to raise the alarm
+		// with; logging it as one would bury the real failures above in noise.
+		o.s.Log.Debug("forge read abandoned by the caller")
+		return zip.Errorf(http.StatusGatewayTimeout, "request abandoned")
 	case errors.Is(err, forge.ErrUnknownActor):
 		return zip.ErrForbidden("no forge identity for this principal")
 	case errors.Is(err, forge.ErrNoActor), errors.Is(err, forge.ErrNoToken):
@@ -391,45 +497,80 @@ func forgeMilestone(m forge.Milestone) milestoneView {
 // FORGE's answer for your own account, so two people in one org can legitimately
 // see different boards.
 func (o ops) forgeProjects(ctx context.Context, _ *noInput) (*projectList, error) {
-	cl, org, err := o.scopeForge(ctx)
-	if err != nil {
-		return nil, err
-	}
-	repos, err := cl.Repos(ctx, org)
-	if err != nil {
-		return nil, o.answer(err)
-	}
-	out := make(projectList, 0, len(repos))
-	for _, r := range repos {
-		if r.Archived {
-			continue
+	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, owner string) (*projectList, error) {
+		// The board list is assembled from ISSUES, not from the org's repository
+		// inventory. Both can answer "which boards are there", but on this forge
+		// they do not cost remotely the same: the inventory charges per repository
+		// returned — ~21s for ONE of the five pages of a 250-repo org — while
+		// issues-search answers the whole org in ~1.5s, and it is the call the
+		// board pages already make. Putting the inventory on this path is what
+		// made the board hang.
+		rows, err := cl.Issues(ctx, owner, forge.IssueFilter{State: "all"})
+		if err != nil {
+			return nil, o.answer(err)
 		}
-		out = append(out, repoProject(org, r))
-	}
-	return &out, nil
+		seen := map[string]forge.Repo{}
+		for _, r := range rows {
+			if r.Repository == nil || r.Repository.Name == "" {
+				continue
+			}
+			full := r.Repository.FullName
+			if full == "" {
+				full = owner + "/" + r.Repository.Name
+			}
+			seen[strings.ToLower(r.Repository.Name)] = forge.Repo{Name: r.Repository.Name, FullName: full}
+		}
+		// A repository with no work on it yet is still a board you can file
+		// against, and only the inventory knows about it. So the inventory is read
+		// WARM-ONLY: present, it completes the list; absent, it fills behind this
+		// request and the next load has it. Waiting for it would put the 21s back
+		// to add boards that are, by definition, empty.
+		if repos, ok := cl.ReposWarm(ctx, owner); ok {
+			for _, r := range repos {
+				if r.Archived {
+					continue
+				}
+				if _, dup := seen[strings.ToLower(r.Name)]; !dup {
+					seen[strings.ToLower(r.Name)] = r
+				}
+			}
+		}
+		out := make(projectList, 0, len(seen))
+		for _, r := range seen {
+			out = append(out, repoProject(owner, r))
+		}
+		// Sorted, because the list is assembled from a map and two identical reads
+		// must not answer in two different orders.
+		sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+		return &out, nil
+	})
 }
 
 // GetProject returns one board of your org by its key — the repository name.
 // 404 when your org has no repository under that key, or when your own forge
 // account cannot see it.
 func (o ops) forgeProject(ctx context.Context, in *projectRef) (*trackerProject, error) {
-	cl, org, err := o.scopeForge(ctx)
-	if err != nil {
-		return nil, err
-	}
-	repos, err := cl.Repos(ctx, org)
-	if err != nil {
-		return nil, o.answer(err)
-	}
-	for _, r := range repos {
-		// Case-insensitive like the key it replaces, so an existing link keeps
-		// resolving; the forge itself treats repository names case-insensitively.
-		if strings.EqualFold(r.Name, in.Key) && !r.Archived {
-			v := repoProject(org, r)
-			return &v, nil
+	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, owner string) (*trackerProject, error) {
+		// ONE repository, read directly. Scanning the org's inventory to find a
+		// board whose name we already have is what made this page cost twenty
+		// seconds on a large org; the forge will simply hand it over for ~1s.
+		r, err := cl.Repo(ctx, owner, in.Key)
+		if err != nil {
+			// The forge answers 404 for "no such repository" and for "your account
+			// cannot see it" alike, and for a board addressed BY NAME those are one
+			// answer — which also declines to tell a caller that a private board is
+			// there.
+			if errors.Is(err, forge.ErrUnknownActor) {
+				return nil, zip.ErrNotFound("no such project")
+			}
+			return nil, o.answer(err)
 		}
-	}
-	return nil, zip.ErrNotFound("no such project")
+		if r.Archived {
+			return nil, zip.ErrNotFound("no such project")
+		}
+		v := repoProject(owner, r)
+		return &v, nil
+	})
 }
 
 // ListIssues returns one board's issues — the work items of that repository on
@@ -439,45 +580,43 @@ func (o ops) forgeProject(ctx context.Context, in *projectRef) (*trackerProject,
 // same object seen twice: relabelling in either moves the card in both. A closed
 // issue reads as done whatever its labels say.
 func (o ops) forgeIssues(ctx context.Context, in *issueQuery) (*issueList, error) {
-	cl, org, err := o.scopeForge(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if in.Status != "" && !statuses[in.Status] {
-		return nil, zip.ErrBadRequest("unknown status")
-	}
-	if in.Kind != "" && !kinds[in.Kind] {
-		return nil, zip.ErrBadRequest("unknown kind")
-	}
-	f := forge.IssueFilter{State: "all"}
-	switch in.Kind {
-	case "pr":
-		f.Type = "pulls"
-	case "issue":
-		f.Type = "issues"
-	}
-	rows, err := cl.Issues(ctx, org, f)
-	if err != nil {
-		return nil, o.answer(err)
-	}
-	out := make(issueList, 0, len(rows))
-	for _, r := range rows {
-		v := forgeIssue(r)
-		// The board is addressed by repository, and issues-search spans the org, so
-		// the repo IS the project filter. Compared case-insensitively for the same
-		// reason getProject is.
-		if !strings.EqualFold(v.Repo, in.Key) {
-			continue
+	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, org string) (*issueList, error) {
+		if in.Status != "" && !statuses[in.Status] {
+			return nil, zip.ErrBadRequest("unknown status")
 		}
-		if in.Status != "" && v.Status != in.Status {
-			continue
+		if in.Kind != "" && !kinds[in.Kind] {
+			return nil, zip.ErrBadRequest("unknown kind")
 		}
-		if in.Scheduled && v.DueAt == 0 && v.StartAt == 0 {
-			continue
+		f := forge.IssueFilter{State: "all"}
+		switch in.Kind {
+		case "pr":
+			f.Type = "pulls"
+		case "issue":
+			f.Type = "issues"
 		}
-		out = append(out, v)
-	}
-	return &out, nil
+		rows, err := cl.Issues(ctx, org, f)
+		if err != nil {
+			return nil, o.answer(err)
+		}
+		out := make(issueList, 0, len(rows))
+		for _, r := range rows {
+			v := forgeIssue(r)
+			// The board is addressed by repository, and issues-search spans the org, so
+			// the repo IS the project filter. Compared case-insensitively for the same
+			// reason getProject is.
+			if !strings.EqualFold(v.Repo, in.Key) {
+				continue
+			}
+			if in.Status != "" && v.Status != in.Status {
+				continue
+			}
+			if in.Scheduled && v.DueAt == 0 && v.StartAt == 0 {
+				continue
+			}
+			out = append(out, v)
+		}
+		return &out, nil
+	})
 }
 
 // ListMilestones returns every milestone across your org's repositories, each
@@ -488,19 +627,17 @@ func (o ops) forgeIssues(ctx context.Context, in *issueQuery) (*issueList, error
 // here rather than in the browser because a client-side fan-out would need the
 // forge reachable from the page and a credential held there.
 func (o ops) forgeMilestones(ctx context.Context, _ *noInput) (*milestoneList, error) {
-	cl, org, err := o.scopeForge(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ms, err := cl.Milestones(ctx, org)
-	if err != nil {
-		return nil, o.answer(err)
-	}
-	out := make(milestoneList, 0, len(ms))
-	for _, m := range ms {
-		out = append(out, forgeMilestone(m))
-	}
-	return &out, nil
+	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, org string) (*milestoneList, error) {
+		ms, err := cl.Milestones(ctx, org)
+		if err != nil {
+			return nil, o.answer(err)
+		}
+		out := make(milestoneList, 0, len(ms))
+		for _, m := range ms {
+			out = append(out, forgeMilestone(m))
+		}
+		return &out, nil
+	})
 }
 
 // milestoneList is the org's milestone rollup. Empty is an empty JSON array,
@@ -536,31 +673,29 @@ type newIssue struct {
 // and the forge issue the same object: someone relabelling in the forge web UI
 // has moved your card.
 func (o ops) forgeCreateIssue(ctx context.Context, in *newIssue) (*issueView, error) {
-	cl, org, err := o.scopeForge(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(in.Title) == "" {
-		return nil, zip.ErrBadRequest("title required")
-	}
-	labels, err := columnLabels(in.Status, in.Priority)
-	if err != nil {
-		return nil, err
-	}
-	got, err := cl.CreateIssue(ctx, org, in.Key, forge.NewIssue{
-		Title: in.Title, Body: in.Description, Labels: labels,
+	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, org string) (*issueView, error) {
+		if strings.TrimSpace(in.Title) == "" {
+			return nil, zip.ErrBadRequest("title required")
+		}
+		labels, err := columnLabels(in.Status, in.Priority)
+		if err != nil {
+			return nil, err
+		}
+		got, err := cl.CreateIssue(ctx, org, in.Key, forge.NewIssue{
+			Title: in.Title, Body: in.Description, Labels: labels,
+		})
+		if err != nil {
+			return nil, o.answer(err)
+		}
+		v := forgeIssue(got)
+		// issues-search stamps the repository on every row; the create response does
+		// not, because the repo was the address. Fill it so the card knows its board.
+		if v.Repo == "" {
+			v.Repo, v.ProjectKey = in.Key, in.Key
+			v.Identifier = fmt.Sprintf("%s#%d", in.Key, got.Number)
+		}
+		return &v, nil
 	})
-	if err != nil {
-		return nil, o.answer(err)
-	}
-	v := forgeIssue(got)
-	// issues-search stamps the repository on every row; the create response does
-	// not, because the repo was the address. Fill it so the card knows its board.
-	if v.Repo == "" {
-		v.Repo, v.ProjectKey = in.Key, in.Key
-		v.Identifier = fmt.Sprintf("%s#%d", in.Key, got.Number)
-	}
-	return &v, nil
 }
 
 // issueEdit changes a work item. Absent fields are left alone.
@@ -587,60 +722,58 @@ type issueEdit struct {
 // forge-side change could contradict. Moving to `done` also CLOSES the issue on
 // the forge, because a done card and an open issue are a contradiction.
 func (o ops) forgePatchIssue(ctx context.Context, in *issueEdit) (*issueView, error) {
-	cl, org, err := o.scopeForge(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if in.Num <= 0 {
-		return nil, zip.ErrBadRequest("bad issue number")
-	}
-	var patch forge.IssuePatch
-	if in.Title != "" {
-		patch.Title = &in.Title
-	}
-	if in.Description != "" {
-		patch.Body = &in.Description
-	}
-	if in.Status != "" {
-		if !statuses[in.Status] {
-			return nil, zip.ErrBadRequest("unknown status")
+	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, org string) (*issueView, error) {
+		if in.Num <= 0 {
+			return nil, zip.ErrBadRequest("bad issue number")
 		}
-		state := "open"
-		if in.Status == "done" || in.Status == "canceled" {
-			state = "closed"
+		var patch forge.IssuePatch
+		if in.Title != "" {
+			patch.Title = &in.Title
 		}
-		patch.State = &state
-	}
-	if patch.Title != nil || patch.Body != nil || patch.State != nil {
-		if err := cl.PatchIssue(ctx, org, in.Key, in.Num, patch); err != nil {
-			return nil, o.answer(err)
+		if in.Description != "" {
+			patch.Body = &in.Description
 		}
-	}
-	// The relabel is a SEPARATE call because the forge models the label set as its
-	// own sub-resource, and replacing it is the one unambiguous "move".
-	if in.Status != "" || in.Priority != "" {
-		labels, err := columnLabels(in.Status, in.Priority)
+		if in.Status != "" {
+			if !statuses[in.Status] {
+				return nil, zip.ErrBadRequest("unknown status")
+			}
+			state := "open"
+			if in.Status == "done" || in.Status == "canceled" {
+				state = "closed"
+			}
+			patch.State = &state
+		}
+		if patch.Title != nil || patch.Body != nil || patch.State != nil {
+			if err := cl.PatchIssue(ctx, org, in.Key, in.Num, patch); err != nil {
+				return nil, o.answer(err)
+			}
+		}
+		// The relabel is a SEPARATE call because the forge models the label set as its
+		// own sub-resource, and replacing it is the one unambiguous "move".
+		if in.Status != "" || in.Priority != "" {
+			labels, err := columnLabels(in.Status, in.Priority)
+			if err != nil {
+				return nil, err
+			}
+			if err := cl.SetLabels(ctx, org, in.Key, in.Num, labels); err != nil {
+				return nil, o.answer(err)
+			}
+		}
+		// Answer with the row as the FORGE now holds it, not with the patch echoed
+		// back: the forge is the source of truth, and a response assembled from the
+		// request would be this surface asserting a state it has not confirmed.
+		rows, err := cl.Issues(ctx, org, forge.IssueFilter{State: "all"})
 		if err != nil {
-			return nil, err
-		}
-		if err := cl.SetLabels(ctx, org, in.Key, in.Num, labels); err != nil {
 			return nil, o.answer(err)
 		}
-	}
-	// Answer with the row as the FORGE now holds it, not with the patch echoed
-	// back: the forge is the source of truth, and a response assembled from the
-	// request would be this surface asserting a state it has not confirmed.
-	rows, err := cl.Issues(ctx, org, forge.IssueFilter{State: "all"})
-	if err != nil {
-		return nil, o.answer(err)
-	}
-	for _, r := range rows {
-		v := forgeIssue(r)
-		if strings.EqualFold(v.Repo, in.Key) && int64(v.Number) == in.Num {
-			return &v, nil
+		for _, r := range rows {
+			v := forgeIssue(r)
+			if strings.EqualFold(v.Repo, in.Key) && int64(v.Number) == in.Num {
+				return &v, nil
+			}
 		}
-	}
-	return nil, zip.ErrNotFound("no such issue")
+		return nil, zip.ErrNotFound("no such issue")
+	})
 }
 
 // columnLabels renders a board column and a priority as the forge label set that

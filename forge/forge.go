@@ -5,8 +5,14 @@
 // It exists because those work items have ONE home. The forge is where an issue
 // is filed, labelled, assigned and closed; a second copy in another store would
 // be a second answer to "what is the state of this work", and the two would
-// drift. So nothing here caches, mirrors or writes through to a local table:
-// every read is a read OF the forge, and every write is a write TO it.
+// drift. So nothing here mirrors or writes through to a local table: every read
+// is a read OF the forge, and every write is a write TO it.
+//
+// The one thing held between a read and the next is a bounded STALENESS WINDOW
+// on the two list endpoints that cost seconds rather than milliseconds — see
+// cache.go, which states why that is not the drifting copy this paragraph
+// refuses, and why its key must carry the actor. No write is cached, and a
+// cached answer is only ever replaced by the forge's own.
 //
 // # The wire
 //
@@ -86,6 +92,28 @@ const page = 50
 // 50 pages x 50 items is 2,500 repos or issues, past any real org.
 const maxPages = 50
 
+// repoPage is the page size for the repository list, and it is SMALL ON PURPOSE.
+//
+// This is the performance fix, and it is a fix at the QUERY rather than a cache
+// over a slow one. The forge's cost on /orgs/{org}/repos is per REPOSITORY
+// RETURNED and serialises inside a single request, but separate requests run in
+// parallel. Measured against git.hanzo.ai's 64-repo `hanzo` org:
+//
+//	one page of 50, then the remainder   20.7s   (what this replaced)
+//	7 concurrent pages of 10              4.3s
+//	13 concurrent pages of 5              2.7s
+//
+// Per-request cost fits ~1.2s fixed + ~0.27s per repository, so the wall time of
+// a concurrent walk is set by the PAGE SIZE, not by the size of the org. Five
+// keeps a 64-repo org inside one [fanout] wave while staying large enough that a
+// small org is not a burst of near-empty requests.
+const repoPage = 5
+
+// maxRepoPages bounds the repository walk. Stated in pages of [repoPage] so that
+// shrinking the page size did not quietly shrink the ceiling with it: this is
+// the same 2,500 repositories the issue walk allows.
+const maxRepoPages = 2500 / repoPage
+
 // maxBody bounds a single response read. The forge is a trusted service, but
 // "trusted" is a statement about intent and not about compromise, and an
 // unbounded io.ReadAll on a remote body is an OOM one bad response away.
@@ -95,7 +123,22 @@ const maxBody = 32 << 20 // 32 MiB
 // has no org-level milestones API, so a rollup is N repo calls; unbounded, a
 // large org would open hundreds of sockets at once and the rollup would read as
 // a denial-of-service against our own forge.
-const fanout = 8
+//
+// 16 rather than 8: a single milestone call costs 0.3-1.3s and a wave of 8
+// completes in ~0.8s (measured on git.hanzo.ai), so the fan-out is cheap next to
+// the repository list that opens the rollup, and halving the number of waves
+// takes the cold rollup for a 64-repo org from ~8s to ~4s. Still small enough
+// that a rollup is a handful of sockets, not a flood.
+const fanout = 16
+
+// maxRollup bounds the repositories one org rollup will fan out over.
+//
+// It is a REFUSAL threshold, not a truncation: see [Client.Milestones]. Set far
+// above any real org here (the largest is 64) because the honest use of this
+// number is to stop a runaway — a forge that answers a repo list wrongly, or an
+// org that has genuinely outgrown a synchronous rollup — rather than to trim a
+// working org down to a partial answer.
+const maxRollup = 300
 
 // Errors a caller must be able to tell apart. They are distinguished because the
 // right answer differs: no actor is a bug in the CALLER (it forgot to scope),
@@ -125,6 +168,14 @@ type Client struct {
 	token string // machine credential from KMS — NEVER logged
 	actor string // Forgejo Sudo login; empty ⇒ every call refuses
 	http  *http.Client
+
+	// The two list endpoints that cost seconds rather than milliseconds are
+	// answered through a read cache keyed by (actor, org) — see cache.go for
+	// why it is not a second source of truth, and why keying it by org alone
+	// would be a cross-user read. As() shares them, which is the point: the
+	// cache belongs to the FORGE CONNECTION, not to one request's actor.
+	repos  *cache[[]Repo]
+	rollup *cache[[]Milestone]
 }
 
 // New builds a client for the forge at `host` authenticating with `token`.
@@ -157,9 +208,46 @@ func New(host, token string) (*Client, error) {
 	return &Client{
 		base:  strings.TrimSuffix(u.Scheme+"://"+u.Host, "/") + API,
 		token: strings.TrimSpace(token),
-		http:  &http.Client{Timeout: 30 * time.Second},
+		// A backstop, not the budget. A caller with a deadline on its context
+		// binds the call tighter than this and is what actually bounds a
+		// request; this only stops a call made WITHOUT one (a CLI invoke, a
+		// background refresh whose budget is longer) from hanging forever.
+		http:   &http.Client{Timeout: 30 * time.Second},
+		repos:  newCache[[]Repo](),
+		rollup: newCache[[]Milestone](),
 	}, nil
 }
+
+// Reuse points c at prev's read caches, so REFRESHING THE MACHINE CREDENTIAL
+// does not throw away a warm repository list.
+//
+// The caller re-reads the token periodically to make rotation real, and builds
+// a new Client each time it does. Without this, every rotation would drop the
+// cache and hand the next board load the full cold-path wait — the credential's
+// lifetime would silently become the cache's, which is two unrelated policies
+// braided into one number.
+//
+// Safe because the caches are keyed by ACTOR and the identity of the machine
+// credential does not change across a rotation of its secret: the same actor
+// sees the same repositories before and after.
+func (c *Client) Reuse(prev *Client) {
+	if prev == nil || c == nil {
+		return
+	}
+	if prev.repos != nil {
+		c.repos = prev.repos
+	}
+	if prev.rollup != nil {
+		c.rollup = prev.rollup
+	}
+}
+
+// key is the cache coordinate of a per-actor list.
+//
+// The ACTOR leads and the separator is a byte neither half can contain, so no
+// two (actor, org) pairs can spell one key. That is the whole tenancy argument
+// for the cache: see cache.go.
+func (c *Client) key(org string) string { return c.actor + "\x00" + org }
 
 // As returns a client that acts as the forge user `login`, dropping privilege to
 // that user's own permissions for every call made through it (see the package
@@ -185,11 +273,22 @@ func (c *Client) Actor() string { return c.actor }
 // enforced, so neither can be forgotten by a call site: every method below is
 // written in terms of this.
 func (c *Client) do(ctx context.Context, path string, q url.Values, out any) error {
+	_, err := c.get(ctx, path, q, out)
+	return err
+}
+
+// get is [Client.do] with the response headers surfaced.
+//
+// Only the repository walk needs them, and it needs exactly one: X-Total-Count,
+// which is what lets it fetch its pages CONCURRENTLY instead of discovering the
+// end of the list one serial page at a time. Everything else calls do and stays
+// unaware that a response has headers at all.
+func (c *Client) get(ctx context.Context, path string, q url.Values, out any) (http.Header, error) {
 	if c.actor == "" {
-		return ErrNoActor
+		return nil, ErrNoActor
 	}
 	if c.token == "" {
-		return ErrNoToken
+		return nil, ErrNoToken
 	}
 	u := c.base + path
 	if len(q) > 0 {
@@ -197,7 +296,7 @@ func (c *Client) do(ctx context.Context, path string, q url.Values, out any) err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return fmt.Errorf("forge: build request: %w", err)
+		return nil, fmt.Errorf("forge: build request: %w", err)
 	}
 	req.Header.Set("Authorization", "token "+c.token)
 	// Sudo as a HEADER, never as a ?sudo= query parameter. Both work, but a query
@@ -212,7 +311,7 @@ func (c *Client) do(ctx context.Context, path string, q url.Values, out any) err
 		// The URL is safe to surface (it names a path, not a secret) but the error
 		// from the transport can embed the request URL only — never a header — so
 		// the token cannot ride out in an error string.
-		return fmt.Errorf("forge: GET %s: %w", path, err)
+		return nil, fmt.Errorf("forge: GET %s: %w", path, err)
 	}
 	defer resp.Body.Close()
 
@@ -223,21 +322,21 @@ func (c *Client) do(ctx context.Context, path string, q url.Values, out any) err
 		// and for "this actor cannot see that". Neither is an error the caller can
 		// fix by retrying, and both must read as "no access", never as an empty
 		// success — a 404 rendered as an empty list is how a board silently lies.
-		return fmt.Errorf("%w: %s", ErrUnknownActor, c.actor)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownActor, c.actor)
 	case http.StatusUnauthorized, http.StatusForbidden:
-		return fmt.Errorf("forge: %s: credential rejected (%d)", path, resp.StatusCode)
+		return nil, fmt.Errorf("forge: %s: credential rejected (%d)", path, resp.StatusCode)
 	default:
-		return fmt.Errorf("forge: %s: unexpected status %d", path, resp.StatusCode)
+		return nil, fmt.Errorf("forge: %s: unexpected status %d", path, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if err != nil {
-		return fmt.Errorf("forge: read %s: %w", path, err)
+		return nil, fmt.Errorf("forge: read %s: %w", path, err)
 	}
 	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("forge: decode %s: %w", path, err)
+		return nil, fmt.Errorf("forge: decode %s: %w", path, err)
 	}
-	return nil
+	return resp.Header, nil
 }
 
 // ── the wire shapes ──────────────────────────────────────────────────────────
@@ -323,23 +422,186 @@ type Issue struct {
 // The actor's own visibility is what bounds the answer: a user who is not a
 // member of a private org gets that org's public repos and nothing else, decided
 // by the forge rather than by a filter here.
+// This is the expensive one — the forge computes permissions and statistics per
+// repository, so it costs 10-22s for a 64-repo org against ~1s for a 1-repo org
+// (measured on git.hanzo.ai). It is therefore READ THROUGH A CACHE keyed by
+// (actor, org); cache.go states why that key must carry the actor, and why a
+// bounded staleness window on a read is not the mirrored copy this package
+// otherwise refuses.
 func (c *Client) Repos(ctx context.Context, org string) ([]Repo, error) {
 	if err := validOrg(org); err != nil {
 		return nil, err
 	}
-	var all []Repo
-	for p := 1; p <= maxPages; p++ {
+	// Ahead of the cache, so an unscoped client refuses rather than taking a
+	// slot in it. Same refusal do() would make, made before anything is stored.
+	if c.actor == "" {
+		return nil, ErrNoActor
+	}
+	got, err := c.repos.do(ctx, c.key(org), func(ctx context.Context) ([]Repo, error) {
+		return c.listRepos(ctx, org)
+	})
+	if err != nil {
+		return nil, err
+	}
+	// A copy: the cached slice is shared by every caller holding this entry, and
+	// one that sorted or filtered it in place would rewrite what the next caller
+	// reads.
+	return append([]Repo(nil), got...), nil
+}
+
+// listRepos is the uncached walk of the org's repository pages.
+//
+// It fetches SMALL PAGES CONCURRENTLY, which is the whole reason a board that
+// used to take twenty seconds takes three. See [repoPage] for the measurement
+// and the cost model behind it.
+//
+// The shape is: one page to learn the size of the list, then the rest at once.
+// X-Total-Count is what makes that possible — without it the only way to find
+// the end of a list is to keep asking until a page comes back short, and that is
+// inherently serial.
+func (c *Client) listRepos(ctx context.Context, org string) ([]Repo, error) {
+	path := "/orgs/" + url.PathEscape(org) + "/repos"
+	fetch := func(ctx context.Context, p int) ([]Repo, http.Header, error) {
 		var batch []Repo
-		q := url.Values{"limit": {strconv.Itoa(page)}, "page": {strconv.Itoa(p)}}
-		if err := c.do(ctx, "/orgs/"+url.PathEscape(org)+"/repos", q, &batch); err != nil {
+		q := url.Values{"limit": {strconv.Itoa(repoPage)}, "page": {strconv.Itoa(p)}}
+		h, err := c.get(ctx, path, q, &batch)
+		return batch, h, err
+	}
+
+	first, hdr, err := fetch(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+	total, err := strconv.Atoi(strings.TrimSpace(hdr.Get("X-Total-Count")))
+	if err != nil || total <= len(first) {
+		// Either the whole list arrived, or this forge does not count its lists.
+		// Nothing more to fetch in the first case; in the second, fall through to
+		// the serial walk, which is SLOWER BUT CORRECT — a degradation, not a
+		// second design.
+		if err == nil {
+			return first, nil
+		}
+		return c.walkRepos(ctx, path, first)
+	}
+
+	pages := (total + repoPage - 1) / repoPage
+	if pages > maxRepoPages {
+		pages = maxRepoPages
+	}
+	// Page 1 is already in hand; the rest go out together.
+	out := make([][]Repo, pages)
+	out[0] = first
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		bad  error
+		sem  = make(chan struct{}, fanout)
+		once sync.Once
+	)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	for p := 2; p <= pages; p++ {
+		wg.Add(1)
+		go func(p int) {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				return
+			}
+			batch, _, err := fetch(ctx, p)
+			if err != nil {
+				// One page's failure fails the walk. A repository list silently
+				// missing the pages that errored is a wrong answer presented as a
+				// complete one, and downstream it reads as "those boards do not
+				// exist" — the same rule the milestone rollup follows.
+				once.Do(func() {
+					mu.Lock()
+					bad = err
+					mu.Unlock()
+					cancel()
+				})
+				return
+			}
+			mu.Lock()
+			out[p-1] = batch
+			mu.Unlock()
+		}(p)
+	}
+	wg.Wait()
+	if bad != nil {
+		return nil, bad
+	}
+	// Concatenated in PAGE ORDER, not completion order, so the list a caller
+	// sees does not reshuffle between two identical reads.
+	all := make([]Repo, 0, total)
+	for _, b := range out {
+		all = append(all, b...)
+	}
+	return all, nil
+}
+
+// walkRepos finishes the list one page at a time, for a forge that does not send
+// X-Total-Count. Correct and slow: it is what the concurrent walk above replaced,
+// kept only for the case that makes the fast path impossible.
+func (c *Client) walkRepos(ctx context.Context, path string, first []Repo) ([]Repo, error) {
+	all := first
+	for p := 2; p <= maxRepoPages; p++ {
+		var batch []Repo
+		q := url.Values{"limit": {strconv.Itoa(repoPage)}, "page": {strconv.Itoa(p)}}
+		if err := c.do(ctx, path, q, &batch); err != nil {
 			return nil, err
 		}
 		all = append(all, batch...)
-		if len(batch) < page {
+		if len(batch) < repoPage {
 			break
 		}
 	}
 	return all, nil
+}
+
+// Repo reads ONE repository by name.
+//
+// The board-detail page needs a single repository, and finding it by listing the
+// org's inventory is what made that page cost twenty seconds: the list endpoint
+// charges per repository RETURNED (see [repoPage]), so 249 of the 250 it returns
+// are waste. A direct read is ~1s no matter how large the org is.
+//
+// A repository the actor cannot see is 404 and surfaces as [ErrUnknownActor],
+// the same as one that does not exist — which is the right answer for a named
+// board, and does not tell a caller whether a private repo is there.
+func (c *Client) Repo(ctx context.Context, org, name string) (Repo, error) {
+	if err := validOrg(org); err != nil {
+		return Repo{}, err
+	}
+	if err := validOrg(name); err != nil {
+		return Repo{}, fmt.Errorf("forge: repo: %w", err)
+	}
+	var r Repo
+	err := c.do(ctx, "/repos/"+url.PathEscape(org)+"/"+url.PathEscape(name), nil, &r)
+	return r, err
+}
+
+// ReposWarm returns the repository inventory ONLY if it is already held, and
+// starts filling it behind the caller when it is not.
+//
+// It exists so a caller that can do without the inventory never waits for it.
+// The board list is assembled from issues-search (~1.5s for this forge's largest
+// org, where the inventory is ~100s); the inventory, when warm, only adds the
+// boards that have no work on them yet. Blocking on it would trade a complete
+// answer for one nobody stays to see.
+func (c *Client) ReposWarm(ctx context.Context, org string) ([]Repo, bool) {
+	if validOrg(org) != nil || c.actor == "" {
+		return nil, false
+	}
+	got, ok := c.repos.warm(ctx, c.key(org), func(ctx context.Context) ([]Repo, error) {
+		return c.listRepos(ctx, org)
+	})
+	if !ok {
+		return nil, false
+	}
+	return append([]Repo(nil), got...), true
 }
 
 // IssueFilter narrows an issue search. Every field is OPTIONAL and none of them
@@ -425,10 +687,47 @@ func (c *Client) Issues(ctx context.Context, org string, f IssueFilter) ([]Issue
 // Concurrency is bounded by [fanout], and one repo's failure fails the rollup:
 // a milestone list silently missing the repos that errored is a wrong answer
 // presented as a complete one.
+//
+// The whole rollup is cached like [Client.Repos] and on the same key, because
+// it is the same shape of expense: its opening move IS that call, and the
+// fan-out behind it is another N requests. Cold, the two together are the
+// slowest read this package makes.
 func (c *Client) Milestones(ctx context.Context, org string) ([]Milestone, error) {
+	if err := validOrg(org); err != nil {
+		return nil, err
+	}
+	if c.actor == "" {
+		return nil, ErrNoActor
+	}
+	got, err := c.rollup.do(ctx, c.key(org), func(ctx context.Context) ([]Milestone, error) {
+		return c.rollupMilestones(ctx, org)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return append([]Milestone(nil), got...), nil
+}
+
+// rollupMilestones is the uncached fan-out.
+func (c *Client) rollupMilestones(ctx context.Context, org string) ([]Milestone, error) {
 	repos, err := c.Repos(ctx, org)
 	if err != nil {
 		return nil, err
+	}
+	live := 0
+	for _, r := range repos {
+		if !r.Archived {
+			live++
+		}
+	}
+	// REFUSE rather than truncate. An org past this cannot be rolled up inside
+	// any sane request budget, and returning the first [maxRollup] repos'
+	// milestones would be a partial answer presented as a complete one — the
+	// same wrong answer the fail-on-first-error rule above exists to prevent,
+	// arrived at by a different route. The message names the cap so the operator
+	// reading it knows what to change.
+	if live > maxRollup {
+		return nil, fmt.Errorf("forge: org %s has %d live repositories, past the %d this rollup fans out over", org, live, maxRollup)
 	}
 	// Cancel the remaining fan-out as soon as one leg fails; without this a large
 	// org keeps issuing requests whose result is already discarded.
