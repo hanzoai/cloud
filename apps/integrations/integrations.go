@@ -864,6 +864,8 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// the raw body, which an op handed the decoded In could not re-verify.
 	app.Post("/v1/connector/github/webhook", cloud.Terminal(cloud.Handle(s, githubWebhook)))
 	zip.Get(zapp, "/v1/integrations/github/installations", o.githubInstallations)
+	// Bind installations the App already holds to the org the caller acts in.
+	zip.Post(zapp, "/v1/integrations/github/claim", o.githubClaim)
 	zip.Get(zapp, "/v1/integrations/github/repos", o.githubRepos)
 	// 202: the import runs in a bounded background worker, so the op DECLARES the
 	// status it has always answered rather than setting it per request.
