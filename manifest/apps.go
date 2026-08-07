@@ -136,7 +136,7 @@ var Apps = []App{
 	// the defect this table exists to prevent, and a 501 that names what is missing
 	// is a better answer than commerce's bare-"/v1" 404.
 	{Name: "platform", Prefixes: []string{"/v1/builds", "/v1/environments", "/v1/pipelines", "/v1/platform/apps", "/v1/platform/cd", "/v1/platform/ci", "/v1/platform/fleet", "/v1/platform/health", "/v1/platform/projects", "/v1/releases", "/v1/run", "/v1/runner"}},
-	{Name: "projects", Prefixes: []string{"/v1/platform/sites", "/v1/projects", "/v1/sites"}},
+	{Name: "projects", Prefixes: []string{"/v1/platform/sites", "/v1/projects", "/v1/sites", "/v1/tags"}},
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
 	{Name: "prompts", Prefixes: []string{"/v1/prompts"}},
