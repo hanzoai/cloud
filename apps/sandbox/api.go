@@ -253,6 +253,7 @@ func Run(s *Service, ctx context.Context, org, id string, cmd Cmd) (ExecResult, 
 	if cmd.Dir != "" {
 		argv = append([]string{"sh", "-c", "cd " + shellQuote(cmd.Dir) + " && exec \"$@\"", "sh"}, argv...)
 	}
+	touched(ctx, store, m) // a call is in flight — see touched
 	r, err := s.State.rt.exec(ctx, m, argv, strings.NewReader(cmd.Stdin), cmd.TimeoutSec)
 	if err != nil {
 		return ExecResult{}, zip.Errorf(http.StatusBadGateway, "exec: %v", err)
@@ -361,6 +362,17 @@ func find(s *Service, ctx context.Context, org, id string) (Sandbox, *Store, err
 
 // touched records use, so the idle reaper can tell an actively-worked sandbox from
 // one whose owner walked away.
+//
+// CALL IT BEFORE THE WORK, not only after. Stamped only on completion it means
+// "when a call last FINISHED", which reads a sandbox in the middle of a
+// forty-minute run as forty minutes idle — and any idle rule shorter than the
+// longest legitimate call then reaps the work it was waiting for. Stamped on
+// entry it means "a call is in flight or recently was", which is the question
+// the reaper is actually asking.
+//
+// It still does not cover a single call LONGER than the idle window on its own:
+// for that the in-flight call has to keep saying so, which is why the window
+// stays an hour until it does.
 func touched(ctx context.Context, store *Store, m Sandbox) {
 	m.LastUsedAt = time.Now().Unix()
 	_ = store.Put(ctx, m)
