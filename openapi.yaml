@@ -14717,7 +14717,7 @@ components:
           type: boolean
         connector:
           $ref: '#/components/schemas/connView'
-          description: Connector is the connector as it now stands.
+          description: Connection is the connector as it now stands.
       type: object
     crmSummary:
       properties:
@@ -15417,7 +15417,7 @@ components:
       properties:
         connector:
           $ref: '#/components/schemas/connView'
-          description: Connector is the connected connector. Present only on "connected".
+          description: Connection is the connected connector. Present only on "connected".
         interval:
           description: |-
             Interval is the seconds to wait before the next poll. Present only while
@@ -37174,7 +37174,7 @@ components:
       properties:
         connector:
           $ref: '#/components/schemas/connView'
-          description: Connector is the connector with its new expiry.
+          description: Connection is the connector with its new expiry.
         refreshed:
           description: Refreshed is always true — a failed rotation is an HTTP error.
           type: boolean
@@ -77566,7 +77566,7 @@ paths:
   /v1/integrations/teams/events:
     post:
       description: |-
-        The messaging endpoint for the Teams bot. A message activity is routed to an agent turn and answered proactively through the Bot Connector; anything that is not a message with text is acknowledged and ignored.
+        The messaging endpoint for the Teams bot. A message activity is routed to an agent turn and answered proactively through the Bot Connection; anything that is not a message with text is acknowledged and ignored.
 
         Authentication is the Bot Framework's RS256 JWT, verified against its published keys and bound BOTH to this deployment's app id and to the activity's own service URL. The service-URL binding is the part that matters: without it a token valid for one activity could point the outbound reply somewhere else.
 
