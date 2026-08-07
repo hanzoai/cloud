@@ -105,6 +105,18 @@ func init() {
 		Example:  json.RawMessage(`{"provider":"slack"}`),
 		Response: json.RawMessage(`{"id":"slack","name":"Slack","description":"Connect your workspace.","category":"Communication","available":true,"connected":false}`),
 	})
+	zip.Describe("GET /v1/integrations/github/installations", zip.Doc{
+		Description: "Lists the GitHub accounts THIS org has connected, each\nconfirmed against the App's own installation list, plus where to add another.\n\nThe confirmation is the point. A connection row holds an installation id, and\nan id whose installation was since removed on GitHub is a row that mints\nnothing — every list and import against it fails with a token error, which\nreads as \"our git integration is broken\" rather than \"that install is gone\".\nChecking the App's view turns that into a fact the caller can act on.\n\nORG-SCOPED, deliberately. The App is installed across every customer, so the\nraw list is the customer list; this returns only accounts the caller's org has\nbound. An org discovers a NEW account by installing it (InstallURL), which is\nGitHub's own consent screen — not by reading ours.",
+		Fields: map[string]string{
+			"githubInstallationView.connected":     "Connected reports whether THIS org has already bound this account.",
+			"githubInstallationView.htmlUrl":       "HTMLURL is the account's page on GitHub.",
+			"githubInstallationView.login":         "Login is the GitHub account name — the org or user the App is installed on.",
+			"githubInstallationView.type":          "Type is \"Organization\" or \"User\".",
+			"githubInstallationsOut.installUrl":    "InstallURL is where to grant a new account, so a UI with an empty list has\nsomewhere to send the reader instead of a dead end.",
+			"githubInstallationsOut.installations": "Installations is every account this org has connected, plus — for a caller\nthat can install — nothing it has not. Never null; [] when none.",
+		},
+		Response: json.RawMessage(`{"installations":[{"login":"hanzoai","type":"Organization","connected":true,"htmlUrl":"https://github.com/hanzoai"}],"installUrl":"https://github.com/apps/hanzo/installations/new"}`),
+	})
 	zip.Describe("GET /v1/integrations/github/repos", zip.Doc{
 		Description: "Lists the org's granted GitHub repositories, each annotated with its\nnative import + sync status from the git object plane. Org-authed: the org comes\nfrom the validated principal, and the granted set is bounded to THAT org's\ninstallation token — an org can never enumerate another org's repos. The console\npolls it to watch an import flip a repo to imported.",
 		Fields: map[string]string{

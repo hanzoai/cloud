@@ -1,6 +1,6 @@
 {
-  "paths": 1782,
-  "operations": 2452,
+  "paths": 1784,
+  "operations": 2454,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -97,7 +97,7 @@
     "ingress": 18,
     "insights": 2,
     "install-patch": 1,
-    "integrations": 33,
+    "integrations": 34,
     "k8s": 5,
     "kb": 9,
     "keys": 3,
@@ -151,7 +151,7 @@
     "run": 1,
     "runner": 3,
     "s3": 12,
-    "sandboxes": 15,
+    "sandboxes": 16,
     "sbom": 3,
     "scrape": 1,
     "search": 6,
