@@ -108,6 +108,17 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 		}
 	}
 
+	// THE ONE REF THIS RUN MAY WRITE, checked before anything is leased. The name
+	// is cloud's (BranchFor, a pure function of the session), the forge refuses
+	// anything else independently (apps/git/refpolicy.go), and this is the third
+	// statement of the same rule at the only other place that could break it — the
+	// process holding the credential. A run handed `main` stops here rather than
+	// discovering at push time that it was never allowed.
+	branch := strings.TrimSpace(req.Branch)
+	if strings.TrimSpace(req.CloneURL) != "" && !strings.HasPrefix(branch, agentPrefix) {
+		return RunResult{}, fmt.Errorf("coding: %q is not an agent branch", branch)
+	}
+
 	class := classFor(req.Tool, req.Desktop)
 	ttl := req.RunTimeoutSeconds
 	if ttl <= 0 {
@@ -153,13 +164,24 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	// The checkout, when there is one. No repo means no clone and no credential —
 	// the request shape already guarantees the second (CredToken must be empty
 	// when CloneURL is), so there is nothing to strip here.
+	in := sandbox{ctx: ctx, id: id, ttl: ttl, session: req.SessionID, token: req.CredToken}
+	base := ""
 	if u := strings.TrimSpace(req.CloneURL); u != "" {
 		step("clone", "cloning "+u, "running")
 		// The clone narrates into the session like everything else. It is the step
 		// that most often hangs — a big repo, a slow forge — and a watcher seeing
 		// git count objects knows the difference between slow and stuck.
-		if _, err := runIn(ctx, id, cloneArgv(req), ttl, req.SessionID); err != nil {
-			return RunResult{}, fmt.Errorf("coding: clone: %w", err)
+		if _, err := in.do(cloneArgv(req), "clone"); err != nil {
+			return RunResult{}, err
+		}
+		// The run's branch exists BEFORE the first edit, so a tool that commits for
+		// itself commits onto the run's branch and never onto the base.
+		if _, err := in.do([]string{"git", "switch", "-c", branch}, "branch"); err != nil {
+			return RunResult{}, err
+		}
+		var err error
+		if base, err = in.tip(); err != nil {
+			return RunResult{}, err
 		}
 	}
 
@@ -170,36 +192,223 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	}
 
 	out := RunResult{
+		Branch:  branch,
 		OK:      ran.ExitCode == 0,
-		LogTail: tail(ran.Stdout, ran.Stderr),
+		LogTail: in.scrub(tail(ran.Stdout, ran.Stderr)),
 	}
 	if !out.OK {
+		// A tool that failed produced nothing anyone should review, so its checkout
+		// stays here and dies with the lease. Pushing it would file work against a
+		// branch whose own run says it did not finish.
 		out.Error = fmt.Sprintf("exit %d", ran.ExitCode)
+		step("done", "finished", statusOf(false))
+		return out, nil
+	}
+	if base != "" {
+		if err := in.deliver(req, branch, base, &out, step); err != nil {
+			return RunResult{}, err
+		}
 	}
 	step("done", "finished", statusOf(out.OK))
 	return out, nil
 }
 
-// cloneArgv checks out the repo with the credential in the URL rather than in a
-// config file, so nothing survives the process that used it. The sandbox is
-// per-run and reaped, but a token written to .git/config would still be readable
-// by every later step of the same run, which is a wider window than the clone.
-func cloneArgv(req RunRequest) []string {
-	url := req.CloneURL
-	if req.CredToken != "" {
-		user := req.CredUser
-		if user == "" {
-			user = "x-access-token"
-		}
-		if rest, ok := strings.CutPrefix(url, "https://"); ok {
-			url = "https://" + user + ":" + req.CredToken + "@" + rest
-		}
+// ── the work leaves the sandbox ──────────────────────────────────────────────
+//
+// Everything above is how a run HAPPENS; this is how it SURVIVES. Without it the
+// rest is a model talking to itself: the sandbox is per-run and reaped, so an
+// edit that stays in the checkout is deleted by the lease ending. The Runner did
+// lease → clone → run → end and threw the work away.
+//
+// It is four facts and one rule.
+//
+//	the branch   is the one cloud issued for the session, created before the
+//	             first edit.
+//	the change   is the difference between two object ids — what we checked out
+//	             and what is there now. Not a status parse and not a guess: it is
+//	             the only reading that stays true both when a tool leaves the tree
+//	             dirty and when it commits for itself, and a run that reports "no
+//	             changes" because it never looked is the failure this file was.
+//	the tip      is what rev-parse says AFTER the commit, so the sha we report is
+//	             one that exists.
+//	the diffstat is measured over exactly that range, so what a reviewer reads and
+//	             what was pushed are the same thing.
+//
+//	THE RULE: the credential is applied to ONE INVOCATION and never recorded.
+
+// agentPrefix is the machine namespace, spelled as coding's own BranchFor builds
+// it. apps/git states the same rule over full refs (refpolicy.go agentRefPrefix)
+// and the two are deliberately independent: this one keeps an honest run inside
+// its lane, that one keeps a compromised one there.
+const agentPrefix = "agent/"
+
+// Who the commit is by. An agent is not a person and does not borrow one: the
+// author of a run's commit is the run's harness, and the human who asked for it
+// is on the PR and in the session.
+const (
+	authorName  = "hanzo-agent"
+	authorEmail = "agent@hanzo.ai"
+)
+
+// sandbox is one leased sandbox, addressed. It carries what every command of a
+// run needs — where, for how long, who is watching, and the grant that must never
+// come back out — so no call site repeats them and no error path can forget the
+// last one.
+type sandbox struct {
+	ctx     context.Context
+	id      string
+	ttl     int
+	session string
+	token   string
+}
+
+// deliver commits what the tool left behind, pushes it to the run's ref, and
+// fills in what actually happened.
+//
+// The commit's EXIT CODE IS NOT READ. `git commit` with nothing staged fails, and
+// that failure is indistinguishable from a tool that had already committed — so
+// the question is answered by the sha instead, which is a fact rather than an
+// opinion about one. When the tip has not moved, nothing changed, and nothing is
+// pushed: a PR against a branch with no commits teaches a reviewer to ignore the
+// agent, which is worse than the missing PR it replaces.
+func (in sandbox) deliver(req RunRequest, branch, base string, out *RunResult, step func(name, msg, status string)) error {
+	if _, err := in.do([]string{"git", "add", "-A"}, "stage"); err != nil {
+		return err
 	}
-	argv := []string{"git", "clone", "--depth", "1"}
+	// The identity rides the invocation for the same reason the credential does:
+	// `git -c` before a subcommand is not written into the repository's config.
+	if _, err := runIn(in.ctx, in.id, []string{"git",
+		"-c", "user.name=" + authorName, "-c", "user.email=" + authorEmail,
+		"commit", "--quiet", "-m", message(req.Prompt, in.session)}, in.ttl, in.session); err != nil {
+		return fmt.Errorf("coding: commit: %w", err)
+	}
+
+	tip, err := in.tip()
+	if err != nil {
+		return err
+	}
+	if tip == base {
+		step("done", "no changes were needed", "running")
+		return nil // and Changed stays false, which is now a measurement
+	}
+
+	stat, err := in.do([]string{"git", "diff", "--stat", base, tip}, "diff")
+	if err != nil {
+		return err
+	}
+	step("push", "pushing "+branch, "running")
+	if _, err := in.do(pushArgv(req, branch), "push"); err != nil {
+		return err
+	}
+	out.Changed, out.CommitSha, out.Diffstat = true, tip, strings.TrimSpace(stat.Stdout)
+	return nil
+}
+
+// cloneArgv checks out the repo. The credential is a per-invocation rewrite, so
+// what git records as the remote is the plain URL and the grant is gone the
+// moment the process is.
+func cloneArgv(req RunRequest) []string {
+	argv := append(gitAs(req), "clone", "--depth", "1")
 	if b := strings.TrimSpace(req.BaseBranch); b != "" {
 		argv = append(argv, "-b", b)
 	}
-	return append(argv, url, ".")
+	return append(argv, req.CloneURL, ".")
+}
+
+// pushArgv writes ONE ref, named in full, and never forces.
+//
+// The refspec is explicit rather than `push origin <branch>` because the local
+// name and the remote ref are then the same string we checked and the grant
+// names, with no configured remote and no push.default in between to resolve it
+// into something else.
+func pushArgv(req RunRequest, branch string) []string {
+	return append(gitAs(req), "push", req.CloneURL, "HEAD:refs/heads/"+branch)
+}
+
+// gitAs is `git`, carrying the grant when there is one — as a URL rewrite that
+// applies to this invocation ALONE.
+//
+// The credential used to ride the clone URL, on the argument that "nothing
+// survives the process that used it". That was false: git writes the URL it was
+// given into .git/config verbatim, userinfo and all, so the grant sat readable in
+// the checkout for every later step of the run — including the one that executes
+// untrusted model output. A rewrite given with `git -c` BEFORE the subcommand is
+// not persisted (unlike `git clone -c`, which is), so the remote git records is
+// the plain URL and the grant lives only in the environment of the one command
+// that needed it.
+//
+// It is one function because clone and push are the same act — reach that URL as
+// this bearer — and a second spelling of it is a second place to get it wrong.
+func gitAs(req RunRequest) []string {
+	rest, https := strings.CutPrefix(req.CloneURL, "https://")
+	if req.CredToken == "" || !https {
+		return []string{"git"}
+	}
+	user := req.CredUser
+	if user == "" {
+		user = "x-access-token"
+	}
+	return []string{"git", "-c",
+		"url.https://" + user + ":" + req.CredToken + "@" + rest + ".insteadOf=" + req.CloneURL}
+}
+
+// tip reads the checkout's current commit.
+func (in sandbox) tip() (string, error) {
+	ran, err := in.do([]string{"git", "rev-parse", "HEAD"}, "read the tip")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(ran.Stdout), nil
+}
+
+// do is a command whose failure is the RUN's failure.
+//
+// runIn answers a non-zero exit as data, deliberately — "the tests failed" and
+// "the sandbox is broken" are different facts. For the commands here they are the
+// same fact: a clone that did not clone or a push that did not push leaves
+// nothing to report, so the exit code is read and the run stops.
+func (in sandbox) do(argv []string, what string) (*plane.Ran, error) {
+	ran, err := runIn(in.ctx, in.id, argv, in.ttl, in.session)
+	if err != nil {
+		return nil, fmt.Errorf("coding: %s: %s", what, in.scrub(err.Error()))
+	}
+	if ran.ExitCode != 0 {
+		return nil, fmt.Errorf("coding: %s: exit %d: %s", what, ran.ExitCode,
+			in.scrub(strings.TrimSpace(tail(ran.Stdout, ran.Stderr))))
+	}
+	return ran, nil
+}
+
+// message is what the commit says: the task, and the run that did it.
+//
+// The session is in the trailer because the commit outlives every other record of
+// the run — the Slack thread scrolls away, the sandbox is reaped — and a commit
+// nobody can trace back to the conversation that asked for it is an orphan in
+// somebody's history.
+func message(prompt, session string) string {
+	m := firstLine(prompt)
+	if len(m) > maxTitlePrompt {
+		m = strings.TrimSpace(m[:maxTitlePrompt]) + "…"
+	}
+	if m == "" {
+		m = "agent changes"
+	}
+	return m + "\n\nRun: " + session + "\n"
+}
+
+// scrub takes the grant out of anything that leaves the sandbox.
+//
+// git redacts the userinfo from the URLs it prints — verified, including through
+// an insteadOf rewrite — and this does not rely on that. Everything here becomes a
+// session event, a Slack line, a log field and a span; a credential is one string
+// away from all four, and being sure costs four lines. It hangs off the sandbox
+// rather than sitting loose so that every path out of a command goes through it
+// without anyone having to remember.
+func (in sandbox) scrub(s string) string {
+	if strings.TrimSpace(in.token) == "" {
+		return s
+	}
+	return strings.ReplaceAll(s, in.token, "[redacted]")
 }
 
 // runIn runs one command in the sandbox and narrates it into the run's session.
