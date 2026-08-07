@@ -330,6 +330,13 @@ var Apps = []App{
 	{Name: "explorer", Prefixes: []string{"/v1/indexers", "/v1/oracles"}},
 	{Name: "security", Prefixes: []string{"/v1/security"}},
 	{Name: "integrations", Prefixes: []string{"/v1/connector/github/webhook", "/v1/connectors", "/v1/integrations"}},
+	// /v1/tags is destinations' BROWSER half and it is a bare noun, so the /v1
+	// remainder (ai) was answering it — 404, for a path the document publishes and
+	// track.js fetches on every page load. A prefix owns its subtree and this one is
+	// deeper than "/v1", so naming it here is what delivers it. Nothing else claims
+	// anything under /v1/tags. It stayed invisible because plugin/destinations'
+	// subset was stale: the route existed in source and in no artifact, so the
+	// reachability gate had nothing to check it against.
 	{Name: "destinations", Prefixes: []string{"/v1/destinations", "/v1/tags"}},
 	{Name: "cloudflare", Prefixes: []string{"/v1/cloudflare"}},
 	{Name: "sbom", Prefixes: []string{"/v1/sbom"}},
