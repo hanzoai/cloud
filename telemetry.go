@@ -359,6 +359,17 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 		sdktrace.WithResource(res),
 	)
 	otel.SetTracerProvider(tp)
+	// The propagator, without which every Inject and Extract in the process is a
+	// silent no-op — OTel's global default is an EMPTY composite that writes
+	// nothing and reads nothing, and it had never been replaced. That is what let
+	// two unrelated trace-id spaces exist side by side: the framework stamps a
+	// W3C traceparent on every request and forwards it across every process hop,
+	// while OTel, unable to read it, rooted a fresh trace in each process.
+	//
+	// The value is the middleware's own (middleware_tracing.go), published here
+	// so a library that reaches for otel's global reads the same configuration
+	// cloud's own request path uses, rather than a second one that could differ.
+	otel.SetTextMapPropagator(propagator)
 
 	// Latch BEFORE MountAll runs, so the composition root can adopt this provider
 	// into subsystems that emit their own spans. Without that adoption ai's

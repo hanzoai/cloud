@@ -14,6 +14,9 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/plane"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // bridge.go is the ONE ChatBridge core: the platform-agnostic @hanzo front-door
@@ -37,6 +40,10 @@ import (
 // linked user, billed against THAT org's ledger.
 
 // ── normalized inbound + reply seam ─────────────────────────────────────────
+
+// bridgeTracer emits the per-turn chat span — one tracer for every platform this
+// package bridges, because a turn is the same event whichever one it arrived on.
+var bridgeTracer = otel.Tracer("hanzo.ai/cloud/integrations")
 
 // Inbound is the normalized inbound chat event — ONE shape for every platform. An
 // adapter produces it AFTER it has authenticated the request and parsed the
@@ -188,7 +195,49 @@ func (l *orgLimiter) release(org string) {
 func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), bridgeAgentTimeout)
 	defer cancel()
-	text, ephemeral := bridgeReply(s, org, in.Provider, in.ExternalID, in.User, in.Text)
+
+	// The turn's own span, and the one record that ties a CONVERSATION to a run.
+	//
+	// A chat turn had no telemetry at all: the webhook's request span ended when we
+	// answered the platform 200, and everything that matters happens after that, in
+	// the goroutine below. So "someone asked @hanzo something in this thread and a
+	// run happened" was two facts with nothing in common — the run knew its own id
+	// and never knew which thread caused it, and the thread knew nothing.
+	//
+	// It carries the run's id (returned by bridgeReply, below) precisely because the
+	// trace cannot be relied on to carry it here: the turn runs on a DETACHED
+	// context by necessity, and the framework forwards trace context only for a
+	// call that has an inbound request behind it — so on a split deployment the
+	// run's spans are in a trace of their own. The id is the join that holds
+	// regardless: thread -> this span -> run_id -> the run row -> its trace_id ->
+	// its spans. One chain, whether the fleet runs fused or as separate processes.
+	//
+	// It is opened here rather than per adapter because this is the one body all
+	// four platforms dispatch — Slack, Teams, Discord and Telegram — so a turn is
+	// observed the same way on every one of them.
+	ctx, span := bridgeTracer.Start(ctx, "agent.turn "+in.Provider, trace.WithSpanKind(trace.SpanKindInternal))
+	defer span.End()
+	span.SetAttributes(
+		// hanzo.org is the key the trace plane files a row under (apps/o11y
+		// planesink.go planeOrg); without it this span is the platform's, not the
+		// tenant's, and the tenant cannot read its own conversation.
+		attribute.String("hanzo.org", org),
+		attribute.String("hanzo.chat.provider", in.Provider),
+	)
+	// The thread, which is how a human arrives here: they are looking at a Slack
+	// conversation and want the run behind it. Absent on a platform or a turn that
+	// has none, rather than empty — a DM is legitimately unthreaded.
+	if in.Channel != "" {
+		span.SetAttributes(attribute.String("hanzo.chat.channel", in.Channel))
+	}
+	if in.ThreadID != "" {
+		span.SetAttributes(attribute.String("hanzo.chat.thread", in.ThreadID))
+	}
+
+	text, ephemeral, runID := bridgeReply(s, org, in.Provider, in.ExternalID, in.User, in.Text)
+	if runID != "" {
+		span.SetAttributes(attribute.String("hanzo.agent.run_id", runID))
+	}
 	if text == "" {
 		return
 	}
@@ -232,10 +281,16 @@ func bridgeRunContext(org string) (context.Context, context.CancelFunc) {
 // to pass the webhook's — which both cancels the run when we answer Slack and
 // silently discards the org. Removing the parameter is what makes that unavailable
 // rather than merely discouraged.
-func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, text string) (reply string, ephemeral bool) {
+// It returns the RUN's id when a run happened, so the turn above can record which
+// run answered this conversation. The id was already in hand and was thrown away
+// everywhere except one failure log, which is why a thread and the run behind it
+// had no value in common.
+func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, text string) (reply string, ephemeral bool, runID string) {
 	link, say, ephemeral := bridgeIdentity(s, org, provider, externalID, user)
 	if say != "" {
-		return say, ephemeral
+		// No run happened — an unlinked user gets a prompt, not an agent turn — so
+		// there is no id to name, and saying so with "" is the honest answer.
+		return say, ephemeral, ""
 	}
 	// On-behalf-of run over the PLANE (ZAP/UDS): org is the isolation gate, tenant
 	// and balance; the linked user's Hanzo subject drives attribution. No bearer,
@@ -285,7 +340,7 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, text 
 	}
 	if rerr != nil {
 		s.Log.Warn("bridge: agent run", "provider", provider, "org", org, "err", rerr) // never logs a token
-		return "Sorry — the agent hit an error handling that. Please try again.", false
+		return "Sorry — the agent hit an error handling that. Please try again.", false, run.RunID
 	}
 	if run.Status != "ok" {
 		// SAID, not just returned. A run that EXECUTED and whose model failed comes
@@ -297,12 +352,12 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, text 
 		// a day of looking. The run id is here so the row is findable.
 		s.Log.Warn("bridge: agent run did not succeed", "provider", provider, "org", org,
 			"status", run.Status, "run_id", run.RunID)
-		return "Sorry — the agent hit an error handling that. Please try again.", false
+		return "Sorry — the agent hit an error handling that. Please try again.", false, run.RunID
 	}
 	if strings.TrimSpace(run.Output) == "" {
-		return "(the agent returned an empty response)", false
+		return "(the agent returned an empty response)", false, run.RunID
 	}
-	return run.Output, false
+	return run.Output, false, run.RunID
 }
 
 // bridgeIdentity resolves the caller's linked Hanzo account, or the sentence to
