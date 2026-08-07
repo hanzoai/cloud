@@ -208,3 +208,109 @@ func TestTraceable(t *testing.T) {
 		}
 	}
 }
+
+// TestTracingMiddleware_JoinsTheCallersTrace is the correlation contract: a
+// request that arrives carrying trace context is recorded IN that trace, not in a
+// new one of its own.
+//
+// This is what makes a run's spans one chain across the fleet. The framework
+// stamps a W3C traceparent at the edge and forwards it on every call it makes to
+// another process, so the webhook, the plane hop that dispatches the agent and
+// the run itself all arrive carrying the same id. Until this was extracted, each
+// process started a fresh root and the three were three unrelated traces — every
+// one of them individually well-formed, which is why nothing looked broken.
+//
+// It fails without the extraction: the middleware rooted its own trace and the
+// assertion below reads a different id.
+func TestTracingMiddleware_JoinsTheCallersTrace(t *testing.T) {
+	sr := newRecordingTracer(t)
+
+	app := zip.New(zip.Config{})
+	app.Use(TracingMiddleware())
+	app.Get("/v1/models", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "yes"}) })
+
+	// A caller's trace, sampled, in the exact shape the framework forwards.
+	const caller = "4bf92f3577b34da6a3ce929d0e0e4736"
+	const parent = "00f067aa0ba902b7"
+	req := httptest.NewRequest("GET", "/v1/models", nil)
+	req.Header.Set("traceparent", "00-"+caller+"-"+parent+"-01")
+	if _, err := app.Test(req); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+
+	span := findSpan(sr.Ended(), "GET /v1/models")
+	if span == nil {
+		t.Fatal("no server span recorded")
+	}
+	if got := span.SpanContext().TraceID().String(); got != caller {
+		t.Fatalf("server span is in trace %q, want the caller's %q — the request "+
+			"started a trace of its own, so its spans cannot be joined to the caller's", got, caller)
+	}
+	// The PARENT is the framework's own hop, not the caller's span id, and that is
+	// correct rather than a near miss. The framework rewrites traceparent on the
+	// way in — keeping the caller's trace id, substituting its own hop's span id —
+	// before any of cloud's middleware runs, so the id extracted here names the hop
+	// that actually handed us the request. It emits no OTel span of its own, which
+	// leaves this span's parent dangling inside a valid trace; a waterfall renders
+	// such a span as a root of what it can see, which is the honest picture. What
+	// must NOT happen is a fresh trace, and that is what the assertion above pins.
+	if !span.Parent().IsRemote() {
+		t.Fatal("the extracted parent must be marked remote — it came off the wire")
+	}
+	// Sampling has to survive the join too. A parent that arrives sampled and a
+	// child that is not recorded is the same silent drop in a different place.
+	if !span.SpanContext().IsSampled() {
+		t.Fatal("a span joined to a sampled caller must itself be sampled")
+	}
+}
+
+// TestTracingMiddleware_RefusesAnUnusableCallerContext: a request that arrives
+// with no trace context, or with a malformed or all-zero one, still gets a valid
+// sampled trace — and never adopts the bogus id.
+//
+// Accepting an all-zero trace id is the failure worth naming: every broken sender
+// emits the same one, so honouring it would merge unrelated requests from
+// unrelated tenants into a single enormous trace. The framework rejects those and
+// mints a fresh id before this middleware reads the header, so what extraction
+// sees is always well-formed; this pins that the outcome is a real trace rather
+// than the placeholder.
+func TestTracingMiddleware_RefusesAnUnusableCallerContext(t *testing.T) {
+	const zeros = "00000000000000000000000000000000"
+	for _, tc := range []struct{ name, header string }{
+		{"absent", ""},
+		{"malformed", "not-a-traceparent"},
+		{"all-zero trace id", "00-" + zeros + "-00f067aa0ba902b7-01"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sr := newRecordingTracer(t)
+
+			app := zip.New(zip.Config{})
+			app.Use(TracingMiddleware())
+			app.Get("/v1/models", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "yes"}) })
+
+			req := httptest.NewRequest("GET", "/v1/models", nil)
+			if tc.header != "" {
+				req.Header.Set("traceparent", tc.header)
+			}
+			if _, err := app.Test(req); err != nil {
+				t.Fatalf("request: %v", err)
+			}
+
+			span := findSpan(sr.Ended(), "GET /v1/models")
+			if span == nil {
+				t.Fatal("no server span recorded")
+			}
+			id := span.SpanContext().TraceID()
+			if !id.IsValid() {
+				t.Fatal("a request with no usable caller context must still get a valid trace id")
+			}
+			if id.String() == zeros {
+				t.Fatal("the all-zero placeholder was adopted as a trace id — every broken " +
+					"sender would land in this one trace")
+			}
+			if !span.SpanContext().IsSampled() {
+				t.Fatal("a minted trace must be sampled, or the request records nothing")
+			}
+		})
+	}
+}
