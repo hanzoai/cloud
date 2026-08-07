@@ -19,6 +19,9 @@
     },
     {
       "name": "sites"
+    },
+    {
+      "name": "tags"
     }
   ],
   "paths": {
@@ -1386,6 +1389,28 @@
           }
         }
       }
+    },
+    "/v1/tags": {
+      "get": {
+        "operationId": "get_v1_tags",
+        "summary": "The site's browser tag set for the hosted tag — which pixels to inject, by publishable key",
+        "description": "Returns the client-side pixels the SITE has connected (GA/Meta/TikTok/X) with their NON-SECRET ids, so the hosted tag injects them first-party and stamps each browser event with the same event_id the server-side Conversions API uses — deduping the two. Resolved per site: by the publishable key on ?key= when it names a project, else by the request host, so hanzo.ai and hanzo.chat carry different tags under one org. WITHOUT a resolvable site it answers an empty set at 200 — a page never breaks on its tag config.",
+        "tags": [
+          "tags"
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tagConfig"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1406,6 +1431,20 @@
           }
         },
         "type": "object"
+      },
+      "browserTagOut": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
       },
       "projectsBoundDomains": {
         "properties": {
@@ -1980,6 +2019,17 @@
           }
         },
         "type": "object"
+      },
+      "tagConfig": {
+        "type": "object",
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/browserTagOut"
+            }
+          }
+        }
       }
     }
   }
