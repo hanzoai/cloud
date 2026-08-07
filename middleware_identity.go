@@ -162,8 +162,15 @@ var authorityHeaders = []string{
 //     exactly like X-Org-Id from `owner`, then still checked non-foreign to the
 //     effective org (defense in depth; it also drops an admin's own-org project when
 //     a SuperAdmin views another org). The raw client copy is never a source.
-//   - X-App-Id / X-Billing-Account-Id are caller attribution hints (no isolation
-//     boundary): forwarded as-is on the validated path, dropped when anonymous.
+//   - X-App-Id is a caller attribution hint (no isolation boundary): forwarded
+//     as-is on the validated path, dropped when anonymous.
+//   - X-Billing-Account-Id is NOT a hint and is never forwarded from the client.
+//     It names WHO PAYS, so it is MINTED from the validated `billing_account`
+//     claim, the same way X-Org-Id is minted from `owner`. It WAS an attribution
+//     hint once, and this list went on saying so long after sanitizeSubScopes
+//     stopped restoring the client copy — a stale sentence on a money boundary,
+//     which is how someone "restores" a debited header believing it decides
+//     nothing. sanitizeSubScopes states the rule it enforces; this now agrees.
 var subScopeHeaders = []string{"X-Project-Id", "X-App-Id", "X-Billing-Account-Id"}
 
 // SanitizeIdentity returns the identity-trust-boundary middleware.
