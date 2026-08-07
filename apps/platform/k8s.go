@@ -1317,7 +1317,8 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 						// scheduler avoid a full node; the limit bounds a runaway build
 						// instead of letting it take the node down for everything else.
 						"resources": map[string]any{
-							// 32Gi, not 50: the request has to FIT beside buildkitd. Each
+							// 12Gi, not 50 and not 32: the request has to FIT beside buildkitd
+							// on a pool that is BUSY. Each
 							// runner-pool-32g node allocates ~88Gi of ephemeral storage and
 							// the buildkitd DaemonSet reserves 48Gi of it on every one, so a
 							// 50Gi request left no node able to hold the pod and every build
@@ -1329,10 +1330,14 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 							//
 							// The reason the request exists is unchanged and still right: a
 							// best-effort pod gets placed on a full node and is evicted first.
-							// It just has to be a number the pool can actually satisfy. 32Gi
-							// leaves headroom on the 40Gi a node has free beside buildkitd,
-							// and matches what cloud's own builds already request and
-							// schedule with. The limit stays 80Gi so a big build still bursts.
+							// It just has to be a number the pool can actually satisfy WHILE
+							// other builds are running. 32Gi fitted only an idle pool: one
+							// in-flight build takes 24Gi of the ~40Gi left beside buildkitd,
+							// so the next one went Pending — and a pool whose builds never
+							// schedule looks idle, so the autoscaler deleted a node and
+							// cordoned another. The shortage feeds itself. 12Gi schedules
+							// against a busy node and is ample for a clone plus a module
+							// cache. The limit stays 80Gi so a big build still bursts.
 							"requests": map[string]any{"ephemeral-storage": "12Gi"},
 							"limits":   map[string]any{"ephemeral-storage": "80Gi"},
 						},
