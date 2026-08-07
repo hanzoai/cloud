@@ -182,6 +182,25 @@ func Issuers() []string {
 	return out
 }
 
+// Domains returns every domain the registry knows — each brand's own and its
+// alternates — in no particular order.
+//
+// It answers the question a caller has when it must NAME our origins rather than
+// resolve one it was handed: which hosts may frame a page, which may be told an
+// origin is ours. ForHost answers "is this one" for a host in hand; this is the
+// enumeration, derived from the same registry, so adding a brand adds its domains
+// everywhere at once instead of in one more list somebody has to find.
+func Domains() []string {
+	out := make([]string, 0, len(brands)*2)
+	for _, b := range brands {
+		if b.Domain != "" {
+			out = append(out, b.Domain)
+		}
+		out = append(out, b.AltDomains...)
+	}
+	return out
+}
+
 // Apex returns the registrable apex of a host: the domain one label below the
 // public suffix ("api.hanzo.ai" -> "hanzo.ai", "hanzo.ai" -> "hanzo.ai"). It is
 // THE ONE derivation of that value in this binary.
