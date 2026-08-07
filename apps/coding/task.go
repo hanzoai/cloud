@@ -3,7 +3,10 @@ package coding
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/hanzoai/cloud/apps/bots"
 )
@@ -24,8 +27,28 @@ import (
 // BODY (never a URL, never argv, never a log). That is why the call declares
 // Secret — the transport then refuses to carry it over a cleartext hop.
 
-// taskOp addresses the runtime's coding-task operation.
+// taskOp addresses the runtime's sandbox-run operation.
 const taskOp = "/v1/coding-tasks"
+
+// sandboxURL is WHERE A RUN GOES, and it is deliberately not the bot address.
+//
+// A sandbox is not the bot. Coding, deep research and bare exec all want the
+// same thing — a computer to run something in — and none of them wants the
+// service that runs Slack channels. BOT_GATEWAY_URL is the right name for bot
+// traffic and stays that; this is the name for a sandbox.
+//
+// The old name is accepted for ONE release so a deploy cannot half-land, then it
+// is deleted. Not a permanent alias: two live names for one address is how the
+// two ends stop agreeing about where a run went, with nothing in a log to say so.
+// Empty here means the transport's own default, which today is the same pod.
+func sandboxURL() string {
+	for _, k := range []string{"SANDBOX_URL", "BOT_GATEWAY_URL"} {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
 
 // credential is the per-org agent git credential the sandbox presents to native
 // git. Token is the secret (an sk- key); Username is the basic-auth user label.
@@ -35,15 +58,23 @@ type credential struct {
 	Token    string `json:"token"`
 }
 
-// taskRequest is the cloud→runtime body for one coding run.
+// taskRequest is the cloud→runtime body for one sandbox run.
+//
+// EVERY GIT FIELD IS omitempty, AND THAT IS THE CONTRACT, NOT A TIDINESS
+// PREFERENCE. A run with no repo must put NO credential on the wire at all —
+// not an empty one. `credential` is a pointer for the same reason: a value type
+// would always marshal, so "no repo" would still ship a `credential` object and
+// the runtime could not tell an absent grant from a blank one.
 type taskRequest struct {
-	CloneURL          string     `json:"cloneUrl"`          // https://<domain>/v1/git/<org>/<repo>.git
-	BaseBranch        string     `json:"baseBranch"`        // branch to start from (default repo default)
-	Branch            string     `json:"branch"`            // branch to create + push (e.g. agent/<sessionid>)
-	Prompt            string     `json:"prompt"`            // the engineering task
-	SessionID         string     `json:"sessionId"`         // cloud session id (correlation)
-	RunTimeoutSeconds int        `json:"runTimeoutSeconds"` // sandbox run budget
-	Credential        credential `json:"credential"`        // agent git credential (write-only)
+	Prompt            string      `json:"prompt"`               // the task
+	Tool              string      `json:"tool,omitempty"`       // dev|claude|codex|python|node (default dev)
+	Desktop           bool        `json:"desktop,omitempty"`    // select the xvfb image variant
+	SessionID         string      `json:"sessionId"`            // cloud session id (correlation)
+	RunTimeoutSeconds int         `json:"runTimeoutSeconds"`    // sandbox run budget
+	CloneURL          string      `json:"cloneUrl,omitempty"`   // https://<domain>/v1/git/<org>/<repo>.git
+	BaseBranch        string      `json:"baseBranch,omitempty"` // branch to start from (default repo default)
+	Branch            string      `json:"branch,omitempty"`     // branch to create + push (e.g. agent/<sessionid>)
+	Credential        *credential `json:"credential,omitempty"` // agent git credential (write-only); nil when there is no repo
 }
 
 // message is the discriminated shape of one streamed line: step/log while the job
@@ -73,16 +104,32 @@ type runner struct{}
 func (runner) Run(ctx context.Context, org, userID string, req RunRequest, onStep func(Step)) (RunResult, error) {
 	var out RunResult
 	var terminal bool
+	body := taskRequest{
+		Prompt: req.Prompt, Tool: req.Tool, Desktop: req.Desktop,
+		SessionID: req.SessionID, RunTimeoutSeconds: req.RunTimeoutSeconds,
+	}
+	// The git half travels together or not at all — there is no path here that
+	// puts a credential on the wire without the repo it belongs to. A caller
+	// that supplies one anyway is REFUSED rather than quietly trimmed: silently
+	// dropping a secret hides the bug that minted it, and the runtime says the
+	// same thing at its own boundary, so the two ends agree.
+	if req.CloneURL == "" && (req.CredToken != "" || req.CredUser != "") {
+		return out, errors.New("coding: a credential without a repo cannot be used, and must not be sent")
+	}
+	if req.CloneURL != "" {
+		body.CloneURL, body.BaseBranch, body.Branch = req.CloneURL, req.BaseBranch, req.Branch
+		body.Credential = &credential{Username: req.CredUser, Token: req.CredToken}
+	}
 	err := bots.Stream(ctx, bots.Call{
 		Op:   taskOp,
 		Org:  org,
 		User: userID,
-		Body: taskRequest{
-			CloneURL: req.CloneURL, BaseBranch: req.BaseBranch, Branch: req.Branch,
-			Prompt: req.Prompt, SessionID: req.SessionID, RunTimeoutSeconds: req.RunTimeoutSeconds,
-			Credential: credential{Username: req.CredUser, Token: req.CredToken},
-		},
-		Secret: true, // the body carries the org's git credential
+		Base: sandboxURL(),
+		Body: body,
+		// Secret ONLY when the body actually carries the org's git credential.
+		// A run with no repo has no secret to protect, so it must not be refused
+		// by the cleartext guard that exists to protect one.
+		Secret: body.Credential != nil,
 	}, func(msg []byte) {
 		var m message
 		if json.Unmarshal(msg, &m) != nil {
