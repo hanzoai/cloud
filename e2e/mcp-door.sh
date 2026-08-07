@@ -81,10 +81,18 @@ print("every listed tool carries prose and a schema")
 # ONE TOOL PER SUBSYSTEM, the operation in an argument (fleet/grouped.go). The
 # flat surface was 1,189 tools in 977 KB and clients keep 128, so the count is a
 # correctness property here and not a nicety.
-stray = [t["name"] for t in tools if not t["name"].startswith("hanzo_")]
+#
+# What makes a tool a subsystem is that it CARRIES an `op` enum, not what it is
+# called. The names used to be `hanzo_<app>` and this read the prefix; a prefix is
+# a convention and the enum is the thing itself, so it asks about the thing.
+def enum_of(t):
+    return t["inputSchema"].get("properties", {}).get("op", {}).get("enum", [])
+stray = [t["name"] for t in tools if t["name"] != "describe" and not enum_of(t)]
 if stray:
     print("FAIL: the door published a flat operation:", ", ".join(stray[:10])); sys.exit(1)
-ops = [op for t in tools for op in t["inputSchema"].get("properties", {}).get("op", {}).get("enum", [])]
+if not any(t["name"] == "describe" for t in tools):
+    print("FAIL: the door published no `describe`; the enums carry names only and cannot be read without it"); sys.exit(1)
+ops = [op for t in tools for op in enum_of(t)]
 print("%d tools carrying %d operations (a client keeps 128)" % (len(tools), len(ops)))
 if len(tools) >= 128:
     print("FAIL: %d tools is back over the cap" % len(tools)); sys.exit(1)
@@ -95,7 +103,7 @@ PY
 echo
 echo "== one operation, with the doc comment its handler carries =="
 # A READ by default: the point is to show the owner answering, not to mutate.
-# hanzo_describe is how a schema is fetched now — the enums carry names only.
+# `describe` is how a schema is fetched now — the enums carry names only.
 TOOL="${TOOL:-$(python3 -c '
 import json,sys
 tools=json.load(open(sys.argv[1]))["result"]["tools"]
@@ -110,17 +118,17 @@ for t in json.load(open(sys.argv[1]))["result"]["tools"]:
 else:
     sys.exit("FAIL: %s is in no subsystem enum" % sys.argv[2])' "$CLOUD_DATA_DIR/list.json" "$TOOL")"
 echo "$TOOL is served through $GROUP"
-rpc "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"hanzo_describe\",\"arguments\":{\"op\":\"$TOOL\"}}}" \
+rpc "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"describe\",\"arguments\":{\"op\":\"$TOOL\"}}}" \
   > "$CLOUD_DATA_DIR/describe.json"
 python3 - "$CLOUD_DATA_DIR/describe.json" "$TOOL" <<'PY'
 import json, sys
 res = json.load(open(sys.argv[1])).get("result") or {}
 text = "".join(c.get("text", "") for c in res.get("content", []))
 if not text:
-    print("FAIL: hanzo_describe returned nothing for %s: %s" % (sys.argv[2], json.dumps(res)[:400])); sys.exit(1)
+    print("FAIL: describe returned nothing for %s: %s" % (sys.argv[2], json.dumps(res)[:400])); sys.exit(1)
 d = json.loads(text)
 if d.get("name") != sys.argv[2] or d.get("inputSchema") is None:
-    print("FAIL: hanzo_describe answered %s" % text[:400]); sys.exit(1)
+    print("FAIL: describe answered %s" % text[:400]); sys.exit(1)
 print(json.dumps(d, indent=2)[:1600])
 PY
 
