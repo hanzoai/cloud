@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -307,5 +308,63 @@ func TestScrapeWrongKeyRejected(t *testing.T) {
 	scrapeHandler(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+// mojeekFixture is a Mojeek result page as the CLUSTER receives it: an <li> per
+// hit carrying <a class="title"> (the destination, verbatim — Mojeek uses no
+// click-tracking redirect) and <p class="s"> (the snippet).
+const mojeekFixture = `<html><body><ul class="results-standard">
+<li class="r1"><a title="https://example.com/one" href="https://example.com/one" class="ob"><p class="i"><span class="url">https://example.com</span></p></a><h2><a class="title" href="https://example.com/one">First Title</a></h2><p class="s">The <strong>first</strong> snippet.</p></li>
+<li class="r2 clu-result"><a title="https://example.com/two" href="https://example.com/two" class="ob"></a><h2><a class="title" href="https://example.com/two">Second Title</a></h2><p class="s">The second snippet.</p></li>
+</ul></body></html>`
+
+// Mojeek is the engine that carries the `site:` operator, which is how an X /
+// GitHub / Reddit scoped search reaches results at all — Bing answers a
+// site:x.com query with nothing. Measured from cluster egress 2026-08-07:
+// bing site:x.com → 0 results, mojeek site:x.com → 10.
+func TestParseMojeekReadsTitleURLAndSnippet(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = io.WriteString(w, mojeekFixture)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("WEBSEARCH_ENGINES", "mojeek")
+	t.Setenv("WEBSEARCH_MOJEEK_URL", srv.URL)
+
+	got := metaSearch(context.Background(), "anything", "")
+	if len(got.Results) != 2 {
+		t.Fatalf("results = %d, want 2 — parseMojeek must read every <li> hit: %+v", len(got.Results), got.Results)
+	}
+	r := got.Results[0]
+	if r.URL != "https://example.com/one" || r.Title != "First Title" || r.Engine != "mojeek" {
+		t.Fatalf("parsed = %+v, want the fixture's url/title stamped engine=mojeek", r)
+	}
+	if !strings.Contains(r.Content, "first") {
+		t.Fatalf("content = %q, want the <p class=\"s\"> snippet", r.Content)
+	}
+}
+
+// A deployment that configures NOTHING must still search more than one engine.
+// WEBSEARCH_ENGINES was unset in production, so the default WAS the whole engine
+// set, and it was bing alone — one engine, 10 results, and no `site:` support.
+func TestDefaultEnginesAreEveryEngineThatSurvivesDatacenterEgress(t *testing.T) {
+	t.Setenv("WEBSEARCH_ENGINES", "")
+	var names []string
+	for _, e := range enabledEngines() {
+		names = append(names, e.name)
+	}
+	if len(names) < 2 {
+		t.Fatalf("default engines = %v, want more than one — a single engine is a single point of failure and a single index", names)
+	}
+	for _, want := range []string{bingName, mojeekName} {
+		if !slices.Contains(names, want) {
+			t.Fatalf("default engines = %v, want %q among them", names, want)
+		}
+	}
+	// DDG must NOT be a default: measured from cluster egress it is served the
+	// anomaly page (67 markers, 0 results) on BOTH /lite/ and the html endpoint.
+	if slices.Contains(names, ddgName) {
+		t.Fatalf("default engines = %v — ddg is bot-challenged from datacenter egress and contributes zero", names)
 	}
 }
