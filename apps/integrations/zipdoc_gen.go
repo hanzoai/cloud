@@ -273,6 +273,16 @@ func init() {
 		Example:  json.RawMessage(`{"provider":"cloudflare"}`),
 		Response: json.RawMessage(`{"provider":"cloudflare","active":true,"account":"Acme","externalId":"a1b2c3","scopes":["zone:read"]}`),
 	})
+	zip.Describe("POST /v1/integrations/github/claim", zip.Doc{
+		Description: "Binds installations the App ALREADY holds to the org the caller is\nacting in — the reconciliation for a grant that happened outside our connect\nflow.\n\nAn installation IS the grant: GitHub recorded the consent when the App was\ninstalled, and our connection row is bookkeeping that never got written because\nnobody came through our callback. This writes that row from the App's own view,\nso 23 accounts granted straight from GitHub stop reading as nothing.\n\nThe org is taken from the VALIDATED PRINCIPAL and never from the body, because\nit is the one part GitHub cannot tell us. An installation carries an account\nlogin, a type and a repository selection — nothing that names a Hanzo org. So\nthe binding cannot be DERIVED, only asserted, and the only unforgeable assertion\navailable is the org the caller is already acting in. Inferring one from the\naccount name would be a guess the store cannot catch: its key is\n(org,provider,owner), so a wrong org is a valid row, and a valid row is a\nmirror pointed at the wrong tenant.\n\nSUPER ADMIN only, for that same reason. A tenant's proof that an account is\ntheirs is GitHub's own consent screen — the connect flow — and without it any\norg could claim any account the App holds. Platform sudo is already the scope\nthat reads the whole install list, so it is the scope that may bind from it;\ngiving a tenant this verb would hand it every other tenant's repositories.\n\nIdempotent: the row is keyed (org,provider,owner) and connected_at survives an\nupsert, so claiming twice rebinds the same account to the same org and reports\nit under `already`. Re-claiming also REFRESHES the installation id, so an\naccount reinstalled on GitHub — new id, same login — self-heals instead of\nminting tokens against a dead installation.",
+		Fields: map[string]string{
+			"githubClaimIn.accounts": "Accounts names GitHub logins the App is installed on (\"hanzoai\"). Matched\ncase-insensitively, since GitHub logins are. Ignored when all is true.",
+			"githubClaimIn.all":      "All binds every account the App holds, instead of naming them.",
+			"githubClaimOut.already": "Already were bound before the call and are unchanged by it.",
+			"githubClaimOut.claimed": "Claimed are the accounts this call bound. Never null; [] when none.",
+		},
+		Response: json.RawMessage(`{"claimed":["hanzoai","luxfi"],"already":["zooai"]}`),
+	})
 	zip.Describe("POST /v1/integrations/github/issues/backfill", zip.Doc{
 		Description: "Seeds the native tracker with the EXISTING issues across the\norg's granted repos (default state=open); the webhook keeps them live thereafter.\nOrg-scoped by the validated principal — a caller only ever backfills its OWN org.\nSynchronous + bounded (a total time budget and an issue cap) so it returns the\ncounts directly; idempotent by ExtRef, so a re-run continues where a truncated\npass left off and never duplicates.",
 		Fields: map[string]string{
