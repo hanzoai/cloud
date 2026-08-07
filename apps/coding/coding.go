@@ -148,11 +148,6 @@ type RunRequest struct {
 	RunTimeoutSeconds int
 	CredUser          string
 	CredToken         string // write-only secret — never logged
-	// ModelToken is the run's right to BUY INFERENCE on the org's ledger. It is a
-	// capability and not a key: it resolves to no principal, spends only on the org
-	// that asked for it, and dies with the run. Write-only, like CredToken, and for
-	// the same reason — it is the one thing in this struct a leak would hand away.
-	ModelToken string
 }
 
 type Step struct {
@@ -190,7 +185,6 @@ type Req struct {
 	Prompt         string
 	CredUser       string
 	CredToken      string
-	ModelToken     string
 	TimeoutSeconds int
 	TargetID       string // when set, route to this registered machine instead of the sandbox
 	// Tool / Desktop are the caller's choice of harness and whether it needs a
@@ -375,7 +369,7 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 		Tool: req.Tool, Desktop: req.Desktop,
 		CloneURL: cloneURL, BaseBranch: strings.TrimSpace(req.Base), Branch: branch,
 		Prompt: prompt, SessionID: sessionID, RunTimeoutSeconds: timeoutOr(req.TimeoutSeconds),
-		CredUser: req.CredUser, CredToken: req.CredToken, ModelToken: req.ModelToken,
+		CredUser: req.CredUser, CredToken: req.CredToken,
 	}
 	onStep := func(s Step) {
 		kind := kindLog
