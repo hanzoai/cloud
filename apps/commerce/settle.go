@@ -112,11 +112,14 @@ package commerce
 // in the same one — a sandbox charge can never fund live inference, and a live
 // charge is never parked in books no gate reads.
 //
-// This is why the credit is posted through finance's own Deposit rather than
-// through commerce's injected creditledger adapter (ledger.go): CreditInput has no
-// test field, so that seam cannot express which books to write, and routing a
-// sandbox settlement through it would put unspendable sandbox money in the live
-// ledger. Same ledger, same idempotency, one field the seam cannot carry.
+// The credit is posted through finance's own Deposit rather than through commerce's
+// injected creditledger adapter (ledger.go) because of the ADDRESS, not the books:
+// the seam carries the test bit now, but it is commerce's door onto its own credit,
+// and the address this file deposits at is (p.ledger, p.subject) — the payer the
+// SCREEN resolved from the request's principal, which is a value commerce cannot
+// compute for itself. Going through the adapter would mean handing it back the
+// answer it exists to ask for. Same ledger, same idempotency, one address resolved
+// where the identity is.
 
 import (
 	"context"
