@@ -4106,6 +4106,17 @@
         "x-app": "github.com/hanzoai/ai"
       }
     },
+    "/v1/audio/transcriptions": {
+      "post": {
+        "operationId": "post_v1_audio_transcriptions",
+        "summary": "The OpenAI-compatible STT endpoint (POST /v1/audio/transcriptions, multipart: file + model [+ language + response_format]).",
+        "description": "The OpenAI-compatible STT endpoint\n(POST /v1/audio/transcriptions, multipart: file + model [+ language +\nresponse_format]). It mirrors AudioSpeech exactly: authenticate the caller,\nresolve `model` to its STT provider through the SAME model-route resolution\n(so the in-cluster speech service — or any BYO node registered as an STT\nprovider — works transparently), transcribe, and return the OpenAI body.\nOne code path, OpenAI-shaped, no store coupling (unlike the legacy\n/v1/process-speech-to-text, which is bound to a chat store).",
+        "tags": [
+          "audio"
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      }
+    },
     "/v1/audio/voice": {
       "post": {
         "operationId": "post_v1_audio_voice",
