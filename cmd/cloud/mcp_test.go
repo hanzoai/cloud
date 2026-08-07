@@ -53,8 +53,8 @@ func app308(t *testing.T) *zip.App {
 		DisableStartupMessage: true,
 		MCP:                   zip.MCPConfig{Disabled: true},
 	})
-	fleet.Mount(app, manifest.MCPPath, nil, func(string) (string, error) {
-		return "", errNoFleetHere
+	fleet.Mount(app, manifest.MCPPath, nil, func(string) (string, string, error) {
+		return "", "", errNoFleetHere
 	})
 	if err := webui.Mount(app, consoleBundle()); err != nil {
 		t.Fatalf("mount console: %v", err)

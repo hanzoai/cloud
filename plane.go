@@ -2,15 +2,19 @@ package cloud
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	luxlog "github.com/luxfi/log"
 
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
+	zapmcp "github.com/zap-proto/mcp"
 	"github.com/zap-proto/zip"
 )
 
@@ -87,6 +91,60 @@ func Peer(app string) (*zip.Conn, error) { return plane.Peer(app) }
 // the compiler checks what only a running fleet could check here.
 func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error) {
 	return plane.Ask[In, Out](ctx, app, op, in)
+}
+
+// Door publishes app's AGENT DOOR on the internal plane, at [manifest.MCPPath].
+//
+// It is the same move [fleet.Door.Serve] makes one level up, for the same
+// reason: the door a subsystem serves on the edge is reachable only through the
+// identity boundary, and the fleet's own callers are not on the edge.
+//
+// # Why the edge door cannot answer an internal caller
+//
+// The boundary (SanitizeIdentity) deletes every authority header on ingress and
+// re-mints one only from a credential it verified. That is exactly right for a
+// stranger and exactly wrong for a sibling: an agent run holds a principal it
+// resolved SERVER-SIDE — the org a Slack workspace is installed in, the person
+// the run is attributed to — and no bearer to replay for it. Reached through the
+// edge, its statement was deleted and every org-scoped op refused it, while the
+// request log still showed the identity that had arrived (zip reports the caller
+// as the request BEGINS, before any middleware). The op was not seeing a
+// different fact from the log; it was seeing a LATER one.
+//
+// So the internal caller is not sent through the edge. It reaches this door,
+// where [zip.CallerOf] reads the caller off the request it is actually serving
+// and [principal.OrgFrom] decides on it with the SAME rule a routed request gets
+// — an org with no validated user is still refused, here as there.
+//
+// # What makes that safe is the address, not a check
+//
+// This is registered on [Plane], which listens on the app's canonical socket and
+// is never mounted on the edge router; there is no path from the public internet
+// to it, in the same way there is no path to a route nobody registered. A
+// sibling's statement is worth what that socket is worth — the same worth
+// [zip.WithCaller] already gives one, and the same authority a plane op has
+// granted since the plane existed. The edge door is untouched: a forged
+// X-Org-Id / X-User-Id arriving at the front door is still hopped into the
+// subsystem's EDGE door, and still dies at the boundary there.
+//
+// It is at manifest.MCPPath and not zip's own /mcp because zip already serves the
+// PLANE's ops at /mcp — a different registry, and one route per address.
+func Door(app *zip.App) {
+	Plane().Post(manifest.MCPPath, func(c *zip.Ctx) error {
+		var f zapmcp.Frame
+		if err := json.Unmarshal(c.Body(), &f); err != nil {
+			return c.JSON(http.StatusOK, &zapmcp.Frame{Kind: zapmcp.Response,
+				Err: &zapmcp.Error{Code: zapmcp.CodeParse, Message: "parse error"}})
+		}
+		// c.Forward() binds THIS request to the context the op is handed, which is
+		// what zip's own HTTP adapter does and the whole of how the caller reaches
+		// the handler (zip mcp.go, callerContext).
+		ans := app.MCP(c.Forward(), &f)
+		if ans == nil {
+			return c.Status(http.StatusAccepted).JSON(http.StatusAccepted, map[string]any{})
+		}
+		return c.JSON(http.StatusOK, ans)
+	})
 }
 
 var planeApp struct {

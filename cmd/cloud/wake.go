@@ -72,7 +72,14 @@ func serveWake(app *zip.App, mcp *fleet.Door) {
 	// edge's /v1/mcp, over ZAP it is the fleet's own. Nothing here re-aggregates
 	// and nothing here filters — [fleet.Door.Serve] publishes the object main.go
 	// already built.
-	mcp.Serve(door, manifest.MCPPath)
+	//
+	// It forwards INSIDE, which is the whole of what this address adds. A caller
+	// on this socket is a sibling with a principal it resolved server-side and no
+	// bearer to replay for it; sent into a subsystem's edge door, its statement is
+	// deleted by the identity boundary and every org-scoped tool refuses it. Sent
+	// into the subsystem's plane door it is read as what it is — see cloud.Door.
+	// The edge's own mount is untouched and still forwards to the edge.
+	mcp.Serve(door, manifest.MCPPath, inside(app))
 
 	zip.Post[plane.StartIn, plane.Started](door, "/host/start",
 		func(_ context.Context, in *plane.StartIn) (*plane.Started, error) {
