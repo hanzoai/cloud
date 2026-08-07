@@ -495,6 +495,39 @@
         ]
       }
     },
+    "/v1/integrations/github/installations": {
+      "get": {
+        "operationId": "get_v1_integrations_github_installations",
+        "summary": "Lists the GitHub accounts THIS org has connected, each confirmed against the App's own installation list, plus where to add another.",
+        "description": "Lists the GitHub accounts THIS org has connected, each\nconfirmed against the App's own installation list, plus where to add another.\n\nThe confirmation is the point. A connection row holds an installation id, and\nan id whose installation was since removed on GitHub is a row that mints\nnothing — every list and import against it fails with a token error, which\nreads as \"our git integration is broken\" rather than \"that install is gone\".\nChecking the App's view turns that into a fact the caller can act on.\n\nORG-SCOPED, deliberately. The App is installed across every customer, so the\nraw list is the customer list; this returns only accounts the caller's org has\nbound. An org discovers a NEW account by installing it (InstallURL), which is\nGitHub's own consent screen — not by reading ours.",
+        "tags": [
+          "integrations"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "installUrl": "https://github.com/apps/hanzo/installations/new",
+                  "installations": [
+                    {
+                      "connected": true,
+                      "htmlUrl": "https://github.com/hanzoai",
+                      "login": "hanzoai",
+                      "type": "Organization"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/githubInstallationsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/integrations/github/issues/backfill": {
       "post": {
         "operationId": "post_v1_integrations_github_issues_backfill",
@@ -1582,6 +1615,43 @@
             "description": "Repos names those repositories, in the installation's listing order.",
             "items": {
               "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "githubInstallationView": {
+        "properties": {
+          "connected": {
+            "description": "Connected reports whether THIS org has already bound this account.",
+            "type": "boolean"
+          },
+          "htmlUrl": {
+            "description": "HTMLURL is the account's page on GitHub.",
+            "type": "string"
+          },
+          "login": {
+            "description": "Login is the GitHub account name — the org or user the App is installed on.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is \"Organization\" or \"User\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "githubInstallationsOut": {
+        "properties": {
+          "installUrl": {
+            "description": "InstallURL is where to grant a new account, so a UI with an empty list has\nsomewhere to send the reader instead of a dead end.",
+            "type": "string"
+          },
+          "installations": {
+            "description": "Installations is every account this org has connected, plus — for a caller\nthat can install — nothing it has not. Never null; [] when none.",
+            "items": {
+              "$ref": "#/components/schemas/githubInstallationView"
             },
             "type": "array"
           }
