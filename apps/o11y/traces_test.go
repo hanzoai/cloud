@@ -50,13 +50,22 @@ func TestTraceListRefusesACallerWithNoTenant(t *testing.T) {
 		return resp.StatusCode, string(b[:n])
 	}
 
-	// No Bridge in front: nothing parked an org where a typed op can read it, so
-	// a caller the host had already validated is still refused. A trace read that
-	// answered here would be reading whatever org the query happened to select.
+	// No Bridge in front — o11y as its own binary, and MCP's tools/call, which
+	// invokes an op directly so no route middleware runs. The tenant reaches the
+	// handler anyway: principal.OrgFrom falls back to zip's caller, which crosses
+	// every door. So a caller the host already validated is SERVED, landing on the
+	// same missing warehouse as the control below rather than on the gate. This
+	// wanted 403, which was a total outage of the surface wherever the Bridge is
+	// not in front — not a tenant check doing its job.
+	//
+	// The tenant is not weakened: SanitizeIdentity deletes every client-sent
+	// authority header at cloud's boundary, so an X-Org-Id a cloud handler reads
+	// was minted from the validated membership claim. The header a caller CAN set
+	// for itself is the next case, and it is still refused.
 	bare := zip.New(zip.Config{Logger: luxlog.New("test")})
 	zip.Get(bare, o11yPrefix+"/traces", handleTraces)
-	if code, body := ask(t, bare, map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}); code != http.StatusForbidden {
-		t.Fatalf("without cloud.Bridge: want 403 (no org on the context), got %d %s", code, body)
+	if code, body := ask(t, bare, map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}); code == http.StatusForbidden {
+		t.Fatalf("without cloud.Bridge: a validated caller was refused — the principal should ride zip's caller, got %d %s", code, body)
 	}
 
 	// Forged: X-Org-Id present, no validated user behind it. principal.OrgFrom
