@@ -308,7 +308,7 @@ func launchDeclareBuild(s *cloud.Service[state], c *zip.Ctx, req declareReq, org
 	// Charged to the ORG that asked, not to the fabric pool: the concurrency
 	// ceiling is per-org, so one org looping deploys can only exhaust its own
 	// share instead of locking every other org out of building (red F3).
-	job, err := s.State.k8s.launchDirectBuild(c.Context(), org, url, ref, image, dockerfile, id)
+	job, err := s.State.k8s.launchDirectBuild(c.Context(), org, url, ref, image, dockerfile, id, nil)
 	if err != nil {
 		s.Log.Error("declare build failed to launch", "app", name, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "could not launch the build: %v", err)
