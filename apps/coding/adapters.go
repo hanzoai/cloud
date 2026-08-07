@@ -54,7 +54,7 @@ const seamTimeout = 20 * time.Second
 func NewDispatcher(log func(msg string, kv ...any)) Dispatcher {
 	d := Dispatcher{
 		Sessions: planeSessions{},
-		Tracker:  planeTracker{},
+		PR:       planePR{},
 		// The SANDBOX runner. The docker-CLI path it replaces could not run at all:
 		// bot-gateway has neither that binary nor a socket, so every dispatch 503d
 		// while the chain read as configured. Same gVisor/Kata boundary, asked of the
@@ -118,10 +118,17 @@ func (planeSessions) Close(ctx context.Context, org, sessionID, status string) e
 	return err
 }
 
-// planeTracker files the native PR work item, in the tracker process.
-type planeTracker struct{}
+// planePR opens the pull request: the work item on our board (tracker), and the
+// proposal where the code lives (git — a GitHub pull request for a repository
+// that mirrors there, the branch's page here otherwise).
+//
+// Two peers, ONE seam. The board row is ours and is filed for every run, whatever
+// host the code is on; the address is a property of the host and only git can
+// answer it. Splitting them at the caller would put the choice of backend in the
+// orchestration, which is exactly where it must not be.
+type planePR struct{}
 
-func (planeTracker) CreatePR(ctx context.Context, in PRInput) (PRRef, error) {
+func (planePR) Open(ctx context.Context, in PRInput) (PRRef, error) {
 	ctx, cancel := bounded(ctx)
 	defer cancel()
 	// The org travels in the ENVELOPE (cloud.For), not in the body. Both spell the
@@ -130,7 +137,8 @@ func (planeTracker) CreatePR(ctx context.Context, in PRInput) (PRRef, error) {
 	// crossing the plane cannot be granted an org key the boundary would refuse.
 	// A body field would arrive unchecked — which is what made this a
 	// cross-tenant write. Same shape as cloud.UpsertIssue's Ask.
-	out, err := plane.Ask[plane.AgentPRIn, plane.AgentPROut](plane.For(ctx, in.Org), trackerApp, plane.TrackerAgentPR,
+	ctx = plane.For(ctx, in.Org)
+	out, err := plane.Ask[plane.AgentPRIn, plane.AgentPROut](ctx, trackerApp, plane.TrackerAgentPR,
 		&plane.AgentPRIn{
 			Project: in.Project, Repo: in.Repo, Base: in.Base,
 			Head: in.Head, Title: in.Title, Body: in.Body, Assignee: in.Assignee,
@@ -141,7 +149,24 @@ func (planeTracker) CreatePR(ctx context.Context, in PRInput) (PRRef, error) {
 	if out == nil {
 		return PRRef{}, fmt.Errorf("coding: tracker filed no PR")
 	}
-	return PRRef{Identifier: out.Identifier, ProjectKey: out.ProjectKey, Number: out.Number}, nil
+	ref := PRRef{Identifier: out.Identifier, ProjectKey: out.ProjectKey, Number: out.Number}
+
+	// The address. Its failure is returned BESIDE the row rather than instead of
+	// it: the work is pushed and tracked either way, and a run that could not
+	// reach GitHub must say so out loud instead of quietly answering with a forge
+	// link that is not where the review will happen.
+	p, perr := plane.Ask[plane.ProposeIn, plane.Proposed](ctx, gitApp, plane.GitPropose,
+		&plane.ProposeIn{
+			Project: in.Project, Repo: in.Repo, Base: in.Base,
+			Head: in.Head, Title: in.Title, Body: in.Body,
+		})
+	if perr != nil {
+		return ref, perr
+	}
+	if p != nil {
+		ref.URL = p.URL
+	}
+	return ref, nil
 }
 
 // planeCloneURL asks git for the org's clone URL. An error is an EMPTY url,

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -216,17 +215,9 @@ func mirrorPushAuthHeader(host string) string {
 	return base64.StdEncoding.EncodeToString([]byte(mirrorBasicUser(host) + ":" + tok))
 }
 
-// githubOwnerOf reads the account from a GitHub remote — the first path segment of
-// https://github.com/<owner>/<repo>.git. Empty when the URL names none, which lets
-// the single-connection case resolve as before.
+// githubOwnerOf reads the account from a GitHub remote. The full read lives in
+// propose.go, which needs the repository half too; one parser, two callers.
 func githubOwnerOf(remote string) string {
-	u, err := url.Parse(strings.TrimSpace(remote))
-	if err != nil {
-		return ""
-	}
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) == 0 {
-		return ""
-	}
-	return parts[0]
+	owner, _ := githubRepoOf(remote)
+	return owner
 }
