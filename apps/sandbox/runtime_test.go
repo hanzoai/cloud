@@ -10,6 +10,7 @@ package sandbox
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -157,7 +158,7 @@ func TestLeaseRefusesAForcedRuntimeBeforeItBuildsAnything(t *testing.T) {
 	ctx := context.Background()
 	const org = "acme"
 
-	_, err = Lease(s, ctx, org, Spec{Class: "dev", Project: "p", RuntimeClass: "kata-fc"})
+	_, err = Lease(s, ctx, org, Spec{Class: "dev", Project: "p", Runtime: "kata-fc"})
 	if err == nil {
 		t.Fatal("Lease accepted kata-fc for a sandbox that mounts a volume")
 	}
@@ -178,5 +179,108 @@ func TestLeaseRefusesAForcedRuntimeBeforeItBuildsAnything(t *testing.T) {
 	}
 	if len(out) != 0 {
 		t.Fatalf("refused lease left %d row(s) behind: %+v", len(out), out)
+	}
+}
+
+// THE REFUSAL REACHES THE WIRE. The test above proves the domain refuses; this
+// one proves a CLIENT cannot get around it, which is a different claim and the
+// one that matters now that `runtime` is a field on the request body.
+//
+// A browser lets somebody pick a runtime, and a browser can be made to send
+// anything. So the question is not whether the picker offers a safe set — it is
+// whether the door does. It asks for the combination that loses data (a project
+// volume under a runtime with no shared filesystem) the way a crafted client
+// would, straight at the route, and requires a 400 carrying cloud's own sentence
+// rather than a 201 carrying a substituted runtime.
+//
+// A SILENT SUBSTITUTION IS THE FAILURE BEING TESTED FOR, not merely a lost
+// refusal. Handing back gvisor to someone who asked for kata-fc reads as success
+// everywhere: the sandbox starts, the commands run, the files persist — and the
+// person measuring the two runtimes writes down Firecracker's name beside
+// gVisor's numbers. That is why the assertion is on the status AND on the
+// absence of a row, and why the granted runtime is reported at all.
+func TestTheDoorRefusesARuntimeAClientCraftedForItself(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	app.Use(cloud.Bridge())
+	s, err := New(cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	Routes(app, s)
+	const org = "acme"
+
+	code, body := req(t, app, http.MethodPost, "/v1/sandboxes", org,
+		`{"class":"dev","project":"p","runtime":"kata-fc"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("POST /v1/sandboxes with a volume + kata-fc = %d %s, want 400 — "+
+			"a client must not be able to obtain a runtime the policy refuses", code, body)
+	}
+	// The reason has to be READABLE, because a person is going to read it. A bare
+	// 400 sends them to the logs of a service they cannot see.
+	if !strings.Contains(string(body), "cannot mount project volume") {
+		t.Fatalf("refusal body %s does not say why the request is wrong", body)
+	}
+
+	// And it refused BEFORE building anything: no row, so no sandbox an operator
+	// has to explain and no project slot held against the next honest request.
+	code, body = req(t, app, http.MethodGet, "/v1/sandboxes", org, "")
+	if code != http.StatusOK {
+		t.Fatalf("GET /v1/sandboxes = %d %s", code, body)
+	}
+	var listed struct {
+		Sandboxes []Sandbox `json:"sandboxes"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("shape: %v (%s)", err, body)
+	}
+	if len(listed.Sandboxes) != 0 {
+		t.Fatalf("a refused lease left %d row(s) behind: %+v", len(listed.Sandboxes), listed.Sandboxes)
+	}
+
+	// The unknown-runtime refusal is the same shape, and it is the one a typo
+	// produces: without it the pod sits Pending forever with nothing said.
+	if code, body = req(t, app, http.MethodPost, "/v1/sandboxes", org,
+		`{"class":"exec","runtime":"firecracker"}`); code != http.StatusBadRequest ||
+		!strings.Contains(string(body), "is not one we run") {
+		t.Fatalf("POST with an invented runtime = %d %s, want 400 naming the set we run", code, body)
+	}
+}
+
+// THE SANDBOX SAYS WHICH RUNTIME IT GOT, and the point of the field is that it
+// can differ from the one asked for. A caller that can only read back its own
+// request learns nothing; the derivation is allowed to answer something else,
+// and the answer is the only honest label for a measurement.
+//
+// No cluster is needed to prove the reporting, only the lease that fails to
+// reach one: Lease writes the row with the granted runtime BEFORE it calls the
+// cluster, so the row it leaves behind on a 503 carries exactly the value the
+// pod spec would have been built from.
+func TestASandboxReportsTheRuntimeItGotNotTheOneItAskedFor(t *testing.T) {
+	s, err := New(cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	// A fleet set to the fast runtime. A dev sandbox cannot have it — it mounts a
+	// volume — so the deployment preference is derived down to the shared one,
+	// and that, not "kata-fc", is what the row must say.
+	s.State.rt.runtimeClass = "kata-fc"
+	// No cluster, said once and immediately. A developer machine may well have a
+	// kubeconfig, and then this test spends the full start timeout waiting for a
+	// pod it does not need — the row is written before the cluster is asked, so
+	// the answer is already there.
+	s.State.rt.dyn = nil
+	ctx := context.Background()
+	const org = "acme"
+
+	if _, err = Lease(s, ctx, org, Spec{Class: "dev", Project: "p"}); err == nil {
+		t.Fatal("Lease reached a cluster in a unit test")
+	}
+	out, err := List(s, ctx, org, "", "")
+	if err != nil || len(out) != 1 {
+		t.Fatalf("List = %+v, %v — want the one row Lease recorded", out, err)
+	}
+	if out[0].Runtime != shared {
+		t.Fatalf("row says runtime %q, but a volume-bearing sandbox on a kata-fc fleet gets %q",
+			out[0].Runtime, shared)
 	}
 }

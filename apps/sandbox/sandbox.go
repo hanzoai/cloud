@@ -279,6 +279,12 @@ type createBody struct {
 	Class   string `json:"class"`
 	Project string `json:"project"`
 	Image   string `json:"image"`
+	// Runtime is the isolation boundary the caller would LIKE. The server still
+	// decides — runtimeFor refuses a choice it cannot honour instead of quietly
+	// substituting one — so this field may be asked for by anyone and obtained
+	// by no one the policy would turn away. The sandbox that comes back carries
+	// the runtime it GOT, which is the field to read.
+	Runtime string `json:"runtime"`
 	TTLSec  int    `json:"ttlSec"`
 }
 
@@ -292,7 +298,8 @@ func create(s *Service, c *zip.Ctx) error {
 		return err
 	}
 	m, err := Lease(s, c.Context(), o, Spec{
-		Class: body.Class, Project: body.Project, Image: body.Image, TTLSec: body.TTLSec})
+		Class: body.Class, Project: body.Project, Image: body.Image,
+		Runtime: body.Runtime, TTLSec: body.TTLSec})
 	if err != nil {
 		return err
 	}
