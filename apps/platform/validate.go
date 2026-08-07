@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -224,6 +225,54 @@ func validateDockerfile(raw string) (string, error) {
 		}
 	}
 	return s, nil
+}
+
+// buildArgNameRE is a Dockerfile `ARG` name: the C-identifier shape docker
+// itself accepts, and nothing else. A name is half of one `build-arg:K=V` argv
+// element, so anything that could read as a second `=` or a leading dash is
+// simply not a name.
+var buildArgNameRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
+
+// buildArgs turns a declared `args:` map into ordered `build-arg:K=V` opts.
+//
+// SORTED, because a map has no order and two builds of one commit that pass the
+// same args in two orders are two different cache keys — the thing the whole
+// digest-pinned lane exists to prevent. Sorting makes the argv a function of the
+// declaration alone.
+//
+// These are NOT a privilege boundary and the limits here do not pretend to be
+// one: `args:` lives in hanzo.yml, in the repo, beside the Dockerfile that
+// declares which ARGs exist. Whoever can add an arg can already edit the
+// Dockerfile that reads it. What the limits close is the argv itself — a name
+// carrying `=` or a leading `-`, or a value carrying a NUL or a newline, is how
+// one opt becomes two.
+func buildArgs(args map[string]string) ([]any, error) {
+	if len(args) == 0 {
+		return nil, nil
+	}
+	if len(args) > 64 {
+		return nil, fmt.Errorf("too many build args (%d, max 64)", len(args))
+	}
+	names := make([]string, 0, len(args))
+	for k := range args {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	out := make([]any, 0, 2*len(names))
+	for _, k := range names {
+		if !buildArgNameRE.MatchString(k) {
+			return nil, fmt.Errorf("build arg %q is not a valid ARG name", k)
+		}
+		v := args[k]
+		if len(v) > 1024 {
+			return nil, fmt.Errorf("build arg %q value is too long (%d, max 1024)", k, len(v))
+		}
+		if strings.ContainsAny(v, "\x00\n\r") {
+			return nil, fmt.Errorf("build arg %q value contains a control character", k)
+		}
+		out = append(out, "--opt", "build-arg:"+k+"="+v)
+	}
+	return out, nil
 }
 
 // validateGitRef enforces a safe git ref/commit that can be placed into the

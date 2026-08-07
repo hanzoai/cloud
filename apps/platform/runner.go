@@ -51,6 +51,13 @@ type runnerBuildReq struct {
 	Context string `json:"context,omitempty" url:"-"`
 	// DockerTarget is the multi-stage build target to stop at.
 	DockerTarget string `json:"dockerTarget,omitempty" url:"-"`
+	// Args are --build-arg values. They are what lets several images off ONE
+	// Dockerfile mean different things — the sandbox classes are three entries
+	// differing only by STAGE. Validated at the k8s choke point, with VERSION and
+	// REVISION taking precedence: those are receipts the builder derives from the
+	// tag and the commit, and a caller that could overwrite them could make an
+	// image lie about which commit it is.
+	Args map[string]string `json:"args,omitempty" url:"-"`
 	// OS is the target operating system for the artifact lane.
 	OS string `json:"os,omitempty" url:"-"`
 	// Arch is the target architecture for the artifact lane.
@@ -101,7 +108,11 @@ type runnerBuildResp struct {
 // other host is NEVER allowed on the privileged build path. registry.hanzo.ai is
 // the self-hosted fleet registry (the native CI/CD home); ghcr stays during the
 // migration as the public mirror.
-var ownedRegistryHosts = []string{"registry.hanzo.ai", "ghcr.io"}
+// oci.hanzo.ai and registry.hanzo.ai are ONE store behind one Traefik router,
+// not two registries: naming the canonical host here grants no reach the
+// deprecated alias did not already have, and omitting it refused the very name
+// the fleet is told to write.
+var ownedRegistryHosts = []string{"oci.hanzo.ai", "registry.hanzo.ai", "ghcr.io"}
 
 // orgRegistryNamespaces maps an IAM org (the validated `owner` claim) to the
 // registry namespace(s) that org OWNS. Only the three brands that own a registry
@@ -414,7 +425,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 
-	jobName, err := s.State.k8s.launchDirectBuild(ctx, platformBuildOrg, req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID)
+	jobName, err := s.State.k8s.launchDirectBuild(ctx, platformBuildOrg, req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID, req.Args)
 	if err != nil {
 		return nil, zip.Errorf(deployErrStatus(err), "launch build: %v", err)
 	}
