@@ -1,7 +1,13 @@
 package sandbox
 
 // terminal.go — the INTERACTIVE way into a sandbox, and the one credential a
-// browser can carry through a WebSocket handshake.
+// browser can carry into a socket or a frame.
+//
+// Three addresses, one mechanism:
+//
+//	POST  /:id/terminal/ticket   the credential
+//	GET   /:id/terminal          the terminal, as a page (page.go)
+//	GET   /:id/terminal/ws       the terminal, as a socket
 //
 // Every other route here is a request/response: the caller presents a bearer, the
 // identity boundary mints X-User-Id, and principal.Org turns that into the org
@@ -46,6 +52,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,12 +73,62 @@ var errClosed = errors.New("sandbox: terminal closed")
 // slack for a slow network rather than a lifetime anybody is meant to hold.
 const ticketTTL = 30 * time.Second
 
-// login is what a terminal runs. It asks for bash and settles for sh, because the
-// three sandbox images are not one image and a shell that must exist is a shell
-// that will one day not — the exec class is a stock node image today. Whatever
-// tools the image carries, the hanzo CLI included, are commands the user types;
-// none of them is a requirement to get a prompt.
-var login = []string{"/bin/sh", "-lc", "exec bash -l 2>/dev/null || exec sh -l"}
+// shell is what a terminal runs, and everything it needs is `/bin/sh`.
+//
+// It asks for bash and settles for sh, because the three sandbox images are not
+// one image and a shell that must exist is a shell that will one day not — the
+// exec class is a stock node image today. Whatever tools the image carries, the
+// hanzo CLI included, are commands the user types; none is a requirement for a
+// prompt.
+//
+// A NAMED session is the same shell under tmux: `new -A` attaches to the session
+// if it is there and creates it if it is not, which is what lets ONE sandbox hold
+// many terminals — a host opening four panes opens four names, and each reattaches
+// to what it left. tmux is asked for and not required: an image without it gets
+// the plain shell rather than an error, because a missing multiplexer should cost
+// a caller its session names, not its terminal.
+func shell(session string) []string {
+	if session == "" {
+		return []string{"/bin/sh", "-lc", plain}
+	}
+	return []string{"/bin/sh", "-lc",
+		"command -v tmux >/dev/null 2>&1 && exec tmux new -A -s " + shellQuote(session) + "; " + plain}
+}
+
+const plain = "exec bash -l 2>/dev/null || exec sh -l"
+
+// sessionOK is what a session name may be. It is an allowlist and not an escape,
+// because a name reaches a command line: `-` would be read by tmux as a flag and
+// anything outside this set has no business naming a session in the first place.
+// A name that does not fit is refused rather than repaired — silently renaming
+// somebody's session hands them a different shell than the one they asked for.
+func sessionOK(name string) bool {
+	if name == "" || len(name) > 64 {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return name[0] != '-'
+}
+
+// session reads the terminal's session name off the request. `arg` is the name
+// the framing host already uses for it.
+func session(c *zip.Ctx) (string, error) {
+	name := strings.TrimSpace(c.Query("arg"))
+	if name == "" {
+		return "", nil
+	}
+	if !sessionOK(name) {
+		return "", zip.ErrBadRequest("arg must be 1-64 characters of letters, digits, - or _, " +
+			"and may not begin with -")
+	}
+	return name, nil
+}
 
 // keystrokes bounds one inbound frame. A terminal's input is keys and pastes, so
 // this is generous for a paste and far below anything a socket could be used to
@@ -184,12 +241,17 @@ func open(s *Service, c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "ticket: %v", err)
 	}
 	return c.JSON(http.StatusCreated, map[string]any{
-		"ticket": tok,
+		"ticket":    tok,
+		"expiresIn": int(ticketTTL / time.Second),
 		// The PATH, not a URL. Which host this address wears in public is the
 		// edge's answer and not ours — behind the gateway this process only ever
 		// sees an internal name — so handing back an absolute URL would hand back
 		// a guess. The client already knows the host it is talking to.
-		"url": "/v1/sandboxes/" + m.ID + "/terminal/ws?ticket=" + tok,
+		//
+		// It names the PAGE, because that is what a caller embeds; the page finds
+		// its own socket. A caller that wants the raw socket adds `/ws`, which is
+		// exactly what the page does.
+		"url": "/v1/sandboxes/" + m.ID + "/terminal?ticket=" + tok,
 	})
 }
 
@@ -199,6 +261,10 @@ func open(s *Service, c *zip.Ctx) error {
 // browser will not tell it.
 func attach(s *Service, c *zip.Ctx) error {
 	id := idParam(c)
+	name, err := session(c)
+	if err != nil {
+		return err
+	}
 	org, ok := s.State.tickets.redeem(time.Now(), c.Query("ticket"), id)
 	if !ok {
 		return zip.ErrUnauthorized("terminal ticket is missing, expired or already spent")
@@ -218,6 +284,12 @@ func attach(s *Service, c *zip.Ctx) error {
 	// LEASE — the same expiry the reaper enforces — so a terminal cannot outlive
 	// the sandbox it is attached to even if the reaper is behind.
 	ctx, stop := context.WithDeadline(context.Background(), leaseEnd(m))
+	// ATTENTION, for as long as somebody is typing. The reaper ends a sandbox
+	// that has gone an hour untouched, and attention is stamped by exec and fs
+	// calls — which a terminal makes none of. Without this, a session somebody is
+	// sitting in reads as abandoned and the pod is taken out from under it at the
+	// hour mark, in the middle of a command.
+	attend := func() { touched(ctx, store, m) }
 	log := s.Log
 	// The session runs AFTER this handler returns: the upgrade hands fasthttp a
 	// hijack callback and answers immediately. So the cancel is deferred inside
@@ -226,8 +298,8 @@ func attach(s *Service, c *zip.Ctx) error {
 	// one path where the callback never runs at all.
 	serve := wsx.Upgrade(func(conn *wsx.Conn) error {
 		defer stop()
-		if err := bridge(ctx, conn, func(ctx context.Context, in *pipe, out *frames, w *window) error {
-			return s.State.rt.tty(ctx, m, login, in, out, w)
+		if err := bridge(ctx, conn, attend, func(ctx context.Context, in *pipe, out *frames, w *window) error {
+			return s.State.rt.tty(ctx, m, shell(name), in, out, w)
 		}); err != nil {
 			log.Debug("terminal ended", "sandbox", m.ID, "err", err)
 		}
@@ -270,7 +342,7 @@ func leaseEnd(m Sandbox) time.Time {
 // sent text would die the first time anyone printed an emoji. Binary frames carry
 // the bytes as they are and the decoder on the far side is the one that already
 // knows how to carry a partial rune between writes.
-func bridge(ctx context.Context, conn *wsx.Conn, run func(context.Context, *pipe, *frames, *window) error) error {
+func bridge(ctx context.Context, conn *wsx.Conn, attend func(), run func(context.Context, *pipe, *frames, *window) error) error {
 	// The session's cancel lives HERE, with the socket, because the socket is what
 	// ends first. A client that closes its tab leaves a shell sitting at a prompt
 	// with nothing to read and nothing to print, and EOF on stdin is a hint a pty
@@ -290,7 +362,7 @@ func bridge(ctx context.Context, conn *wsx.Conn, run func(context.Context, *pipe
 
 	done := make(chan struct{})
 	defer close(done)
-	go heartbeat(out, done)
+	go alive(out, attend, done)
 
 	// The read pump owns everything the far side can affect: stdin's bytes and the
 	// window's size. It is the ONE writer to each, so neither needs a lock of its
@@ -331,11 +403,17 @@ func bridge(ctx context.Context, conn *wsx.Conn, run func(context.Context, *pipe
 	return err
 }
 
-// heartbeat keeps an idle terminal open. A shell that nobody has typed into for
-// an hour is a working shell, so the socket has to stay up without traffic — and
-// the ping is also how a client that vanished without closing is noticed, since
-// the read deadline is only ever extended by a pong.
-func heartbeat(out *frames, done <-chan struct{}) {
+// alive says this session is still here, to the two things that have to be told.
+//
+// THE CLIENT is told with a ping. A shell nobody has typed into for an hour is a
+// working shell, so the socket has to stay up without traffic — and the ping is
+// also how a client that vanished without closing is noticed, since the read
+// deadline is only ever extended by a pong.
+//
+// THE REAPER is told with a touch. It ends a sandbox that has gone an hour
+// untouched, and the fields it reads are stamped by exec and fs calls, which a
+// terminal makes none of. One loop says both, because they are one fact.
+func alive(out *frames, attend func(), done <-chan struct{}) {
 	t := time.NewTicker(beat)
 	defer t.Stop()
 	for {
@@ -346,6 +424,7 @@ func heartbeat(out *frames, done <-chan struct{}) {
 			if err := out.ping(); err != nil {
 				return
 			}
+			attend()
 		}
 	}
 }
@@ -514,11 +593,19 @@ func (w *window) Next() *remotecommand.TerminalSize {
 	}
 }
 
-// terminal registers the interactive pair on the group that already owns the
-// member routes. One function and not two lines in Routes, so that what a
-// terminal needs — a ticket door and a socket door, never one without the other
-// — cannot be half registered.
+// terminal registers the three doors, on the group that already owns the member
+// routes. One function and not three lines in Routes, so that what a terminal
+// needs — a credential, a page and a socket — cannot be half registered.
+//
+//	POST  /:id/terminal/ticket   the credential a socket can carry
+//	GET   /:id/terminal          the page, for anything with an iframe
+//	GET   /:id/terminal/ws       the socket, for anything with its own emulator
+//
+// The page and the socket are two addresses and not one, because the ticket is
+// spent ONCE: a page that redeemed it would be a page holding a credential that
+// no longer opens anything.
 func terminal(g zip.Router, s *Service) {
-	g.Post("/:id/terminal", cloud.Handle(s, open))
+	g.Post("/:id/terminal/ticket", cloud.Handle(s, open))
+	g.Get("/:id/terminal", cloud.Handle(s, serve))
 	g.Get("/:id/terminal/ws", cloud.Handle(s, attach))
 }

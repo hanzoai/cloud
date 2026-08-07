@@ -229,21 +229,72 @@ func TestWindowReportsTheLatestSizeAndThenEnds(t *testing.T) {
 	w.close()
 }
 
-// The login shell must not require anything of the image beyond a shell. The
-// three sandbox classes are three different images and the exec one is stock
-// node today, so a command that assumed a tool would be a terminal that opens
-// and immediately dies with a message nobody can read through a closed socket.
-func TestLoginShellRequiresOnlySh(t *testing.T) {
-	if len(login) != 3 || login[0] != "/bin/sh" || login[1] != "-lc" {
-		t.Fatalf("login = %q, want a plain /bin/sh -lc invocation", login)
+// The shell must not require anything of the image beyond /bin/sh. The three
+// sandbox classes are three different images and the exec one is stock node
+// today, so a command that assumed a tool would be a terminal that opens and
+// immediately dies with a message nobody can read through a closed socket.
+func TestShellRequiresOnlySh(t *testing.T) {
+	argv := shell("")
+	if len(argv) != 3 || argv[0] != "/bin/sh" || argv[1] != "-lc" {
+		t.Fatalf("shell(\"\") = %q, want a plain /bin/sh -lc invocation", argv)
 	}
-	if !strings.Contains(login[2], "exec sh -l") {
-		t.Errorf("login has no fallback to sh: %q — every image has /bin/sh and not "+
-			"every image has bash", login[2])
+	if !strings.Contains(argv[2], "exec sh -l") {
+		t.Errorf("no fallback to sh: %q — every image has /bin/sh and not every "+
+			"image has bash", argv[2])
 	}
-	if strings.Contains(login[2], "hanzo") {
-		t.Errorf("login names the hanzo CLI: %q — the CLI is a command the user types, "+
-			"not a precondition for getting a prompt", login[2])
+	if strings.Contains(argv[2], "hanzo") {
+		t.Errorf("the shell names the hanzo CLI: %q — the CLI is a command the user "+
+			"types, not a precondition for getting a prompt", argv[2])
+	}
+}
+
+// A NAMED terminal is the same shell under tmux, and the name is what lets one
+// sandbox hold many. Two properties have to hold together: the session is
+// ATTACHED if it exists (`new -A`, or every reframe starts a fresh empty shell
+// and the user's work is gone from view), and a missing tmux costs the caller its
+// name rather than its terminal.
+func TestNamedShellAttachesAndDegrades(t *testing.T) {
+	argv := shell("pane-1")
+	if len(argv) != 3 || argv[0] != "/bin/sh" {
+		t.Fatalf("shell(\"pane-1\") = %q, want a /bin/sh invocation", argv)
+	}
+	cmd := argv[2]
+	if !strings.Contains(cmd, "tmux new -A -s 'pane-1'") {
+		t.Errorf("%q does not attach-or-create the named session; without -A every "+
+			"reframe would open a fresh shell over the user's work", cmd)
+	}
+	if !strings.Contains(cmd, "command -v tmux") || !strings.Contains(cmd, plain) {
+		t.Errorf("%q has no fallback — an image without tmux must still give a "+
+			"prompt, because a missing multiplexer costs a session name and not a "+
+			"terminal", cmd)
+	}
+}
+
+// The name reaches a COMMAND LINE, so what may be in it is an allowlist and not
+// an escape. This is the injection gate and it is measured as one.
+func TestSessionNameIsAnAllowlist(t *testing.T) {
+	for _, ok := range []string{"a", "pane-1", "PANE_1", "0", strings.Repeat("x", 64)} {
+		if !sessionOK(ok) {
+			t.Errorf("sessionOK(%q) refused a legitimate name", ok)
+		}
+	}
+	refused := []string{
+		"", strings.Repeat("x", 65),
+		"-rf",               // tmux would read it as a flag
+		"a b", "a;rm -rf /", // a second command
+		"a'b", "a\"b", "a$(id)", "a`id`", "a|b", "a&b", "a\nb",
+		"../etc", "a/b", "ünïcode",
+	}
+	for _, bad := range refused {
+		if sessionOK(bad) {
+			t.Errorf("sessionOK(%q) accepted a name that reaches a command line", bad)
+		}
+	}
+	// And nothing that gets through can leave its own quotes: the name is
+	// allowlisted AND quoted, because one of the two being wrong later should not
+	// be enough on its own.
+	if got := shell("pane-1")[2]; !strings.Contains(got, "'pane-1'") {
+		t.Errorf("the session name is not quoted in %q", got)
 	}
 }
 
@@ -264,26 +315,27 @@ func TestTerminalEndsWithTheLease(t *testing.T) {
 }
 
 // A handler nothing can reach is the failure this package has already had once:
-// Create, List, Get and Delete existed as exported functions with no routes, and
-// nothing said so. So the terminal's two doors are measured as ROUTES — mounted,
-// addressable, and refusing in the right order — and none of it needs a cluster,
-// because both refusals happen before a pod is ever addressed.
+// Create, List, Get and Delete existed as exported functions with no routes
+// registered, and nothing said so. The terminal adds three more doors, so the
+// mounting is a fact with a test rather than a line somebody remembered to write.
+//
+// None of it needs a cluster. Every refusal here happens before a pod or a store
+// is addressed, which is the same reason they are safe refusals in production.
 func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 	app := mountHTTP(t)
 
 	// The ticket door is the ordinary org gate, and it is the SAME 403 the
 	// siblings answer. A 404 here would mean the route is not registered at all,
-	// which is the bug this test exists for. What happens with a principal needs
+	// which is the bug this test exists for. What happens WITH a principal needs
 	// the org's store and so belongs to the live suite.
-	if code, b := req(t, app, http.MethodPost, "/v1/sandboxes/m_nope/terminal", "", ""); code != http.StatusForbidden {
+	if code, b := req(t, app, http.MethodPost, "/v1/sandboxes/m_nope/terminal/ticket", "", ""); code != http.StatusForbidden {
 		t.Fatalf("unauthenticated ticket: want 403, got %d %s", code, b)
 	}
 
 	// The socket door answers the TICKET and nothing else. It refuses BEFORE
 	// upgrading — a socket that opens and then closes tells a browser nothing —
 	// and it refuses identically whether the caller brings a principal or not,
-	// because a principal is not what opens a terminal. Nothing here reaches a
-	// store, so this is the whole gate, measured.
+	// because a principal is not what opens a terminal.
 	for _, org := range []string{"", "hanzo"} {
 		for _, q := range []string{"", "?ticket=", "?ticket=forged"} {
 			code, b := req(t, app, http.MethodGet, "/v1/sandboxes/m_nope/terminal/ws"+q, org, "")
@@ -291,5 +343,73 @@ func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 				t.Errorf("socket with org=%q %s: want 401, got %d %s", org, q, code, b)
 			}
 		}
+	}
+
+	// A session name that could reach a command line is refused at the door, ahead
+	// of the ticket — so a caller cannot learn anything about a ticket by varying
+	// the name, and a malformed name never gets as far as a shell.
+	if code, b := req(t, app, http.MethodGet, "/v1/sandboxes/m_nope/terminal/ws?arg=a;id&ticket=x", "", ""); code != http.StatusBadRequest {
+		t.Errorf("socket with an illegal session name: want 400, got %d %s", code, b)
+	}
+
+	// The PAGE is served to anyone. It is inert markup — its only power is the
+	// ticket in its own URL, and it does not redeem it — so gating it would only
+	// mean a framing host could not load the thing that asks for the credential.
+	code, b := req(t, app, http.MethodGet, "/v1/sandboxes/m_nope/terminal", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("terminal page: want 200, got %d %s", code, b)
+	}
+	page := string(b)
+	for _, want := range []string{"<!doctype html>", "new WebSocket", "hanzo-term", "FitAddon"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page does not contain %q — it is not a working terminal", want)
+		}
+	}
+	// SELF-CONTAINED. A terminal that fetches its emulator from somewhere else is
+	// a terminal that stops working when the somewhere else does.
+	if strings.Contains(page, "src=\"http") || strings.Contains(page, "href=\"http") {
+		t.Error("the page loads something from another origin")
+	}
+	// And the emulator really is IN it, rather than the markers being left unfilled.
+	for _, marker := range []string{"__CSS__", "__XTERM__", "__FIT__"} {
+		if strings.Contains(page, marker) {
+			t.Errorf("%s was never substituted — the page has no emulator", marker)
+		}
+	}
+	if len(page) < 400_000 {
+		t.Errorf("the page is %d bytes, far too small to carry xterm", len(page))
+	}
+	// Nothing inside a <script> may close it early, which is the one way inlining
+	// a vendored file could become an injection.
+	if n := strings.Count(page, "</script"); n != 3 {
+		t.Errorf("found %d </script, want exactly the 3 the template opens — a "+
+			"vendored file that closes a script tag would be markup, not code", n)
+	}
+}
+
+// Who may FRAME the terminal is derived from the brand registry, so adding a
+// brand admits its hosts and nothing else has to be edited. It is defence in
+// depth against a clickjack — the ticket is the gate — but a policy that admits
+// the whole web is not defence at all.
+func TestOnlyOurOwnHostsMayFrameTheTerminal(t *testing.T) {
+	p := framers()
+	if !strings.HasPrefix(p, "frame-ancestors ") {
+		t.Fatalf("policy = %q, want a frame-ancestors directive", p)
+	}
+	for _, want := range []string{"'self'", "https://*.hanzo.ai", "https://hanzo.ai"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("policy %q does not admit %s — tabs and the console are both "+
+				"subdomains", p, want)
+		}
+	}
+	// Every brand in the registry, not just ours: one binary serves them all.
+	for _, want := range []string{"https://*.lux.network", "https://*.zoo.ngo", "https://*.pars.network"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("policy %q does not admit %s — the white-label estates frame "+
+				"the same page", p, want)
+		}
+	}
+	if strings.Contains(p, "*;") || strings.Contains(p, " * ") || strings.HasSuffix(p, " *") {
+		t.Errorf("policy %q admits any origin", p)
 	}
 }
