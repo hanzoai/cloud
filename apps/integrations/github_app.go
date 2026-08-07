@@ -177,6 +177,167 @@ func githubConnection(org, owner string) (Connection, error) {
 	}
 }
 
+// githubInstallation is one place the App is installed: a GitHub user or org.
+type githubInstallation struct {
+	ID      int64  `json:"id"`
+	Login   string `json:"login"`
+	Type    string `json:"type"`
+	HTMLURL string `json:"htmlUrl,omitempty"`
+}
+
+// appInstallations lists every account the GitHub App is installed on.
+//
+// This is the App's OWN view — signed with the App JWT, not an installation
+// token — so it answers a question no installation-scoped call can: WHICH
+// accounts granted us anything. Without it, cloud could only speak about
+// installations it had already been told about at connect time, so an App
+// installed across a dozen orgs looked like nothing at all until somebody
+// pasted an installation id. That is the gap this closes: the console can
+// offer the real list to connect, and an agent asked "which of my GitHub orgs
+// can you see" has something true to answer with.
+//
+// It is NOT tenant data and must never be returned raw to a tenant — the App is
+// installed across every customer, so the full list is every customer's name.
+// githubInstallations below is the org-scoped projection, and it is what the
+// route serves.
+func appInstallations(ctx context.Context) ([]githubInstallation, error) {
+	tr, err := ghApp.transport()
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{Transport: tr, Timeout: 20 * time.Second}
+	const perPage = 100
+	const maxPages = 20 // 2k installations; far past any real App
+	var all []githubInstallation
+	for page := 1; page <= maxPages; page++ {
+		endpoint := fmt.Sprintf("%s/app/installations?per_page=%d&page=%d",
+			strings.TrimRight(githubAPIBase, "/"), perPage, page)
+		req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if rerr != nil {
+			return nil, rerr
+		}
+		req.Header.Set("Accept", "application/vnd.github+json")
+		resp, derr := client.Do(req)
+		if derr != nil {
+			return nil, fmt.Errorf("github call: %w", derr)
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		_ = resp.Body.Close()
+		if resp.StatusCode/100 != 2 {
+			return nil, fmt.Errorf("github http %d: %s", resp.StatusCode, truncateBody(body))
+		}
+		var pageResp []struct {
+			ID      int64 `json:"id"`
+			Account struct {
+				Login   string `json:"login"`
+				Type    string `json:"type"`
+				HTMLURL string `json:"html_url"`
+			} `json:"account"`
+		}
+		if uerr := json.Unmarshal(body, &pageResp); uerr != nil {
+			return nil, fmt.Errorf("github decode: %w", uerr)
+		}
+		for _, it := range pageResp {
+			all = append(all, githubInstallation{
+				ID: it.ID, Login: it.Account.Login,
+				Type: it.Account.Type, HTMLURL: it.Account.HTMLURL,
+			})
+		}
+		if len(pageResp) < perPage {
+			break
+		}
+	}
+	return all, nil
+}
+
+// githubInstallationView is one installable account as an org may see it.
+type githubInstallationView struct {
+	// Login is the GitHub account name — the org or user the App is installed on.
+	Login string `json:"login"`
+	// Type is "Organization" or "User".
+	Type string `json:"type,omitempty"`
+	// Connected reports whether THIS org has already bound this account.
+	Connected bool `json:"connected"`
+	// HTMLURL is the account's page on GitHub.
+	HTMLURL string `json:"htmlUrl,omitempty"`
+}
+
+// githubInstallationsOut is what the caller's org may see of the App's installs.
+type githubInstallationsOut struct {
+	// Installations is every account this org has connected, plus — for a caller
+	// that can install — nothing it has not. Never null; [] when none.
+	Installations []githubInstallationView `json:"installations"`
+	// InstallURL is where to grant a new account, so a UI with an empty list has
+	// somewhere to send the reader instead of a dead end.
+	InstallURL string `json:"installUrl,omitempty"`
+}
+
+// githubInstallations lists the GitHub accounts THIS org has connected, each
+// confirmed against the App's own installation list, plus where to add another.
+//
+// The confirmation is the point. A connection row holds an installation id, and
+// an id whose installation was since removed on GitHub is a row that mints
+// nothing — every list and import against it fails with a token error, which
+// reads as "our git integration is broken" rather than "that install is gone".
+// Checking the App's view turns that into a fact the caller can act on.
+//
+// ORG-SCOPED, deliberately. The App is installed across every customer, so the
+// raw list is the customer list; this returns only accounts the caller's org has
+// bound. An org discovers a NEW account by installing it (InstallURL), which is
+// GitHub's own consent screen — not by reading ours.
+//
+// Response: {"installations":[{"login":"hanzoai","type":"Organization","connected":true,"htmlUrl":"https://github.com/hanzoai"}],"installUrl":"https://github.com/apps/hanzo/installations/new"}
+func (o ops) githubInstallations(ctx context.Context, _ *noArgs) (*githubInstallationsOut, error) {
+	org, err := authed(ctx, principalRequired)
+	if err != nil {
+		return nil, err
+	}
+	out := &githubInstallationsOut{
+		Installations: []githubInstallationView{},
+		InstallURL:    githubInstallURL(),
+	}
+	// What this org has bound. This is the authority on WHICH accounts to show;
+	// the App's list only says whether each is still live.
+	conns := Connections(org, "github")
+	if len(conns) == 0 {
+		return out, nil
+	}
+	live := map[int64]githubInstallation{}
+	if all, aerr := appInstallations(ctx); aerr == nil {
+		for _, in := range all {
+			live[in.ID] = in
+		}
+	}
+	// A failed App call leaves `live` empty, and every row then reports
+	// connected=false rather than vanishing: an unreachable GitHub must not read
+	// as "you have no integrations".
+	for _, c := range conns {
+		v := githubInstallationView{Login: c.Owner, Connected: false}
+		if id, perr := strconv.ParseInt(strings.TrimSpace(c.ExternalID), 10, 64); perr == nil {
+			if in, ok := live[id]; ok {
+				v.Connected = true
+				if in.Login != "" {
+					v.Login = in.Login // GitHub is authoritative on a renamed account
+				}
+				v.Type, v.HTMLURL = in.Type, in.HTMLURL
+			}
+		}
+		out.Installations = append(out.Installations, v)
+	}
+	return out, nil
+}
+
+// githubInstallURL is where a reader grants the App another account. The App's
+// public slug is the one piece a deployment configures; without it the console
+// still renders the list and simply offers no "add" link.
+func githubInstallURL() string {
+	slug := strings.TrimSpace(os.Getenv("GITHUB_APP_SLUG"))
+	if slug == "" {
+		return ""
+	}
+	return "https://github.com/apps/" + slug + "/installations/new"
+}
+
 // githubInstallationAccount fetches an installation's account login via the App JWT,
 // which both VALIDATES the installation (the App can see it) and yields the human
 // label. Used by githubExchange at connect time.
