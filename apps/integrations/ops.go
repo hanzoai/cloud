@@ -70,6 +70,11 @@ type facts struct {
 	// admin is principal.IsOrgAdmin — admin OF ONE'S OWN org, the AdminOnly
 	// connector gate. NOT SuperAdmin (see principal's two-predicate note).
 	admin bool
+	// super is principal.IsSuperAdmin — platform sudo, the one CROSS-TENANT
+	// scope. Kept as its own fact rather than folded into admin: an org admin
+	// who inherited platform breadth is a privilege escalation, so the two
+	// answers stay two values.
+	super bool
 	// user is the validated principal's user id, the per-USER connector plane's
 	// row key. CLONED at the bridge: c.User() is a zero-copy view into the reused
 	// fasthttp request buffer, and this value keys rows and KMS paths that outlive
@@ -88,6 +93,7 @@ type factsKey struct{}
 func bridgeFacts(c *zip.Ctx) error {
 	c.SetContext(context.WithValue(c.Context(), factsKey{}, facts{
 		admin: principal.IsOrgAdmin(c),
+		super: principal.IsSuperAdmin(c),
 		user:  strings.Clone(strings.TrimSpace(c.User())),
 	}))
 	return c.Next()
@@ -100,6 +106,10 @@ func factsOf(ctx context.Context) facts {
 
 // orgAdmin reports the bridged own-org admin bit.
 func orgAdmin(ctx context.Context) bool { return factsOf(ctx).admin }
+
+// superAdmin reports the bridged platform-sudo bit. Absence of a bridge reads
+// false, so an unbridged request is never platform-privileged.
+func superAdmin(ctx context.Context) bool { return factsOf(ctx).super }
 
 // caller resolves the validated (org,user) pair the per-USER connector plane keys
 // every row by: authed's two steps plus the user id, refused 400 when it could not

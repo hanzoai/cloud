@@ -183,6 +183,10 @@ type githubInstallation struct {
 	Login   string `json:"login"`
 	Type    string `json:"type"`
 	HTMLURL string `json:"htmlUrl,omitempty"`
+	// Grant is how much of the account the install covers: "all" repositories or
+	// only "selected" ones. GitHub returns it with the installation, so the reach
+	// of an install is known without spending a token to list its repositories.
+	Grant string `json:"grant,omitempty"`
 }
 
 // appInstallations lists every account the GitHub App is installed on.
@@ -233,6 +237,7 @@ func appInstallations(ctx context.Context) ([]githubInstallation, error) {
 				Type    string `json:"type"`
 				HTMLURL string `json:"html_url"`
 			} `json:"account"`
+			Selection string `json:"repository_selection"`
 		}
 		if uerr := json.Unmarshal(body, &pageResp); uerr != nil {
 			return nil, fmt.Errorf("github decode: %w", uerr)
@@ -241,6 +246,7 @@ func appInstallations(ctx context.Context) ([]githubInstallation, error) {
 			all = append(all, githubInstallation{
 				ID: it.ID, Login: it.Account.Login,
 				Type: it.Account.Type, HTMLURL: it.Account.HTMLURL,
+				Grant: it.Selection,
 			})
 		}
 		if len(pageResp) < perPage {
@@ -260,20 +266,26 @@ type githubInstallationView struct {
 	Connected bool `json:"connected"`
 	// HTMLURL is the account's page on GitHub.
 	HTMLURL string `json:"htmlUrl,omitempty"`
+	// Grant is "all" or "selected" — how many of the account's repositories the
+	// install covers. A reader deciding what to import needs the reach, not just
+	// the name.
+	Grant string `json:"grant,omitempty"`
 }
 
 // githubInstallationsOut is what the caller's org may see of the App's installs.
 type githubInstallationsOut struct {
-	// Installations is every account this org has connected, plus — for a caller
-	// that can install — nothing it has not. Never null; [] when none.
+	// Installations is every account the caller may see: the ones its own org has
+	// bound, or — for a super admin — every account the App is installed on.
+	// Never null; [] when none.
 	Installations []githubInstallationView `json:"installations"`
 	// InstallURL is where to grant a new account, so a UI with an empty list has
 	// somewhere to send the reader instead of a dead end.
 	InstallURL string `json:"installUrl,omitempty"`
 }
 
-// githubInstallations lists the GitHub accounts THIS org has connected, each
-// confirmed against the App's own installation list, plus where to add another.
+// githubInstallations lists the GitHub accounts the caller may see the App
+// installed on, each confirmed against the App's own list, plus where to add
+// another.
 //
 // The confirmation is the point. A connection row holds an installation id, and
 // an id whose installation was since removed on GitHub is a row that mints
@@ -281,12 +293,21 @@ type githubInstallationsOut struct {
 // reads as "our git integration is broken" rather than "that install is gone".
 // Checking the App's view turns that into a fact the caller can act on.
 //
-// ORG-SCOPED, deliberately. The App is installed across every customer, so the
-// raw list is the customer list; this returns only accounts the caller's org has
-// bound. An org discovers a NEW account by installing it (InstallURL), which is
-// GitHub's own consent screen — not by reading ours.
+// ORG-SCOPED for a tenant, deliberately. The App is installed across every
+// customer, so the raw list is the customer list; a tenant sees only accounts its
+// own org has bound. It discovers a NEW account by installing it (InstallURL),
+// which is GitHub's own consent screen — not by reading ours.
 //
-// Response: {"installations":[{"login":"hanzoai","type":"Organization","connected":true,"htmlUrl":"https://github.com/hanzoai"}],"installUrl":"https://github.com/apps/hanzo/installations/new"}
+// A SUPER ADMIN sees the App's whole install list, because that list is the
+// platform's own inventory rather than any one tenant's data, and platform sudo
+// is the single cross-tenant scope this house has. Without it an App installed
+// out-of-band — granted straight from GitHub, so no connect flow ever ran and no
+// connection row exists — is invisible to everyone: the console card reads "not
+// connected" and an operator asked "which GitHub orgs do you see" can only
+// answer for accounts already bound, which is precisely the accounts that were
+// never the question.
+//
+// Response: {"installations":[{"login":"hanzoai","type":"Organization","connected":true,"htmlUrl":"https://github.com/hanzoai","grant":"all"}],"installUrl":"https://github.com/apps/hanzo/installations/new"}
 func (o ops) githubInstallations(ctx context.Context, _ *noArgs) (*githubInstallationsOut, error) {
 	org, err := authed(ctx, principalRequired)
 	if err != nil {
@@ -296,9 +317,31 @@ func (o ops) githubInstallations(ctx context.Context, _ *noArgs) (*githubInstall
 		Installations: []githubInstallationView{},
 		InstallURL:    githubInstallURL(),
 	}
-	// What this org has bound. This is the authority on WHICH accounts to show;
-	// the App's list only says whether each is still live.
+	// What this org has bound. For a tenant this is the authority on WHICH
+	// accounts to show; for either caller it is the authority on `connected`.
 	conns := Connections(org, "github")
+	bound := make(map[int64]bool, len(conns))
+	for _, c := range conns {
+		if id, perr := strconv.ParseInt(strings.TrimSpace(c.ExternalID), 10, 64); perr == nil {
+			bound[id] = true
+		}
+	}
+	if superAdmin(ctx) {
+		// Here the App's list IS the answer, so a failed call is an error rather
+		// than a degraded view — reporting zero installs to the one caller who
+		// asked for the whole inventory would be a lie in the shape of a success.
+		all, aerr := appInstallations(ctx)
+		if aerr != nil {
+			return nil, zip.Errorf(http.StatusBadGateway, "list github installations: %v", aerr)
+		}
+		for _, in := range all {
+			out.Installations = append(out.Installations, githubInstallationView{
+				Login: in.Login, Type: in.Type, HTMLURL: in.HTMLURL,
+				Grant: in.Grant, Connected: bound[in.ID],
+			})
+		}
+		return out, nil
+	}
 	if len(conns) == 0 {
 		return out, nil
 	}
@@ -319,7 +362,7 @@ func (o ops) githubInstallations(ctx context.Context, _ *noArgs) (*githubInstall
 				if in.Login != "" {
 					v.Login = in.Login // GitHub is authoritative on a renamed account
 				}
-				v.Type, v.HTMLURL = in.Type, in.HTMLURL
+				v.Type, v.HTMLURL, v.Grant = in.Type, in.HTMLURL, in.Grant
 			}
 		}
 		out.Installations = append(out.Installations, v)
