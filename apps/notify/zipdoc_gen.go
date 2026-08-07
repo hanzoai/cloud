@@ -14,6 +14,15 @@ func init() {
 			"notifyHealth.status":  "Status is \"ok\"; the route answers 200 whenever the subsystem is mounted.",
 		},
 	})
+	zip.Describe("POST /notify/send", zip.Doc{
+		Fields: map[string]string{
+			"Send.body":    "the message, sent verbatim",
+			"Send.channel": "\"sms\" or \"email\"",
+			"Send.org":     "the tenant to send as; notify resolves ITS provider credential",
+			"Send.subject": "carried on email only",
+			"Send.to":      "phone number for sms, address for email",
+		},
+	})
 	zip.Describe("POST /v1/notify/send", zip.Doc{
 		Description: "Delivers one transactional message by email or SMS through the caller\norg's own provider credential.\n\nThe channel comes from the body — sms or email — and the provider credential is\nread from KMS at orgs/<org>/notify/<service>/<key>, never from the environment.\nThe org is the validated principal's, never a client-supplied value, so a caller\ncan only ever send as their own tenant; an unauthenticated caller gets 401.\nNaming no provider picks the one whose credentials are actually configured\n(Twilio, then Plivo for SMS; Twilio Email, then SMTP for email) and fails closed\nwhen none is. Delivery is synchronous and per recipient: one recipient answers\nthe bare {message_id,status} outcome, several answer the {items:[…]} envelope. A\nterminal provider failure is a 200 whose status is failed with the reason in\nerror, never a transport error. sync=true is REQUIRED — an async dispatch\nanswers 503, because the queue plane that would run it is owned elsewhere. The\nmessage body wins verbatim when present; otherwise template_id (or the event\nname) selects a built-in template rendered against template_vars.",
 		Fields: map[string]string{
