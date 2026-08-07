@@ -165,9 +165,15 @@ func enabledEngines() []engine {
 }
 
 // metaSearch runs the enabled engines CONCURRENTLY and merges their results,
-// deduped by normalized URL, capped at maxResults. Engine order is preserved
-// (deterministic ranking: first engine's hits lead). A failing/challenged engine
+// deduped by normalized URL, capped at maxResults. A failing or challenged engine
 // contributes nothing — the request never fails on its account.
+//
+// The merge is ranked by AGREEMENT (rank.go), not by the order engines were
+// named. It used to be the latter, and that made WEBSEARCH_ENGINES an accidental
+// relevance knob: with `bing,ddg`, bing's three irrelevant hits for "post quantum
+// cryptography lattice" opened the page while ddg's correct ones were pushed
+// below them. Which engine is listed first is a configuration fact and was never
+// evidence about a result.
 func metaSearch(ctx context.Context, query, lang string) webSearchResults {
 	engs := enabledEngines()
 	perEngine := make([][]webResult, len(engs))
@@ -185,28 +191,42 @@ func metaSearch(ctx context.Context, query, lang string) webSearchResults {
 	}
 	wg.Wait()
 
-	seen := make(map[string]bool)
-	merged := make([]webResult, 0, maxResults)
-	for _, rs := range perEngine {
-		for _, s := range rs {
-			key := normalizeURL(s.URL)
-			if key == "" || seen[key] {
-				continue
-			}
-			seen[key] = true
-			merged = append(merged, s)
-			if len(merged) >= maxResults {
-				return webSearchResults{Query: query, NumberOfResults: len(merged), Results: merged}
-			}
-		}
-	}
+	merged := rankMerged(perEngine, maxResults)
 	return webSearchResults{Query: query, NumberOfResults: len(merged), Results: merged}
 }
 
 // fetchEngine GETs one engine's result page with a realistic UA and parses it.
 // Returns an error on transport/HTTP failure; a bot-challenge page parses to
 // zero results (not an error), so it simply contributes nothing.
+// fetchEngine answers from the cache when it can, fetches statically when it
+// cannot, and escalates to a real browser when the static fetch parsed to
+// NOTHING — which is what a bot challenge looks like here, since a challenge is
+// a 200 whose markup holds no results.
+//
+// The three live in that order because that is their cost order: remembered,
+// then one GET, then a browser render. See cache.go and render.go for why each
+// is correctness rather than speed.
 func fetchEngine(ctx context.Context, e engine, query, lang string) ([]webResult, error) {
+	url := e.build(query, lang)
+	if hit, ok := cacheGet(url); ok {
+		return hit, nil
+	}
+	out, err := fetchEngineStatic(ctx, e, query, lang)
+	if err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		// The static fetch said nothing. Ask the browser before believing it.
+		if rendered := renderedResults(ctx, e, query, lang); len(rendered) > 0 {
+			cachePut(url, rendered)
+			return rendered, nil
+		}
+	}
+	cachePut(url, out)
+	return out, nil
+}
+
+func fetchEngineStatic(ctx context.Context, e engine, query, lang string) ([]webResult, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.build(query, lang), nil)
 	if err != nil {
 		return nil, err
