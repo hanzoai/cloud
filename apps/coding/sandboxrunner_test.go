@@ -504,3 +504,110 @@ func TestClassForCarriesTheBinaryTheToolNeeds(t *testing.T) {
 		}
 	}
 }
+
+// ── the right to buy inference ───────────────────────────────────────────────
+
+// theModelGrant is the run's inference capability. Spelled once so every
+// assertion about where it may and may not appear asks about the same string.
+const theModelGrant = "hrun_LIVEMODELGRANT"
+
+// THE HARNESS RECEIVES THE CAPABILITY, ON ITS OWN INVOCATION AND NOWHERE ELSE.
+//
+// The box holds no key: commands enter through the apiserver's exec channel, so
+// the credential is an argument to ONE command rather than an environment the pod
+// was built with. That is what keeps it out of the pod spec, out of any image
+// layer, and out of the shell the model later drives — a later step of the run,
+// including the one executing model output, does not find it lying around.
+func TestSandboxRun_TheHarnessIsGivenTheRightToBuyInference(t *testing.T) {
+	p := &pod{answer: func(argv []string) plane.Ran {
+		if has(argv, "rev-parse") {
+			return plane.Ran{Stdout: theSHA + "\n"}
+		}
+		return plane.Ran{}
+	}}
+	servePod(t, p)
+
+	req := aRun()
+	req.ModelToken = theModelGrant
+	if _, err := (sandboxRunner{}).Run(context.Background(), "acme", "u_1", req, nil); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	// The harness command carries it.
+	line, ok := p.did("dev exec")
+	if !ok {
+		t.Fatalf("the harness never ran:\n%s", strings.Join(p.lines(), "\n"))
+	}
+	if !strings.Contains(line, modelKeyVar+"="+theModelGrant) {
+		t.Fatalf("the harness was not given a credential, so it will stop at "+
+			"\"Authentication required\":\n%s", line)
+	}
+
+	// And NOTHING ELSE does. git in particular: a clone reaches a forge, and a
+	// credential on that invocation is a credential sent to whatever the checkout
+	// makes git reach.
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, argv := range p.ran {
+		if argv[0] == "git" && strings.Contains(strings.Join(argv, " "), theModelGrant) {
+			t.Fatalf("the inference grant rode a git command:\n%s", strings.Join(argv, " "))
+		}
+	}
+}
+
+// A run with no grant is left exactly as it was. A routed run holds none — it
+// executes on a machine the customer operates — and an empty variable would tell
+// the harness a credential exists and then hand it "".
+func TestSandboxRun_NoGrantMeansNoEmptyCredential(t *testing.T) {
+	p := &pod{answer: func(argv []string) plane.Ran {
+		if has(argv, "rev-parse") {
+			return plane.Ran{Stdout: theSHA + "\n"}
+		}
+		return plane.Ran{}
+	}}
+	servePod(t, p)
+
+	if _, err := (sandboxRunner{}).Run(context.Background(), "acme", "u_1", aRun(), nil); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	for _, l := range p.lines() {
+		if strings.Contains(l, modelKeyVar) {
+			t.Fatalf("a run with no grant still named a credential variable:\n%s", l)
+		}
+	}
+}
+
+// AN ECHOED CAPABILITY IS SCRUBBED. Everything a run says becomes a session event,
+// a Slack line, a log field and a span. A harness that prints its own environment
+// on failure — and they do — would otherwise publish the credential to all four.
+func TestSandboxRun_TheInferenceGrantIsScrubbedOnTheWayOut(t *testing.T) {
+	p := &pod{answer: func(argv []string) plane.Ran {
+		switch {
+		case has(argv, "rev-parse"):
+			return plane.Ran{Stdout: theSHA + "\n"}
+		case has(argv, "dev"):
+			return plane.Ran{ExitCode: 1, Stderr: "env dump: " + modelKeyVar + "=" + theModelGrant + "\n"}
+		}
+		return plane.Ran{}
+	}}
+	servePod(t, p)
+
+	req := aRun()
+	req.ModelToken = theModelGrant
+	var said []string
+	res, err := sandboxRunner{}.Run(context.Background(), "acme", "u_1", req, steps(&said))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if strings.Contains(res.LogTail, theModelGrant) {
+		t.Fatalf("the inference grant survived into the run's log tail: %q", res.LogTail)
+	}
+	if !strings.Contains(res.LogTail, redacted) {
+		t.Fatalf("the credential was neither present nor redacted — scrub did not run: %q", res.LogTail)
+	}
+	for _, s := range said {
+		if strings.Contains(s, theModelGrant) {
+			t.Fatalf("the inference grant was said out loud: %q", s)
+		}
+	}
+}

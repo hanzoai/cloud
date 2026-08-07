@@ -138,6 +138,34 @@ func argvFor(tool, prompt string) []string {
 	}
 }
 
+// modelKeyVar is the ONE name the harnesses read their inference credential
+// from. Cloud states the SECRET and the image states the PROVIDER — which model,
+// which base URL, which harness reads which variable — because that is a property
+// of the box's own configuration and not of the run. A table of per-harness flags
+// here would be cloud holding a second copy of the image's config, out of date the
+// first time a harness changes.
+const modelKeyVar = "HANZO_API_KEY"
+
+// asModel runs argv carrying the run's right to buy inference, applied to THIS
+// INVOCATION and nothing else.
+//
+// It is gitAs's twin and rests on the same property. `env K=V cmd` sets the
+// variable for the one process being started: it is not written to a profile, not
+// exported into the shell the model later drives, and not in the pod spec — so a
+// later step of the run, including the one that executes model output, does not
+// find it lying around. The pod itself never receives it: commands enter through
+// the apiserver's exec channel, so the credential is an argument to one command
+// rather than an environment the box is built with.
+//
+// A run with no grant is left exactly as it was. A routed run has none, and adding
+// an empty variable would tell the harness a credential exists and hand it "".
+func asModel(req RunRequest, argv []string) []string {
+	if strings.TrimSpace(req.ModelToken) == "" {
+		return argv
+	}
+	return append([]string{"env", modelKeyVar + "=" + req.ModelToken}, argv...)
+}
+
 // tools is the closed set a caller may name, and it is closed for the reason
 // every other set in this package is: `default:` in the two switches above
 // reads dev, so an unknown name did not fail — it silently ran a DIFFERENT
@@ -251,7 +279,7 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	// the request shape already guarantees the second (CredToken must be empty
 	// when CloneURL is), so there is nothing to strip here.
 	in := sandbox{ctx: ctx, id: id, ttl: ttl, session: req.SessionID,
-		token: req.CredToken, basic: basicOf(req)}
+		token: req.CredToken, basic: basicOf(req), model: req.ModelToken}
 	base := ""
 	if u := strings.TrimSpace(req.CloneURL); u != "" {
 		step("clone", "cloning "+u, "running")
@@ -273,7 +301,7 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	}
 
 	step(req.Tool, "running the task", "running")
-	ran, err := runIn(ctx, id, argvFor(req.Tool, req.Prompt), ttl, req.SessionID)
+	ran, err := runIn(ctx, id, asModel(req, argvFor(req.Tool, req.Prompt)), ttl, req.SessionID)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("coding: run: %w", err)
 	}
@@ -354,6 +382,9 @@ type sandbox struct {
 	// other would leave the credential in the output in the only form that
 	// actually travelled.
 	token, basic string
+	// model is the run's right to buy inference. Held here for one reason only —
+	// so scrub takes it back out of everything that leaves the sandbox.
+	model string
 }
 
 // deliver commits what the tool left behind, pushes it to the run's ref, and
@@ -517,10 +548,16 @@ func message(prompt, session string) string {
 // rather than sitting loose so that every path out of a command goes through it
 // without anyone having to remember.
 func (in sandbox) scrub(s string) string {
-	if strings.TrimSpace(in.token) == "" {
+	var swap []string
+	for _, secret := range []string{in.token, in.basic, in.model} {
+		if strings.TrimSpace(secret) != "" {
+			swap = append(swap, secret, redacted)
+		}
+	}
+	if len(swap) == 0 {
 		return s
 	}
-	return strings.NewReplacer(in.token, redacted, in.basic, redacted).Replace(s)
+	return strings.NewReplacer(swap...).Replace(s)
 }
 
 const redacted = "[redacted]"

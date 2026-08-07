@@ -187,6 +187,15 @@ const (
 	GitGrant  = "git_grant"
 	GitRevoke = "git_revoke"
 
+	// AIGrant / AIRevoke delegate — and withdraw — the right to BUY INFERENCE on
+	// one org's ledger for the length of one run. The same sentence GitGrant
+	// states, about the other thing a run has to be able to do: ai owns the
+	// inference door, so ai decides who may spend at it, and an orchestrator
+	// dispatching untrusted work asks for this instead of putting a model key in
+	// the box. See apps/ai/run.go.
+	AIGrant  = "ai_grant"
+	AIRevoke = "ai_revoke"
+
 	// GitMirror declares (or removes) a native repo's OUTBOUND mirror target. The
 	// sync engine decides a mirror should exist; the git app owns the repos and
 	// the reactor that pushes them. Two processes, so declaring it was a nil call
@@ -921,6 +930,37 @@ type Granted struct {
 	// never means presenting the secret twice.
 	Handle string `json:"handle"`
 	// ExpiresAt is the unix second the grant stops working regardless.
+	ExpiresAt int64 `json:"expiresAt"`
+}
+
+// RunGrantIn asks the inference door to delegate SPENDING for one run.
+//
+// There is no Org field, for the reason GrantIn has none: the tenant rides the
+// caller's plane identity, so an app cannot spend on a ledger it does not act
+// for by naming one. That is the whole cross-tenant property — an org in the
+// argument would be an org the caller chose.
+type RunGrantIn struct {
+	// Run names the run this is for. It reaches the usage record, so what one run
+	// cost its org is a sum that can be read back rather than a guess.
+	Run string `json:"run" validate:"required"`
+	// TTLSeconds bounds the grant. Absent, or longer than the cap, gets the cap —
+	// the right to spend somebody's money is never open-ended.
+	TTLSeconds int `json:"ttlSeconds,omitempty"`
+}
+
+// RunGranted is the delegated right to buy inference.
+//
+// It is deliberately the same shape as Granted, because it is the same KIND of
+// thing: a bearer that names an act, the digest that withdraws it, and the
+// moment it stops working. Two shapes for one idea would invite two lifetimes.
+type RunGranted struct {
+	// Token is the bearer the run presents as its API key. It authenticates
+	// nobody and buys nothing but inference on the org that asked for it.
+	Token string `json:"token"`
+	// Handle revokes the grant — the token's digest, so withdrawing it never
+	// means presenting the secret a second time.
+	Handle string `json:"handle"`
+	// ExpiresAt is the unix second it stops working regardless.
 	ExpiresAt int64 `json:"expiresAt"`
 }
 
