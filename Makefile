@@ -90,7 +90,7 @@ APP_BINS := $(addprefix bin/,$(APPS))
 # gate (check) sat behind a door with no handle.
 include mk/fleet.mk
 
-.PHONY: help deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke zipdoc-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
+.PHONY: help deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke zipdoc-check closure closure-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -289,11 +289,59 @@ zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
 	# .claude/worktrees/<id>/ is a whole second checkout of this repository, and
 	# the walk read it: 203 packages where there are 104, and it went red on a
 	# copy's o11y while nothing here had changed.
-	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' --exclude-dir='.?*' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do \
-	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; \
-	done
+	#
+	# EVERY stale package, never the first. `set -e` stopped this loop at the first
+	# one, which is the masking that cost the release train six red runs in a day:
+	# apps/meet went stale, three runs said so, and when apps/projects went stale
+	# behind it that took three more. The loop now COLLECTS and the report names
+	# them all, so one run is one full answer. The paths are normalised before
+	# `sort -u` because the same directory reached through `clients` and through `.`
+	# is two different strings and was checked twice.
+	@stale=""; \
+	for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' --exclude-dir='.?*' clients cmd . 2>/dev/null | xargs -n1 dirname | sed 's|^\./||' | sort -u); do \
+	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check >/dev/null 2>&1) || stale="$$stale $$d"; \
+	done; \
+	if [ -n "$$stale" ]; then \
+	  echo ""; \
+	  echo "STALE: the lifted prose no longer matches the source it was lifted from."; \
+	  echo "Go drops comments at compile time, so zipdoc_gen.go is the ONLY path from a"; \
+	  echo "typed handler's doc comment to /v1/openapi.json — a stale lift ships a binary"; \
+	  echo "that describes itself wrongly."; \
+	  echo ""; \
+	  for d in $$stale; do echo "    $$d/zipdoc_gen.go"; done; \
+	  echo ""; \
+	  echo "  fix:"; \
+	  printf '    go generate -run zipdoc'; for d in $$stale; do printf ' ./%s/...' "$$d"; done; echo ""; \
+	  echo ""; \
+	  exit 1; \
+	fi
+	@echo ">> zipdoc: every lifted file matches its source"
+
+# WHAT EACH DOCUMENT WAS GENERATED FROM, and whether that has moved.
+#
+# `make -f mk/fleet.mk check` proves a document is current by REGENERATING it. That
+# is exact and it stays; it is also one link per app — 6m39s warm on a twenty-core
+# box, 35-53 minutes on the runner — and it is the LAST gate, so it reports a
+# thirty-second regeneration after everything else has been paid for.
+#
+# The blind spot it was learned from is narrower and completely invisible: a commit
+# that moves a version in go.mod and touches nothing else. hanzoai/iam v1.34.21 →
+# v1.34.29 added EnableCodeSignin to the type behind iam.Application, the commit
+# touched go.mod, go.sum and apps/iam, and plugin/iam/openapi.json went stale on
+# main. Nothing could have said so sooner, because nothing recorded what that
+# document had been generated FROM. openapi/closure.json records it, and this reads
+# it back in about two seconds. See cmd/closure for why the unit is the PACKAGE and
+# not the module.
+closure: ## Record what each app document was generated from (openapi/closure.json).
+	@$(GO) run ./cmd/closure -write -describable="$(DESCRIBABLE)"
+
+closure-check: ## Fail if a document was left behind by a dependency that moved. Seconds.
+	@$(GO) run ./cmd/closure -describable="$(DESCRIBABLE)"
 
 test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ships).
+	# CHEAPEST FIRST, and that ordering is the point rather than tidiness: these two
+	# answer in seconds, and the gate below takes minutes to say the same thing.
+	$(MAKE) closure-check
 	$(MAKE) zipdoc-check
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 	# The drift gate: regenerate the document FROM SOURCE and fail on any diff.
@@ -312,6 +360,7 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 	@echo ">> test-fast: NOT checking spec drift (openapi.yaml + plugin/*/openapi.json)."
 	@echo ">>            a route added without regenerating will pass here and fail CI."
 	@echo ">>            the real gate:  make -f mk/fleet.mk check"
+	$(MAKE) closure-check
 	$(MAKE) zipdoc-check
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 

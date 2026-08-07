@@ -104,11 +104,32 @@
 # on a runner with a C toolchain (build.yml provisions one), so vet needs the tag
 # for the same reason go-unit does.
 test:
-  - name: go-vet
+  - name: closure-current
+    # FIRST, AND IT IS THE CHEAPEST THING THAT CAN BE KNOWN. `go list` over the whole
+    # plugin closure — no compile, no link — is 2 seconds, against 6m39s for
+    # app-contract warm and 35-53 minutes on this runner.
+    #
+    # It answers the ONE question nothing in this file could: has a committed document
+    # been left behind by a dependency that moved? A commit that bumps a version in
+    # go.mod and touches nothing else invalidates a generated document silently, and
+    # every gate here is blind to it — go-vet compiles the new code happily,
+    # zipdoc-current only reads this repo's own comments, and app-contract catches it
+    # correctly but fiftieth. hanzoai/iam v1.34.21 → v1.34.29 added EnableCodeSignin,
+    # the commit touched go.mod, go.sum and apps/iam, and run 996 spent 53m11s to
+    # report a 3-line diff in plugin/iam/openapi.json.
+    #
+    # openapi/closure.json records what each document was generated FROM; this compares
+    # it to what the tree resolves now, names every stale document in ONE pass, names
+    # the dependency that moved, and prints the command that repairs it — scoped to the
+    # apps that moved when that is fewer than a third of the fleet. See cmd/closure for
+    # why the unit is the PACKAGE and not the module, and for where that does NOT help.
+    #
+    # It PREDICTS; app-contract still DECIDES. A moved closure means the document was
+    # generated from source that has since changed, not that the projection differs.
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
-      go vet -tags "sqlite_fts5 sqlite_math_functions" ./...
+      make closure-check
   - name: generated-current
     # manifest/apps.go is the hand-authored source of truth for the subsystem set.
     # gen-app-cmds scaffolds a plugin/<app>/main.go for any manifest app that
@@ -151,8 +172,20 @@ test:
     # apps/agents/zipdoc_gen.go did not carry a word of it.
     #
     # BEFORE app-contract, necessarily: after it the tree is already regenerated and
-    # this would assert nothing. Cheap here — go-vet above has already warmed the
-    # build cache these package loads want (40s warm on an 8-core box).
+    # this would assert nothing.
+    #
+    # BEFORE go-vet now, and that move is the single biggest thing in this file.
+    # It used to sit after vet and the note here said vet had warmed the caches these
+    # package loads want — true, and beside the point: vet is ~22 minutes on this
+    # runner and this is 1m23s, so every stale lift was reported twenty-two minutes
+    # late. Measured over runs 985-1003, zipdoc-current was the failing step in SIX of
+    # the eight runs that started, at 8m54s to 35m00s each. The load cost moves, it
+    # does not appear — vet pays it a minute later instead — and what changes is when
+    # a thirty-second regeneration is discovered.
+    #
+    # It reports EVERY stale file rather than the first. Under `set -e` this loop
+    # stopped at one, which is how apps/meet took three red runs and apps/projects
+    # took three more behind it.
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
@@ -161,6 +194,23 @@ test:
       # developer runs, so CI and the Makefile cannot drift apart, which is exactly
       # how the Makefile's own zipdoc check ended up policing nothing.
       make zipdoc-check
+  - name: go-vet
+    # NO LONGER FIRST, and the reason is the clock rather than taste. This step
+    # typechecks the whole module and is the single most expensive thing before
+    # app-contract — ~22 minutes on this runner (run 992: 04:39:57 → 05:01:44). The
+    # three steps above it now cost about 1m26s together and each of them can fail on
+    # its own evidence without a build. So the order here is cost, ascending: every
+    # question that can be answered without compiling is asked before the one that
+    # compiles everything, and the release train learns in ninety seconds what it used
+    # to learn in twenty-three minutes.
+    #
+    # Nothing above depends on vet having run. They were ordered the other way because
+    # vet warmed the build cache the package loads want, which is a saving of a minute
+    # inside a step that reports twenty-two minutes late.
+    run: |
+      set -e
+      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      go vet -tags "sqlite_fts5 sqlite_math_functions" ./...
   - name: host-is-light
     # The light host's ONE property is that it links no subsystem: it knows where
     # each app lives and what path it answers, never what the app does. That is
