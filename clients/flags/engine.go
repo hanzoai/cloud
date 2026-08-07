@@ -1,4 +1,4 @@
-//go:build cgo
+//go:build cgo && flags_native
 
 package flags
 
@@ -8,9 +8,15 @@ package flags
 // (definitions JSON, context JSON): no KV, no network, no state — SQLite-backed
 // definitions come from the Go side and the result returns in microseconds.
 //
-// Build: `make native` (or cargo build --release -p hanzo-flags) produces
-// native/flags/target/release/libhanzo_flags.a; the cloud image builds it in a
-// dedicated Rust stage. cloud already links C (SQLCipher), so cgo is a given.
+// Build: `make native` (cargo build --release -p hanzo-flags) produces
+// native/flags/target/release/libhanzo_flags.a, then build the binary with
+// `-tags flags_native` to link it — `make build TAGS=flags_native` does both.
+//
+// It is behind a tag rather than behind cgo because those are different
+// questions. cgo is on in a default build and already links C (SQLCipher), so
+// "cgo" cannot mean "the Rust archive exists"; only an explicit tag can. Without
+// the tag engine_stub.go supplies the fallback and a fresh clone builds with no
+// Rust toolchain installed.
 
 /*
 #cgo LDFLAGS: ${SRCDIR}/../../native/flags/target/release/libhanzo_flags.a

@@ -2,3 +2,4 @@ native/flags/target/
 node_modules/
 *.test
 /cloud
+/.dev/

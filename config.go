@@ -390,7 +390,7 @@ var flagsOnce sync.Once
 // LoadConfig reads flags + env into a Config. Flags override env.
 func LoadConfig() *Config {
 	cfg := &Config{
-		ListenAddr:           getenv("CLOUD_LISTEN", ":8080"),
+		ListenAddr:           getenv("CLOUD_LISTEN", listenDefault()),
 		ZAPListenAddr:        getenv("CLOUD_ZAP_LISTEN", ":9653"),
 		HealthListenAddr:     getenv("CLOUD_HEALTH_LISTEN", ":9090"),
 		AdminListenAddr:      getenv("CLOUD_ADMIN_LISTEN", ":8081"),
@@ -604,7 +604,15 @@ func registrableDomain(host string) string {
 // one binary — retiring their standalone pods. iam and ingress STAY staged: iam is a
 // production identity cutover gated on the fold being verified (see above), served by
 // the standalone pod until the operator flips it on.
-var stagedSubsystems = map[string]bool{"iam": true, "ingress": true}
+// "functions" is staged for a different reason than the two above: it RUNS CODE.
+// Its invoke op writes the stored function body to a temp file and executes it
+// with node, python3 or bash, which is exactly what a local functions runtime is
+// for and exactly what must never appear on a surface nobody asked for it on. A
+// staged default means the capability exists in every build but has to be named
+// before it can be reached, so mounting the OSS binary somewhere public does not
+// silently expose an execution endpoint. `make dev` names it; production does not
+// unless it means to.
+var stagedSubsystems = map[string]bool{"iam": true, "ingress": true, "functions": true}
 
 // Enabled reports whether subsystem `name` is enabled in this config.
 // Empty Enable list = all subsystems enabled, EXCEPT staged subsystems
@@ -629,6 +637,31 @@ func contains(list []string, name string) bool {
 		}
 	}
 	return false
+}
+
+// listenDefault is the API listen address when CLOUD_LISTEN says nothing: PORT
+// if the environment set one, else :8080.
+//
+// PORT is not a second knob for the same fact — CLOUD_LISTEN remains the one way
+// to say where cloud listens, and it wins whenever it is set. PORT is read only
+// as the fallback, because it is the first thing everyone tries and because the
+// platforms that run a container for you (and every `PORT=3000 ./cloud` reflex)
+// state the port that way and nothing else. Silently ignoring it meant the
+// process came up on :8080 while the operator was watching another port and
+// concluded the binary had hung.
+//
+// A bare number becomes ":3000". Anything else is passed through untouched, so
+// PORT=127.0.0.1:3000 binds loopback and a malformed value fails loudly at the
+// listener instead of being quietly rewritten into something that works.
+func listenDefault() string {
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		return ":8080"
+	}
+	if strings.IndexFunc(port, func(r rune) bool { return r < '0' || r > '9' }) < 0 {
+		return ":" + port
+	}
+	return port
 }
 
 func getenv(key, dflt string) string {

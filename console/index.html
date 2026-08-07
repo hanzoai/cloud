@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>cloud console</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/console.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand"><i class="mark"></i><b id="title">cloud</b><span class="sub">console</span></div>
+  <span class="chip" id="version" title="build version">version …</span>
+  <span class="chip" id="origin"></span>
+  <nav class="tabs" id="tabs"></nav>
+  <button class="ghost" id="reload" title="re-read the live route table">reload</button>
+  <button class="ghost" id="theme" title="light / dark / follow the system">auto</button>
+</header>
+
+<div class="health" id="health"></div>
+
+<main>
+
+  <section class="view api" id="view-api">
+    <aside class="routes">
+      <input id="filter" placeholder="filter routes" spellcheck="false" autocomplete="off">
+      <div id="tree" class="tree"></div>
+      <div class="count" id="count"></div>
+    </aside>
+
+    <section class="runner">
+      <div class="line">
+        <select id="method" aria-label="method">
+          <option>GET</option><option>POST</option><option>PUT</option>
+          <option>PATCH</option><option>DELETE</option>
+        </select>
+        <input id="path" value="/v1/openapi.json" spellcheck="false" autocomplete="off" aria-label="path">
+        <button class="primary" id="send">send</button>
+      </div>
+
+      <div id="params" class="params"></div>
+
+      <div class="line thin">
+        <label for="body">body</label>
+        <span class="grow"></span>
+        <button class="ghost" id="format">format</button>
+        <button class="ghost" id="curl">copy curl</button>
+      </div>
+      <textarea id="body" rows="6" spellcheck="false" placeholder="{ }"></textarea>
+
+      <details class="opt">
+        <summary>headers</summary>
+        <textarea id="headers" rows="3" spellcheck="false" placeholder="X-Org-Id: acme&#10;Authorization: Bearer …"></textarea>
+      </details>
+
+      <div id="out" class="out"><p class="muted">pick a route on the left, or type a path. ctrl/cmd + enter sends.</p></div>
+    </section>
+  </section>
+
+</main>
+
+<script src="/console.js" defer></script>
+</body>
+</html>

@@ -132,10 +132,17 @@ func Serve(specs []MountSpec, enable []string) error {
 	// missing/invalid CLOUD_KMS_MASTER_KEY_REF makes the FIRST store open fail
 	// closed (MountAll aborts) — the same fail-closed stance as the KMS store; we
 	// surface it here so the posture is never silent.
+	// The false branch says "no key", not "no codec": every backend encrypts
+	// (cgo links libsqlcipher, pure-Go uses the codec VFS), so the only way to
+	// reach it is a missing or malformed key — and then the first store open
+	// fails closed. Saying "pure-Go dev build" here was how a boot came to
+	// announce that encryption was off and then refuse to start BECAUSE it was
+	// on; one of the two had to be wrong, and it was this line.
 	if cek.Encrypting() {
 		deps.Logger.Info("data-plane encryption ACTIVE (SQLCipher at rest, per-db DEK)")
 	} else {
-		deps.Logger.Warn("data-plane encryption OFF (pure-Go dev build, or missing key on a capable build → store opens fail closed)")
+		deps.Logger.Warn("data-plane encryption OFF — no usable " + cek.MasterKeyEnv +
+			"; store opens fail closed until one is set (or " + cek.DevUnencryptedEnv + "=1)")
 	}
 
 	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB fiber
@@ -356,11 +363,25 @@ func Serve(specs []MountSpec, enable []string) error {
 		openapi.Server{URL: "https://" + cfg.Domain},
 	)
 
-	// Headless API-only core: the OSS binary ships NO embedded console SPA. Mounted
-	// LAST, after every /v1 route + the /zap plane + the health contract, this
-	// registers a terminal catch-all that answers any unmatched path with a JSON
-	// 404 — so a client that expects JSON never receives an HTML shell. The private
-	// build replaces this with the //go:embed @hanzo/gui console. See webui.go.
+	// Install zip's own deferred projections of the typed-op registry — the MCP
+	// endpoint at /mcp, the typed OpenAPI document, the op-call plane — BEFORE the
+	// console catch-all below.
+	//
+	// zip installs these itself, but from Listen, which is AFTER everything mounted
+	// here. Fiber matches in registration order and the catch-all matches
+	// everything, so a /mcp registered after it is a route the router can never
+	// reach: the endpoint existed and still answered 404. Prepare is idempotent
+	// (sync.Once), so Listen's own call becomes a no-op and this is purely a
+	// question of who registers first.
+	//
+	// It has to be here rather than earlier for the same reason openapi.Mount is:
+	// the projections read the COMPLETE op registry, so they run after MountAll.
+	app.Prepare()
+
+	// Mounted LAST, after every /v1 route, the /zap plane, the health contract and
+	// the projections above, this registers the terminal catch-all: the embedded
+	// dev console at the web root, still a JSON 404 for an unmatched /v1 path so a
+	// client that expects JSON never receives an HTML shell. See webui.go.
 	if err := mountConsole(app); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
