@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
 
@@ -100,12 +101,12 @@ func waitFor(t *testing.T, sock string) {
 func host(t *testing.T, apps []string, kids map[string]*child) *zip.App {
 	t.Helper()
 	h := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
-	fleet.Mount(h, "/v1/mcp", apps, func(app string) (string, error) {
+	fleet.Mount(h, "/v1/mcp", apps, func(app string) (addr, path string, err error) {
 		k := kids[app]
 		if k == nil {
-			return "", &net.AddrError{Err: "no instance running", Addr: app}
+			return "", "", &net.AddrError{Err: "no instance running", Addr: app}
 		}
-		return k.addr, nil
+		return k.addr, manifest.FrameworkMCPPath, nil
 	})
 	return h
 }
