@@ -535,7 +535,7 @@ func (r *runtime) pods() dynamic.ResourceInterface {
 // start creates the sandbox's volume (if it has one) and its pod, and waits for
 // the pod to be running. A create that returns before the sandbox can answer is
 // a create that hands the caller a 502 on its very next call.
-func (r *runtime) start(ctx context.Context, m Sandbox, rc string) error {
+func (r *runtime) start(ctx context.Context, m Sandbox) error {
 	if err := r.ready(); err != nil {
 		return err
 	}
@@ -544,7 +544,7 @@ func (r *runtime) start(ctx context.Context, m Sandbox, rc string) error {
 			return err
 		}
 	}
-	if _, err := r.pods().Create(ctx, r.podSpec(m, rc), metav1.CreateOptions{}); err != nil {
+	if _, err := r.pods().Create(ctx, r.podSpec(m), metav1.CreateOptions{}); err != nil {
 		if !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("create pod: %w", err)
 		}
@@ -607,7 +607,7 @@ func (r *runtime) ensureVolume(ctx context.Context, m Sandbox) error {
 }
 
 // podSpec is the sandbox, stated once.
-func (r *runtime) podSpec(m Sandbox, rc string) *unstructured.Unstructured {
+func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 	c := map[string]any{
 		"name":  container,
 		"image": m.Image,
@@ -711,16 +711,19 @@ func (r *runtime) podSpec(m Sandbox, rc string) *unstructured.Unstructured {
 	// names it — so stating it again here would be a second copy that goes stale
 	// the day the runsc node pool moves, and a wrong copy pins pods Pending
 	// forever with a message that blames the wrong object.
-	// PER SANDBOX, falling back to the deployment default. It was
-	// deployment-wide, which meant the same task could not be run on two
-	// runtimes and compared without a rollout — and a caller could not choose.
-	// The row does NOT record it: the pod is the source of truth for what a
-	// sandbox is actually running, and a second copy could only go stale.
-	if rc == "" {
-		rc = r.runtimeClass
-	}
-	if rc != "" {
-		spec["runtimeClassName"] = rc
+	// PER SANDBOX, and read from the sandbox rather than passed beside it. It was
+	// deployment-wide, which meant the same task could not be run on two runtimes
+	// and compared without a rollout — and a caller could not choose.
+	//
+	// m.Runtime is what runtimeFor ANSWERED, resolved once in Lease. There is no
+	// second fallback here on purpose: a `rc == "" then use r.runtimeClass` line
+	// stood here, and it is precisely how the row and the pod come to disagree —
+	// the row would say "the node default" while the pod ran gvisor, and the
+	// person comparing two runtimes would be reading the wrong label on the right
+	// experiment. One derivation, one place, and the field the row reports is the
+	// same field the pod is built from.
+	if m.Runtime != "" {
+		spec["runtimeClassName"] = m.Runtime
 	}
 	// THE WORKDIR IS MOUNTED EITHER WAY, and until now only one of the two ways
 	// existed. A `dev` sandbox gets its project PVC at /work; an `exec` sandbox has
