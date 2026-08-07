@@ -78,11 +78,11 @@ func TestLiveTerminalIsARealShell(t *testing.T) {
 	w := newWindow()
 	w.to(100, 30)
 
-	// THE REAL ARGV. Not a command written for the test: if `bash -l || sh -l`
+	// THE REAL ARGV. Not a command written for the test: if the login shell
 	// does not come up on this image, the product is broken and this is where
 	// that shows.
 	ended := make(chan error, 1)
-	go func() { ended <- r.tty(ctx, m, login, in, out, w) }()
+	go func() { ended <- r.tty(ctx, m, shell(""), in, out, w) }()
 
 	// A pty ECHOES what is typed, so a marker that appears in the command text
 	// would match the echo rather than the output and prove nothing. `$((6*7))`
@@ -142,3 +142,75 @@ func oneLine(s string) string {
 
 var _ io.Writer = (*screen)(nil)
 var _ remotecommand.TerminalSizeQueue = (*window)(nil)
+
+// TestLiveTerminalNamedSession is the property tabs depends on: one sandbox, many
+// terminals, each reattaching to what it left. `arg` names a tmux session and
+// `new -A` attaches or creates, so the second terminal with the same name finds
+// the first one's scrollback rather than a fresh empty shell.
+//
+// It also answers the question that decides whether that works at all — does the
+// IMAGE carry tmux — and says so either way rather than failing, because an image
+// without tmux is a deployment fact and not a bug in this code.
+func TestLiveTerminalNamedSession(t *testing.T) {
+	if os.Getenv("SANDBOX_LIVE") != "1" {
+		t.Skip("set SANDBOX_LIVE=1 to run against a real cluster")
+	}
+	r := newRuntime()
+	if err := r.ready(); err != nil {
+		t.Fatalf("no cluster: %v", err)
+	}
+	m := Sandbox{
+		ID:     "live-session",
+		Org:    "hanzo",
+		Status: "running",
+		Class:  "exec",
+		Pod:    fmt.Sprintf("sandbox-live-session-%d", time.Now().Unix()),
+		Image:  envOr("SANDBOX_LIVE_IMAGE", "node:22"),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	if err := r.start(ctx, m, ""); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = r.stop(context.Background(), m) }()
+
+	has, err := r.exec(ctx, m, []string{"sh", "-c", "command -v tmux >/dev/null 2>&1 && echo yes || echo no"}, nil, 60)
+	if err != nil {
+		t.Fatalf("probe tmux: %v", err)
+	}
+	tmux := strings.Contains(has.Stdout, "yes")
+	t.Logf("IMAGE HAS TMUX: %v (%s)", tmux, m.Image)
+
+	// Whether or not tmux is there, a NAMED terminal must still give a prompt.
+	// That is the degradation the fallback exists for, and it is the difference
+	// between "your panes are not multiplexed" and "your terminal is broken".
+	in, out, w := newPipe(), &screen{}, newWindow()
+	w.to(100, 30)
+	ended := make(chan error, 1)
+	go func() { ended <- r.tty(ctx, m, shell("pane-1"), in, out, w) }()
+
+	if _, err := in.Write([]byte("echo $((6*7))\n")); err != nil {
+		t.Fatalf("type: %v", err)
+	}
+	if !waitFor(out, "42", 60*time.Second) {
+		t.Fatalf("a named terminal gave no prompt: %q", oneLine(out.String()))
+	}
+	t.Logf("NAMED TERMINAL RUNS: %s", oneLine(out.String()))
+
+	if tmux {
+		// Inside tmux, the session is named and $TMUX is set. Only meaningful when
+		// tmux is actually there.
+		if _, err := in.Write([]byte("echo SESSION=${TMUX:+on}\n")); err != nil {
+			t.Fatalf("type: %v", err)
+		}
+		if !waitFor(out, "SESSION=on", 30*time.Second) {
+			t.Errorf("tmux is installed but the shell is not inside a session: %s", oneLine(out.String()))
+		} else {
+			t.Log("SESSION IS MULTIPLEXED: the shell runs inside tmux")
+		}
+	}
+
+	w.close()
+	in.drop()
+	<-ended
+}

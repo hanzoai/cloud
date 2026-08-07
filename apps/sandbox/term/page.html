@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terminal</title>
+<style>__CSS__</style>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; }
+  #t { position: absolute; inset: 0; padding: 8px; }
+  #s {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; gap: 12px; flex-direction: column;
+    background: #000; color: #8b8b8b;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  #s[hidden] { display: none; }
+  #s button {
+    font: inherit; color: #ddd; background: #1c1c1c; border: 1px solid #333;
+    border-radius: 6px; padding: 4px 12px; cursor: pointer;
+  }
+  #s button:hover { border-color: #555; }
+</style>
+</head>
+<body>
+<div id="t"></div>
+<div id="s"><span id="m">Starting your cloud shell…</span></div>
+<script>__XTERM__</script>
+<script>__FIT__</script>
+<script>
+// The page knows its own address, so nothing here is templated. The socket is
+// this document's path plus /ws, carrying this document's query string
+// unchanged — which is where the ticket and the session name already are. A page
+// with no substitutions has no injection surface and can be served as a constant.
+(function () {
+  var status = document.getElementById('s')
+  var message = document.getElementById('m')
+
+  function stopped(why) {
+    status.hidden = false
+    message.textContent = why
+    if (document.getElementById('r')) return
+    var again = document.createElement('button')
+    again.id = 'r'
+    again.textContent = 'Reconnect'
+    again.onclick = function () { location.reload() }
+    status.appendChild(again)
+  }
+
+  var Fit = (window.FitAddon && window.FitAddon.FitAddon) || window.FitAddon
+  var term = new window.Terminal({ cursorBlink: true, fontSize: 13, scrollback: 5000 })
+  var fit = new Fit()
+  term.loadAddon(fit)
+  term.open(document.getElementById('t'))
+
+  var socket = location.origin.replace(/^http/, 'ws') +
+    location.pathname.replace(/\/+$/, '') + '/ws' + location.search
+  var ws = new WebSocket(socket)
+  ws.binaryType = 'arraybuffer'
+
+  function measure() {
+    try { fit.fit() } catch (e) { return }
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify({ resize: { cols: term.cols, rows: term.rows } }))
+    }
+  }
+  new ResizeObserver(measure).observe(document.body)
+
+  ws.onopen = function () {
+    status.hidden = true
+    measure()
+    term.focus()
+    // The readiness handshake. A host that frames this page has no other way to
+    // tell "the terminal is up" from "the page 404'd into a sign-in", and a host
+    // that guesses gets a blank pane it cannot explain.
+    if (window.parent !== window) {
+      window.parent.postMessage({ source: 'hanzo-term', ready: true }, '*')
+    }
+  }
+  ws.onmessage = function (e) {
+    term.write(typeof e.data === 'string' ? e.data : new Uint8Array(e.data))
+  }
+  ws.onerror = function () { stopped('The connection failed.') }
+  ws.onclose = function (e) { stopped(e.reason || 'The connection closed.') }
+  term.onData(function (d) { if (ws.readyState === 1) ws.send(d) })
+  window.addEventListener('focus', function () { term.focus() })
+})()
+</script>
+</body>
+</html>
