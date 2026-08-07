@@ -357,14 +357,18 @@ func TestDefaultEnginesAreEveryEngineThatSurvivesDatacenterEgress(t *testing.T) 
 	if len(names) < 2 {
 		t.Fatalf("default engines = %v, want more than one — a single engine is a single point of failure and a single index", names)
 	}
-	for _, want := range []string{bingName, mojeekName} {
+	// Every engine measured to ANSWER from cluster egress, by whichever fetch it
+	// takes. DDG belongs here on the rendered number, not the static one: served
+	// a captcha over plain HTTP ("Select all squares containing a duck", 0
+	// results) and 10 real results through the browser at the same URL, the same
+	// second. render.go escalates, so the engine answers.
+	//
+	// It is safe to default an engine that DEPENDS on the browser only because a
+	// browser-less deployment now reports it BLIND rather than dropping it
+	// quietly — see outcome.go. Without that this line would be optimism.
+	for _, want := range []string{bingName, ddgName, mojeekName} {
 		if !slices.Contains(names, want) {
 			t.Fatalf("default engines = %v, want %q among them", names, want)
 		}
-	}
-	// DDG must NOT be a default: measured from cluster egress it is served the
-	// anomaly page (67 markers, 0 results) on BOTH /lite/ and the html endpoint.
-	if slices.Contains(names, ddgName) {
-		t.Fatalf("default engines = %v — ddg is bot-challenged from datacenter egress and contributes zero", names)
 	}
 }

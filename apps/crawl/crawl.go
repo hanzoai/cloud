@@ -3,13 +3,15 @@
 // Hanzo Crawl: fetch one URL and return its readable content as markdown,
 // in-process, in Go.
 //
-// It replaces the dial to a separate Crawl4AI deployment. That service was named
-// in config but did not exist — crawl.hanzo.svc.cluster.local was NXDOMAIN — so
-// every scrape returned {success:false, "no such host"} while the surface in front
-// of it answered 200. This package is the same move already made for the SEARCH
-// half in clients/websearch/search.go, which replaced a SearXNG pod with in-process
-// Go: one fewer non-Go dependency, one fewer thing that can be down, and no network
+// The FETCH is in-process Go rather than a dial to a separate service, which is
+// the same move already made for the SEARCH half in apps/websearch/search.go:
+// one fewer non-Go dependency, one fewer thing that can be down, and no network
 // hop for work that is a fetch and a parse.
+//
+// A browser still lives out of process, because rendering is not a fetch and a
+// parse. `crawl` (ghcr.io/hanzoai/crawl, headless Chromium) is deployed at
+// crawl.hanzo.svc:11235 and browser.go escalates to it for the pages this file
+// cannot read alone.
 //
 // The engine is three orthogonal steps, each in its own file and each testable
 // without the others:
