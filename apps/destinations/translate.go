@@ -45,9 +45,13 @@ var standardOf = map[string]StandardEvent{
 // (pre-warehouse-scrub) properties carry the match keys the User set is lifted from.
 func Translate(ev analytics.SinkEvent) Conversion {
 	return Conversion{
-		Standard:   standardOf[ev.Name], // "" ⇒ custom, forwarded as ev.Name
-		Name:       ev.Name,
-		EventID:    ev.MessageID,
+		Standard: standardOf[ev.Name], // "" ⇒ custom, forwarded as ev.Name
+		Name:     ev.Name,
+		// The dedup id: the browser tag's own event_id when it set one (track.js stamps
+		// it into properties + fires it on the pixel), else the messageId. This is what
+		// makes a browser pixel event and this server CAPI event DEDUPLICATE — without
+		// it the two carry different ids and a conversion is double-counted.
+		EventID:    firstNonEmpty(strProp(ev.Properties, "event_id"), ev.MessageID),
 		Time:       ev.Time,
 		Value:      conversionValue(ev),
 		Currency:   conversionCurrency(ev),
