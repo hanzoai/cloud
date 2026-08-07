@@ -73,22 +73,22 @@ import (
 	sqlitedrv "github.com/hanzoai/sqlite"
 )
 
-// masterKeyEnv is the ONE variable that supplies the 32-byte KMS master key
+// MasterKeyEnv is the ONE variable that supplies the 32-byte KMS master key
 // (base64), matching the operator Deployment and clients/kms. No second gate.
-const masterKeyEnv = "CLOUD_KMS_MASTER_KEY_REF"
+const MasterKeyEnv = "CLOUD_KMS_MASTER_KEY_REF"
 
-// devUnencryptedEnv opts a LOCAL build out of the no-key refusal above. It is
-// deliberately its own variable rather than a value of masterKeyEnv: "run this
+// DevUnencryptedEnv opts a LOCAL build out of the no-key refusal above. It is
+// deliberately its own variable rather than a value of MasterKeyEnv: "run this
 // unencrypted" and "here is the key" are different statements, and overloading
 // one variable to mean both is how a deployment ends up plaintext because
 // somebody typed the wrong thing into a secret.
-const devUnencryptedEnv = "CLOUD_DEV_UNENCRYPTED"
+const DevUnencryptedEnv = "CLOUD_DEV_UNENCRYPTED"
 
 // devUnencrypted reports the opt-out. Only an explicit truthy value counts —
 // merely being PRESENT is not enough, so `CLOUD_DEV_UNENCRYPTED=0` (or an empty
 // export inherited from a parent shell) does not silently disable encryption.
 func devUnencrypted() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(devUnencryptedEnv))) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(DevUnencryptedEnv))) {
 	case "1", "true", "yes", "on":
 		return true
 	}
@@ -130,15 +130,30 @@ func SetMasterKey(k []byte) {
 // resolveMaster resolves the process master key exactly once:
 //
 //	(key, nil)   — 32-byte key AND an encryption-capable build → encrypt.
-//	(nil, nil)   — no key AND a non-encrypting (pure-Go) build → dev/CI plaintext.
+//	(nil, nil)   — no key AND a non-encrypting build → dev/CI plaintext.
 //	(nil, error) — key malformed; OR key set on a non-encrypting build; OR NO key
 //	               on an encryption-capable build. The last is the production
 //	               fail-closed: a capable binary never silently ships plaintext.
+//
+// EVERY BUILD IS CAPABLE TODAY, and the error text must not say otherwise.
+// hanzoai/sqlite reports EncryptionAvailable() == true under BOTH build tags: the
+// cgo backend links libsqlcipher, and the pure-Go backend encrypts through the
+// hanzoai/sqlcipher codec VFS. There is no longer a plaintext-only backend, so
+// the no-key branch below is the one every build takes.
+//
+// This used to be untrue, and the refusal still carried the advice from back
+// then: "or run a pure-Go dev build". That route is gone. Following it landed you
+// on a build that refuses for exactly the same reason, having just logged that
+// encryption was off — the message named a cure for the disease it was
+// describing. The advice is removed rather than the refusal relaxed: a build that
+// CAN encrypt and has no key must keep failing closed, and the pure-Go build can
+// encrypt. The remaining two routes both work: supply a key, or say
+// CLOUD_DEV_UNENCRYPTED=1 and mean it.
 func resolveMaster() ([]byte, error) {
 	masterOnce.Do(func() {
 		raw := masterOverride
 		if len(raw) == 0 {
-			b64 := strings.TrimSpace(os.Getenv(masterKeyEnv))
+			b64 := strings.TrimSpace(os.Getenv(MasterKeyEnv))
 			if b64 == "" {
 				if sqlitedrv.EncryptionAvailable() {
 					// LOCAL DEV ESCAPE HATCH. Without this, the only way to run a
@@ -159,19 +174,22 @@ func resolveMaster() ([]byte, error) {
 						fmt.Fprintf(os.Stderr,
 							"cek: WARNING — %s set: opening the data plane UNENCRYPTED. "+
 								"Local development only; never set this where real data lives.\n",
-							devUnencryptedEnv)
+							DevUnencryptedEnv)
 						return
 					}
-					masterErr = fmt.Errorf("cek: %s is required on an encryption-capable build; "+
-						"refusing to open the data plane unencrypted (set the KMS master key "+
-						"— `openssl rand -base64 32` — or set %s=1 for local development, "+
-						"or run a pure-Go dev build)", masterKeyEnv, devUnencryptedEnv)
+					masterErr = fmt.Errorf("cek: %s is required; refusing to open the data "+
+						"plane unencrypted (set the KMS master key — `openssl rand -base64 32` "+
+						"— or set %s=1 for local development)", MasterKeyEnv, DevUnencryptedEnv)
 				}
-				return // pure-Go dev/CI: plaintext is expected (no codec linked)
+				// Unreachable while every backend encrypts (see resolveMaster's
+				// note). Kept as the honest answer for a backend that genuinely
+				// cannot: no key and no codec is plaintext by construction, not by
+				// choice, and there is nothing to refuse.
+				return
 			}
 			decoded, err := base64.StdEncoding.DecodeString(b64)
 			if err != nil {
-				masterErr = fmt.Errorf("cek: %s is not valid base64: %w", masterKeyEnv, err)
+				masterErr = fmt.Errorf("cek: %s is not valid base64: %w", MasterKeyEnv, err)
 				return
 			}
 			raw = decoded
@@ -182,7 +200,7 @@ func resolveMaster() ([]byte, error) {
 		}
 		if !sqlitedrv.EncryptionAvailable() {
 			masterErr = fmt.Errorf("cek: %s is set but this build cannot encrypt (pure-Go sqlite); "+
-				"rebuild CGO_ENABLED=1 linked against libsqlcipher, or unset it for a dev build", masterKeyEnv)
+				"rebuild CGO_ENABLED=1 linked against libsqlcipher, or unset it for a dev build", MasterKeyEnv)
 			return
 		}
 		masterKey = raw

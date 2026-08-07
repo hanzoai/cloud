@@ -1,0 +1,126 @@
+#!/bin/sh
+# Refuse to publish the private enterprise edition to the public Apache-2.0 repo.
+#
+# The public repo (github.com/hanzoai/cloud) and the private one share no
+# history. One mistyped command in this checkout -- `git push origin HEAD:main`
+# after fetching a private branch, or `git merge forge/main` -- relicenses the
+# private tree. Two checks, run only when the destination is the public repo:
+#
+#   HISTORY  no pushed commit may be reachable from a private remote's ref.
+#   IMPORTS  no pushed .go / go.mod blob may reference a private module.
+#
+# Private == every refs/remotes/ namespace that is not origin. Naming the
+# remotes individually would miss the stale ones: this checkout carries
+# forgeall/* and incx/*, left by removed remotes, holding thousands of
+# private commits.
+
+set -u
+
+remote_name=${1-}
+remote_url=${2-}
+
+# Guard the public repo only. Everything else -- forge, gh, inc, inc2 -- is
+# already private, and people push those from sibling checkouts.
+guard=no
+[ "$remote_name" = origin ] && guard=yes
+case $remote_url in
+	*github.com[:/]hanzoai/cloud*) guard=yes ;;   # bypasses `origin` by URL
+esac
+[ "$guard" = yes ] || exit 0
+
+is_zero() { case $1 in *[!0]*) return 1 ;; *) return 0 ;; esac; }
+
+# A module path is private if it lives under hanzo-inc, or is one of the three
+# closed-source libraries. Boundary class keeps `hanzoai/authz` from matching a
+# longer name; github.com/luxfi/kms is public and matches nothing here.
+private_import='github\.com/hanzo-inc/|hanzoai/(authz|licensing|metrics)([^0-9A-Za-z_-]|$)'
+# Same set, but matching the whole module path so the refusal can quote it.
+private_import_show='(github\.com/)?hanzo-inc/[0-9A-Za-z._/-]*|(github\.com/)?hanzoai/(authz|licensing|metrics)[0-9A-Za-z._/-]*'
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/prepush.XXXXXX") || exit 1
+trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+
+# Tips of every private ref, as rev-list exclusions. Absent in a fresh clone
+# that never fetched them -- then the file is empty and HISTORY always passes.
+git for-each-ref --format='%(refname) %(objectname)' refs/remotes/ 2>/dev/null |
+	grep -vE '^refs/remotes/origin($|/)' |
+	awk '{print "^" $2}' >"$tmp/private"
+
+fail=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+	[ -n "${local_sha:-}" ] || continue
+
+	# Deleting a remote branch publishes nothing.
+	is_zero "$local_sha" && continue
+
+	# A new remote branch has no counterpart to diff against, so walk its
+	# whole history. Otherwise only what this push adds.
+	if is_zero "$remote_sha"; then
+		printf '%s\n' "$local_sha" >"$tmp/range"
+	else
+		printf '%s\n^%s\n' "$local_sha" "$remote_sha" >"$tmp/range"
+	fi
+
+	total=$(git rev-list --stdin --count <"$tmp/range") || exit 1
+	[ "$total" -gt 0 ] || continue
+
+	# ---- HISTORY ----------------------------------------------------
+	if [ -s "$tmp/private" ]; then
+		kept=$(cat "$tmp/range" "$tmp/private" | git rev-list --stdin --count)
+		if [ "$kept" -ne "$total" ]; then
+			git rev-list --stdin <"$tmp/range" | sort >"$tmp/all"
+			cat "$tmp/range" "$tmp/private" | git rev-list --stdin | sort >"$tmp/ok"
+			bad=$(comm -23 "$tmp/all" "$tmp/ok")
+			first=$(printf '%s\n' "$bad" | head -1)
+			where=$(git for-each-ref --format='%(refname:short)' --contains "$first" \
+				refs/remotes/ 2>/dev/null | grep -vE '^origin($|/)' | head -1)
+
+			echo "pre-push: REFUSED $local_ref -> $remote_ref ($remote_name)"
+			echo "  private history: $(printf '%s\n' "$bad" | wc -l) of $total pushed commits are reachable from a private remote."
+			echo "    $(git log -1 --format='%h %s' "$first")"
+			echo "    also on: ${where:-a private ref}"
+			echo "  The public and private editions share no history. Do not merge or push across them."
+			fail=1
+			continue
+		fi
+	fi
+
+	# ---- IMPORTS ----------------------------------------------------
+	# Every version of every .go / go.mod introduced by these commits, not
+	# the working tree. blob<TAB>commit<TAB>path.
+	#
+	# --diff-merges=first-parent: without it git shows no diff for a merge, so
+	# content added by the merge resolution itself -- an evil merge whose two
+	# parents are both clean -- would never be read. Blobs are deduped by sha
+	# below, so re-listing a merged branch's blobs costs nothing.
+	git log --no-renames --diff-filter=AM --format='C %H' --raw --no-abbrev \
+		--diff-merges=first-parent \
+		--stdin -- '*.go' '*go.mod' <"$tmp/range" |
+		awk -F'\t' '
+			$0 ~ /^C / { split($0, c, " "); commit = c[2]; next }
+			/^:/ { split($1, f, " "); print f[4] "\t" commit "\t" $2 }
+		' >"$tmp/blobs"
+	[ -s "$tmp/blobs" ] || continue
+
+	# Fast path: stream every distinct blob through one grep. The batch
+	# headers are "<sha> blob <size>" and cannot contain a module path, so a
+	# hit here is always a real hit in some blob's content.
+	cut -f1 "$tmp/blobs" | sort -u >"$tmp/uniq"
+	git cat-file --batch <"$tmp/uniq" | grep -qE "$private_import" || continue
+
+	# Slow path: only reached when refusing. Name the file.
+	echo "pre-push: REFUSED $local_ref -> $remote_ref ($remote_name)"
+	echo "  private imports:"
+	sort -u "$tmp/blobs" | while IFS="$(printf '\t')" read -r blob commit path; do
+		git cat-file blob "$blob" 2>/dev/null | grep -qE "$private_import" || continue
+		hit=$(git cat-file blob "$blob" | grep -oE "$private_import_show" | sort -u | head -2 | tr '\n' ' ')
+		[ -n "$hit" ] || continue
+		echo "    $path  ($(git rev-parse --short "$commit"))  ->  $hit"
+	done | sort -u | head -20
+	echo "  These modules are closed source. The public edition must not reference them."
+	fail=1
+done
+
+[ "$fail" -eq 0 ] || echo "pre-push: nothing was pushed."
+exit "$fail"

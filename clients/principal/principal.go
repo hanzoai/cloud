@@ -30,6 +30,7 @@
 package principal
 
 import (
+	"context"
 	"strings"
 
 	"github.com/zap-proto/zip"
@@ -281,4 +282,41 @@ func BillingAccount(c *zip.Ctx) string {
 		return ""
 	}
 	return strings.Clone(acct)
+}
+
+// Tenant resolves the namespace a TYPED op operates in: the validated org, or
+// the local namespace for a caller that presents no validated identity.
+//
+// It is the context-shaped counterpart of [Org]. A typed handler
+// (zip.Get[In,Out]) is handed a context.Context and never sees a *zip.Ctx, so it
+// cannot call Org — and the whole point of this package is that the trust
+// decision is not re-derived per subsystem. Both accessors read the same
+// server-minted headers and apply the same rule; only the surface differs.
+//
+// THE LOCAL NAMESPACE. Org answers ("", false) for an unvalidated caller and its
+// callers must refuse. Tenant instead returns "" as a NAMESPACE KEY, because the
+// local primitives (base, kv, sql, tasks, functions) exist to be usable with no
+// identity provider running — refusing every request would leave the OSS edition
+// a framework with nothing behind it. The empty key cannot collide with a real
+// tenant: a validated org is non-empty by construction (Org rejects an empty
+// one), so no principal can ever address the local namespace and no local caller
+// can ever address a principal's.
+//
+// What this DOES mean is that anyone who can reach the port shares that
+// namespace. It is a local-development posture, not an authorization decision:
+// the dev entrypoint binds loopback, and a deployment serving real tenants puts
+// IAM in front. A subsystem that must never serve an unvalidated caller — one
+// that spends money, or reaches another system — calls [Validated] or [Org] and
+// refuses, exactly as before. Tenant is for data that belongs to whoever is
+// holding the machine.
+func Tenant(ctx context.Context) string {
+	c := zip.CallerOf(ctx)
+	if strings.TrimSpace(c.User) == "" {
+		return "" // no validated principal — the local namespace
+	}
+	org := strings.TrimSpace(c.Org)
+	if org == "" || len(org) > MaxOrgLen {
+		return ""
+	}
+	return strings.Clone(org)
 }

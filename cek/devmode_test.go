@@ -34,7 +34,7 @@ func TestDevUnencrypted_OnlyExplicitTruthyValuesCount(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run("val="+tc.val, func(t *testing.T) {
-			t.Setenv(devUnencryptedEnv, tc.val)
+			t.Setenv(DevUnencryptedEnv, tc.val)
 			if got := devUnencrypted(); got != tc.want {
 				t.Fatalf("devUnencrypted() with %q = %v, want %v", tc.val, got, tc.want)
 			}
@@ -45,7 +45,7 @@ func TestDevUnencrypted_OnlyExplicitTruthyValuesCount(t *testing.T) {
 // Absent entirely is not opted in. Separate from the empty-string case above:
 // unset and set-to-empty reach different branches of os.Getenv.
 func TestDevUnencrypted_UnsetIsOff(t *testing.T) {
-	os.Unsetenv(devUnencryptedEnv)
+	os.Unsetenv(DevUnencryptedEnv)
 	if devUnencrypted() {
 		t.Fatal("devUnencrypted() = true with the variable unset; the default must be OFF")
 	}
@@ -55,7 +55,7 @@ func TestDevUnencrypted_UnsetIsOff(t *testing.T) {
 // the key" and "run unencrypted" is how a deployment goes plaintext because
 // someone put the wrong value in a secret.
 func TestDevUnencrypted_IsNotTheMasterKeyVariable(t *testing.T) {
-	if devUnencryptedEnv == masterKeyEnv {
-		t.Fatalf("the dev opt-out and the master key must be different variables; both are %q", masterKeyEnv)
+	if DevUnencryptedEnv == MasterKeyEnv {
+		t.Fatalf("the dev opt-out and the master key must be different variables; both are %q", MasterKeyEnv)
 	}
 }

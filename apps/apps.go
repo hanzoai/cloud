@@ -27,11 +27,13 @@ import (
 	// In-repo subsystem packages (clients/*). Each exports a Mount (and, where it
 	// owns process-lifetime resources, a Shutdown); Wire references them directly.
 	"github.com/hanzoai/cloud/clients/auditlog"
+	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/dns"
 	"github.com/hanzoai/cloud/clients/do"
 	"github.com/hanzoai/cloud/clients/exec"
 	"github.com/hanzoai/cloud/clients/flags"
+	"github.com/hanzoai/cloud/clients/functions"
 	"github.com/hanzoai/cloud/clients/gateway"
 	"github.com/hanzoai/cloud/clients/ingress"
 	"github.com/hanzoai/cloud/clients/kms"
@@ -40,6 +42,7 @@ import (
 	"github.com/hanzoai/cloud/clients/security"
 	"github.com/hanzoai/cloud/clients/share"
 	"github.com/hanzoai/cloud/clients/storage"
+	"github.com/hanzoai/cloud/clients/tasks"
 	"github.com/hanzoai/cloud/clients/validators"
 	"github.com/hanzoai/cloud/clients/zt"
 )
@@ -78,6 +81,21 @@ func Wire() []cloud.MountSpec {
 		{Name: "exec", Mount: exec.Mount},
 		{Name: "gateway", Mount: gateway.Mount},
 		{Name: "audit", Mount: auditlog.Mount},
+
+		// The local apps. Each is a REAL implementation over the embedded store,
+		// not a relay to a cluster: the dev edition is meant to be a working
+		// product on a laptop with no network, and an app that only forwards
+		// somewhere else would make it a client for a thing you do not have.
+		//
+		// Every route in these three is a typed op, which is why they need no
+		// per-app integration work: one declaration is simultaneously the REST
+		// route, the OpenAPI schema, the MCP tool and the generated SDK method.
+		{Name: "base", Mount: base.Mount, Shutdown: base.Shutdown},
+		{Name: "tasks", Mount: tasks.Mount, Shutdown: tasks.Shutdown},
+		// STAGED (see stagedSubsystems): functions RUNS CODE, so it is linked in
+		// every build but mounts only when an operator names it.
+		{Name: "functions", Mount: functions.Mount, Shutdown: functions.Shutdown},
+
 		// Runtime wasm/proxy plugins — mounts dead last.
 		{Name: "plugins", Mount: plugin.Mount},
 	}

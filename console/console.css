@@ -1,0 +1,306 @@
+/* Dev console styling. One palette, expressed as variables, resolved three ways:
+   the light default, the system preference, and an explicit choice on <html>. */
+
+:root {
+  --bg: #faf9f7;
+  --panel: #ffffff;
+  --sunk: #f3f1ed;
+  --line: #e3e0d9;
+  --fg: #1c1a17;
+  --muted: #7c766c;
+  --accent: #a8480d;
+  --accent-fg: #ffffff;
+  --ok: #2f7d4f;
+  --info: #2b6cb0;
+  --warn: #a86a00;
+  --down: #c0392b;
+  --purple: #6b46c1;
+  --shadow: 0 1px 0 rgba(0, 0, 0, .03);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1012;
+    --panel: #17191d;
+    --sunk: #101216;
+    --line: #272b31;
+    --fg: #e7e5e1;
+    --muted: #8b8f96;
+    --accent: #e08a4c;
+    --accent-fg: #1a1207;
+    --ok: #56b87f;
+    --info: #6aa9e9;
+    --warn: #d9a441;
+    --down: #e8756a;
+    --purple: #a992e8;
+    --shadow: none;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f1012;
+  --panel: #17191d;
+  --sunk: #101216;
+  --line: #272b31;
+  --fg: #e7e5e1;
+  --muted: #8b8f96;
+  --accent: #e08a4c;
+  --accent-fg: #1a1207;
+  --ok: #56b87f;
+  --info: #6aa9e9;
+  --warn: #d9a441;
+  --down: #e8756a;
+  --purple: #a992e8;
+  --shadow: none;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.5 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- header ------------------------------------------------------------- */
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  height: 48px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.brand { display: flex; align-items: center; gap: 8px; letter-spacing: -.2px; }
+.brand b { font-weight: 600; }
+.brand .sub { color: var(--muted); }
+.mark {
+  width: 10px; height: 10px;
+  background: var(--accent);
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.chip {
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tabs { display: flex; gap: 2px; margin-left: auto; overflow-x: auto; }
+.tabs button {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font: inherit;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.tabs button:hover { color: var(--fg); }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tabs button.off { opacity: .5; }
+
+/* ---- health strip ------------------------------------------------------- */
+
+.health {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg);
+}
+.pill b { color: var(--fg); font-weight: 500; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.dot.ok { background: var(--ok); }
+.dot.warn { background: var(--warn); }
+.dot.down { background: var(--down); }
+
+/* ---- layout ------------------------------------------------------------- */
+
+main { padding: 14px; }
+.view[hidden] { display: none; }
+
+.api {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.routes, .runner, .panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.routes { position: sticky; top: 62px; }
+.tree { max-height: calc(100vh - 190px); overflow: auto; margin: 8px -4px 0; }
+.count { color: var(--muted); font-size: 11px; padding-top: 8px; border-top: 1px solid var(--line); margin-top: 8px; }
+
+details.group { margin-bottom: 2px; }
+details.group > summary {
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 5px;
+  color: var(--fg);
+  list-style: none;
+}
+details.group > summary::-webkit-details-marker { display: none; }
+details.group > summary:hover { background: var(--sunk); }
+details.group > summary .n { color: var(--muted); font-size: 11px; margin-left: 6px; }
+
+.route {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 6px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  color: var(--fg);
+  font: inherit;
+  padding: 3px 4px;
+  cursor: pointer;
+}
+.route:hover { background: var(--sunk); }
+.route[aria-current="true"] { background: var(--sunk); box-shadow: inset 2px 0 0 var(--accent); }
+.route span.p { overflow-wrap: anywhere; }
+.route .arg { color: var(--accent); }
+
+.m { font-size: 10px; font-weight: 600; letter-spacing: .3px; color: var(--muted); }
+.m-GET { color: var(--ok); }
+.m-POST { color: var(--info); }
+.m-PUT { color: var(--warn); }
+.m-PATCH { color: var(--purple); }
+.m-DELETE { color: var(--down); }
+
+/* ---- controls ----------------------------------------------------------- */
+
+.line { display: flex; gap: 8px; align-items: center; }
+.line.thin { margin: 12px 0 6px; color: var(--muted); }
+.grow { flex: 1; }
+
+input, textarea, select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  padding: 6px 8px;
+  width: 100%;
+}
+textarea { resize: vertical; }
+select { width: auto; }
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+input.bad { border-color: var(--down); }
+
+button { font: inherit; cursor: pointer; }
+.primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 6px 14px;
+}
+.ghost {
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 9px;
+}
+.ghost:hover:not([disabled]) { color: var(--fg); border-color: var(--muted); }
+button[disabled] { opacity: .45; cursor: not-allowed; }
+
+.params { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.params label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.params input { width: 190px; }
+
+details.opt { margin-top: 10px; }
+details.opt > summary { cursor: pointer; color: var(--muted); }
+details.opt > summary:hover { color: var(--fg); }
+details.opt textarea { margin-top: 6px; }
+
+/* ---- results ------------------------------------------------------------ */
+
+.out { margin-top: 12px; }
+.out .muted { margin: 0; }
+.status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.code {
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-weight: 600;
+  color: var(--accent-fg);
+  background: var(--muted);
+}
+.code.ok { background: var(--ok); }
+.code.info { background: var(--info); }
+.code.warn { background: var(--warn); }
+.code.down { background: var(--down); }
+
+pre {
+  margin: 0;
+  padding: 10px;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  max-height: 52vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.muted { color: var(--muted); }
+.note {
+  margin: 0 0 8px;
+  padding: 7px 9px;
+  border-left: 2px solid var(--warn);
+  background: var(--sunk);
+  color: var(--muted);
+}
+
+/* ---- primitive panels --------------------------------------------------- */
+
+.panel { max-width: 940px; margin: 0 auto 14px; }
+.panel h2 { margin: 0 0 2px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.panel h2 code { color: var(--muted); font-weight: 400; font-size: 12px; }
+.panel > p { margin: 0 0 12px; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.links { margin-top: 12px; }
+.links > summary { cursor: pointer; color: var(--muted); }
+.links .route { grid-template-columns: 46px minmax(0, 1fr); }
+
+@media (max-width: 900px) {
+  .api { grid-template-columns: minmax(0, 1fr); }
+  .routes { position: static; }
+  .tree { max-height: 260px; }
+  .bar { flex-wrap: wrap; height: auto; padding: 8px 12px; }
+  .tabs { margin-left: 0; width: 100%; }
+}
