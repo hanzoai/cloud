@@ -196,8 +196,30 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	}
 
 	step("lease", "leasing a "+class+" sandbox", "running")
+	// NO PROJECT, and that is the whole of it.
+	//
+	// A project NAMES A DISK. apps/sandbox keys one 20Gi PVC per (org, project) so a
+	// second lease on the same project finds the first disk and a checkout survives
+	// between sessions — which is right, and which is why a disk is KEPT unless
+	// somebody explicitly purges it.
+	//
+	// This run used to pass its SESSION id as the project. A session is opened once
+	// per dispatch and never reopened, so that name could not be asked for twice:
+	// every run minted a disk that was by construction unreusable, and the
+	// deliberate keep-by-default then made it immortal. 20Gi a run, and DO bills a
+	// volume whether or not anything is attached to it.
+	//
+	// The fix is not to purge harder. A purge on the way out still strands the disk
+	// of any run killed, OOM'd, or evicted between the lease and the goodbye. The
+	// fix is to stop asking for the wrong primitive: a run wants scratch space that
+	// dies with its pod, and that is EXACTLY what an emptyDir is — which is what
+	// runtime.go mounts whenever there is no volume. Its lifetime is the pod's by
+	// construction, so there is nothing to remember to delete and nothing to leak.
+	//
+	// The work does not live on that disk anyway: deliver() commits it and pushes it
+	// to the run's ref, which is the only reason anything survives a run at all.
 	leased, err := plane.Ask[plane.LeaseIn, plane.Leased](ctx, "sandboxes", plane.SandboxLease,
-		&plane.LeaseIn{Class: class, Project: req.SessionID, TTLSec: ttl})
+		&plane.LeaseIn{Class: class, TTLSec: ttl})
 	if err != nil {
 		return RunResult{}, fmt.Errorf("coding: lease sandbox: %w", err)
 	}

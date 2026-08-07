@@ -44,6 +44,10 @@ type pod struct {
 	mu     sync.Mutex
 	ran    [][]string
 	answer func(argv []string) plane.Ran
+	// leased is every lease the run asked for, verbatim. A lease is a REQUEST for
+	// resources — a class, a ttl, and whether a disk is wanted — and the only place
+	// that request is visible is here, before it reaches a cluster.
+	leased []plane.LeaseIn
 }
 
 func (p *pod) exec(argv []string) plane.Ran {
@@ -103,6 +107,9 @@ func servePod(t *testing.T, p *pod) {
 	sandboxes := zip.New(zip.Config{AppName: "sandboxes", DisableStartupMessage: true})
 	zip.Post[plane.LeaseIn, plane.Leased](sandboxes, "/sandbox/lease",
 		func(_ context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
+			p.mu.Lock()
+			p.leased = append(p.leased, *in)
+			p.mu.Unlock()
 			return &plane.Leased{ID: "sbx_1", Class: in.Class, Status: "ready", Workdir: "/work"}, nil
 		}, zip.WithOperationID(plane.SandboxLease))
 	zip.Post[plane.RunIn, plane.Ran](sandboxes, "/sandbox/run",
@@ -144,6 +151,43 @@ func aRun() RunRequest {
 // Slack actually reads.
 func steps(out *[]string) func(Step) {
 	return func(s Step) { *out = append(*out, s.Step+" "+s.Message+" "+s.Status) }
+}
+
+// A RUN ASKS FOR NO PROJECT, so it leaves no disk behind.
+//
+// A project names a per-(org, project) 20Gi PVC that apps/sandbox deliberately
+// KEEPS when a lease ends, so a checkout survives between sessions. A run used to
+// pass its SESSION id there — a name minted per dispatch and never reopened — so
+// each run created a disk that could never be addressed again and was then kept
+// forever. That is the whole mechanism of the leak, and it is visible only here,
+// in what the lease ASKS for; the run's own result looks identical either way.
+//
+// The assertion is on Project and not on some later cleanup on purpose. A purge on
+// the way out cannot cover a run that is killed, OOM'd, or evicted before it says
+// goodbye, whereas a lease that never asks for a disk cannot strand one. The pod's
+// emptyDir already has exactly the lifetime a run wants.
+func TestSandboxRun_LeasesNoDiskBecauseARunIsNotAProject(t *testing.T) {
+	p := &pod{answer: func(argv []string) plane.Ran {
+		if has(argv, "rev-parse") {
+			return plane.Ran{Stdout: theSHA + "\n"}
+		}
+		return plane.Ran{}
+	}}
+	servePod(t, p)
+
+	if _, err := (sandboxRunner{}).Run(context.Background(), "acme", "u_1", aRun(), nil); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.leased) != 1 {
+		t.Fatalf("a run took %d leases, want exactly 1", len(p.leased))
+	}
+	if got := p.leased[0].Project; got != "" {
+		t.Fatalf("the run asked for project %q, which mints a 20Gi disk keyed to a name "+
+			"no later lease can ever reuse — a run must ask for no project at all", got)
+	}
 }
 
 // A run that edited NOTHING says so, and touches no ref. This is the first test
