@@ -83,7 +83,7 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 	wd := workdirFor(m.Class)
 
 	// 1. It runs code at all.
-	res, err := r.exec(ctx, m, []string{"node", "-e", "console.log('SANDBOX-RUNS-CODE', process.version)"}, nil, 60)
+	res, err := r.exec(ctx, m, []string{"node", "-e", "console.log('SANDBOX-RUNS-CODE', process.version)"}, nil, 60, nil)
 	if err != nil {
 		t.Fatalf("exec: %v", err)
 	}
@@ -97,10 +97,10 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 	//    inside one call is not a filesystem.
 	const src = "export const answer = 42; // edited by the agent\n"
 	if res, err = r.exec(ctx, m, []string{"sh", "-c", "mkdir -p " + wd + "/src && cat > " + wd + "/src/app.js"},
-		strings.NewReader(src), 60); err != nil || res.ExitCode != 0 {
+		strings.NewReader(src), 60, nil); err != nil || res.ExitCode != 0 {
 		t.Fatalf("write: err=%v exit=%d stderr=%q", err, res.ExitCode, res.Stderr)
 	}
-	if res, err = r.exec(ctx, m, []string{"cat", wd + "/src/app.js"}, nil, 60); err != nil {
+	if res, err = r.exec(ctx, m, []string{"cat", wd + "/src/app.js"}, nil, 60, nil); err != nil {
 		t.Fatalf("read back: %v", err)
 	}
 	if res.Stdout != src {
@@ -112,7 +112,7 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 	//    executing it proves the edit reached the same filesystem the runtime
 	//    uses, which is the thing an agent depends on.
 	if res, err = r.exec(ctx, m, []string{"node", "-e",
-		"import('" + wd + "/src/app.js').then(m=>console.log('ANSWER='+m.answer))"}, nil, 60); err != nil {
+		"import('" + wd + "/src/app.js').then(m=>console.log('ANSWER='+m.answer))"}, nil, 60, nil); err != nil {
 		t.Fatalf("run edited code: %v", err)
 	}
 	if !strings.Contains(res.Stdout, "ANSWER=42") {
@@ -123,7 +123,7 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 	// 4. A failing command is DATA, not an error. An agent has to be able to see
 	//    a test suite fail without the call itself failing, or it cannot tell
 	//    "your code is broken" from "the sandbox is broken".
-	if res, err = r.exec(ctx, m, []string{"sh", "-c", "echo to-stderr >&2; exit 3"}, nil, 60); err != nil {
+	if res, err = r.exec(ctx, m, []string{"sh", "-c", "echo to-stderr >&2; exit 3"}, nil, 60, nil); err != nil {
 		t.Fatalf("a non-zero exit must not be a transport error: %v", err)
 	}
 	if res.ExitCode != 3 || !strings.Contains(res.Stderr, "to-stderr") {
@@ -158,7 +158,7 @@ func TestLiveSandboxDoesGit(t *testing.T) {
 	}()
 
 	// git present at all — an image without it cannot host a coding agent.
-	res, err := r.exec(ctx, m, []string{"git", "--version"}, nil, 60)
+	res, err := r.exec(ctx, m, []string{"git", "--version"}, nil, 60, nil)
 	if err != nil || res.ExitCode != 0 {
 		t.Fatalf("git missing from the image: err=%v exit=%d stderr=%q", err, res.ExitCode, res.Stderr)
 	}
@@ -180,7 +180,7 @@ printf 'edited\n' > file.txt
 git add file.txt
 git commit -q -m "the agent committed this"
 git log --oneline -1`
-	if res, err = r.exec(ctx, m, []string{"sh", "-c", script}, nil, 120); err != nil {
+	if res, err = r.exec(ctx, m, []string{"sh", "-c", script}, nil, 120, nil); err != nil {
 		t.Fatalf("git flow: %v", err)
 	}
 	if res.ExitCode != 0 {
@@ -192,6 +192,6 @@ git log --oneline -1`
 	// separates "the network allows it" from "we have a credential". Those are
 	// different gaps and conflating them sends someone to fix the wrong one.
 	res, _ = r.exec(ctx, m, []string{"sh", "-c",
-		"git ls-remote https://git.hanzo.ai/hanzo/universe HEAD 2>&1 | head -2"}, nil, 60)
+		"git ls-remote https://git.hanzo.ai/hanzo/universe HEAD 2>&1 | head -2"}, nil, 60, nil)
 	t.Logf("FORGE REACHABLE: exit=%d out=%q", res.ExitCode, strings.TrimSpace(res.Stdout+res.Stderr))
 }
