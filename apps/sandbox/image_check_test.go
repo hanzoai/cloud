@@ -33,19 +33,7 @@ func TestCheckImageRefusesAnotherOrgsNamespaceOnOurRegistry(t *testing.T) {
 	}
 }
 
-// A runtime is passed to the apiserver as runtimeClassName, so an unknown value
-// is a pod that never schedules. Refusing it here turns a silent Pending into a
-// 400 that says which runtimes exist.
-func TestCheckRuntimeIsAClosedSet(t *testing.T) {
-	for _, c := range []struct {
-		rc      string
-		wantErr bool
-	}{
-		{"", false}, {"gvisor", false}, {"kata-fc", false}, {"kata-clh", false},
-		{"runsc", true}, {"gVisor", true}, {"anything", true},
-	} {
-		if err := checkRuntime(c.rc); (err != nil) != c.wantErr {
-			t.Fatalf("checkRuntime(%q) err=%v, wantErr=%v", c.rc, err, c.wantErr)
-		}
-	}
-}
+// The closed set of runtimes moved to runtime_test.go, beside the derivation
+// that reads it. Being in the set is only half the question a caller's runtime
+// has to answer; the other half is whether it can hold that sandbox's volume,
+// and splitting the two is what let a valid name lose a checkout.
