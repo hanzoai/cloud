@@ -170,17 +170,17 @@ func TestCrawlProjectsAsATool(t *testing.T) {
 		t.Fatalf("POST /mcp did not answer MCP: %d — %.200s", resp.StatusCode, raw)
 	}
 	for _, tool := range env.Result.Tools {
-		if tool.Name != "post_v1_crawl" {
+		if tool.Name != "read_page" {
 			continue
 		}
 		if tool.Description == "" {
-			t.Fatal("post_v1_crawl projects with NO description — a tool a model cannot " +
+			t.Fatal("read_page projects with NO description — a tool a model cannot " +
 				"read is a tool it will not call; run `go generate -run zipdoc ./...`")
 		}
-		t.Logf("post_v1_crawl projects: %.90s…", tool.Description)
+		t.Logf("read_page projects: %.90s…", tool.Description)
 		return
 	}
-	t.Fatalf("post_v1_crawl is not in this subsystem's tools/list — %.300s", raw)
+	t.Fatalf("read_page is not in this subsystem's tools/list — %.300s", raw)
 }
 
 // TestCrawlPublishesItsBodies holds the document to account. It used to assert
