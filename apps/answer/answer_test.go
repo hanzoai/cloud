@@ -777,3 +777,28 @@ func TestSynthesisPromptFencesCrawledPages(t *testing.T) {
 		t.Fatal("the page must still be present — fencing contains it, it does not drop it")
 	}
 }
+
+// A source hint must SCOPE the search, not decorate it. The hints were appended
+// as bare words — `x` turned "openai news" into "openai news x", which is the
+// original query plus a noise token and reaches X/Twitter not at all. Mojeek
+// honours `site:` (measured: site:x.com → 10 results; Bing → 0), so a hint that
+// names a site has to become one.
+func TestSourceHintsScopeToTheirSite(t *testing.T) {
+	q := buildQuery("openai", modes["search"], []string{"x"})
+	if !strings.Contains(q, "site:x.com") {
+		t.Fatalf("buildQuery with the x hint = %q, want it scoped to site:x.com", q)
+	}
+	multi := buildQuery("openai", modes["search"], []string{"github", "reddit"})
+	if !strings.Contains(multi, "site:github.com") || !strings.Contains(multi, "site:reddit.com") {
+		t.Fatalf("two site hints = %q, want both sites", multi)
+	}
+	// Two sites are alternatives, never both-at-once: `site:a site:b` is an AND
+	// no page can satisfy, and would answer zero.
+	if !strings.Contains(multi, " OR ") {
+		t.Fatalf("two site hints = %q, want them joined as alternatives", multi)
+	}
+	// A TOPICAL hint names no site and must stay a plain word.
+	if s := buildQuery("openai", modes["search"], []string{"web"}); strings.Contains(s, "site:") {
+		t.Fatalf("topical hint = %q, want no site scope", s)
+	}
+}
