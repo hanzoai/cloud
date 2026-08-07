@@ -3,6 +3,7 @@ package projects
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -166,6 +167,14 @@ type Project struct {
 	// disclaim it is a platform that launders provenance.
 	Upstream string
 	License  string
+	// Tags is the site's per-project browser tag config: platform slug → its
+	// non-secret pixel/measurement id (e.g. {"ga4":"G-…","meta":"…"}). The per-SITE
+	// half of the tag manager — track.js fetches it from /v1/tags (by this project's
+	// pk-, or derived from the request host) and injects those pixels, and the
+	// server-side CAPI fan-out reads the same ids, so hanzo.ai and hanzo.chat carry
+	// different tags under one org. The API SECRET (a CAPI token/api_secret) is NOT
+	// here; it stays per-org in KMS. Empty until a destination is connected for the site.
+	Tags map[string]string
 }
 
 // Deployment is one deploy attempt for a project, versioned monotonically per
@@ -342,6 +351,9 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 		// then minted per row by backfillKeys below, because a shared default would
 		// be one key for every tenant — the column default cannot be the credential.
 		`ALTER TABLE projects ADD COLUMN key TEXT NOT NULL DEFAULT ''`,
+		// tags is the per-project browser tag config (platform → non-secret pixel id)
+		// as JSON. '{}' backfills every existing row: no tags until a site connects one.
+		`ALTER TABLE projects ADD COLUMN tags TEXT NOT NULL DEFAULT '{}'`,
 		// Every site_hosts row that exists when this migration runs is ALREADY
 		// SERVING, so the default must be 'verified'. Defaulting to 'pending'
 		// would take every live custom domain and subdomain off the air the
@@ -420,30 +432,60 @@ func (s *Store) backfillKeys() error {
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id,forked_from,visibility,hidden,hidden_reason,upstream,license,key`
+// encodeTags / decodeTags are the JSON codec for a project's per-site browser tag
+// config (platform → non-secret pixel id). Empty ⇒ "{}"; a malformed or empty column ⇒
+// an empty map (never nil), so callers never nil-check.
+func encodeTags(t map[string]string) string {
+	if len(t) == 0 {
+		return "{}"
+	}
+	b, err := json.Marshal(t)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+func decodeTags(s string) map[string]string {
+	if s == "" {
+		return map[string]string{}
+	}
+	var t map[string]string
+	if json.Unmarshal([]byte(s), &t) != nil || t == nil {
+		return map[string]string{}
+	}
+	return t
+}
+
+const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id,forked_from,visibility,hidden,hidden_reason,upstream,license,key,tags`
 
 func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 	var p Project
+	var tagsJSON string
 	err := sc.Scan(&p.ID, &p.Org, &p.Slug, &p.Name, &p.Description,
 		&p.RepoURL, &p.RepoBranch, &p.RepoProvider, &p.Framework,
 		&p.Status, &p.LiveURL, &p.Bucket, &p.CurrentDeploy, &p.CurrentRelease,
 		&p.CacheControl, &p.LastPurgeAt, &p.CreatedAt, &p.UpdatedAt,
 		&p.Analytics, &p.SpaceId, &p.ForkedFrom, &p.Visibility, &p.Hidden, &p.HiddenReason,
-		&p.Upstream, &p.License, &p.Key)
-	return p, err
+		&p.Upstream, &p.License, &p.Key, &tagsJSON)
+	if err != nil {
+		return p, err
+	}
+	p.Tags = decodeTags(tagsJSON)
+	return p, nil
 }
 
 // CreateProject inserts one project. A UNIQUE(org,slug) violation surfaces as
 // errConflict.
 func (s *Store) CreateProject(ctx context.Context, p Project) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, p.Org, p.Slug, p.Name, p.Description,
 		p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
 		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease,
 		p.CacheControl, p.LastPurgeAt, p.CreatedAt, p.UpdatedAt,
 		p.Analytics, p.SpaceId, p.ForkedFrom, p.Visibility, p.Hidden, p.HiddenReason,
-		p.Upstream, p.License, p.Key)
+		p.Upstream, p.License, p.Key, encodeTags(p.Tags))
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -512,11 +554,11 @@ func (s *Store) ListProjects(ctx context.Context, org string) ([]Project, error)
 // reads-modifies-writes the whole Project; org+slug+id+created_at are immutable.
 func (s *Store) UpdateProject(ctx context.Context, p Project) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,current_release=?,cache_control=?,last_purge_at=?,analytics=?,visibility=?,hidden=?,hidden_reason=?,upstream=?,license=?,updated_at=?
+		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,current_release=?,cache_control=?,last_purge_at=?,analytics=?,visibility=?,hidden=?,hidden_reason=?,upstream=?,license=?,tags=?,updated_at=?
 		 WHERE org=? AND slug=?`,
 		p.Name, p.Description, p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
 		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease, p.CacheControl, p.LastPurgeAt,
-		p.Analytics, p.Visibility, p.Hidden, p.HiddenReason, p.Upstream, p.License, p.UpdatedAt, p.Org, p.Slug)
+		p.Analytics, p.Visibility, p.Hidden, p.HiddenReason, p.Upstream, p.License, encodeTags(p.Tags), p.UpdatedAt, p.Org, p.Slug)
 	if err != nil {
 		return fmt.Errorf("update project: %w", err)
 	}
