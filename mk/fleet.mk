@@ -202,9 +202,16 @@ fan = $(MAKE) -f $(ROOT)/mk/fleet.mk -k -j$(JOBS) GOFLAGS=-p=$(FLEET_P) $1
 # The composition proof: compose the apps' documents and check the result against
 # the fully-mounted golden. It links no subsystem and mounts nothing — see
 # openapi/weave_test.go for what it refuses. OUT=<path> writes it elsewhere.
-openapi: ## Compose every app's document into openapi.yaml. OUT=<path> to write it elsewhere.
+#
+# It writes BOTH projections, from one weave: openapi.yaml is everything the
+# fleet serves, and public.yaml beside it is the part that declared itself part
+# of the published contract (openapi/public.go). Two files, one command, one
+# composition — a second command for the second file is how two documents come to
+# describe two different commits.
+openapi: ## Compose every app's document into openapi.yaml + public.yaml. OUT=<path> to write them elsewhere.
 	@$(GO) test -count=1 $(ROOT)/openapi -weave="$(abspath $(if $(OUT),$(OUT),$(ROOT)/openapi.yaml))"
 	@echo ">> openapi.yaml — $$(grep -c '^  /' $(ROOT)/openapi.yaml) paths"
+	@echo ">> public.yaml  — $$(grep -c '^  /' $(ROOT)/public.yaml) paths"
 
 # ONE APP, EITHER VERB. Both delegate to mk/plugin.mk through `app` — nothing
 # about how a binary is produced is restated here — and being TARGETS rather than
@@ -317,10 +324,10 @@ describe: ## Every app describes itself (one binary per app, all at once).
 check: describe ## Regenerate every document + openapi.yaml FROM SOURCE and fail on any diff. The drift gate.
 	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi OUT=$(ROOT)/openapi.yaml 2>&1) \
 	  || { echo "$$out"; echo "!! the compose refused; nothing was written"; exit 1; }
-	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml openapi/floor.json plugin/); \
+	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml public.yaml openapi/floor.json plugin/); \
 	if [ -n "$$stale" ]; then \
 	  echo "$$stale"; \
-	  git -C $(ROOT) diff --stat -- openapi.yaml plugin/; \
+	  git -C $(ROOT) diff --stat -- openapi.yaml public.yaml plugin/; \
 	  echo ""; \
 	  echo "STALE: regenerating the document from source produced something other than what is"; \
 	  echo "committed. The list above is published surface — routes that exist and are"; \
@@ -332,3 +339,4 @@ check: describe ## Regenerate every document + openapi.yaml FROM SOURCE and fail
 	  exit 1; \
 	fi
 	@echo ">> openapi.yaml regenerated from source and unchanged — $$(grep -c '^  /' $(ROOT)/openapi.yaml) paths"
+	@echo ">> public.yaml  regenerated from source and unchanged — $$(grep -c '^  /' $(ROOT)/public.yaml) paths"

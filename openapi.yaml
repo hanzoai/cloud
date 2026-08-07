@@ -52066,6 +52066,7 @@ paths:
       tags:
       - audio
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/audio/music:
     post:
       description: |-
@@ -52079,6 +52080,7 @@ paths:
       tags:
       - audio
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/audio/speech:
     post:
       description: |-
@@ -52093,6 +52095,7 @@ paths:
       tags:
       - audio
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/audio/transcriptions:
     post:
       description: |-
@@ -52110,6 +52113,7 @@ paths:
       tags:
       - audio
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/audio/voice:
     post:
       description: |-
@@ -52123,6 +52127,7 @@ paths:
       tags:
       - audio
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/audit:
     get:
       description: |-
@@ -56927,6 +56932,7 @@ paths:
       tags:
       - chat
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/cloud:
     get:
       description: |-
@@ -62760,6 +62766,7 @@ paths:
       tags:
       - completions
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/compliance/accreditation:
     get:
       description: |-
@@ -66138,6 +66145,7 @@ paths:
       tags:
       - embeddings
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/enablement:
     get:
       description: |-
@@ -75436,6 +75444,7 @@ paths:
       tags:
       - images
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/index/health:
     get:
       description: Answers Meilisearch's `{"status":"available"}` when the index store
@@ -80598,6 +80607,7 @@ paths:
       tags:
       - messages
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/messages/count_tokens:
     post:
       description: |-
@@ -80609,6 +80619,7 @@ paths:
       tags:
       - messages
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/metrics/batch:
     post:
       description: |-
@@ -80829,6 +80840,7 @@ paths:
       tags:
       - models
       x-app: ai
+      x-public: true
   /v1/models/{model}/access:
     get:
       description: |-
@@ -80876,6 +80888,7 @@ paths:
       tags:
       - models
       x-app: ai
+      x-public: true
   /v1/mq/health:
     get:
       description: Reports whether the message plane behind this surface answers.
@@ -97485,6 +97498,7 @@ paths:
       tags:
       - rerank
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/research/artifacts:
     get:
       description: |-
@@ -97749,6 +97763,7 @@ paths:
       tags:
       - responses
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/risk/datasets:
     get:
       description: |-
@@ -105412,6 +105427,7 @@ paths:
       tags:
       - videos
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/videos/{id}/content:
     get:
       description: |-
@@ -105433,6 +105449,7 @@ paths:
       tags:
       - videos
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/videos/generations:
     post:
       description: |-
@@ -105452,6 +105469,7 @@ paths:
       tags:
       - videos
       x-app: github.com/hanzoai/ai
+      x-public: true
   /v1/vpcs:
     get:
       description: |-

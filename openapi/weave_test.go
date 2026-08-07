@@ -28,6 +28,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud/manifest"
@@ -41,12 +42,32 @@ import (
 // into the golden. Without the flag the same weave is the drift gate.
 var weaveOut = flag.String("weave", "", "write the woven document to this path (regenerate the golden)")
 
-// goldenPath, floorPath and specDir are relative to this package's directory.
+// goldenPath, publicPath, floorPath and specDir are relative to this package's
+// directory.
+//
+// TWO GOLDENS, ONE WEAVE. openapi.yaml is the INTERNAL document — everything the
+// fleet serves, which is what we generate our own clients from. public.yaml is
+// the PUBLIC projection of that same document: only the operations that declared
+// themselves part of the published contract (openapi/public.go). They are written
+// by one run of one weave and compared by one test, so the two can never describe
+// different commits — which they would the moment a second command produced the
+// second file.
 const (
 	goldenPath = "../openapi.yaml"
+	publicPath = "../public.yaml"
 	floorPath  = "floor.json"
 	specDir    = "../plugin"
 )
+
+// render is the one encoding both goldens are written in, so a difference
+// between them is never a difference in how they were serialised.
+func render(d *openapi.Document) ([]byte, error) {
+	j, err := json.Marshal(d)
+	if err != nil {
+		return nil, err
+	}
+	return yaml.JSONToYAML(j)
+}
 
 // fromTree is the WORKING TREE's copy of one app's subset — the files
 // check has just regenerated from source and is about to compare against.
@@ -98,27 +119,48 @@ func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	j, err := json.Marshal(woven)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	got, err := yaml.JSONToYAML(j)
+	got, err := render(woven)
 	if err != nil {
 		t.Fatalf("yaml: %v", err)
 	}
 
-	// -weave is the REGENERATE mode (write the golden and stop); no flag is the
+	// THE PUBLIC PROJECTION, out of the SAME woven document. It is derived here
+	// rather than by a second command for the reason the whole package exists: two
+	// producers of one fact are two facts, free to be generated at different
+	// commits and to disagree about which operations the API has.
+	pub, err := openapi.Publish(woven)
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	pubGot, err := render(pub)
+	if err != nil {
+		t.Fatalf("yaml (public): %v", err)
+	}
+
+	// -weave is the REGENERATE mode (write the goldens and stop); no flag is the
 	// GATE mode (verify below). Falling through would compare the just-written
 	// document against the golden we read BEFORE writing it, and fail every real
 	// regeneration for having done its job.
+	//
+	// The public document is written BESIDE whatever -weave named, never at its
+	// own flag: a second flag is a second thing to forget, and the run that forgot
+	// it would leave a public contract describing last week's surface.
 	if *weaveOut != "" {
 		if err := os.WriteFile(*weaveOut, got, 0o644); err != nil {
 			t.Fatalf("write %s: %v", *weaveOut, err)
 		}
+		out := filepath.Join(filepath.Dir(*weaveOut), filepath.Base(publicPath))
+		if err := os.WriteFile(out, pubGot, 0o644); err != nil {
+			t.Fatalf("write %s: %v", out, err)
+		}
+		// The floor is raised from the INTERNAL document and from nothing else —
+		// see TestTheFloorGuardsTheInternalDocument for why measuring the public
+		// one would disarm it in a single run.
 		if err := raised.Write(floorPath); err != nil {
 			t.Fatalf("write %s: %v", floorPath, err)
 		}
-		t.Logf("wrote %s (%d paths) and %s (%d products)", *weaveOut, len(woven.Paths), floorPath, len(raised.Products))
+		t.Logf("wrote %s (%d paths), %s (%d paths) and %s (%d products)",
+			*weaveOut, len(woven.Paths), out, len(pub.Paths), floorPath, len(raised.Products))
 		return
 	}
 
@@ -131,8 +173,70 @@ func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 			"removed or renamed and either an app subset or the golden was not regenerated — the SDK repos pull "+
 			"this file. Run `make describe` and commit the result.", len(woven.Paths))
 	}
-	t.Logf("woven %d paths / %d schemas / %d tags from %d apps — byte-identical to %s",
-		len(woven.Paths), schemaCount(woven), len(woven.Tags), len(manifest.Apps), goldenPath)
+
+	// And the same check for the public contract, which is the one that matters
+	// in the OTHER direction: a diff here is either a product that stopped being
+	// published or one that started, and both are decisions somebody makes on
+	// purpose. This is the whole ratchet for the public surface — it is small
+	// enough to compare WHOLE, so it needs no counting scheme (openapi/floor.go)
+	// to notice a shrink, and it notices growth too.
+	wantPub, err := os.ReadFile(publicPath)
+	if err != nil {
+		t.Fatalf("read %s: %v — run `make describe`", publicPath, err)
+	}
+	if !bytes.Equal(pubGot, wantPub) {
+		t.Fatalf("public.yaml is not the public projection of the woven document (%d paths public now, out of "+
+			"%d). An operation was added to or removed from the published contract — every public SDK, the "+
+			"public CLI, the MCP tool list and docs.hanzo.ai are generated from this file. If that was the "+
+			"intent, run `make describe` and commit it next to the openapi.Public line that caused it.",
+			len(pub.Paths), len(woven.Paths))
+	}
+	t.Logf("woven %d paths / %d schemas / %d tags from %d apps — byte-identical to %s; %d paths public (%s)",
+		len(woven.Paths), schemaCount(woven), len(woven.Tags), len(manifest.Apps), goldenPath,
+		len(pub.Paths), publicPath)
+}
+
+// THE FLOOR GUARDS THE INTERNAL DOCUMENT. Pointing it at the public one would not
+// fail — it would pass, quietly, and take the ratchet with it.
+//
+// floor.json is the only thing that can tell a smaller API from a smaller
+// document, and it works by refusing a regeneration that publishes less than the
+// last one. The public projection publishes, by construction, a tiny fraction of
+// the same surface. Measure THAT and one of two things happens: the run is
+// refused for a shrink that is not a shrink and CI is wedged, or somebody
+// "fixes" it by rewriting floor.json from the public numbers — after which every
+// internal product could vanish and the floor, now sized to eighteen paths,
+// would agree that nothing was lost.
+//
+// So this asserts both halves: the committed floor is the internal document's,
+// and feeding it the public one is REFUSED. The second is the load-bearing one —
+// it is the assertion that fails if the ratchet is ever re-based.
+func TestTheFloorGuardsTheInternalDocument(t *testing.T) {
+	subsets, err := openapi.Subsets(manifest.Names(), fromTree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	woven, err := openapi.Fleet(subsets)
+	if err != nil {
+		t.Fatalf("weave: %v", err)
+	}
+	pub, err := openapi.Publish(woven)
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	was, err := openapi.ReadFloor(floorPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := was.Raise(openapi.Measure(woven)); err != nil {
+		t.Fatalf("the committed floor refuses the INTERNAL document, which is the document it is "+
+			"supposed to describe: %v", err)
+	}
+	if _, err := was.Raise(openapi.Measure(pub)); err == nil {
+		t.Fatalf("the committed floor ACCEPTS the public projection (%d paths against the internal "+
+			"document's %d). It is therefore not sized to the internal surface, and a regeneration that "+
+			"lost most of the API would pass it", len(pub.Paths), len(woven.Paths))
+	}
 }
 
 // Two apps may not claim one address. This is the check the manifest's
@@ -271,4 +375,102 @@ func schemaCount(d *openapi.Document) int {
 		return 0
 	}
 	return len(d.Components.Schemas)
+}
+
+// THE PUBLIC CONTRACT, READ AS THE ARTIFACT. Not the declarations, not the
+// projection function — the committed file every public SDK, the public CLI, the
+// MCP tool catalogue and docs.hanzo.ai are generated from.
+//
+// Checking the artifact rather than the config is the whole point. A whitelist
+// that is right and a document that is wrong is the same outage as a whitelist
+// that is wrong, and only one of the two is visible from the config.
+
+// regenerating reports whether this run is WRITING the goldens rather than
+// checking them. A test that reads a committed artifact must not run then: it
+// would read the previous one, from before this run replaced it, which is the
+// same trap TestFleetIsTheWeaveOfItsApps returns early to avoid.
+func regenerating() bool { return *weaveOut != "" }
+
+// readPublic loads the committed public contract.
+func readPublic(t *testing.T) *openapi.Document {
+	t.Helper()
+	if regenerating() {
+		t.Skip("regenerate mode: the artifact is being rewritten by this run, so reading it would read the old one")
+	}
+	raw, err := os.ReadFile(publicPath)
+	if err != nil {
+		t.Fatalf("read %s: %v — run `make describe`", publicPath, err)
+	}
+	j, err := yaml.YAMLToJSON(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var d openapi.Document
+	if err := json.Unmarshal(j, &d); err != nil {
+		t.Fatal(err)
+	}
+	return &d
+}
+
+// The products a leak would be worst in — the admin console, the money, the
+// observability plane, identity, secrets, and the customer analytics. Checked BY
+// NAME rather than by counting, so a failure says what got out.
+func TestThePublicContractCarriesNoConsoleSurface(t *testing.T) {
+	d := readPublic(t)
+	console := map[string]bool{
+		"admin": true, "commerce": true, "billing": true, "finance": true, "o11y": true,
+		"analytics": true, "insights": true, "iam": true, "kms": true, "audit": true,
+		"treasury": true, "internal": true,
+	}
+	for path, item := range d.Paths {
+		for method, op := range item {
+			for _, tag := range openapi.Products(op.Tags) {
+				if console[tag] {
+					t.Errorf("%s %s is published in the public contract under product %q",
+						strings.ToUpper(method), path, tag)
+				}
+			}
+		}
+	}
+}
+
+// The document's own FURNITURE is gone, and it is gone for FREE — nothing
+// excludes it, it was simply never declared. /v1/openapi.json describes the API,
+// /v1/event.js is a script tag, /health is a probe: none of them is a product,
+// and every one of them reached the published surface for years because a route
+// table was read as a product surface.
+func TestThePublicContractDropsWhatIsNotAProduct(t *testing.T) {
+	d := readPublic(t)
+	for _, path := range []string{
+		"/v1/openapi.json", "/v1/commands", "/v1/event.js", "/health", "/",
+		"/v1/generate-text-to-speech-audio", "/v1/generate-text-to-speech-audio-stream",
+		"/v1/summary", "/v1/errors", "/v1/traffic",
+	} {
+		if _, published := d.Paths[path]; published {
+			t.Errorf("%s reached the public contract", path)
+		}
+	}
+}
+
+// Every published operation is INFERENCE — a model call, or the catalog of models
+// to call — which is the rule apps/ai/public.go states. Asserted over the PRODUCT
+// axis, because that is the axis a document reader and a docs site see, so a new
+// product appearing publicly has to be admitted here in the commit that publishes
+// it.
+func TestThePublicContractIsInferenceAndNothingElse(t *testing.T) {
+	want := map[string]bool{
+		"models": true, "chat": true, "completions": true, "responses": true, "messages": true,
+		"embeddings": true, "rerank": true, "images": true, "videos": true, "audio": true,
+	}
+	d := readPublic(t)
+	if len(d.Paths) == 0 {
+		t.Fatal("the public contract is empty")
+	}
+	for _, tag := range d.Tags {
+		if !want[tag.Name] {
+			t.Errorf("the public contract publishes product %q, which is not part of the v1 inference "+
+				"surface. If that is intended, admit it here in the same commit", tag.Name)
+		}
+	}
+	t.Logf("%d paths, %d products", len(d.Paths), len(d.Tags))
 }
