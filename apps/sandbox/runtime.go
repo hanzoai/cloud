@@ -98,9 +98,12 @@ type ExecResult struct {
 
 // streamer is the exec channel, behind an interface for exactly one reason: the
 // real one opens an SPDY stream to the apiserver, and a test has no apiserver.
-// It is NOT an abstraction over "ways to run a command" — there is one way.
+// It is NOT an abstraction over "ways to run a command" — there is one way, and
+// its two shapes are the two things a caller can want from it: collect what a
+// command produced, or hand a person a terminal.
 type streamer interface {
 	stream(ctx context.Context, ns, pod string, argv []string, stdin io.Reader, stdout, stderr io.Writer) error
+	tty(ctx context.Context, ns, pod string, argv []string, stdin io.Reader, stdout io.Writer, size remotecommand.TerminalSizeQueue) error
 }
 
 type runtime struct {
@@ -597,6 +600,29 @@ func (r *runtime) exec(ctx context.Context, m Sandbox, argv []string, stdin io.R
 	return res, err
 }
 
+// tty runs argv on a PSEUDO-TERMINAL inside the sandbox and stays for as long as
+// the person on the other end does.
+//
+// It is a different call from exec and not a flag on it, because almost nothing
+// they do is the same. exec bounds the run with a timeout, buffers both streams
+// to a ceiling and reports an exit code; a terminal has no timeout that is not an
+// insult to whoever is typing, keeps nothing (the bytes go straight to the
+// socket), and ends when the shell does. What they share is the channel, which is
+// the one thing that is stated once.
+//
+// STDERR IS NOT REQUESTED. A pty has one stream by construction — the kernel
+// merges them onto the same device — and asking the apiserver for a second one on
+// a TTY session is rejected outright.
+func (r *runtime) tty(ctx context.Context, m Sandbox, argv []string, stdin io.Reader, stdout io.Writer, size remotecommand.TerminalSizeQueue) error {
+	if err := r.ready(); err != nil {
+		return err
+	}
+	if m.Status != "running" || m.Pod == "" {
+		return fmt.Errorf("sandbox is %s", firstNonEmpty(m.Status, "unknown"))
+	}
+	return r.str.tty(ctx, r.ns, m.Pod, argv, stdin, stdout, size)
+}
+
 func asCodeExit(err error, out *utilexec.CodeExitError) bool {
 	for err != nil {
 		if c, ok := err.(utilexec.CodeExitError); ok {
@@ -663,6 +689,29 @@ func (s *spdy) stream(ctx context.Context, ns, pod string, argv []string, stdin 
 	}
 	return ex.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin: stdin, Stdout: stdout, Stderr: stderr,
+	})
+}
+
+func (s *spdy) tty(ctx context.Context, ns, pod string, argv []string, stdin io.Reader, stdout io.Writer, size remotecommand.TerminalSizeQueue) error {
+	cl, err := rest.RESTClientFor(coreConfig(s.cfg))
+	if err != nil {
+		return err
+	}
+	req := cl.Post().Resource("pods").Namespace(ns).Name(pod).SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: container,
+			Command:   argv,
+			Stdin:     true,
+			Stdout:    true,
+			Stderr:    false,
+			TTY:       true,
+		}, scheme.ParameterCodec)
+	ex, err := remotecommand.NewSPDYExecutor(s.cfg, "POST", req.URL())
+	if err != nil {
+		return err
+	}
+	return ex.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stdin: stdin, Stdout: stdout, Tty: true, TerminalSizeQueue: size,
 	})
 }
 
