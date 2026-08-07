@@ -330,7 +330,7 @@ var Apps = []App{
 	{Name: "explorer", Prefixes: []string{"/v1/indexers", "/v1/oracles"}},
 	{Name: "security", Prefixes: []string{"/v1/security"}},
 	{Name: "integrations", Prefixes: []string{"/v1/connector/github/webhook", "/v1/connectors", "/v1/integrations"}},
-	{Name: "destinations", Prefixes: []string{"/v1/destinations"}},
+	{Name: "destinations", Prefixes: []string{"/v1/destinations", "/v1/tags"}},
 	{Name: "cloudflare", Prefixes: []string{"/v1/cloudflare"}},
 	{Name: "sbom", Prefixes: []string{"/v1/sbom"}},
 	// /collaborator is team's SECOND plane and it is app-level on purpose: the Team
