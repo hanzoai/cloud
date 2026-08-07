@@ -81,21 +81,29 @@ type pipelineImage struct {
 	Context    string `yaml:"context"`    // build context dir (default ".")
 	Dockerfile string `yaml:"dockerfile"` // default "<context>/Dockerfile"
 	TagSuffix  string `yaml:"tag-suffix"` // default = name
+	// Args are `--build-arg` values for THIS image. They are what makes several
+	// entries off ONE Dockerfile mean different things: hanzoai/bot declares
+	// three sandbox classes as three entries that differ only by
+	// `args: {STAGE: exec|dev|desktop}`. Dropped on the floor, the three tags are
+	// three copies of whatever stage the Dockerfile defaults to — an `exec` tag
+	// carrying a whole desktop, published under a name that says otherwise.
+	Args map[string]string `yaml:"args"`
 }
 
 // enqueueReq is platform's /v1/runner body (EnqueueBody). Field-for-field the
 // same shape the `hanzoai/ci mode:delegate` step POSTs, so a native-push build and a
 // delegated GitHub-Actions build are byte-identical downstream — one build path.
 type enqueueReq struct {
-	Repo       string `json:"repo"`  // GitHub owner/repo — BuildKit's clone context
-	SHA        string `json:"sha"`   // full commit the build pins to
-	Image      string `json:"image"` // full pushed ref repo:tag (we own the tag)
-	Branch     string `json:"branch,omitempty"`
-	Ref        string `json:"ref,omitempty"`
-	Dockerfile string `json:"dockerfile,omitempty"`
-	Context    string `json:"context,omitempty"`
-	OS         string `json:"os,omitempty"`
-	Arch       string `json:"arch,omitempty"`
+	Repo       string            `json:"repo"`  // GitHub owner/repo — BuildKit's clone context
+	SHA        string            `json:"sha"`   // full commit the build pins to
+	Image      string            `json:"image"` // full pushed ref repo:tag (we own the tag)
+	Branch     string            `json:"branch,omitempty"`
+	Ref        string            `json:"ref,omitempty"`
+	Dockerfile string            `json:"dockerfile,omitempty"`
+	Context    string            `json:"context,omitempty"`
+	OS         string            `json:"os,omitempty"`
+	Arch       string            `json:"arch,omitempty"`
+	Args       map[string]string `json:"args,omitempty"`
 }
 
 // nativeCICDEnabled reports whether the orchestrator is armed: the enable flag is
@@ -262,6 +270,7 @@ func enqueueBody(img pipelineImage, ghRepo, branch, sha string) *enqueueReq {
 		Context:    ctxDir,
 		OS:         "linux",
 		Arch:       "amd64",
+		Args:       img.Args,
 	}
 }
 
