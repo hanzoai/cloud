@@ -39,6 +39,13 @@ var _ creditledger.CreditLedger = ledger{}
 // with (account.Payer, via principal), so a credit and the spend it funds land on one
 // wallet by construction. An org whose members share one balance names no subject and
 // is byte-for-byte unchanged.
+//
+// AND Test IS THE THIRD PART OF THAT ADDRESS. finance keeps sandbox money in a
+// separate file per org, so which books to write is not a mode this adapter can leave
+// unsaid — it was saying "live" for every credit that came through here, which put a
+// sandbox tenant's grant in the books the gate spends real inference from. It is the
+// input's, unchanged, because the caller is the one that knows whether the charge it
+// is crediting was a sandbox charge.
 func (ledger) Credit(ctx context.Context, in creditledger.CreditInput) (string, int64, error) {
 	fin := finance.Current()
 	if fin == nil {
@@ -64,22 +71,31 @@ func (ledger) Credit(ctx context.Context, in creditledger.CreditInput) (string, 
 		Notes:    in.Reason,
 		Tags:     tag,
 		Ref:      in.IdempotencyKey,
+		Test:     in.Test,
 	})
 	if err != nil {
 		return "", 0, err
 	}
-	// Read back the account that was CREDITED, never the pool — reporting a pool
-	// balance after crediting a member is how a caller concludes the grant vanished.
-	bal, berr := fin.Balance(ctx, in.Org, subject, cur, false)
+	// Read back the account that was CREDITED, never the pool and never the other
+	// books — reporting a pool balance after crediting a member, or a live balance
+	// after crediting the sandbox, is how a caller concludes the grant vanished. The
+	// read repeats the deposit's whole address, one value at a time.
+	bal, berr := fin.Balance(ctx, in.Org, subject, cur, in.Test)
 	if berr != nil {
 		return id, 0, berr
 	}
 	return id, bal.Cents(), nil
 }
 
-// Balance returns the org pool's available balance in cents for currency — the
-// same read the AI gate performs, so GET /v1/billing/balance and the gate agree.
-func (ledger) Balance(ctx context.Context, org, currency string) (int64, error) {
+// Balance returns the available balance in cents held at (org, subject) in currency,
+// from the sandbox books when test — the same read the AI gate performs, so
+// GET /v1/billing/balance and the gate agree.
+//
+// It takes the whole address for the reason Credit writes it: an empty subject is the
+// org's pool, and a named one is the member's own wallet. Answering the pool for a
+// member's read is answering about a different account, and it answers without
+// erroring — which is the shape of a balance bug nobody notices.
+func (ledger) Balance(ctx context.Context, org, subject, currency string, test bool) (int64, error) {
 	fin := finance.Current()
 	if fin == nil {
 		return 0, fmt.Errorf("commerce balance: no finance ledger co-resident")
@@ -87,7 +103,10 @@ func (ledger) Balance(ctx context.Context, org, currency string) (int64, error) 
 	if currency == "" {
 		currency = "usd"
 	}
-	bal, err := fin.Balance(ctx, org, org, currency, false)
+	if subject == "" {
+		subject = org // pooled org: the slug IS the pool account the gate reads
+	}
+	bal, err := fin.Balance(ctx, org, subject, currency, test)
 	if err != nil {
 		return 0, err
 	}
