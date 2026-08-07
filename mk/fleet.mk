@@ -286,6 +286,13 @@ describe: ## Every app describes itself (one binary per app, all at once).
 	@echo ">> build-only: $(UNMOUNTABLE) — no standalone mount to project (broker / coresident)"
 	+@$(call fan,$(addprefix describe/,$(DESCRIBABLE)) $(addprefix build/,$(UNMOUNTABLE)))
 	@echo ">> $$(ls $(ROOT)/plugin/*/openapi.json | wc -l) app documents"
+	# The witness, written by the sweep that generates the documents rather than
+	# beside it: openapi/closure.json says what these documents were generated FROM,
+	# and it is only true if the same run produced both. `make closure-check` reads
+	# it back in two seconds, which is how a go.mod bump stops being invisible until
+	# the fifty-minute gate. Here rather than in the per-app describe because 121
+	# concurrent writers to one file is a race, and one `go list` covers the fleet.
+	@cd $(ROOT) && $(GO) run ./cmd/closure -write -describable="$(DESCRIBABLE)"
 
 # The drift gate. It REGENERATES FROM SOURCE and fails on any diff, which is the
 # whole difference between it and openapi.
@@ -324,7 +331,7 @@ describe: ## Every app describes itself (one binary per app, all at once).
 check: describe ## Regenerate every document + openapi.yaml FROM SOURCE and fail on any diff. The drift gate.
 	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi OUT=$(ROOT)/openapi.yaml 2>&1) \
 	  || { echo "$$out"; echo "!! the compose refused; nothing was written"; exit 1; }
-	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml public.yaml openapi/floor.json plugin/); \
+	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml public.yaml openapi/floor.json openapi/closure.json plugin/); \
 	if [ -n "$$stale" ]; then \
 	  echo "$$stale"; \
 	  git -C $(ROOT) diff --stat -- openapi.yaml public.yaml plugin/; \
@@ -334,7 +341,11 @@ check: describe ## Regenerate every document + openapi.yaml FROM SOURCE and fail
 	  echo "undocumented, or documented and gone. The SDK repos pull this file, so a route"; \
 	  echo "missing here is a route no generated client can reach."; \
 	  echo ""; \
-	  echo "  fix:  make describe  # then commit openapi.yaml and plugin/*/openapi.json"; \
+	  echo "  fix:  make describe  # then commit openapi.yaml, plugin/*/openapi.json and openapi/closure.json"; \
+	  echo ""; \
+	  echo "  openapi/closure.json alone means only the DEPENDENCIES moved — the documents"; \
+	  echo "  are current and the witness is what was not committed. 'make closure-check'"; \
+	  echo "  would have said so in two seconds."; \
 	  echo ""; \
 	  exit 1; \
 	fi
