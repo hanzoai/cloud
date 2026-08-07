@@ -88,3 +88,39 @@ That last one is not hypothetical. Every security finding in this repo this week
 had the same shape: a credential that authenticated more than its design
 described, because an identity was carried to a general resolver instead of to
 the one handler that needed it.
+
+## Where this stands
+
+**Done and on main** (`87248144`): the store. One table keyed
+`(org, user, provider, label)`, `Connector` folded into `Connection`, `owner`
+became `label`, `widenConnectionKey` deleted. `List` answers what a principal may
+use; `Delete` names one account, `Disconnect` takes every account at a scope.
+Four tests pin Google-at-both-scopes, cross-user isolation, and that the org
+disconnecting does not sign a person out of their own.
+
+**Started, not landed** — the door fold. What was written and works:
+
+- every `/v1/integrations` path renamed to `/v1/connectors`, and the retired
+  prefix removed from `manifest.Apps` (one prefix, one owner)
+- `o.list` stopped skipping user-scope providers, so one catalog covers both
+- the second catalog (`o.connectors`, `o.connectorProviders`) deleted as dead
+- `connView` gained `Scope` ("org" | "user"), derived from the key, not stored
+- `providerView` gained `Connections []connView`, FILTERED to what the caller may
+  see — `c.User == "" || c.User == user`. That filter is the tenancy boundary and
+  is the line to review hardest.
+
+**What is left, and it is small but real:**
+
+1. `connectors_test.go` still asks the catalog for flat connection rows
+   (`list.Connectors`). They now live under `providers[].connections`, so the
+   test reads the wrong shape — update the test, not the response.
+2. Three `github_bind_test.go` cases 404 after the rename. Unresolved: the
+   callback path moved and something still points at the old one. Find the
+   registration rather than guessing — a 404 here means a route, not a policy.
+3. `/v1/ai/connections` still to fold in as category `AI`; `anthropic` is
+   registered twice today.
+4. The console is the only caller of the old paths.
+
+**Operational, before this ships:** every OAuth redirect URI changes from
+`/v1/integrations/<p>/callback` to `/v1/connectors/<p>/callback`, so each
+provider's app registration needs updating — Slack, GitHub, Cloudflare.
