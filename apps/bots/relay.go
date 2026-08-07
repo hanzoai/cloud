@@ -85,7 +85,7 @@ func mountRelay(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("bots.mountRelay: nil deps.Logger")
 	}
 	s := &relay{
-		target: executorURL(),
+		target: executorURL(""),
 		log:    deps.Logger.New("subsystem", "bots"),
 		cc:     &http.Client{Timeout: 60 * time.Second},
 	}

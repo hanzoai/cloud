@@ -1197,8 +1197,8 @@ of them refuted a claim that had been repeated confidently for weeks.
 - **`GET /v1/commands` is live**: 2448 commands over 194 services, under a strong
   ETag that answers 304 to a matching `If-None-Match`.
 - **`POST /v1/mcp` works end to end**: `tools/list` returns 88 tools —
-  `hanzo_describe` plus ONE tool per subsystem, each carrying its operations in an
-  `op` enum — and `tools/call` on `hanzo_describe` returns the prose zipdoc lifted
+  `describe` plus ONE tool per subsystem, each carrying its operations in an
+  `op` enum — and `tools/call` on `describe` returns the prose zipdoc lifted
   off the Go handler. 0 of the 88 have an empty description or a missing input
   schema.
 - **HALF the surface is not reachable as a tool, and only a tenth of that gap is
@@ -1206,7 +1206,7 @@ of them refuted a claim that had been repeated confidently for weeks.
   (49%)**. The `_meta` names 134 as refused by the projection rule (a name that
   discloses a bearer secret; a mutating verb on an identity or authority object)
   and exactly ONE subsystem as unavailable (`x402`) — so roughly 1,100 operations
-  are absent with no stated reason. `hanzo_ai` is the extreme: **1 op in its enum
+  are absent with no stated reason. `ai` is the extreme: **1 op in its enum
   against ~300 in the document.** An untyped route earns no tool by construction,
   so most of this is the typed migration's remaining tail showing up in the one
   projection where it is countable — but it is NOT all of it, and nothing today
@@ -3081,21 +3081,34 @@ semantic is identical — fail closed once armed, allow before.
   bytes** — ~244k tokens to merely enumerate what can be called — and MCP clients
   truncate (Slack keeps 128), so 1,061 operations were unreachable no matter how
   they were ordered. Ordering (`rank`) fixes which tools a truncating client keeps;
-  it cannot fix a hard cap. So the surface is `hanzo_<app>` carrying
+  it cannot fix a hard cap. So the surface is ONE TOOL PER APP, NAMED FOR IT, carrying
   `{"op":"<operation>","input":{…}}`, whose `op` enum holds NAMES ONLY, plus
-  `hanzo_describe` — which returns one operation's own descriptor, so a model
+  `describe` — which returns one operation's own descriptor, so a model
   searches the enum and fetches the schema for the one it picked. The whole
-  corpus is **116 tools in 106,847 bytes** (`fleet.TestTheWholeFleetFitsInAModelsHead`,
+  corpus is **118 tools in 106,282 bytes** (`fleet.TestTheWholeFleetFitsInAModelsHead`,
   which builds it from `plugin/*/openapi.json`) — 17× less per operation, for 1.9×
-  MORE operations than the baseline carried. `hanzo_describe` is FIRST because it is
+  MORE operations than the baseline carried. `describe` is FIRST because it is
   what makes every other tool usable, so truncation must never take it. The envelope
   is a DECODING and not a second route: it yields the (name, message) a direct call
   carries, and `refuse()` in `gather` remains the only gate, so a refused name is in
   no enum, dispatchable through no envelope, and describable by nothing.
-  **Headroom: 12 subsystems.** 116 of the 128 a client keeps. The manifest is 119
-  apps and growing, so the next dozen subsystems put the door back over the cap; the
+  **Headroom: 10 subsystems.** 118 of the 128 a client keeps. The manifest is 121
+  apps and growing, so the next ten subsystems put the door back over the cap; the
   move then is to group by product surface (`productStems`, 17 buckets), not to add
   a second projection.
+  **The tools carry no prefix.** They shipped as `hanzo_<app>` + `hanzo_describe`
+  and were renamed hours later to the bare app names + `describe`, in one change
+  with no aliases. The MCP server is the namespace — a client reaches these names
+  through it and through nothing else — so `hanzo_` disambiguated nothing and cost
+  a token per tool per turn. Two consequences worth knowing before touching this:
+  the prefix was also how `composed()` told one of the door's own tools from a
+  child's operation, which is now an exact membership test against the app set
+  (`Door.composed`); and the door's tools and the app names now share one
+  namespace, so **no subsystem may be named `describe`** —
+  `fleet.TestNoSubsystemIsCalledDescribe` reads the manifest and fails the build if
+  one ever is. A door still on an older image answers the prefixed names; the
+  refused set is untouched, because `refuse()` reads CHILD operation ids and never
+  saw the door's own names.
   It used to read a BUILD-TIME catalogue — `plugin/<app>/mcp.json`, embedded by
   `plugin/embed.go` and handed to zip as `Plugin.Tools` — and `tools/list` was a
   memcpy. **Those 116 files are deleted (49,865 lines).** They were a second source
@@ -4758,7 +4771,7 @@ interchangeable and are not:
 | relative position | 187 ahead of inc HEAD | 16 ahead of forge/main |
 
 Production runs `ghcr.io/hanzoai/cloud:sha-8465354e6bf3`, and its live behavior —
-88 grouped tools, `hanzo_describe` first, 134 refused — exists **only on the inc
+88 grouped tools, `describe` first, 134 refused — exists **only on the inc
 line**. An earlier draft of § 6 and § 9 was written against a forge-line checkout
 and concluded the agent door withholds nothing and that nothing in cloud calls
 it. Both were false in production, and false in the dangerous direction:
@@ -5094,7 +5107,7 @@ irreversible.
 
 **The tool surface already refuses, and it refuses our own agents too.**
 Measured on the live door, `POST https://api.hanzo.ai/v1/mcp` `tools/list`:
-88 tools in 63,468 bytes, the first of them `hanzo_describe`, and
+88 tools in 63,468 bytes, the first of them `describe`, and
 
 ```
 _meta["hanzo.ai/refused"] = {count: 134, rule: "a tool is not projected when its
@@ -5232,9 +5245,9 @@ or forgotten. Two properties come free and both matter here:
   forwarded, because a scheduled run has no inbound request and a nested one may
   be running for a different principal.
 
-Every rung of § 4 is already on that door: `hanzo_analytics` publishes
-`get_v1_errors`, `hanzo_o11y` publishes 318 ops including the review queues,
-and `hanzo_tracker` and `hanzo_help` are both projected. So the ladder needs no
+Every rung of § 4 is already on that door: `analytics` publishes
+`get_v1_errors`, `o11y` publishes 318 ops including the review queues,
+and `tracker` and `help` are both projected. So the ladder needs no
 new tool surface — only the policy about which rung may be pulled without a
 human, which is § 4's job and not the door's.
 
