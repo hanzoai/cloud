@@ -222,9 +222,25 @@ func WithOrg(ctx context.Context, c *zip.Ctx) context.Context {
 // the same value. The org is never an In field: an In field is caller-supplied,
 // so a tenant key read from one is a cross-tenant read the caller asserted for
 // itself.
+// It has TWO readers, in this order, and they answer the same question through
+// different doors:
+//
+//  1. the slot [WithOrg] parked, which the route middleware fills; and
+//  2. zip's own caller, for the door that has NO route to run middleware on.
+//
+// The second is not a second rule. MCP's tools/call invokes an op DIRECTLY — no
+// route, so no middleware, so nothing parks slot 1 — and until zip carried the
+// caller over that door there was nothing else to read, which is why this package
+// grew the slot at all. zip carries it now (caller_mcp_test.go), so the org is
+// read back through [OrgOf]: the SAME two facts, the SAME decision, one more
+// reader. A tool call therefore resolves the tenant a routed request would, and
+// an unvalidated one still resolves nothing, because OrgOf refuses a blank user.
 func OrgFrom(ctx context.Context) (string, bool) {
-	org, ok := ctx.Value(orgKey{}).(string)
-	return org, ok && org != ""
+	if org, ok := ctx.Value(orgKey{}).(string); ok && org != "" {
+		return org, true
+	}
+	c := zip.CallerOf(ctx)
+	return OrgOf(c.User, c.Org)
 }
 
 // validatedKey names the slot the WEAKER fact crosses the same seam in.
@@ -256,9 +272,20 @@ func WithValidated(ctx context.Context, c *zip.Ctx) context.Context {
 // Validated, and the same answer. FALSE off the HTTP path, where there is no
 // request and so no attested caller: an op that gates on it refuses rather than
 // serving an unauthenticated one.
+// It reads the same two doors [OrgFrom] does, and for the same reason: the slot
+// is filled by route middleware, and tools/call has no route. The fallback is
+// [Validated]'s own predicate — a non-empty user — read off zip's caller instead
+// of off a request, because over MCP there is a caller and no *zip.Ctx to ask.
+//
+// This is what made an op that gates on it unreachable AS A TOOL: the gate had
+// been moved INTO the handler precisely so every door would reach it, but the
+// fact it reads was still parked by the one door tools/call does not pass
+// through, so the gate was unsatisfiable exactly where it was meant to work.
 func ValidatedFrom(ctx context.Context) bool {
-	ok, _ := ctx.Value(validatedKey{}).(bool)
-	return ok
+	if ok, _ := ctx.Value(validatedKey{}).(bool); ok {
+		return true
+	}
+	return strings.TrimSpace(zip.CallerOf(ctx).User) != ""
 }
 
 // Owner resolves the caller's HOME org — the identity + BILLING anchor: the

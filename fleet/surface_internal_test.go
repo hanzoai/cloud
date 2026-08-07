@@ -109,7 +109,7 @@ var survivors = []struct{ name, why string }{
 	// against the rule rather than assumed past it: the rule reads the NAME, so
 	// whether a capability projects is a property of what its operation is
 	// CALLED. Both are mutating verbs over nouns that confer no authority.
-	{"post_v1_websearch", "POST /v1/websearch — searching the web grants nothing"},
+	{"search_web", "POST /v1/websearch — searching the web grants nothing"},
 	{"post_v1_crawl", "POST /v1/crawl — reading a page grants nothing"},
 
 	// Reads of the identity surface survive: knowing who holds a role is not
