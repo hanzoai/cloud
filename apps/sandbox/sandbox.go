@@ -15,6 +15,8 @@
 //	POST   /v1/sandboxes/:id/exec    {argv|command, stdin?, timeoutSec?} -> {exitCode,stdout,stderr}
 //	GET    /v1/sandboxes/:id/fs      ?path=  read a file, or list a directory
 //	POST   /v1/sandboxes/:id/fs      ?path=  write a file
+//	POST   /v1/sandboxes/:id/terminal        a single-use ticket for one terminal
+//	GET    /v1/sandboxes/:id/terminal/ws     ?ticket=  the terminal itself
 //
 // THERE IS EXACTLY ONE WAY INTO A SANDBOX, and it is the Kubernetes exec
 // subresource. fs read/list/write are not a second channel — they are `cat`,
@@ -89,6 +91,10 @@ func Ours(id string) bool { return strings.HasPrefix(strings.TrimSpace(id), IDPr
 type state struct {
 	stores *cloud.OrgStore[*Store]
 	rt     *runtime
+	// tickets are the thirty-second, single-use credentials a browser presents
+	// to open a terminal. Per service and in memory — see terminal.go for why
+	// the one credential a WebSocket can carry is minted rather than borrowed.
+	tickets *tickets
 }
 
 // storeFor is the ONE way this package reaches a store, through
@@ -121,8 +127,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "sandbox")
 	s := &cloud.Service[state]{Base: b, State: state{
-		stores: cloud.NewOrgStore(b, "sandbox", openStore),
-		rt:     newRuntime(),
+		stores:  cloud.NewOrgStore(b, "sandbox", openStore),
+		rt:      newRuntime(),
+		tickets: newTickets(),
 	}}
 	Routes(app, s)
 	// The peer half. Registered beside the routes because they are two adapters
@@ -164,6 +171,8 @@ func Routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/:id/exec", cloud.Handle(s, execIn))
 	g.Get("/:id/fs", cloud.Handle(s, fsRead))
 	g.Post("/:id/fs", cloud.Handle(s, fsWrite))
+
+	terminal(g, s)
 
 	// THE AGENT'S DOOR. Everything above is a RAW route, and a raw route is
 	// invisible to every projection zip derives from its typed registry — REST is
@@ -218,8 +227,9 @@ func New(deps cloud.Deps) (*Service, error) {
 	}
 	b := cloud.NewBase(deps, "sandbox")
 	return &cloud.Service[state]{Base: b, State: state{
-		stores: cloud.NewOrgStore(b, "sandbox", openStore),
-		rt:     newRuntime(),
+		stores:  cloud.NewOrgStore(b, "sandbox", openStore),
+		rt:      newRuntime(),
+		tickets: newTickets(),
 	}}, nil
 }
 
@@ -473,4 +483,25 @@ func init() {
 		"Write a file",
 		"Writes the request body to one file in the sandbox's project directory, creating "+
 			"parent directories. Same confinement as the read above.")
+	openapi.Describe("/v1/sandboxes/:id/terminal", http.MethodPost,
+		"Open a terminal",
+		"Mints a SINGLE-USE ticket for one interactive terminal in this sandbox and returns "+
+			"`{ticket, url}`, where url is the socket's path with the ticket already on it.\n\n"+
+			"It exists because a browser's WebSocket carries no Authorization header, so the "+
+			"socket cannot be authenticated the way every other route here is. The ticket is a "+
+			"credential MINTED for that one socket: bound to this org and this sandbox, valid "+
+			"for thirty seconds, and gone the first time it is presented. A long-lived bearer in "+
+			"a query string would instead be written into every access log on the path.")
+	openapi.Describe("/v1/sandboxes/:id/terminal/ws", http.MethodGet,
+		"The terminal itself",
+		"Upgrades to a WebSocket carrying a login shell on a pseudo-terminal inside the "+
+			"sandbox. Requires `ticket` from the POST above; a missing, expired or already-spent "+
+			"ticket answers 401 without upgrading.\n\n"+
+			"THE WIRE. A text frame is stdin, unless it is the one control object "+
+			"`{\"resize\":{\"cols\":N,\"rows\":M}}`; a binary frame is always stdin. Output comes "+
+			"back as BINARY frames, because a pty emits arbitrary bytes cut at arbitrary offsets "+
+			"and a text frame carrying half a rune is one the browser closes the connection over.\n\n"+
+			"The shell is `bash -l`, falling back to `sh -l`. Whatever else the sandbox image "+
+			"carries — the hanzo CLI included — is a command to type, never a requirement to get "+
+			"a prompt.")
 }
