@@ -329,6 +329,12 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 #   3. the weave composes those subsets into openapi.yaml (openapi/weave.go),
 #      refusing when two apps claim one path or one schema name. There is no
 #      monolith left to read: the woven document IS the published spec.
+#   4. the same run projects that document twice and writes public.yaml beside it
+#      (openapi/public.go): the PUBLIC contract, which is the operations that
+#      DECLARED themselves part of it and nothing else. Default-deny — an
+#      operation that says nothing is internal, so a product cannot reach a
+#      published SDK by anyone forgetting. openapi.yaml stays the internal
+#      document, admin included, and is what our own clients are cut from.
 #
 # openapi.yaml is a golden file: written here, and verified two different ways —
 # and the difference between them is the whole lesson.
