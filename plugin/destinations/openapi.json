@@ -13,6 +13,9 @@
   "tags": [
     {
       "name": "destinations"
+    },
+    {
+      "name": "tags"
     }
   ],
   "paths": {
@@ -177,6 +180,28 @@
           }
         }
       }
+    },
+    "/v1/tags": {
+      "get": {
+        "operationId": "get_v1_tags",
+        "summary": "The org's browser tag set for the hosted tag — which pixels to inject, by publishable key",
+        "description": "Returns the client-side pixels the org has connected (GA, Meta, TikTok, X) with their NON-SECRET ids, so the hosted tag (/v1/event.js) injects them first-party and stamps each browser event with the same event_id the server-side Conversions API uses — deduping the two. Keyed by the publishable key on ?key= (or Authorization: Bearer); it returns only ids that already ship in the page, never a credential. WITHOUT A VALID KEY it answers an empty set at 200 — a page never breaks on its tag config. The same connected destination also drives the server-side fan-out, so the browser tag and the server conversion never drift.",
+        "tags": [
+          "tags"
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/tagConfig"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -256,6 +281,20 @@
         },
         "type": "object"
       },
+      "browserTagOut": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
       "destinationDisconnected": {
         "properties": {
           "disconnected": {
@@ -297,6 +336,17 @@
           }
         },
         "type": "object"
+      },
+      "tagConfig": {
+        "type": "object",
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/browserTagOut"
+            }
+          }
+        }
       }
     }
   }

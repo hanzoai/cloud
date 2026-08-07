@@ -688,6 +688,20 @@ components:
         status:
           type: string
       type: object
+    Blob:
+      properties:
+        data:
+          contentEncoding: base64
+          type: string
+        dir:
+          type: boolean
+        entries:
+          items:
+            type: string
+          type: array
+        path:
+          type: string
+      type: object
     Blog:
       properties:
         caseStudy:
@@ -2384,6 +2398,13 @@ components:
           description: 'Replay is the replay pacing: instant (default) or original.'
           type: string
       type: object
+    EndIn:
+      properties:
+        id:
+          type: string
+        purge:
+          type: boolean
+      type: object
     Endpoint:
       properties:
         created:
@@ -4020,6 +4041,28 @@ components:
             out of, so it is normally larger than len(rows).
           type: integer
       type: object
+    LeaseIn:
+      properties:
+        class:
+          type: string
+        id:
+          type: string
+        project:
+          type: string
+        ttlSec:
+          type: integer
+      type: object
+    Leased:
+      properties:
+        class:
+          type: string
+        id:
+          type: string
+        status:
+          type: string
+        workdir:
+          type: string
+      type: object
     Leg:
       properties:
         account:
@@ -4869,6 +4912,13 @@ components:
         name:
           type: string
       type: object
+    PathIn:
+      properties:
+        id:
+          type: string
+        path:
+          type: string
+      type: object
     PaymentIn:
       properties:
         amountCents:
@@ -5569,6 +5619,15 @@ components:
           description: |-
             UserID identifies the customer being billed, within the caller's own org.
             Required — an invoice with no addressee is not an invoice.
+          type: string
+      type: object
+    Ran:
+      properties:
+        exitCode:
+          type: integer
+        stderr:
+          type: string
+        stdout:
           type: string
       type: object
     Range:
@@ -6655,6 +6714,23 @@ components:
         priority:
           description: 'Priority breaks ties: when several patterns match, the highest
             wins.'
+          type: integer
+      type: object
+    RunIn:
+      properties:
+        argv:
+          items:
+            type: string
+          type: array
+        command:
+          type: string
+        dir:
+          type: string
+        id:
+          type: string
+        stdin:
+          type: string
+        timeoutSec:
           type: integer
       type: object
     SaaSCategory:
@@ -8767,6 +8843,23 @@ components:
         mainModule:
           type: string
         script:
+          type: string
+      type: object
+    WriteIn:
+      properties:
+        data:
+          contentEncoding: base64
+          type: string
+        id:
+          type: string
+        path:
+          type: string
+      type: object
+    Wrote:
+      properties:
+        bytes:
+          type: integer
+        path:
           type: string
       type: object
     accList:
@@ -11470,6 +11563,15 @@ components:
           type: string
         vcpu:
           type: integer
+      type: object
+    browserTagOut:
+      properties:
+        id:
+          type: string
+        platform:
+          type: string
+        type:
+          type: string
       type: object
     bucketCreateIn:
       properties:
@@ -41504,6 +41606,13 @@ components:
           description: bumped on every reconcile — the last-synced time
           type: string
       type: object
+    tagConfig:
+      properties:
+        tags:
+          items:
+            $ref: '#/components/schemas/browserTagOut'
+          type: array
+      type: object
     tally:
       properties:
         accruedLifetimeCents:
@@ -51933,7 +52042,7 @@ paths:
 
         The question is classified to a grounded domain, that domain's read runs IN-PROCESS under the caller's own credentials, and only then is the result narrated. So the figures and their sources are the domain's, resolved before any model call and never altered by one — a wrong answer is a wrong query, never an invention.
 
-        Domains: books (the org's ledger) and web (search, news, research, deep). A validated principal is required; the answer is scoped to that principal's org and nothing else.
+        Domains: books (the org's ledger), projects (what is built and what of it is deployed), git (the org's repositories and what changed in them), and web (search, news, research, deep). A validated principal is required; the answer is scoped to that principal's org and nothing else.
       operationId: post_v1_ask
       requestBody:
         content:
@@ -51981,6 +52090,23 @@ paths:
         /v1/generate-text-to-speech-audio which is bound to a chat store).
       operationId: post_v1_audio_speech
       summary: The OpenAI-compatible TTS endpoint (POST /v1/audio/speech).
+      tags:
+      - audio
+      x-app: github.com/hanzoai/ai
+  /v1/audio/transcriptions:
+    post:
+      description: |-
+        The OpenAI-compatible STT endpoint
+        (POST /v1/audio/transcriptions, multipart: file + model [+ language +
+        response_format]). It mirrors AudioSpeech exactly: authenticate the caller,
+        resolve `model` to its STT provider through the SAME model-route resolution
+        (so the in-cluster speech service — or any BYO node registered as an STT
+        provider — works transparently), transcribe, and return the OpenAI body.
+        One code path, OpenAI-shaped, no store coupling (unlike the legacy
+        /v1/process-speech-to-text, which is bound to a chat store).
+      operationId: post_v1_audio_transcriptions
+      summary: 'The OpenAI-compatible STT endpoint (POST /v1/audio/transcriptions,
+        multipart: file + model [+ language + response_format]).'
       tags:
       - audio
       x-app: github.com/hanzoai/ai
@@ -100136,6 +100262,161 @@ paths:
       tags:
       - sandboxes
       x-app: sandboxes
+  /v1/sandboxes/{id}/terminal:
+    get:
+      description: |-
+        A complete, self-contained terminal — xterm inline, no other origin — that opens its own socket and runs a shell in this sandbox. Embed it in an iframe and there is nothing else to build.
+
+        `ticket` is the credential from the POST above and `arg` names the session (see the socket below); both are simply carried through to the socket. The page is NOT gated — it is inert markup and does not redeem the ticket, because a ticket is spent once and a page that spent it would hold a credential that no longer opens anything.
+
+        When the terminal is up it posts `{source:"hanzo-term", ready:true}` to its parent frame, so a host can tell a live terminal from a page that failed into something else. `frame-ancestors` admits our own brands' hosts and nothing further.
+      operationId: get_v1_sandboxes_by_id_terminal
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: The terminal, as a page
+      tags:
+      - sandboxes
+      x-app: sandboxes
+  /v1/sandboxes/{id}/terminal/ticket:
+    post:
+      description: |-
+        Mints a SINGLE-USE ticket for one interactive terminal in this sandbox and returns `{ticket, expiresIn, url}`, where url is the terminal PAGE with the ticket already on it.
+
+        It exists because a browser carries no Authorization header into a WebSocket or an iframe, so a terminal cannot be authenticated the way every other route here is. The ticket is a credential MINTED for that one terminal: bound to this org and this sandbox, valid for thirty seconds, and gone the first time it is presented. A long-lived bearer in a query string would instead be written into every access log on the path.
+
+        Mint one per terminal, and mint a fresh one to reconnect.
+      operationId: post_v1_sandboxes_by_id_terminal_ticket
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Open a terminal
+      tags:
+      - sandboxes
+      x-app: sandboxes
+  /v1/sandboxes/{id}/terminal/ws:
+    get:
+      description: |-
+        Upgrades to a WebSocket carrying a login shell on a pseudo-terminal inside the sandbox — for a host that brings its own emulator. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.
+
+        THE WIRE. A text frame is stdin, unless it is the one control object `{"resize":{"cols":N,"rows":M}}`; a binary frame is always stdin. Output comes back as BINARY frames, because a pty emits arbitrary bytes cut at arbitrary offsets and a text frame carrying half a rune is one the browser closes the connection over.
+
+        `arg` names a SESSION: the shell runs under `tmux new -A -s <arg>`, which attaches to that session if it exists and creates it if it does not — so one sandbox holds as many terminals as a caller has names for. It is 1-64 characters of letters, digits, `-` or `_` and may not begin with `-`; anything else is 400. Without `arg` the shell is unnamed and unmultiplexed.
+
+        The shell is `bash -l`, falling back to `sh -l`, and to the plain shell again when the image has no tmux. Whatever else the image carries — the hanzo CLI included — is a command to type, never a requirement to get a prompt.
+      operationId: get_v1_sandboxes_by_id_terminal_ws
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: The terminal, as a socket
+      tags:
+      - sandboxes
+      x-app: sandboxes
+  /v1/sandboxes/end:
+    post:
+      operationId: end_sandbox
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndIn'
+        required: true
+      responses:
+        "204":
+          description: no content
+      summary: End a sandbox and release it
+      tags:
+      - sandboxes
+      x-app: sandboxes
+  /v1/sandboxes/lease:
+    post:
+      operationId: lease_sandbox
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaseIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Leased'
+          description: ok
+      summary: Lease a sandbox — a real computer — or resume one you hold
+      tags:
+      - sandboxes
+      x-app: sandboxes
+  /v1/sandboxes/read:
+    post:
+      operationId: read_sandbox_file
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PathIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Blob'
+          description: ok
+      summary: Read a file from a sandbox you hold
+      tags:
+      - sandboxes
+      x-app: sandboxes
+  /v1/sandboxes/run:
+    post:
+      operationId: run_in_sandbox
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ran'
+          description: ok
+      summary: Run a command in a sandbox you hold and read its output
+      tags:
+      - sandboxes
+      x-app: sandboxes
+  /v1/sandboxes/write:
+    post:
+      operationId: write_sandbox_file
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WriteIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wrote'
+          description: ok
+      summary: Write a file into a sandbox you hold
+      tags:
+      - sandboxes
+      x-app: sandboxes
   /v1/sbom:
     post:
       description: |-
@@ -102875,6 +103156,30 @@ paths:
       tags:
       - sync
       x-app: sync
+  /v1/tags:
+    get:
+      description: 'Returns the client-side pixels the org has connected (GA, Meta,
+        TikTok, X) with their NON-SECRET ids, so the hosted tag (/v1/event.js) injects
+        them first-party and stamps each browser event with the same event_id the
+        server-side Conversions API uses — deduping the two. Keyed by the publishable
+        key on ?key= (or Authorization: Bearer); it returns only ids that already
+        ship in the page, never a credential. WITHOUT A VALID KEY it answers an empty
+        set at 200 — a page never breaks on its tag config. The same connected destination
+        also drives the server-side fan-out, so the browser tag and the server conversion
+        never drift.'
+      operationId: get_v1_tags
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tagConfig'
+          description: Success
+      summary: The org's browser tag set for the hosted tag — which pixels to inject,
+        by publishable key
+      tags:
+      - tags
+      x-app: destinations
   /v1/tasks:
     delete:
       description: |-
@@ -106650,6 +106955,9 @@ tags:
 - description: 'Package sync is data sync: link two endpoints and keep them in step,
     on a webhook, on a schedule, or on demand.'
   name: sync
+- description: Package destinations is your events forwarded to the ad and analytics
+    tools you use.
+  name: tags
 - description: 'Package tasks is Hanzo Tasks: durable workflows that survive a crash,
     with every run visible and replayable.'
   name: tasks
