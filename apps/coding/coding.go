@@ -187,6 +187,11 @@ type Req struct {
 	CredToken      string
 	TimeoutSeconds int
 	TargetID       string // when set, route to this registered machine instead of the sandbox
+	// Tool / Desktop are the caller's choice of harness and whether it needs a
+	// screen. They travel to RunRequest unchanged; classFor and argvFor over in
+	// sandboxrunner.go are the only two things that read them.
+	Tool    string
+	Desktop bool
 	// SessionID adopts an ALREADY-OPEN session instead of opening one. The door
 	// (Start) opens it so it can answer with a real handle the moment the run is
 	// admitted, rather than an empty promise the caller cannot watch. Empty keeps
@@ -361,6 +366,7 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 
 	// 2. Dispatch to the sandbox runtime, mirroring every progress line live.
 	runReq := RunRequest{
+		Tool: req.Tool, Desktop: req.Desktop,
 		CloneURL: cloneURL, BaseBranch: strings.TrimSpace(req.Base), Branch: branch,
 		Prompt: prompt, SessionID: sessionID, RunTimeoutSeconds: timeoutOr(req.TimeoutSeconds),
 		CredUser: req.CredUser, CredToken: req.CredToken,

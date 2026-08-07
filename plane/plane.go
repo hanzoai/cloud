@@ -2341,6 +2341,17 @@ type CodingStartIn struct {
 	AgentRef       string `json:"agentRef,omitempty"`
 	TargetID       string `json:"targetId,omitempty"`
 	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
+	// Tool is which harness runs the prompt — dev | claude | codex | python |
+	// node — and Desktop is whether the run needs a screen. Both are empty by
+	// default, which is `dev` with no screen, and that default is what every
+	// caller gets until it says otherwise.
+	//
+	// They are two fields because they are two questions. The harness decides
+	// what argv starts; the screen decides which image carries an X server. A
+	// caller may want claude WITH a browser it can see, and a single enum would
+	// have made that combination unsayable.
+	Tool    string `json:"tool,omitempty"`
+	Desktop bool   `json:"desktop,omitempty"`
 	// ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the door
 	// that started it has somewhere for it to talk. Empty means nobody is
 	// listening and the run simply does not narrate — which is the app door's

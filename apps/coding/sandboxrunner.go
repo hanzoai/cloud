@@ -45,6 +45,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -78,22 +79,84 @@ func classFor(tool string, desktop bool) string {
 
 // argvFor is the command that runs inside the sandbox.
 //
-// The runtime owns the real name→argv table (bot's TOOLS), and this is the
-// minimum cloud has to know to start one. It is deliberately not a second table
-// of flags: everything a harness needs beyond its name travels in the prompt.
+// Each harness names its OWN non-interactive verb, and they do not agree. That
+// is the whole content of this table: `-p` means print-the-answer to claude and
+// --profile to dev, so one spelling copied across both is not a style choice,
+// it is a run that never starts.
+//
+// Measured in a dev-class pod (oci.hanzo.ai/hanzoai/sandbox 1.0.1, dev 0.6.91):
+//
+//	dev -p "say hi"     ->  Error loading configuration: config profile `say hi` not found
+//	dev exec "say hi"    ->  runs
+//
+// Every coding run cloud has ever dispatched took the first line. The prompt
+// was read as the name of a config profile, no profile by that name existed,
+// and the process was gone before a model was ever asked anything.
+//
+// TWO FLAGS, AND NEITHER IS A PREFERENCE.
+//
+//   - --full-auto is `-a on-failure --sandbox workspace-write`: nobody is at a
+//     terminal to approve a command, so a run that asks is a run that hangs.
+//   - --skip-git-repo-check because CloneURL is optional. dev refuses to run
+//     outside a git repo to protect a laptop from itself; the pod is not a
+//     laptop, and the checkout is the thing it was given rather than the thing
+//     it wandered into.
+//
+// dev keeps its own workspace-write sandbox on TOP of the pod's isolation. It
+// is not the boundary — runtimeClass is — but it costs nothing, it was measured
+// to work under gVisor, and a harness that confines its own writes is one fewer
+// way for a bad turn to reach the checkout.
+//
+// `--` ENDS THE OPTIONS, AND IT IS THE SECURITY-CARRYING TOKEN HERE.
+//
+// The prompt is caller text in an argv position, so a prompt that BEGINS WITH A
+// DASH is not a prompt — it is a flag to the harness. Measured in the same pod,
+// all three agree:
+//
+//	dev exec --full-auto "--version"  ->  hanzo dev-exec 0.6.83   (printed, exited)
+//	codex exec "--version"            ->  codex-cli-exec 0.146.1
+//	claude -p "--version"             ->  2.1.223 (Claude Code)
+//
+// None of those ran a task. The reachable end of that is worse than a wasted
+// run: dev's `-c key=value` overrides its own config, including the sandbox
+// policy it was just given, so the text a caller sends could choose how much of
+// the box the model is allowed to touch. With `--` the same string is the
+// prompt and nothing else. python3 -c / node -e need none: there the prompt is
+// the VALUE of a flag, which is already a position no parser reinterprets.
 func argvFor(tool, prompt string) []string {
 	switch strings.TrimSpace(tool) {
 	case "claude":
-		return []string{"claude", "-p", prompt}
+		return []string{"claude", "-p", "--", prompt}
 	case "codex":
-		return []string{"codex", "exec", prompt}
+		return []string{"codex", "exec", "--", prompt}
 	case "python":
 		return []string{"python3", "-c", prompt}
 	case "node":
 		return []string{"node", "-e", prompt}
 	default:
-		return []string{"dev", "-p", prompt}
+		return []string{"dev", "exec", "--full-auto", "--skip-git-repo-check", "--", prompt}
 	}
+}
+
+// tools is the closed set a caller may name, and it is closed for the reason
+// every other set in this package is: `default:` in the two switches above
+// reads dev, so an unknown name did not fail — it silently ran a DIFFERENT
+// harness than the one that was asked for, and answered as though it had run
+// the right one. A typo is refused at the door instead.
+var tools = map[string]bool{"dev": true, "claude": true, "codex": true, "python": true, "node": true}
+
+// CheckTool refuses a harness we do not carry. Empty is not a request, so it is
+// not an error — it is dev, which is what the whole default path already is.
+func CheckTool(tool string) error {
+	if tool = strings.TrimSpace(tool); tool == "" || tools[tool] {
+		return nil
+	}
+	names := make([]string, 0, len(tools))
+	for t := range tools {
+		names = append(names, t)
+	}
+	sort.Strings(names)
+	return fmt.Errorf("coding: %q is not a harness we run (%s)", tool, strings.Join(names, ", "))
 }
 
 // Run leases a sandbox, does the work in it, and ends the lease.

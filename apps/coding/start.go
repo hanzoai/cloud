@@ -162,6 +162,9 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 	if project != "" && !RepoRE.MatchString(project) {
 		return Accepted{}, fmt.Errorf("coding: %q is not a project name", project)
 	}
+	if err := CheckTool(in.Tool); err != nil {
+		return Accepted{}, err
+	}
 	if len(prompt) > maxPromptLen {
 		prompt = prompt[:maxPromptLen]
 	}
@@ -180,7 +183,7 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 
 	req := Req{
 		Org: org, UserID: subject, AgentRef: in.AgentRef, Repo: repo,
-		Project: project, Base: base,
+		Project: project, Base: base, Tool: strings.TrimSpace(in.Tool), Desktop: in.Desktop,
 		Prompt: prompt, TimeoutSeconds: in.TimeoutSeconds, TargetID: strings.TrimSpace(in.TargetID),
 	}
 

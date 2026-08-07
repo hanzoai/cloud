@@ -386,3 +386,77 @@ func has(argv []string, want string) bool {
 	}
 	return false
 }
+
+// The three properties of argvFor that a run actually dies of, each pinned
+// against what the harness was MEASURED to do in a dev-class pod
+// (oci.hanzo.ai/hanzoai/sandbox 1.0.1: dev 0.6.91, claude 2.1.223, codex 0.146.1).
+func TestArgvForNonInteractiveVerb(t *testing.T) {
+	// `-p` is --profile to dev, not "prompt". `dev -p "<task>"` answered
+	// `config profile "<task>" not found` and exited before asking a model
+	// anything — which is what every coding run cloud dispatched used to do.
+	argv := argvFor("", "add a README")
+	if len(argv) < 2 || argv[0] != "dev" || argv[1] != "exec" {
+		t.Fatalf("the default harness must start with `dev exec`, got %q", argv)
+	}
+}
+
+func TestArgvForEndsOptionsBeforeThePrompt(t *testing.T) {
+	// A prompt is caller text in an argv position. Without `--`, a prompt that
+	// begins with a dash is a FLAG: all three agent harnesses printed their own
+	// version and exited when handed "--version" as the task.
+	for _, tool := range []string{"", "dev", "claude", "codex"} {
+		argv := argvFor(tool, "--version")
+		last := argv[len(argv)-1]
+		if last != "--version" {
+			t.Fatalf("%s: prompt must be last, got %q", tool, argv)
+		}
+		if argv[len(argv)-2] != "--" {
+			t.Fatalf("%s: prompt must be preceded by `--` or it parses as a flag, got %q", tool, argv)
+		}
+	}
+	// python3 -c / node -e take the prompt as a flag VALUE, which no parser
+	// reinterprets, so they neither need nor take a separator.
+	for tool, flag := range map[string]string{"python": "-c", "node": "-e"} {
+		argv := argvFor(tool, "--version")
+		if len(argv) != 3 || argv[1] != flag || argv[2] != "--version" {
+			t.Fatalf("%s: want [%s %s --version], got %q", tool, argv[0], flag, argv)
+		}
+	}
+}
+
+func TestCheckToolRefusesAHarnessWeDoNotCarry(t *testing.T) {
+	// Empty is dev, which is the whole default path, so it is not an error.
+	if err := CheckTool(""); err != nil {
+		t.Fatalf("empty tool must be accepted as dev: %v", err)
+	}
+	for _, ok := range []string{"dev", "claude", "codex", "python", "node"} {
+		if err := CheckTool(ok); err != nil {
+			t.Fatalf("%s is carried by the dev image: %v", ok, err)
+		}
+	}
+	// Without this, `default:` in classFor and argvFor read a typo as dev and
+	// answered as though the asked-for harness had run.
+	if err := CheckTool("clade"); err == nil {
+		t.Fatal("an unknown harness must be refused, not silently run as dev")
+	}
+}
+
+func TestClassForCarriesTheBinaryTheToolNeeds(t *testing.T) {
+	// Measured `command -v` in each published 1.0.1 class: exec carries dev,
+	// hanzo and hanzo-mcp but NOT claude/codex/gh; dev and desktop carry all.
+	for tool, want := range map[string]string{
+		"": "dev", "dev": "dev", "claude": "dev", "codex": "dev",
+		"python": "exec", "node": "exec",
+	} {
+		if got := classFor(tool, false); got != want {
+			t.Fatalf("classFor(%q): want %s, got %s", tool, want, got)
+		}
+	}
+	// A screen is an image variant, so it wins over every harness — desktop is
+	// dev plus an X server and therefore carries every binary dev does.
+	for _, tool := range []string{"", "dev", "claude", "python"} {
+		if got := classFor(tool, true); got != "desktop" {
+			t.Fatalf("classFor(%q, desktop): want desktop, got %s", tool, got)
+		}
+	}
+}
