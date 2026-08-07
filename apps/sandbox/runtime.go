@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -226,6 +227,90 @@ func (r *runtime) imageFor(class string) string {
 // pinned and is not, which is what this function exists to end.
 func (r *runtime) digestFor(class string) string {
 	return strings.TrimSpace(os.Getenv("SANDBOX_IMAGE_DIGEST_" + strings.ToUpper(class)))
+}
+
+// runtimes are the isolation boundaries we run, and for each the one fact that
+// decides which sandboxes may take it: whether it can back a PERSISTENT VOLUME.
+//
+// Firecracker has no virtio-fs. Read it on the node rather than take it on
+// faith: `configuration-fc.toml` carries no `shared_fs` key at all, where
+// `configuration-clh.toml:130` sets `shared_fs = "virtio-fs"`. A kata-fc guest
+// therefore cannot mount a directory from the host — and Kubernetes does not
+// fail that mount. The sandbox gets a ~599M tmpfs standing exactly where the
+// volume should be, every write SUCCEEDS into it, and the VM takes the bytes
+// with it when it exits. A `dev` sandbox would look perfect and lose the
+// checkout.
+//
+// That is why this is a table and not a comment: the failure has no symptom at
+// the point it happens, so it has to be refused here, where the fact is
+// written down once.
+var runtimes = map[string]bool{"gvisor": true, "kata-clh": true, "kata-fc": false}
+
+// shared is the runtime that takes a sandbox the deployment's own runtime
+// cannot hold. gVisor is the only boundary we run that both isolates and shares
+// a filesystem, and it is already what the fleet runs, so this names the
+// existing behaviour rather than adding one.
+const shared = "gvisor"
+
+// runtimeFor is the ONE place that decides a sandbox's isolation boundary. Not
+// a fork in the code and not a knob per class — a derivation from a property
+// the sandbox already declares two lines earlier, when a project gives it a
+// volume:
+//
+//	a sandbox that needs a PERSISTENT VOLUME needs a runtime that can SHARE A
+//	FILESYSTEM; one that does not, does not.
+//
+// Keying on m.Volume and not on m.Class is the whole point. CLASS DOES NOT
+// DECIDE THIS — `project` does (api.go). `dev` and `desktop` are refused
+// without one so they always carry a volume, but `exec` is optional: an
+// exec sandbox NAMING A PROJECT gets a volume too. A table of class→runtime
+// would have read `exec → the fast one` and silently thrown that org's project
+// away. The volume is the thing that matters, so the volume is what is asked.
+//
+// The two callers are answered differently ON PURPOSE:
+//
+//   - The DEPLOYMENT states a preference, so it is derived down. A fleet set to
+//     the fast runtime still has to run dev sandboxes, and refusing them would
+//     make the setting unusable.
+//   - A CALLER states a request, so a contradiction is refused rather than
+//     corrected. Handing back a runtime nobody asked for is the same silence
+//     this table exists to end, one level up.
+func (r *runtime) runtimeFor(m Sandbox, want string) (string, error) {
+	if want = strings.TrimSpace(want); want != "" {
+		shares, known := runtimes[want]
+		if !known {
+			// A runtimeClassName the cluster has never heard of is a pod that
+			// waits Pending with no explanation, so a typo stops here instead.
+			return "", fmt.Errorf("runtime %q is not one we run (%s)", want, runtimeNames())
+		}
+		if m.Volume != "" && !shares {
+			return "", fmt.Errorf(
+				"runtime %q has no shared filesystem, so it cannot mount project volume %q — "+
+					"the write would succeed into a tmpfs and be lost when the sandbox ends; "+
+					"ask for %s, or drop the project for a sandbox that keeps nothing",
+				want, m.Volume, shared)
+		}
+		return want, nil
+	}
+	// Empty stays empty: that is the node's default runtime, which is a
+	// different request from any named class, and a cluster with no gVisor
+	// installed must not be handed one.
+	if r.runtimeClass == "" || m.Volume == "" || runtimes[r.runtimeClass] {
+		return r.runtimeClass, nil
+	}
+	return shared, nil
+}
+
+// runtimeNames lists the closed set for the refusal above, sorted, because a Go
+// map range would print them in a different order every time and an error
+// message that changes on its own is one nobody can grep for.
+func runtimeNames() string {
+	n := make([]string, 0, len(runtimes))
+	for k := range runtimes {
+		n = append(n, k)
+	}
+	sort.Strings(n)
+	return strings.Join(n, ", ")
 }
 
 func (r *runtime) pods() dynamic.ResourceInterface {
