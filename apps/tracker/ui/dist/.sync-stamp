@@ -6,18 +6,9 @@ app=@hanzo/tracker (apps/tracker)
 base=/tracker/
 api_prefix=/v1/tracker
 auth=AuthGate (@hanzogui/admin) + @hanzo/iam@0.9.4 PKCE
-<<<<<<< HEAD
-idp=https://hanzo.id/v1/iam   # from the brand registry; VITE_IAM_BRAND, not a URL
-callback=/tracker/callback
-chrome=OrgSwitcher (left) + UserMenu (right); no nav rail, no env/version/clock/theme
-org_scope=X-Org-Id, resolved against the token's signed `orgs` claim; cloud re-mints it
-source=hanzoai/admin:apps/tracker@577bb4c (main)
-built=turbo typecheck 11/11 + turbo test 6/6 (609) + playwright 5/5 + vite build
-=======
 idp=brand registry: hostname -> hanzo.id | lux.id | zoo.id (VITE_IAM_BRAND pins)
 callback=/tracker/callback
 chrome=OrgSwitcher (left) + UserMenu (right); no nav rail, no env/version/clock/theme
 org_scope=X-Org-Id, resolved against the token's signed `orgs` claim; cloud re-mints it
 source=hanzoai/admin:apps/tracker@8da44d7 (main)
 built=turbo typecheck 11/11 + turbo test 6/6 (633) + playwright 5/5 (TLS, brand host)
->>>>>>> hanzogit/main
