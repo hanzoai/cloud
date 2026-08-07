@@ -495,11 +495,52 @@
         ]
       }
     },
+    "/v1/integrations/github/claim": {
+      "post": {
+        "operationId": "post_v1_integrations_github_claim",
+        "summary": "Binds installations the App ALREADY holds to the org the caller is acting in — the reconciliation for a grant that happened outside our connect flow.",
+        "description": "Binds installations the App ALREADY holds to the org the caller is\nacting in — the reconciliation for a grant that happened outside our connect\nflow.\n\nAn installation IS the grant: GitHub recorded the consent when the App was\ninstalled, and our connection row is bookkeeping that never got written because\nnobody came through our callback. This writes that row from the App's own view,\nso 23 accounts granted straight from GitHub stop reading as nothing.\n\nThe org is taken from the VALIDATED PRINCIPAL and never from the body, because\nit is the one part GitHub cannot tell us. An installation carries an account\nlogin, a type and a repository selection — nothing that names a Hanzo org. So\nthe binding cannot be DERIVED, only asserted, and the only unforgeable assertion\navailable is the org the caller is already acting in. Inferring one from the\naccount name would be a guess the store cannot catch: its key is\n(org,provider,owner), so a wrong org is a valid row, and a valid row is a\nmirror pointed at the wrong tenant.\n\nSUPER ADMIN only, for that same reason. A tenant's proof that an account is\ntheirs is GitHub's own consent screen — the connect flow — and without it any\norg could claim any account the App holds. Platform sudo is already the scope\nthat reads the whole install list, so it is the scope that may bind from it;\ngiving a tenant this verb would hand it every other tenant's repositories.\n\nIdempotent: the row is keyed (org,provider,owner) and connected_at survives an\nupsert, so claiming twice rebinds the same account to the same org and reports\nit under `already`. Re-claiming also REFRESHES the installation id, so an\naccount reinstalled on GitHub — new id, same login — self-heals instead of\nminting tokens against a dead installation.",
+        "tags": [
+          "integrations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/githubClaimIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "already": [
+                    "zooai"
+                  ],
+                  "claimed": [
+                    "hanzoai",
+                    "luxfi"
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/githubClaimOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/integrations/github/installations": {
       "get": {
         "operationId": "get_v1_integrations_github_installations",
-        "summary": "Lists the GitHub accounts THIS org has connected, each confirmed against the App's own installation list, plus where to add another.",
-        "description": "Lists the GitHub accounts THIS org has connected, each\nconfirmed against the App's own installation list, plus where to add another.\n\nThe confirmation is the point. A connection row holds an installation id, and\nan id whose installation was since removed on GitHub is a row that mints\nnothing — every list and import against it fails with a token error, which\nreads as \"our git integration is broken\" rather than \"that install is gone\".\nChecking the App's view turns that into a fact the caller can act on.\n\nORG-SCOPED, deliberately. The App is installed across every customer, so the\nraw list is the customer list; this returns only accounts the caller's org has\nbound. An org discovers a NEW account by installing it (InstallURL), which is\nGitHub's own consent screen — not by reading ours.",
+        "summary": "Lists the GitHub accounts the caller may see the App installed on, each confirmed against the App's own list, plus where to add another.",
+        "description": "Lists the GitHub accounts the caller may see the App\ninstalled on, each confirmed against the App's own list, plus where to add\nanother.\n\nThe confirmation is the point. A connection row holds an installation id, and\nan id whose installation was since removed on GitHub is a row that mints\nnothing — every list and import against it fails with a token error, which\nreads as \"our git integration is broken\" rather than \"that install is gone\".\nChecking the App's view turns that into a fact the caller can act on.\n\nORG-SCOPED for a tenant, deliberately. The App is installed across every\ncustomer, so the raw list is the customer list; a tenant sees only accounts its\nown org has bound. It discovers a NEW account by installing it (InstallURL),\nwhich is GitHub's own consent screen — not by reading ours.\n\nA SUPER ADMIN sees the App's whole install list, because that list is the\nplatform's own inventory rather than any one tenant's data, and platform sudo\nis the single cross-tenant scope this house has. Without it an App installed\nout-of-band — granted straight from GitHub, so no connect flow ever ran and no\nconnection row exists — is invisible to everyone: the console card reads \"not\nconnected\" and an operator asked \"which GitHub orgs do you see\" can only\nanswer for accounts already bound, which is precisely the accounts that were\nnever the question.",
         "tags": [
           "integrations"
         ],
@@ -512,6 +553,7 @@
                   "installations": [
                     {
                       "connected": true,
+                      "grant": "all",
                       "htmlUrl": "https://github.com/hanzoai",
                       "login": "hanzoai",
                       "type": "Organization"
@@ -1589,6 +1631,41 @@
         },
         "type": "object"
       },
+      "githubClaimIn": {
+        "properties": {
+          "accounts": {
+            "description": "Accounts names GitHub logins the App is installed on (\"hanzoai\"). Matched\ncase-insensitively, since GitHub logins are. Ignored when all is true.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "all": {
+            "description": "All binds every account the App holds, instead of naming them.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "githubClaimOut": {
+        "properties": {
+          "already": {
+            "description": "Already were bound before the call and are unchanged by it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "claimed": {
+            "description": "Claimed are the accounts this call bound. Never null; [] when none.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "githubImportIn": {
         "properties": {
           "all": {
@@ -1627,6 +1704,10 @@
             "description": "Connected reports whether THIS org has already bound this account.",
             "type": "boolean"
           },
+          "grant": {
+            "description": "Grant is \"all\" or \"selected\" — how many of the account's repositories the\ninstall covers. A reader deciding what to import needs the reach, not just\nthe name.",
+            "type": "string"
+          },
           "htmlUrl": {
             "description": "HTMLURL is the account's page on GitHub.",
             "type": "string"
@@ -1649,7 +1730,7 @@
             "type": "string"
           },
           "installations": {
-            "description": "Installations is every account this org has connected, plus — for a caller\nthat can install — nothing it has not. Never null; [] when none.",
+            "description": "Installations is every account the caller may see: the ones its own org has\nbound, or — for a super admin — every account the App is installed on.\nNever null; [] when none.",
             "items": {
               "$ref": "#/components/schemas/githubInstallationView"
             },
