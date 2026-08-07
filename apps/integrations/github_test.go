@@ -123,29 +123,20 @@ func TestGitHubAuthorizeURL(t *testing.T) {
 	}
 }
 
-// TestGitHubExchangeInstallationID proves the callback identifier (installation_id)
-// is custodied as the ExternalID and validated (account fetched) via the App JWT.
-func TestGitHubExchangeInstallationID(t *testing.T) {
-	srv := mockGitHub(t, nil)
-	withGithubApp(t, srv)
-
-	res, err := githubExchange(context.Background(), OAuthConfig{}, "", "789")
-	if err != nil {
-		t.Fatalf("exchange: %v", err)
+// TestGitHubDeclaresNoExchange pins the registration that makes the callback
+// unable to bind: the App install returns an installation id, an id a caller
+// supplies is not a grant, so the provider trades nothing on the callback. The
+// generic dispatcher reads this field to refuse — see github_bind_test.go.
+func TestGitHubDeclaresNoExchange(t *testing.T) {
+	p, ok := registry["github"]
+	if !ok {
+		t.Fatal("github provider not registered")
 	}
-	if res.ExternalID != "789" {
-		t.Fatalf("ExternalID must be the installation id, got %q", res.ExternalID)
+	if p.Exchange != nil {
+		t.Fatal("github must declare no callback exchange; githubClaim binds an installation")
 	}
-	if res.AccountLabel != "acme-gh" {
-		t.Fatalf("account label must be fetched, got %q", res.AccountLabel)
-	}
-	if len(res.Tokens) != 0 {
-		t.Fatalf("no token is sealed on connect, got %v", res.Tokens)
-	}
-
-	// A non-numeric identifier fails honestly (no fake OK).
-	if _, err := githubExchange(context.Background(), OAuthConfig{}, "", "not-a-number"); err == nil {
-		t.Fatal("non-numeric installation id must error")
+	if p.Authorize == nil {
+		t.Fatal("github still sends the user to GitHub's install page")
 	}
 }
 
