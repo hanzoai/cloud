@@ -395,15 +395,37 @@ jobs:
         # of its own rather than to main, because main is the mirror's to move and
         # the two lineages do diverge — this step's job is to make the object
         # exist, not to decide what main is.
+        #
+        # THE REPO IT PUBLISHES TO IS PRIVATE, and that is the whole point of
+        # naming it explicitly. This lane used to push here — the full private
+        # tree, every release — to github.com/hanzoai/cloud, which is PUBLIC: it
+        # holds the Apache-2.0 OSS core. `refs/heads/forge-head` on a public repo
+        # is a world-readable copy of everything, published automatically, which
+        # nobody chose and nothing announced.
+        #
+        # It stopped being merely wrong and started being visible when GitHub's
+        # push protection refused the ref: two commits carry deliberately
+        # fake-shaped credentials (apps/platform/secretshape_test.go and
+        # declare_secret_test.go) that exist to prove the secret-shape detector
+        # catches them, and GitHub's scanner reads them as real. Every release
+        # after that died here, because the fixtures are ancestors of main and so
+        # ride every future push. The tempting fix is the unblock URL in the log.
+        # That is the wrong fix twice over: it re-opens the leak, and it teaches
+        # the scanner to ignore exactly the shape we want it to catch.
+        #
+        # So the private repo is both the correct home and the working one. The
+        # version claim below reserves refs/tags/v<N> in the SAME repo the build
+        # clones from, which is the property that was actually missing: a release
+        # name and the bytes it names now live in one place.
         run: |
           set -euo pipefail
-          api="https://api.github.com/repos/hanzoai/cloud"
+          api="https://api.github.com/repos/hanzo-inc/cloud"
           if curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" "${api}/commits/${SHA}" 2>/dev/null; then
             echo "commit ${SHA} is already on github — nothing to publish"
             exit 0
           fi
           echo "commit ${SHA} is not on github yet (push mirror runs every 8h); publishing it now"
-          git push --force "https://x-access-token:${GH_PAT}@github.com/hanzoai/cloud" \
+          git push --force "https://x-access-token:${GH_PAT}@github.com/hanzo-inc/cloud" \
             "${SHA}:refs/heads/forge-head"
           for i in 1 2 3 4 5 6 7 8 9 10; do
             if curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" "${api}/commits/${SHA}" 2>/dev/null; then
@@ -472,10 +494,20 @@ jobs:
           done
 
           # What has been TAGGED. ls-remote rather than /repos/../tags because the
-          # REST list paginates at 100 and this repo carries ~1700 refs. github.com,
-          # not the forge: that is where cloud's tags actually are; the forge copy
-          # trails and reading it would collide with fifty published images.
-          GIT=$(git ls-remote --tags "https://x-access-token:${GH_PAT}@github.com/hanzoai/cloud" \
+          # REST list paginates at 100 and this repo carries ~1700 refs. The
+          # private github repo, not the forge: the claim is a compare-and-swap
+          # and only one server can arbitrate it, so the register of names has to
+          # be the one the claim writes to. Reading a different git than we claim
+          # against is how two lanes come to believe they both own a number.
+          #
+          # The register moved here from the public repo, so it starts from
+          # v1.801.491 — the reconciliation release — rather than from the
+          # public repo's v1.801.490. 487 through 490 are holes there: versions
+          # claimed by runs that then died in the build, which is the correct
+          # direction to fail (a hole is inert; a reused number serves wrong
+          # bytes). They are not carried over, because a name nothing published
+          # is not a release.
+          GIT=$(git ls-remote --tags "https://x-access-token:${GH_PAT}@github.com/hanzo-inc/cloud" \
             | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' || true)
 
@@ -527,7 +559,7 @@ jobs:
             CODE=$(curl -s -o /tmp/claim.json -w '%{http_code}' -X POST \
               -H "Authorization: Bearer $GH_PAT" \
               -H 'Accept: application/vnd.github+json' \
-              "https://api.github.com/repos/hanzoai/cloud/git/refs" \
+              "https://api.github.com/repos/hanzo-inc/cloud/git/refs" \
               -d "{\"ref\":\"refs/tags/v${CAND}\",\"sha\":\"${SHA}\"}")
             if [ "$CODE" = "422" ]; then
               # TWO DIFFERENT FAILURES SHARE THIS STATUS, and treating them alike
@@ -547,7 +579,7 @@ jobs:
               # Taken. By us, or by somebody else? The distinction is the whole
               # difference between a resume and a collision, and it is one GET.
               HAVE=$(curl -fsS -H "Authorization: Bearer $GH_PAT" \
-                "https://api.github.com/repos/hanzoai/cloud/git/ref/tags/v${CAND}" | jq -r '.object.sha // empty')
+                "https://api.github.com/repos/hanzo-inc/cloud/git/ref/tags/v${CAND}" | jq -r '.object.sha // empty')
               if [ "$HAVE" = "${SHA}" ]; then
                 echo "v${CAND} is already claimed at our sha — this release, resumed"
                 CLAIMED="$CAND"; break
@@ -736,7 +768,7 @@ jobs:
           # false the moment the bytes change under the name.
           SMOKED=0
           if curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" \
-            "https://api.github.com/repos/hanzoai/cloud/git/ref/${RECEIPT}" 2>/dev/null; then
+            "https://api.github.com/repos/hanzo-inc/cloud/git/ref/${RECEIPT}" 2>/dev/null; then
             echo "$DIGEST already has a smoke receipt — these exact bytes have booted"
             SMOKED=1
           fi
@@ -816,7 +848,7 @@ jobs:
           set -euo pipefail
           CODE=$(curl -s -o /tmp/receipt.json -w '%{http_code}' -X POST \
             -H "Authorization: Bearer ${GH_PAT}" -H 'Accept: application/vnd.github+json' \
-            "https://api.github.com/repos/hanzoai/cloud/git/refs" \
+            "https://api.github.com/repos/hanzo-inc/cloud/git/refs" \
             -d "$(jq -nc --arg r "refs/${{ steps.img.outputs.receipt }}" --arg s "${{ github.sha }}" '{ref:$r, sha:$s}')")
           case "$CODE" in
             201) echo "recorded: ${{ steps.img.outputs.digest }} booted, built from ${{ github.sha }}" ;;
@@ -836,7 +868,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsS -o /dev/null -H "Authorization: Bearer ${GH_PAT}" \
-            "https://api.github.com/repos/hanzoai/cloud/git/ref/${{ steps.img.outputs.receipt }}" \
+            "https://api.github.com/repos/hanzo-inc/cloud/git/ref/${{ steps.img.outputs.receipt }}" \
             || { echo "::error::no smoke receipt for ${{ steps.img.outputs.digest }} — these bytes have never been proven to boot. Nothing downstream may pin them."; exit 1; }
           echo "${{ steps.img.outputs.digest }} is smoked"
 
@@ -871,7 +903,7 @@ jobs:
           set -euo pipefail
           TAG="v${{ needs.image.outputs.version }}"
           HAVE=$(curl -fsS -H "Authorization: Bearer ${GH_PAT}" \
-            "https://api.github.com/repos/hanzoai/cloud/git/ref/tags/${TAG}" | jq -r '.object.sha // empty')
+            "https://api.github.com/repos/hanzo-inc/cloud/git/ref/tags/${TAG}" | jq -r '.object.sha // empty')
           if [ -z "$HAVE" ]; then
             echo "::error::${TAG} was claimed by this run but no longer exists — refusing to ship a release whose receipt was deleted"; exit 1
           fi
@@ -1257,14 +1289,14 @@ jobs:
 
           # Idempotent: create, or update the one that a previous attempt left.
           ID=$(curl -fsS -H "Authorization: Bearer ${GH_PAT}" \
-            "https://api.github.com/repos/hanzoai/cloud/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
+            "https://api.github.com/repos/hanzo-inc/cloud/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
           if [ -n "$ID" ]; then
             curl -fsS -X PATCH -H "Authorization: Bearer ${GH_PAT}" \
-              "https://api.github.com/repos/hanzoai/cloud/releases/${ID}" \
+              "https://api.github.com/repos/hanzo-inc/cloud/releases/${ID}" \
               -d "$(jq -nc --arg b "$BODY" '{body:$b}')" >/dev/null
           else
             curl -fsS -X POST -H "Authorization: Bearer ${GH_PAT}" \
-              "https://api.github.com/repos/hanzoai/cloud/releases" \
+              "https://api.github.com/repos/hanzo-inc/cloud/releases" \
               -d "$(jq -nc --arg t "$TAG" --arg b "$BODY" '{tag_name:$t, name:$t, body:$b}')" >/dev/null
           fi
           echo "receipt written to the ${TAG} release"
