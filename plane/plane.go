@@ -410,6 +410,7 @@ const (
 	SandboxRun   = "sandbox_run"
 	SandboxRead  = "sandbox_read"
 	SandboxWrite = "sandbox_write"
+	SandboxStop  = "sandbox_stop"
 	SandboxEnd   = "sandbox_end"
 
 	// The FIGURES seam: one question — "what are this org's headline numbers?" —
@@ -1958,6 +1959,16 @@ type RunIn struct {
 	Stdin      string   `json:"stdin,omitempty"`
 	Dir        string   `json:"dir,omitempty"`
 	TimeoutSec int      `json:"timeoutSec,omitempty"`
+	// Session is the live agent session this command narrates into: its output is
+	// appended there AS IT IS PRODUCED, so every surface watching that session
+	// watches the command work instead of a blank pause. A long run is otherwise a
+	// silence with a verdict at the end.
+	//
+	// It names a SESSION and never a tenant. The org is the one the caller already
+	// proved, so a session belonging to somebody else is simply absent from the org
+	// this call acts for and the append is refused there. Empty means nothing is
+	// watching, and then nothing is sent.
+	Session string `json:"session,omitempty"`
 }
 
 // Ran is what a command produced. A non-zero ExitCode is DATA, not an error: the
@@ -1999,6 +2010,23 @@ type WriteIn struct {
 type Wrote struct {
 	Path  string `json:"path"`
 	Bytes int    `json:"bytes"`
+}
+
+// StopIn interrupts what a sandbox is running. It names the SANDBOX and not a
+// command, because whoever is watching a run holds the sandbox's id and never the
+// process id of whatever is inside it.
+type StopIn struct {
+	ID string `json:"id"`
+}
+
+// Stopped is how many commands the stop interrupted.
+//
+// Zero is an ANSWER and not a failure: a command that finished a moment ago is
+// one there was nothing left to stop. The distinction a caller actually needs is
+// "already over" versus "not yours", and the second is a 404 from the ordinary
+// org lookup rather than a zero here.
+type Stopped struct {
+	Stopped int `json:"stopped"`
 }
 
 // EndIn ends a lease. Purge drops the project VOLUME as well and is opt-in,
