@@ -2,12 +2,18 @@
 // one channel into it.
 //
 // A sandbox is a Pod, and its isolation boundary is the RUNTIME that pod names
-// — one field, `SANDBOX_RUNTIME_CLASS`, holding `gvisor` or `kata-fc` or
-// `kata-clh` or nothing. It is the ONLY boundary claimed here: no uid juggling,
-// no process groups, no daemon inside the pod deciding what it is allowed to
-// run. Everything the predecessor built to approximate that boundary in Go is
-// deleted rather than kept "for defence in depth", because a second
-// half-boundary is a second thing to keep true.
+// — one field, whose value comes from `runtimes` and nowhere else. It is the
+// ONLY boundary claimed here: no uid juggling, no process groups, no daemon
+// inside the pod deciding what it is allowed to run. Everything the predecessor
+// built to approximate that boundary in Go is deleted rather than kept "for
+// defence in depth", because a second half-boundary is a second thing to keep
+// true.
+//
+// WHICH boundary is a derivation and not a setting — see runtimeFor, which is
+// the one place that decides it, over two facts a sandbox already states about
+// itself: whose code it runs, and whether it keeps anything.
+// `SANDBOX_RUNTIME_CLASS` states the deployment's preference among them and is
+// checked against the table at startup.
 //
 // Empty is honest, not a hole: it means the node's default runtime, which is
 // the containment a normal pod gets. It ships that way because runsc has to be
@@ -28,6 +34,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/k8s"
 
 	corev1 "k8s.io/api/core/v1"
@@ -112,6 +119,12 @@ type runtime struct {
 	image        string // oci.hanzo.ai/hanzoai/sandbox, without a tag
 	tag          string
 	runtimeClass string
+	// bare is the boundary our OWN code takes — the one with no kernel of its
+	// own — and it is empty until the cluster keeps that boundary to nodes of its
+	// own. Resolved once, against the cluster, because containment is the
+	// cluster's fact and a setting that claimed it would be the one thing here
+	// worth lying about. See confine.
+	bare         string
 	startTimeout time.Duration
 	execTimeout  time.Duration
 	dyn          dynamic.Interface
@@ -144,6 +157,25 @@ func newRuntime() *runtime {
 	}
 	r.bound = b
 
+	// SANDBOX_RUNTIME_CLASS IS CHECKED AGAINST THE TABLE, AT STARTUP.
+	//
+	// It was read straight through to the pod spec, so a value the table had
+	// never heard of arrived at the apiserver as a runtimeClassName and the
+	// sandbox sat Pending with nothing said — the same silence the caller-facing
+	// refusal exists to end, one level up and with nobody watching for it. Worse,
+	// it only did that for a volumeless sandbox: the old derivation short-
+	// circuited on `m.Volume == ""` and never consulted the table at all, so the
+	// one path that skipped validation was also the common one.
+	//
+	// A deployment's runtime is decided once, so it is checked once, here, where
+	// the reason has somewhere to go. Everything downstream may then take a
+	// non-empty r.runtimeClass as a name we run.
+	if _, ok := runtimes[r.runtimeClass]; r.runtimeClass != "" && !ok {
+		r.initErr = fmt.Sprintf("SANDBOX_RUNTIME_CLASS=%q is not one we run (%s)",
+			r.runtimeClass, runtimeNames())
+		return r
+	}
+
 	cfg, cerr := rest.InClusterConfig()
 	if cerr != nil {
 		// KUBECONFIG fallback for local development — identical to every other
@@ -162,6 +194,12 @@ func newRuntime() *runtime {
 		return r
 	}
 	r.dyn, r.str = dyn, &spdy{cfg: cfg}
+	// Asked once, at startup, and only ever able to REMOVE a boundary from what
+	// this deployment offers — so a cluster that cannot answer costs a little
+	// speed and never an outage.
+	if n := bare(); r.confine(context.Background(), n) {
+		r.bare = n
+	}
 	return r
 }
 
@@ -229,8 +267,12 @@ func (r *runtime) digestFor(class string) string {
 	return strings.TrimSpace(os.Getenv("SANDBOX_IMAGE_DIGEST_" + strings.ToUpper(class)))
 }
 
-// runtimes are the isolation boundaries we run, and for each the one fact that
-// decides which sandboxes may take it: whether it can back a PERSISTENT VOLUME.
+// runtimes are the isolation boundaries we run, and for each the TWO facts that
+// decide which sandboxes may take it.
+//
+//	kernel — the sandbox gets a kernel of its own, so a process that breaks out
+//	         of its container has not broken out onto the node.
+//	shares — the sandbox can back a PERSISTENT VOLUME.
 //
 // Firecracker has no virtio-fs. Read it on the node rather than take it on
 // faith: `configuration-fc.toml` carries no `shared_fs` key at all, where
@@ -241,31 +283,85 @@ func (r *runtime) digestFor(class string) string {
 // with it when it exits. A `dev` sandbox would look perfect and lose the
 // checkout.
 //
-// That is why this is a table and not a comment: the failure has no symptom at
-// the point it happens, so it has to be refused here, where the fact is
-// written down once.
-var runtimes = map[string]bool{"gvisor": true, "kata-clh": true, "kata-fc": false}
+// runc has no kernel of its own because it IS the node's kernel, which is both
+// why it is the fastest thing here and why only code of ours may take it. See
+// runtimeFor for who that is, and confine for the topology that has to hold
+// before it is offered at all.
+//
+// That is why this is a table and not a comment: neither failure has a symptom
+// at the point it happens — a lost volume looks like a successful write, and a
+// shared kernel looks like a fast sandbox — so both are refused here, where the
+// facts are written down once.
+var runtimes = map[string]struct{ kernel, shares bool }{
+	"runc":     {shares: true},
+	"gvisor":   {kernel: true, shares: true},
+	"kata-clh": {kernel: true, shares: true},
+	"kata-fc":  {kernel: true},
+}
 
-// shared is the runtime that takes a sandbox the deployment's own runtime
-// cannot hold. gVisor is the only boundary we run that both isolates and shares
-// a filesystem, and it is already what the fleet runs, so this names the
-// existing behaviour rather than adding one.
+// shared is the boundary that meets BOTH facts at once, and so the answer
+// whenever the one a deployment stated does not. gVisor isolates and shares a
+// filesystem, and it is already what the fleet runs, so this names the existing
+// behaviour rather than adding one.
 const shared = "gvisor"
 
+// fits reports whether this deployment may put a sandbox on a boundary — the
+// ONE predicate, asked by all three paths into runtimeFor.
+//
+// It is one and not three because it was two, briefly, and the third path was
+// the bug: the derivation consulted the topology, the by-name request did not,
+// and the deployment's own setting did not either — so `SANDBOX_RUNTIME_CLASS=runc`
+// put our sandboxes on the node's kernel wherever the scheduler felt like,
+// which is the entire thing confine exists to prevent. A fact that only some
+// callers consult is a fact that has already drifted.
+//
+// An unknown name fits nothing, which is what makes an answer fall to `shared`
+// rather than to a string the apiserver has never heard of.
+func (r *runtime) fits(name string, kernel, shares bool) bool {
+	b, ok := runtimes[name]
+	if !ok || (shares && !b.shares) {
+		return false
+	}
+	// A boundary with a kernel of its own suits anybody. The one without suits
+	// only code of ours, and only where the cluster keeps it to nodes of its own.
+	return b.kernel || (!kernel && name == r.bare)
+}
+
+// bare names the boundary with NO KERNEL OF ITS OWN — a container on the node's
+// kernel, which is the fastest thing we run and the only one reserved to code of
+// ours. Derived from the table rather than written down a second time, so adding
+// or removing a boundary stays a table entry.
+func bare() string {
+	for _, name := range sorted() {
+		if !runtimes[name].kernel {
+			return name
+		}
+	}
+	return ""
+}
+
 // runtimeFor is the ONE place that decides a sandbox's isolation boundary. Not
-// a fork in the code and not a knob per class — a derivation from a property
-// the sandbox already declares two lines earlier, when a project gives it a
-// volume:
+// a fork in the code and not a knob per class — ONE LOOKUP over two facts the
+// sandbox already states about itself:
 //
-//	a sandbox that needs a PERSISTENT VOLUME needs a runtime that can SHARE A
-//	FILESYSTEM; one that does not, does not.
+//	WHO OWNS THE CODE decides how much isolation is needed. Ours runs on our own
+//	kernel; everybody else's gets a kernel of its own.
+//	WHETHER IT KEEPS ANYTHING decides which boundaries can serve it. A project
+//	volume needs a boundary that can share a filesystem.
 //
-// Keying on m.Volume and not on m.Class is the whole point. CLASS DOES NOT
-// DECIDE THIS — `project` does (api.go). `dev` and `desktop` are refused
-// without one so they always carry a volume, but `exec` is optional: an
-// exec sandbox NAMING A PROJECT gets a volume too. A table of class→runtime
-// would have read `exec → the fast one` and silently thrown that org's project
-// away. The volume is the thing that matters, so the volume is what is asked.
+// NEITHER FACT CAN BE HANDED IN, and that is the whole security of it. The org
+// is the caller's identity — api.go takes it from principal.Org, which refuses
+// an org that arrived without a validated principal, and no body field reaches
+// it — while the volume was set two lines earlier from the project. A caller
+// that could name its own org could name its own kernel.
+//
+// Keying on m.Volume and not on m.Class is the same point made about the other
+// fact. CLASS DOES NOT DECIDE THIS — `project` does (api.go). `dev` and
+// `desktop` are refused without one so they always carry a volume, but `exec`
+// is optional: an exec sandbox NAMING A PROJECT gets a volume too. A table of
+// class→runtime would have read `exec → the fast one` and silently thrown that
+// org's project away. The volume is the thing that matters, so the volume is
+// what is asked.
 //
 // The two callers are answered differently ON PURPOSE:
 //
@@ -276,14 +372,31 @@ const shared = "gvisor"
 //     corrected. Handing back a runtime nobody asked for is the same silence
 //     this table exists to end, one level up.
 func (r *runtime) runtimeFor(m Sandbox, want string) (string, error) {
+	// THE TWO FACTS. authz.AdminOrg is the reserved platform org — the issuer's
+	// own constant, the same predicate admin-guard and the audit trail read, so
+	// there is no second notion of "ours" here to drift from IAM's.
+	kernel, shares := m.Org != authz.AdminOrg, m.Volume != ""
+
 	if want = strings.TrimSpace(want); want != "" {
-		shares, known := runtimes[want]
-		if !known {
+		b, known := runtimes[want]
+		switch {
+		case !known:
 			// A runtimeClassName the cluster has never heard of is a pod that
 			// waits Pending with no explanation, so a typo stops here instead.
 			return "", fmt.Errorf("runtime %q is not one we run (%s)", want, runtimeNames())
-		}
-		if m.Volume != "" && !shares {
+		case kernel && !b.kernel:
+			return "", fmt.Errorf(
+				"runtime %q is the node's own kernel, which is a boundary only for code of ours — "+
+					"ask for %s", want, shared)
+		case !b.kernel && want != r.bare:
+			// EVEN FOR US. Asking by name must go through the same topology the
+			// derivation does, or the one caller allowed to name runc is the one
+			// caller who can put it on a pool it does not own — and on a cluster
+			// with no such class at all, on a pod that waits Pending forever.
+			return "", fmt.Errorf(
+				"runtime %q is the node's own kernel and this cluster does not keep it to a pool "+
+					"of its own, so nothing may take it — ask for %s", want, shared)
+		case shares && !b.shares:
 			return "", fmt.Errorf(
 				"runtime %q has no shared filesystem, so it cannot mount project volume %q — "+
 					"the write would succeed into a tmpfs and be lost when the sandbox ends; "+
@@ -292,25 +405,111 @@ func (r *runtime) runtimeFor(m Sandbox, want string) (string, error) {
 		}
 		return want, nil
 	}
+	// OUR OWN CODE takes the boundary the cluster keeps to itself. There is no
+	// test for who the caller is here, and there does not need to be: the
+	// boundary has no kernel of its own, so it fits nothing that needs one and
+	// the table refuses it to everybody else. r.bare is empty until the topology
+	// holds (confine), and an empty name fits nothing at all.
+	if r.fits(r.bare, kernel, shares) {
+		return r.bare, nil
+	}
 	// Empty stays empty: that is the node's default runtime, which is a
 	// different request from any named class, and a cluster with no gVisor
-	// installed must not be handed one.
-	if r.runtimeClass == "" || m.Volume == "" || runtimes[r.runtimeClass] {
+	// installed must not be handed one. Every named value has been through the
+	// table at startup, so what reaches a pod spec here is a name we run.
+	if r.runtimeClass == "" || r.fits(r.runtimeClass, kernel, shares) {
 		return r.runtimeClass, nil
 	}
 	return shared, nil
 }
 
-// runtimeNames lists the closed set for the refusal above, sorted, because a Go
-// map range would print them in a different order every time and an error
-// message that changes on its own is one nobody can grep for.
-func runtimeNames() string {
+// sorted is the closed set, in one order. A Go map range would give a different
+// one every time, and both an error message and a derived choice that change on
+// their own are ones nobody can grep for or reproduce.
+func sorted() []string {
 	n := make([]string, 0, len(runtimes))
 	for k := range runtimes {
 		n = append(n, k)
 	}
 	sort.Strings(n)
-	return strings.Join(n, ", ")
+	return n
+}
+
+func runtimeNames() string { return strings.Join(sorted(), ", ") }
+
+// confine asks the CLUSTER whether it keeps a boundary to NODES OF ITS OWN, and
+// it is what stands between "runc is the fastest thing we run" and "somebody's
+// model output is on the node's kernel next to another tenant".
+//
+// Our own agent is not our own binary. Its commands are written by a model that
+// just read a repository, a web page or a user's prompt, so the realistic threat
+// is that somebody else wrote them — and the node's kernel is one bug away. That
+// is survivable only if the blast radius is drawn by TOPOLOGY rather than by the
+// runtime: nothing else on the pool, and nothing on the pool worth taking.
+//
+// A RuntimeClass already draws it. `scheduling.nodeSelector` and
+// `scheduling.tolerations` are merged into every pod that names the class, so
+// the selector says which pool our sandboxes go to and the toleration says that
+// pool is tainted against everything else. BOTH are required, because either
+// alone is half a pool: a selector with no taint puts our sandboxes on nodes
+// anything may join, and a taint with no selector leaves them free to land
+// anywhere. And the pool must be the boundary's OWN — sharing one with a
+// boundary other tenants take would put a kernel-sharing sandbox on the same
+// node as their gVisor ones, which is the radius we just went to the trouble of
+// drawing.
+//
+// It is READ and never configured. A boundary that merely says it is contained
+// is not, and this is precisely the fact an attacker would like taken on faith.
+// Every no-answer is a NO — no such class, no client, no permission — so the
+// boundary is simply not offered and our code takes the same one as everybody
+// else's. That is the failure this can afford to have.
+func (r *runtime) confine(ctx context.Context, name string) bool {
+	if r.dyn == nil || name == "" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	all, err := r.dyn.Resource(k8s.RuntimeClasses).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false
+	}
+	pool := map[string]any{}
+	for _, rc := range all.Items {
+		if rc.GetName() != name {
+			continue
+		}
+		sel, _, _ := unstructured.NestedMap(rc.Object, "scheduling", "nodeSelector")
+		tol, _, _ := unstructured.NestedSlice(rc.Object, "scheduling", "tolerations")
+		if len(sel) == 0 || len(tol) == 0 {
+			return false
+		}
+		pool = sel
+	}
+	if len(pool) == 0 {
+		return false
+	}
+	for _, rc := range all.Items {
+		sel, _, _ := unstructured.NestedMap(rc.Object, "scheduling", "nodeSelector")
+		if rc.GetName() != name && samePool(sel, pool) {
+			return false
+		}
+	}
+	return true
+}
+
+// samePool reports whether two node selectors choose the same nodes. An empty
+// selector chooses every node, so it is never "the same pool" as one that
+// chooses some — it is a superset, and the caller has already refused it.
+func samePool(a, b map[string]any) bool {
+	if len(a) == 0 || len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *runtime) pods() dynamic.ResourceInterface {

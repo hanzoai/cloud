@@ -122,7 +122,7 @@ func TestLiveLeaseKeepsWhatItPromisesToKeep(t *testing.T) {
 	// The runtime it LANDED on, read off the pod rather than inferred from the
 	// env — the pod is what the kubelet obeyed.
 	got := runtimeOfPod(t, ctx, rt, first.ID)
-	if !runtimes[got] {
+	if !runtimes[got].shares {
 		t.Fatalf("a sandbox mounting a volume landed on %q, which has no shared filesystem — "+
 			"this is the silent-tmpfs case the derivation exists to prevent", got)
 	}
@@ -192,12 +192,21 @@ func TestLiveLeaseKeepsWhatItPromisesToKeep(t *testing.T) {
 		plane.RunIn{ID: ex.ID, Command: "uname -r"})
 	guest, host := oneLine(kern.Stdout), hostKernel(t, ctx, rt, ex.ID)
 	t.Logf("  guest kernel %s vs host %s (run %v)", guest, host, dKern.Round(time.Millisecond))
-	if runtimes[exRC] && exRC != "" && guest != host {
-		t.Logf("  note: %q isolates with its own kernel too", exRC)
-	}
-	if !runtimes[exRC] && exRC != "" && guest == host {
-		t.Fatalf("runtimeClassName=%q but the guest kernel %s equals the host's — "+
-			"the pod did not get a VM, so the label is not the runtime it ran on", exRC, guest)
+	// The table's `kernel` column, checked against the only thing that can
+	// settle it. A boundary that claims a kernel of its own and reports the
+	// node's has not got one — the runtimeClassName was accepted and nothing
+	// behind it was installed. And a boundary that claims none must report the
+	// node's, or the table is describing a runtime we are not running.
+	if b, ok := runtimes[exRC]; ok {
+		if b.kernel && guest == host {
+			t.Fatalf("runtimeClassName=%q says it has a kernel of its own, and the guest kernel %s "+
+				"equals the host's — the pod did not get one, so the label is not the boundary it ran on",
+				exRC, guest)
+		}
+		if !b.kernel && guest != host {
+			t.Fatalf("runtimeClassName=%q says it IS the node's kernel, and the guest reports %s "+
+				"against the host's %s", exRC, guest, host)
+		}
 	}
 }
 
