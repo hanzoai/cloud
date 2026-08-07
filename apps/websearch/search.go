@@ -86,6 +86,26 @@ type webResult struct {
 	Engine string `json:"engine,omitempty"`
 }
 
+// webEngine is what ONE engine did on this query: what it is called, how its
+// turn ended, and how many hits it contributed before the merge.
+//
+// It is published so a thin answer carries its own explanation. Without it, an
+// engine that has stopped working shows up only as fewer results, and the caller
+// cannot tell "the web is quiet on this" from "half our indexes are blind" — the
+// exact ambiguity that let DuckDuckGo sit in the default set contributing zero.
+// Three results with `ddg blind` is a different fact from three results with
+// every engine answered, and the caller deserves to see which one it got.
+type webEngine struct {
+	// Name is the engine, matching the `engine` stamped on each result.
+	Name string `json:"name"`
+	// Outcome is "answered", "blind" or "failed" — see outcome.go. "blind" means
+	// the page came back and no results could be read out of it.
+	Outcome string `json:"outcome"`
+	// Results is how many hits this engine contributed, before the merge
+	// deduplicated them against the others.
+	Results int `json:"results"`
+}
+
 // webSearchResults is the SearXNG /search?format=json envelope. `results` is always
 // a non-nil array so the client never decodes null.
 type webSearchResults struct {
@@ -97,6 +117,10 @@ type webSearchResults struct {
 	// Results are the merged hits, deduplicated by normalised URL and capped at
 	// 30. Always an array and never null: no hits is an ANSWER, not a fault.
 	Results []webResult `json:"results"`
+	// Engines is one entry per engine asked, in the order they were asked. It is
+	// ADDITIVE to the SearXNG contract, which the LibreChat client ignores as an
+	// unknown field exactly as it ignores `engine` on a result.
+	Engines []webEngine `json:"engines,omitempty"`
 }
 
 // engine is one keyless public web-search backend: build a request URL for a
@@ -177,13 +201,27 @@ var engineByName = map[string]engine{
 	mojeekEngine.name: mojeekEngine,
 }
 
-// defaultEngines is what a deployment that configures nothing searches. It is
-// every engine measured to survive datacenter egress, and it is a LIST rather
-// than one name because production ran with WEBSEARCH_ENGINES unset — so this
-// default was the whole engine set, and it was Bing alone: one index, ten
-// results, and no `site:` operator. DDG stays coded and out of the default; it
-// is served the bot-challenge page from the cluster and contributes zero.
-var defaultEngines = []engine{bingEngine, mojeekEngine}
+// defaultEngines is what a deployment that configures nothing searches: every
+// engine measured to answer from datacenter egress. A LIST rather than one name
+// because production once ran with WEBSEARCH_ENGINES unset, which made this
+// default the whole engine set, and it was Bing alone — one index, ten results,
+// no `site:`.
+//
+// DDG is here even though it is served a captcha over static HTTP, because
+// render.go escalates and the browser reads it (measured: 0 static, 10 rendered,
+// same URL, same second). It earns the slot on the rendered number. If the
+// escalation is off, DDG is BLIND rather than quietly absent — outcome.go says
+// so in the answer and in the metric — which is the property that makes putting
+// a browser-dependent engine in the default set honest rather than optimistic.
+//
+// Bing is the weakest of the three and stays because it is the broadest. It has
+// no zero state at all: asked three distinct nonsense strings it returned ten
+// results each time (Edmonton property tax, Bastille Day, Microsoft support),
+// and for a fourth, pornography. It never abstains, so its hits carry no
+// evidence of relevance on their own. That is precisely what rank.go's agreement
+// scoring is for — a Bing hit no other index found ranks below one two of them
+// agree on — and it is why removing Bing is not obviously wrong, only untested.
+var defaultEngines = []engine{bingEngine, ddgEngine, mojeekEngine}
 
 // enabledEngines resolves WEBSEARCH_ENGINES (comma list) to the engine set,
 // defaulting to [defaultEngines]. Unknown names are ignored, and a spec that
@@ -218,54 +256,101 @@ func enabledEngines() []engine {
 // evidence about a result.
 func metaSearch(ctx context.Context, query, lang string) webSearchResults {
 	engs := enabledEngines()
-	perEngine := make([][]webResult, len(engs))
+	answers := make([]answer, len(engs))
 
 	var wg sync.WaitGroup
 	for i := range engs {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			r, err := fetchEngine(ctx, engs[i], query, lang)
-			if err == nil {
-				perEngine[i] = r
-			}
+			answers[i] = fetchEngine(ctx, engs[i], query, lang)
 		}(i)
 	}
 	wg.Wait()
 
+	// Say what happened before saying what was found. An engine that went blind
+	// is a fact about this answer, and reporting it here — once, where every
+	// caller of metaSearch passes — is what stops a broken engine from being
+	// visible only as a slightly shorter page. See outcome.go.
+	report(ctx, query, answers)
+
+	perEngine := make([][]webResult, len(answers))
+	engines := make([]webEngine, len(answers))
+	for i, a := range answers {
+		perEngine[i] = a.results
+		engines[i] = webEngine{Name: a.engine, Outcome: string(a.outcome), Results: len(a.results)}
+	}
 	merged := rankMerged(perEngine, maxResults)
-	return webSearchResults{Query: query, NumberOfResults: len(merged), Results: merged}
+	return webSearchResults{
+		Query:           query,
+		NumberOfResults: len(merged),
+		Results:         merged,
+		Engines:         engines,
+	}
 }
 
-// fetchEngine GETs one engine's result page with a realistic UA and parses it.
-// Returns an error on transport/HTTP failure; a bot-challenge page parses to
-// zero results (not an error), so it simply contributes nothing.
-// fetchEngine answers from the cache when it can, fetches statically when it
-// cannot, and escalates to a real browser when the static fetch parsed to
-// NOTHING — which is what a bot challenge looks like here, since a challenge is
-// a 200 whose markup holds no results.
+// fetchEngine asks one engine and says how the asking went.
 //
-// The three live in that order because that is their cost order: remembered,
-// then one GET, then a browser render. See cache.go and render.go for why each
-// is correctness rather than speed.
-func fetchEngine(ctx context.Context, e engine, query, lang string) ([]webResult, error) {
+// It answers from the cache when it can, fetches statically when it cannot, and
+// escalates to a real browser when the static fetch parsed to NOTHING — which is
+// what a bot challenge looks like here, since a challenge is a 200 whose markup
+// holds no results. The three live in that order because that is their cost
+// order: remembered, then one GET, then a browser render. See cache.go and
+// render.go for why each is correctness rather than speed.
+//
+// It returns an `answer` rather than ([]webResult, error) because zero results
+// is NOT the same fact as "nothing to report", and the pair could not tell them
+// apart: a challenged engine and a query with no matches were both (nil, nil).
+// outcome.go has the measurements that make the difference concrete.
+//
+// Note what `blind` means AFTER the escalation ran: we rendered the page in a
+// real browser and still read zero results out of it. That is the strongest
+// evidence of selector rot the system can produce, and it is exactly the signal
+// that was missing when Brave was dropped for having unreadable markup.
+func fetchEngine(ctx context.Context, e engine, query, lang string) answer {
 	url := e.build(query, lang)
 	if hit, ok := cacheGet(url); ok {
-		return hit, nil
+		return answer{engine: e.name, results: hit, outcome: answered}
 	}
+
 	out, err := fetchEngineStatic(ctx, e, query, lang)
+	if len(out) > 0 {
+		cachePut(url, out)
+		return answer{engine: e.name, results: out, outcome: answered}
+	}
+
+	// NOTHING READABLE CAME BACK, and there is ONE remedy for that whichever way
+	// it happened: render the page in a real browser and read it again.
+	//
+	// This used to be two rules, and the seam between them cost us DuckDuckGo
+	// entirely. Escalation ran only when a 200 parsed to zero, so a bad status
+	// short-circuited to "failed" and never reached the browser. DDG's challenge
+	// is served as HTTP 202 — measured, three times over, 14,180 bytes of "Select
+	// all squares containing a duck" under a 2xx — so the one engine the browser
+	// was deployed to rescue was the one engine that could never reach it.
+	//
+	// A status is a fact about the fetch, not about whether a browser can read
+	// the page. Keeping it as a separate rule was a distinction the remedy does
+	// not have.
+	//
+	// A REFUSAL is worth a render for a reason that is not obvious: the browser
+	// runs in a different pod on a different node, so it leaves the cluster from a
+	// different address than this process does. An engine rate-limiting one of our
+	// egress IPs has not necessarily rate-limited the other. What it will NOT
+	// rescue is a refusal aimed at the browser's own address — asked to render a
+	// URL that had just answered it 403, Crawl returned 0 bytes. So this can
+	// recover an engine and can also spend ~1.1s learning nothing, which is
+	// affordable because the engines run concurrently and renderTimeout bounds it.
+	rendered, browsed := renderedResults(ctx, e, query, lang)
+	if len(rendered) > 0 {
+		cachePut(url, rendered)
+		return answer{engine: e.name, results: rendered, outcome: answered, browsed: browsed}
+	}
 	if err != nil {
-		return nil, err
+		// Never got a readable page at all, so this says nothing about the parser.
+		return answer{engine: e.name, outcome: failed, browsed: browsed, err: err}
 	}
-	if len(out) == 0 {
-		// The static fetch said nothing. Ask the browser before believing it.
-		if rendered := renderedResults(ctx, e, query, lang); len(rendered) > 0 {
-			cachePut(url, rendered)
-			return rendered, nil
-		}
-	}
-	cachePut(url, out)
-	return out, nil
+	return answer{engine: e.name, outcome: blind, browsed: browsed}
 }
 
 func fetchEngineStatic(ctx context.Context, e engine, query, lang string) ([]webResult, error) {
@@ -282,7 +367,11 @@ func fetchEngineStatic(ctx context.Context, e engine, query, lang string) ([]web
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	// ANY 2xx is an answer worth parsing, not just 200. DuckDuckGo serves its bot
+	// challenge as 202, and an engine is free to answer 203 or 206 as well;
+	// singling out 200 discarded bodies we had already paid to fetch and turned a
+	// readable page into a transport error.
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return nil, fmt.Errorf("%s: http %d", e.name, resp.StatusCode)
 	}
 	root, err := html.Parse(io.LimitReader(resp.Body, 4<<20)) // 4 MiB cap
