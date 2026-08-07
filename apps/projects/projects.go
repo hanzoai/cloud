@@ -173,10 +173,14 @@ type projectsProject struct {
 	// Upstream/License credit the third-party work this project was published
 	// from, and the terms it carries. Omitted when nothing is declared: an absent
 	// credit means "nobody has said", not "there is nothing to say".
-	Upstream  string `json:"upstream,omitempty"`
-	License   string `json:"license,omitempty"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	Upstream string `json:"upstream,omitempty"`
+	License  string `json:"license,omitempty"`
+	// Tags is the site's browser tag config: platform slug → non-secret pixel id (GA
+	// measurement, Meta pixel, …) — what track.js injects and the server CAPI reads,
+	// per site. Omitted when none are set. The API SECRET is never here (KMS).
+	Tags      map[string]string `json:"tags,omitempty"`
+	CreatedAt int64             `json:"createdAt"`
+	UpdatedAt int64             `json:"updatedAt"`
 }
 
 func toProject(p Project) projectsProject {
@@ -188,7 +192,7 @@ func toProject(p Project) projectsProject {
 		Analytics: p.Analytics, Space: p.SpaceId, Key: p.Key,
 		ForkedFrom: p.ForkedFrom,
 		Visibility: p.Visibility, Hidden: p.Hidden, HiddenReason: p.HiddenReason,
-		Upstream: p.Upstream, License: p.License,
+		Upstream: p.Upstream, License: p.License, Tags: p.Tags,
 		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
@@ -755,6 +759,12 @@ type projectsUpdate struct {
 	// ones already live. Pointers so "" clears a credit and absent leaves it.
 	Upstream *string `json:"upstream"`
 	License  *string `json:"license"`
+	// Tags sets the site's browser tag config: platform slug → non-secret pixel id
+	// (e.g. {"ga4":"G-…","meta":"…"}). track.js injects these first-party and the
+	// server CAPI reads them, per site. Absent LEAVES them; a present object REPLACES
+	// the set (send {} to clear). The ids are public — they ship in the page — so this
+	// is not the SECRET path (a CAPI token is sealed via POST /v1/destinations).
+	Tags map[string]string `json:"tags"`
 }
 
 // credit normalizes one attribution line: trimmed, single-line, bounded. It is
@@ -767,6 +777,26 @@ func credit(s string) string {
 		s = s[:200]
 	}
 	return s
+}
+
+// sanitizeTags cleans a site's browser tag config: lower-cased platform keys, trimmed
+// ids, empties dropped, and both the platform count and each id's length bounded. The
+// ids are non-secret (they ship in the page) but reach a stored config and the public
+// tag door, so they are bounded like any input.
+func sanitizeTags(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		k = strings.TrimSpace(strings.ToLower(k))
+		v = strings.TrimSpace(v)
+		if k == "" || v == "" || len(k) > 32 || len(v) > 256 {
+			continue
+		}
+		out[k] = v
+		if len(out) >= 32 {
+			break
+		}
+	}
+	return out
 }
 
 // UpdateProject changes a project's settings, and only the settings you send.
@@ -852,6 +882,9 @@ func (o ops) update(ctx context.Context, in *projectsUpdate) (*projectsProject, 
 	}
 	if body.License != nil {
 		p.License = credit(*body.License)
+	}
+	if body.Tags != nil {
+		p.Tags = sanitizeTags(body.Tags)
 	}
 	p.UpdatedAt = time.Now().Unix()
 	if err := s.State.store.UpdateProject(ctx, p); err != nil {
