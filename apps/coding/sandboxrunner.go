@@ -191,8 +191,11 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 		return RunResult{}, fmt.Errorf("coding: run: %w", err)
 	}
 
+	// Branch is deliberately NOT reported. coding.Run does not read it — the branch
+	// is the one cloud issued, and a sandbox that answers a different one is
+	// reporting something it was never asked — so filling it in would only offer a
+	// value nobody may trust.
 	out := RunResult{
-		Branch:  branch,
 		OK:      ran.ExitCode == 0,
 		LogTail: in.scrub(tail(ran.Stdout, ran.Stderr)),
 	}
