@@ -42,6 +42,14 @@ var Pods = schema.GroupVersionResource{Version: "v1", Resource: "pods"}
 // copy of the tenant's data. Nothing here deletes one.
 var Volumes = schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumeclaims"}
 
+// RuntimeClasses is the isolation boundary a pod may name (node.k8s.io/v1), and
+// the object that says WHERE a pod naming it may land: `scheduling.nodeSelector`
+// and `scheduling.tolerations` are merged by the apiserver into every such pod.
+// That merge is why the sandbox reads this rather than writing a nodeSelector of
+// its own — the class already holds the fact, and a second copy in a pod spec is
+// one that goes stale the day the pool moves.
+var RuntimeClasses = schema.GroupVersionResource{Group: "node.k8s.io", Version: "v1", Resource: "runtimeclasses"}
+
 // CDApplications is Hanzo CD's Application CR (apps.hanzo.ai/v1alpha1) — the
 // GitOps plane's own record of a tracked git source: the revision it last applied,
 // its sync verdict, and its deploy history. A different fact from Apps: an App is
