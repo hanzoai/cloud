@@ -19673,6 +19673,8 @@ components:
           type: string
         displayName:
           type: string
+        enableCodeSignin:
+          type: boolean
         expireInHours:
           description: |-
             ExpireInHours and RefreshExpireInHours are the application's token
@@ -35985,6 +35987,14 @@ components:
           type: string
         status:
           type: string
+        tags:
+          additionalProperties:
+            type: string
+          description: |-
+            Tags is the site's browser tag config: platform slug → non-secret pixel id (GA
+            measurement, Meta pixel, …) — what track.js injects and the server CAPI reads,
+            per site. Omitted when none are set. The API SECRET is never here (KMS).
+          type: object
         updatedAt:
           type: integer
         upstream:
@@ -36118,6 +36128,16 @@ components:
             Slug is the project to update, from the path. The URL is the addressing
             authority — a `slug` in the body cannot move the write to another project.
           type: string
+        tags:
+          additionalProperties:
+            type: string
+          description: |-
+            Tags sets the site's browser tag config: platform slug → non-secret pixel id
+            (e.g. {"ga4":"G-…","meta":"…"}). track.js injects these first-party and the
+            server CAPI reads them, per site. Absent LEAVES them; a present object REPLACES
+            the set (send {} to clear). The ids are public — they ship in the page — so this
+            is not the SECRET path (a CAPI token is sealed via POST /v1/destinations).
+          type: object
         upstream:
           description: |-
             Upstream/License credit the third-party work this app was published from —
@@ -103173,15 +103193,13 @@ paths:
       x-app: sync
   /v1/tags:
     get:
-      description: 'Returns the client-side pixels the org has connected (GA, Meta,
-        TikTok, X) with their NON-SECRET ids, so the hosted tag (/v1/event.js) injects
-        them first-party and stamps each browser event with the same event_id the
-        server-side Conversions API uses — deduping the two. Keyed by the publishable
-        key on ?key= (or Authorization: Bearer); it returns only ids that already
-        ship in the page, never a credential. WITHOUT A VALID KEY it answers an empty
-        set at 200 — a page never breaks on its tag config. The same connected destination
-        also drives the server-side fan-out, so the browser tag and the server conversion
-        never drift.'
+      description: 'Returns the client-side pixels the SITE has connected (GA/Meta/TikTok/X)
+        with their NON-SECRET ids, so the hosted tag injects them first-party and
+        stamps each browser event with the same event_id the server-side Conversions
+        API uses — deduping the two. Resolved per site: by the publishable key on
+        ?key= when it names a project, else by the request host, so hanzo.ai and hanzo.chat
+        carry different tags under one org. WITHOUT a resolvable site it answers an
+        empty set at 200 — a page never breaks on its tag config.'
       operationId: get_v1_tags
       responses:
         2XX:
@@ -103190,7 +103208,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/tagConfig'
           description: Success
-      summary: The org's browser tag set for the hosted tag — which pixels to inject,
+      summary: The site's browser tag set for the hosted tag — which pixels to inject,
         by publishable key
       tags:
       - tags

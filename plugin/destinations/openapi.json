@@ -184,8 +184,8 @@
     "/v1/tags": {
       "get": {
         "operationId": "get_v1_tags",
-        "summary": "The org's browser tag set for the hosted tag — which pixels to inject, by publishable key",
-        "description": "Returns the client-side pixels the org has connected (GA, Meta, TikTok, X) with their NON-SECRET ids, so the hosted tag (/v1/event.js) injects them first-party and stamps each browser event with the same event_id the server-side Conversions API uses — deduping the two. Keyed by the publishable key on ?key= (or Authorization: Bearer); it returns only ids that already ship in the page, never a credential. WITHOUT A VALID KEY it answers an empty set at 200 — a page never breaks on its tag config. The same connected destination also drives the server-side fan-out, so the browser tag and the server conversion never drift.",
+        "summary": "The site's browser tag set for the hosted tag — which pixels to inject, by publishable key",
+        "description": "Returns the client-side pixels the SITE has connected (GA/Meta/TikTok/X) with their NON-SECRET ids, so the hosted tag injects them first-party and stamps each browser event with the same event_id the server-side Conversions API uses — deduping the two. Resolved per site: by the publishable key on ?key= when it names a project, else by the request host, so hanzo.ai and hanzo.chat carry different tags under one org. WITHOUT a resolvable site it answers an empty set at 200 — a page never breaks on its tag config.",
         "tags": [
           "tags"
         ],
