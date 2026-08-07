@@ -1,7 +1,27 @@
 # The sandbox: the executor everything already points at
 
-Status: design, agreed. No code yet. This file is the contract two builders in
-two repos implement without talking to each other.
+Status: **the original design. It shipped, and it shipped DIFFERENTLY in three
+places.** Read those three before believing anything below, because each one
+reads here as a gap somebody still has to close, and closing them again is
+rebuilding what was deliberately torn out.
+
+- **There is no `boxd` and there must not be one.** §3 and the proxy tables
+  describe an HTTP daemon inside the box. It was deleted along with the ~2000
+  lines that served it; work reaches a sandbox through the Kubernetes exec
+  subresource, which is one channel instead of two and needs no port, no
+  listener and no auth of its own. `cmd/boxd` does not exist.
+- **`@hanzo/dev` is not what the image installs** (§47 says no image installs
+  it). The npm package put a Node shim at `/usr/local/bin/dev` and claimed the
+  `hanzo` name for the agent, so the cloud CLI became a symlink to it. The image
+  fetches the NATIVE binaries — `hanzo`, `dev`, `hanzo-mcp` — from release
+  assets, checksummed.
+- **The classes are four, not three**, and `admin` is a tag no caller can ask
+  for: it is substituted for a SuperAdmin's `dev`.
+
+What is true and still worth reading: the hard boundary in §"The hard boundary"
+(`apps/sandbox` executes nothing itself), the lease/GC model, and the routing
+prefix. The image itself is specified by `hanzoai/bot`'s `Dockerfile.box` and
+its `LLM.md`, which are the source of truth for what is in a box.
 
 Every control plane for agentic execution exists. The thing they control does
 not. This is the spec for the thing.
