@@ -40,6 +40,7 @@ var typedOps = []string{
 	"POST /v1/integrations/:provider/connect",
 	"POST /v1/integrations/:provider/disconnect",
 	"POST /v1/integrations/:provider/verify",
+	"POST /v1/integrations/github/claim",
 	"POST /v1/integrations/github/issues/backfill",
 	"POST /v1/integrations/github/repos/:repo/pages",
 	"POST /v1/integrations/github/repos/:repo/pages/builds",

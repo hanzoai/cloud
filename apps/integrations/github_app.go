@@ -370,6 +370,121 @@ func (o ops) githubInstallations(ctx context.Context, _ *noArgs) (*githubInstall
 	return out, nil
 }
 
+// githubClaimIn selects which held installations to bind. Name accounts or pass
+// all — neither is a 400, because "bind nothing" is not a request worth making.
+type githubClaimIn struct {
+	// Accounts names GitHub logins the App is installed on ("hanzoai"). Matched
+	// case-insensitively, since GitHub logins are. Ignored when all is true.
+	Accounts []string `json:"accounts"`
+	// All binds every account the App holds, instead of naming them.
+	All bool `json:"all"`
+}
+
+// githubClaimOut reports what the call bound and what was already bound, so a
+// second run is visibly a no-op rather than silently indistinguishable from the
+// first.
+type githubClaimOut struct {
+	// Claimed are the accounts this call bound. Never null; [] when none.
+	Claimed []string `json:"claimed"`
+	// Already were bound before the call and are unchanged by it.
+	Already []string `json:"already"`
+}
+
+// githubClaim binds installations the App ALREADY holds to the org the caller is
+// acting in — the reconciliation for a grant that happened outside our connect
+// flow.
+//
+// An installation IS the grant: GitHub recorded the consent when the App was
+// installed, and our connection row is bookkeeping that never got written because
+// nobody came through our callback. This writes that row from the App's own view,
+// so 23 accounts granted straight from GitHub stop reading as nothing.
+//
+// The org is taken from the VALIDATED PRINCIPAL and never from the body, because
+// it is the one part GitHub cannot tell us. An installation carries an account
+// login, a type and a repository selection — nothing that names a Hanzo org. So
+// the binding cannot be DERIVED, only asserted, and the only unforgeable assertion
+// available is the org the caller is already acting in. Inferring one from the
+// account name would be a guess the store cannot catch: its key is
+// (org,provider,owner), so a wrong org is a valid row, and a valid row is a
+// mirror pointed at the wrong tenant.
+//
+// SUPER ADMIN only, for that same reason. A tenant's proof that an account is
+// theirs is GitHub's own consent screen — the connect flow — and without it any
+// org could claim any account the App holds. Platform sudo is already the scope
+// that reads the whole install list, so it is the scope that may bind from it;
+// giving a tenant this verb would hand it every other tenant's repositories.
+//
+// Idempotent: the row is keyed (org,provider,owner) and connected_at survives an
+// upsert, so claiming twice rebinds the same account to the same org and reports
+// it under `already`. Re-claiming also REFRESHES the installation id, so an
+// account reinstalled on GitHub — new id, same login — self-heals instead of
+// minting tokens against a dead installation.
+//
+// Response: {"claimed":["hanzoai","luxfi"],"already":["zooai"]}
+func (o ops) githubClaim(ctx context.Context, in *githubClaimIn) (*githubClaimOut, error) {
+	org, err := authed(ctx, principalRequired)
+	if err != nil {
+		return nil, err
+	}
+	if !superAdmin(ctx) {
+		return nil, zip.Errorf(http.StatusForbidden,
+			"claiming an installation is platform sudo; connect the account to grant it to this org")
+	}
+	if !in.All && len(in.Accounts) == 0 {
+		return nil, zip.ErrBadRequest("name accounts to claim, or pass all")
+	}
+	held, err := appInstallations(ctx)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "list github installations: %v", err)
+	}
+	byLogin := make(map[string]githubInstallation, len(held))
+	for _, ins := range held {
+		byLogin[strings.ToLower(ins.Login)] = ins
+	}
+
+	want := held
+	if !in.All {
+		want = nil
+		var absent []string
+		for _, name := range in.Accounts {
+			ins, ok := byLogin[strings.ToLower(strings.TrimSpace(name))]
+			if !ok {
+				absent = append(absent, name)
+				continue
+			}
+			want = append(want, ins)
+		}
+		// Refused WHOLE, before any write. A named account the App does not hold
+		// is a caller's mistake, and binding the rest of the list around it would
+		// leave a half-applied request whose result depends on argument order.
+		if len(absent) > 0 {
+			return nil, zip.Errorf(http.StatusBadRequest,
+				"the app holds no installation for %s", strings.Join(absent, ", "))
+		}
+	}
+
+	out := &githubClaimOut{Claimed: []string{}, Already: []string{}}
+	for _, ins := range want {
+		_, bound, gerr := o.s.State.store.Get(ctx, org, "github", ins.Login)
+		if gerr != nil {
+			return nil, gerr
+		}
+		// Written even when bound, so a reinstalled account's new id lands.
+		if uerr := o.s.State.store.Upsert(ctx, Connection{
+			Org: org, Provider: "github", Owner: ins.Login,
+			ExternalID: strconv.FormatInt(ins.ID, 10), AccountLabel: ins.Login,
+		}); uerr != nil {
+			return nil, uerr
+		}
+		if bound {
+			out.Already = append(out.Already, ins.Login)
+			continue
+		}
+		out.Claimed = append(out.Claimed, ins.Login)
+	}
+	return out, nil
+}
+
 // githubInstallURL is where a reader grants the App another account. The App's
 // public slug is the one piece a deployment configures; without it the console
 // still renders the list and simply offers no "add" link.
