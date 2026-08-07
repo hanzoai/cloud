@@ -181,7 +181,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// ONE registration, at the address this API is called on. Declaring the whole
 	// path here — rather than a leaf on a Group — is the fix LLM.md prescribes for
 	// the trailing-slash class described on [Path].
+	// Named, not derived. A POST to /v1/crawl derives `create_crawl`, which reads
+	// as "make a crawl" — a job this surface does not have and cannot start. What
+	// it does is read ONE page that is already addressed, and a model choosing
+	// from an `op` enum picks by that name before it reads any description: the
+	// derived name offered a crawler and the op is a reader. It is the verb over
+	// the noun, beside search_web and research_web.
 	zip.Post(reg, Path, fetch,
+		zip.WithOperationID("read_page"),
 		zip.WithSummary("Fetch one URL and read it back as markdown"),
 		// 400 is DECLARED because this op answers it with its OWN body rather than
 		// with zip's error envelope. See [crawlResult.StatusCode].
