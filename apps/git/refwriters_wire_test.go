@@ -499,3 +499,84 @@ func doAuth(t *testing.T, app *zip.App, method, path, token string, body any) (i
 	out, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, out
 }
+
+// TestAGrantAuthenticatesTheWayTheSandboxPresentsIt is the end-to-end proof for
+// the shape apps/coding actually builds, and it exists because the shape it used
+// to build could not work.
+//
+// A run's clone and push carried the grant as URL userinfo —
+// https://x-access-token:hgg_…@host/… — on the reasoning that a credential in a
+// URL leaves nothing behind. Two things were wrong with it, and the second is
+// fatal rather than untidy:
+//
+//   - git writes the URL it was given into .git/config verbatim, so the grant sat
+//     readable in the checkout that then executes untrusted model output.
+//   - git does not SEND a URL-embedded credential until it is challenged. It makes
+//     an anonymous request and waits for 401 WWW-Authenticate. resolvePackRepo
+//     answers a caller it cannot place with 403, never 401 — so the grant was
+//     never presented at all.
+//
+// The header form is what the rest of the forge already uses (mirror_out.go), and
+// this pins that a URL-SCOPED one — which git attaches to this repository and to
+// no other host the run might be steered at — authenticates the same way.
+func TestAGrantAuthenticatesTheWayTheSandboxPresentsIt(t *testing.T) {
+	app := mountApp(t)
+	base := liveServer(t, app)
+	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
+		t.Fatalf("create repo: %d %s", code, b)
+	}
+	if code, b := do(t, app, http.MethodPost, "/v1/git/repos/code/push", "acme", map[string]any{
+		"branch": "main", "message": "seed",
+		"files": []map[string]any{{"path": "README.md", "content": "# seed\n"}},
+	}); code != 200 {
+		t.Fatalf("seed main: %d %s", code, b)
+	}
+
+	branch := "agent/abc123def456"
+	tok, _, err := issued.issue(grant{org: "acme", repo: "code", ref: "refs/heads/" + branch}, 0)
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	url := base + "/v1/git/acme/code.git"
+	// EXACTLY what apps/coding builds (sandboxrunner.go gitAs): one -c, scoped to
+	// this url, applied to this invocation.
+	auth := []string{"-c", "http." + url + ".extraHeader=Authorization: Basic " +
+		base64.StdEncoding.EncodeToString([]byte("x-access-token:"+tok))}
+
+	work := filepath.Join(t.TempDir(), "clone")
+	gitRun(t, "", append(auth, "clone", "-q", "--depth", "1", "-b", "main", url, work)...)
+	t.Log("the grant cloned its repo with a url-scoped header")
+
+	// AND IT LEFT NOTHING BEHIND. The checkout the model edits holds no credential:
+	// a top-level -c is not written into the new repository's config.
+	cfg, err := os.ReadFile(filepath.Join(work, ".git", "config"))
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	for _, leak := range []string{tok, "extraHeader", "Authorization"} {
+		if strings.Contains(string(cfg), leak) {
+			t.Fatalf("the clone persisted %q into .git/config:\n%s", leak, cfg)
+		}
+	}
+	t.Log("nothing was written to .git/config")
+
+	gitRun(t, work, "switch", "-q", "-c", branch)
+	write(t, work, "feature.txt", "agent work\n")
+	gitRun(t, work, "add", "-A")
+	gitRun(t, work, "commit", "-q", "-m", "agent change")
+	if out, err := gitTestCmd(work, append(auth, "push", url, "HEAD:refs/heads/"+branch)...).CombinedOutput(); err != nil {
+		t.Fatalf("the run must be able to push its own branch: %v\n%s", err, out)
+	}
+	t.Log("the grant pushed the one ref it names")
+
+	// The trunk is still refused with the credential presented THIS way, so the
+	// change of form did not change what the form is allowed to do.
+	out, err := gitTestCmd(work, append(auth, "push", url, "HEAD:refs/heads/main")...).CombinedOutput()
+	if err == nil {
+		t.Fatalf("A GRANT WROTE THE TRUNK\n%s", out)
+	}
+	if !strings.Contains(string(out), "may only write") {
+		t.Fatalf("refused, but not by the ref policy:\n%s", out)
+	}
+	t.Logf("REFUSED: %s", firstRejectLine(string(out)))
+}
