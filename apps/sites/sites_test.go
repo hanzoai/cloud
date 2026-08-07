@@ -822,3 +822,56 @@ func (f *fakeResolver) reset() {
 	defer f.mu.Unlock()
 	f.calls, f.orgCalls = nil, nil
 }
+
+// TestCors pins the header that decides whether the builder can preview a
+// deployed site at all.
+//
+// Measured in a real sandboxed frame (sandbox="allow-scripts", the preview's own
+// attributes) against megashop.hanzo.app: the bundle loads as an absolute CLASSIC
+// script and is BLOCKED as a module. Vite emits a module, so a site with no
+// Access-Control-Allow-Origin previews as a blank white page.
+func TestCors(t *testing.T) {
+	// A subresource is readable cross-origin. This is the whole fix.
+	for _, ct := range []string{
+		"text/javascript; charset=utf-8",
+		"text/css; charset=utf-8",
+		"application/wasm",
+		"image/png",
+		"application/json",
+		"font/woff2",
+	} {
+		if got := headerMap(cors(false, ct))["Access-Control-Allow-Origin"]; got != "*" {
+			t.Errorf("cors(false, %q) ACAO = %q, want *", ct, got)
+		}
+	}
+
+	// A DOCUMENT is navigated to, never read cross-origin — and the preview
+	// supplies its own. Granting it nothing keeps the surface as small as the
+	// problem.
+	for _, ct := range []string{"text/html; charset=utf-8", "text/html"} {
+		if h := cors(false, ct); h != nil {
+			t.Errorf("cors(false, %q) = %v, want nil", ct, h)
+		}
+	}
+
+	// A site that opted into cross-origin isolation asked for same-origin
+	// subresources. ACAO must not quietly widen that back out — if this ever
+	// returns a header, isolation became decorative.
+	for _, ct := range []string{"text/javascript; charset=utf-8", "application/wasm", "text/html; charset=utf-8"} {
+		if h := cors(true, ct); h != nil {
+			t.Errorf("cors(true, %q) = %v, want nil — isolation must win", ct, h)
+		}
+	}
+
+	// The two policies stay orthogonal: neither emits the other's headers.
+	a := headerMap(cors(false, "application/wasm"))
+	for _, k := range []string{"Cross-Origin-Resource-Policy", "Cross-Origin-Opener-Policy", "Cross-Origin-Embedder-Policy"} {
+		if _, ok := a[k]; ok {
+			t.Errorf("cors must not emit %s, got %v", k, a)
+		}
+	}
+	i := headerMap(crossOriginIsolation(true, "application/wasm"))
+	if _, ok := i["Access-Control-Allow-Origin"]; ok {
+		t.Errorf("crossOriginIsolation must not emit ACAO, got %v", i)
+	}
+}
