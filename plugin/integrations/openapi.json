@@ -987,7 +987,7 @@
       "post": {
         "operationId": "post_v1_integrations_teams_events",
         "summary": "Microsoft Teams Bot Framework webhook",
-        "description": "The messaging endpoint for the Teams bot. A message activity is routed to an agent turn and answered proactively through the Bot Connector; anything that is not a message with text is acknowledged and ignored.\n\nAuthentication is the Bot Framework's RS256 JWT, verified against its published keys and bound BOTH to this deployment's app id and to the activity's own service URL. The service-URL binding is the part that matters: without it a token valid for one activity could point the outbound reply somewhere else.\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.\n\nThe answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.",
+        "description": "The messaging endpoint for the Teams bot. A message activity is routed to an agent turn and answered proactively through the Bot Connection; anything that is not a message with text is acknowledged and ignored.\n\nAuthentication is the Bot Framework's RS256 JWT, verified against its published keys and bound BOTH to this deployment's app id and to the activity's own service URL. The service-URL binding is the part that matters: without it a token valid for one activity could point the outbound reply somewhere else.\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.\n\nThe answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.",
         "tags": [
           "integrations"
         ]
@@ -1524,7 +1524,7 @@
           },
           "connector": {
             "$ref": "#/components/schemas/connView",
-            "description": "Connector is the connector as it now stands."
+            "description": "Connection is the connector as it now stands."
           }
         },
         "type": "object"
@@ -1533,7 +1533,7 @@
         "properties": {
           "connector": {
             "$ref": "#/components/schemas/connView",
-            "description": "Connector is the connected connector. Present only on \"connected\"."
+            "description": "Connection is the connected connector. Present only on \"connected\"."
           },
           "interval": {
             "description": "Interval is the seconds to wait before the next poll. Present only while\npending, and it may rise when the provider asks the client to slow down.",
@@ -1997,7 +1997,7 @@
         "properties": {
           "connector": {
             "$ref": "#/components/schemas/connView",
-            "description": "Connector is the connector with its new expiry."
+            "description": "Connection is the connector with its new expiry."
           },
           "refreshed": {
             "description": "Refreshed is always true — a failed rotation is an HTTP error.",
