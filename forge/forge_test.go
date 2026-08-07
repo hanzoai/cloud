@@ -105,9 +105,14 @@ func newStub(t *testing.T) *forgeStub {
 		case strings.HasSuffix(path, "/repos") && strings.HasPrefix(path, "/orgs/"):
 			org := strings.TrimSuffix(strings.TrimPrefix(path, "/orgs/"), "/repos")
 			if !canSee(org) {
+				w.Header().Set("X-Total-Count", "0")
 				writeJSON(w, []Repo{})
 				return
 			}
+			// The real forge counts its paginated lists, and the repository walk
+			// fetches its pages concurrently off that count. A stub that omitted it
+			// would silently exercise only the serial fallback.
+			w.Header().Set("X-Total-Count", strconv.Itoa(len(s.repos[org])))
 			writeJSON(w, pageOf(s.repos[org], r))
 		case strings.HasSuffix(path, "/milestones"):
 			parts := strings.Split(strings.TrimPrefix(path, "/repos/"), "/")
@@ -116,6 +121,20 @@ func newStub(t *testing.T) *forgeStub {
 				return
 			}
 			writeJSON(w, s.milestones[parts[0]+"/"+parts[1]])
+		case strings.HasPrefix(path, "/repos/"):
+			// One repository by name, which is how a single board is read.
+			parts := strings.Split(strings.TrimPrefix(path, "/repos/"), "/")
+			if len(parts) != 2 || !canSee(parts[0]) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			for _, r := range s.repos[parts[0]] {
+				if strings.EqualFold(r.Name, parts[1]) {
+					writeJSON(w, r)
+					return
+				}
+			}
+			w.WriteHeader(http.StatusNotFound)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
