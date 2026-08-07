@@ -81,11 +81,13 @@ func planeLease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := Lease(s, ctx, org, Spec{ID: in.ID, Class: in.Class, Project: in.Project, TTLSec: in.TTLSec})
+	m, err := Lease(s, ctx, org, Spec{ID: in.ID, Class: in.Class, Project: in.Project,
+		Runtime: in.Runtime, TTLSec: in.TTLSec})
 	if err != nil {
 		return nil, err
 	}
-	return &plane.Leased{ID: m.ID, Class: m.Class, Status: m.Status, Workdir: workdirFor(m.Class)}, nil
+	return &plane.Leased{ID: m.ID, Class: m.Class, Runtime: m.Runtime, Status: m.Status,
+		Workdir: workdirFor(m.Class)}, nil
 }
 
 // planeRun runs one command inside the caller's sandbox and answers its exit code,
