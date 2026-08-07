@@ -103,6 +103,14 @@ CREATE TABLE IF NOT EXISTS connections (
   updated_at    INTEGER NOT NULL,
   PRIMARY KEY (org, user, provider, label)
 );
+-- Plain, not UNIQUE, and that is deliberate. One provider account belongs to one
+-- org (Upsert enforces it), but the constraint SQL can express here is not the
+-- one we mean: UNIQUE(provider, external_id) collides on every row that carries
+-- no external id, and it also forbids the same org holding an account twice —
+-- once for the org, once for a person — which the user column exists to allow.
+-- The predicate is "no two DISTINCT orgs", which no index states, so it lives in
+-- Upsert, the one statement every write passes through, and Collisions reports
+-- the rows that predate it.
 CREATE INDEX IF NOT EXISTS ix_conn_provider_extid ON connections(provider, external_id);
 CREATE INDEX IF NOT EXISTS ix_conn_org_provider ON connections(org, provider);
 
@@ -182,9 +190,40 @@ func scanConnection(sc interface{ Scan(...any) error }) (Connection, error) {
 	return c, err
 }
 
+// errBound reports a write that would bind a provider account a DIFFERENT org
+// already holds. Callers that answer a tenant map it to a flat "persist failed"
+// and log the detail — the org named in the message is another tenant's.
+var errBound = errors.New("provider account is bound to another org")
+
 // Upsert stores (or refreshes) a connection. On a re-connect the original
 // connected_at is PRESERVED ("connected since"), only updated_at advances.
+//
+// A write whose external_id another org holds is REFUSED. The external id IS the
+// provider-side account — a GitHub App installation, a Slack team — and one
+// account belongs to one tenant. The key (org,user,provider,label) cannot say
+// that: a second org binding the same account writes a perfectly valid row, and
+// nothing downstream can tell it from a real one. What follows is not a subtler
+// tenancy question but one tenant's credentials answering for another —
+// ResolveOrgByExternalID hands that account's inbound events to whichever org
+// connected first, and every token minted through the second row is minted
+// against the first org's account.
+//
+// The predicate is "a different org", not "another row", because the same org may
+// hold an account twice: once for the org and once for a person. That is the user
+// column doing its job and it stays legal.
 func (s *Store) Upsert(ctx context.Context, c Connection) error {
+	if strings.TrimSpace(c.ExternalID) != "" {
+		var other string
+		err := s.db.QueryRowContext(ctx,
+			`SELECT org FROM connections WHERE provider=? AND external_id=? AND org<>? LIMIT 1`,
+			c.Provider, c.ExternalID, c.Org).Scan(&other)
+		switch {
+		case err == nil:
+			return fmt.Errorf("%w: %s %s belongs to %s", errBound, c.Provider, c.ExternalID, other)
+		case !errors.Is(err, sql.ErrNoRows):
+			return fmt.Errorf("upsert connection: %w", err)
+		}
+	}
 	now := time.Now().Unix()
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO connections (`+connCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)
@@ -325,6 +364,45 @@ func (s *Store) ResolveOrgByExternalID(ctx context.Context, provider, externalID
 		return "", false, fmt.Errorf("resolve org by external id: %w", err)
 	}
 	return org, true, nil
+}
+
+// collision is one provider account held by more than one org.
+type collision struct {
+	Provider   string
+	ExternalID string
+	Orgs       []string
+}
+
+// Collisions reports provider accounts held by more than one org — the shape a
+// cross-tenant bind leaves behind, and the only place it becomes visible.
+//
+// Upsert refuses to write one, so a hit here is history: a row from before that
+// refusal existed. It is REPORTED, never repaired and never fatal. Which org
+// should keep an account is not a question this process can answer, and refusing
+// to boot over rows already written would take the whole surface down to protect
+// them.
+func (s *Store) Collisions(ctx context.Context) ([]collision, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT provider, external_id, GROUP_CONCAT(DISTINCT org) FROM connections
+		 WHERE external_id != ''
+		 GROUP BY provider, external_id
+		 HAVING COUNT(DISTINCT org) > 1
+		 ORDER BY provider, external_id`)
+	if err != nil {
+		return nil, fmt.Errorf("collisions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []collision
+	for rows.Next() {
+		var c collision
+		var orgs string
+		if err := rows.Scan(&c.Provider, &c.ExternalID, &orgs); err != nil {
+			return nil, fmt.Errorf("scan collision: %w", err)
+		}
+		c.Orgs = strings.Split(orgs, ",")
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // PutNonce records a single-use OAuth nonce bound to (org,provider). A duplicate

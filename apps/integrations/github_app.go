@@ -3,6 +3,7 @@ package integrations
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -474,6 +475,14 @@ func (o ops) githubClaim(ctx context.Context, in *githubClaimIn) (*githubClaimOu
 			Org: org, Provider: "github", Label: ins.Login,
 			ExternalID: strconv.FormatInt(ins.ID, 10), AccountLabel: ins.Login,
 		}); uerr != nil {
+			// An account another org already holds is a conflict to resolve, not a
+			// fault: the holder disconnects first. Sudo may bind an unheld account,
+			// never move one, so a slip of the org header cannot take a live
+			// integration away from the tenant using it.
+			if errors.Is(uerr, errBound) {
+				return nil, zip.Errorf(http.StatusConflict,
+					"%s is bound to another org; disconnect it there first", ins.Login)
+			}
 			return nil, uerr
 		}
 		if bound {
@@ -494,41 +503,6 @@ func githubInstallURL() string {
 		return ""
 	}
 	return "https://github.com/apps/" + slug + "/installations/new"
-}
-
-// githubInstallationAccount fetches an installation's account login via the App JWT,
-// which both VALIDATES the installation (the App can see it) and yields the human
-// label. Used by githubExchange at connect time.
-func githubInstallationAccount(ctx context.Context, id int64) (string, error) {
-	tr, err := ghApp.transport()
-	if err != nil {
-		return "", err
-	}
-	endpoint := strings.TrimRight(githubAPIBase, "/") + "/app/installations/" + strconv.FormatInt(id, 10)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	// The AppsTransport signs the request with the App JWT.
-	resp, err := (&http.Client{Transport: tr, Timeout: 20 * time.Second}).Do(req)
-	if err != nil {
-		return "", fmt.Errorf("github call: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode/100 != 2 {
-		return "", fmt.Errorf("github http %d: %s", resp.StatusCode, truncateBody(body))
-	}
-	var out struct {
-		Account struct {
-			Login string `json:"login"`
-		} `json:"account"`
-	}
-	if err := json.Unmarshal(body, &out); err != nil {
-		return "", fmt.Errorf("github decode: %w", err)
-	}
-	return out.Account.Login, nil
 }
 
 // ── GitHub API: the installation's repositories ──────────────────────────────
