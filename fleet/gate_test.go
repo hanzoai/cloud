@@ -85,14 +85,17 @@ func TestTheDoorDoesNotProjectACredentialOpItsChildServes(t *testing.T) {
 	for _, n := range order(t, h) {
 		got[n] = true
 	}
+	// The enum carries the name the door PUBLISHES, so both halves are asked in
+	// that spelling — and the dangerous half is asked in both, because a refused
+	// operation must not reappear under a friendlier name.
 	for _, n := range dangerous {
-		if got[n] {
+		if got[n] || got[fleet.Phrase(n)] {
 			t.Errorf("the door PROJECTED %q — an agent can mint or read a credential with it", n)
 		}
 	}
 	for _, n := range useful {
-		if !got[n] {
-			t.Errorf("the door dropped %q — the gate ate a product tool", n)
+		if !got[fleet.Phrase(n)] {
+			t.Errorf("the door dropped %q (offered as %q) — the gate ate a product tool", n, fleet.Phrase(n))
 		}
 	}
 }
@@ -154,16 +157,19 @@ func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("the door listed nothing")
 	}
-	if got[0] != "post_v1_chat_completions" {
+	if got[0] != fleet.Phrase("post_v1_chat_completions") {
 		t.Errorf("the first tool is %q; chat leads the product surface", got[0])
 	}
-	at := func(name string) int {
+	// Ranking reads the ROUTE and the enum carries the phrase, so a lookup names
+	// the operation the way the fixture declared it and finds it the way the door
+	// published it. That the two agree for every entry is the point.
+	at := func(id string) int {
 		for i, n := range got {
-			if n == name {
+			if n == fleet.Phrase(id) {
 				return i
 			}
 		}
-		t.Fatalf("%q is missing from %v", name, got)
+		t.Fatalf("%q (offered as %q) is missing from %v", id, fleet.Phrase(id), got)
 		return -1
 	}
 	for _, product := range []string{"post_v1_chat_completions", "get_v1_models", "post_v1_code_ask"} {
