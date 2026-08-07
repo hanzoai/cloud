@@ -68,17 +68,17 @@ func TestStartRefusesAProjectThatIsAPath(t *testing.T) {
 // The branch was cloud's to decide — BranchFor(sessionID), named after a session
 // the sandbox did not choose. Adopting the sandbox's self-report meant the claim
 // flowed into VerifyRef, which only asks whether a ref EXISTS (and main does),
-// and out the other side as CreatePR{Head: "main"}: a pull request headed at the
+// and out the other side as PR.Open{Head: "main"}: a pull request headed at the
 // trunk, filed by us, on behalf of a run that never had permission to write
 // there.
 func TestACompromisedSandboxCannotRenameItsOwnBranch(t *testing.T) {
 	sessions := &fakeSessions{id: "sess_abc123def456"}
-	tracker := &fakeTracker{ref: PRRef{Identifier: "API-1"}}
+	tracker := &fakePR{ref: PRRef{Identifier: "API-1"}}
 	verified := map[string]bool{}
 
 	d := Dispatcher{
 		Sessions: sessions,
-		Tracker:  tracker,
+		PR:       tracker,
 		Runner: &fakeRunner{result: RunResult{
 			OK: true, Changed: true, CommitSha: "deadbeef",
 			Branch: "main", // the lie
@@ -113,10 +113,10 @@ func TestACompromisedSandboxCannotRenameItsOwnBranch(t *testing.T) {
 // rather than our sandbox — a strictly less trusted place.
 func TestARoutedMachineCannotRenameItsOwnBranch(t *testing.T) {
 	sessions := &fakeSessions{id: "sess_abc123def456"}
-	tracker := &fakeTracker{ref: PRRef{Identifier: "API-2"}}
+	tracker := &fakePR{ref: PRRef{Identifier: "API-2"}}
 	d := Dispatcher{
 		Sessions:  sessions,
-		Tracker:   tracker,
+		PR:        tracker,
 		VerifyRef: func(context.Context, string, string, string) (string, bool) { return "deadbeef", true },
 	}
 	issuedBranch := BranchFor("sess_abc123def456")
@@ -133,7 +133,7 @@ func TestARoutedMachineCannotRenameItsOwnBranch(t *testing.T) {
 	t.Logf("the machine said %q; the PR is headed at %q", "main", issuedBranch)
 }
 
-func head(f *fakeTracker) string {
+func head(f *fakePR) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.inputs[0].Head

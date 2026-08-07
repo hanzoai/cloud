@@ -47,7 +47,7 @@ func (g *fakeGate) gate(_ context.Context, org, target string) error {
 func routedDispatcher(sess *fakeSessions, run *fakeRunner, router *fakeRouter, gate *fakeGate) (Dispatcher, *[]string) {
 	var cloneCalls []string
 	d := Dispatcher{
-		Sessions: sess, Tracker: &fakeTracker{}, Runner: run,
+		Sessions: sess, PR: &fakePR{}, Runner: run,
 		CloneURL: func(_ context.Context, org, repo string) string {
 			cloneCalls = append(cloneCalls, org+"/"+repo)
 			return "https://git.test/v1/git/" + org + "/" + repo + ".git"
@@ -220,7 +220,7 @@ func TestRun_RoutedButRoutingUnwired_FailsClosed(t *testing.T) {
 	sess := &fakeSessions{id: "sess_x"}
 	run := &fakeRunner{}
 	// No Route / TargetGate seams.
-	d := Dispatcher{Sessions: sess, Tracker: &fakeTracker{}, Runner: run,
+	d := Dispatcher{Sessions: sess, PR: &fakePR{}, Runner: run,
 		CloneURL: func(_ context.Context, org, repo string) string {
 			return "https://git.test/v1/git/" + org + "/" + repo + ".git"
 		}}
@@ -236,9 +236,9 @@ func TestRun_RoutedButRoutingUnwired_FailsClosed(t *testing.T) {
 
 // ---- routed completion parity (#48 I2): verify + PR + session close ----
 
-func finalizeDispatcher(sess *fakeSessions, tr *fakeTracker, verifyOK bool) Dispatcher {
+func finalizeDispatcher(sess *fakeSessions, tr *fakePR, verifyOK bool) Dispatcher {
 	return Dispatcher{
-		Sessions: sess, Tracker: tr,
+		Sessions: sess, PR: tr,
 		VerifyRef: func(_ context.Context, _, _, _ string) (string, bool) {
 			if verifyOK {
 				return "verifiedsha", true
@@ -252,7 +252,7 @@ func finalizeDispatcher(sess *fakeSessions, tr *fakeTracker, verifyOK bool) Disp
 // side completion as the local path: the PR is filed and the session is closed done.
 func TestFinalizeRouted_ChangedVerifyPasses_FilesPR_ClosesDone(t *testing.T) {
 	sess := &fakeSessions{}
-	tr := &fakeTracker{ref: PRRef{Identifier: "API-9"}}
+	tr := &fakePR{ref: PRRef{Identifier: "API-9"}}
 	d := finalizeDispatcher(sess, tr, true)
 	in := RoutedRun{Org: "acme", SessionID: "sess_r", Repo: "api", Base: "main", Branch: "agent/r", Prompt: "add a test", Actor: "u-1", AgentRef: "hanzo"}
 
@@ -284,7 +284,7 @@ func TestFinalizeRouted_ChangedVerifyPasses_FilesPR_ClosesDone(t *testing.T) {
 // — trust the tips we can read, not the machine's self-report.
 func TestFinalizeRouted_VerifyFails_NoPR_ClosesError(t *testing.T) {
 	sess := &fakeSessions{}
-	tr := &fakeTracker{}
+	tr := &fakePR{}
 	d := finalizeDispatcher(sess, tr, false) // verify fails
 	in := RoutedRun{Org: "acme", SessionID: "s", Repo: "api", Branch: "agent/r"}
 
@@ -301,7 +301,7 @@ func TestFinalizeRouted_VerifyFails_NoPR_ClosesError(t *testing.T) {
 // A routed run that reported NO changes closes the session done with no PR.
 func TestFinalizeRouted_NoChanges_NoPR_ClosesDone(t *testing.T) {
 	sess := &fakeSessions{}
-	tr := &fakeTracker{}
+	tr := &fakePR{}
 	d := finalizeDispatcher(sess, tr, true)
 	d.finalizeRouted(context.Background(), RoutedRun{Org: "acme", SessionID: "s", Repo: "api"}, RoutedResult{OK: true, Changed: false})
 
@@ -317,9 +317,9 @@ func TestFinalizeRouted_NoChanges_NoPR_ClosesDone(t *testing.T) {
 // even VerifyRef is never consulted (there is nothing to verify).
 func TestFinalizeRouted_ReportedError_ClosesError_NoPR(t *testing.T) {
 	sess := &fakeSessions{}
-	tr := &fakeTracker{}
+	tr := &fakePR{}
 	verifyCalled := false
-	d := Dispatcher{Sessions: sess, Tracker: tr, VerifyRef: func(context.Context, string, string, string) (string, bool) {
+	d := Dispatcher{Sessions: sess, PR: tr, VerifyRef: func(context.Context, string, string, string) (string, bool) {
 		verifyCalled = true
 		return "", true
 	}}
@@ -363,7 +363,7 @@ func TestNewDispatcher_WiresRoutedFinalizer(t *testing.T) {
 // the attribution the completion needs.
 func TestFinalizeRoutedDurable_BridgesFields(t *testing.T) {
 	sess := &fakeSessions{}
-	tr := &fakeTracker{ref: PRRef{Identifier: "API-1"}}
+	tr := &fakePR{ref: PRRef{Identifier: "API-1"}}
 	d := finalizeDispatcher(sess, tr, true)
 	d.finalizeRoutedDurable(context.Background(),
 		agents.RoutedRun{Org: "acme", SessionID: "s", Repo: "api", Branch: "agent/b", AgentRef: "hanzo", Actor: "u-9"},

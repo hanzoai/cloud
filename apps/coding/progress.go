@@ -104,6 +104,7 @@ func renderLine(kind string, payload []byte) (line string, terminal bool) {
 		Status  string `json:"status"`
 		Branch  string `json:"branch"`
 		PR      string `json:"pr"`
+		URL     string `json:"url"`
 		Error   string `json:"error"`
 		Changed bool   `json:"changed"`
 	}
@@ -127,6 +128,14 @@ func renderLine(kind string, payload []byte) (line string, terminal bool) {
 		l := ":sparkles: Pushed `" + esc(e.Branch) + "`"
 		if e.PR != "" {
 			l += " · PR `" + esc(e.PR) + "`"
+		}
+		// The address goes out BARE. Slack turns a plain URL into a link on its
+		// own, so nothing here has to build `<url|text>` — which is the one markup
+		// element that carries an arbitrary destination, and therefore the one
+		// esc() exists to stop a run from writing. A link nobody had to construct
+		// cannot be constructed by a prompt.
+		if e.URL != "" {
+			l += " " + esc(e.URL)
 		}
 		return l, true
 	case e.Status == "started":
