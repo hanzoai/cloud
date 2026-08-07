@@ -57,6 +57,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	// Aliased: this package's tests already bind `account` to a UUID literal, and
+	// an import that shadows a package-level identifier is a compile error in the
+	// test build only — green `go build`, red `go test`.
+	accountapp "github.com/hanzoai/cloud/apps/account"
 	meetui "github.com/hanzoai/cloud/apps/meet/ui"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
@@ -332,7 +336,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// this route turns `<token>` into `"<token>"` under application/json and breaks
 	// every published bundle in the field. It stays the escape hatch until zip can
 	// declare a non-JSON response.
-	app.Post("/v1/meet/getToken", cloud.Handle(s, mint))
+	// THE GROUP EXISTS FOR THE GATE. Every /v1/meet route hangs off it, so the
+	// anti-CSRF check is written ONCE and cannot be forgotten by the next route
+	// added here — the same reason apps/tracker puts it on its group rather than
+	// on each of its six writes.
+	g := app.Group("/v1/meet", requireCSRFOnWrites())
+
+	g.Post("/getToken", cloud.Handle(s, mint))
 
 	// The lobby's read. UNTYPED for a reason that is this app's alone: the gate is
 	// principal.Minted — the boundary's OWN attestation — and a typed op holds a
@@ -341,7 +351,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// nothing strips in a hand-written plugin main, which is exactly the forgeable
 	// signal admits was fixed to stop selecting on. Typing this route would put the
 	// weaker fact back in front of the same rows.
-	app.Get("/v1/meet/session", cloud.Handle(s, session))
+	g.Get("/session", cloud.Handle(s, session))
 
 	// /v1/meet/health makes "the office is unconfigured" a SIGNAL rather than a grep.
 	// A boot log line is invisible to a dashboard and rotates away; this is the same
@@ -352,11 +362,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// StatusCode picks 200 or 503, so the degraded answer keeps carrying the same
 	// body the healthy one does — the pair that once kept this route raw, before
 	// zip could declare a non-2xx with a typed body.
-	reg := cloud.ZipApp(app)
-	if reg == nil {
-		return fmt.Errorf("meet.Mount: router carries no typed-op registry")
-	}
-	zip.Get(reg, "/v1/meet/health", ops{s}.health,
+	zip.Get(g, "/health", ops{s}.health,
 		zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 
 	// The native client, embedded in THIS binary and served from the SAME origin as
@@ -370,6 +376,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Mounted OUTSIDE the ready() gate below, on purpose: an unconfigured deployment
 	// still serves the UI, which then renders the honest refusal from /v1/meet/session
 	// instead of a blank 404 that says nothing about what is wrong.
+	// On the ROOT router, not the group: /meet is the bundle and /v1/meet is the
+	// API, and a GET of an HTML shell has nothing to forge. tracker registers its
+	// SPA the same way, outside its own gate.
 	ui := zip.AdaptNetHTTP(http.StripPrefix("/meet", meetui.Handler()))
 	app.All("/meet", ui)
 	app.All("/meet/*", ui)
@@ -806,4 +815,48 @@ func (s state) grant(room, identity, name string, now time.Time) (string, error)
 	mac := hmac.New(sha256.New, []byte(s.apiSecret))
 	mac.Write([]byte(signing))
 	return signing + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
+
+// unsafe is the set of methods that CHANGE something. Everything else is a read.
+var unsafe = map[string]bool{
+	http.MethodPost: true, http.MethodPut: true,
+	http.MethodPatch: true, http.MethodDelete: true,
+}
+
+// requireCSRFOnWrites is the anti-CSRF gate for meet's one write, installed on
+// the GROUP rather than on the route.
+//
+// THREAT, and it is not hypothetical for this endpoint. A browser authenticates
+// this surface from an httpOnly session COOKIE, which is AMBIENT: any page that
+// can reach us sends it. callerToken (middleware_identity.go) accepts five cookie
+// names, validatedPrincipal mints from it, and admits selects the IAM lane on
+// principal.Minted FIRST — so a visitor holding only __Host-hanzo_iam_token, with
+// no Authorization header at all, can mint a LiveKit join token. The deployment's
+// CORS policy reflects *.hanzo.ai with credentials, and that wildcard covers hosts
+// serving arbitrary user content, so a page there could put a stranger into a
+// colleague's call. Minting a room token IS a write: it hands out a credential to
+// a live conversation.
+//
+// The positive control is a token the caller can only obtain by READING a
+// same-origin response (GET /v1/csrf; the Same-Origin Policy stops a cross-site
+// page reading it) and must echo in a CUSTOM header, which a simple form POST
+// cannot set without a preflight we do not grant.
+//
+// This is apps/tracker's gate verbatim, over apps/account's one implementation —
+// the estate has ONE anti-CSRF token, minted by GET /v1/csrf and bound to the
+// caller's validated identity. A second answer to a solved question is how two
+// surfaces end up disagreeing about what a valid token is.
+//
+// It costs an API client nothing: account's gate is a no-op whenever Authorization
+// is present, which covers every Bearer and gateway caller — including the native
+// SPA at meet.hanzo.ai, which is cross-origin and bearer-only and sends no cookie
+// at all.
+func requireCSRFOnWrites() zip.Handler {
+	gate := accountapp.RequireCSRF()
+	return func(c *zip.Ctx) error {
+		if !unsafe[c.Method()] {
+			return c.Next()
+		}
+		return gate(c)
+	}
 }
