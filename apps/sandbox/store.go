@@ -24,14 +24,29 @@ var errNotFound = errors.New("sandbox: sandbox not found")
 // other than the IAM edge. The predecessor returned a pod IP in every create,
 // get and list response.
 type Sandbox struct {
-	ID         string `json:"id"`
-	Org        string `json:"org"`
-	Kind       string `json:"kind"`
-	Class      string `json:"class"`
-	Project    string `json:"project,omitempty"`
-	Status     string `json:"status"` // pending | running | error
-	Image      string `json:"image"`
-	Pod        string `json:"-"`
+	ID      string `json:"id"`
+	Org     string `json:"org"`
+	Kind    string `json:"kind"`
+	Class   string `json:"class"`
+	Project string `json:"project,omitempty"`
+	Status  string `json:"status"` // pending | running | error
+	Image   string `json:"image"`
+	Pod     string `json:"-"`
+	// Runtime is the isolation boundary this sandbox GOT, which is not always the
+	// one it asked for: a caller states a preference and runtimeFor answers with
+	// what the sandbox can actually have. Reported so a person comparing two
+	// runtimes is comparing the runtimes they got rather than the ones they typed
+	// — the difference between those two is the whole reason to record it.
+	//
+	// Empty means the node's default runtime, which is a real answer and not a
+	// missing one.
+	//
+	// This is not a copy that can go stale. runtimeClassName is IMMUTABLE on a
+	// pod, a sandbox's pod is created once and never recreated (restartPolicy
+	// Never, no pool), and its name is never reused — so for as long as the pod
+	// this row names exists, it is running this runtime. The alternative, asking
+	// the apiserver on every read, buys nothing and costs a round trip per row.
+	Runtime    string `json:"runtime,omitempty"`
 	Volume     string `json:"volume,omitempty"`
 	Error      string `json:"error,omitempty"`
 	CreatedAt  int64  `json:"createdAt"`
@@ -65,6 +80,7 @@ CREATE TABLE IF NOT EXISTS sandbox (
   status       TEXT NOT NULL DEFAULT 'pending',
   image        TEXT NOT NULL DEFAULT '',
   pod          TEXT NOT NULL DEFAULT '',
+  runtime      TEXT NOT NULL DEFAULT '',
   volume       TEXT NOT NULL DEFAULT '',
   error        TEXT NOT NULL DEFAULT '',
   created_at   INTEGER NOT NULL,
@@ -77,6 +93,14 @@ CREATE INDEX IF NOT EXISTS ix_machines_org_status  ON sandbox(org, status);
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+	// runtime: added after the initial schema. Fresh DBs get it from the CREATE
+	// above; a DB that predates it gains it here, and its existing rows read as
+	// the node default — which is what they in fact ran. SQLite has no ADD COLUMN
+	// IF NOT EXISTS, so the duplicate-column error is the expected no-op.
+	if _, err := s.db.Exec(`ALTER TABLE sandbox ADD COLUMN runtime TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("migrate runtime column: %w", err)
+	}
 	return nil
 }
 
@@ -84,12 +108,13 @@ func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Put(ctx context.Context, m Sandbox) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO sandbox (id,org,kind,class,project,status,image,pod,volume,error,created_at,last_used_at,expires_at)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+INSERT INTO sandbox (id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,expires_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
-  status=excluded.status, image=excluded.image, pod=excluded.pod, volume=excluded.volume,
+  status=excluded.status, image=excluded.image, pod=excluded.pod, runtime=excluded.runtime,
+  volume=excluded.volume,
   error=excluded.error, last_used_at=excluded.last_used_at, expires_at=excluded.expires_at`,
-		m.ID, m.Org, m.Kind, m.Class, m.Project, m.Status, m.Image, m.Pod, m.Volume,
+		m.ID, m.Org, m.Kind, m.Class, m.Project, m.Status, m.Image, m.Pod, m.Runtime, m.Volume,
 		m.Error, m.CreatedAt, m.LastUsedAt, m.ExpiresAt)
 	return err
 }
@@ -131,7 +156,7 @@ func (s *Store) List(ctx context.Context, org, project, status string) ([]Sandbo
 	for rows.Next() {
 		var m Sandbox
 		if err := rows.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
-			&m.Image, &m.Pod, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt); err != nil {
+			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -163,7 +188,7 @@ func (s *Store) Expired(ctx context.Context, org string, now int64) ([]Sandbox, 
 	for rows.Next() {
 		var m Sandbox
 		if err := rows.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
-			&m.Image, &m.Pod, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt); err != nil {
+			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -215,12 +240,12 @@ func (s *Store) Delete(ctx context.Context, org, id string) error {
 	return err
 }
 
-const selectCols = `SELECT id,org,kind,class,project,status,image,pod,volume,error,created_at,last_used_at,expires_at FROM sandbox`
+const selectCols = `SELECT id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,expires_at FROM sandbox`
 
 func scanMachine(row *sql.Row) (Sandbox, error) {
 	var m Sandbox
 	err := row.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
-		&m.Image, &m.Pod, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt)
+		&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Sandbox{}, errNotFound
 	}

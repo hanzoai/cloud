@@ -46,12 +46,18 @@ type Spec struct {
 	Class   string
 	Project string
 	Image   string
-	// RuntimeClass is the isolation boundary, per sandbox. It was deployment-wide
-	// (one env var read at startup), which made it impossible to run the same
-	// task on two runtimes and compare — and impossible for a caller to choose.
-	// Empty means the deployment's default.
-	RuntimeClass string
-	TTLSec       int
+	// Runtime is the isolation boundary the caller ASKS FOR, per sandbox. It was
+	// deployment-wide (one env var read at startup), which made it impossible to
+	// run the same task on two runtimes and compare — and impossible for a caller
+	// to choose. Empty means the deployment's default.
+	//
+	// Asking is not getting. The server decides, in runtimeFor, and it answers a
+	// request it cannot honour with a refusal rather than with a different
+	// runtime — so what the sandbox got comes back on Sandbox.Runtime and the two
+	// can be compared. `RuntimeClass` is the Kubernetes spelling and it stays in
+	// runtime.go, where Kubernetes is spoken.
+	Runtime string
+	TTLSec  int
 }
 
 // Cmd is one command to run inside a sandbox. Argv is the honest form; Command is
@@ -188,7 +194,12 @@ func Lease(s *Service, ctx context.Context, org string, spec Spec) (Sandbox, err
 	// THE ISOLATION BOUNDARY, derived from the volume the line above just decided.
 	// Asked here rather than at start() so that a request which cannot be honoured
 	// leaves nothing behind — no row, no PVC, no pod.
-	rc, err := s.State.rt.runtimeFor(m, spec.RuntimeClass)
+	//
+	// The ANSWER is recorded, not the question. A caller that asked for one
+	// runtime and can only have another must be able to see which it got, or the
+	// two are indistinguishable from the outside and a comparison between them
+	// measures nothing.
+	m.Runtime, err = s.State.rt.runtimeFor(m, spec.Runtime)
 	if err != nil {
 		return Sandbox{}, zip.ErrBadRequest(err.Error())
 	}
@@ -209,7 +220,7 @@ func Lease(s *Service, ctx context.Context, org string, spec Spec) (Sandbox, err
 	// A failure to start is RECORDED on the row and answered 503 — the row stays so
 	// an operator can see what was asked for and why it did not happen, rather than
 	// the request vanishing with the evidence.
-	if err := s.State.rt.start(ctx, m, rc); err != nil {
+	if err := s.State.rt.start(ctx, m); err != nil {
 		m.Status, m.Error = "error", err.Error()
 		_ = store.Put(ctx, m)
 		return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "start sandbox: %v", err)
