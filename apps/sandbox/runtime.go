@@ -569,7 +569,11 @@ func (r *runtime) purge(ctx context.Context, m Sandbox) error {
 // arrive at a pod belonging to somebody else — a name is minted once per sandbox
 // and never reused, so the recycled-address break the predecessor defended
 // against with a header cannot be spelled here.
-func (r *runtime) exec(ctx context.Context, m Sandbox, argv []string, stdin io.Reader, timeoutSec int) (ExecResult, error) {
+// say, when a caller named a session, is handed THE SAME BYTES on their way to
+// the buffers, so a watcher reads the program's output while it is still being
+// written. It is a pass-through and never a second read: a tap that re-ran the
+// command to observe it would be observing a different command.
+func (r *runtime) exec(ctx context.Context, m Sandbox, argv []string, stdin io.Reader, timeoutSec int, say *tell) (ExecResult, error) {
 	if err := r.ready(); err != nil {
 		return ExecResult{}, err
 	}
@@ -584,7 +588,13 @@ func (r *runtime) exec(ctx context.Context, m Sandbox, argv []string, stdin io.R
 	defer cancel()
 
 	var out, errb capped
-	err := r.str.stream(ctx, r.ns, m.Pod, argv, stdin, &out, &errb)
+	so, se := io.Writer(&out), io.Writer(&errb)
+	if say != nil {
+		// BOTH streams, through one tell. A failing command says why on stderr, and
+		// a watcher that only saw stdout would watch the silence.
+		so, se = io.MultiWriter(&out, say), io.MultiWriter(&errb, say)
+	}
+	err := r.str.stream(ctx, r.ns, m.Pod, argv, stdin, so, se)
 	res := ExecResult{Stdout: out.String(), Stderr: errb.String()}
 	if err == nil {
 		return res, nil
