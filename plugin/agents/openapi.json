@@ -1136,6 +1136,9 @@
           "base": {
             "type": "string"
           },
+          "desktop": {
+            "type": "boolean"
+          },
           "project": {
             "type": "string"
           },
@@ -1159,6 +1162,9 @@
           },
           "timeoutSeconds": {
             "type": "integer"
+          },
+          "tool": {
+            "type": "string"
           }
         },
         "type": "object"

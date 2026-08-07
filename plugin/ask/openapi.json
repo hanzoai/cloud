@@ -34,10 +34,93 @@
           }
         }
       }
+    },
+    "/v1/ask/web": {
+      "post": {
+        "operationId": "research_web",
+        "summary": "Research a question on the live web and answer it with sources cited",
+        "description": "Researches a question on the live web and answers it with its\nsources cited.\n\nThis is the DEEP one. It plans the question into topics, runs several web\nsearches, FETCHES AND READS the pages it finds, ranks them, and writes a\ngrounded answer with inline markdown citations. Use it for anything that needs\nevidence, comparison or current fact — \"what changed in X\", \"compare A and B\",\n\"is this claim true\". For a plain list of links, use search_web instead; for\none page you already have the URL of, use read_page.\n\n`mode` buys depth: `search` is a single fast pass, `news` biases to recency,\n`research` plans and iterates, `deep` surveys widest. `sources` narrows the\nevidence to `web`, `news`, `academic`, `github`, `reddit` or `x` — each becomes\na site-scoped search, which is how this reaches X/Twitter posts.\n\nEVERY CITATION IS A PAGE THIS CALL FETCHED. That is a property of the text and\nnot an instruction to the model: each source is fenced with a per-request nonce\nso a crawled page cannot print itself a source number, and every markdown link\nin the answer is checked against the gathered set before it is returned. So a\nlink in `answer` always appears in `sources`, and a page that was not read\ncannot be cited.\n\nIt is BOUNDED and it degrades rather than failing: a mode's rounds, wall clock\nand token ceiling all cap it, and a search that finds little or a page that\nwill not load yields a thinner answer, never an error. A validated principal is\nrequired, and the answer is billed once to that principal's org.",
+        "tags": [
+          "ask"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/webQuestion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "Report": {
+        "properties": {
+          "answer": {
+            "description": "Answer is the grounded prose, with inline markdown citations. Every link in\nit points at a page in Sources: the citation check runs on the text before\nit leaves the engine, so a cited URL is one THIS call fetched.",
+            "type": "string"
+          },
+          "follow_ups": {
+            "description": "FollowUps are the questions worth asking next. Best-effort — an empty list\nis a normal outcome, not a fault.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "description": "Mode is the profile that ran: search, news, research or deep.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the model that synthesized the answer.",
+            "type": "string"
+          },
+          "sources": {
+            "description": "Sources are the pages the answer was written from, deduplicated and ranked.\nAlways an array, never null.",
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Source": {
+        "properties": {
+          "engine": {
+            "type": "string"
+          },
+          "favicon": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "askRequest": {
         "type": "object",
         "properties": {
@@ -78,6 +161,34 @@
             "type": "string"
           }
         }
+      },
+      "webQuestion": {
+        "properties": {
+          "language": {
+            "description": "Language narrows the search to a locale, BCP-47-ish (\"en\", \"ja\"). Empty\nmeans no narrowing.",
+            "type": "string"
+          },
+          "max_sources": {
+            "description": "MaxSources caps how many pages are read. Empty means the mode's own budget.",
+            "type": "integer"
+          },
+          "mode": {
+            "description": "Mode is how much work to do: `search` (fast, one pass), `news` (recency\nbiased), `research` (a plan and several rounds) or `deep` (the widest\nsurvey). Empty means research.",
+            "type": "string"
+          },
+          "q": {
+            "description": "Q is the question, in plain language. Required.",
+            "type": "string"
+          },
+          "sources": {
+            "description": "Sources narrows where the evidence comes from: any of `web`, `news`,\n`academic`, `github`, `reddit`, `x`. Each becomes a site-scoped search, so\n`[\"x\"]` researches X/Twitter posts rather than the open web.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

@@ -2400,6 +2400,13 @@
             "description": "Arch is the target architecture for the artifact lane.",
             "type": "string"
           },
+          "args": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Args are --build-arg values. They are what lets several images off ONE\nDockerfile mean different things — the sandbox classes are three entries\ndiffering only by STAGE. Validated at the k8s choke point, with VERSION and\nREVISION taking precedence: those are receipts the builder derives from the\ntag and the commit, and a caller that could overwrite them could make an\nimage lie about which commit it is.",
+            "type": "object"
+          },
           "binaries": {
             "description": "Binaries selects the ARTIFACT lane (artifact.go): build what the repo's\nhanzo.yml `binaries:` block declares — a Go binary, an npm tarball, a Rust\nbinary — and publish it to hanzoai/s3 instead of pushing an image. It is the\nsame recipe hanzoai/ci reads, sent verbatim, so `image` is meaningless here\nand must be absent.",
             "items": {
