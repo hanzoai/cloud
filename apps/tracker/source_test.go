@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -130,9 +131,12 @@ func newForge(t *testing.T) *stubForge {
 		case strings.HasPrefix(path, "/orgs/") && strings.HasSuffix(path, "/repos"):
 			org := strings.TrimSuffix(strings.TrimPrefix(path, "/orgs/"), "/repos")
 			if !sees(org) {
+				w.Header().Set("X-Total-Count", "0")
 				writeJSON(w, []any{})
 				return
 			}
+			// As the real forge does — the repository walk pages off this count.
+			w.Header().Set("X-Total-Count", strconv.Itoa(len(f.repos[org])))
 			writeJSON(w, f.repos[org])
 		case strings.HasSuffix(path, "/milestones"):
 			seg := strings.Split(strings.TrimPrefix(path, "/repos/"), "/")
@@ -141,6 +145,22 @@ func newForge(t *testing.T) *stubForge {
 				return
 			}
 			writeJSON(w, f.milestones[seg[0]+"/"+seg[1]])
+		case strings.HasPrefix(path, "/repos/"):
+			// One repository by name — what the board-detail page reads instead of
+			// scanning the org's inventory. 404 for both "no such repo" and "not
+			// yours", as the real forge does under Sudo.
+			seg := strings.Split(strings.TrimPrefix(path, "/repos/"), "/")
+			if len(seg) != 2 || !sees(seg[0]) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			for _, r := range f.repos[seg[0]] {
+				if name, _ := r["name"].(string); strings.EqualFold(name, seg[1]) {
+					writeJSON(w, r)
+					return
+				}
+			}
+			w.WriteHeader(http.StatusNotFound)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}

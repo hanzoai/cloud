@@ -106110,7 +106110,7 @@ paths:
         and a CLI command, and tools/call invokes it with no route and therefore no
         middleware — so the gate is in the handler, where every door reaches it, rather
         than in a middleware only one door passes through.
-      operationId: post_v1_websearch
+      operationId: search_web
       requestBody:
         content:
           application/json:
