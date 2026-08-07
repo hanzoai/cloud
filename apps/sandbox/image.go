@@ -67,23 +67,8 @@ func isOurs(host string) bool {
 	return false
 }
 
-// runtimes are the isolation boundaries a caller may ask for. It is a CLOSED
-// set, not free text, because runtimeClassName is passed to the apiserver and an
-// unknown value is a pod that never schedules — a caller typo would become a
-// sandbox stuck Pending with no explanation.
-//
-// The empty string is the deployment's own default (SANDBOX_RUNTIME_CLASS), and
-// it is what a caller naming nothing gets.
-var runtimes = map[string]bool{"gvisor": true, "kata-fc": true, "kata-clh": true}
-
-// checkRuntime refuses a runtime we do not run. Naming one that is not installed
-// on any node is the same failure with a slower clock, so this is only half the
-// check — the RuntimeClass has to exist in the cluster too, and the apiserver is
-// the one that knows.
-func checkRuntime(rc string) error {
-	rc = strings.TrimSpace(rc)
-	if rc == "" || runtimes[rc] {
-		return nil
-	}
-	return fmt.Errorf("runtime %q is not one we run (gvisor, kata-fc, kata-clh)", rc)
-}
+// The runtime a caller may ask for is checked in runtime.go, beside the table
+// that says what each runtime can do — see runtimeFor. It used to be a second
+// half-check here (is the name in the set?) with the real decision elsewhere,
+// which is how a caller could name a runtime that exists and still get a
+// sandbox that silently dropped its volume.
