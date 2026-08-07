@@ -34,6 +34,7 @@ var typedOps = []string{
 	"POST /v1/connectors/:provider/device/:flow/poll",
 	"GET /v1/integrations",
 	"GET /v1/integrations/:provider",
+	"GET /v1/integrations/github/installations",
 	"GET /v1/integrations/github/repos",
 	"GET /v1/integrations/github/repos/:repo/pages",
 	"POST /v1/integrations/:provider/connect",
@@ -56,10 +57,10 @@ var typedOps = []string{
 // "202 Accepted" was a third until zip v1.18.2 gave WithStatus a vocabulary for
 // it; /repos/import and /pages/builds are typed ops now.
 var rawRoutes = map[string]string{
-	"GET /v1/integrations/:provider/callback":     "302 to the console",
-	"GET /v1/integrations/discord/link":           "302",
-	"GET /v1/integrations/discord/link/callback":  "302",
-	"GET /v1/integrations/discord/link/discord":   "302",
+	"GET /v1/integrations/:provider/callback":    "302 to the console",
+	"GET /v1/integrations/discord/link":          "302",
+	"GET /v1/integrations/discord/link/callback": "302",
+	"GET /v1/integrations/discord/link/discord":  "302",
 	// The Marketplace / "Add to Slack" entry point. Unauthenticated BY DESIGN —
 	// the person clicking Install in Slack's directory has no Hanzo session — and
 	// it reveals nothing: the consent URL it 302s to carries only the PUBLIC
