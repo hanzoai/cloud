@@ -105,6 +105,14 @@ func run() error {
 	//
 	// Fail-SOFT: a plane that will not bind must not take the HTTP surface down
 	// with it — this process is what answers /v1/o11y and /v1/sentry.
+	//
+	// The AGENT DOOR goes on that plane first, for the third time in this file and
+	// for the third identical reason: cloud.Listen registers it for every generated
+	// app main and this one is hand-written. Without it this app's tools are the
+	// only ones in the fleet a caller from INSIDE reaches through the edge, so the
+	// identity boundary deletes that caller's principal and all 365 of them refuse
+	// it — see cloud.Door.
+	cloud.Door(app)
 	if stop, err := cloud.ServePlane("o11y", deps.Logger); err != nil {
 		deps.Logger.Warn("plane: socket not served", "app", "o11y", "err", err)
 	} else {

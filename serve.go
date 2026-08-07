@@ -440,6 +440,12 @@ func Listen(plugins []Plugin, enable []string) error {
 		return fmt.Errorf("console: %w", err)
 	}
 
+	// This process's AGENT DOOR on that same plane, before the sockets bind, so a
+	// caller that resolves one is answered by a door that is already there. It is
+	// the same door the edge serves, at the address the fleet's own callers use:
+	// see Door, which is also where the reason it cannot be the edge's is written.
+	Door(app)
+
 	// Internal plane: this app's typed ops over ZAP on its canonical unix socket
 	// (plane.go). Served for every mounted app name — the ops declared during
 	// Mount are live by now — so zip.DialApp(app) resolving a socket always means

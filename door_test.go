@@ -1,0 +1,213 @@
+package cloud
+
+// The agent door, from both directions, against ONE subsystem.
+//
+// WHAT IT CAUGHT. Every tool the @hanzo Slack agent called answered `X-Org-Id
+// required` or `sign in to use`, while tools/list and describe worked. The run
+// holds a principal it resolved SERVER-SIDE and no bearer to replay for it, and
+// the door forwarded it into the subsystem's EDGE door — where the identity
+// boundary deletes every authority header and re-mints one only from a credential
+// it verified. So X-User-Id was gone by the time the op read it, principal.OrgOf
+// refused the org that had ridden along, and the op refused the caller.
+//
+// The plugin's own request log said `org=hanzo user=hanzo/z@hanzo.ai` for that
+// exact request, which is what made it look impossible. It is not: zip reports the
+// caller as a request BEGINS (telemetry.go, describe before Continue), so the line
+// says what ARRIVED, and the op reads what SURVIVED. Both halves are pinned below.
+//
+// The two cases differ in ONE value — which door the hop goes to — and that is the
+// whole fix: an internal caller reaches the subsystem's plane door, where its
+// statement is worth what the socket is worth; a stranger reaches the edge door,
+// where the boundary judges it. TestForgedIdentityStillDiesAtTheEdge is the half
+// that must never move.
+
+import (
+	"context"
+	"encoding/json"
+	"net"
+	"net/http"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/manifest"
+	"github.com/zap-proto/zip"
+)
+
+// seen is what a typed op resolves about its caller: the tenant it would scope a
+// query by, and whether there is a validated principal behind it at all. These are
+// the two facts every org-scoped op in the fleet gates on.
+type seen struct {
+	Org       string `json:"org"`
+	OrgOK     bool   `json:"org_ok"`
+	Validated bool   `json:"validated"`
+}
+
+// tenantOp is the one op under test, and it resolves its tenant the way every
+// org-scoped op does — principal.OrgFrom / ValidatedFrom, never a header.
+const tenantOp = "probe_tenant"
+
+// subsystem is one plugin process's worth of machinery: the identity boundary, one
+// typed op, its EDGE door on its own socket (zip's /mcp, what cloud.Serve leaves
+// where the framework puts it), and its PLANE door (cloud.Door). It returns the
+// two addresses a host can reach it at.
+func subsystem(t *testing.T) (edge, plane string) {
+	t.Helper()
+	ResetPlane()
+	t.Cleanup(ResetPlane)
+
+	app := zip.New(zip.Config{AppName: "websearch", DisableStartupMessage: true})
+	Identify(app, &Config{})
+	zip.Post(app, "/v1/websearch/probe", func(ctx context.Context, _ *struct{}) (*seen, error) {
+		org, ok := principal.OrgFrom(ctx)
+		return &seen{Org: org, OrgOK: ok, Validated: principal.ValidatedFrom(ctx)}, nil
+	}, zip.WithOperationID(tenantOp), zip.WithSummary("what this op resolves about its caller"))
+
+	Door(app)
+
+	dir := t.TempDir()
+	edge, plane = filepath.Join(dir, "edge.sock"), filepath.Join(dir, "plane.sock")
+	go func() { _ = app.Listen(edge) }()
+	go func() { _ = Plane().Listen(plane) }()
+	t.Cleanup(func() { _ = app.Shutdown() })
+	accepts(t, edge)
+	accepts(t, plane)
+	return edge, plane
+}
+
+// doors composes the fleet's door at BOTH of its addresses over that one
+// subsystem: the edge's, forwarding into the subsystem's edge door, and the
+// fleet's own internal socket, forwarding into its plane door. Exactly the pair
+// cmd/cloud registers (locate / inside).
+func doors(t *testing.T) (fromEdge, fromInside *zip.App) {
+	t.Helper()
+	edge, plane := subsystem(t)
+
+	fromEdge = zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
+	fromInside = zip.New(zip.Config{AppName: "plane", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
+
+	d := fleet.Mount(fromEdge, manifest.MCPPath, []string{"websearch"},
+		func(string) (string, string, error) { return edge, manifest.FrameworkMCPPath, nil })
+	d.Serve(fromInside, manifest.MCPPath,
+		func(string) (string, string, error) { return plane, manifest.MCPPath, nil })
+	return fromEdge, fromInside
+}
+
+// TestInsideTheFleetTheCallerReachesTheOp is the fix. A sibling states the
+// principal it resolved server-side, reaches the door on the fleet's own socket,
+// and the op resolves the tenant — which is what every tool the agent calls needs
+// and what none of them got.
+func TestInsideTheFleetTheCallerReachesTheOp(t *testing.T) {
+	_, inside := doors(t)
+
+	got := tool(t, inside, "hanzo", "hanzo/z@hanzo.ai")
+
+	if !got.Validated {
+		t.Error("ValidatedFrom = false for a caller the fleet resolved server-side; " +
+			"every op that gates on it answers `sign in` and no tool is reachable")
+	}
+	if !got.OrgOK || got.Org != "hanzo" {
+		t.Errorf("OrgFrom = (%q, %v), want (\"hanzo\", true) — the op cannot scope a query "+
+			"to the tenant the run is billed to", got.Org, got.OrgOK)
+	}
+}
+
+// TestForgedIdentityStillDiesAtTheEdge is the half that must NOT move. The SAME
+// headers, from outside, are a caller naming its own tenant with nothing behind it
+// — the F1 forge — and the boundary in front of the subsystem's edge door is what
+// refuses them. A fix that made the door work by trusting what it was handed would
+// pass the test above and fail this one.
+func TestForgedIdentityStillDiesAtTheEdge(t *testing.T) {
+	edge, _ := doors(t)
+
+	got := tool(t, edge, "victim-corp", "victim-corp/ceo@victim.test")
+
+	if got.Validated {
+		t.Error("ValidatedFrom = true for a forged identity at the public door — " +
+			"an anonymous caller passes every gate that reads it")
+	}
+	if got.OrgOK {
+		t.Errorf("OrgFrom = (%q, true) for a forged X-Org-Id at the public door; "+
+			"that org key opens another tenant's store", got.Org)
+	}
+}
+
+// TestInsideTheFleetAnOrgAloneIsStillRefused pins that the fix carried the trust
+// rule across rather than dropping it. principal.OrgOf refuses an org that arrived
+// without a validated user, and it refuses one here for the same reason: a caller
+// that names a tenant and nobody has named its own authority.
+func TestInsideTheFleetAnOrgAloneIsStillRefused(t *testing.T) {
+	_, inside := doors(t)
+
+	got := tool(t, inside, "hanzo", "")
+
+	if got.Validated || got.OrgOK {
+		t.Errorf("OrgFrom = (%q, %v) validated=%v for an org with no user; the org that "+
+			"rode along is untrusted on every door", got.Org, got.OrgOK, got.Validated)
+	}
+}
+
+// accepts blocks until a socket has a listener behind it, so "the subsystem is
+// up" is a fact rather than an intention — the same wait cloud.ServePlane makes
+// before it reports a plane bound.
+func accepts(t *testing.T, sock string) {
+	t.Helper()
+	for i := 0; i < 400; i++ {
+		if c, err := net.Dial("unix", sock); err == nil {
+			_ = c.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("%s never began listening", sock)
+}
+
+// tool runs tenantOp through one door as (org, user) and reads back what the op
+// resolved.
+func tool(t *testing.T, door *zip.App, org, user string) seen {
+	t.Helper()
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + tenantOp + `","arguments":{}}}`
+	req, err := http.NewRequest("POST", "http://cloud"+manifest.MCPPath, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(zip.HeaderOrg, org)
+	if user != "" {
+		req.Header.Set(zip.HeaderUser, user)
+	}
+	resp, err := door.Test(req, zip.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("POST %s: %v", manifest.MCPPath, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var env struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("the door answered something that is not JSON-RPC: %v", err)
+	}
+	if env.Error != nil {
+		t.Fatalf("the door refused to route %s: %s", tenantOp, env.Error.Message)
+	}
+	if env.Result.IsError || len(env.Result.Content) == 0 {
+		t.Fatalf("tools/call returned no result (isError=%v)", env.Result.IsError)
+	}
+	var got seen
+	if err := json.Unmarshal([]byte(env.Result.Content[0].Text), &got); err != nil {
+		t.Fatalf("the content is not the op's output: %v (%s)", err, env.Result.Content[0].Text)
+	}
+	return got
+}

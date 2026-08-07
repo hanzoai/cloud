@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
@@ -57,7 +59,12 @@ func subsystem(t *testing.T, name string, ops ...string) string {
 // fleetDoor composes the real door over those apps and puts it where a child
 // looks for it — plane.HostApp's socket, at manifest.MCPPath. This is
 // serveWake's two lines, not a reimplementation of them.
-func fleetDoor(t *testing.T, at map[string]string) {
+//
+// at names each app's EDGE door and inside names the PLANE door of the ones that
+// have one, which is the pair cmd/cloud registers (locate / inside). An app with
+// no entry in inside is reached at its edge door — production's remotely-mounted
+// case, where there is no local plane socket to reach.
+func fleetDoor(t *testing.T, at map[string]string, inside map[string]string) {
 	t.Helper()
 	run := shortDir(t)
 	t.Setenv("ZIP_RUNTIME_DIR", run)
@@ -69,16 +76,22 @@ func fleetDoor(t *testing.T, at map[string]string) {
 	for name := range at {
 		apps = append(apps, name)
 	}
-	d := fleet.Mount(host, manifest.MCPPath, apps, func(app string) (string, error) {
+	edge := func(app string) (addr, path string, err error) {
 		sock, ok := at[app]
 		if !ok {
-			return "", &net.AddrError{Err: "no instance running", Addr: app}
+			return "", "", &net.AddrError{Err: "no instance running", Addr: app}
 		}
-		return sock, nil
-	})
+		return sock, manifest.FrameworkMCPPath, nil
+	}
+	d := fleet.Mount(host, manifest.MCPPath, apps, edge)
 
 	door := zip.New(zip.Config{AppName: "plane", DisableStartupMessage: true})
-	d.Serve(door, manifest.MCPPath)
+	d.Serve(door, manifest.MCPPath, func(app string) (addr, path string, err error) {
+		if sock, ok := inside[app]; ok {
+			return sock, manifest.MCPPath, nil
+		}
+		return edge(app)
+	})
 	path := zip.SocketPath(plane.HostApp)
 	go func() { _ = door.Listen(path) }()
 	t.Cleanup(func() { _ = door.Shutdown() })
@@ -126,7 +139,7 @@ func TestAgentResolvesItsToolsFromTheFleetDoor(t *testing.T) {
 	fleetDoor(t, map[string]string{
 		"alpha": subsystem(t, "alpha", "alpha_echo", "alpha_other"),
 		"beta":  subsystem(t, "beta", "beta_echo"),
-	})
+	}, nil)
 
 	door := doorTools{}
 	defs := door.catalog(context.Background(), "acme", "acme/u-1", []string{"alpha_echo", "beta_echo"})
@@ -151,7 +164,7 @@ func TestAgentResolvesItsToolsFromTheFleetDoor(t *testing.T) {
 // A declared name NOTHING in the fleet serves is absent, never offered. Offering
 // a tool that would be refused at dispatch teaches the model a lie.
 func TestUnservedNamesAreNotOffered(t *testing.T) {
-	fleetDoor(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")})
+	fleetDoor(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")}, nil)
 
 	door := doorTools{}
 	defs := door.catalog(context.Background(), "acme", "acme/u-1",
@@ -171,7 +184,7 @@ func TestUnservedNamesAreNotOffered(t *testing.T) {
 func TestTheAgentInheritsTheDoorsDenylist(t *testing.T) {
 	fleetDoor(t, map[string]string{
 		"iam": subsystem(t, "iam", "CreateServiceAccountKey", "GetRole"),
-	})
+	}, nil)
 	door := doorTools{}
 	ctx := context.Background()
 
@@ -187,7 +200,7 @@ func TestTheAgentInheritsTheDoorsDenylist(t *testing.T) {
 // TestADispatchCarriesTheRunsOrg: the tenant reaches the subsystem that owns the
 // tool, and it comes from the run rather than from anything the model emitted.
 func TestADispatchCarriesTheRunsOrg(t *testing.T) {
-	fleetDoor(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")})
+	fleetDoor(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")}, nil)
 
 	door := doorTools{}
 	out, err := door.call(context.Background(), "acme", "acme/u-1", "alpha_echo", `{"say":"pong"}`)
@@ -201,10 +214,66 @@ func TestADispatchCarriesTheRunsOrg(t *testing.T) {
 	}
 }
 
+// guarded is one subsystem in its PRODUCTION shape, which is the shape the
+// fixture above deliberately is not: the identity boundary in front of it, and its
+// tool resolving the tenant the way every org-scoped op does — principal.OrgFrom,
+// never a header. It returns its EDGE socket and its PLANE socket.
+//
+// The bare fixture answers zip.CallerOf directly, so it reports the org for any
+// caller that names one. That is why every test above passed while every tool the
+// @hanzo Slack agent called refused it: production has a boundary, the boundary
+// deletes an authority header no credential backs, and nothing in this file had
+// one.
+func guarded(t *testing.T, name, op string) (edge, plane string) {
+	t.Helper()
+	cloud.ResetPlane()
+	t.Cleanup(cloud.ResetPlane)
+
+	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
+	cloud.Identify(app, &cloud.Config{})
+	zip.Post(app, "/v1/"+name+"/"+op, func(ctx context.Context, in *echoIn) (*echoOut, error) {
+		org, ok := principal.OrgFrom(ctx)
+		if !ok {
+			return nil, zip.ErrForbidden("X-Org-Id required")
+		}
+		return &echoOut{App: name, Say: in.Say, Org: org}, nil
+	}, zip.WithOperationID(op), zip.WithSummary("what "+name+" does at "+op))
+	cloud.Door(app)
+
+	dir := shortDir(t)
+	edge, plane = dir+"/"+name+".sock", dir+"/"+name+"-plane.sock"
+	go func() { _ = app.Listen(edge) }()
+	go func() { _ = cloud.Plane().Listen(plane) }()
+	t.Cleanup(func() { _ = app.Shutdown() })
+	accepts(t, edge)
+	accepts(t, plane)
+	return edge, plane
+}
+
+// TestATenantedToolAnswersTheRun is the @hanzo Slack failure, as a test: a run
+// with a principal the fleet resolved server-side calls a tool that scopes by
+// tenant, and gets an answer instead of `X-Org-Id required`.
+//
+// It is the same call TestADispatchCarriesTheRunsOrg makes, against a subsystem
+// that has the boundary production has. Point the door's internal reach at the
+// EDGE door instead and it fails exactly the way the deployed fleet did.
+func TestATenantedToolAnswersTheRun(t *testing.T) {
+	edge, plane := guarded(t, "alpha", "alpha_tenant")
+	fleetDoor(t, map[string]string{"alpha": edge}, map[string]string{"alpha": plane})
+
+	out, err := doorTools{}.call(context.Background(), "acme", "acme/u-1", "alpha_tenant", `{"say":"pong"}`)
+	if err != nil {
+		t.Fatalf("a tool that scopes by tenant refused the run it belongs to: %v", err)
+	}
+	if !strings.Contains(out, `"org":"acme"`) {
+		t.Fatalf("alpha answered %q, which does not carry the run's tenant", out)
+	}
+}
+
 // A tool the door cannot route is an ERROR the model reads, never a silent empty
 // result and never a killed turn.
 func TestAnUnroutableToolIsAnErrorNotAnEmptyResult(t *testing.T) {
-	fleetDoor(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")})
+	fleetDoor(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")}, nil)
 
 	door := doorTools{}
 	out, err := door.call(context.Background(), "acme", "acme/u-1", "nobody_serves_this", `{}`)
@@ -220,7 +289,7 @@ func TestAnUnroutableToolIsAnErrorNotAnEmptyResult(t *testing.T) {
 // Arguments that are not a JSON object are refused HERE, before the wire, and
 // the model is told so — the same sentence the co-resident plane gives it.
 func TestMalformedArgumentsNeverReachTheDoor(t *testing.T) {
-	fleetDoor(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")})
+	fleetDoor(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")}, nil)
 
 	door := doorTools{}
 	if _, err := door.call(context.Background(), "acme", "acme/u-1", "alpha_echo", `["not","an","object"]`); err == nil {

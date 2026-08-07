@@ -494,11 +494,40 @@ func locate(app *zip.App) fleet.At {
 			remote[a.Name] = addr
 		}
 	}
-	return func(name string) (string, error) {
+	return func(name string) (addr, path string, err error) {
 		if addr := remote[name]; addr != "" {
-			return addr, nil
+			return addr, manifest.FrameworkMCPPath, nil
 		}
-		return app.Start(name)
+		addr, err = app.Start(name)
+		return addr, manifest.FrameworkMCPPath, err
+	}
+}
+
+// inside is how a door reached from INSIDE the fleet reaches one app: the app's
+// own plane socket, where its agent door answers with no edge in front of it
+// (cloud.Door). Same start, different door.
+//
+// A REMOTELY mounted app (CLOUD_<NAME>_ADDR) keeps the edge door, because its
+// plane socket is on its own host and no path here reaches it. So an internal
+// caller's identity survives into every app this host RUNS, and into a remote one
+// only as far as that app's own boundary lets it — which is the honest answer,
+// and the same one it has always given.
+func inside(app *zip.App) fleet.At {
+	edge := locate(app)
+	remote := map[string]bool{}
+	for _, a := range manifest.Apps {
+		if a.Plugin().Addr != "" {
+			remote[a.Name] = true
+		}
+	}
+	return func(name string) (addr, path string, err error) {
+		if remote[name] {
+			return edge(name)
+		}
+		if _, err := app.Start(name); err != nil {
+			return "", "", err
+		}
+		return zip.SocketPath(name), manifest.MCPPath, nil
 	}
 }
 
