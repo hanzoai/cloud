@@ -56,14 +56,14 @@ func (f *fakeSessions) Close(_ context.Context, org, session, status string) err
 	return nil
 }
 
-type fakeTracker struct {
+type fakePR struct {
 	mu     sync.Mutex
 	inputs []PRInput
 	ref    PRRef
 	err    error
 }
 
-func (f *fakeTracker) CreatePR(_ context.Context, in PRInput) (PRRef, error) {
+func (f *fakePR) Open(_ context.Context, in PRInput) (PRRef, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.inputs = append(f.inputs, in)
@@ -94,10 +94,10 @@ func (f *fakeRunner) Run(_ context.Context, org, userID string, req RunRequest, 
 // dispatcherFor builds a Dispatcher whose git seams are org-aware fakes: CloneURL
 // echoes the (org, repo) so a test can assert the sandbox is pointed only at the
 // caller's namespace; VerifyRef succeeds for a configured branch.
-func dispatcherFor(sess *fakeSessions, tr *fakeTracker, run *fakeRunner, verifyOK bool) (Dispatcher, *[]string) {
+func dispatcherFor(sess *fakeSessions, tr *fakePR, run *fakeRunner, verifyOK bool) (Dispatcher, *[]string) {
 	var cloneCalls []string
 	d := Dispatcher{
-		Sessions: sess, Tracker: tr, Runner: run,
+		Sessions: sess, PR: tr, Runner: run,
 		CloneURL: func(_ context.Context, org, repo string) string {
 			cloneCalls = append(cloneCalls, org+"/"+repo)
 			return "https://git.test/v1/git/" + org + "/" + repo + ".git"
@@ -125,7 +125,7 @@ func baseReq() Req {
 
 func TestRun_HappyPath_PushVerifyPR_NoCredentialLeak(t *testing.T) {
 	sess := &fakeSessions{id: "sess_abc123def456"}
-	tr := &fakeTracker{ref: PRRef{Identifier: "API-1", ProjectKey: "API", Number: 1}}
+	tr := &fakePR{ref: PRRef{Identifier: "API-1", ProjectKey: "API", Number: 1}}
 	run := &fakeRunner{
 		steps:  []Step{{Type: "step", Step: "clone", Status: "ok"}, {Type: "log", Message: "editing handler.go"}, {Type: "step", Step: "push", Status: "ok"}},
 		result: RunResult{Branch: "agent/abc123def456", CommitSha: "deadbeef", Diffstat: "1 file changed", Changed: true, OK: true},
@@ -188,7 +188,7 @@ func TestRun_EventVocabulary_StepIsToolCall_LogIsLog(t *testing.T) {
 		steps:  []Step{{Type: "step", Step: "clone"}, {Type: "log", Message: "hi"}},
 		result: RunResult{Branch: "agent/x", Changed: true, OK: true},
 	}
-	d, _ := dispatcherFor(sess, &fakeTracker{}, run, true)
+	d, _ := dispatcherFor(sess, &fakePR{}, run, true)
 	d.Run(context.Background(), baseReq())
 
 	var toolCalls, logs, statuses int
@@ -214,7 +214,7 @@ func TestRun_EventVocabulary_StepIsToolCall_LogIsLog(t *testing.T) {
 
 func TestRun_NoChanges_NoPR_DoneNotError(t *testing.T) {
 	sess := &fakeSessions{id: "sess_x"}
-	tr := &fakeTracker{}
+	tr := &fakePR{}
 	run := &fakeRunner{result: RunResult{Changed: false, OK: true}}
 	d, _ := dispatcherFor(sess, tr, run, true)
 
@@ -232,7 +232,7 @@ func TestRun_NoChanges_NoPR_DoneNotError(t *testing.T) {
 
 func TestRun_RunnerError_ClosesError_NoPR(t *testing.T) {
 	sess := &fakeSessions{id: "sess_x"}
-	tr := &fakeTracker{}
+	tr := &fakePR{}
 	run := &fakeRunner{err: context.DeadlineExceeded}
 	d, _ := dispatcherFor(sess, tr, run, true)
 
@@ -250,7 +250,7 @@ func TestRun_RunnerError_ClosesError_NoPR(t *testing.T) {
 
 func TestRun_VerifyRefFails_FailsClosed_NoPR(t *testing.T) {
 	sess := &fakeSessions{id: "sess_x"}
-	tr := &fakeTracker{}
+	tr := &fakePR{}
 	run := &fakeRunner{result: RunResult{Branch: "agent/x", Changed: true, OK: true}}
 	d, _ := dispatcherFor(sess, tr, run, false) // verify fails
 
@@ -268,7 +268,7 @@ func TestRun_VerifyRefFails_FailsClosed_NoPR(t *testing.T) {
 
 func TestRun_MissingCredential_FailsBeforeOpeningSession(t *testing.T) {
 	sess := &fakeSessions{id: "sess_x"}
-	d, _ := dispatcherFor(sess, &fakeTracker{}, &fakeRunner{}, true)
+	d, _ := dispatcherFor(sess, &fakePR{}, &fakeRunner{}, true)
 
 	req := baseReq()
 	req.CredToken = ""
@@ -282,7 +282,7 @@ func TestRun_MissingCredential_FailsBeforeOpeningSession(t *testing.T) {
 }
 
 func TestRun_MissingRepoOrPrompt_FailsClosed(t *testing.T) {
-	d, _ := dispatcherFor(&fakeSessions{id: "s"}, &fakeTracker{}, &fakeRunner{}, true)
+	d, _ := dispatcherFor(&fakeSessions{id: "s"}, &fakePR{}, &fakeRunner{}, true)
 	if r := d.Run(context.Background(), Req{Org: "acme", CredToken: "x", Prompt: "do it"}); r.OK || r.Error == "" {
 		t.Fatalf("missing repo must fail: %+v", r)
 	}
@@ -291,9 +291,9 @@ func TestRun_MissingRepoOrPrompt_FailsClosed(t *testing.T) {
 	}
 }
 
-func TestRun_TrackerFailure_DoesNotFailRun(t *testing.T) {
+func TestRun_PRFailure_DoesNotFailRun(t *testing.T) {
 	sess := &fakeSessions{id: "sess_x"}
-	tr := &fakeTracker{err: context.Canceled}
+	tr := &fakePR{err: context.Canceled}
 	run := &fakeRunner{result: RunResult{Branch: "agent/x", Changed: true, OK: true}}
 	d, _ := dispatcherFor(sess, tr, run, true)
 

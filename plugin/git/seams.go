@@ -33,6 +33,28 @@ func init() {
 	zip.Post[plane.RefIn, plane.RefTip](cloud.Plane(), "/git/verify-ref", planeVerifyRef,
 		zip.WithOperationID(plane.GitVerifyRef),
 		zip.WithSummary("The tip of a branch, read from git's own storage"))
+
+	zip.Post[plane.ProposeIn, plane.Proposed](cloud.Plane(), "/git/propose", planePropose,
+		zip.WithOperationID(plane.GitPropose),
+		zip.WithSummary("Offer a branch for merging, and answer where it is read"))
+}
+
+// planePropose opens the pull request for a finished run.
+//
+// The org is the CALLER's plane identity and never a field, exactly as the grant
+// door resolves it: a caller able to name the org could propose a branch into
+// another tenant's repository — and, on the GitHub path, mint that tenant's
+// installation token to do it.
+func planePropose(ctx context.Context, in *plane.ProposeIn) (*plane.Proposed, error) {
+	who := cloud.Who(ctx)
+	if who.Org == "" {
+		return nil, zip.ErrForbidden("git propose: org required")
+	}
+	url, err := git.Propose(ctx, who.Org, in.Project, in.Repo, in.Base, in.Head, in.Title, in.Body)
+	if err != nil {
+		return nil, err
+	}
+	return &plane.Proposed{URL: url}, nil
 }
 
 // planeCloneURL answers with the org-scoped clone URL, or an EMPTY one when git

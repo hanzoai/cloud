@@ -5,7 +5,7 @@
 //
 // It is a LIBRARY, not an app: no route, no plugin, no manifest row. Its one
 // caller is apps/integrations (the Slack `code:` trigger). It touches its
-// collaborators only through interface seams (Sessions, Tracker, Runner) plus two
+// collaborators only through interface seams (Sessions, PR, Runner) plus two
 // git functions (CloneURL, VerifyRef), so the whole orchestration is unit-testable
 // with fakes and — critically — coding does NOT import apps/git: git imports
 // apps/integrations, integrations calls coding, so coding->git would cycle.
@@ -83,9 +83,16 @@ type Sessions interface {
 	Close(ctx context.Context, org, sessionID, status string) error
 }
 
-// Tracker is the work-item seam (clients/tracker in-process).
-type Tracker interface {
-	CreatePR(ctx context.Context, in PRInput) (PRRef, error)
+// PR opens the pull request for a finished run and says where it can be read.
+//
+// It is ONE seam with two backends behind it, because a repository can live in
+// two places and a run must not care which: the work item lands on our board
+// either way, and the address comes back from the forge for a repository that
+// lives only here or from GitHub for one that mirrors there. A caller that had to
+// ask which host it was talking to would be two orchestrations pretending to be
+// one, and they would drift.
+type PR interface {
+	Open(ctx context.Context, in PRInput) (PRRef, error)
 }
 
 // Runner is the bot-gateway coding-task seam (clients/bot in-process client).
@@ -110,6 +117,12 @@ type PRRef struct {
 	Identifier string
 	ProjectKey string
 	Number     int
+	// URL is where the proposal is READ — the GitHub pull request when the
+	// repository mirrors there, the branch's page in the forge when it does not.
+	// It is the only part of a finished run a person can click, so it travels all
+	// the way out to the chat thread; empty is a real answer (a project-scoped
+	// repository has no browsable page) and costs a link, never a run.
+	URL string
 }
 
 // RunRequest / Step / RunResult mirror the bot coding contract.
@@ -240,7 +253,7 @@ const (
 // cancelled with the run.
 type Dispatcher struct {
 	Sessions  Sessions
-	Tracker   Tracker
+	PR        PR
 	Runner    Runner
 	CloneURL  func(ctx context.Context, org, repo string) string
 	VerifyRef func(ctx context.Context, org, repo, branch string) (string, bool)
@@ -372,7 +385,7 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	// cloud, named after a session the sandbox did not choose — and adopting the
 	// sandbox's self-report let a compromised one answer `main`, which then flowed
 	// into VerifyRef (which only asks whether a ref EXISTS, and main does) and out
-	// as CreatePR{Head: "main"}. A PR headed at the trunk, filed by us, from a run
+	// as PR.Open{Head: "main"}. A PR headed at the trunk, filed by us, from a run
 	// that never had permission to write there.
 	//
 	// The sandbox has nothing to report here: it was TOLD which branch to push,
@@ -431,19 +444,22 @@ func (d Dispatcher) completeChanged(ctx context.Context, c completion, res Resul
 			res.CommitSha = sha // authoritative tip from our own storage
 		}
 	}
-	pr, perr := d.Tracker.CreatePR(ctx, PRInput{
+	pr, perr := d.PR.Open(ctx, PRInput{
 		Org: c.org, Project: strings.TrimSpace(c.project), Repo: c.repo,
 		Base: baseOr(c.base), Head: c.branch, Title: codingTitle(c.repo, c.prompt),
 		Body: prBody(c.prompt, c.base, c.branch, res.CommitSha, c.diffstat, c.sessionID), Assignee: c.agentRef,
 	})
+	// Whatever came back is kept, even beside an error: opening a PR is two acts
+	// in two places, and a run that filed its work item but could not reach GitHub
+	// has a real handle to report. Discarding it would hide the half that worked.
+	res.PR = pr
 	if perr != nil {
-		d.logf("coding: tracker PR create failed", "org", c.org, "repo", c.repo, "err", perr)
-		d.mirror(ctx, c.org, c.sessionID, c.actor, kindLog, map[string]any{"message": "tracker PR not created: " + perr.Error()})
-	} else {
-		res.PR = pr
+		d.logf("coding: PR open failed", "org", c.org, "repo", c.repo, "err", perr)
+		d.mirror(ctx, c.org, c.sessionID, c.actor, kindLog, map[string]any{"message": "pull request: " + perr.Error()})
 	}
 	d.mirror(ctx, c.org, c.sessionID, c.actor, kindStatus, map[string]any{
-		"status": "done", "changed": true, "branch": c.branch, "commit": res.CommitSha, "pr": pr.Identifier,
+		"status": "done", "changed": true, "branch": c.branch,
+		"commit": res.CommitSha, "pr": pr.Identifier, "url": pr.URL,
 	})
 	_ = d.Sessions.Close(ctx, c.org, c.sessionID, statusDone)
 	res.OK = true

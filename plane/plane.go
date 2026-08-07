@@ -2098,6 +2098,16 @@ const (
 	// fail-closed and costs the run its PR.
 	GitVerifyRef = "git_verify_ref"
 
+	// GitPropose offers a run's branch for merging into its base, and answers the
+	// address a human opens to read it.
+	//
+	// ONE seam, two backends, chosen by where the code actually lives rather than
+	// by who is asking: a repository that mirrors into GitHub gets a real pull
+	// request there (its head pushed to the mirror first, because GitHub refuses a
+	// pull request whose head it cannot see), and one that lives only in the forge
+	// gets its branch page. The caller asks for the address and never for the host.
+	GitPropose = "git_propose"
+
 	// TrackerAgentPR opens the native PR work item for a finished run.
 	TrackerAgentPR = "tracker_agent_pr"
 
@@ -2221,6 +2231,25 @@ type RefIn struct {
 type RefTip struct {
 	SHA   string `json:"sha,omitempty"`
 	Found bool   `json:"found"`
+}
+
+// ProposeIn offers Head for merging into Base. The org is the caller's plane
+// identity and never a field, so a run can only ever propose within its own
+// namespace.
+type ProposeIn struct {
+	Repo    string `json:"repo" validate:"required"`
+	Project string `json:"project,omitempty"`
+	Base    string `json:"base,omitempty"`
+	Head    string `json:"head" validate:"required"`
+	Title   string `json:"title,omitempty"`
+	Body    string `json:"body,omitempty"`
+}
+
+// Proposed is where the proposal can be read. Empty is a real answer — a
+// project-scoped repository has no browsable page — and it costs a link, never a
+// run.
+type Proposed struct {
+	URL string `json:"url,omitempty"`
 }
 
 // AgentPRIn opens the native PR work item for a pushed branch.
