@@ -173,13 +173,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// open so DB() is nil whenever the subsystem is fail-closed.
 	embeddedDB, embeddedConn = db, conn
 
-	// Bind the transport that carries a verification code to a person. Grafted, IAM
-	// and notify share a process, so the org travels as an ARGUMENT and every tenant
-	// this binary answers for can be sent to with no credential to mint or rotate —
-	// unlike the standalone iam, whose HTTP client is a principal of exactly one org.
-	// Until this line runs, IAM correctly hides email/SMS sign-in and both delivered
-	// second factors, because the predicate behind all four reads the bound sender.
-	iamserver.BindSender(otpSender{kms: deps.KMS})
+	// Bind the transport that carries a verification code to a person — IAM's own,
+	// not a second one written here. Delivery is a ZAP op to notify over its socket,
+	// so the org travels as an ARGUMENT and every tenant this binary answers for can
+	// be reached with no credential to mint, mount or rotate. PlaneSender answers a
+	// truthful nil when notify is not mounted, so binding it unconditionally still
+	// leaves email/SMS sign-in and both delivered second factors correctly hidden.
+	iamserver.BindSender(iamserver.PlaneSender())
 
 	// Seed is NON-FATAL: new-only + idempotent config bootstrap (orgs/apps/providers/
 	// certs) from the SAME init_data.json the standalone iam seeds from. A missing or
