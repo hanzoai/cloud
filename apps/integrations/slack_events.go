@@ -278,6 +278,9 @@ func slackReplier(s *cloud.Service[state], org, channel, threadTS, user string) 
 		if err != nil {
 			return err
 		}
+		// The model writes Markdown; Slack reads mrkdwn. Untranslated, a reply
+		// arrives with its asterisks and hashes showing.
+		text = mrkdwn(text)
 		if ephemeral {
 			return slackPostEphemeral(ctx, string(tok), channel, user, text)
 		}
