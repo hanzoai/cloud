@@ -1,22 +1,28 @@
 package integrations
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 )
 
 // GitHub is a GitHub *App* provider on the SAME registry as Slack/Google/GitLab.
-// The user is sent to the App's installation page; the callback returns an
-// installation_id (NOT an OAuth code — the App must be configured WITHOUT "Request
-// user authorization (OAuth) during installation", so the generic callback reads
-// installation_id). The installation_id is custodied as the connection ExternalID;
-// it maps the install back to the org (OrgForExternalID) for inbound webhooks, and
-// a fresh short-lived installation token is minted on demand from the App private
-// key (github_app.go) for every list/import/mirror — never stored.
+// The user is sent to the App's installation page, and GitHub records the consent
+// when the App is installed there.
+//
+// The callback does NOT bind. A GitHub App install returns an installation_id, and
+// that id is a name the caller wrote in a URL, not a grant GitHub made to this org:
+// the App JWT reads EVERY tenant's installation, so an id that resolves is no
+// evidence it resolves to the caller's. Binding an installation to an org is
+// githubClaim (github_app.go), which is platform sudo for exactly that reason.
+// Hence no Exchange — the provider states that its callback completes nothing, and
+// the generic callback says so instead of writing a row.
+//
+// Once bound, the installation_id is the connection ExternalID; it maps the install
+// back to the org (ResolveOrgByExternalID) for inbound webhooks, and a fresh
+// short-lived installation token is minted on demand from the App private key
+// (github_app.go) for every list/import/mirror — never stored.
 //
 // Sync is wired via DEDICATED routes (github_app.go / github_webhook.go), not the
 // generic Provider.Sync hook: the repo list, import, and the inbound push webhook
@@ -42,8 +48,9 @@ func init() {
 		// generic OAuth readiness check does not apply: without this the connect
 		// flow is refused for a credential a GitHub App install never uses.
 		AuthorizeReady: githubConfigured,
-		Exchange:       githubExchange,
-		Revoke:         nil, // App installs are removed from GitHub, not token-revoked.
+		// No Exchange: an App install hands back an installation id, and an id the
+		// caller supplies is not a grant. githubClaim binds.
+		Revoke: nil, // App installs are removed from GitHub, not token-revoked.
 	})
 }
 
@@ -88,30 +95,4 @@ func githubAuthorize(creds OAuthConfig, _, state string) (string, error) {
 	}
 	return "https://github.com/apps/" + url.PathEscape(slug) +
 		"/installations/new?state=" + url.QueryEscape(state), nil
-}
-
-// githubExchange handles the App install callback. The generic dispatcher passes
-// the installation_id (the callback query `installation_id`, surfaced as the
-// identifier when no OAuth `code` is present). It custodies the installation_id as
-// the ExternalID and validates the install by fetching its account via the App JWT
-// — a failure fails the connection (fail-closed), never a fabricated success. No
-// token is sealed: installation tokens are minted on demand (github_app.go).
-func githubExchange(ctx context.Context, _ OAuthConfig, _, identifier string) (*ExchangeResult, error) {
-	instID := strings.TrimSpace(identifier)
-	if instID == "" {
-		return nil, fmt.Errorf("github: empty installation id")
-	}
-	id, err := strconv.ParseInt(instID, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("github: installation_id must be numeric")
-	}
-	label, err := githubInstallationAccount(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("github: could not verify installation %d: %w", id, err)
-	}
-	return &ExchangeResult{
-		Tokens:       map[string]string{}, // none — minted on demand
-		ExternalID:   instID,
-		AccountLabel: label,
-	}, nil
 }

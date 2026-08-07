@@ -496,6 +496,19 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s
 
+	// Say out loud whether any provider account is held by more than one org.
+	// Upsert refuses to create that, so a hit is a row written before the refusal
+	// existed, and this log is the only place it surfaces — the rows themselves
+	// read as ordinary connections.
+	if dup, derr := store.Collisions(context.Background()); derr != nil {
+		b.Log.Warn("could not check for shared provider accounts", "err", derr)
+	} else {
+		for _, d := range dup {
+			b.Log.Error("provider account held by several orgs",
+				"provider", d.Provider, "externalId", d.ExternalID, "orgs", strings.Join(d.Orgs, " "))
+		}
+	}
+
 	// Publish the Slack egress on the internal plane so a peer plugin can reach
 	// this process's bot-token store over the socket (slack_rpc.go).
 	exposeSlack()
@@ -1257,17 +1270,25 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 		return failRedirect(s, c, p.ID, "authorization denied",
 			fmt.Errorf("org %s: provider reported %q", payload.Org, truncate(e, 200)))
 	}
+	// A provider with no Exchange does not complete its binding here, and the
+	// callback must say so rather than invent one. GitHub is the case: an App
+	// install hands back an installation_id, and the state cannot cover it — the
+	// install does not exist when the state is minted — so the id arrives as
+	// nothing but a number the caller typed. The App JWT reads every tenant's
+	// installation, so an id that resolves proves only that the App is installed
+	// somewhere, never that it is installed for THIS org. Trading it for a
+	// connection let any org name any other tenant's install and mint live tokens
+	// against it. The consent is real, but the org it belongs to is not in the
+	// callback; githubClaim binds it, under platform sudo, for that reason.
+	if p.Exchange == nil {
+		return failRedirect(s, c, p.ID, "this install must be bound by an operator",
+			fmt.Errorf("org %s: %s returns no grant this org can prove (installation %q)",
+				payload.Org, p.ID, truncate(strings.TrimSpace(c.Query("installation_id")), 32)))
+	}
 	code := strings.TrimSpace(c.Query("code"))
 	if code == "" {
-		// A GitHub App install returns installation_id (+ setup_action), not an OAuth
-		// code, unless "request user authorization during installation" is enabled.
-		// Surface it as the identifier the provider's Exchange trades — the ONE
-		// generalization the App model needs (OAuth providers always have `code`).
-		code = strings.TrimSpace(c.Query("installation_id"))
-	}
-	if code == "" {
 		return failRedirect(s, c, p.ID, "missing authorization code",
-			fmt.Errorf("org %s: neither code nor installation_id present", payload.Org))
+			fmt.Errorf("org %s: no code present", payload.Org))
 	}
 	if len(code) > maxCodeLen {
 		return failRedirect(s, c, p.ID, "authorization code too large",
