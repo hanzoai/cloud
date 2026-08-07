@@ -273,7 +273,20 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	}
 
 	step(req.Tool, "running the task", "running")
-	ran, err := runIn(ctx, id, argvFor(req.Tool, req.Prompt), ttl, req.SessionID)
+	// The credential the agent answers the gateway with. Absent on a deployment
+	// that holds no machine identity, and then the run proceeds without one and
+	// fails at the model call with the harness's own message — which is a truer
+	// report than refusing here would be, because everything up to that point
+	// (lease, clone, branch) still happened and is still worth showing.
+	cred, err := key(ctx)
+	if err != nil {
+		return RunResult{}, fmt.Errorf("coding: %w", err)
+	}
+	argv, stdin := argvFor(req.Tool, req.Prompt), ""
+	if cred != "" {
+		argv, stdin = keyed(argv), cred+"\n"
+	}
+	ran, err := runIn(ctx, id, argv, ttl, req.SessionID, stdin)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("coding: run: %w", err)
 	}
@@ -373,7 +386,7 @@ func (in sandbox) deliver(req RunRequest, branch, base string, out *RunResult, s
 	// `git -c` before a subcommand is not written into the repository's config.
 	if _, err := runIn(in.ctx, in.id, []string{"git",
 		"-c", "user.name=" + authorName, "-c", "user.email=" + authorEmail,
-		"commit", "--quiet", "-m", message(req.Prompt, in.session)}, in.ttl, in.session); err != nil {
+		"commit", "--quiet", "-m", message(req.Prompt, in.session)}, in.ttl, in.session, ""); err != nil {
 		return fmt.Errorf("coding: commit: %w", err)
 	}
 
@@ -480,7 +493,7 @@ func (in sandbox) tip() (string, error) {
 // same fact: a clone that did not clone or a push that did not push leaves
 // nothing to report, so the exit code is read and the run stops.
 func (in sandbox) do(argv []string, what string) (*plane.Ran, error) {
-	ran, err := runIn(in.ctx, in.id, argv, in.ttl, in.session)
+	ran, err := runIn(in.ctx, in.id, argv, in.ttl, in.session, "")
 	if err != nil {
 		return nil, fmt.Errorf("coding: %s: %s", what, in.scrub(err.Error()))
 	}
@@ -531,9 +544,9 @@ const redacted = "[redacted]"
 // here, because the bytes are IN THE SANDBOX and this call does not return until
 // the command is over. Streamed from where they are produced, a twenty-five
 // minute agent edit loop is watchable; collected here, it is a silence.
-func runIn(ctx context.Context, id string, argv []string, ttl int, session string) (*plane.Ran, error) {
+func runIn(ctx context.Context, id string, argv []string, ttl int, session, stdin string) (*plane.Ran, error) {
 	ran, err := plane.Ask[plane.RunIn, plane.Ran](ctx, "sandboxes", plane.SandboxRun,
-		&plane.RunIn{ID: id, Argv: argv, TimeoutSec: ttl, Session: session})
+		&plane.RunIn{ID: id, Argv: argv, TimeoutSec: ttl, Session: session, Stdin: stdin})
 	if err != nil {
 		return nil, err
 	}
