@@ -6,6 +6,7 @@ package sandbox
 // before a pod is ever addressed, which is exactly why it can be tested at all.
 
 import (
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -259,5 +260,36 @@ func TestTerminalEndsWithTheLease(t *testing.T) {
 	got := leaseEnd(Sandbox{})
 	if bound := time.Now().Add(maxTTL * time.Second); got.After(bound.Add(time.Minute)) {
 		t.Errorf("leaseEnd = %v for an expiry-less row, want no later than %v", got, bound)
+	}
+}
+
+// A handler nothing can reach is the failure this package has already had once:
+// Create, List, Get and Delete existed as exported functions with no routes, and
+// nothing said so. So the terminal's two doors are measured as ROUTES — mounted,
+// addressable, and refusing in the right order — and none of it needs a cluster,
+// because both refusals happen before a pod is ever addressed.
+func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
+	app := mountHTTP(t)
+
+	// The ticket door is the ordinary org gate, and it is the SAME 403 the
+	// siblings answer. A 404 here would mean the route is not registered at all,
+	// which is the bug this test exists for. What happens with a principal needs
+	// the org's store and so belongs to the live suite.
+	if code, b := req(t, app, http.MethodPost, "/v1/sandboxes/m_nope/terminal", "", ""); code != http.StatusForbidden {
+		t.Fatalf("unauthenticated ticket: want 403, got %d %s", code, b)
+	}
+
+	// The socket door answers the TICKET and nothing else. It refuses BEFORE
+	// upgrading — a socket that opens and then closes tells a browser nothing —
+	// and it refuses identically whether the caller brings a principal or not,
+	// because a principal is not what opens a terminal. Nothing here reaches a
+	// store, so this is the whole gate, measured.
+	for _, org := range []string{"", "hanzo"} {
+		for _, q := range []string{"", "?ticket=", "?ticket=forged"} {
+			code, b := req(t, app, http.MethodGet, "/v1/sandboxes/m_nope/terminal/ws"+q, org, "")
+			if code != http.StatusUnauthorized {
+				t.Errorf("socket with org=%q %s: want 401, got %d %s", org, q, code, b)
+			}
+		}
 	}
 }
