@@ -183,7 +183,7 @@ type webSearchQuery struct {
 // a third-party search API and never a search key. The enabled engines run
 // concurrently and their hits are merged, deduplicated by normalised URL (host
 // and path, trailing slash and fragment dropped, query kept, so distinct queries
-// stay distinct results) and capped at 20. Ranking is deterministic rather than
+// stay distinct results) and capped at 30. Ranking is deterministic rather than
 // scored: the first configured engine's hits lead.
 //
 // It fails SOFT on the engines. One that errors, times out or is served a
@@ -399,7 +399,7 @@ func init() {
 				"third-party search API and never a search key. The enabled engines run "+
 				"concurrently and their hits are merged, deduplicated by normalised URL (host and "+
 				"path, trailing slash and fragment dropped, query kept — distinct queries are "+
-				"distinct results) and capped at 20. Ranking is deterministic rather than scored: "+
+				"distinct results) and capped at 30. Ranking is deterministic rather than scored: "+
 				"the first configured engine's hits lead.\n\n"+
 
 				"TWO WAYS IN, one-way equivalent, and no third: a validated principal — the same "+
