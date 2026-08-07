@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -37,6 +38,39 @@ const TracerName = "hanzo-cloud"
 // (ZAP) provider on the first otel.SetTracerProvider, so the package-level
 // capture is safe and binds to ZAP — never to a later, competing provider.
 var httpTracer = otel.Tracer(TracerName)
+
+// propagator is how trace context crosses a process boundary: W3C trace context,
+// the format the framework already stamps on every request and forwards on every
+// call it makes.
+//
+// It is a value HERE rather than a read of otel's global, and that is the point.
+// The global default is an EMPTY composite whose Extract silently returns the
+// context unchanged, so a middleware that reached for it would join no trace at
+// all in any process where installation had not run first — the exact silent
+// no-op this file exists to remove. Owning the value makes extraction independent
+// of initialization order; initTelemetry publishes this same value to the global
+// so anything that does reach for it there agrees.
+var propagator propagation.TextMapPropagator = propagation.TraceContext{}
+
+// inbound adapts one request's headers to the propagator's carrier, so the
+// server span can be extracted from whatever the caller sent.
+type inbound struct{ c *zip.Ctx }
+
+// Get reads one header. TraceContext asks for exactly two — traceparent and
+// tracestate — and this is the whole of what extraction needs.
+func (i inbound) Get(k string) string { return i.c.Header(k) }
+
+// Set writes a header back onto the inbound request. Extraction never calls it;
+// it is here because the carrier interface is shared with injection.
+func (i inbound) Set(k, v string) { i.c.Fiber().Request().Header.Set(k, v) }
+
+// Keys lists what the carrier holds, read off the request rather than declared,
+// so it stays true if a propagator that enumerates is ever composed in.
+func (i inbound) Keys() []string {
+	var keys []string
+	i.c.Fiber().Request().Header.VisitAll(func(k, _ []byte) { keys = append(keys, string(k)) })
+	return keys
+}
 
 // traceSkip reports paths that must NOT open a span: the liveness/readiness/
 // metrics surface (the ops port at :9090 already owns it) and the per-subsystem
@@ -95,10 +129,25 @@ func TracingMiddleware() zip.Handler {
 		method := strings.Clone(c.Method())
 		start := time.Now()
 
-		// Start the span off the request context and write the enriched context
-		// back so the rest of the chain (and every downstream client that pulls
-		// c.Context()) nests under it.
-		ctx, span := httpTracer.Start(c.Context(), method+" "+path,
+		// JOIN the caller's trace rather than starting a new one, then write the
+		// enriched context back so the rest of the chain (and every downstream
+		// client that pulls c.Context()) nests under it.
+		//
+		// The framework stamps a W3C traceparent on every inbound request before
+		// this middleware runs — parsing the caller's when there is one, minting a
+		// sampled one at the edge when there is not — and forwards that same header
+		// on every call it makes to another process. So the id that makes one
+		// request's spans ONE trace is already on the wire at every hop. Nothing
+		// here had ever read it, which is why a span tree stopped dead at each
+		// process boundary: the Slack webhook and the agent run it caused were two
+		// unrelated traces, and no query could join them.
+		//
+		// Extracting collapses the two id spaces into one. A span's trace id now
+		// equals the `trace` field the logger already prints for the same request,
+		// so a log line and a span are reachable from each other.
+		ctx, span := httpTracer.Start(
+			propagator.Extract(c.Context(), inbound{c}),
+			method+" "+path,
 			trace.WithSpanKind(trace.SpanKindServer),
 			trace.WithAttributes(
 				attribute.String("http.request.method", method),
