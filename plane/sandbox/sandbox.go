@@ -34,6 +34,7 @@ var Ops = []string{
 	plane.SandboxLease,
 	plane.SandboxRead,
 	plane.SandboxRun,
+	plane.SandboxStop,
 	plane.SandboxWrite,
 }
 
@@ -63,6 +64,13 @@ func SandboxRead(ctx context.Context, in *plane.PathIn) (*plane.Blob, error) {
 // Calls plane.SandboxRun on sandbox over the peer plane.
 func SandboxRun(ctx context.Context, in *plane.RunIn) (*plane.Ran, error) {
 	return plane.Ask[plane.RunIn, plane.Ran](ctx, App, plane.SandboxRun, in)
+}
+
+// SandboxStop interrupt what a sandbox is running.
+//
+// Calls plane.SandboxStop on sandbox over the peer plane.
+func SandboxStop(ctx context.Context, in *plane.StopIn) (*plane.Stopped, error) {
+	return plane.Ask[plane.StopIn, plane.Stopped](ctx, App, plane.SandboxStop, in)
 }
 
 // SandboxWrite write a file in a sandbox.

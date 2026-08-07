@@ -131,6 +131,12 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	}
 	id := leased.ID
 
+	// THE SANDBOX'S ID IS SAID OUT LOUD, because it is the handle for the only two
+	// things a person watching a run can do to it: stop the work (stop_run) or
+	// release it (end_sandbox). A run that never named its sandbox could be watched
+	// and not touched.
+	step("leased", "sandbox "+id+" ("+class+")", "running")
+
 	// END ON EVERY PATH. A detached context because the caller's may already be
 	// cancelled by the time we unwind — the lease still has to be released, and
 	// releasing it is not the caller's deadline to spend.
@@ -139,6 +145,9 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 		defer cancel()
 		_, _ = plane.Ask[plane.EndIn, struct{}](end, "sandboxes", plane.SandboxEnd,
 			&plane.EndIn{ID: id})
+		// Said AFTER the lease is actually gone, so "ended" means the pod is
+		// released and not that we intended to release it.
+		step("ended", "released sandbox "+id, "running")
 	}()
 
 	// The checkout, when there is one. No repo means no clone and no credential —
@@ -146,13 +155,16 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	// when CloneURL is), so there is nothing to strip here.
 	if u := strings.TrimSpace(req.CloneURL); u != "" {
 		step("clone", "cloning "+u, "running")
-		if _, err := runIn(ctx, id, cloneArgv(req), ttl); err != nil {
+		// The clone narrates into the session like everything else. It is the step
+		// that most often hangs — a big repo, a slow forge — and a watcher seeing
+		// git count objects knows the difference between slow and stuck.
+		if _, err := runIn(ctx, id, cloneArgv(req), ttl, req.SessionID); err != nil {
 			return RunResult{}, fmt.Errorf("coding: clone: %w", err)
 		}
 	}
 
 	step(req.Tool, "running the task", "running")
-	ran, err := runIn(ctx, id, argvFor(req.Tool, req.Prompt), ttl)
+	ran, err := runIn(ctx, id, argvFor(req.Tool, req.Prompt), ttl, req.SessionID)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("coding: run: %w", err)
 	}
@@ -190,9 +202,15 @@ func cloneArgv(req RunRequest) []string {
 	return append(argv, url, ".")
 }
 
-func runIn(ctx context.Context, id string, argv []string, ttl int) (*plane.Ran, error) {
+// runIn runs one command in the sandbox and narrates it into the run's session.
+//
+// The session travels with the command rather than the output travelling back
+// here, because the bytes are IN THE SANDBOX and this call does not return until
+// the command is over. Streamed from where they are produced, a twenty-five
+// minute agent edit loop is watchable; collected here, it is a silence.
+func runIn(ctx context.Context, id string, argv []string, ttl int, session string) (*plane.Ran, error) {
 	ran, err := plane.Ask[plane.RunIn, plane.Ran](ctx, "sandboxes", plane.SandboxRun,
-		&plane.RunIn{ID: id, Argv: argv, TimeoutSec: ttl})
+		&plane.RunIn{ID: id, Argv: argv, TimeoutSec: ttl, Session: session})
 	if err != nil {
 		return nil, err
 	}
