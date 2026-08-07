@@ -359,6 +359,18 @@ func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("terminal page: want 200, got %d %s", code, b)
 	}
+	// WITH the trailing slash too, which is the form a framing host builds when it
+	// appends a query to a directory-shaped URL. The page derives its socket from
+	// its own path, so both spellings have to reach it or one of them silently
+	// dials the wrong address.
+	for _, p := range []string{
+		"/v1/sandboxes/m_nope/terminal/",
+		"/v1/sandboxes/m_nope/terminal/?ticket=t&arg=pane-1",
+	} {
+		if c, _ := req(t, app, http.MethodGet, p, "", ""); c != http.StatusOK {
+			t.Errorf("GET %s: want 200, got %d", p, c)
+		}
+	}
 	page := string(b)
 	for _, want := range []string{"<!doctype html>", "new WebSocket", "hanzo-term", "FitAddon"} {
 		if !strings.Contains(page, want) {
