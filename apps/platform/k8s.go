@@ -1333,7 +1333,7 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 							// leaves headroom on the 40Gi a node has free beside buildkitd,
 							// and matches what cloud's own builds already request and
 							// schedule with. The limit stays 80Gi so a big build still bursts.
-							"requests": map[string]any{"ephemeral-storage": "32Gi"},
+							"requests": map[string]any{"ephemeral-storage": "12Gi"},
 							"limits":   map[string]any{"ephemeral-storage": "80Gi"},
 						},
 						"securityContext": map[string]any{
