@@ -22,11 +22,13 @@
 // # What asking costs, and why it is affordable
 //
 // A child answers on its OWN door — zip's default /mcp, which cloud.Serve
-// deliberately leaves where the framework puts it (manifest.FrameworkMCPPath) —
-// over the private ZAP socket the host started it on. [At] resolves the name to
-// that address, and zip.App.Start is exactly that function: idempotent, and the
-// SAME single-flighted path a request to the app's prefix takes, so a burst of
-// concurrent askers still produces one child.
+// deliberately leaves where the framework puts it (manifest.FrameworkMCPPath),
+// over the private ZAP socket the host started it on; or, for a caller that
+// reached this host from INSIDE, the same door on the app's own plane socket
+// (manifest.MCPPath, cloud.Door). [At] resolves the name to whichever of the two
+// that caller may use, and zip.App.Start is what makes either reachable:
+// idempotent, and the SAME single-flighted path a request to the app's prefix
+// takes, so a burst of concurrent askers still produces one child.
 //
 // So the first ask of a cold app pays that app's start. That is the cost of the
 // answer being true, and it is paid once per app per host: the child stays up
@@ -51,15 +53,25 @@ import (
 	zaphttp "github.com/zap-proto/http"
 )
 
-// At resolves one app to the address its own door answers on, starting it if it
-// is cold.
+// At resolves one app to the DOOR it answers on — the address, and the path on
+// it — starting the app if it is cold.
 //
 // It is a function rather than a *zip.App because there are two ways an app is
 // reachable and only one of them is a child of this host: zip.App.Start covers
 // the spawned ones, and a deployment that points CLOUD_<NAME>_ADDR at an instance
 // running elsewhere is mounted, never started, so Start does not know it. The
 // composition root holds both facts (cmd/cloud), and this package holds neither.
-type At func(app string) (addr string, err error)
+//
+// It answers the PATH too, because a subsystem serves its door at two addresses
+// and they are not interchangeable. Its EDGE door sits behind the identity
+// boundary every public request must pass, which deletes any authority header a
+// caller wrote and re-mints one only from a credential it verified; its PLANE
+// door sits on the canonical socket no edge route reaches, where a caller's
+// identity is its own statement, trusted exactly as far as that socket makes it
+// (cloud.Door). Which of the two a caller may be forwarded to is a property of
+// where that caller reached THIS door, and the composition root is the only
+// thing that knows both — so it says, rather than the dispatch assuming.
+type At func(app string) (addr, path string, err error)
 
 // Answer is one subsystem's reply to one question, or the reason there is none.
 // Exactly one of Body and Err is meaningful.
@@ -86,14 +98,14 @@ type Answer struct {
 // Order is the order given — the manifest's mount order, which is the fleet's
 // routing order — so a caller that resolves a collision by taking the first
 // resolves it the way the router would.
-func Ask(at At, apps []string, req *fasthttp.Request, path string) []Answer {
+func Ask(at At, apps []string, req *fasthttp.Request) []Answer {
 	out := make([]Answer, len(apps))
 	var wg sync.WaitGroup
 	for i, name := range apps {
 		wg.Add(1)
 		go func(i int, name string) {
 			defer wg.Done()
-			out[i] = ask(at, name, req, path)
+			out[i] = ask(at, name, req)
 		}(i, name)
 	}
 	wg.Wait()
@@ -106,8 +118,8 @@ func Ask(at At, apps []string, req *fasthttp.Request, path string) []Answer {
 // The failure is returned, never logged-and-dropped. "This app would not start"
 // and "this app serves nothing" are different answers and the difference is the
 // whole point of this package.
-func ask(at At, name string, req *fasthttp.Request, path string) Answer {
-	addr, err := at(name)
+func ask(at At, name string, req *fasthttp.Request) Answer {
+	addr, path, err := at(name)
 	if err != nil {
 		return Answer{App: name, Err: err}
 	}

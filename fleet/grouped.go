@@ -271,13 +271,13 @@ func callBody(id json.RawMessage, op string, input json.RawMessage) []byte {
 // owning subsystem's OWN descriptor bytes, the same ones the flat list used to
 // carry. So an operation is describable exactly when it is listable and exactly
 // when it is callable: there is one set, computed one way, and no third answer.
-func (d *Door) describe(c *zip.Ctx, req message, args json.RawMessage) error {
+func (d *Door) describe(c *zip.Ctx, req message, args json.RawMessage, at At) error {
 	var in struct {
 		Op string `json:"op"`
 	}
 	_ = json.Unmarshal(args, &in)
 
-	tools, _, _ := d.gather(c)
+	tools, _, _ := d.gather(c, at)
 	for _, t := range tools {
 		// Either spelling: the name the enum published, or the id the owner knows.
 		// The gathered set carries both, so this needs no table and cannot answer
