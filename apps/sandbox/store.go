@@ -171,6 +171,19 @@ func (s *Store) Expired(ctx context.Context, org string, now int64) ([]Sandbox, 
 	return out, rows.Err()
 }
 
+// Extend pushes one sandbox's lease out to at, and only ever FORWARD.
+//
+// The `expires_at<?` guard is what makes it monotonic: a stale caller with an
+// older `at` cannot pull a lease in and kill a sandbox early. A lease may be
+// lengthened by work and shortened only by ending it, which is the property the
+// reaper relies on to be safe to run every minute from more than one place.
+func (s *Store) Extend(ctx context.Context, org, id string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE sandboxes SET expires_at=? WHERE org=? AND id=? AND expires_at>0 AND expires_at<?`,
+		at, org, id, at)
+	return err
+}
+
 // IDs is every sandbox this org still claims, with NO LIMIT — which is the whole
 // reason it is not just List.
 //
