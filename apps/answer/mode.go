@@ -261,15 +261,45 @@ func buildQuery(q string, m mode, sources []string) string {
 	if m.newsBias {
 		wq = q + " latest news " + strconv.Itoa(time.Now().Year())
 	}
-	var hints []string
+	var sites, words []string
 	for _, s := range sources {
 		t := strings.ToLower(strings.TrimSpace(s))
-		if knownSourceHints[t] {
-			hints = append(hints, t)
+		if !knownSourceHints[t] {
+			continue
 		}
+		if host := siteFor[t]; host != "" {
+			sites = append(sites, "site:"+host)
+			continue
+		}
+		words = append(words, t)
 	}
-	if len(hints) > 0 {
-		wq = wq + " " + strings.Join(hints, " ")
+	if len(words) > 0 {
+		wq = wq + " " + strings.Join(words, " ")
+	}
+	switch len(sites) {
+	case 0:
+	case 1:
+		wq = wq + " " + sites[0]
+	default:
+		// ALTERNATIVES, never both at once. `site:a site:b` reads as an AND and no
+		// page is on two hosts, so the naive join answers zero every time.
+		wq = wq + " (" + strings.Join(sites, " OR ") + ")"
 	}
 	return wq
+}
+
+// siteFor maps a source hint to the host it scopes the search to. A hint that
+// names a place becomes a `site:` operator; a hint that names a TOPIC (web,
+// news) has no host and stays a plain word, because there is no one site that
+// is "the news".
+//
+// This is what makes the `x` hint reach X at all. It was appended as the bare
+// word "x", so asking for X sources turned "openai" into "openai x" — the same
+// open-web query plus a token that matches nothing in particular. The scoped
+// form lands on Mojeek, which honours `site:` where Bing does not.
+var siteFor = map[string]string{
+	"academic": "arxiv.org",
+	"github":   "github.com",
+	"reddit":   "reddit.com",
+	"x":        "x.com",
 }

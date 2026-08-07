@@ -35,6 +35,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/ask"
 	"github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/exec"
 	"github.com/hanzoai/cloud/apps/websearch"
@@ -56,10 +57,12 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 	want := []reach{
 		{"websearch", websearch.Mount, "search_web",
 			"answer any question about what is happening now — the weather, an outage, a release"},
-		{"crawl", crawl.Mount, "post_v1_crawl",
+		{"crawl", crawl.Mount, "read_page",
 			"read a page it was given the URL of"},
 		{"exec", exec.Mount, "post_v1_exec",
 			"run a snippet and report what it printed"},
+		{"ask", ask.Mount, "research_web",
+			"research a question across many pages and answer it with sources cited"},
 	}
 
 	apps := make([]string, 0, len(want))
@@ -82,8 +85,9 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 	sort.Strings(offering)
 	for _, w := range want {
 		// The enum carries the name the door PUBLISHES for an operation, so that
-		// is what a model reads and that is what is asked for here. `create_crawl`
-		// is what `post_v1_crawl` is called; fleet/verbs.go is why.
+		// is what a model reads and that is what is asked for here. A DECLARED id
+		// (read_page, search_web, research_web) is published verbatim; only a
+		// route-derived one is rephrased. fleet/verbs.go is why.
 		as := fleet.Phrase(w.op)
 		if !contains(offering, as) {
 			t.Errorf("%s (offered as %s) does NOT project — so the assistant still cannot %s.\n"+
