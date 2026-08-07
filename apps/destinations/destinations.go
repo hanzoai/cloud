@@ -163,6 +163,14 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	g.Post("/:platform", cloud.Handle(s, connect))
 	zip.Delete(zapp, "/v1/destinations/:platform", o.disconnect)
 	zip.Post(zapp, "/v1/destinations/:platform/test", o.test)
+
+	// GET /v1/tags — the PUBLIC, pk--keyed browser-tag config the hosted tag fetches.
+	// A raw net/http handler (like analytics' /v1/event.js) so it sets CORS + cache
+	// directly; it self-resolves the org from the publishable key and requires no
+	// session. Closes over s for the store.
+	app.Get("/v1/tags", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serveTags(s, w, r)
+	})))
 }
 
 // The one untyped route DECLARES what it carries. Its request is the map the
