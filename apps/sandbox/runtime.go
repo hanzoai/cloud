@@ -641,12 +641,8 @@ func (r *runtime) ensureVolume(ctx context.Context, m Sandbox) error {
 // podSpec is the sandbox, stated once.
 func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 	c := map[string]any{
-		"name":  container,
-		"image": m.Image,
-		// `sleep infinity` and nothing else. The pod is a place to run commands,
-		// not a program — every lifetime, from a one-shot invoke to a week-long
-		// session, is the same pod entered through the same channel.
-		"command":    []any{"sleep", "infinity"},
+		"name":       container,
+		"image":      m.Image,
 		"workingDir": workdirFor(m.Class),
 		// EPHEMERAL STORAGE IS REQUESTED AND LIMITED, both, and it is not
 		// optional. A pod that requests less than it uses is permanently first in
@@ -671,6 +667,32 @@ func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 			"allowPrivilegeEscalation": false,
 			"capabilities":             map[string]any{"drop": []any{"ALL"}},
 		},
+	}
+	// `sleep infinity` and nothing else — the pod is a place to run commands, not
+	// a program. Every lifetime, from a one-shot invoke to a week-long session, is
+	// the same pod entered through the same channel.
+	//
+	// EXCEPT A DESKTOP, WHOSE SCREEN IS ITS PROCESS. The desktop image's CMD
+	// starts Xvfb, a window manager and the VNC/noVNC pair and only then becomes
+	// the same `sleep infinity`; stating a command here replaced that script
+	// outright, so the class that exists to have a display came up with no X
+	// server at all — byte-identical to `dev` but for a label, and silent about
+	// it, because a pod that sleeps looks perfectly healthy.
+	//
+	// Deferring to the image is not a second way to start a sandbox. Work still
+	// arrives only through the exec subresource, for all three classes; the
+	// desktop simply also has something of its own to run first.
+	if m.Class != "desktop" {
+		c["command"] = []any{"sleep", "infinity"}
+	} else {
+		// Declared so the screen is addressable by name rather than by a number
+		// somebody has to look up. Ports are how a reader learns a desktop has a
+		// display; they do not open anything the entrypoint has not bound, and it
+		// binds loopback.
+		c["ports"] = []any{
+			map[string]any{"name": "vnc", "containerPort": int64(5900)},
+			map[string]any{"name": "novnc", "containerPort": int64(6080)},
+		}
 	}
 	spec := map[string]any{
 		// No token, ever. A sandbox runs somebody else's code; a projected
