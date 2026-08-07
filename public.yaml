@@ -1,0 +1,348 @@
+info:
+  description: 'The public Hanzo Cloud API: the operations declared part of the published
+    contract, and only those. It is a SUBSET of the full document — an operation absent
+    here may still be served, and is simply not part of what we publish. Tagged by
+    product: the first path segment after /v1/.'
+  title: Hanzo Cloud API
+  version: v1
+openapi: 3.1.0
+paths:
+  /v1/audio/foley:
+    post:
+      description: |-
+        Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
+        /foley — that the Zen family serves natively. It resolves the SKU and, for a Zen
+        model, forwards to zen's matching verb billed per call at the discovered price.
+        These verbs are Zen-native; a non-Zen model is rejected.
+      operationId: post_v1_audio_foley
+      summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
+        /foley — that the Zen family serves natively.
+      tags:
+      - audio
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/audio/music:
+    post:
+      description: |-
+        Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
+        /foley — that the Zen family serves natively. It resolves the SKU and, for a Zen
+        model, forwards to zen's matching verb billed per call at the discovered price.
+        These verbs are Zen-native; a non-Zen model is rejected.
+      operationId: post_v1_audio_music
+      summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
+        /foley — that the Zen family serves natively.
+      tags:
+      - audio
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/audio/speech:
+    post:
+      description: |-
+        The OpenAI-compatible TTS endpoint (POST /v1/audio/speech). It
+        authenticates the caller, resolves `model` to its TTS provider (the SAME model-route
+        resolution the chat/images/video endpoints use — so a BYO node registered as a TTS
+        provider works transparently), synthesizes the audio, and streams the bytes back.
+        One code path, OpenAI-shaped, no store/message coupling (unlike the legacy
+        /v1/generate-text-to-speech-audio which is bound to a chat store).
+      operationId: post_v1_audio_speech
+      summary: The OpenAI-compatible TTS endpoint (POST /v1/audio/speech).
+      tags:
+      - audio
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/audio/transcriptions:
+    post:
+      description: |-
+        The OpenAI-compatible STT endpoint
+        (POST /v1/audio/transcriptions, multipart: file + model [+ language +
+        response_format]). It mirrors AudioSpeech exactly: authenticate the caller,
+        resolve `model` to its STT provider through the SAME model-route resolution
+        (so the in-cluster speech service — or any BYO node registered as an STT
+        provider — works transparently), transcribe, and return the OpenAI body.
+        One code path, OpenAI-shaped, no store coupling (unlike the legacy
+        /v1/process-speech-to-text, which is bound to a chat store).
+      operationId: post_v1_audio_transcriptions
+      summary: 'The OpenAI-compatible STT endpoint (POST /v1/audio/transcriptions,
+        multipart: file + model [+ language + response_format]).'
+      tags:
+      - audio
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/audio/voice:
+    post:
+      description: |-
+        Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
+        /foley — that the Zen family serves natively. It resolves the SKU and, for a Zen
+        model, forwards to zen's matching verb billed per call at the discovered price.
+        These verbs are Zen-native; a non-Zen model is rejected.
+      operationId: post_v1_audio_voice
+      summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
+        /foley — that the Zen family serves natively.
+      tags:
+      - audio
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/chat/completions:
+    post:
+      description: Implements the OpenAI-compatible chat completions API
+      operationId: post_v1_chat_completions
+      summary: Implements the OpenAI-compatible chat completions API
+      tags:
+      - chat
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/completions:
+    post:
+      description: Implements the OpenAI-compatible chat completions API
+      operationId: post_v1_completions
+      summary: Implements the OpenAI-compatible chat completions API
+      tags:
+      - completions
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/embeddings:
+    post:
+      description: |-
+        Implements POST /v1/embeddings (OpenAI-compatible).
+
+        Body: {"model": "...", "input": "..."|["...", ...], "encoding_format"?, "dimensions"?}
+        It authenticates the caller, resolves the model to its upstream provider via
+        the shared routing table, rewrites the user-facing model name to the upstream
+        id, and proxies the request to the provider's /embeddings endpoint verbatim.
+      operationId: post_v1_embeddings
+      summary: Implements POST /v1/embeddings (OpenAI-compatible).
+      tags:
+      - embeddings
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/images/generations:
+    post:
+      description: "Implements POST /v1/images/generations (OpenAI-compatible).\n\nBody:
+        {\"model\": \"...\", \"prompt\": \"...\", \"n\"?: int, \"size\"?: \"1024x1024\",\n\n\t\"response_format\"?:
+        \"url\"|\"b64_json\"}\n\nIt authenticates the caller, resolves the model to
+        its upstream provider via\nthe shared routing table (zen3-image* → do-ai fal
+        diffusion), reserves the\nper-image budget, generates the image(s) through
+        the do-ai async image\nclient, records usage for billing, and returns the
+        OpenAI images response."
+      operationId: post_v1_images_generations
+      summary: Implements POST /v1/images/generations (OpenAI-compatible).
+      tags:
+      - images
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/messages:
+    post:
+      description: Implements the Anthropic Messages API.
+      operationId: post_v1_messages
+      summary: Implements the Anthropic Messages API.
+      tags:
+      - messages
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/messages/count_tokens:
+    post:
+      description: |-
+        Implements POST /v1/messages/count_tokens. Claude Code
+        calls it before a request; it returns {"input_tokens": N} for the given
+        model + messages + tools.
+      operationId: post_v1_messages_count_tokens
+      summary: Implements POST /v1/messages/count_tokens.
+      tags:
+      - messages
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/models:
+    get:
+      description: |-
+        Returns the list of available models from the routing table.
+
+        PUBLIC BY DESIGN, AND IT DOES NOT AUTHENTICATE — that is the whole contract, so it
+        is stated here rather than left to be inferred. The catalogue is the same for
+        everyone (listAvailableModels takes no principal), docs.hanzo.ai fetches it from
+        the browser, and every policy layer around it already says so out loud: the authz
+        filter lists "models" as public, filter_balance refuses to gate it (a 402 here was
+        a console-wide outage), the rate limiter excludes it, and cloud's spend.Reachable
+        carries /v1/models/ as "the model catalog the shell reads for discovery".
+
+        SO THE Authorization HEADER IS NOT AN ADMISSION CHECK HERE. It is read for ONE
+        thing — annotating gated SKUs with the caller's own access standing — and
+        annotation degrades to nothing when there is no verified principal.
+
+        It used to hold a "require authentication" gate that authenticated nobody: it
+        rejected an ABSENT credential and a MALFORMED one, then accepted any string that
+        merely looked like a key. `Bearer sk-` followed by 36 zeroes returned 200 in
+        production; so did a JWT three days expired. It was a shape check wearing an auth
+        check's clothes, and its cost was diagnostic: /v1/models is the natural "is my auth
+        working?" probe, and answering 200 to a dead credential sent people debugging the
+        wrong system. A public endpoint must not appear to validate. Either check the
+        credential or ignore it — this one ignores it, deliberately and visibly.
+
+        Removing that gate discloses nothing new: the catalogue was already reachable by
+        anyone willing to type three characters, so there is no confidentiality delta, only
+        an honesty one.
+      operationId: get_v1_models
+      summary: Returns the list of available models from the routing table.
+      tags:
+      - models
+      x-app: ai
+      x-public: true
+  /v1/models/providers:
+    get:
+      description: |-
+        Public, secret-free list of the providers serving the models that
+        GET /v1/models lists — the same source, projected. Safe unauthenticated: no
+        keys, URLs, or config are returned, and it reports a SET of names, never
+        which provider serves which model.
+      operationId: get_v1_models_providers
+      summary: Public, secret-free list of the providers serving the models that GET
+        /v1/models lists — the same source, projected.
+      tags:
+      - models
+      x-app: ai
+      x-public: true
+  /v1/rerank:
+    post:
+      description: "Implements POST /v1/rerank (Cohere/Jina-compatible).\n\nBody:
+        {\"model\": \"...\", \"query\": \"...\", \"documents\": [\"...\", ...]|[{\"text\":\"...\"}],\n\n\t\"top_n\"?:
+        int, \"return_documents\"?: bool}\n\nResponse: {\"object\":\"list\",\"model\":...,\"results\":[{\"index\",\"relevance_score\",\"document\"?}],\"usage\":{...}}\n\nBackend
+        selection is provider-driven (one endpoint, one contract):\n  - If the model
+        routes to a native rerank provider (Jina/Cohere/Voyage) the\n    request is
+        proxied to that provider's /rerank endpoint.\n  - Otherwise scores are computed
+        as a real bi-encoder ranking: embed the\n    query and documents through the
+        resolved embedding model and rank by\n    cosine similarity. No rerank-specific
+        key required."
+      operationId: post_v1_rerank
+      summary: Implements POST /v1/rerank (Cohere/Jina-compatible).
+      tags:
+      - rerank
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/responses:
+    post:
+      description: |-
+        Implements POST /v1/responses. The converted request is passed to
+        ChatCompletions and an installed ResponseWriter converts its OpenAI chat JSON
+        or SSE back into Responses JSON/SSE on the fly.
+      operationId: post_v1_responses
+      summary: Implements POST /v1/responses.
+      tags:
+      - responses
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/videos/{id}:
+    get:
+      description: |-
+        Implements GET /v1/videos/{id} — poll a job's status.
+
+        It authenticates the caller, verifies they OWN the job (the caller's billing
+        subject must equal the job's), performs ONE upstream status poll, and — the
+        first time the job is observed completed — settles the reservation with the
+        actual cost and records the billable usage event (exactly once). Returns the
+        OpenAI-shaped video object.
+      operationId: get_v1_videos_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Implements GET /v1/videos/{id} — poll a job's status.
+      tags:
+      - videos
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/videos/{id}/content:
+    get:
+      description: |-
+        Implements GET /v1/videos/{id}/content — download the finished MP4.
+
+        It authenticates + ownership-checks the caller, then proxies the upstream
+        /content endpoint (bounded by the download concurrency ceiling) and streams the
+        raw video bytes back inline. A successful download also bills the job once (for
+        the client that downloads without first polling to completion) — idempotent
+        with the poll path via job.markCompleted.
+      operationId: get_v1_videos_by_id_content
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Implements GET /v1/videos/{id}/content — download the finished MP4.
+      tags:
+      - videos
+      x-app: github.com/hanzoai/ai
+      x-public: true
+  /v1/videos/generations:
+    post:
+      description: |-
+        Implements POST /v1/videos/generations — the ASYNC create.
+
+        Body: {"model": "...", "prompt": "...", "size"?: "1280x720", "seconds"?: int}
+
+        It authenticates the caller, resolves the model to its upstream provider via
+        the shared routing table (zen3-video* / wan2-2-t2v-a14b → the spark-video
+        backend), reserves the per-video budget (the balance gate), creates ONE
+        upstream job, registers it in the in-pod store, and returns the OpenAI-shaped
+        video object with status "queued" IMMEDIATELY. The client then polls
+        GET /v1/videos/{id} and downloads GET /v1/videos/{id}/content. Nothing is
+        billed here — the debit lands on completion.
+      operationId: post_v1_videos_generations
+      summary: Implements POST /v1/videos/generations — the ASYNC create.
+      tags:
+      - videos
+      x-app: github.com/hanzoai/ai
+      x-public: true
+servers:
+- url: https://api.hanzo.ai
+tags:
+- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
+    cannot INSTALL.
+  name: audio
+- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
+    cannot INSTALL.
+  name: chat
+- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
+    cannot INSTALL.
+  name: completions
+- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
+    cannot INSTALL.
+  name: embeddings
+- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
+    cannot INSTALL.
+  name: images
+- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
+    cannot INSTALL.
+  name: messages
+- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
+    cannot INSTALL.
+  name: models
+- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
+    cannot INSTALL.
+  name: rerank
+- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
+    cannot INSTALL.
+  name: responses
+- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
+    cannot INSTALL.
+  name: videos

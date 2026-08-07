@@ -296,6 +296,15 @@ type Parameter struct {
 // It is written exactly once per operation, by whichever producer knows: [Project]
 // stamps the relay's source as the operation enters, [Weave] stamps the part's app
 // for everything else, and neither overwrites a value already there.
+//
+// Public is AUDIENCE: this operation is part of the published contract. It is a
+// declared fact, never a derived one — see openapi/public.go for why the split is
+// a per-operation mark and not a list of prefixes, and [Publish] for the
+// projection that reads it. Default-deny: absent means internal, so an operation
+// that says nothing about its audience cannot leak into a public SDK. It rides in
+// the document as an extension rather than as a tag because the tag axis already
+// means PRODUCT — `compat` had to be filtered back out of it by [Products], and a
+// second orthogonal fact in the same slot would be that wart twice.
 type Operation struct {
 	OperationID string      `json:"operationId"`
 	Summary     string      `json:"summary,omitempty"`
@@ -305,6 +314,7 @@ type Operation struct {
 	RequestBody any         `json:"requestBody,omitempty"`
 	Responses   any         `json:"responses,omitempty"`
 	App         string      `json:"x-app,omitempty"`
+	Public      bool        `json:"x-public,omitempty"`
 }
 
 // Components holds the named schemas operations reference by $ref, so an SDK
@@ -646,6 +656,12 @@ func Spec(app *zip.App, info Info, servers ...Server) (*Document, error) {
 	if err := Project(doc, relays()); err != nil {
 		return nil, err
 	}
+	// Audience is stamped LAST, on the finished set of addresses, because it is
+	// the only point at which every operation this app publishes exists at its
+	// published address: Fold replaces structural operations with typed ones and
+	// Project replaces doors with what is behind them, so a mark written before
+	// either would be thrown away by it. See openapi/public.go.
+	stamp(doc)
 	return doc, nil
 }
 

@@ -65,6 +65,24 @@ var (
 			"registered. Tagged by product: the first path segment after /v1/.",
 	}
 	fleetServer = Server{URL: "https://api.hanzo.ai"}
+
+	// publicInfo is the identity of the PUBLIC projection (openapi/public.go).
+	//
+	// The same API, the same version, the same server — because it IS the same
+	// API, and a client generated from either document calls the same host. Only
+	// the description differs, and it differs because it has one fact to add that
+	// the reader cannot get anywhere else: this document is a SUBSET, and the
+	// absence of an operation from it is not evidence that the operation does not
+	// exist. A generator, a docs site or a person reading it without that sentence
+	// would take 18 paths for the whole of Hanzo Cloud.
+	publicInfo = Info{
+		Title:   fleetInfo.Title,
+		Version: fleetInfo.Version,
+		Description: "The public Hanzo Cloud API: the operations declared part of the published " +
+			"contract, and only those. It is a SUBSET of the full document — an operation absent " +
+			"here may still be served, and is simply not part of what we publish. Tagged by " +
+			"product: the first path segment after /v1/.",
+	}
 )
 
 // FleetSpec projects app into THE Hanzo Cloud API document: Spec, carrying the
