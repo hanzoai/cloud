@@ -1,4 +1,4 @@
-package destinations
+package projects
 
 import (
 	"encoding/json"
@@ -7,41 +7,41 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hanzoai/cloud/apps/projects"
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/zap-proto/zip"
 )
 
-// tags.go — GET /v1/tags, the PUBLIC per-site browser-tag config the hosted tag
-// (track.js) fetches to know which client-side pixels to inject.
+// tagdoor.go — GET /v1/tags, the PUBLIC per-site browser-tag config the hosted tag
+// (track.js / /v1/event.js) fetches to know which client-side pixels to inject.
 //
-// PER SITE, not per org: a project IS a site and carries its own pixel ids
-// (projects.Project.Tags); track.js is dual-resolved to the right site — by the
-// publishable KEY when it is a per-site project key, else by the request HOST (an
-// org-level key + where the tag runs). So hanzo.ai and hanzo.chat inject different pixels
-// under one org, and the server-side CAPI reads the same per-site ids. Public + pk--keyed
-// like /v1/event(.js); non-secret ids only; FAIL-SAFE to an empty set so a page never
-// breaks on its tag config.
+// It lives HERE, in the projects app, because a project IS a site and carries its own
+// Project.Tags — and this is the process that OWNS the project store. (It first lived in
+// the destinations app and read empty in production: destinations runs in a different
+// process, so its cross-app reach for the store resolved to nil. The rule the key
+// resolver already follows: the door that reads the project store must be served by the
+// process that holds it.)
 //
-// GATEWAY: like /v1/event(.js) this must be reachable without a validated session — the
-// browser presents only the publishable key — so it rides the same public allowlist.
+// Dual-resolved per site: by the publishable KEY when it is a per-site project key
+// (ResolveKey), else by the request HOST (ResolveHost) for an org-level key — so
+// hanzo.ai and hanzo.chat inject different pixels under one org. Public + pk--keyed like
+// /v1/event(.js); NON-SECRET ids only; FAIL-SAFE to an empty set so a page never breaks.
 
 // browserTags names the platforms with a client-side pixel track.js can inject, and the
 // injector `type` it dispatches on. A platform absent here forwards server-side only.
 var browserTags = map[string]string{
-	"ga4":    "ga",     // gtag('config', G-…)
-	"meta":   "meta",   // fbq('init', …)
-	"tiktok": "tiktok", // ttq.load(…)
-	"x":      "x",      // twq('config', …)
+	"ga4":    "ga",
+	"meta":   "meta",
+	"tiktok": "tiktok",
+	"x":      "x",
 }
 
-// browserTagOut is one injectable tag on the wire: the platform, the injector type, the id.
 type browserTagOut struct {
 	Platform string `json:"platform"`
 	Type     string `json:"type"`
 	ID       string `json:"id"`
 }
 
-// tagConfig is the /v1/tags response: the site's injectable browser tags. Never a secret.
 type tagConfig struct {
 	Tags []browserTagOut `json:"tags"`
 }
@@ -58,6 +58,14 @@ func init() {
 			"site it answers an empty set at 200 — a page never breaks on its tag config.")
 }
 
+// mountTagDoor registers GET /v1/tags as a public, raw net/http handler (like analytics'
+// /v1/event.js) that reads THIS process's project store directly.
+func mountTagDoor(app cloud.Router, s *cloud.Service[state]) {
+	app.Get("/v1/tags", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serveTags(s, w, r)
+	})))
+}
+
 // buildTags maps a site's tag config (platform → non-secret pixel id) to injectable
 // browser tags, in stable platform order. A platform with no client pixel, or an empty
 // id, is omitted.
@@ -71,7 +79,7 @@ func buildTags(tags map[string]string) []browserTagOut {
 	for _, platform := range platforms {
 		typ, ok := browserTags[platform]
 		if !ok {
-			continue // server-side-only destination — no browser pixel to inject
+			continue
 		}
 		if id := strings.TrimSpace(tags[platform]); id != "" {
 			out = append(out, browserTagOut{Platform: platform, Type: typ, ID: id})
@@ -80,8 +88,7 @@ func buildTags(tags map[string]string) []browserTagOut {
 	return out
 }
 
-// tagsKey lifts the publishable key: Authorization: Bearer first, then ?key= (the tag's
-// data-key), then the retiring ?ingest_key=.
+// tagsKey lifts the publishable key: Authorization: Bearer first, then ?key=, then ?ingest_key=.
 func tagsKey(r *http.Request) string {
 	if b := r.Header.Get("Authorization"); strings.HasPrefix(b, "Bearer ") {
 		if k := strings.TrimSpace(strings.TrimPrefix(b, "Bearer ")); k != "" {
@@ -89,7 +96,10 @@ func tagsKey(r *http.Request) string {
 		}
 	}
 	q := r.URL.Query()
-	return firstNonEmpty(strings.TrimSpace(q.Get("key")), strings.TrimSpace(q.Get("ingest_key")))
+	if k := strings.TrimSpace(q.Get("key")); k != "" {
+		return k
+	}
+	return strings.TrimSpace(q.Get("ingest_key"))
 }
 
 // tagsHost lifts the site host for the org-key derivation path: ?host= first, else the
@@ -97,15 +107,14 @@ func tagsKey(r *http.Request) string {
 func tagsHost(r *http.Request) string {
 	q := r.URL.Query()
 	for _, raw := range []string{q.Get("host"), r.Header.Get("Origin"), r.Header.Get("Referer")} {
-		if h := hostname(raw); h != "" {
+		if h := hostnameOf(raw); h != "" {
 			return h
 		}
 	}
 	return ""
 }
 
-// hostname reduces an origin/URL/bare-host to its hostname ("" if none).
-func hostname(raw string) string {
+func hostnameOf(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""
@@ -124,16 +133,33 @@ func hostname(raw string) string {
 	return raw
 }
 
-// serveTags writes the site's browser tag config. Public + cross-origin (the tag loads
-// from every property), non-secret, fail-safe. A raw net/http handler so it sets CORS +
-// cache directly, exactly like /v1/event.js. Dual-resolves the site via projects.TagsFor.
-func serveTags(w http.ResponseWriter, r *http.Request) {
+// resolveSiteTags dual-resolves the site and returns its Project.Tags, reading THIS
+// process's store directly (in-process; no cross-process reach). nil,false when nothing
+// resolves — the door then answers an empty set.
+func resolveSiteTags(s *cloud.Service[state], r *http.Request) (map[string]string, bool) {
+	ctx := r.Context()
+	if key := tagsKey(r); key != "" {
+		if p, err := s.State.store.ResolveKey(ctx, key); err == nil {
+			return p.Tags, true
+		}
+	}
+	if host := tagsHost(r); host != "" {
+		if p, err := s.State.store.ResolveHost(ctx, host); err == nil {
+			return p.Tags, true
+		}
+	}
+	return nil, false
+}
+
+// serveTags writes the site's browser tag config. Public + cross-origin, non-secret,
+// fail-safe. A raw net/http handler so it sets CORS + cache directly, like /v1/event.js.
+func serveTags(s *cloud.Service[state], w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cache-Control", "public, max-age=60")
 
 	out := tagConfig{Tags: []browserTagOut{}}
-	if tags, ok := projects.TagsFor(r.Context(), tagsKey(r), tagsHost(r)); ok {
+	if tags, ok := resolveSiteTags(s, r); ok {
 		out.Tags = buildTags(tags)
 	}
 	body, err := json.Marshal(out)

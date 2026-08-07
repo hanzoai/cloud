@@ -309,6 +309,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, s)
 
+	// The public per-site tag door (GET /v1/tags), served by THIS process because it
+	// reads THIS process's project store in-process — the same reason the key/site/scope
+	// resolvers above are registered here rather than reached across the plane.
+	mountTagDoor(app, s)
+
 	// The site edge must hand the browser the bytes we published, unedited: a
 	// Cloudflare zone with an HTML rewriter on breaks every hydrating app the
 	// plane serves (see sites.rewriters). Assert it off-thread so a slow or
