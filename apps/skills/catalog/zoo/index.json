@@ -2,7 +2,7 @@
   "base_url": "https://api.zoo.ngo",
   "brand": "zoo",
   "generated_by": "openapi/skills.py",
-  "issuer": "https://zoo.id",
+  "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
   "skill_count": 1,
@@ -12,7 +12,7 @@
       "name": "ai_models",
       "path": "ai_models/SKILL.md",
       "service": "ai",
-      "sha256": "dff9ddfb6947ffddab984a4148c9b66152f16c74057745e953d8936567a34ff6",
+      "sha256": "0981cb419a689ba4beaf2e0756e185003f43f94009903ff81cee8a9a84fddc0f",
       "version": "8.0.0"
     }
   ],
