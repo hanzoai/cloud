@@ -46,7 +46,12 @@ type Spec struct {
 	Class   string
 	Project string
 	Image   string
-	TTLSec  int
+	// RuntimeClass is the isolation boundary, per sandbox. It was deployment-wide
+	// (one env var read at startup), which made it impossible to run the same
+	// task on two runtimes and compare — and impossible for a caller to choose.
+	// Empty means the deployment's default.
+	RuntimeClass string
+	TTLSec       int
 }
 
 // Cmd is one command to run inside a sandbox. Argv is the honest form; Command is
@@ -110,6 +115,15 @@ func Lease(s *Service, ctx context.Context, org string, spec Spec) (Sandbox, err
 	}
 	if !classes[class] {
 		return Sandbox{}, zip.ErrBadRequest("class must be one of exec, dev, desktop")
+	}
+	// A caller-supplied image is spent against OUR pull secret, so the namespace
+	// is checked before it reaches a pod spec. See image.go — unchecked, this
+	// field let one org's request fetch another org's private image.
+	if err := checkImage(org, spec.Image); err != nil {
+		return Sandbox{}, zip.ErrBadRequest(err.Error())
+	}
+	if err := checkRuntime(spec.RuntimeClass); err != nil {
+		return Sandbox{}, zip.ErrBadRequest(err.Error())
 	}
 	project := slug(spec.Project)
 	if class != "exec" && project == "" {
@@ -186,7 +200,7 @@ func Lease(s *Service, ctx context.Context, org string, spec Spec) (Sandbox, err
 	// A failure to start is RECORDED on the row and answered 503 — the row stays so
 	// an operator can see what was asked for and why it did not happen, rather than
 	// the request vanishing with the evidence.
-	if err := s.State.rt.start(ctx, m); err != nil {
+	if err := s.State.rt.start(ctx, m, spec.RuntimeClass); err != nil {
 		m.Status, m.Error = "error", err.Error()
 		_ = store.Put(ctx, m)
 		return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "start sandbox: %v", err)
