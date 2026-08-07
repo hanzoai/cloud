@@ -19,6 +19,7 @@ var goGitAllowed = map[string]string{
 	"gitbackend.go": "the git backend — the whole point is that go-git lives HERE",
 	"push.go":       "the write path: builds commit/tree objects directly",
 	"storage.go":    "repository initialisation over the S3-backed storer",
+	"merge.go":      "the merge path: reads two branch refs, walks ancestry, compare-and-sets one",
 }
 
 func TestReadPlaneDoesNotImportGoGit(t *testing.T) {
