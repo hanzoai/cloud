@@ -297,6 +297,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("websearch.Mount: nil deps.Logger")
 	}
 	logger = logger.New("subsystem", "websearch")
+	// The package logs one thing and only one thing: an engine that went blind
+	// on a query another engine answered (outcome.go). Held here rather than
+	// threaded through metaSearch because the three doors into search — this
+	// subsystem's two handlers and compose.go's in-process caller — do not all
+	// have a logger to pass, and a search that must not run without one would be
+	// a worse trade than a warning that stays quiet in a library caller.
+	setLogger(logger)
 
 	// /v1/websearch/search admits a caller two ONE-WAY-equivalent ways, checked at
 	// the zip layer so the same request either reaches native meta-search or is

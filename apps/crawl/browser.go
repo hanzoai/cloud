@@ -9,10 +9,14 @@ package crawl
 // than one that fails, because nothing upstream can tell.
 //
 // So: static first, and if what came back is too thin to be the page, ask Hanzo
-// Crawl (headless Chromium, ghcr.io/hanzoai/crawl) for the rendered version.
-// Escalation is one-way and best-effort — if the browser is absent, slow or
-// unhappy, the static Page still stands. That keeps a working crawl working
-// while the browser is not deployed, which is the state this ships in.
+// Crawl (headless Chromium, ghcr.io/hanzoai/crawl) for the rendered version. It
+// runs at crawl.hanzo.svc:11235 — the address browserEndpoint returns — and it
+// requires the bearer token below.
+//
+// Escalation is one-way and best-effort: if the browser is slow or unhappy, the
+// static Page still stands. That is a property worth keeping even though the
+// service is up, because "the render failed" must never turn a page we already
+// have into an error.
 
 import (
 	"bytes"
@@ -183,8 +187,15 @@ func browse(ctx context.Context, raw string) (*Page, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	// Token if the deployment has one; the network policy is the real boundary,
-	// so its absence is not a reason to skip rendering.
+	// The service REQUIRES this: unauthenticated it answers
+	// {"detail":"Authentication required"}, so a missing token is not a degraded
+	// render, it is no render at all. It reaches both pods from KMS as the
+	// crawl-secrets/CRAWL_API_TOKEN key.
+	//
+	// Sent when present rather than demanded up front because the failure is
+	// already well reported — the request returns a non-2xx, escalate() keeps the
+	// static Page, and websearch counts the engine blind. One boundary, one
+	// refusal, read in one place.
 	if tok := strings.TrimSpace(os.Getenv("CRAWL_API_TOKEN")); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}

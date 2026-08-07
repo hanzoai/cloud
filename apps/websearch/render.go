@@ -24,6 +24,32 @@ package websearch
 // The RENDERED HTML IS PARSED BY THE ENGINE'S OWN PARSER. There is no second
 // extraction path and no second idea of what a result is — parseBing and parseDDG
 // are the only readers of an engine's markup, whichever fetch produced it.
+//
+// WHAT THE BROWSER FIXES, MEASURED. lite.duckduckgo.com, one URL, one second
+// apart from the same cluster:
+//
+//	static   25,672 bytes, 0 results — "Unfortunately, bots use DuckDuckGo too.
+//	                                   Select all squares containing a duck."
+//	browser  24,410 bytes, 10 results — github.com/firecracker-microvm/firecracker,
+//	                                   fly.io/learn/firecracker-vm, wikipedia.
+//
+// WHAT IT DOES NOT FIX: GOOGLE. Do not add a Google engine here; it was tried
+// and it is not viable from this network. Every path returns the /sorry/
+// interstitial — ~6KB, 19 captcha markers, "unusual traffic", zero results:
+//
+//	crawl, headless, stealth on          /sorry/  0 results
+//	crawl, headless, &udm=14 and &gbv=1  /sorry/  0 results
+//	bot-browser, HEADFUL Chrome 150 on a real X display, second egress IP
+//	                                     /sorry/  0 results
+//
+// The control rules out our technique: that same headful browser reads DDG's ten
+// results, and google.com's HOMEPAGE loads normally through it (268KB, title
+// "Google", no captcha). Only /search is refused, from two different egress IPs,
+// headless and headful alike. That is reputation attached to datacenter
+// addresses, not headless detection, so no browser flag reaches it — the fix
+// would be residential egress, which is a different decision than a parser.
+// Shipping it anyway would mean an engine permanently blind and permanently
+// warning: noise where outcome.go is trying to keep a signal.
 
 import (
 	"context"
@@ -83,22 +109,30 @@ func renderEnabled() bool {
 // renderedResults asks the browser for the engine's page and parses it with that
 // engine's own parser. Any failure returns nil, which the caller treats as "the
 // static zero stands".
-func renderedResults(ctx context.Context, e engine, query, lang string) []webResult {
+//
+// The second return says whether the browser actually RENDERED the page — not
+// whether it found anything. The caller stamps it onto a blind answer, and it is
+// the difference between two faults that need different people: browsed=false
+// means escalation was off or the service was unreachable (configuration);
+// browsed=true means a real browser drew the page and our parser still read
+// nothing out of it (selector rot). Collapsing them would put the loudest signal
+// this package has back into the same bucket as "not switched on".
+func renderedResults(ctx context.Context, e engine, query, lang string) ([]webResult, bool) {
 	if !renderEnabled() {
-		return nil
+		return nil, false
 	}
 	ctx, cancel := context.WithTimeout(ctx, renderTimeout())
 	defer cancel()
 
 	body, err := renderPage(ctx, e.build(query, lang))
 	if err != nil || strings.TrimSpace(body) == "" {
-		return nil
+		return nil, false
 	}
 	root, err := html.Parse(strings.NewReader(body))
 	if err != nil {
-		return nil
+		return nil, false
 	}
-	return e.parse(root)
+	return e.parse(root), true
 }
 
 // renderPage POSTs one URL to Hanzo Crawl and returns the rendered HTML.
@@ -122,6 +156,8 @@ func renderPage(ctx context.Context, target string) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// Required by the service, and the same KMS-sourced token apps/crawl sends —
+	// one service, one credential, read from one env.
 	if tok := strings.TrimSpace(os.Getenv("CRAWL_API_TOKEN")); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
