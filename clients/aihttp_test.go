@@ -236,6 +236,94 @@ func TestAIHTTP_EmptyChoices(t *testing.T) {
 	}
 }
 
+// TestAIHTTP_UnparsedCallRefused pins the SAFETY NET, not the fix: when an
+// upstream fails to turn a model's native tool-call tokens into structured
+// tool_calls and hands them back as prose, that text is serialization internals
+// and must never reach the person waiting on the answer.
+//
+// The bodies here are verbatim shapes from the four families this gateway routes
+// to. Each carries a real tool call the upstream did not parse, so tool_calls is
+// empty and the loop would otherwise return the markup as the assistant's reply —
+// which is exactly how a Slack turn came to print one.
+//
+// Two things are asserted, and the second matters as much as the first: the
+// completion is REFUSED, and the refusal itself carries none of the markup. An
+// error that quoted the bytes would leak the same internals by a shorter path.
+// The refusal is tagged ErrUpstreamBusy because an upstream that drops its own
+// parse is a fault a retry or a failover can actually clear.
+func TestAIHTTP_UnparsedCallRefused(t *testing.T) {
+	for _, tc := range []struct {
+		family  string
+		content string
+	}{
+		{"deepseek dsml", "<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"websearch\">\n" +
+			"<｜DSML｜parameter name=\"op\" string=\"true\">search_web</｜DSML｜parameter>\n" +
+			"</｜DSML｜invoke>\n</｜DSML｜tool_calls>"},
+		{"deepseek native", "<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>websearch\n" +
+			"```json\n{\"op\":\"search_web\"}\n```<｜tool▁call▁end｜>"},
+		{"qwen hermes", "<tool_call>\n{\"name\":\"websearch\",\"arguments\":{\"op\":\"search_web\"}}\n</tool_call>"},
+		{"mistral", "[TOOL_CALLS][{\"name\":\"websearch\",\"arguments\":{\"op\":\"search_web\"}}]"},
+		{"llama", "<|python_tag|>{\"name\":\"websearch\",\"parameters\":{\"op\":\"search_web\"}}"},
+	} {
+		t.Run(tc.family, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"id": "chatcmpl-x", "object": "chat.completion", "model": "enso",
+					"choices": []map[string]any{{
+						"index":         0,
+						"message":       map[string]string{"role": "assistant", "content": tc.content},
+						"finish_reason": "stop",
+					}},
+				})
+			}))
+			defer srv.Close()
+
+			got, err := AIHTTPAt(srv.URL, "sk-test", "enso").
+				ChatCompletion(context.Background(), &types.ChatRequest{Prompt: "latest on x.com?"})
+			if err == nil {
+				t.Fatalf("an unparsed tool call was returned as an answer: %q", got.Content)
+			}
+			if !errors.Is(err, types.ErrUpstreamBusy) {
+				t.Errorf("want ErrUpstreamBusy so the runner retries/fails over, got: %v", err)
+			}
+			for _, leak := range []string{"DSML", "｜", "tool▁", "<tool_call>", "[TOOL_CALLS]", "<|python_tag|>"} {
+				if strings.Contains(err.Error(), leak) {
+					t.Errorf("the refusal quotes the markup it exists to withhold (%q): %v", leak, err)
+				}
+			}
+		})
+	}
+}
+
+// TestAIHTTP_ToolCallsKept is the control for the refusal above: a completion the
+// upstream DID parse is untouched. Structured tool_calls are read off the choice,
+// and prose that merely mentions a tool is prose — the net recognises markup, and
+// recognising it is all it does.
+func TestAIHTTP_ToolCallsKept(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"x","object":"chat.completion","choices":[{"index":0,
+			"message":{"role":"assistant","content":"Let me look that up with the websearch tool.",
+			"tool_calls":[{"id":"call_1","type":"function",
+			"function":{"name":"websearch","arguments":"{\"op\":\"search_web\"}"}}]},
+			"finish_reason":"tool_calls"}]}`))
+	}))
+	defer srv.Close()
+
+	got, err := AIHTTPAt(srv.URL, "sk-test", "enso").
+		ChatCompletion(context.Background(), &types.ChatRequest{Prompt: "latest on x.com?"})
+	if err != nil {
+		t.Fatalf("a parsed tool call was refused: %v", err)
+	}
+	if len(got.ToolCalls) != 1 || got.ToolCalls[0].Name != "websearch" {
+		t.Fatalf("tool calls lost: %+v", got.ToolCalls)
+	}
+	if got.FinishReason != "tool_calls" {
+		t.Errorf("finish reason: got %q want tool_calls", got.FinishReason)
+	}
+}
+
 // TestAIHTTP_Models asserts httpAI implements types.ModelLister: it GETs the
 // gateway's OpenAI-compatible /models list (Bearer-authenticated) and returns the
 // served model ids — the catalog the agents subsystem validates a model against.
