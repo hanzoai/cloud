@@ -52,6 +52,9 @@ func expose() {
 	zip.Post[plane.WriteIn, plane.Wrote](p, "/sandbox/write", planeWrite,
 		zip.WithOperationID(plane.SandboxWrite),
 		zip.WithSummary("Write a file in a sandbox"))
+	zip.Post[plane.StopIn, plane.Stopped](p, "/sandbox/stop", planeStop,
+		zip.WithOperationID(plane.SandboxStop),
+		zip.WithSummary("Interrupt what a sandbox is running"))
 	zip.Post[plane.EndIn, struct{}](p, "/sandbox/end", planeEnd,
 		zip.WithOperationID(plane.SandboxEnd),
 		zip.WithSummary("End a sandbox's lease"))
@@ -88,17 +91,43 @@ func planeLease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
 // planeRun runs one command inside the caller's sandbox and answers its exit code,
 // stdout and stderr. A non-zero exit is a successful call carrying a failed
 // program, so it comes back as data and not as an error.
+//
+// Name a `session` and the command NARRATES INTO IT: its output is appended to
+// that session's live log as the program produces it, so anything watching the
+// session — GET /v1/agents/sessions/stream, scoped to one run with ?root= —
+// watches the work happen rather than waiting for the verdict. Without it the
+// call is what it always was: silent until it returns, which for an agentic run
+// is twenty-five minutes of blank screen.
+//
+// The session is named; the TENANT is not. It is the org the caller already
+// proved, so a session belonging to somebody else is absent from the org this
+// call acts for and the append is refused there.
 func planeRun(ctx context.Context, in *plane.RunIn) (*plane.Ran, error) {
 	s, org, err := live(ctx)
 	if err != nil {
 		return nil, err
 	}
 	r, err := Run(s, ctx, org, in.ID, Cmd{Argv: in.Argv, Command: in.Command,
-		Stdin: in.Stdin, Dir: in.Dir, TimeoutSec: in.TimeoutSec})
+		Stdin: in.Stdin, Dir: in.Dir, TimeoutSec: in.TimeoutSec, Session: in.Session})
 	if err != nil {
 		return nil, err
 	}
 	return &plane.Ran{ExitCode: r.ExitCode, Stdout: r.Stdout, Stderr: r.Stderr}, nil
+}
+
+// planeStop interrupts whatever the caller's sandbox is running and answers how
+// many commands it ended. The sandbox stays leased — stop ends the WORK, end ends
+// the RESOURCE — so whoever stopped a run can still read what it left behind.
+func planeStop(ctx context.Context, in *plane.StopIn) (*plane.Stopped, error) {
+	s, org, err := live(ctx)
+	if err != nil {
+		return nil, err
+	}
+	n, err := Stop(s, ctx, org, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &plane.Stopped{Stopped: n}, nil
 }
 
 // planeRead reads one path in the caller's sandbox: a file's bytes, or a
