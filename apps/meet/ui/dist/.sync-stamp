@@ -3,9 +3,9 @@ app=@hanzo/meet (apps/meet)
 base=/meet/
 api_prefix=/v1/meet
 auth=AuthGate (@hanzogui/admin) + @hanzo/iam@0.9.4 PKCE
-idp=brand registry: hostname -> hanzo.id | lux.id | zoo.id (VITE_IAM_BRAND pins)
+idp=brand registry: hostname -> hanzo.id | lux.id | zoolabs.id (VITE_IAM_BRAND pins)
 callback=/meet/callback
 mint=POST /v1/meet/getToken CARRIES the bearer (sessionHeaders) — meet.hanzo.ai
      is bearer-only (host-only cookies), so without it every room join 401s
-source=hanzoai/admin:apps/meet@8da44d7 (main)
-built=tsc --noEmit clean + vitest 15/15 (8 pin the mint) + vite build
+source=hanzoai/admin:apps/meet@d1fb463 (main)
+built=vitest 20/20 + pkgs/admin 408/408
