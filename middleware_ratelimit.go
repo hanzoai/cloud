@@ -51,15 +51,44 @@ const rateConfigTTL = 5 * time.Second
 // than hold the request that asked.
 const scopeRulesTimeout = 3 * time.Second
 
-// ScopeRateLimit returns the per-scope rate-limit middleware. It caps an
-// authenticated org from TWO config sources, most-restrictive-wins:
-//   - commerce spend-alert RateLimitRpm (the plan-configured ceiling), and
-//   - the /v1/gateway per-org OrgRPM (gp), the runtime-mutable operator override.
+// defaultServiceRPM is the ceiling a SERVICE CLASS carries when nothing has
+// configured one for it. It is the floor under the two config sources, not an
+// override of them: a configured rule still wins by most-restrictive-wins, and
+// an org that has never been configured is still bounded.
 //
-// It is a no-op passthrough only when BOTH are absent (no commerce AND no policy
-// store), so an unwired deployment is never blocked — mirroring BillingGate.
+// It exists because "no rule" used to mean "no limit". For a priced service that
+// is defensible — consumption bills, so an unbounded caller is an unbounded
+// invoice, and the funds gate ends it. It is not defensible for a service that
+// bills ZERO: the speech models are unpriced by design, so nothing downstream
+// ever says stop, and they are served from a two-replica CPU deployment that is
+// the whole estate's capacity for them. Free and unbounded is a free denial of
+// service, and the endpoint that most needs a limit was the one relying on an
+// operator to remember to set one.
+//
+// Keyed by the class canonicalService derives, so it is deliberately narrow: a
+// class not named here behaves exactly as before. A platform-wide default is a
+// separate decision with a blast radius this is not the change to take.
+var defaultServiceRPM = map[string]int{
+	// /v1/audio/* — transcription and synthesis. One request per second sustained
+	// is far above interactive use and far below what one org could use to
+	// monopolize the upstream, which the in-flight ceiling in hanzoai/ai bounds
+	// separately. The two compose: this bounds how OFTEN one org may ask, that
+	// bounds how MUCH work can be running at once.
+	"audio": 60,
+}
+
+// ScopeRateLimit returns the per-scope rate-limit middleware. It caps an
+// authenticated org from TWO config sources plus a static floor,
+// most-restrictive-wins:
+//   - commerce spend-alert RateLimitRpm (the plan-configured ceiling),
+//   - the /v1/gateway per-org OrgRPM (gp), the runtime-mutable operator override,
+//   - defaultServiceRPM, the ceiling a service class carries unconfigured.
+//
+// It is a no-op passthrough only when all three are absent, so an unwired
+// deployment is never blocked — mirroring BillingGate — while a service class
+// that names a default is bounded even in one.
 func ScopeRateLimit(m *metering.Client, gp *edge.Store) zip.Handler {
-	if !billingEnabled(m) && gp == nil {
+	if !billingEnabled(m) && gp == nil && len(defaultServiceRPM) == 0 {
 		return func(c *zip.Ctx) error { return c.Next() }
 	}
 	rl := &scopeRateLimiter{
@@ -123,6 +152,16 @@ func (rl *scopeRateLimiter) handler(c *zip.Ctx) error {
 	// commerce scope keys so the two never share a bucket. gp is nil-safe.
 	if orpm := rl.gp.OrgRPM(org); orpm > 0 && (rpm <= 0 || orpm < rpm) {
 		key, rpm = "gwpolicy|"+org, orpm
+	}
+
+	// The static floor for this service class, in its own bucket namespace so it
+	// can never share a bucket with a commerce scope or a gateway override. It
+	// binds only when nothing else did: a configured rule is a DECISION about
+	// this org and outranks a default, including a looser one.
+	if rpm <= 0 {
+		if d := defaultServiceRPM[service]; d > 0 {
+			key, rpm = "default|"+org+"|"+service, d
+		}
 	}
 	if rpm <= 0 {
 		return c.Next() // no rate limit configured for this scope.
