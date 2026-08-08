@@ -1,25 +1,36 @@
-# connectors — one way to connect a third party
+# connectors and channels
 
-## What this should be
-
-**One surface.** `/v1/connectors`. A caller asks for connectors; the server
-returns the ones that principal may see, each carrying whether it is connected
-and who owns the credential.
-
-**Scope belongs to the CONNECTION, not the provider.** A person connects Google
-for themselves (their Drive) or for the org (a shared Drive). The provider only
-declares which of those it permits — a GitHub App installation is inherently
-org-wide, a personal API key inherently personal, and Google is genuinely both.
+## Two nouns, and they are not the same noun
 
 ```
-Provider.Scopes  []string   // what this connector permits: ["org"], ["user"], or both
-POST /v1/connectors/google/connect {"scope":"user"}   // my Drive
-POST /v1/connectors/google/connect {"scope":"org"}    // the org's Drive
+connector   the LOGIC to connect a third party — how to OAuth Slack, how to talk GitHub
+channel     a CONNECTED INSTANCE you talk through — your Slack workspace, your GitHub org
 ```
 
-**One table**, and the unification needs no new column — `user = ''` means the
-org owns it. That convention already exists here: `owner = ''` in the old
-`connections` table meant "one owner". The same idea, stated once.
+Adapter versus opened instance. One connector opens many channels; a channel
+without its connector is a row nobody can use.
+
+This is why `/v1/connectors` and `/v1/channels` are two surfaces rather than one:
+
+```
+/v1/connectors   what CAN I connect?     the adapter registry — code, ~69 providers
+/v1/channels     what HAVE I connected?  data, owned by an org or by a person
+```
+
+An earlier pass here tried to fold them into one door and hit a wall: a test
+wanted `fake:work` and `fake:default` and the merged catalog had flattened them
+into a single card. Those are two channels through one connector, and a shape
+that cannot say that is the wrong shape.
+
+## Scope belongs to the channel, not the connector
+
+A person connects Google for themselves (their Drive) or for the org (a shared
+Drive). The connector only declares which of those it permits — a GitHub App
+installation is inherently org-wide, a personal API key inherently personal,
+Google is genuinely both.
+
+One table, and the unification needs no new column: `user = ''` means the org
+owns it.
 
 ```sql
 CREATE TABLE connections (
@@ -38,89 +49,78 @@ CREATE TABLE connections (
 );
 ```
 
-`owner` becomes `label`: both existed to tell several accounts of one provider
-apart, under two names.
+`owner` became `label`: both existed to tell several accounts of one provider
+apart, under two names. The rows are channels — renaming `Connection` → `Channel`
+is mechanical and still owed.
 
-## What it is today, and why
+**The org of a channel comes from the validated principal, never the body.** A
+caller that can name its own org can read another tenant's credential. Every
+security finding in this repo this week had that one shape: a credential
+authenticating more than its design described, because an identity reached a
+general resolver instead of the one handler that needed it.
 
-Two doors over ONE registry of 69 providers, split by a `Provider.Scope` field:
+## Where the chat path stands
 
-- `/v1/integrations` — `list` skips `Scope == userScope`; org rows keyed
-  `(org, provider, owner)`
-- `/v1/connectors` — the per-user plane; rows keyed `(org, user, provider, label)`
+`bridge.go` is a second implementation of channels living on the wrong side of
+the line. Every adapter does **both**: `emitIngress` to the channels inbox, and
+`bridgeSpawn`/`runBridgeTurn` to answer inline. Two mechanisms, one message,
+four times over.
 
-The code says "the two planes are disjoint", and that is the sentence to delete.
-Disjointness is why "connect Google for my org or just me" cannot be expressed:
-the provider decides the plane, so Google is org-only forever.
+**Fixed:** the inbox seam. It crossed on a package global —
+`integrations.RegisterIngress`, a consumer pointer channels installed at Mount —
+and a package global is per-process. `integrations`, `channels` and `agents` are
+three separate PIDs in one writer pod, so that pointer was nil on the emitting
+side and every event returned at the nil check. The inbox took nothing; the
+pairing and allowlist gates never ran on real traffic. It now crosses as
+`plane.ChannelsIngest`, a typed op.
 
-A third surface, `/v1/ai/connections` (openai · anthropic · google), is the same
-idea a third time — and `anthropic` is registered in BOTH it and the connector
-registry today. It folds in as category `AI`.
+**Still owed:** the turn itself. `bridge.go` should not exist — channels already
+carries the ingress, the policy gate, the inbox and all four egress doors
+(`slackDoor`/`teamsDoor`/`discordDoor`/`telegramDoor`), and its own code names
+the gap: *"Agent delivery is NOT built this pass."* Moving it means:
 
-## Doing it
+- `apps/channels/turn.go` takes the bounded per-org pool, `runBridgeTurn`,
+  `bridgeReply`, the agent ref and the concurrency knobs
+- the adapters keep auth + parse + emit, and drop `bridgeSpawn`
+- integrations keeps what is genuinely its own: token custody, `OrgForExternalID`
+  (the isolation root), the account link, and the send doors
+- one thing to design, not skip: adapters acquire a pool slot **synchronously**
+  today so a capacity shed returns a retriable non-2xx *without burning the
+  platform's event id*. Once the pool lives in channels, the seam has to answer
+  taken/refused — `ChannelsIngestOut.Taken` exists for this — and emitting stops
+  being fire-and-forget.
+
+## Doing the connector half
 
 No migration, no alias, no compatibility window — there are no live connections
-to preserve, and `widenConnectionKey` (an in-place rebuild from an older key) is
-the accretion this replaces. Delete it with the rest.
+to preserve.
 
-1. One table above; drop `connectors` and `connections`, and `widenConnectionKey`.
-2. `Provider.Scope string` → `Provider.Scopes []string`. A connect naming a scope
+1. `Provider.Scope string` → `Provider.Scopes []string`. A connect naming a scope
    the provider does not permit is a 400, not a silent coercion.
-3. Fold the handlers: one `list`, one `get`, one `connect`, one `disconnect`, one
-   `verify`. GitHub's product routes (`installations`, `claim`, `repos`, `pages`)
-   are not generic connector verbs and stay their own surface under
-   `/v1/connectors/github/*`.
-4. Delete `/v1/integrations` and its manifest prefix. Update the console in the
-   same change — it is the only caller.
-5. `/v1/ai/connections` folds in; remove the duplicate `anthropic` registration.
+2. One `list`, one `get`, one `connect`, one `disconnect`, one `verify`. GitHub's
+   product routes (`installations`, `claim`, `repos`, `pages`) are not generic
+   connector verbs and stay their own surface.
+3. `/v1/ai/connections` folds in as category `AI`; `anthropic` is registered
+   twice today.
+4. The console is the only caller of the old paths.
+5. Every OAuth redirect URI moves from `/v1/integrations/<p>/callback` to
+   `/v1/connectors/<p>/callback`, so each provider's app registration needs
+   updating — Slack, GitHub, Cloudflare — before it ships.
 
 ## The tests that make it true
 
-- a user-scoped connection is INVISIBLE to another user in the same org
-- an org-scoped connection is visible to every member
-- a connect naming a scope the provider does not permit is refused
+- a user-scoped channel is INVISIBLE to another user in the same org
+- an org-scoped channel is visible to every member
 - one provider connected at both scopes yields two rows, and neither shadows the
   other
-- the org of a connection comes from the validated principal, never the body —
-  a caller that can name its own org can read another tenant's credential
+- disconnecting a scope leaves the other alone — the org disconnecting Google
+  must not sign a person out of their own
+- a connect naming a scope the provider does not permit is refused
 
-That last one is not hypothetical. Every security finding in this repo this week
-had the same shape: a credential that authenticated more than its design
-described, because an identity was carried to a general resolver instead of to
-the one handler that needed it.
+`scope_test.go` pins the first four. What is not yet pinned is the door.
 
-## Where this stands
-
-**Done and on main** (`87248144`): the store. One table keyed
-`(org, user, provider, label)`, `Connector` folded into `Connection`, `owner`
-became `label`, `widenConnectionKey` deleted. `List` answers what a principal may
-use; `Delete` names one account, `Disconnect` takes every account at a scope.
-Four tests pin Google-at-both-scopes, cross-user isolation, and that the org
-disconnecting does not sign a person out of their own.
-
-**Started, not landed** — the door fold. What was written and works:
-
-- every `/v1/integrations` path renamed to `/v1/connectors`, and the retired
-  prefix removed from `manifest.Apps` (one prefix, one owner)
-- `o.list` stopped skipping user-scope providers, so one catalog covers both
-- the second catalog (`o.connectors`, `o.connectorProviders`) deleted as dead
-- `connView` gained `Scope` ("org" | "user"), derived from the key, not stored
-- `providerView` gained `Connections []connView`, FILTERED to what the caller may
-  see — `c.User == "" || c.User == user`. That filter is the tenancy boundary and
-  is the line to review hardest.
-
-**What is left, and it is small but real:**
-
-1. `connectors_test.go` still asks the catalog for flat connection rows
-   (`list.Connectors`). They now live under `providers[].connections`, so the
-   test reads the wrong shape — update the test, not the response.
-2. Three `github_bind_test.go` cases 404 after the rename. Unresolved: the
-   callback path moved and something still points at the old one. Find the
-   registration rather than guessing — a 404 here means a route, not a policy.
-3. `/v1/ai/connections` still to fold in as category `AI`; `anthropic` is
-   registered twice today.
-4. The console is the only caller of the old paths.
-
-**Operational, before this ships:** every OAuth redirect URI changes from
-`/v1/integrations/<p>/callback` to `/v1/connectors/<p>/callback`, so each
-provider's app registration needs updating — Slack, GitHub, Cloudflare.
+**And a test can pass while the thing it names is dead.** The three tests that
+guarded the ingress seam registered a consumer in the same process and asserted
+delivery. They were green on every run for as long as production dropped every
+event. A test that only ever builds the co-resident case says nothing about the
+deployed one.
