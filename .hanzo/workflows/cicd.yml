@@ -158,22 +158,12 @@ jobs:
     # called workflow's jobs while scheduling sibling jobs in the same run, and
     # why naming an immutable tag prevents run construction when that tag demonstrably
     # carries .hanzo/workflows/build.yml. Both answers live in the forge, not here.
-    # THE SINGLE-HOP PATH, and the difference is whether this job gets a runner.
-    #
-    # `.hanzo/workflows/build.yml` is a FORWARDER — its one job is
-    # `uses: ./.github/workflows/build.yml` — so naming it makes gate a NESTED
-    # reusable call: cloud -> ci/.hanzo -> ci/.github. The forge does not schedule
-    # that second hop. It is the exact failure recorded above: runner_id 0, zero
-    # steps, ~32 min, failure, while `containment` succeeds on the same run against
-    # an idle fleet. No release has minted since v1.801.491.
-    #
-    # hanzoai/cli names this path and released v1.9.43, .44 and .45 on one day, so
-    # the single hop is not a theory. The forwarder's own header explains why it
-    # must live at .hanzo — github.com cannot resolve a local `uses: ./.hanzo/…` —
-    # but that constraint is about the CALLER's file, and this caller already lives
-    # at .hanzo/workflows. A cross-repo `uses:` names its path explicitly and both
-    # forges resolve it, which is what cli proves every day.
-    uses: hanzoai/ci/.github/workflows/build.yml@v1
+    # ci publishes the reusable at .hanzo/workflows/build.yml and NOWHERE ELSE.
+    # .github/workflows/build.yml was deleted upstream — present at v1.0.39, gone
+    # by v1.0.44, and `v1` now names v1.0.46 — so a caller pinning that path fails
+    # at InsertRun before a run row is written: no run, no red, and nothing to look
+    # at. Read the tag, not a local checkout; a stale worktree still shows the file.
+    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
     with:
       # Not on a tag: the tag is minted below only after this gate passed on main
       # AND the image built AND it smoked, so a tag build re-tests a proven
