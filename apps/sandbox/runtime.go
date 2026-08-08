@@ -26,6 +26,7 @@
 package sandbox
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -257,11 +258,17 @@ func (r *runtime) ready() error {
 // a pod is handed is decided by the identity that leased it, not by the bytes it
 // booted. So there is nothing here to defend against a caller who names the
 // admin image by hand — which checkImage already permits for every platform
-// image, for precisely this reason. That invariant is load-bearing: the day a
-// kubeconfig is wired in, it arrives at the pod from the identity, and it must
-// never arrive in a layer.
+// image, for precisely this reason.
+//
+// THAT INVARIANT IS NOW LOAD-BEARING RATHER THAN ANTICIPATED. The kubeconfig and
+// the DigitalOcean token exist, and they arrive at the POD from the identity that
+// leased it: the env of one pod, and one file written through the exec channel,
+// both built by cred.go on the SAME predicate this line reads. So naming the
+// admin image by hand still gets a caller exactly what it always did — kubectl
+// and doctl with nothing to reach — because nothing a caller can spell makes them
+// a SuperAdmin, and the credential was never in the layer to begin with.
 func (r *runtime) imageFor(class string, super bool) string {
-	if super && class == "dev" {
+	if admin(class, super) {
 		class = "admin"
 	}
 	if d := r.digestFor(class); d != "" {
@@ -567,7 +574,7 @@ func (r *runtime) pods() dynamic.ResourceInterface {
 // start creates the sandbox's volume (if it has one) and its pod, and waits for
 // the pod to be running. A create that returns before the sandbox can answer is
 // a create that hands the caller a 502 on its very next call.
-func (r *runtime) start(ctx context.Context, m Sandbox) error {
+func (r *runtime) start(ctx context.Context, m Sandbox, cr cred) error {
 	if err := r.ready(); err != nil {
 		return err
 	}
@@ -576,12 +583,53 @@ func (r *runtime) start(ctx context.Context, m Sandbox) error {
 			return err
 		}
 	}
-	if _, err := r.pods().Create(ctx, r.podSpec(m), metav1.CreateOptions{}); err != nil {
+	if _, err := r.pods().Create(ctx, r.podSpec(m, cr), metav1.CreateOptions{}); err != nil {
 		if !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("create pod: %w", err)
 		}
 	}
-	return r.waitRunning(ctx, m)
+	if err := r.waitRunning(ctx, m); err != nil {
+		return err
+	}
+	// THE KUBECONFIG ARRIVES LAST AND THROUGH THE EXEC CHANNEL, so it exists in
+	// the pod and in no Kubernetes object — see cred.go for why the bigger
+	// credential takes this route and the DO token does not. It is empty for every
+	// lease but a SuperAdmin's own, so this is one comparison for everybody else.
+	//
+	// A failure here FAILS THE LEASE. The caller gets the 503 and the row records
+	// why, which is the same shape a failed pod create already has; the
+	// alternative is a shell whose kubectl reaches nothing and only says so the
+	// first time somebody trusts it.
+	if len(cr.kube) == 0 {
+		return nil
+	}
+	res, err := r.put(ctx, m, kubePath, cr.kube)
+	if err != nil {
+		return fmt.Errorf("write kubeconfig: %w", err)
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("write kubeconfig: %s", strings.TrimSpace(res.Stderr))
+	}
+	return nil
+}
+
+// put writes one file into the pod. It is the mechanism UNDER the fs write verb —
+// `cat >` over the exec subresource, which is how `kubectl cp` has always worked —
+// stated once at the level where the path may be ours rather than a caller's.
+//
+// umask 077 because one of its two callers writes a credential and the other
+// cannot tell the difference: every process in a sandbox is uid 1000, so 0600 and
+// 0644 are indistinguishable from inside one, and only the stricter of the two is
+// also right for a kubeconfig.
+//
+// It answers the RESULT and not just an error, because its callers need different
+// halves of it: a transport failure is a bad gateway, a non-zero exit is a bad
+// path, and collapsing them would make the fs API blame the wrong side.
+func (r *runtime) put(ctx context.Context, m Sandbox, path string, data []byte) (ExecResult, error) {
+	q := shellQuote(path)
+	return r.exec(ctx, m, []string{"sh", "-c",
+		"umask 077 && mkdir -p -- \"$(dirname -- " + q + ")\" && cat > " + q},
+		bytes.NewReader(data), 0, nil)
 }
 
 // ensureVolume creates the project disk if it is not already there. A volume
@@ -639,7 +687,7 @@ func (r *runtime) ensureVolume(ctx context.Context, m Sandbox) error {
 }
 
 // podSpec is the sandbox, stated once.
-func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
+func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 	c := map[string]any{
 		"name":       container,
 		"image":      m.Image,
@@ -667,6 +715,27 @@ func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 			"allowPrivilegeEscalation": false,
 			"capabilities":             map[string]any{"drop": []any{"ALL"}},
 		},
+	}
+	// THE ONLY THING AN IDENTITY EVER PUTS IN A POD, and it is empty for every
+	// lease but one. cr.env is non-empty only on the `admin` branch — a
+	// SuperAdmin's own dev sandbox, cred.go — so this key is ABSENT, not empty,
+	// from every other sandbox's spec. Absent is the point: "a sandbox is handed
+	// nothing" stays a readable fact about the OBJECT rather than a claim about
+	// the code that built it.
+	//
+	// Sorted, because a Go map ranges in random order and a pod spec that differs
+	// run to run is one nothing can diff.
+	if len(cr.env) > 0 {
+		names := make([]string, 0, len(cr.env))
+		for k := range cr.env {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		env := make([]any, 0, len(names))
+		for _, k := range names {
+			env = append(env, map[string]any{"name": k, "value": cr.env[k]})
+		}
+		c["env"] = env
 	}
 	// `sleep infinity` and nothing else — the pod is a place to run commands, not
 	// a program. Every lifetime, from a one-shot invoke to a week-long session, is
@@ -699,6 +768,16 @@ func (r *runtime) podSpec(m Sandbox) *unstructured.Unstructured {
 		// service-account token in its filesystem is an API credential handed to
 		// that code. This is also why nothing else needs to strip credentials on
 		// the way in — there are none to strip.
+		//
+		// THIS STAYS TRUE NOW THAT ONE POD IS HANDED SOMETHING. What this line
+		// refuses is a token minted by KUBERNETES, for THIS namespace's service
+		// account, which the cluster would honour and which every sandbox would
+		// carry — an ambient credential nobody chose. A SuperAdmin's own shell
+		// carries that SuperAdmin's own DigitalOcean credentials (cred.go): a
+		// credential the person already holds, in a pod running only what they
+		// type, chosen by their identity at the moment they leased it. Different
+		// thing, and this one is still refused for every pod including that one.
+		//
 		// THE POD RUNS AS uid 1000, and fsGroup is why it can WRITE.
 		//
 		// The image ends `USER sandbox` (uid 1000). A mounted volume — the emptyDir
