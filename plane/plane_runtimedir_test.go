@@ -1,6 +1,7 @@
 package plane
 
 import (
+	"context"
 	"os"
 	"testing"
 )
@@ -38,5 +39,30 @@ func TestBindRuntimeDirIsIdempotentAndHonoursAnOverride(t *testing.T) {
 	}
 	if again := BindRuntimeDir(); again != "/explicit/run" {
 		t.Fatalf("idempotent: got %q", again)
+	}
+}
+
+// Reach must resolve WHERE sockets live before looking for one.
+//
+// It was the only entry point in this file that did not Bind, so it answered about
+// whatever directory zip had defaulted to. That is not academic: Serve binds when it
+// computes its listen addresses, which is AFTER every subsystem has mounted, so a
+// mount-time caller asked about /tmp while the fleet's sockets live under the data
+// dir — and got "not deployed here" for an app that is. The two sibling entry points
+// (Peer, Ask) have always bound; this asserts all three resolve one path.
+func TestReachResolvesTheSharedPathWithoutAPriorBind(t *testing.T) {
+	t.Setenv("ZIP_RUNTIME_DIR", "")
+	t.Setenv("CLOUD_RUN_DIR", t.TempDir())
+	t.Setenv("CLOUD_DATA_DIR", "")
+	t.Setenv("ZIP_ADDR", "") // no router: "no socket, no router" is a fast, real answer
+	Unbind()
+	t.Cleanup(Unbind)
+
+	// Nothing is listening anywhere, so the ANSWER is ErrNoPeer either way. What is
+	// under test is the DIRECTORY it looked in.
+	_ = Reach(context.Background(), "somepeer")
+
+	if got := os.Getenv("ZIP_RUNTIME_DIR"); got != os.Getenv("CLOUD_RUN_DIR") {
+		t.Fatalf("Reach looked in %q, want the cloud run dir %q — a mount-time caller would be told an app that IS deployed is not", got, os.Getenv("CLOUD_RUN_DIR"))
 	}
 }
