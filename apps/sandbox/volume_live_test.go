@@ -15,11 +15,11 @@ package sandbox
 // test is the proof and the negative control:
 //
 //	# the shared-filesystem way: the file MUST come back
-//	SANDBOX_LIVE=1 SANDBOX_RUNTIME_CLASS=gvisor \
+//	SANDBOX_LIVE=1 \   # fleet runtime = gvisor
 //	  go test ./apps/sandbox/ -run TestLiveLease -v
 //
 //	# the fast way: exec gets Firecracker, and no volume is anywhere near it
-//	SANDBOX_LIVE=1 SANDBOX_RUNTIME_CLASS=kata-fc \
+//	SANDBOX_LIVE=1 \   # fleet runtime = kata-fc
 //	  go test ./apps/sandbox/ -run TestLiveLease -v
 //
 // It drives the PLANE routes — lease_sandbox, run_in_sandbox, write, read,
@@ -105,7 +105,7 @@ func TestLiveLeaseKeepsWhatItPromisesToKeep(t *testing.T) {
 
 	project := fmt.Sprintf("fcproof%d", time.Now().Unix())
 	want := fmt.Sprintf("survived-%d", time.Now().UnixNano())
-	t.Logf("deployment runtime = %q (SANDBOX_RUNTIME_CLASS)", rt.runtimeClass)
+	t.Logf("fleet runtime = %q (settings: sandbox.runtime)", rt.preference(ctx))
 
 	// ---- THE VOLUME-BEARING WAY --------------------------------------------
 	// A project gives the sandbox a volume, and the volume is what decides the
@@ -179,10 +179,10 @@ func TestLiveLeaseKeepsWhatItPromisesToKeep(t *testing.T) {
 	}
 	exRC := runtimeOfPod(t, ctx, rt, ex.ID)
 	t.Logf("  runtimeClassName=%q", exRC)
-	if exRC != rt.runtimeClass {
-		t.Fatalf("volumeless exec landed on %q, but the deployment states %q — "+
-			"a sandbox with nothing to lose should take the deployment's runtime unchanged",
-			exRC, rt.runtimeClass)
+	if fleet := rt.preference(ctx); exRC != fleet {
+		t.Fatalf("volumeless exec landed on %q, but the fleet states %q — "+
+			"a sandbox with nothing to lose should take the fleet's runtime unchanged",
+			exRC, fleet)
 	}
 
 	// THE KERNEL IS THE CONTROL. A runtimeClassName is a label; a different
@@ -266,7 +266,7 @@ func volumePhase(t *testing.T, ctx context.Context, r *runtime, name string) str
 // directions: how long a lease takes to answer, and how fast the sandbox is once
 // it does. Run it under each runtime and read the two columns together.
 //
-//	SANDBOX_LIVE=1 SANDBOX_RUNTIME_CLASS=kata-fc \
+//	SANDBOX_LIVE=1 \   # fleet runtime = kata-fc
 //	  go test ./apps/sandbox/ -run TestLiveLeaseCost -v -timeout 20m
 func TestLiveLeaseCost(t *testing.T) {
 	if os.Getenv("SANDBOX_LIVE") != "1" {
@@ -288,7 +288,7 @@ func TestLiveLeaseCost(t *testing.T) {
 		`s=$(date +%s%N) && git status --porcelain >/dev/null && e=$(date +%s%N) && ` +
 		`echo "git_status_ms=$(( (e-s)/1000000 ))"`
 
-	t.Logf("runtime=%q  rounds=%d", rt.runtimeClass, rounds)
+	t.Logf("runtime=%q  rounds=%d", rt.preference(context.Background()), rounds)
 	for i := 0; i < rounds; i++ {
 		m, dLease := post[plane.Leased](t, app, "/v1/sandboxes/lease", org,
 			plane.LeaseIn{Class: "exec", TTLSec: 600})
@@ -310,7 +310,7 @@ func ctx0() context.Context { return context.Background() }
 func runtimeOfPodOrGone(ctx context.Context, r *runtime, id string) string {
 	u, err := r.pods().Get(ctx, podName(id), metav1.GetOptions{})
 	if err != nil {
-		return r.runtimeClass + "(gone)"
+		return r.preference(ctx) + "(gone)"
 	}
 	rc, _, _ := unstructured.NestedString(u.Object, "spec", "runtimeClassName")
 	return rc

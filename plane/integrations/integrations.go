@@ -30,7 +30,15 @@ const App = "integrations"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.IntegrationsConnection,
 	plane.IntegrationsSlackSend,
+}
+
+// IntegrationsConnection whether the caller's org has connected a provider.
+//
+// Calls plane.IntegrationsConnection on integrations over the peer plane.
+func IntegrationsConnection(ctx context.Context, in *plane.ConnectionIn) (*plane.Connection, error) {
+	return plane.Ask[plane.ConnectionIn, plane.Connection](ctx, App, plane.IntegrationsConnection, in)
 }
 
 // IntegrationsSlackSend post to an org's Slack channel via the org's KMS-custodied bot token.

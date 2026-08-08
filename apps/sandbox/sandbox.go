@@ -160,14 +160,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// A runtime that cannot serve says so ONCE AND IN FULL, at startup. `cluster:
 	// false` alone is a symptom with the cause stripped off, and the two causes
 	// read nothing alike: a cluster we cannot reach is an outage to page on, a
-	// SANDBOX_RUNTIME_CLASS the table has never heard of is a typo to fix. Both
+	// fleet runtime the table has never heard of is a typo to fix. Both
 	// fail every lease closed; only one of them is anybody's fault.
 	if err := s.State.rt.ready(); err != nil {
 		s.Log.Error("sandbox cannot serve", "why", err)
 	}
 	s.Log.Info("sandbox mounted",
 		"namespace", s.State.rt.ns, "image", s.State.rt.image,
-		"runtimeClass", s.State.rt.runtimeClass, "bare", s.State.rt.bare,
+		"bare", s.State.rt.bare,
 		"cluster", s.State.rt.ready() == nil,
 		"reapEvery", reapEvery, "idleAfter", idleAfter)
 	return nil
