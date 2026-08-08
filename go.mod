@@ -72,7 +72,6 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
@@ -690,7 +689,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.832.44
+	github.com/hanzoai/ai v1.832.45
 	github.com/hanzoai/authz v1.10.29
 	github.com/hanzoai/base v1.5.17
 	github.com/hanzoai/licensing v0.1.10
