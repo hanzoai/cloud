@@ -330,7 +330,34 @@ var errBound = errors.New("provider account is bound to another org")
 // hold an account twice: once for the org and once for a person. That is the user
 // column doing its job and it stays legal.
 func (s *Store) Upsert(ctx context.Context, c Connection) error {
-	if strings.TrimSpace(c.ExternalID) != "" {
+	return s.write(ctx, c, false)
+}
+
+// Share stores a connection that a DIFFERENT org may already hold — the same
+// provider account reachable from more than one of our own orgs.
+//
+// It exists because "one account belongs to one tenant" is the right default and
+// the wrong absolute. The GitHub org `luxfi` is developed from the `hanzo` org and
+// is also Lux's own; binding it once means one of those two contexts cannot see its
+// own repositories. So the same installation may be held by several orgs.
+//
+// It is a SEPARATE FUNCTION rather than a flag on Upsert, and that is the whole
+// safety argument. The App here is Hanzo's own, so a customer installs it on THEIR
+// GitHub org — and if exclusivity were merely a parameter, any caller that passed
+// the wrong value would let one tenant claim another tenant's installation and read
+// their private repositories. A caller reaches this by naming it, so the one call
+// site that may is visible, and everything else keeps the refusal by construction.
+//
+// The only caller is the platform-sudo claim path. A tenant's self-service connect
+// goes through Upsert and still cannot take an account another org holds.
+func (s *Store) Share(ctx context.Context, c Connection) error {
+	return s.write(ctx, c, true)
+}
+
+// write is the ONE statement every connection passes through; shared says whether
+// an account another org holds is permitted.
+func (s *Store) write(ctx context.Context, c Connection, shared bool) error {
+	if !shared && strings.TrimSpace(c.ExternalID) != "" {
 		var other string
 		err := s.db.QueryRowContext(ctx,
 			`SELECT org FROM connections WHERE provider=? AND external_id=? AND org<>? LIMIT 1`,
