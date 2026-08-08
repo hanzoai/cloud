@@ -125,6 +125,15 @@ func Peer(app string) (*zip.Conn, error) {
 // budget expires mid-start still fails closed, and the child it asked for keeps
 // coming up (the host single-flights the start), so the next call finds it.
 func Reach(ctx context.Context, app string) error {
+	// Resolve WHERE sockets live before looking for one, exactly as Peer and Ask do.
+	// It was the only entry point here that did not, so it answered about whatever
+	// directory zip had defaulted to — and a caller that ran before the host bound
+	// one looked in /tmp for a socket that lives on the data volume, found nothing,
+	// and concluded the app was not deployed. Serve does not bind until it computes
+	// its listen addresses, which is AFTER every subsystem has mounted, so every
+	// mount-time caller is exactly that shape. Idempotent, and an operator's own
+	// ZIP_RUNTIME_DIR still wins.
+	Bind()
 	up, err := Listening(zip.SocketPath(app))
 	if err != nil {
 		return fmt.Errorf("reach %s: %w", app, err)
