@@ -16,14 +16,13 @@
 # root key from its own environment and hands it to the kms broker child alone —
 # see cmd/cloud.
 #
-# ── prebuilt decomplection artifacts (cloud compiles ONLY Go) ────────────────
-# The agent-skills catalog is built by ITS OWN CI as a versioned immutable image
-# and PULLED here, instead of rebuilding python from scratch every cloud release.
-#   agent-skills  (hanzoai/openapi Dockerfile.skills) → /catalog → apps/skills/catalog (go:embed)
-# Pinned to ghcr.io so BOTH buildx lanes (release.yml + platform arcbuild) pull
-# it directly; the SAME tags are mirrored to registry.hanzo.ai (S3-backed) for
-# GET-flow consumers (docker/kaniko/crane). Override the pin with
-# --build-arg SKILLS_IMAGE=… .
+# ── the skills catalog is source, not an artifact ────────────────────────────
+# apps/skills/catalog is TRACKED whole: 528 skills x 3 brands of markdown that
+# //go:embed bakes in. It arrived here as a container image until a package
+# permission on that image stopped 28 commits from building — a registry 403
+# standing between this repo and its own text. `make skills` regenerates it from
+# hanzoai/openapi; the diff is readable, which is the point of prose an agent
+# follows. Cloud still compiles only Go.
 #
 # IMMUTABLE per-commit tags, never `:latest`. This default is LOAD-BEARING: the
 # builder that actually runs our releases is the native one (POST /v1/runner →
@@ -58,8 +57,6 @@
 # Deployment. Learned the expensive way — console:v8.5.59 was built, pinned and
 # rolled to Ready, and served no one. Rolling that Deployment reaches nobody;
 # publishing a `hanzo-console` site release is what reaches users.
-ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
-
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
 # GHCR mirror (ghcr.io/hanzoai/mirror/*), pinned by digest. WHY: public.ecr.aws
 # rate-limits anonymous pulls (HTTP 429) on shared CI runners and a 429 on ANY
@@ -70,9 +67,6 @@ ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 # ghcr.io/hanzoai/mirror/<name>:<tag> and repoint the digest below. Canonical
 # long-term home is registry.hanzo.ai/hanzoai/mirror/* — repoint once the runners
 # carry its IAM pull credentials (follow-up).
-
-# ── agent-skills catalog (prebuilt → /catalog) ──────────────────────────────
-FROM ${SKILLS_IMAGE} AS skills
 
 FROM ghcr.io/hanzoai/mirror/golang:1.26.5-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS build
 # go.mod is the ONE place the Go version is declared.
@@ -162,24 +156,11 @@ RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
 COPY . .
 # NO console overlay. The console is not in this binary — it is the active release
 # of a published site, fetched at boot (webui/release). See the header.
-# Overlay the FULL agent-skills catalog before `go build` so //go:embed all:catalog
-# bakes the complete set (all services × brands), not the committed `ai` fallback.
-#
-# The path is apps/skills/catalog because that is where the embed is
-# (apps/skills/skills.go). It read apps/skills/catalog until
-# now — the pre-f873d1a1 home of every subsystem — and COPY CREATES a missing
-# destination, so the overlay landed in a directory no package embeds and nothing
-# anywhere disagreed. Every image since that move has shipped the tracked fallback
-# instead: one skill (ai_models) per brand, served as the whole of
-# /.well-known/agent-skills/index.json. The RUN below is the gate that was missing.
-COPY --from=skills /catalog/ /src/apps/skills/catalog/
-# RED gate — the overlay landed WHERE THE EMBED READS. The COPY above writes into
-# a tracked fallback that exists precisely so a bare `go build` works, and `COPY`
-# creates a missing destination rather than failing — so a stale path is not an
-# error, it is a silently smaller binary. That is the whole failure above, and it
-# survived because the only evidence was a number in a served document. Asserted
-# here, where the destination is named, in the terms the fallback is defined by
-# rather than a file count that drifts: the fallback is ONE skill per brand.
+# RED gate — the catalog is the full set, not a stub. This once guarded an
+# overlay that could miss its embed path; it now guards the tracked files, which
+# is the same question asked of a thing that cannot silently move. A one-skill
+# hanzo/index.json means someone re-stubbed the catalog, and the only evidence
+# would otherwise be a number in a served document.
 #
 # The CONSOLE half of this gate is gone with the thing it guarded. It asserted
 # that webui/dist carried JavaScript, because an overlay that missed its embed
@@ -190,8 +171,8 @@ COPY --from=skills /catalog/ /src/apps/skills/catalog/
 # which the binary refuses to boot without (cmd/cloud) and re-checks on a poll.
 RUN set -eu; \
     n="$(sed -n 's/.*"skill_count":[[:space:]]*\([0-9]*\).*/\1/p' /src/apps/skills/catalog/hanzo/index.json)"; \
-    [ "${n:-0}" -gt 1 ] || { echo "SKILLS-GATE FAIL: apps/skills/catalog holds the ${n:-0}-skill fallback — the overlay missed the //go:embed path"; exit 1; }; \
-    echo ">> overlay landed: $n skills/brand"
+    [ "${n:-0}" -gt 1 ] || { echo "SKILLS-GATE FAIL: apps/skills/catalog holds ${n:-0} skills — run \`make skills\` to regenerate it from hanzoai/openapi"; exit 1; }; \
+    echo ">> catalog: $n skills/brand"
 # RED gate — modernc double-registration guard: 0 modernc under CGO=1 ACROSS EVERY
 # per-app binary, else the "sqlite" driver is registered twice (mattn + modernc) →
 # panic at init. The fused monolith that this once checked is gone; the union of
