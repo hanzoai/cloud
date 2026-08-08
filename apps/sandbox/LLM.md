@@ -89,3 +89,46 @@ tenant gets gVisor and our own agents get runc.
   image store and takes ~188s to unpack. A negative control (kata-clh, which uses
   no devmapper) came within 15% of kata-fc, so the microVM costs ~4x and the pool
   is ~15% of that. Do not conflate launch latency with the runtime.
+
+## Why chat has no computer, and the one-line reason
+
+`apps/agents` is the chat brain and reaches no sandbox. `apps/coding` has the
+sandbox and no chat. Slack bridges them with a literal prefix:
+
+```go
+if !strings.EqualFold(t[:len("code:")], "code:") { return "", false }
+```
+
+`@hanzo code: repo fix the bug` gets a machine. `@hanzo fix the bug in repo`
+gets a model with no machine. hanzo.app and hanzo.chat do not have the magic
+word at all, which is the whole of why they are not computer-using.
+
+**The cause is one fact: `apps/coding` registers ZERO typed ops.** The agent's
+tools come from the one registry —
+
+```go
+for _, t := range tools.Default().List(ctx, tools.Scope{Org: org}) {
+    if !wanted[t.Name] || !t.Dispatchable || !t.Activated { continue }
+```
+
+— so anything in the registry that the agent's list names is callable, and the
+sandbox is not in the registry. A keyword gate got bolted on beside the brain
+because the brain had no way to reach it. Same shape as bridge.go beside
+channels, and the two doors beside one connector registry.
+
+**The fix is structural, not an integration.** Give coding a typed op and it
+lands in the registry, becomes a tool, and every surface — Slack, hanzo.app,
+hanzo.chat, MCP — reaches it through the one brain. `codingIntent` then deletes,
+and the model decides what a model should decide.
+
+The input is NOT RunRequest. That type carries `CredToken`, and a tool schema
+the model fills in must never be able to name a credential:
+
+```go
+type CodeRunIn  struct { Repo, Task, Tool, Branch string; Desktop bool }
+type CodeRunOut struct { RunID, Status, Output, Branch, URL string }
+```
+
+The org's GitHub credential is resolved on the ANSWERING side from its
+connection row — the same rule the rest of this file is about. An agent says
+what to do; it never says what to authenticate as.
