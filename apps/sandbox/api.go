@@ -223,6 +223,26 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	}
 	m.ExpiresAt = now + int64(ttl)
 
+	// THE RUN'S INFERENCE CREDENTIAL, minted with the lease and expiring with it.
+	//
+	// A pod running model-authored code must never hold the caller's own bearer:
+	// indirect prompt injection makes the page being read the instruction source,
+	// so whatever the pod holds, the text it reads can spend. This grant
+	// authorises one thing — ask a model, billed to this org — and dies when the
+	// lease does. See grant.go.
+	//
+	// Minted HERE rather than on first use because the lease is the bound: the
+	// credential and the thing it is scoped to are created in one place, so they
+	// cannot disagree about when they end. A mint failure is not fatal to the
+	// sandbox — the pod is still useful for exec and fs — so it is recorded on the
+	// row and the run simply has no model, which is a visible state rather than a
+	// silent one.
+	if tok, err := s.State.grants.mint(time.Now(), org, m.ID, time.Unix(m.ExpiresAt, 0)); err == nil {
+		m.Grant = tok
+	} else {
+		s.Log.Warn("sandbox: no inference grant minted", "sandbox", m.ID, "err", err)
+	}
+
 	if err := store.Put(ctx, m); err != nil {
 		return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "put: %v", err)
 	}
