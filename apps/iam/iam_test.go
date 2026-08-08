@@ -80,7 +80,7 @@ func TestDBLifecycleAndStore(t *testing.T) {
 	}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
+	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: dataDirWithStore(t)}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
