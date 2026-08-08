@@ -328,6 +328,13 @@ const (
 	// turn ran as nobody.
 	ChatIdentity = "chat_identity"
 
+	// ChatSend posts one message back to a chat platform. Token custody lives in
+	// integrations — the per-org bot token IS the tenancy gate — so the send has
+	// to happen there and only the intent crosses. The four Send* helpers are Go
+	// calls gated on that package's `mounted` global, which is nil in the process
+	// that now runs the turn: channels could receive and never reply.
+	ChatSend = "chat_send"
+
 	// ChannelsRecent reads the last turns of ONE room back out of the inbox, so a
 	// chat bridge can answer with the conversation in front of it instead of a
 	// single message.
@@ -2015,6 +2022,23 @@ type Ownership struct {
 // Org is resolved by the adapter via OrgForExternalID on a signature-VERIFIED
 // payload — never a client-supplied field — and is the isolation root: a
 // workspace's events reach only the org that connected that workspace.
+// ChatSendIn is one outbound message. Provider picks the transport on the
+// ANSWERING side, where the org's token for it lives; nothing here names a
+// credential.
+type ChatSendIn struct {
+	Org      string `json:"org"`
+	Provider string `json:"provider"`
+	Room     string `json:"room"`      // channel / conversation / chat id
+	ReplyTo  string `json:"reply_to"`  // thread or message to reply under, "" when unthreaded
+	Root     string `json:"root"`      // transport-verified reply root (Teams' serviceURL), "" elsewhere
+	Text     string `json:"text"`
+}
+
+// ChatSendOut carries the platform's id for the message, when it gives one.
+type ChatSendOut struct {
+	MessageID string `json:"message_id"`
+}
+
 // ChatIdentityIn names one chat user at one workspace. The org is the isolation
 // root the adapter already resolved from a signature-verified payload.
 type ChatIdentityIn struct {
