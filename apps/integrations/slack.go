@@ -193,7 +193,7 @@ func slackExchange(ctx context.Context, creds OAuthConfig, redirectURI, code str
 		"redirect_uri":  {redirectURI},
 	}
 	var r slackOAuthResponse
-	if err := slackPostForm(ctx, slackWebAPIBase+"/oauth.v2.access", form, &r); err != nil {
+	if err := slackPostForm(ctx, "", slackWebAPIBase+"/oauth.v2.access", form, &r); err != nil {
 		return nil, err
 	}
 	if !r.OK {
@@ -223,7 +223,7 @@ func slackRevoke(ctx context.Context, _ OAuthConfig, token string) error {
 		Error   string `json:"error"`
 		Revoked bool   `json:"revoked"`
 	}
-	if err := slackPostForm(ctx, slackWebAPIBase+"/auth.revoke", url.Values{"token": {token}}, &r); err != nil {
+	if err := slackPostForm(ctx, "", slackWebAPIBase+"/auth.revoke", url.Values{"token": {token}}, &r); err != nil {
 		return err
 	}
 	if !r.OK {
@@ -235,13 +235,21 @@ func slackRevoke(ctx context.Context, _ OAuthConfig, token string) error {
 // slackPostForm POSTs an application/x-www-form-urlencoded body and decodes the
 // JSON response into out. Bounded body read (Slack responses are small) so a
 // hostile/oversized response can't exhaust memory.
-func slackPostForm(ctx context.Context, endpoint string, form url.Values, out any) error {
+// bearer is the bot token for a method that authenticates as the app, and empty
+// for the OAuth endpoints, which carry their credentials in the form itself.
+// Slack's read methods (conversations.*) take form encoding only and want the
+// token in the header, so the one form poster carries it rather than a second one
+// growing beside it. It is never logged.
+func slackPostForm(ctx context.Context, bearer, endpoint string, form url.Values, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return fmt.Errorf("slack request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
 	resp, err := slackHTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("slack call: %w", err)
