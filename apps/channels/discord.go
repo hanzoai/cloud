@@ -8,6 +8,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/integrations"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // discord.go is the Discord transport: envelope normalization from the
@@ -33,8 +34,8 @@ var discordTransport = transport{
 // discordNormalize maps a Discord Inbound (ExternalID = guild id, DedupeKey =
 // interaction id) into the envelope. The ingress is guild slash commands
 // only, so every room is a group.
-func discordNormalize(ev integrations.IngressEvent) (Message, bool) {
-	in := ev.In
+func discordNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
+	in := ev
 	return Message{
 		Channel:     "discord",
 		Account:     strings.ToLower(in.ExternalID),
