@@ -158,19 +158,6 @@ func sweep(ctx context.Context, s *cloud.Service[state]) {
 // end retires a sandbox whose lease is over: the pod goes, the row goes, the
 // volume stays.
 func end(ctx context.Context, s *cloud.Service[state], st *Store, m Sandbox, why string) {
-	// THE CREDENTIAL DIES FIRST, and before anything that can fail.
-	//
-	// Expiry alone would get there eventually, and eventually is the gap: a
-	// sandbox ended EARLY — a finished run, a user who stopped it, the idle
-	// sweep — would otherwise leave a working inference grant for the rest of its
-	// window, belonging to a pod that no longer exists. Revoking here makes "the
-	// sandbox is over" and "its credential is worthless" one event rather than two
-	// that usually coincide.
-	//
-	// First, because stop() and Delete() can both fail and this must not be
-	// skipped when they do: a sandbox we could not tear down is precisely the one
-	// whose credential should already be dead.
-	s.State.grants.revoke(m.ID)
 	if serr := s.State.rt.stop(ctx, m); serr != nil {
 		s.Log.Warn("reap: stop", "id", m.ID, "err", serr)
 	}
