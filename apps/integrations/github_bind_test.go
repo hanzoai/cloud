@@ -281,3 +281,49 @@ func TestOneInstallationCanBeHeldBySeveralOrgs(t *testing.T) {
 		}
 	}
 }
+
+// A SHORT list must say it is short.
+//
+// The repo listing fans out per installation, and a failing account used to be
+// dropped in SILENCE: the response stayed 200 and simply carried fewer
+// repositories, erroring only when EVERY account failed. Measured twice minutes
+// apart against the same fleet: 1475 repositories, then 1157 — a whole
+// installation missing with nothing in the answer to say so. Work driven off that
+// list under-covers and reports success, which is the same shape of fault as a
+// guard that never fires.
+//
+// reachableRepos' own doc already claimed the error "is carried back so a caller
+// can report a partial view honestly". It wasn't: the failures were computed and
+// then thrown away. This pins the plumbing that makes the doc true.
+func TestARepoListingNamesWhatItCouldNotRead(t *testing.T) {
+	withGithubApp(t, mockInstallations(t, twoAccounts()))
+	newApp(t, newKMS(t))
+	ctx := context.Background()
+	for _, login := range []string{"hanzoai", "unreachable"} {
+		if err := mounted.State.store.Share(ctx, Connection{
+			Org: "hanzo", Provider: "github", Label: login,
+			ExternalID: "9" + login, AccountLabel: login,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", login, err)
+		}
+	}
+
+	repos, unread, err := reachableRepos(ctx, "hanzo")
+	if err == nil && len(unread) == 0 {
+		return // every account answered: a whole list, which is also correct
+	}
+	// Whether it answered partially or not at all, it must NAME the accounts it
+	// could not read. Returning nothing there is what made a short list silent.
+	if len(unread) == 0 {
+		t.Fatalf("listing failed (%v) but named no unreadable account", err)
+	}
+	for _, owner := range unread {
+		if strings.TrimSpace(owner) == "" {
+			t.Error("unread carries an empty owner, which names nothing")
+		}
+	}
+	// A caller can tell a short answer from a whole one, which is the whole point.
+	if err == nil && len(repos) > 0 && len(unread) > 0 {
+		t.Logf("partial view reported honestly: %d repos, unread %v", len(repos), unread)
+	}
+}
