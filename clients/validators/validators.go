@@ -217,7 +217,10 @@ func provisionValidator(s *cloud.Service[state], c *zip.Ctx) error {
 
 	// 3) On-chain ownership: the recovered wallet must own Validator-tier NFT
 	// #tokenId on Ethereum mainnet.
-	if err := s.State.nft.verifyOwnership(ctx, body.TokenID, addr); err != nil {
+	// The observation is recorded with the claim so it stays citable: an attestation
+	// over it commits to the same fact anyone else can re-check.
+	obs, err := s.State.nft.verifyOwnership(ctx, body.TokenID, addr)
+	if err != nil {
 		return zip.ErrForbidden(err.Error())
 	}
 
@@ -246,17 +249,20 @@ func provisionValidator(s *cloud.Service[state], c *zip.Ctx) error {
 	name := crName(org, body.TokenID)
 	ns := envOr("VALIDATORS_NAMESPACE", "lux-validators")
 	slot := Slot{
-		TokenID:   body.TokenID,
-		Org:       org,
-		Wallet:    strings.ToLower(addr.Hex()),
-		NodeID:    id.NodeID,
-		KMSRef:    kmsBase,
-		CRName:    name,
-		Namespace: ns,
-		BLSPubkey: id.BLSPubkeyHex,
-		Status:    "provisioning",
-		CreatedAt: now.Unix(),
-		UpdatedAt: now.Unix(),
+		TokenID:    body.TokenID,
+		Org:        org,
+		Wallet:     strings.ToLower(addr.Hex()),
+		NodeID:     id.NodeID,
+		KMSRef:     kmsBase,
+		CRName:     name,
+		Namespace:  ns,
+		BLSPubkey:  id.BLSPubkeyHex,
+		Chain:      obs.Chain,
+		Collection: obs.Collection,
+		OwnedAt:    obs.Block,
+		Status:     "provisioning",
+		CreatedAt:  now.Unix(),
+		UpdatedAt:  now.Unix(),
 	}
 	if _, err := s.State.store.ClaimSlot(ctx, slot); err != nil {
 		if err == errConflict {
