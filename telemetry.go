@@ -55,6 +55,7 @@ package cloud
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -342,9 +343,30 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 		// luxfi/trace owns the ZAP span wire; it speaks exactly what o11y's
 		// zapreceiver decodes, so the same bytes reach a co-located plugin, a
 		// sidecar or the fleet collector.
+		// THE ZAP NODE IDENTITY IS PER PROCESS, AND service.name IS NOT.
+		//
+		// luxtrace builds the wire's node id as "trace-"+<this argument>
+		// (exporter_zap.go), and ZAP admits ONE connection per identity. This
+		// binary re-execs itself as ~110 plugin subprocesses which all read the
+		// same OTEL_SERVICE_NAME, so passing serviceName made every one of them
+		// claim "trace-hanzo-cloud" and lose a race for the same slot: measured
+		// 119 nodes started under that one id, 240 "telemetry export stopped"
+		// against 42 that held. The losers drop their spans silently — which is
+		// why event.span holds millions of HTTP rows and has NEVER held a single
+		// `chat {model}` or `agent.run` span, though both are instrumented.
+		//
+		// The pid is what makes this correct rather than conventional: two plugins
+		// could share a name, and a future caller cannot forget to be unique.
+		// serviceName still names the SERVICE on the resource, so the console
+		// groups every process under hanzo-cloud exactly as before — one is the
+		// transport's identity, the other is the telemetry's subject, and they
+		// were only ever the same string by accident.
+		//
+		// Metrics already worked for this reason: their node ids are per-app.
+		nodeIdentity := fmt.Sprintf("%s-%d", serviceName, os.Getpid())
 		w, err := luxtrace.NewZAPExporter(
 			luxtrace.ExporterConfig{Type: luxtrace.ZAP, Endpoint: wireEndpoint},
-			serviceName, "",
+			nodeIdentity, "",
 		)
 		if err != nil {
 			log.Warn("ZAP wire exporter unavailable; co-resident sink only", "endpoint", wireEndpoint, "err", err)
