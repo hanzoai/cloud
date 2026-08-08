@@ -684,7 +684,7 @@ func linkService(store cloud.KMSClient) *cloud.Service[state] {
 	return s
 }
 
-// An UNLINKED person gets the link prompt the bridge already writes — and nothing
+// An UNLINKED person gets the link prompt the channel already writes — and nothing
 // runs. A command is the linked person's, so there is no identity to fall back
 // to: not the workspace's bot token, not the service's own. (The caller delivers
 // every answer on this branch ephemerally; slackSlashTurn states that once.)

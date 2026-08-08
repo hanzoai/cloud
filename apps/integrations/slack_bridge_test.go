@@ -308,7 +308,7 @@ func TestSlackBridgeOrgIsolation(t *testing.T) {
 	}
 
 	// END TO END: an app_mention from TACME (valid HMAC), an UNLINKED user → the
-	// link prompt is posted EPHEMERALLY with ACME's bot token. If the bridge ever
+	// link prompt is posted EPHEMERALLY with ACME's bot token. If the channel ever
 	// resolved the wrong org, the captured bearer would be globex's — an isolation
 	// breach — or the post would never fire.
 	body := `{"type":"event_callback","team_id":"TACME","event_id":"EvIso1","event":{"type":"app_mention","user":"Uacme","text":"<@BACME> hi","channel":"C1","ts":"9.9"}}`
@@ -594,16 +594,16 @@ func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	slackBridgeReady(mounted)
 
-	// Swap in a cap-1 limiter on the SHARED bridge pool, then saturate it so the next
+	// Swap in a cap-1 limiter on the SHARED channel pool, then saturate it so the next
 	// handler acquire sheds.
-	saved := bridgeLim
-	bridgeLim = newOrgLimiter(1, 1)
-	t.Cleanup(func() { bridgeLim = saved })
+	saved := channelLim
+	channelLim = newOrgLimiter(1, 1)
+	t.Cleanup(func() { channelLim = saved })
 
 	if cb := connectSlack(t, app, "shedorg", "acmecode"); cb.Code != http.StatusFound {
 		t.Fatalf("connect: %d (%s)", cb.Code, cb.Body)
 	}
-	if !bridgeLim.acquire("shedorg") {
+	if !channelLim.acquire("shedorg") {
 		t.Fatal("precondition: fill the cap-1 pool")
 	}
 
@@ -634,24 +634,24 @@ func TestSlackTurnPanicRecoveredAndSlotReleased(t *testing.T) {
 	newApp(t, newKMS(t))
 	slackBridgeReady(mounted)
 
-	saved := bridgeLim
-	bridgeLim = newOrgLimiter(1, 1)
-	t.Cleanup(func() { bridgeLim = saved })
+	saved := channelLim
+	channelLim = newOrgLimiter(1, 1)
+	t.Cleanup(func() { channelLim = saved })
 
 	const org = "panicorg"
 	// Simulate the handler acquiring the single slot, then hand a PANICKING turn to
-	// bridgeSpawn (which owns the release).
-	if !bridgeLim.acquire(org) {
+	// channelSpawn (which owns the release).
+	if !channelLim.acquire(org) {
 		t.Fatal("precondition: acquire the single slot")
 	}
-	bridgeSpawn(mounted, org, func() { panic("boom in a slack turn") })
+	channelSpawn(mounted, org, func() { panic("boom in a slack turn") })
 
 	// The recovered goroutine must release its slot; poll until a fresh acquire
 	// succeeds. Reaching here at all proves the panic did not crash the process.
 	released := false
 	for i := 0; i < 400; i++ {
-		if bridgeLim.acquire(org) {
-			bridgeLim.release(org)
+		if channelLim.acquire(org) {
+			channelLim.release(org)
 			released = true
 			break
 		}

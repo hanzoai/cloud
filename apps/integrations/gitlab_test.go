@@ -11,7 +11,7 @@ import (
 )
 
 // TestGitLabRegisteredProvider proves the gitlab provider is on the registry with
-// the contract the git-sync bridge depends on: id "gitlab", the two token secret
+// the contract the git-sync channel depends on: id "gitlab", the two token secret
 // names, and a callback path that matches the generic dispatcher (the one the
 // GitLab app's Callback URL points at).
 func TestGitLabRegisteredProvider(t *testing.T) {

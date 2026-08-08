@@ -16,7 +16,7 @@ import (
 
 // discord_link.go is Discord's per-user account link: the PLATFORM-IDENTIFY leg is
 // Discord OAuth2 `identify` (Discord proves which Discord user is linking), then the
-// shared hanzo.id OIDC leg (bridge_link.go):
+// shared hanzo.id OIDC leg (channel_link.go):
 //
 //	GET /v1/integrations/discord/link           leg1: set __Host init cookie, redirect to Discord identify
 //	GET /v1/integrations/discord/link/discord    leg2: Discord callback; verify user, bind (guild,discordUser)
@@ -48,7 +48,7 @@ func discordLinkURL(s *cloud.Service[state], guildID, _user string) (string, err
 // ── leg 1: redirect to Discord identify ─────────────────────────────────────
 
 func discordLink(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	if !discordLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -80,7 +80,7 @@ func discordLink(s *cloud.Service[state], c *zip.Ctx) error {
 // ── leg 2: Discord identify callback ────────────────────────────────────────
 
 func discordLinkDiscord(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	if !discordLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -134,7 +134,7 @@ func discordLinkDiscord(s *cloud.Service[state], c *zip.Ctx) error {
 // ── leg 3: hanzo.id OIDC callback (bind Discord↔Hanzo) ──────────────────────
 
 func discordLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	if !discordLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -187,7 +187,7 @@ func discordLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
 		clearLinkCookie(c, discordOIDCCookie)
 		return zip.ErrBadRequest("link failed")
 	}
-	if bridgeSeen.seenAndAdd(nonce, time.Time{}) {
+	if channelSeen.seenAndAdd(nonce, time.Time{}) {
 		clearLinkCookie(c, discordOIDCCookie)
 		return zip.ErrBadRequest("link already used")
 	}
@@ -209,7 +209,7 @@ func discordLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
 	clearLinkCookie(c, discordOIDCCookie)
 	s.Log.Info("discord: user linked", "guild", guildID, "discordUser", discordUser) // no token
 	c.Fiber().Status(http.StatusOK).Type("html")
-	return c.Fiber().SendString(bridgeLinkedHTML("Discord"))
+	return c.Fiber().SendString(channelLinkedHTML("Discord"))
 }
 
 func discordLinkDiscordURI(s *cloud.Service[state]) string {
@@ -239,12 +239,12 @@ func discordExchangeIdentify(ctx context.Context, code, redirectURI string) (dis
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := bridgeHTTP.Do(req)
+	resp, err := channelHTTP.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, bridgeMaxBody))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, channelMaxBody))
 	if resp.StatusCode/100 != 2 {
 		return "", fmt.Errorf("discord token http %d", resp.StatusCode)
 	}
@@ -263,7 +263,7 @@ func discordExchangeIdentify(ctx context.Context, code, redirectURI string) (dis
 		return "", err
 	}
 	meReq.Header.Set("Authorization", "Bearer "+tok.AccessToken)
-	meResp, err := bridgeHTTP.Do(meReq)
+	meResp, err := channelHTTP.Do(meReq)
 	if err != nil {
 		return "", err
 	}
@@ -274,7 +274,7 @@ func discordExchangeIdentify(ctx context.Context, code, redirectURI string) (dis
 	var me struct {
 		ID string `json:"id"`
 	}
-	if err := json.NewDecoder(io.LimitReader(meResp.Body, bridgeMaxBody)).Decode(&me); err != nil {
+	if err := json.NewDecoder(io.LimitReader(meResp.Body, channelMaxBody)).Decode(&me); err != nil {
 		return "", err
 	}
 	if me.ID == "" {

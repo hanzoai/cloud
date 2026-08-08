@@ -23,7 +23,7 @@ import (
 // (provider-agnostic) and are reused by the Slack primitives too (no redeclaration).
 
 // linkStateTTLSec is the account-link state lifetime — the browser legs must
-// complete within it. It is ALSO the single-use seen-set TTL (bridgeSeen), so a
+// complete within it. It is ALSO the single-use seen-set TTL (channelSeen), so a
 // signed link state redeems exactly once within its validity.
 const linkStateTTLSec = 60 * 10 // 10 minutes
 
@@ -87,7 +87,7 @@ func verifySubject(key []byte, state string, now int64) (subject, nonce string, 
 // ── in-process single-use seen-set (link-state nonces) ──────────────────────
 
 // seenSet is an age-based single-use / seen-set with an atomic test-and-set. It
-// backs every platform's per-user link single-use guarantee (bridgeSeen for the
+// backs every platform's per-user link single-use guarantee (channelSeen for the
 // generalized adapters, slackUsedStates for Slack): a signed link state is redeemed
 // exactly once within its TTL.
 //

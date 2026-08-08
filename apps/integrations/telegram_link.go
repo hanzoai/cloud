@@ -19,7 +19,7 @@ import (
 // telegram_link.go is Telegram's per-user account link: a transplant-safe browser
 // flow whose PLATFORM-IDENTIFY leg is the Telegram Login Widget (Telegram
 // cryptographically signs the auth data with the bot token, so we KNOW the real
-// Telegram user), followed by the shared hanzo.id OIDC leg (bridge_link.go):
+// Telegram user), followed by the shared hanzo.id OIDC leg (channel_link.go):
 //
 //	GET /v1/integrations/telegram/link           leg1: set __Host init+link cookies, render the Login Widget
 //	GET /v1/integrations/telegram/link/auth       leg2: widget callback; verify the signed auth, bind (chat,tgUser)
@@ -63,7 +63,7 @@ func telegramLinkURL(s *cloud.Service[state], chatID, _user string) (string, err
 // ── leg 1: render the Telegram Login Widget ─────────────────────────────────
 
 func telegramLink(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	if !telegramLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -102,7 +102,7 @@ func telegramWidgetHTML(botUsername, authURL string) string {
 // ── leg 2: Login Widget callback (verify the signed Telegram identity) ──────
 
 func telegramLinkAuth(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	if !telegramLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -149,7 +149,7 @@ func telegramLinkAuth(s *cloud.Service[state], c *zip.Ctx) error {
 // ── leg 3: hanzo.id OIDC callback (bind Telegram↔Hanzo) ─────────────────────
 
 func telegramLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	if !telegramLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -203,7 +203,7 @@ func telegramLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("link failed")
 	}
 	// Single-use AFTER a successful exchange (a bogus code cannot burn a valid nonce).
-	if bridgeSeen.seenAndAdd(nonce, time.Time{}) {
+	if channelSeen.seenAndAdd(nonce, time.Time{}) {
 		clearLinkCookie(c, telegramOIDCCookie)
 		return zip.ErrBadRequest("link already used")
 	}
@@ -225,7 +225,7 @@ func telegramLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
 	clearLinkCookie(c, telegramOIDCCookie)
 	s.Log.Info("telegram: user linked", "chat", chatID, "tgUser", tgUser) // no token
 	c.Fiber().Status(http.StatusOK).Type("html")
-	return c.Fiber().SendString(bridgeLinkedHTML("Telegram"))
+	return c.Fiber().SendString(channelLinkedHTML("Telegram"))
 }
 
 func clearTelegramLinkCookies(c *zip.Ctx) {

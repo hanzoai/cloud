@@ -25,7 +25,7 @@ import (
 
 // A turn's context must name the tenant, or the balance gate refuses it.
 func TestRunContextStatesTheTenant(t *testing.T) {
-	ctx, cancel := bridgeRunContext("acme")
+	ctx, cancel := channelRunContext("acme")
 	defer cancel()
 	if got := cloud.Who(ctx).Org; got != "acme" {
 		t.Fatalf("the turn must act for a named tenant, got %q", got)
@@ -39,17 +39,17 @@ func TestStatingOnARequestContextIsANoOp(t *testing.T) {
 	if got := cloud.Who(cloud.For(context.Background(), "acme")).Org; got != "acme" {
 		t.Fatalf("stated tenant must be readable off a request, got %q", got)
 	}
-	// bridgeRunContext must not be derivable from a caller-supplied context: it
+	// channelRunContext must not be derivable from a caller-supplied context: it
 	// takes an org and nothing else, so there is no parameter through which the
 	// webhook's request could be threaded back in. If this ever grows a
 	// context.Context argument, the bug returns — the signature IS the guard.
-	var _ func(string) (context.Context, context.CancelFunc) = bridgeRunContext
+	var _ func(string) (context.Context, context.CancelFunc) = channelRunContext
 }
 
 // An empty org states nothing rather than a blank tenant: downstream must refuse on
 // "no org" rather than bill an account named "".
 func TestEmptyTenantIsNotStated(t *testing.T) {
-	ctx, cancel := bridgeRunContext("")
+	ctx, cancel := channelRunContext("")
 	defer cancel()
 	if got := cloud.Who(ctx).Org; got != "" {
 		t.Errorf("an empty org must not become a tenant, got %q", got)
@@ -59,7 +59,7 @@ func TestEmptyTenantIsNotStated(t *testing.T) {
 // The turn outlives the webhook reply, so its deadline must come from the turn
 // budget and not from a request that is already answered.
 func TestRunContextIsNotAlreadyCancelled(t *testing.T) {
-	ctx, cancel := bridgeRunContext("acme")
+	ctx, cancel := channelRunContext("acme")
 	defer cancel()
 	select {
 	case <-ctx.Done():
@@ -67,6 +67,6 @@ func TestRunContextIsNotAlreadyCancelled(t *testing.T) {
 	default:
 	}
 	if _, ok := ctx.Deadline(); !ok {
-		t.Error("a turn must be bounded by bridgeAgentTimeout")
+		t.Error("a turn must be bounded by channelAgentTimeout")
 	}
 }
