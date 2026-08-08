@@ -229,7 +229,7 @@ func (o ops) githubIssuesBackfill(ctx context.Context, in *githubBackfillIn) (*g
 	default:
 		return nil, zip.ErrBadRequest("state must be open|closed|all")
 	}
-	repos, err := reachableRepos(ctx, org)
+	repos, _, err := reachableRepos(ctx, org)
 	if err != nil {
 		return nil, err
 	}
