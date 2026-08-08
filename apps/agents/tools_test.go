@@ -126,7 +126,7 @@ func TestRunCallsTools(t *testing.T) {
 	// The second completion must carry the whole transcript: who the agent is, the
 	// user turn, the assistant's tool call, and the tool result linked back by id.
 	msgs := ai.seen[1].Messages
-	want := []string{types.RoleSystem, types.RoleUser, types.RoleAssistant, types.RoleTool}
+	want := []string{types.RoleUser, types.RoleUser, types.RoleAssistant, types.RoleTool}
 	if len(msgs) != len(want) {
 		t.Fatalf("want %v in the second turn, got %d: %+v", want, len(msgs), msgs)
 	}
@@ -145,9 +145,9 @@ func TestRunCallsTools(t *testing.T) {
 
 // An agent with no tools — or one whose declared names the plane does not offer —
 // takes one completion with no tools field, and is shown exactly what it is and
-// what it was asked. The instructions are a SYSTEM turn rather than a string glued
-// to the front of the question: prior turns have to sit between the two, and a
-// concatenation has no between.
+// what it was asked — as two turns rather than one glued string, because prior
+// turns have to sit between the two and a concatenation has no between. Both are
+// USER turns: the model this path runs ignores a system one (see conversation).
 func TestRunWithoutToolsIsUnchanged(t *testing.T) {
 	plane := &fakePlane{} // offers nothing
 	withPlane(t, plane)
@@ -169,9 +169,9 @@ func TestRunWithoutToolsIsUnchanged(t *testing.T) {
 	}
 	msgs := ai.seen[0].Messages
 	if len(msgs) != 2 ||
-		msgs[0].Role != types.RoleSystem || msgs[0].Content != "You are a greeter." ||
+		msgs[0].Role != types.RoleUser || msgs[0].Content != "You are a greeter." ||
 		msgs[1].Role != types.RoleUser || msgs[1].Content != "say hi" {
-		t.Fatalf("want the instructions as system and the ask as user, got %+v", msgs)
+		t.Fatalf("want the instructions and the ask as two turns, got %+v", msgs)
 	}
 	if len(plane.calls) != 0 {
 		t.Fatalf("nothing may be dispatched, got %+v", plane.calls)
