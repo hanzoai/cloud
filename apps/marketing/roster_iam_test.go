@@ -8,6 +8,7 @@ import (
 	"github.com/hanzoai/cloud"
 	iamclient "github.com/hanzoai/cloud/apps/iam"
 	model "github.com/hanzoai/iam/pkg/model"
+	iamstore "github.com/hanzoai/iam/pkg/store"
 	"github.com/hanzoai/orm"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -34,11 +35,25 @@ func TestRosterReadsTheRealEmbeddedIAM(t *testing.T) {
 		t.Fatalf("unmounted iam must fail closed, got %v", err)
 	}
 
+	// THE STORE HAS TO EXIST FIRST. The co-resident IAM refuses to CREATE one —
+	// an absent store there is a mounting fault, and minting a fresh empty
+	// identity database would serve a fleet in which every account is absent — so
+	// a test that wants the real store has to stand it up with IAM's own opener,
+	// at the path IAM names.
+	dir := t.TempDir()
+	seed, err := iamstore.Open("sqlite", iamclient.StorePath(dir))
+	if err != nil {
+		t.Fatalf("stand up the identity store: %v", err)
+	}
+	if err := seed.Close(); err != nil {
+		t.Fatalf("close the seeded store: %v", err)
+	}
+
 	app := zip.New(zip.Config{Logger: luxlog.NewNoOpLogger()})
 	compose(app)
 	if err := iamclient.Mount(app, cloud.Deps{
 		Logger:  luxlog.NewNoOpLogger(),
-		DataDir: t.TempDir(),
+		DataDir: dir,
 	}); err != nil {
 		t.Fatalf("mount iam: %v", err)
 	}
