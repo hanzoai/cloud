@@ -12,6 +12,9 @@
   ],
   "tags": [
     {
+      "name": "agent"
+    },
+    {
       "name": "agents"
     },
     {
@@ -19,6 +22,56 @@
     }
   ],
   "paths": {
+    "/v1/agent": {
+      "post": {
+        "operationId": "post_v1_agent",
+        "summary": "Run one tool-calling round against your org's own tools",
+        "description": "Answers one turn of a conversation with four things: the model's `reply`, the `actions` the server executed on the caller's behalf, the `ops` the client must apply itself, and the `conversationId` the turn was recorded under.\n\nThe split between actions and ops is the rule most easily got wrong. A tool call is executed HERE only when the chosen preset is server-executing AND the tool resolves in the caller's own scope; every other call is handed back as an op for the client to apply to its own graph or UI. A tool that fails still comes back as an action, carrying its error rather than failing the round.\n\n`preset` selects the system prompt and the tool set (`capability` is a legacy alias for it); an unknown one is refused. `conversationId` continues an existing thread, and its absence starts one. A validated principal with a non-empty org is required — the org is the sole authority for both persistence and tool scope, and is NEVER read from the body.\n\nA completion refused for the caller's own reason — 402 insufficient balance, 429, 403 — is relayed with its own status and body verbatim, so the real billing message reaches the client instead of an opaque gateway error. Only a genuine upstream fault becomes a 502.",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/v1/agent/conversations": {
+      "get": {
+        "operationId": "get_v1_agent_conversations",
+        "summary": "List the agent threads in your org",
+        "description": "Returns a summary of every agent conversation in the caller's org — id, derived title, and when it was last appended to — for populating a thread list.\n\nScoped to the caller's org and nothing else, and that isolation is structural rather than a filter: conversations are persisted in a store opened PER ORG, so there is no query in which another tenant's threads could appear. A validated principal with a non-empty org is required; 403 without one.",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/v1/agent/conversations/{id}": {
+      "get": {
+        "operationId": "get_v1_agent_conversations_by_id",
+        "summary": "Read one agent thread in full",
+        "description": "Returns every message of one conversation in order — role, content, the assistant's tool calls where it made any, and each message's creation time — which is the transcript a client replays to resume a thread.\n\nThe lookup happens inside the caller's OWN per-org store, so an id belonging to another tenant is not refused, it is simply absent: the answer is 200 with an empty message list. Read it as \"no such conversation for you\" rather than as an empty thread. A validated principal with a non-empty org is required; 403 without one.",
+        "tags": [
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agent/presets": {
+      "get": {
+        "operationId": "get_v1_agent_presets",
+        "summary": "List the agent presets available to a caller",
+        "description": "Returns the preset catalog: each entry's id, its description and whether it is server-executing — the flag that decides if a preset's tool calls run here or come back for the client to apply. The ids are what POST /v1/agent accepts in `preset`.\n\nThe catalog is compiled into the build, identical for every caller, and this is the one read in the group that needs no principal.",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
     "/v1/agents": {
       "get": {
         "operationId": "get_v1_agents",
@@ -1098,6 +1151,7 @@
       "post": {
         "operationId": "post_v1_coding",
         "summary": "Start one autonomous coding run against a repo in the caller's org",
+        "description": "Is the app's door. It answers 202 with the run's handle the\nmoment the run is ADMITTED — not when it finishes. A coding run takes minutes;\nholding a request open for one would tie a connection to a model loop and give\nthe caller nothing it cannot get better from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis door does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.",
         "tags": [
           "coding"
         ],
@@ -1131,39 +1185,49 @@
       "CodingStartIn": {
         "properties": {
           "agentRef": {
+            "description": "AgentRef names a configured agent to run as, which is how an org pins a\nharness, a model and a prompt to a name. Empty runs the default agent.",
             "type": "string"
           },
           "base": {
+            "description": "Base is the branch to start from. Empty takes the repository's default. The\nrun never writes here — it writes the agent branch it answers with.",
             "type": "string"
           },
           "desktop": {
             "type": "boolean"
           },
           "project": {
+            "description": "Project scopes the run to one board's work when the org keeps more than one.\nEmpty is the org's default.",
             "type": "string"
           },
           "prompt": {
+            "description": "Prompt is the task, in the words you would use with a colleague who has the\ncheckout open. It is the whole instruction: there is no second field for\ncontext, and a prompt that names files and the outcome it wants gets a run\nthat does not have to guess either.",
             "type": "string"
           },
           "replyChannel": {
+            "description": "ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the door\nthat started it has somewhere for it to talk. Empty means nobody is\nlistening and the run simply does not narrate — which is the app door's\ncase, because /v1/coding hands back a session id and the session stream is\na better progress feed than any message could be.\n\nIt is an ADDRESS and not a token: the engine says \"put this text there\",\nand the process that owns the workspace's bot credential is the one that\nactually posts. So a run reports into a Slack thread without the engine\never holding the token that could post anywhere else in that workspace.",
             "type": "string"
           },
           "replyThread": {
             "type": "string"
           },
           "repo": {
+            "description": "Repo is what to work on, as `owner/name` in the caller's own org. The engine\nresolves the clone URL and the push credential from the org itself, so this\nsays WHICH repository and never how to reach it.",
             "type": "string"
           },
           "subject": {
+            "description": "Subject is the person the run is attributed to — a linked Hanzo identity the\ndoor already proved, never a name the caller picks. Empty is refused rather\nthan defaulted: a run that lost its human must not execute as the org.",
             "type": "string"
           },
           "targetId": {
+            "description": "TargetID routes the run to a registered machine the org has claimed instead\nof to a sandbox in our cluster. Empty runs it here, which is the usual case.",
             "type": "string"
           },
           "timeoutSeconds": {
+            "description": "TimeoutSeconds bounds the whole run. Unset takes the default budget; a run\nthat hits the bound is stopped and reports what it had done by then.",
             "type": "integer"
           },
           "tool": {
+            "description": "Tool is which harness runs the prompt — dev | claude | codex | python |\nnode — and Desktop is whether the run needs a screen. Both are empty by\ndefault, which is `dev` with no screen, and that default is what every\ncaller gets until it says otherwise.\n\nThey are two fields because they are two questions. The harness decides\nwhat argv starts; the screen decides which image carries an X server. A\ncaller may want claude WITH a browser it can see, and a single enum would\nhave made that combination unsayable.",
             "type": "string"
           }
         },
