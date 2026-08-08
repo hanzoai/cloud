@@ -80,5 +80,5 @@ func planeRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunO
 	if err != nil {
 		return nil, err
 	}
-	return &plane.RunOnBehalfOut{Status: run.Status, Output: run.Output, RunID: run.ID}, nil
+	return &plane.RunOnBehalfOut{Status: run.Status, Output: run.Output, RunID: run.ID, Error: run.Error}, nil
 }

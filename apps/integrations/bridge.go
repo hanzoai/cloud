@@ -351,7 +351,7 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, text 
 		// trace of the cause was the run row. That is how a dead model wire survived
 		// a day of looking. The run id is here so the row is findable.
 		s.Log.Warn("bridge: agent run did not succeed", "provider", provider, "org", org,
-			"status", run.Status, "run_id", run.RunID)
+			"status", run.Status, "run_id", run.RunID, "err", run.Error)
 		return "Sorry — the agent hit an error handling that. Please try again.", false, run.RunID
 	}
 	if strings.TrimSpace(run.Output) == "" {
