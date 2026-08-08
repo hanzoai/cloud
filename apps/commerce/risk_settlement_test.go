@@ -67,6 +67,7 @@ type caught struct {
 // instead of recording them.
 func watchTeaching(t *testing.T) <-chan caught {
 	t.Helper()
+	mute(t)
 	seen := make(chan caught, 16)
 	prior := teach
 	teach = func(ctx context.Context, in *plane.RiskObserveIn) (*plane.RiskObserved, error) {
@@ -130,13 +131,20 @@ func await(t *testing.T, seen <-chan caught) caught {
 func released(within time.Duration) bool {
 	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
-		if len(teaching) == 0 {
+		if inflight() == 0 {
 			return true
 		}
 		time.Sleep(time.Millisecond)
 	}
-	return len(teaching) == 0
+	return inflight() == 0
 }
+
+// inflight is how many detached hand-offs a settlement still has running. A
+// settlement spawns TWO — the risk teaching and the event-plane statement — and a
+// fixture that tears down while either is running is the race [quiet] exists to
+// avoid, so both are counted here rather than one of them being watched and the
+// other being hoped about.
+func inflight() int { return len(teaching) + len(emitting) }
 
 // none asserts the door stated nothing, which is the correct answer for a top-up
 // that did not settle.
@@ -361,6 +369,7 @@ func TestTeachSettlement_CannotFailTheSettledPayment(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			mute(t)
 			done := make(chan struct{})
 			prior := teach
 			teach = func(ctx context.Context, in *plane.RiskObserveIn) (*plane.RiskObserved, error) {
