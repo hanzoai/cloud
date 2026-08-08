@@ -320,6 +320,18 @@ const (
 	// Nothing failed loudly, because a nil consumer simply returns.
 	ChannelsIngest = "channels_ingest"
 
+	// ChannelsRecent reads the last turns of ONE room back out of the inbox, so a
+	// chat bridge can answer with the conversation in front of it instead of a
+	// single message.
+	//
+	// It exists because the inbox was already recording every inbound turn and
+	// nothing ever read them. A bridge that sends only the newest message makes an
+	// assistant that cannot follow a two-line exchange: asked "weather in Benicia",
+	// told "try again", it asks WHICH CITY — and by the third turn it is looking
+	// "Benicia" up as an org, because a bare noun with no conversation around it
+	// looks like a lookup. The record was there the whole time.
+	ChannelsRecent = "channels_recent"
+
 	// The x402 rail, across the process boundary. Four ops, because the four
 	// things a settlement needs live in four binaries: the RAIL is x402's, the
 	// PRICE is the marketplace's, the PAYEE is wallets', and the LEDGER is
@@ -2005,6 +2017,45 @@ type RunOnBehalfIn struct {
 	// the turn instead of being written into an agent row: two people in one
 	// workspace can prefer different models of the same assistant.
 	Model string `json:"model,omitempty"`
+	// History is the conversation this Input arrived in, oldest first and NOT
+	// including Input itself. Empty is a first message, which is a real answer and
+	// not a missing one.
+	//
+	// It rides the turn because the answering side has no way to obtain it: the
+	// room is a fact about the transport the bridge is on, and only the bridge knows
+	// it. Without this the agent saw one message with nothing around it, which is
+	// how "try again" became "what would you like me to help you with".
+	History []Turn `json:"history,omitempty"`
+}
+
+// RecentIn asks for the last turns of one room. The ORG is the caller's, from
+// the plane context and never an argument — an org a caller could name is an org
+// whose conversations a caller could read.
+type RecentIn struct {
+	// Channel is the transport (slack, discord, telegram) and Room the id within
+	// it. Both are required: a room id is only unique inside its transport.
+	Channel string `json:"channel" validate:"required"`
+	Room    string `json:"room" validate:"required"`
+	// Limit caps how many turns come back, newest last. Zero takes a sane default;
+	// the owner clamps it, because an unbounded history is a prompt that costs more
+	// than the answer.
+	Limit int `json:"limit,omitempty"`
+}
+
+// Turn is one thing somebody said, in the order it was said.
+type Turn struct {
+	// Sender is the platform user id, and Self marks the assistant's own turns so a
+	// reader can tell a question from its answer without parsing either.
+	Sender string `json:"sender,omitempty"`
+	Self   bool   `json:"self,omitempty"`
+	Text   string `json:"text"`
+	At     int64  `json:"at,omitempty"`
+}
+
+// Recent is the conversation, oldest first — the order a reader needs and not the
+// order the store returns.
+type Recent struct {
+	Turns []Turn `json:"turns"`
 }
 
 // RunOnBehalfOut is one finished turn.

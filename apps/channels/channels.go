@@ -51,6 +51,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return err
 	}
 	serveIngest()
+	// The read side of the same inbox: a chat bridge answers with the conversation
+	// in front of it instead of one message. Published beside the write so the two
+	// halves of one record are declared together.
+	serveRecent()
 	b.Log.Info("channels mounted", "transports", len(transports))
 	return nil
 }

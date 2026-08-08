@@ -186,6 +186,34 @@ func (st *store) insertInbox(ctx context.Context, r inboxRow) error {
 
 // listInbox returns the org's inbox rows with id > since, oldest first. limit
 // clamps to 1..200; <=0 selects the default 50.
+// recentRoom reads the newest turns of ONE room, newest first so the LIMIT keeps
+// the recent ones rather than the oldest. The caller reverses them.
+//
+// Keyed (org, channel, room) because a room id is unique only inside its
+// transport, and org is the tenancy predicate on every read of this table.
+func (st *store) recentRoom(ctx context.Context, org, channel, room string, limit int) ([]inboxRow, error) {
+	rows, err := st.db.QueryContext(ctx, `SELECT id, org, channel, account, room_id, room_kind,
+  sender, sender_user, text, reply_to, event_key, created_at
+  FROM channel_inbox WHERE org = ? AND channel = ? AND room_id = ?
+  ORDER BY id DESC LIMIT ?`, org, channel, room, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := []inboxRow{}
+	for rows.Next() {
+		var r inboxRow
+		var kind string
+		if err := rows.Scan(&r.ID, &r.Org, &r.Channel, &r.Account, &r.RoomID, &kind,
+			&r.Sender, &r.SenderUser, &r.Text, &r.ReplyTo, &r.EventKey, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		r.RoomKind = RoomKind(kind)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 func (st *store) listInbox(ctx context.Context, org string, since int64, limit int) ([]inboxRow, error) {
 	switch {
 	case limit <= 0:
