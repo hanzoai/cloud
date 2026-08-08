@@ -89,3 +89,64 @@ func patchRaw(t *testing.T, app *zip.App, id, body string) syncView {
 	}
 	return v
 }
+
+// A PATCH that asks to repoint a sync must be REFUSED, not quietly ignored.
+//
+// The endpoints are immutable on purpose — re-pointing is a delete and a create,
+// so a link can never silently start syncing somewhere else. But the fields were
+// undeclared, so the binder dropped them and the request answered 200 having
+// changed nothing and said nothing. That is worse than the immutability it was
+// protecting: an operator reads success and believes a moved repository has been
+// repointed.
+//
+// Live, and how this was found: a sync still naming github.com/hanzoai/cloud
+// after the repository moved to hanzo-inc/cloud failed every reconcile with
+// "Repository not found", and a PATCH carrying the corrected source returned 200
+// with the stale locator still in the response body.
+func TestPatchSyncRefusesToRepoint(t *testing.T) {
+	app := mountSync(t)
+	code, body := do(t, app, http.MethodPost, "/v1/sync", "acme", map[string]any{
+		"kind":      "git",
+		"source":    map[string]any{"provider": "github", "locator": "https://github.com/acme/widgets.git"},
+		"target":    map[string]any{"provider": "hanzo-git", "locator": "widgets"},
+		"direction": "pull",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("create want 200, got %d (%s)", code, body)
+	}
+	var created syncView
+	if err := json.Unmarshal(body, &created); err != nil {
+		t.Fatalf("create json: %v (%s)", err, body)
+	}
+
+	status := func(raw string) int {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPatch, "/v1/sync/"+created.ID, strings.NewReader(raw))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Org-Id", "acme")
+		req.Header.Set("X-User-Id", "u_acme")
+		resp, err := app.Test(req, testCfg)
+		if err != nil {
+			t.Fatalf("PATCH %s: %v", raw, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+
+	for _, raw := range []string{
+		`{"source":{"provider":"github","locator":"https://github.com/acme/moved.git"}}`,
+		`{"target":{"provider":"hanzo-git","locator":"elsewhere"}}`,
+		`{"kind":"git"}`,
+		// Mixed: refused WHOLE, never half-honoured.
+		`{"direction":"off","source":{"provider":"github","locator":"https://github.com/acme/moved.git"}}`,
+	} {
+		if got := status(raw); got != http.StatusBadRequest {
+			t.Fatalf("PATCH %s got %d, want 400 — an ignored field must not read as success", raw, got)
+		}
+	}
+
+	// Nothing moved, including the direction the mixed request also named.
+	if got := patchRaw(t, app, created.ID, `{}`); got.Direction != "pull" {
+		t.Errorf("direction is %q — a refused request was half-applied", got.Direction)
+	}
+}
