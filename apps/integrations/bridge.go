@@ -234,7 +234,7 @@ func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyF
 		span.SetAttributes(attribute.String("hanzo.chat.thread", in.ThreadID))
 	}
 
-	text, ephemeral, runID := bridgeReply(s, org, in.Provider, in.ExternalID, in.User, in.Text)
+	text, ephemeral, runID := bridgeReply(s, org, in.Provider, in.ExternalID, in.User, in.Channel, in.Text)
 	if runID != "" {
 		span.SetAttributes(attribute.String("hanzo.agent.run_id", runID))
 	}
@@ -285,7 +285,7 @@ func bridgeRunContext(org string) (context.Context, context.CancelFunc) {
 // run answered this conversation. The id was already in hand and was thrown away
 // everywhere except one failure log, which is why a thread and the run behind it
 // had no value in common.
-func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, text string) (reply string, ephemeral bool, runID string) {
+func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, room, text string) (reply string, ephemeral bool, runID string) {
 	link, say, ephemeral := bridgeIdentity(s, org, provider, externalID, user)
 	if say != "" {
 		// No run happened — an unlinked user gets a prompt, not an agent turn — so
@@ -332,8 +332,20 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, text 
 	// request ctx the model call would be cancelled the moment we answer Slack.
 	runCtx, cancel := bridgeRunContext(org)
 	defer cancel()
+	// THE CONVERSATION, not just the newest line of it. channels has been recording
+	// every inbound turn since ingest existed and nothing read them back, so the
+	// agent saw one message with nothing around it: asked "weather in Benicia", then
+	// "try again", it answered "what would you like me to help you with" — and by the
+	// third turn it was looking "Benicia" up as an org, because a bare noun with no
+	// conversation around it looks like a lookup rather than a place.
+	//
+	// A failed read is NOT a failed turn. An unreachable inbox costs context, which
+	// makes a worse answer; refusing to answer at all makes none. So this degrades to
+	// the single message it used to send, which is the behaviour it replaces.
+	history := recentTurns(runCtx, provider, room)
 	out, rerr := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](runCtx, "agents", plane.AgentsRunOnBehalf,
-		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: bridgeAgentRef(provider), Input: text, Model: link.Model})
+		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: bridgeAgentRef(provider),
+			Input: text, Model: link.Model, History: history})
 	run := plane.RunOnBehalfOut{}
 	if out != nil {
 		run = *out
@@ -502,4 +514,25 @@ func bridgeOrgConcurrency() int {
 		return v
 	}
 	return bridgeDefaultOrgConcurrency
+}
+
+// recentTurns asks channels for the conversation this message arrived in.
+//
+// The room is the transport's own id, which only the adapter knows, and the org
+// rides runCtx — the same context the run itself bills on, so the history and the
+// charge cannot disagree about whose conversation this is.
+//
+// The newest turn is dropped: it IS this Input, already recorded by ingest before
+// the turn ran, and sending it twice would have the agent answer a question it
+// appears to have been asked a moment ago.
+func recentTurns(ctx context.Context, provider, room string) []plane.Turn {
+	if room == "" {
+		return nil
+	}
+	out, err := plane.Ask[plane.RecentIn, plane.Recent](ctx, "channels", plane.ChannelsRecent,
+		&plane.RecentIn{Channel: provider, Room: room})
+	if err != nil || out == nil || len(out.Turns) == 0 {
+		return nil
+	}
+	return out.Turns[:len(out.Turns)-1]
 }
