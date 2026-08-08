@@ -121,8 +121,10 @@ deploy-ui: ## Build the monochrome ArgoCD dashboard bundle into apps/deploy/webu
 
 skills: ## Regenerate the FULL agent-skills catalog into apps/skills/catalog (go:embed source) from the openapi SOT. OPENAPI_DIR=<path to openapi>.
 	@test -f "$(OPENAPI_DIR)/skills.py" || { echo "openapi checkout not found at $(OPENAPI_DIR) — set OPENAPI_DIR=<path> or clone hanzoai/openapi"; exit 1; }
-	# skills.py rewrites the whole catalog dir; the .gitignore keeps only the tiny
-	# `ai` fallback tracked, so the full set is embedded at build but never committed.
+	# skills.py rewrites the whole catalog dir, and every file of it is tracked —
+	# commit what changes. The catalog is prose an agent follows, so its diff is
+	# worth reading; it used to arrive as a container image and be committed as a
+	# one-skill stub, which made a registry permission a build outage.
 	python3 "$(OPENAPI_DIR)/skills.py" --no-services --out apps/skills/catalog
 	@echo ">> embedded FULL agent-skills catalog ($$(jq -r .skill_count apps/skills/catalog/hanzo/index.json) skills/brand)"
 
