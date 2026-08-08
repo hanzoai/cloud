@@ -147,7 +147,7 @@ var Apps = []App{
 	// handed through — all three of which are agents'. A separate app would put a
 	// socket between the run and its own mailbox. A second address on one app is
 	// the ordinary shape here (tasks answers /tasks and /v1/tasks).
-	{Name: "agents", Prefixes: []string{"/v1/agents", "/v1/coding"}},
+	{Name: "agents", Prefixes: []string{"/v1/agent", "/v1/agents", "/v1/coding"}},
 	{Name: "link", Prefixes: []string{"/v1/links"}},
 	{Name: "wallets", Prefixes: []string{"/v1/wallets"}},
 	{Name: "x402", Prefixes: []string{"/v1/x402"}},
@@ -409,7 +409,6 @@ var Apps = []App{
 	{Name: "company", Prefixes: []string{"/v1/company"}},
 	{Name: "compliance", Prefixes: []string{"/v1/compliance"}},
 	{Name: "legal", Prefixes: []string{"/v1/legal"}},
-	{Name: "agent", Prefixes: []string{"/v1/agent"}},
 	{Name: "ask", Prefixes: []string{"/v1/ask"}},
 	{Name: "translate", Prefixes: []string{"/v1/translate"}},
 	// ai owns the /v1 REMAINDER: the OpenAI-compatible surface
