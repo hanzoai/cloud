@@ -8,47 +8,47 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/plane"
 )
 
 // ingress.go is the chat-ingress seam between the platform adapters and the
-// /v1/channels transport plane (clients/channels), plus the transport send
-// doors. The seam is the cloud.RegisterSync idiom (sync_seam.go): channels
-// registers its consumer at Mount, adapters emit with NO import of channels —
-// the dependency points one way and token custody never leaves this package.
+// channels inbox, plus the transport send doors. Token custody never leaves this
+// package; the event crosses on the PLANE.
+//
+// It used to cross on a package global — channels.Mount installed a consumer
+// function pointer here — and a package global is per-PROCESS. In production
+// integrations, channels and agents run as three separate processes, so that
+// pointer was nil on this side and every event was dropped where a nil check
+// returns. The inbox took nothing and the pairing and allowlist gates never saw
+// real traffic, silently, for as long as the seam existed. This is the same
+// mistake plane.AgentsRunOnBehalf was written to undo, one seam over.
 
-// IngressEvent is one authenticated inbound chat event crossing the seam. Org
-// is resolved via OrgForExternalID on a signature-verified payload; In is the
-// adapter-normalized Inbound (bridge.go); ReplyRoot is a transport-verified
-// reply root (Teams: the JWT-verified serviceURL; "" elsewhere).
-type IngressEvent struct {
-	Org       string
-	In        Inbound
-	ReplyRoot string
-}
-
-// ingressFn is the single registered consumer — nil until channels mounts.
-// Written once at Mount before serving, read from webhook goroutines (the
-// RegisterSync pattern, sync_seam.go).
-var ingressFn func(context.Context, IngressEvent)
-
-// RegisterIngress installs the ingress consumer. Called once at channels.Mount.
-func RegisterIngress(fn func(context.Context, IngressEvent)) { ingressFn = fn }
-
-// emitIngress hands one event to the registered consumer on a detached
-// goroutine with its own bounded context, so the billed webhook path is never
-// delayed and a panicking consumer cannot crash the shared process. No
-// request-scoped context crosses the hop — everything the consumer needs rides
-// the event. The adapter's bridgeLim slot ownership is untouched.
+// emitIngress hands one event to the channels inbox over the plane, on a
+// detached goroutine with its own bounded context, so the billed webhook path is
+// never delayed. No request-scoped context crosses the hop — everything the
+// consumer needs rides the event.
 func emitIngress(org string, in Inbound, replyRoot string) {
-	fn := ingressFn
-	if fn == nil {
-		return
-	}
 	go func() {
 		defer func() { _ = recover() }()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		fn(ctx, IngressEvent{Org: org, In: in, ReplyRoot: replyRoot})
+		out, err := plane.Ask[plane.ChannelsIngestIn, plane.ChannelsIngestOut](ctx, "channels", plane.ChannelsIngest,
+			ingestIn(org, in, replyRoot))
+		// SAID, not swallowed. The whole point of this change is that a dropped
+		// event used to be invisible; an unreachable inbox must not become the
+		// same silence one layer down.
+		if err != nil {
+			if m := mounted; m != nil {
+				m.Log.Warn("integrations: channels ingest", "provider", in.Provider, "org", org, "err", err)
+			}
+			return
+		}
+		if out != nil && !out.Taken {
+			if m := mounted; m != nil {
+				m.Log.Debug("integrations: channels declined event", "provider", in.Provider, "org", org)
+			}
+		}
 	}()
 }
 
@@ -156,4 +156,15 @@ func SendDiscord(ctx context.Context, channelID, replyTo, text string) (string, 
 	}
 	_ = json.Unmarshal(body, &m)
 	return m.ID, nil
+}
+
+// ingestIn is the adapter-normalized event as it crosses to channels. Its own
+// function because the mapping is the part that can silently be wrong, and the
+// hop it feeds cannot be observed from this process.
+func ingestIn(org string, in Inbound, replyRoot string) *plane.ChannelsIngestIn {
+	return &plane.ChannelsIngestIn{
+		Org: org, Provider: in.Provider, ExternalID: in.ExternalID, User: in.User,
+		Channel: in.Channel, ThreadID: in.ThreadID, Text: in.Text,
+		DedupeKey: in.DedupeKey, ReplyRoot: replyRoot,
+	}
 }

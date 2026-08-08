@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/integrations"
 )
 
 // state is the subsystem's mounted state: the ONE channels store.
@@ -45,13 +44,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "channels")
 	s := &cloud.Service[state]{Base: b, State: state{store: st}}
-	// Publish state BEFORE registering the ingress consumer so the first
-	// emitted event finds a mounted service.
+	// Publish state BEFORE serving the ingest door so the first event finds a
+	// mounted service.
 	mounted.Store(s)
 	if err := routes(app, s); err != nil {
 		return err
 	}
-	integrations.RegisterIngress(ingest)
+	serveIngest()
 	b.Log.Info("channels mounted", "transports", len(transports))
 	return nil
 }

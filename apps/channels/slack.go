@@ -7,6 +7,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/integrations"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // slack.go is the Slack transport: envelope normalization from the ingress
@@ -27,8 +28,8 @@ var slackTransport = transport{
 // event_id) into the envelope. Slack conversation-id contract: D* = IM,
 // C* = public channel, G* = private/mpim — a D-prefixed conversation is a DM;
 // a threaded event (thread_ts set) is a thread; everything else is a group.
-func slackNormalize(ev integrations.IngressEvent) (Message, bool) {
-	in := ev.In
+func slackNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
+	in := ev
 	kind := RoomGroup
 	switch {
 	case strings.HasPrefix(in.Channel, "D"):
