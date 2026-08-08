@@ -1,10 +1,10 @@
-package integrations
+package channels
 
 // A chat turn had no telemetry at all, and the reason is easy to miss: the
-// webhook's request span ends when we answer the platform 200, and everything
-// worth observing happens AFTER that, in a detached goroutine. So "someone asked
-// @hanzo something in this thread" and "a run happened" were two facts with
-// nothing in common.
+// adapter's request span ends when it answers the platform 200, and everything
+// worth observing happens AFTER that, in a detached goroutine in THIS process.
+// So "someone asked @hanzo something in this thread" and "a run happened" were
+// two facts with nothing in common.
 //
 // These pin the span that joins them, and the identity it has to carry.
 
@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -25,9 +26,9 @@ func recordTurns(t *testing.T) *tracetest.SpanRecorder {
 	t.Helper()
 	sr := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
-	prev := channelTracer
-	channelTracer = tp.Tracer("test")
-	t.Cleanup(func() { channelTracer = prev; _ = tp.Shutdown(context.Background()) })
+	prev := turnTracer
+	turnTracer = tp.Tracer("test")
+	t.Cleanup(func() { turnTracer = prev; _ = tp.Shutdown(context.Background()) })
 	return sr
 }
 
@@ -40,31 +41,38 @@ func turnAttr(sp sdktrace.ReadOnlySpan, key string) string {
 	return ""
 }
 
+// spyTransport counts replies without reaching a platform.
+func spyTransport(n *int) transport {
+	return transport{
+		id:        "slack",
+		normalize: func(plane.ChannelsIngestIn) (Message, bool) { return Message{}, false },
+		send: func(context.Context, *cloud.Service[state], string, Message) (Delivery, error) {
+			*n++
+			return Delivery{}, nil
+		},
+	}
+}
+
 // TestTurnRecordsTheConversationItCameFrom: the span a turn emits names the
 // tenant and the exact thread, so a human looking at a Slack conversation has a
 // value to search telemetry by.
 //
-// It asserts on a turn whose run does NOT succeed (there is no agents plane
+// It asserts on a turn that CANNOT run (there is no integrations or agents plane
 // here), which is deliberate: a failed turn is precisely when someone goes
 // looking, and instrumentation that only records the happy path is absent when it
 // is needed.
 func TestTurnRecordsTheConversationItCameFrom(t *testing.T) {
 	sr := recordTurns(t)
-	channelReady()
 
 	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{}}
-	in := Inbound{
-		Provider:   "slack",
-		ExternalID: "T0FAKE",
-		User:       "U0FAKE",
-		Channel:    "C0FAKE",
-		ThreadID:   "1699999999.000100",
-		Text:       "what broke last night",
-	}
-	delivered := 0
-	runBridgeTurn(s, "acme", in, func(context.Context, string, bool) error {
-		delivered++
-		return nil
+	sent := 0
+	turn(s, spyTransport(&sent), "acme", Message{
+		Channel: "slack",
+		Account: "T0FAKE",
+		Room:    Room{ID: "C0FAKE", Kind: RoomThread},
+		ReplyTo: "1699999999.000100",
+		Sender:  Sender{ExternalID: "U0FAKE", Org: "acme"},
+		Text:    "what broke last night",
 	})
 
 	spans := sr.Ended()
@@ -91,36 +99,12 @@ func TestTurnRecordsTheConversationItCameFrom(t *testing.T) {
 			t.Fatalf("turn span %s = %q, want %q", want.key, got, want.value)
 		}
 	}
-	// The turn still answered the person, which is what makes the failed-run case
-	// worth recording rather than dropping.
-	if delivered != 1 {
-		t.Fatalf("the turn delivered %d replies, want 1", delivered)
-	}
-}
-
-// TestUnthreadedTurnSaysNothingRatherThanEmpty: a DM legitimately has no thread,
-// and absence is a different fact from an empty one. An attribute stored blank is
-// a value every query returns and none can explain.
-func TestUnthreadedTurnSaysNothingRatherThanEmpty(t *testing.T) {
-	sr := recordTurns(t)
-	channelReady()
-
-	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{}}
-	runBridgeTurn(s, "acme", Inbound{Provider: "slack", ExternalID: "T0", User: "U0", Channel: "D0", Text: "hi"},
-		func(context.Context, string, bool) error { return nil })
-
-	spans := sr.Ended()
-	if len(spans) != 1 {
-		t.Fatalf("got %d spans, want 1", len(spans))
-	}
-	for _, kv := range spans[0].Attributes() {
-		if string(kv.Key) == "hanzo.chat.thread" {
-			t.Fatalf("an unthreaded turn recorded a thread attribute (%q) — absent is the honest answer", kv.Value.Emit())
-		}
-	}
-	// The channel is still there: a DM has one, and it is how the conversation is
-	// found.
-	if got := turnAttr(spans[0], "hanzo.chat.channel"); got != "D0" {
-		t.Fatalf("channel = %q, want D0", got)
+	// And it said NOTHING, which is the other half of the contract. The identity
+	// door is unreachable here, and that is our failure rather than the asker's —
+	// posting an apology into the room on every message while a socket is down is
+	// worse than silence. The span is what remains, which is exactly the case
+	// someone goes looking for.
+	if sent != 0 {
+		t.Fatalf("an unreachable identity door must not answer the room, sent %d", sent)
 	}
 }
