@@ -15,7 +15,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// bridge_link.go is the SHARED hanzo.id OIDC leg of the account-link flow, reused
+// channel_link.go is the SHARED hanzo.id OIDC leg of the account-link flow, reused
 // by every non-Slack chat adapter (Discord/Teams/Telegram). Each adapter supplies
 // its own PLATFORM-IDENTIFY leg (Discord OAuth `identify`, Teams AAD, Telegram
 // Login Widget) that proves WHICH platform user is linking; this file is the
@@ -27,10 +27,10 @@ import (
 // as a redirect URI. (Slack keeps its own SLACK_LINK_IAM_* client for continuity;
 // converging it onto this helper is a follow-up.)
 
-// bridgeHTTP bounds every bridge-side call: a real timeout (fail-secure — never an
+// channelHTTP bounds every channel-side call: a real timeout (fail-secure — never an
 // infinite hang) and no redirect-following surprises. Shared by the new adapters'
 // platform + OIDC HTTP.
-var bridgeHTTP = &http.Client{Timeout: 15 * time.Second}
+var channelHTTP = &http.Client{Timeout: 15 * time.Second}
 
 // ── shared __Host- link cookies (browser-binding for every adapter's link) ──
 //
@@ -49,9 +49,9 @@ func setLinkCookie(c *zip.Ctx, name, val string) {
 
 func readLinkCookie(c *zip.Ctx, name string) string { return c.Fiber().Cookies(name) }
 
-// bridgeLinkedHTML is the terse success page shown after a user links their account
+// channelLinkedHTML is the terse success page shown after a user links their account
 // from any platform. platform is the display name ("Discord","Telegram","Teams").
-func bridgeLinkedHTML(platform string) string {
+func channelLinkedHTML(platform string) string {
 	return `<!doctype html><meta charset="utf-8"><title>Hanzo connected</title>` +
 		`<body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;text-align:center">` +
 		`<h1>Hanzo connected</h1><p>Your Hanzo account is linked. Return to ` + platform +
@@ -66,10 +66,10 @@ func clearLinkCookie(c *zip.Ctx, name string) {
 	})
 }
 
-// bridgeTokenSet is the subset of the IAM token response the link flow consumes. A
+// channelTokenSet is the subset of the IAM token response the link flow consumes. A
 // refresh token is REQUIRED (offline_access) so an access token can be minted later
 // without re-prompting the user.
-type bridgeTokenSet struct {
+type channelTokenSet struct {
 	Access  string
 	Refresh string
 	IDToken string
@@ -108,7 +108,7 @@ func oidcAuthorizeURL(redirectURI, state string) string {
 
 // oidcExchange swaps an authorization code for a token set (confidential client, no
 // PKCE). The secrets (code / client_secret) are POST-form only and never logged.
-func oidcExchange(ctx context.Context, code, redirectURI string) (bridgeTokenSet, error) {
+func oidcExchange(ctx context.Context, code, redirectURI string) (channelTokenSet, error) {
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
@@ -119,18 +119,18 @@ func oidcExchange(ctx context.Context, code, redirectURI string) (bridgeTokenSet
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, oidcBase()+"/oauth/token",
 		strings.NewReader(form.Encode()))
 	if err != nil {
-		return bridgeTokenSet{}, err
+		return channelTokenSet{}, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	resp, err := bridgeHTTP.Do(req)
+	resp, err := channelHTTP.Do(req)
 	if err != nil {
-		return bridgeTokenSet{}, err
+		return channelTokenSet{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, bridgeMaxBody))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, channelMaxBody))
 	if resp.StatusCode != http.StatusOK {
-		return bridgeTokenSet{}, fmt.Errorf("bridge: IAM token status %d", resp.StatusCode)
+		return channelTokenSet{}, fmt.Errorf("channel: IAM token status %d", resp.StatusCode)
 	}
 	var out struct {
 		AccessToken  string `json:"access_token"`
@@ -139,15 +139,15 @@ func oidcExchange(ctx context.Context, code, redirectURI string) (bridgeTokenSet
 		Error        string `json:"error"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
-		return bridgeTokenSet{}, fmt.Errorf("bridge: IAM token decode: %w", err)
+		return channelTokenSet{}, fmt.Errorf("channel: IAM token decode: %w", err)
 	}
 	if out.Error != "" {
-		return bridgeTokenSet{}, fmt.Errorf("bridge: IAM token: %s", out.Error)
+		return channelTokenSet{}, fmt.Errorf("channel: IAM token: %s", out.Error)
 	}
 	if out.AccessToken == "" {
-		return bridgeTokenSet{}, fmt.Errorf("bridge: IAM token: empty access_token")
+		return channelTokenSet{}, fmt.Errorf("channel: IAM token: empty access_token")
 	}
-	return bridgeTokenSet{Access: out.AccessToken, Refresh: out.RefreshToken, IDToken: out.IDToken}, nil
+	return channelTokenSet{Access: out.AccessToken, Refresh: out.RefreshToken, IDToken: out.IDToken}, nil
 }
 
 // oidcIdentity resolves the linked account's IAM subject (sub) + org (owner) from
@@ -161,23 +161,23 @@ func oidcIdentity(ctx context.Context, access string) (sub, org string, err erro
 	}
 	req.Header.Set("Authorization", "Bearer "+access)
 	req.Header.Set("Accept", "application/json")
-	resp, err := bridgeHTTP.Do(req)
+	resp, err := channelHTTP.Do(req)
 	if err != nil {
 		return "", "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("bridge: IAM userinfo status %d", resp.StatusCode)
+		return "", "", fmt.Errorf("channel: IAM userinfo status %d", resp.StatusCode)
 	}
 	var u struct {
 		Sub   string `json:"sub"`
 		Owner string `json:"owner"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, bridgeMaxBody)).Decode(&u); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, channelMaxBody)).Decode(&u); err != nil {
 		return "", "", err
 	}
 	if u.Sub == "" {
-		return "", "", fmt.Errorf("bridge: IAM userinfo missing sub")
+		return "", "", fmt.Errorf("channel: IAM userinfo missing sub")
 	}
 	return u.Sub, u.Owner, nil
 }

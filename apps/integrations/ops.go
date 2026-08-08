@@ -29,15 +29,15 @@ package integrations
 //     subsystem's routes — an order only the composer can hold (serve.go).
 //   - THE OTHER IDENTITY FACTS. Two more live only in headers: the caller's
 //     own-org admin bit (what the AdminOnly connectors gate on) and their user id
-//     (what the per-USER /v1/connectors plane keys every row by). bridgeFacts
+//     (what the per-USER /v1/connectors plane keys every row by). channelFacts
 //     parks them beside the org, and it IS this subsystem's own.
 //
-// So bridgeFacts is the one thing registered here, at the ROOT and gated by PATH
+// So channelFacts is the one thing registered here, at the ROOT and gated by PATH
 // (scope.Use), rather than on a group per served prefix. A group per prefix reads
 // better and does not run: these routes are registered on the root node, so the
 // group node would declare middleware over a subtree holding no routes, which zip
 // refuses to compose — the app exits instead of listening. The gate is the prefix
-// set manifest/apps.go declares for this subsystem, so bridgeFacts reaches
+// set manifest/apps.go declares for this subsystem, so channelFacts reaches
 // /v1/integrations, /v1/connectors and the connector webhook, and nothing that
 // belongs to anyone else. Ahead of the ops, always: fiber runs middleware in
 // registration order, so one installed after its leaves never runs.
@@ -76,21 +76,21 @@ type facts struct {
 	// answers stay two values.
 	super bool
 	// user is the validated principal's user id, the per-USER connector plane's
-	// row key. CLONED at the bridge: c.User() is a zero-copy view into the reused
+	// row key. CLONED at the channel: c.User() is a zero-copy view into the reused
 	// fasthttp request buffer, and this value keys rows and KMS paths that outlive
 	// the request.
 	user string
 }
 
-// factsKey is the context key bridgeFacts parks facts under. Unexported zero-size
+// factsKey is the context key channelFacts parks facts under. Unexported zero-size
 // type, so no other package can mint or read one.
 type factsKey struct{}
 
-// bridgeFacts carries the header-only identity facts onto the request context —
+// channelFacts carries the header-only identity facts onto the request context —
 // the twin of the org cloud.Bridge parks. A request that never passed a bridge
 // reads back the zero facts, so absence is "not an admin, no user", which every
 // gate below refuses.
-func bridgeFacts(c *zip.Ctx) error {
+func channelFacts(c *zip.Ctx) error {
 	c.SetContext(context.WithValue(c.Context(), factsKey{}, facts{
 		admin: principal.IsOrgAdmin(c),
 		super: principal.IsSuperAdmin(c),
@@ -104,10 +104,10 @@ func factsOf(ctx context.Context) facts {
 	return f
 }
 
-// orgAdmin reports the bridged own-org admin bit.
+// orgAdmin reports the carried own-org admin bit.
 func orgAdmin(ctx context.Context) bool { return factsOf(ctx).admin }
 
-// superAdmin reports the bridged platform-sudo bit. Absence of a bridge reads
+// superAdmin reports the carried platform-sudo bit. Absence of a bridge reads
 // false, so an unbridged request is never platform-privileged.
 func superAdmin(ctx context.Context) bool { return factsOf(ctx).super }
 
