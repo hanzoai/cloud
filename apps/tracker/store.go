@@ -397,14 +397,30 @@ type IssueFilter struct {
 	// both) — the timeline's slice. It is the one filter that is a predicate
 	// rather than an equality, because "has a date" is what a gantt selects on.
 	Scheduled bool
+	// Assignee keeps only issues held by that person; "" means anyone. Pair it
+	// with Status to answer "what am I working on".
+	Assignee string
+	// Text matches title or description, case-insensitively. It is the one
+	// filter that is a SEARCH rather than a selection, which is why it is a
+	// substring and not an equality — a person looking for an issue knows a word
+	// from it, not its number.
+	Text string
 }
 
 // ListIssues returns issues for a project narrowed by IssueFilter. Ordered by
 // status then number so a status-grouped view renders deterministically and a
 // single-column board reads oldest-first.
 func (s *Store) ListIssues(ctx context.Context, org, projectID string, f IssueFilter) ([]Issue, error) {
-	q := `SELECT ` + issueCols + ` FROM issues WHERE org=? AND project_id=?`
-	args := []any{org, projectID}
+	// projectID "" means EVERY project this store holds. Cross-project is the
+	// same query with one fewer predicate, not a second function: an issue
+	// mirrored from GitHub lands in the org's default project, so "find the issue
+	// about X" cannot be answered by asking one project at a time.
+	q := `SELECT ` + issueCols + ` FROM issues WHERE org=?`
+	args := []any{org}
+	if projectID != "" {
+		q += ` AND project_id=?`
+		args = append(args, projectID)
+	}
 	add := func(col, val string) {
 		if val != "" {
 			q += ` AND ` + col + `=?`
@@ -415,8 +431,14 @@ func (s *Store) ListIssues(ctx context.Context, org, projectID string, f IssueFi
 	add("kind", f.Kind)
 	add("repo", f.Repo)
 	add("source", f.Source)
+	add("assignee", f.Assignee)
 	if f.Scheduled {
 		q += ` AND (start_at>0 OR due_at>0)`
+	}
+	if t := strings.TrimSpace(f.Text); t != "" {
+		q += ` AND (title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')`
+		like := "%" + likeEscape(t) + "%"
+		args = append(args, like, like)
 	}
 	q += ` ORDER BY status ASC, number ASC`
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -464,4 +486,12 @@ func (s *Store) DeleteIssue(ctx context.Context, org, projectID string, number i
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+// likeEscape neutralises the wildcards in a user's search text so a query for
+// "50%" finds "50%" and not everything. The ESCAPE clause above names the
+// backslash; without this a search box is a way to select the whole table.
+func likeEscape(v string) string {
+	r := strings.NewReplacer(`\\`, `\\\\`, "%", `\\%`, "_", `\\_`)
+	return r.Replace(v)
 }
