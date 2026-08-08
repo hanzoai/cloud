@@ -42,8 +42,8 @@ import (
 // Called last from routes(); the literal /providers registers before the wildcard
 // GETs (static-before-wildcard discipline, same as routes()).
 func connectorRoutes(app cloud.Router, zapp *zip.App, o ops) {
-	// The ops below read the org (cloud.Bridge) and the user id (bridgeFacts) off
-	// the request context, so the bridge has to run ahead of them.
+	// The ops below read the org (cloud.Bridge) and the user id (channelFacts) off
+	// the request context, so the channel has to run ahead of them.
 	//
 	// routes() already installs both through the scope, and the scope gates by
 	// path across EVERY prefix the manifest declares for this subsystem —

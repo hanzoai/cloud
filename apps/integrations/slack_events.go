@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// slack_events.go is the SLACK ADAPTER of the ChatBridge core (bridge.go): the Slack
+// slack_events.go is the SLACK ADAPTER of the ChatBridge core (channel.go): the Slack
 // Events webhook + slash command. Like every adapter (discord_events.go /
 // telegram_events.go / teams_events.go) its three edges are —
 //
@@ -27,12 +27,12 @@ import (
 //	reply        : slackReplier (bot-token chat.post{Message,Ephemeral}) / response_url
 //
 // — and it delegates the shared middle to the core: the bounded per-org pool
-// (bridgeLim), the durable dedupe (store.MarkEvent), org resolution
-// (OrgForExternalID — the ISOLATION ROOT), the ONE agent brain (bridgeReply, run
+// (channelLim), the durable dedupe (store.MarkEvent), org resolution
+// (OrgForExternalID — the ISOLATION ROOT), the ONE agent brain (channelReply, run
 // ON-BEHALF-OF the linked user), and the per-user link. The @hanzo CHAT turn is now
 // ONE code path across all four platforms.
 //
-// ONE Slack-SPECIFIC branch stays, deliberately NOT folded into the chat bridge: a
+// ONE Slack-SPECIFIC branch stays, deliberately NOT folded into the chat channel: a
 // `code:` prefix routes to the durable CODING agent (slack_coding.go) — its own pool
 // and dispatch to the engine. The coding agent is a distinct flow from a chat turn.
 //
@@ -62,7 +62,7 @@ var (
 )
 
 // slackBridgeReady lazily initializes the Slack adapter's OWN process state — the
-// single-use link-state seen-set — plus the shared bridge state (bridgeReady: the
+// single-use link-state seen-set — plus the shared channel state (channelReady: the
 // bounded chat pool + link seen-set). The durable dedupe table is created in the
 // store's migrate() at Mount. Cheap + idempotent; every Slack handler calls it first.
 //
@@ -71,7 +71,7 @@ var (
 // have been a second policy that the app door did not share and that could
 // disagree with the real one about what "full" means.
 func slackBridgeReady(s *cloud.Service[state]) {
-	bridgeReady()
+	channelReady()
 	slackBridgeOnce.Do(func() {
 		slackUsedStates = newSeenSet(time.Duration(slackLinkTTLSec) * time.Second)
 	})
@@ -82,7 +82,7 @@ func slackBridgeReady(s *cloud.Service[state]) {
 // slackEvents is the Slack Events API webhook (the app's request_url:
 // https://{domain}/v1/integrations/slack/events). It HMAC-verifies the raw body,
 // answers the url_verification challenge, and routes @mentions / DMs — acking FAST
-// (empty 200) and doing the billed work async on the bridge under the bounded pool,
+// (empty 200) and doing the billed work async on the channel under the bounded pool,
 // deduped durably on event_id. A `code:` prompt branches to the coding flow.
 func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	slackBridgeReady(s)
@@ -145,7 +145,7 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		// the pool is full, record NOTHING and return a retriable NON-2xx — the turn
 		// never ran, so no event_id is burned and Slack re-delivers when a slot frees
 		// (no lost @mention, no double-run).
-		if !bridgeLim.acquire(org) {
+		if !channelLim.acquire(org) {
 			s.Log.Warn("slack: at capacity, shedding for retry", "org", org)
 			return zip.Errorf(http.StatusTooManyRequests, "slack agent pool at capacity")
 		}
@@ -156,12 +156,12 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		key := slackEventKey(raw)
 		fresh, err := s.State.store.MarkEvent(c.Context(), "slack", key)
 		if err != nil {
-			bridgeLim.release(org)
+			channelLim.release(org)
 			s.Log.Warn("slack: event dedupe error, skipping", "err", err)
 			return c.NoContent(http.StatusOK)
 		}
 		if !fresh {
-			bridgeLim.release(org)
+			channelLim.release(org)
 			return c.NoContent(http.StatusOK)
 		}
 		// Opportunistic GC so the dedupe table cannot grow without bound.
@@ -173,7 +173,7 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		// answered by the chat brain — but the hand-off is short and synchronous, so
 		// it rides the same bounded spawn every other Slack turn does.
 		if codingText, isCoding := codingIntent(route.Text); isCoding {
-			bridgeSpawn(s, org, func() { slackCodingEvent(s, org, route, codingText) })
+			channelSpawn(s, org, func() { slackCodingEvent(s, org, route, codingText) })
 			return c.NoContent(http.StatusOK)
 		}
 		in := Inbound{
@@ -182,7 +182,7 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		emitIngress(org, in, "")
 		reply := slackReplier(s, org, route.Channel, route.ThreadTS, route.User)
-		bridgeSpawn(s, org, func() {
+		channelSpawn(s, org, func() {
 			// SAY SOMETHING IMMEDIATELY. A turn is a real model completion and
 			// measured 9,955 / 35,893 / 52,985 ms in production — the plumbing is
 			// ~25ms of it. Until this, the person saw an empty thread for the whole
@@ -211,7 +211,7 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 // slackCommands handles a Slack slash command (application/x-www-form-urlencoded)
 // at https://{domain}/v1/integrations/slack/commands. Same HMAC gate; deduped on
 // trigger_id; acks within Slack's 3s budget (empty 200) and posts the answer
-// asynchronously via the command's response_url on the bridge.
+// asynchronously via the command's response_url on the channel.
 func slackCommands(s *cloud.Service[state], c *zip.Ctx) error {
 	slackBridgeReady(s)
 	secret := slackSigningSecret()
@@ -231,22 +231,22 @@ func slackCommands(s *cloud.Service[state], c *zip.Ctx) error {
 	// removed; handled in slackSlashTurn), then SHED before the dedupe write (Red
 	// M-1), same order as the events path.
 	org, _ := OrgForExternalID("slack", team)
-	if !bridgeLim.acquire(org) {
+	if !channelLim.acquire(org) {
 		s.Log.Warn("slack: at capacity, shedding slash", "org", org)
 		return zip.Errorf(http.StatusTooManyRequests, "slack agent pool at capacity")
 	}
 	fresh, err := s.State.store.MarkEvent(c.Context(), "slack", triggerID)
 	if err != nil {
-		bridgeLim.release(org)
+		channelLim.release(org)
 		s.Log.Warn("slack: slash dedupe error, skipping", "err", err)
 		return c.NoContent(http.StatusOK)
 	}
 	if !fresh {
-		bridgeLim.release(org)
+		channelLim.release(org)
 		return c.NoContent(http.StatusOK)
 	}
 	in := Inbound{Provider: "slack", ExternalID: team, User: user, Channel: channel, Text: text}
-	bridgeSpawn(s, org, func() { slackSlashTurn(s, org, in, responseURL) })
+	channelSpawn(s, org, func() { slackSlashTurn(s, org, in, responseURL) })
 	return c.NoContent(http.StatusOK)
 }
 
@@ -267,7 +267,7 @@ func parseSlashCommand(raw []byte) (team, channel, user, text, responseURL, trig
 	return
 }
 
-// ── Slack dispatch: chat via the bridge, coding via its own flow ────────────
+// ── Slack dispatch: chat via the channel, coding via its own flow ────────────
 
 // slackReplier is the Slack Events reply seam handed to runBridgeTurn: it fetches
 // THIS org's bot token (the isolation-scoped reply sink) and posts the agent's
@@ -296,7 +296,7 @@ func slackReplier(s *cloud.Service[state], org, channel, threadTS, user string) 
 // deliberately NOT folded into the chat brain: it is a different act with a
 // different budget, and it answers with a run handle rather than a sentence.
 func slackCodingEvent(s *cloud.Service[state], org string, d slackRoute, codingText string) {
-	ctx, cancel := context.WithTimeout(context.Background(), bridgeAgentTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), channelAgentTimeout)
 	defer cancel()
 	// Echo-loop guard already applied in the sync path; the bot token is the reply
 	// sink both the ack and the result card post through.
@@ -308,15 +308,15 @@ func slackCodingEvent(s *cloud.Service[state], org string, d slackRoute, codingT
 	handleSlackCoding(s, ctx, org, string(tok), d.TeamID, d.Channel, d.ThreadTS, d.User, codingText)
 }
 
-// slackSlashTurn is the async slash body dispatched on the bridge. An empty org means
+// slackSlashTurn is the async slash body dispatched on the channel. An empty org means
 // the workspace's Hanzo connection was removed. A `code:` prompt branches to the
 // coding flow (slack_coding.go). A body that NAMES a registry command runs it as the
 // linked user (slack_command.go); anything else runs the ONE agent brain
-// (bridgeReply). Delivery is via the (host-pinned) response_url: an agent answer goes
+// (channelReply). Delivery is via the (host-pinned) response_url: an agent answer goes
 // in_channel; a command's result and the account-link prompt go ephemeral (only the
 // invoker sees them).
 func slackSlashTurn(s *cloud.Service[state], org string, in Inbound, responseURL string) {
-	ctx, cancel := context.WithTimeout(context.Background(), bridgeAgentTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), channelAgentTimeout)
 	defer cancel()
 	if org == "" {
 		_ = slackPostResponseURL(ctx, responseURL, "ephemeral", "This Slack workspace isn't connected to Hanzo yet.")
@@ -338,7 +338,7 @@ func slackSlashTurn(s *cloud.Service[state], org string, in Inbound, responseURL
 	// A slash command answers synchronously on the request, which already has a
 	// span; the run id is recorded on it for the same reason the async turn records
 	// one — so this invocation can be joined to the run it caused.
-	text, ephemeral, runID := bridgeReply(s, org, in.Provider, in.ExternalID, in.User, in.Channel, in.Text)
+	text, ephemeral, runID := channelReply(s, org, in.Provider, in.ExternalID, in.User, in.Channel, in.Text)
 	if runID != "" {
 		trace.SpanFromContext(ctx).SetAttributes(attribute.String("hanzo.agent.run_id", runID))
 	}
@@ -651,7 +651,7 @@ func NotifySlack(ctx context.Context, org, channel, text string, blocks []any) e
 // slackResponseHost is the ONLY host a slash-command response_url may target. A
 // var (not const) so a test can repoint delivery at an httptest stub; production
 // never mutates it. Pinning stops a forged command (should the signature ever be
-// bypassed) from turning the bridge into an SSRF/exfil client to an attacker host.
+// bypassed) from turning the channel into an SSRF/exfil client to an attacker host.
 var slackResponseHost = "hooks.slack.com"
 
 // slackPostResponseURL delivers a slash reply to Slack's response_url (a
@@ -687,7 +687,7 @@ func slackPostResponseURL(ctx context.Context, responseURL, responseType, text s
 func slackSigningSecret() string { return strings.TrimSpace(os.Getenv("SLACK_SIGNING_SECRET")) }
 
 // slackAgentRef resolves the agent the Slack CODING flow runs (slack_coding.go). The
-// CHAT path resolves its agent through the bridge (bridgeAgentRef("slack")); this
+// CHAT path resolves its agent through the channel (channelAgentRef("slack")); this
 // stays for the coding path, unchanged: SLACK_AGENT_REF, default "hanzo".
 func slackAgentRef() string {
 	if v := strings.TrimSpace(os.Getenv("SLACK_AGENT_REF")); v != "" {

@@ -13,7 +13,7 @@ import (
 
 // slack_coding.go turns the @hanzo Slack front-door into an ENGINEER: a message
 // `@hanzo code: <repo> <task>` (or `/hanzo code: <repo> <task>`) branches off the
-// chat reply path (slack_events.go → the shared bridge brain) into a durable coding
+// chat reply path (slack_events.go → the shared channel brain) into a durable coding
 // run — a fresh agent works a NATIVE /v1/git repo in a sandbox, pushes a branch,
 // opens a native PR work item, and reports back IN THE SAME THREAD. Everything
 // that is NOT the `code:` trigger stays on the existing chat path, unchanged.
@@ -38,7 +38,7 @@ import (
 
 const (
 	// codingTaskTimeout bounds one detached coding run end to end. It is far longer
-	// than a chat turn (bridgeAgentTimeout) because a real coding run clones, runs a
+	// than a chat turn (channelAgentTimeout) because a real coding run clones, runs a
 	// model-driven edit loop, and pushes. Overridable via SLACK_CODING_TIMEOUT_SEC.
 	codingTaskDefaultTimeout = 25 * time.Minute
 	// codingDefaultConcurrency / codingDefaultOrgConcurrency bound simultaneous
@@ -295,7 +295,7 @@ func codingDispatchAck(err error) string {
 // the webhook request, carrying the tenant, bounded by a short budget because
 // dispatch is an admission and not the run.
 //
-// It takes an org and nothing else, for the same reason bridgeRunContext does: a
+// It takes an org and nothing else, for the same reason channelRunContext does: a
 // ctx parameter is an invitation to pass the webhook's, and on the webhook's ctx
 // the statement is silently discarded and the call leaves with no tenant at all.
 // The signature is the guard.

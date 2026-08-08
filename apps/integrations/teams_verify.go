@@ -222,7 +222,7 @@ func teamsGetJSON(ctx context.Context, urlStr string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := bridgeHTTP.Do(req)
+	resp, err := channelHTTP.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +230,7 @@ func teamsGetJSON(ctx context.Context, urlStr string) ([]byte, error) {
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("teams metadata http %d", resp.StatusCode)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, bridgeMaxBody))
+	return io.ReadAll(io.LimitReader(resp.Body, channelMaxBody))
 }
 
 // rsaPubFromJWK builds an RSA public key from a JWK's base64url modulus (n) and

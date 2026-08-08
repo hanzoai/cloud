@@ -49,14 +49,14 @@ import (
 //	         nowhere to put. Naming is not invoking, and the gap between them is
 //	         most of the English language.
 //
-// A body that fails either is prose and goes to bridgeReply unchanged, which is
+// A body that fails either is prose and goes to channelReply unchanged, which is
 // what happened to every body before this file existed.
 //
 // AUTH is the LINKED PERSON's, never a service identity. The refresh token
 // slack_link sealed in KMS mints a short-lived hanzo.id access token, and the
 // call goes through the front door, so the command meets the same authorizer a
-// REST client would. An unlinked user gets the prompt the bridge already writes
-// ([bridgeIdentity]); a spent one is told to link again rather than to wait. The
+// REST client would. An unlinked user gets the prompt the channel already writes
+// ([channelIdentity]); a spent one is told to link again rather than to wait. The
 // workspace's own bot token is a REPLY sink and is never a credential.
 //
 // THE ORG IS THE WORKSPACE'S. It rides as X-Org-Id and the caller's membership is
@@ -287,7 +287,7 @@ func unescapeSlack(s string) string {
 // it produces belongs to the person who typed the command, which is why the
 // caller delivers all of them ephemerally and this returns no say in it.
 func slackCommandTurn(s *cloud.Service[state], ctx context.Context, org string, in Inbound, cmds []zip.Command, argv []string) string {
-	link, say, _ := bridgeIdentity(s, org, in.Provider, in.ExternalID, in.User)
+	link, say, _ := channelIdentity(s, org, in.Provider, in.ExternalID, in.User)
 	if say != "" {
 		return say
 	}
@@ -342,7 +342,7 @@ func slackCommandTurn(s *cloud.Service[state], ctx context.Context, org string, 
 //
 // It bounds the call itself. zip.Remote reads the context only before dialling
 // (its transport owns the deadline from there, and the https transport declares
-// none), so an unanswered request would hold a bridge pool slot for as long as
+// none), so an unanswered request would hold a channel pool slot for as long as
 // the socket stayed open. The turn's deadline is applied HERE, where the slot is
 // held. The send itself is left to finish into a buffered channel nobody reads:
 // it holds one goroutine and one socket until the transport gives up, which is

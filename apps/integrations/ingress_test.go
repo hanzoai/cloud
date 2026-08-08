@@ -172,7 +172,7 @@ func TestSendDiscordHTTPErrorRedacted(t *testing.T) {
 // while production dropped every event, because the consumer runs in ANOTHER
 // PROCESS and the function pointer they installed was one this process happened
 // to hold. A test that only ever builds the co-resident case says nothing about
-// the deployed one, which is the same trap that let a chat bridge call
+// the deployed one, which is the same trap that let a chat channel call
 // agents.RunOnBehalf directly for as long as it did.
 //
 // What can be checked from here is the mapping, and that emitting never delays
