@@ -25,6 +25,15 @@ package coding
 // status 82ms vs 980ms, start 294ms vs 881ms, ~57 MiB either way) — so the
 // boundary has to be switchable by deployment, not by rewrite.
 //
+// READ THAT BENCHMARK AS ABOUT kata-fc, WHICH IS NOT INSTALLED. Measured on the
+// live fleet against the runtimes that ARE (gvisor, kata-clh), gVisor wins both
+// axes and not narrowly: 2306ms vs 3967ms to Running, and 0.25s vs 1.99s for 3000
+// file writes — eight times. Cloud Hypervisor is not Firecracker, and the
+// conclusion does not carry across. So the fast choice among what exists today is
+// gvisor, which is also what the fleet runs; kata-fc stays worth installing to
+// test, on the strength of the original numbers, and until it is a caller naming
+// it is refused by the runtime table rather than handed a pod that sits Pending.
+//
 // # Why the plane and not HTTP
 //
 // apps/bots' transport is net/http by its own admission — its doc says the bytes
