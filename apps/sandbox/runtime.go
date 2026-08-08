@@ -17,11 +17,10 @@
 // the read, because a value an operator can change under a running fleet has no
 // boot to be checked at.
 //
-// Empty is honest, not a hole: it means the node's default runtime, which is
-// the containment a normal pod gets. It ships that way because runsc has to be
-// installed on the nodes first and that restarts containerd under 204 running
-// pods — maintenance, not a release step. The field flips afterwards with no
-// rebuild, and that is the whole reason the runtime is a string.
+// An unconfigured fleet gets gVisor, not the node's own runtime. Empty meant the
+// node default while runsc still had to be installed — a cluster without it must
+// not be handed a class it does not have — and that has been true for long enough
+// that the accommodation now only hides a downgrade. See runtimeFor.
 //
 // There is no os/exec in this file and there must never be. It creates
 // Kubernetes objects and streams bytes to the apiserver.
@@ -456,7 +455,21 @@ func (r *runtime) runtimeFor(m Sandbox, want, fleet string) (string, error) {
 	// different request from any named class, and a cluster with no gVisor
 	// installed must not be handed one. Every named value has been through the
 	// table at startup, so what reaches a pod spec here is a name we run.
-	if fleet = strings.TrimSpace(fleet); fleet == "" || r.fits(fleet, kernel, shares) {
+	// GVISOR IS THE FLOOR, and it is one line because it is one rule: whatever the
+	// fleet says, what comes back can hold this sandbox.
+	//
+	// Unset used to mean the node's own runtime — the containment an ordinary pod
+	// gets — which was honest while runsc was not yet installed on the nodes and a
+	// cluster without it must not be handed a class it does not have. It is
+	// installed, the fleet runs it, and the setting moved somewhere an operator can
+	// change it live: an unconfigured deployment putting somebody's model output on
+	// the node's kernel is no longer a bootstrap accommodation, it is a downgrade
+	// that nobody asked for and nobody would see.
+	//
+	// So unset, unknown and known-but-unfit all land in the same place, and it is
+	// the boundary that isolates. Our own code took r.bare above; nothing that
+	// needs a kernel of its own ever reaches here without one.
+	if fleet = strings.TrimSpace(fleet); fleet != "" && r.fits(fleet, kernel, shares) {
 		return fleet, nil
 	}
 	return shared, nil

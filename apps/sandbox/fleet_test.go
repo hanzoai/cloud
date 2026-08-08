@@ -84,7 +84,7 @@ func TestAMistypedSettingFallsToTheBoundaryThatServes(t *testing.T) {
 	for _, c := range []struct{ set, want string }{
 		{"gvisor", "gvisor"},
 		{"kata-clh", "kata-clh"},
-		{"", ""},              // unconfigured: the node's own default
+		{"", shared},          // unconfigured isolates; it does not fall to the node
 		{"gvisor ", "gvisor"}, // trimmed on the way in
 		{"runsc", shared},     // the HANDLER's name, not the class's
 		{"gVisor", shared},    // case matters — the apiserver's does
@@ -105,11 +105,11 @@ func TestAMistypedSettingFallsToTheBoundaryThatServes(t *testing.T) {
 	}
 }
 
-// Settings being down is not a reason to refuse a sandbox. Unreachable answers
-// the same as unconfigured — the node's own default — because the alternative
-// trades a configurable boundary for an outage, and the boundary it would be
-// protecting is the one the fleet already had before anyone configured it.
-func TestNoSettingsPeerAnswersLikeUnconfigured(t *testing.T) {
+// Settings being down is not a reason to refuse a sandbox, and it is not a reason
+// to weaken one either. An unreachable peer reads as unconfigured, and
+// unconfigured isolates — so an outage in the settings app cannot move a tenant's
+// sandbox onto the node's kernel.
+func TestNoSettingsPeerStillIsolates(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
 	plane.Unbind()
 	cloud.ResetPlane()
@@ -118,5 +118,35 @@ func TestNoSettingsPeerAnswersLikeUnconfigured(t *testing.T) {
 	r := newRuntime()
 	if got := r.preference(context.Background()); got != "" {
 		t.Fatalf("preference with no peer = %q, want empty", got)
+	}
+	// And empty is not a weaker sandbox.
+	got, err := r.runtimeFor(Sandbox{ID: "m_1", Org: "acme", Volume: "m-acme-p-abc"}, "", "")
+	if err != nil || got != shared {
+		t.Fatalf("no settings peer gave runtime %q (err %v), want %q", got, err, shared)
+	}
+}
+
+// THE FLOOR, over every fleet value at once: a tenant's sandbox never lands on
+// the node's own kernel, whatever an operator types in the field.
+//
+// The table tests state cases; this states the property, so a boundary added to
+// `runtimes` later cannot open a hole that no case happened to cover. It is the
+// isolation half of the volume invariant next door — same shape, same reason.
+func TestNoFleetValuePutsATenantOnTheNodesKernel(t *testing.T) {
+	r := &runtime{}
+	for _, fleet := range append([]string{"", " ", "runsc", "default", "gVisor"}, sorted()...) {
+		for _, vol := range []string{"", "m-acme-p-abc"} {
+			m := Sandbox{ID: "m_1", Org: "acme", Volume: vol}
+			got, err := r.runtimeFor(m, "", fleet)
+			if err != nil {
+				continue // a refusal is the other acceptable answer
+			}
+			if got == "" {
+				t.Fatalf("fleet %q + volume %q gave the node's own runtime", fleet, vol)
+			}
+			if !runtimes[got].kernel {
+				t.Fatalf("fleet %q + volume %q gave %q, which has no kernel of its own", fleet, vol, got)
+			}
+		}
 	}
 }
