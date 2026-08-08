@@ -25,7 +25,7 @@ import (
 func dataDirWithStore(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	seedIdentity(t, dbPath(dir), "hanzo", "z")
+	seedIdentity(t, StorePath(dir), "hanzo", "z")
 	return dir
 }
 
@@ -62,7 +62,7 @@ func TestTheGraftOpensTheStoreThatHoldsTheIdentities(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	path := dbPath(dir)
+	path := StorePath(dir)
 	seedIdentity(t, path, "hanzo", "z")
 
 	db, err := openStore(dir)
@@ -93,7 +93,7 @@ func TestTheStorePathIsTheOneIAMWrites(t *testing.T) {
 	dir := t.TempDir()
 	want := filepath.Join(dir, "iam", "iam.db")
 
-	if got := dbPath(dir); got != want {
+	if got := StorePath(dir); got != want {
 		t.Fatalf("store path = %s, want %s (the --db the standalone iam is given)", got, want)
 	}
 
@@ -134,7 +134,7 @@ var sqliteMagic = []byte("SQLite format 3\x00")
 // and any one of them would then be locked out of the fleet's own database.
 func TestTheIdentityStoreIsPlaintextAndThatIsRecorded(t *testing.T) {
 	dir := t.TempDir()
-	path := dbPath(dir)
+	path := StorePath(dir)
 	seedIdentity(t, path, "hanzo", "z")
 
 	head, err := os.ReadFile(path)
