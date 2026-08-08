@@ -14,9 +14,18 @@ import (
 // "what would you like me to help you with". Nothing carried the conversation.
 // These are the four things that had to become true.
 
-// A conversation is instructions, then what was said, then what is being asked.
-// The order is the whole point: prior turns belong BETWEEN who the agent is and
-// the newest question, and the string concatenation this replaces had no between.
+// A conversation is instructions, then what was said, then what is being asked —
+// three separate USER/assistant turns. The order is the point: prior turns belong
+// BETWEEN who the agent is and the newest question, and the string concatenation
+// this replaces had no between.
+//
+// The roles are measured, not assumed. enso-flash through api.hanzo.ai IGNORES a
+// system turn — asked in one for the single word PONG it answered "Hello! How can
+// I help you today?", and answered "PONG" to the same bytes in a user turn — so
+// instructions in a system turn reach nothing and the agent silently runs with no
+// instructions at all. And they are a turn of their own, not a prefix on the
+// newest message: prepended to "try again" the model answered the instructions
+// ("Understood. How can I help you today?") instead of the question.
 func TestTheConversationPutsHistoryBetweenTheAgentAndTheAsk(t *testing.T) {
 	history := []types.ChatMessage{
 		{Role: types.RoleUser, Content: "weather in Benicia"},
@@ -25,7 +34,7 @@ func TestTheConversationPutsHistoryBetweenTheAgentAndTheAsk(t *testing.T) {
 	msgs := conversation("You are Hanzo.", history, "try again")
 
 	want := []types.ChatMessage{
-		{Role: types.RoleSystem, Content: "You are Hanzo."},
+		{Role: types.RoleUser, Content: "You are Hanzo."},
 		{Role: types.RoleUser, Content: "weather in Benicia"},
 		{Role: types.RoleAssistant, Content: "It is 24 degrees and clear."},
 		{Role: types.RoleUser, Content: "try again"},
@@ -42,8 +51,7 @@ func TestTheConversationPutsHistoryBetweenTheAgentAndTheAsk(t *testing.T) {
 }
 
 // A run with nothing to answer — a scheduled agent — asks with its instructions,
-// exactly as it did before. Handing a model a system message and no question is
-// not a turn.
+// exactly as it did before.
 func TestAStandingInstructionIsTheAskWhenThereIsNoQuestion(t *testing.T) {
 	msgs := conversation("Post the daily summary.", nil, "")
 	if len(msgs) != 1 || msgs[0].Role != types.RoleUser || msgs[0].Content != "Post the daily summary." {
