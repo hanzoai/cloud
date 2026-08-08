@@ -1123,29 +1123,40 @@ func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Age
 }
 
 // conversation is what the model is shown for one turn: who it is, what was said
-// before, and the message it has to answer.
+// before, and the message it has to answer — in that order, each its own turn.
 //
-// The instructions used to be GLUED to the input as a single user string. That
-// was fine while a turn was one message and became wrong the moment there was a
+// The instructions used to be GLUED to the input as one user string. That was
+// fine while a turn was a single message and became wrong the moment there was a
 // conversation: earlier turns belong BETWEEN what the agent is and what it was
-// just asked, and a concatenated string has no between. Three roles, in the
-// order they are read.
+// just asked, and a concatenation has no between.
 //
-// The one exception is a run with nothing to answer — a scheduled agent, whose
-// input is empty and whose instructions ARE the ask. It asks as a user turn,
-// exactly as it did before, rather than handing a model a system message and no
-// question.
+// THE INSTRUCTIONS ARE A USER TURN, NOT A SYSTEM TURN, and that is not a style
+// choice. Measured against api.hanzo.ai on enso-flash, the model this chat path
+// actually runs: a system message asking for the single word PONG was answered
+// "Hello! How can I help you today?", and the byte-identical instruction in a
+// user turn was answered "PONG". The system role is dropped somewhere on that
+// path, so instructions delivered in it reach nothing — the persona, the tool
+// protocol and the open-web rule would all be silently absent, which compiles,
+// passes every test with a fake client, and produces an assistant with no
+// instructions at all. The seam is worth fixing where it breaks; until it is,
+// this sends the turn the model actually reads.
+//
+// It is a turn of its OWN rather than a prefix on the newest message. Measured
+// the same way: with the instructions prepended to "try again", the reply was
+// "Understood. How can I help you today?" — the model answered the instructions
+// instead of the question. Separated, the same exchange re-answered the weather
+// it had been asked about, which is the whole point of carrying a history.
+//
+// A run with nothing to answer — a scheduled agent — falls out of this with no
+// special case: its instructions ARE the ask, and they are the only turn.
 func conversation(instructions string, history []types.ChatMessage, input string) []types.ChatMessage {
 	msgs := make([]types.ChatMessage, 0, len(history)+2)
 	if s := strings.TrimSpace(instructions); s != "" {
-		msgs = append(msgs, types.ChatMessage{Role: types.RoleSystem, Content: s})
+		msgs = append(msgs, types.ChatMessage{Role: types.RoleUser, Content: s})
 	}
 	msgs = append(msgs, history...)
 	if in := strings.TrimSpace(input); in != "" {
 		msgs = append(msgs, types.ChatMessage{Role: types.RoleUser, Content: in})
-	}
-	if len(msgs) == 1 && msgs[0].Role == types.RoleSystem {
-		msgs[0].Role = types.RoleUser
 	}
 	return msgs
 }

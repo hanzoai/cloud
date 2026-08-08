@@ -174,7 +174,7 @@ func TestExecuteRunOK(t *testing.T) {
 		t.Fatalf("run must use the agent's model, got %q", ai.gotModel)
 	}
 	if len(ai.gotMsgs) != 2 ||
-		ai.gotMsgs[0].Role != types.RoleSystem || ai.gotMsgs[0].Content != "You are a greeter." ||
+		ai.gotMsgs[0].Role != types.RoleUser || ai.gotMsgs[0].Content != "You are a greeter." ||
 		ai.gotMsgs[1].Role != types.RoleUser || ai.gotMsgs[1].Content != "say hi" {
 		t.Fatalf("the model must be shown what it is and what it was asked, got %+v", ai.gotMsgs)
 	}
