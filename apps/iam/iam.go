@@ -258,7 +258,29 @@ func dbPath(dir string) string { return filepath.Join(dir, "iam", "iam.db") }
 //
 // cek keeps opening cloud's OWN stores. Each store is opened by whoever owns it.
 func openStore(dir string) (orm.DB, error) {
-	db, err := iamstore.Open("sqlite", dbPath(dir))
+	// REFUSE TO CREATE ONE. This process is pointed at an identity store that
+	// already exists — that is the whole shape: one store, pointed at, never
+	// converted. iamstore.Open creates the file when it is absent, which is right
+	// for the standalone iam (it OWNS the store and must be able to make one) and
+	// catastrophic here: if the volume holding it is not mounted, or is mounted
+	// somewhere else, or is shadowed by an emptyDir, this would mint a fresh empty
+	// database and serve it. Identity would simply be gone — every account absent,
+	// /v1/iam/.well-known/jwks answering {"keys":[]} so every token in the fleet
+	// fails to verify — and nothing would have failed to say so, because from the
+	// code's point of view opening an empty database is a success.
+	//
+	// An absent store is therefore a MOUNTING FAULT, and the honest answer to a
+	// mounting fault is to say so. Mount's caller already knows what to do with
+	// that: it serves an honest 503 on every identity address (mountFailClosed)
+	// rather than falling through to a catch-all that would answer HTML on an auth
+	// path. A loud 503 is recoverable in a minute; a silently empty identity
+	// service is not recoverable at all, because by then clients have been told
+	// their accounts do not exist.
+	path := dbPath(dir)
+	if _, err := os.Stat(path); err != nil {
+		return nil, fmt.Errorf("iam: the identity store is not at %s, so this process has nothing to serve — check that the volume holding it is mounted there: %w", path, err)
+	}
+	db, err := iamstore.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("iam: open store: %w", err)
 	}
