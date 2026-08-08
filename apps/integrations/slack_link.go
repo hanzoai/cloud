@@ -359,7 +359,7 @@ func slackExchangeUser(ctx context.Context, creds OAuthConfig, redirectURI, code
 		"redirect_uri":  {redirectURI},
 	}
 	var r slackUserOAuthResponse
-	if err := slackPostForm(ctx, slackWebAPIBase+"/oauth.v2.access", form, &r); err != nil {
+	if err := slackPostForm(ctx, "", slackWebAPIBase+"/oauth.v2.access", form, &r); err != nil {
 		return "", "", err
 	}
 	if !r.OK {
