@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/integrations"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -21,7 +20,9 @@ import (
 var errNoRoute = errors.New("channels: no reply route for this room")
 
 // discordDoor is the send door; tests spy it, prod never repoints.
-var discordDoor = integrations.SendDiscord
+var discordDoor = func(ctx context.Context, channelID, replyTo, text string) (string, error) {
+	return post(ctx, plane.ChatSendIn{Provider: "discord", Room: channelID, ReplyTo: replyTo, Text: text})
+}
 
 // DM:false is honest: the interactions ingress is guild-scoped only.
 var discordTransport = transport{
