@@ -346,6 +346,41 @@ type chatChannels struct {
 // order is fixed, so a console can render the same rows every time. A policy that
 // cannot be read leaves that channel's policy fields empty rather than failing
 // the whole listing.
+// orgConnection answers the question this surface actually asks — has the ORG
+// connected this transport — and answers it from the same query that decides the
+// same thing on /v1/integrations.
+//
+// It replaces integrations.ConnectionFor(org, id, ""), which asks a narrower
+// question: give me the row filed under this EXACT composite key. A connection is
+// keyed (org, user, provider, label), where user is "" only when the org owns it
+// and label is "" only for a provider with a single account — so a lookup that
+// hardcodes both empty finds a row only when the install happened to write it that
+// way. Slack was connected, /v1/integrations said so, and this listing said
+// `connected: false` for the same workspace: one install, two answers, and a send
+// refused on the strength of the wrong one.
+//
+// Asking "does the org have any" removes the guess. Where an org holds several
+// accounts for one provider, the ORG-held one wins: a channel posts as the
+// WORKSPACE, never as some member's personal link, and that preference is stated
+// here rather than left to whichever row the store returned first.
+func orgConnection(org, provider string) (integrations.Connection, bool) {
+	return pickOrgConnection(integrations.Connections(org, provider))
+}
+
+// pickOrgConnection is the choice itself, pure so it can be tested without a
+// mounted integrations app: the ORG-held account wins, else the first, else none.
+func pickOrgConnection(conns []integrations.Connection) (integrations.Connection, bool) {
+	for _, c := range conns {
+		if c.User == "" {
+			return c, true
+		}
+	}
+	if len(conns) > 0 {
+		return conns[0], true
+	}
+	return integrations.Connection{}, false
+}
+
 func (o ops) list(ctx context.Context, _ *noInput) (*chatChannels, error) {
 	s := o.s
 	org, err := tenant(ctx)
@@ -362,7 +397,7 @@ func (o ops) list(ctx context.Context, _ *noInput) (*chatChannels, error) {
 	}
 	out := make([]channelView, 0, len(transports))
 	for _, tr := range transports {
-		conn, connected := integrations.ConnectionFor(org, tr.id, "")
+		conn, connected := orgConnection(org, tr.id)
 		// Absent row ⇒ defaults (policyFor); a read error leaves zero policy
 		// fields rather than failing the whole listing.
 		p, _ := policyFor(ctx, s.State.store, org, tr.id)
