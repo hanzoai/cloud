@@ -72,6 +72,19 @@ func init() {
 			"pairingView.sender":    "Sender is the transport-native user id waiting for access — the same\nidentity inbox messages carry. Approving mints a DM allow entry for exactly\nthis value and nothing wider: pairing never grants group access.",
 		},
 	})
+	zip.Describe("POST /channels/ingest", zip.Doc{
+		Description: "Answers an adapter's event.\n\nThe org travels IN the request rather than coming from the caller's plane\nidentity, for the same reason AgentsRunOnBehalf does: the tenant is the one\nthat connected the workspace, which the adapter resolved from the signed\nteam/guild/chat id, and the adapter plugin's own identity is not it. Taken\nreports whether this inbox carries the transport — a fact worth returning,\nsince the silent version of that answer is the bug this door replaces.",
+		Fields: map[string]string{
+			"ChannelsIngestIn.channel":     "reply target",
+			"ChannelsIngestIn.dedupe_key":  "event id, \"\" when non-dedupable",
+			"ChannelsIngestIn.external_id": "workspace/tenant/guild/chat id",
+			"ChannelsIngestIn.provider":    "\"slack\",\"teams\",\"discord\",\"telegram\"",
+			"ChannelsIngestIn.reply_root":  "ReplyRoot is a transport-verified reply root: Teams' JWT-verified\nserviceURL, \"\" everywhere else.",
+			"ChannelsIngestIn.text":        "the prompt, mention stripped",
+			"ChannelsIngestIn.thread_id":   "thread to reply under, \"\" when unthreaded",
+			"ChannelsIngestIn.user":        "platform-verified user id",
+		},
+	})
 	zip.Describe("POST /v1/channels/:channel/send", zip.Doc{
 		Description: "Wraps a handler so a returned *zip.HTTPError is written in-band (its\nstatus + the {status,code,error} JSON zip's default errorHandler would emit)\nand nil is returned, instead of propagating the error up the middleware chain.\n\nIt exists for routes mounted UNDER an outer error-flattening filter. The\ncommerce embed installs one: mountCommerce (apps) registers ErrorHandlerJSON on\nan app.Group(\"/v1\") whose middleware rewrites ANY error a downstream /v1 handler\nPROPAGATES into a hardcoded HTTP 500 — so a reject that returns zip.ErrUnauthorized\n(401) or zip.ErrBadRequest (400) up the chain surfaces to the client as 500. A\nsubsystem mounted after commerce (git, sync, integrations, …) whose reject path\nmust keep its real 4xx wraps its handler here: the status is written before the\nfilter runs, so the filter's c.Next() sees nil and has nothing to flatten. A\nnon-HTTPError (a genuine unexpected failure) passes through unchanged — those are\n500s regardless. Compose with Handle: cloud.Terminal(cloud.Handle(s, fn)).",
 	})
