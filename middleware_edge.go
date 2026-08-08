@@ -48,38 +48,59 @@ import (
 // CORS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// corsAllowMethods / corsAllowHeaders / corsMaxAge mirror the gateway's ONE CORS
-// policy (hanzoai/gateway routes.go corsPreflightMiddleware) so the browser
-// contract is byte-identical whether cloud is reached through the gateway or
-// directly. Credentialed reflect-Origin: the allowlisted request Origin is echoed
-// verbatim (never `*` with credentials), so a cookie/Authorization request from an
-// allowed brand host works and every other origin gets no CORS headers.
+// corsAllowMethods / corsMaxAge state the rest of the browser contract.
+// Credentialed reflect-Origin: the allowlisted request Origin is echoed verbatim
+// (never `*` with credentials), so a cookie/Authorization request from an allowed
+// brand host works and every other origin gets no CORS headers.
 const (
 	corsAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-	// The list must name EVERY header a browser client actually sends: a header
-	// absent here fails PREFLIGHT, and the browser reports it as an opaque
-	// "TypeError: Failed to fetch" with no server-side log — the request never
-	// arrives. Measured against production before this line changed: from a
-	// signed-in console.hanzo.ai page, adding any one of X-Actor-Id,
-	// X-Act-As-Project, X-Act-As-Org or X-CSRF-Token blocked the call, while the
-	// identical request without it returned 200.
-	//
-	// Those four are what the console stamps on a signed-in call (console
-	// src/lib/api/client.ts baseHeaders + applyCsrfToInit):
-	//   X-Actor-Id       — the signed-in user, on EVERY authenticated request
-	//   X-Act-As-Project — project sub-scope INTENT (a request, never a claim)
-	//   X-Act-As-Org     — org-switch INTENT, same shape
-	//   X-CSRF-Token     — echoed on every mutating write the ambient-cookie path makes
-	//
-	// Naming a header here only lets the browser SEND it; each stays exactly as
-	// trustworthy as before — SanitizeIdentity still strips and re-mints
-	// client-supplied identity, so an intent is still validated, never believed.
-	corsAllowHeaders = "Content-Type, Authorization, X-User-Id, X-Org-Id, " +
-		"X-Project-Id, X-Environment, X-Roles, X-User-Email, X-Request-ID, " +
-		"X-Client-ID, X-Requested-With, Accept, Accept-Language, " +
-		"X-Actor-Id, X-Act-As-Project, X-Act-As-Org, X-CSRF-Token"
-	corsMaxAge = "86400"
+	corsMaxAge       = "86400"
 )
+
+// corsAllowHeaders answers a preflight with the header names the BROWSER said the
+// script attached — the Access-Control-Request-Headers it is asking about.
+//
+// This used to be a literal list, and a literal list is a standing outage waiting
+// for the next client header. A name absent from it fails PREFLIGHT, and the
+// browser reports that as an opaque "TypeError: Failed to fetch" with nothing at
+// all on the server side to see — the request never arrives, so there is no log,
+// no metric and no 4xx to notice. It has now cost us twice: first the console's
+// X-Actor-Id / X-Act-As-Project / X-Act-As-Org / X-CSRF-Token, then
+// billing.hanzo.ai's X-Idempotency-Key, whose absence meant NO paid subscription
+// POST could leave the browser — the Square nonce was minted and the request died
+// at the preflight. Echoing the ask is the Fetch-standard way to say "all of
+// them", and it is the only answer that cannot go stale.
+//
+// Answering the ask widens nothing. Naming a header only lets the browser SEND
+// it; each stays exactly as trustworthy as before, because SanitizeIdentity still
+// strips and re-mints every client-supplied identity header — an intent is
+// validated, never believed. The forbidden names a script must never set (Cookie,
+// Host, Origin…) the browser refuses on its own, whatever we allow. The origin
+// check above is the enforcement, and it did not move.
+//
+// Only well-formed tokens are echoed, so a hand-written request cannot fold a CRLF
+// into a response header. A malformed name is dropped rather than answered; the
+// browser then blocks the call, which is the correct answer to an ask we did not
+// grant.
+func corsAllowHeaders(ask string) string {
+	names := make([]string, 0, 8)
+	for _, name := range strings.Split(ask, ",") {
+		if name = strings.TrimSpace(name); headerToken(name) {
+			names = append(names, name)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// headerToken reports whether s is a single RFC 9110 field-name token — the only
+// shape a header name can have.
+func headerToken(s string) bool {
+	const tchar = "!#$%&'*+-.^_`|~0123456789" +
+		"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	return s != "" && strings.IndexFunc(s, func(r rune) bool {
+		return !strings.ContainsRune(tchar, r)
+	}) < 0
+}
 
 // EdgeCORS returns the browser-CORS middleware for the public /v1 edge, and it is
 // THE CORS authority for this binary: one predicate decides the preflight and the
@@ -170,8 +191,11 @@ func edgeCORS(pol *edge.Store, proven verifiedHostFn) zip.Handler {
 		c.SetHeader("Access-Control-Allow-Origin", origin)
 		c.SetHeader("Access-Control-Allow-Credentials", "true")
 		if c.Method() == "OPTIONS" {
+			// The allow-headers answer now depends on what the browser asked, so the
+			// cache key has to say so for the same reason Vary: Origin does.
+			c.Fiber().Vary("Access-Control-Request-Headers")
 			c.SetHeader("Access-Control-Allow-Methods", corsAllowMethods)
-			c.SetHeader("Access-Control-Allow-Headers", corsAllowHeaders)
+			c.SetHeader("Access-Control-Allow-Headers", corsAllowHeaders(c.Header("Access-Control-Request-Headers")))
 			c.SetHeader("Access-Control-Max-Age", corsMaxAge)
 			// Short-circuit the preflight: 204, no body, no auth/rate work.
 			c.Status(204)
