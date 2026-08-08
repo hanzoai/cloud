@@ -38,6 +38,7 @@
       "post": {
         "operationId": "end_sandbox",
         "summary": "End a sandbox and release it",
+        "description": "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too.",
         "tags": [
           "sandboxes"
         ],
@@ -62,6 +63,7 @@
       "post": {
         "operationId": "lease_sandbox",
         "summary": "Lease a sandbox — a real computer — or resume one you hold",
+        "description": "Leases the caller's sandbox, or returns the one it named if that\nlease is still running.\n\nWhat comes back is a real computer: a pod under a runtime boundary with a\ntoolchain already in it, its own filesystem, and a lease that ends it. Every\nother op here acts on the one this returns.",
         "tags": [
           "sandboxes"
         ],
@@ -93,6 +95,7 @@
       "post": {
         "operationId": "read_sandbox_file",
         "summary": "Read a file from a sandbox you hold",
+        "description": "Reads one path in the caller's sandbox: a file's bytes, or a\ndirectory's entries when the path names one.",
         "tags": [
           "sandboxes"
         ],
@@ -124,6 +127,7 @@
       "post": {
         "operationId": "run_in_sandbox",
         "summary": "Run a command in a sandbox you hold and read its output",
+        "description": "Runs one command inside the caller's sandbox and answers its exit code,\nstdout and stderr. A non-zero exit is a successful call carrying a failed\nprogram, so it comes back as data and not as an error.\n\nName a `session` and the command NARRATES INTO IT: its output is appended to\nthat session's live log as the program produces it, so anything watching the\nsession — GET /v1/agents/sessions/stream, scoped to one run with ?root= —\nwatches the work happen rather than waiting for the verdict. Without it the\ncall is what it always was: silent until it returns, which for an agentic run\nis twenty-five minutes of blank screen.\n\nThe session is named; the TENANT is not. It is the org the caller already\nproved, so a session belonging to somebody else is absent from the org this\ncall acts for and the append is refused there.",
         "tags": [
           "sandboxes"
         ],
@@ -155,6 +159,7 @@
       "post": {
         "operationId": "stop_run",
         "summary": "Stop what a sandbox is running, and keep the sandbox",
+        "description": "Interrupts whatever the caller's sandbox is running and answers how\nmany commands it ended. The sandbox stays leased — stop ends the WORK, end ends\nthe RESOURCE — so whoever stopped a run can still read what it left behind.",
         "tags": [
           "sandboxes"
         ],
@@ -186,6 +191,7 @@
       "post": {
         "operationId": "write_sandbox_file",
         "summary": "Write a file into a sandbox you hold",
+        "description": "Writes bytes to one path in the caller's sandbox, creating parents,\nand answers the resolved path.",
         "tags": [
           "sandboxes"
         ],
@@ -396,9 +402,11 @@
       "EndIn": {
         "properties": {
           "id": {
+            "description": "ID is the sandbox whose lease ends, from an earlier lease.",
             "type": "string"
           },
           "purge": {
+            "description": "Purge deletes the project's DISK as well. It is opt-in because the disk holds\nthe only copy of the checkout: ending a lease is cheap and reversible,\ndeleting someone's uncommitted work is neither.",
             "type": "boolean"
           }
         },
@@ -407,18 +415,23 @@
       "LeaseIn": {
         "properties": {
           "class": {
+            "description": "Class is what KIND of computer to lease, and the set is closed:\n\n\texec     a throwaway one that keeps nothing. Seconds to minutes.\n\tdev      a coding one, with the project's own disk attached. Hours.\n\tdesktop  a dev one that also has a screen.\n\nEmpty leases an `exec`, which is the right answer for running a program and\nthe wrong one for working on a repository, because it keeps nothing.",
             "type": "string"
           },
           "id": {
+            "description": "ID names a sandbox to RESUME, and is the id an earlier lease answered with.\nEmpty asks for a new one. A caller that holds an id and omits it does not get\na second view of the same computer, it gets a second computer.",
             "type": "string"
           },
           "project": {
+            "description": "Project names the disk to attach, and is REQUIRED for every class but `exec`.\n\nOne live sandbox per project: the disk attaches to one computer at a time, so\na second lease over a project that already has one is refused by name rather\nthan handed a silently empty disk.",
             "type": "string"
           },
           "runtime": {
+            "description": "Runtime is the isolation boundary asked for: `gvisor` shares a filesystem\nand holds a project volume, `kata-fc` is a microVM that boots slower and\nreads files faster but has no shared filesystem at all. Empty asks for the\nfleet's default, which is the right answer unless you are measuring.\n\nIt is a REQUEST. The owner decides, and refuses a combination it cannot\nhonour — a volume under a runtime with no shared filesystem would write\ninto a tmpfs and lose the bytes at exit. Read Leased.Runtime for what the\nsandbox actually got.",
             "type": "string"
           },
           "ttlSec": {
+            "description": "TTLSec bounds the lease in seconds. Unset takes the class default. Nothing\nruns forever, because a sandbox is somebody else's code on our nodes.",
             "type": "integer"
           }
         },
@@ -433,6 +446,7 @@
             "type": "string"
           },
           "runtime": {
+            "description": "Runtime is the boundary this sandbox GOT, which need not be the one asked\nfor — carried for the same reason Workdir is, that it is a fact only the\nowner knows and a caller assuming it would be holding a second copy. Empty\nis the node's default runtime, and a real answer.",
             "type": "string"
           },
           "status": {
@@ -447,9 +461,11 @@
       "PathIn": {
         "properties": {
           "id": {
+            "description": "ID is the sandbox to read from, from an earlier lease.",
             "type": "string"
           },
           "path": {
+            "description": "Path is read relative to the sandbox's working directory unless it is\nabsolute, and a path that climbs out of it is refused rather than rewritten.\nEmpty names the working directory itself, which lists it.",
             "type": "string"
           }
         },
@@ -472,27 +488,34 @@
       "RunIn": {
         "properties": {
           "argv": {
+            "description": "Argv is the program and its arguments, already split — the form no shell can\nmisread. Give this or Command, not both.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "command": {
+            "description": "Command is a shell line, run by `sh -c`. Use it when a pipeline or a\nredirection is the point, and Argv when it is not.",
             "type": "string"
           },
           "dir": {
+            "description": "Dir runs the command somewhere other than the sandbox's working directory,\nwhich Leased.Workdir names.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the sandbox to run in, from an earlier lease.",
             "type": "string"
           },
           "session": {
+            "description": "Session is the live agent session this command narrates into: its output is\nappended there AS IT IS PRODUCED, so every surface watching that session\nwatches the command work instead of a blank pause. A long run is otherwise a\nsilence with a verdict at the end.\n\nIt names a SESSION and never a tenant. The org is the one the caller already\nproved, so a session belonging to somebody else is simply absent from the org\nthis call acts for and the append is refused there. Empty means nothing is\nwatching, and then nothing is sent.",
             "type": "string"
           },
           "stdin": {
+            "description": "Stdin is fed to the program on standard input. This is how bytes reach a file\nwithout being quoted into a shell line: `cat \u003e path` with the contents here\nwrites them exactly.",
             "type": "string"
           },
           "timeoutSec": {
+            "description": "TimeoutSec bounds this ONE command, so a wedged program holds the caller for\nits own timeout rather than for the whole lease.",
             "type": "integer"
           }
         },
@@ -518,12 +541,15 @@
         "properties": {
           "data": {
             "contentEncoding": "base64",
+            "description": "Data is the file's bytes, and replaces whatever was there.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the sandbox to write into, from an earlier lease.",
             "type": "string"
           },
           "path": {
+            "description": "Path is confined the same way PathIn.Path is. Missing parent directories are\ncreated.",
             "type": "string"
           }
         },
