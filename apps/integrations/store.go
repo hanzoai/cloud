@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -174,7 +175,124 @@ CREATE INDEX IF NOT EXISTS ix_grants_expires ON grants(expires_at);
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+	return s.alignConnections()
+}
+
+// alignConnections rebuilds `connections` when the table on disk is not the table
+// declared above.
+//
+// It has to exist because `CREATE TABLE IF NOT EXISTS` is a NO-OP on a database
+// that already has the table. Every column this schema has gained — user, label,
+// expires_at — and the primary key it moved to (org,user,provider,label) therefore
+// reached new databases only. An existing one kept whatever shape it was created
+// with, forever, while the code went on selecting the new columns.
+//
+// That is not theoretical. Production answered GET /v1/integrations with HTTP 500
+// `no such column: user`, so every connection in the org read as absent: the Slack
+// workspace looked disconnected to everything that asks this store even though the
+// install was live and its bot was answering, and integrations.db had not been
+// written to in twelve days. A fresh deployment was perfect and every real one was
+// broken, which is the signature of a declared schema with no migration behind it.
+//
+// The rebuild carries rows across by the INTERSECTION of the old and new column
+// lists, so it does not need to know which historical shape it is coming from — a
+// column the old table never had takes its declared default, and ” is exactly
+// what an empty user or label means (a connection the ORG holds rather than a
+// person). Anything the old table had and this one does not is dropped, because
+// the declared schema is the schema.
+//
+// Fast path first: once the shapes match, every later boot does one pragma read
+// and returns.
+func (s *Store) alignConnections() error {
+	have, err := s.columns("connections")
+	if err != nil {
+		return err
+	}
+	want := strings.Split(connCols, ",")
+	if sameColumns(have, want) {
+		return nil
+	}
+
+	// Only the columns present in BOTH can be carried; the rest take their default.
+	var shared []string
+	for _, c := range want {
+		if slices.Contains(have, c) {
+			shared = append(shared, c)
+		}
+	}
+	cols := strings.Join(shared, ",")
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("align connections: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	steps := []string{
+		connectionsDeclaredDDL,
+		`INSERT INTO connections_declared (` + cols + `) SELECT ` + cols + ` FROM connections`,
+		`DROP TABLE connections`,
+		`ALTER TABLE connections_declared RENAME TO connections`,
+		`CREATE INDEX IF NOT EXISTS ix_conn_provider_extid ON connections(provider, external_id)`,
+		`CREATE INDEX IF NOT EXISTS ix_conn_org_provider ON connections(org, provider)`,
+	}
+	for _, q := range steps {
+		if _, err := tx.Exec(q); err != nil {
+			return fmt.Errorf("align connections: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("align connections: commit: %w", err)
+	}
 	return nil
+}
+
+// connectionsDeclaredDDL is the declared table under a build name. It is spelled
+// out rather than derived from the DDL above because a rebuild that guessed at the
+// shape it was rebuilding TO would be the same class of bug this function fixes.
+const connectionsDeclaredDDL = `
+CREATE TABLE connections_declared (
+  org           TEXT NOT NULL,
+  user          TEXT NOT NULL DEFAULT '',
+  provider      TEXT NOT NULL,
+  label         TEXT NOT NULL DEFAULT '',
+  external_id   TEXT NOT NULL DEFAULT '',
+  account_label TEXT NOT NULL DEFAULT '',
+  bot_user_id   TEXT NOT NULL DEFAULT '',
+  scopes_csv    TEXT NOT NULL DEFAULT '',
+  expires_at    INTEGER NOT NULL DEFAULT 0,
+  connected_at  INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  PRIMARY KEY (org, user, provider, label)
+)`
+
+// columns reports the column names a table actually has, in declaration order.
+func (s *Store) columns(table string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return nil, fmt.Errorf("read %s columns: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, fmt.Errorf("scan %s column: %w", table, err)
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// sameColumns compares two column sets as SETS: order is a property of how a
+// table was written, not of whether it holds what the code reads.
+func sameColumns(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	x, y := slices.Clone(a), slices.Clone(b)
+	slices.Sort(x)
+	slices.Sort(y)
+	return slices.Equal(x, y)
 }
 
 func (s *Store) Close() error { return s.db.Close() }
