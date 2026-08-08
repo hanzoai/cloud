@@ -151,8 +151,7 @@ func telegramWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		DedupeKey: strconv.FormatInt(m.UpdateID, 10),
 	}
 	emitIngress(org, in, "")
-	reply := telegramReplier(in)
-	channelSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
+	// The turn runs in channels now — emitIngress above is the whole dispatch.
 	return c.NoContent(http.StatusOK)
 }
 
@@ -179,17 +178,6 @@ func telegramBind(s *cloud.Service[state], c *zip.Ctx, m telegramMessage, code s
 	_ = telegramSend(c.Context(), m.ChatID, m.MessageID, "Connected to Hanzo. Mention @hanzo (or /hanzo) to chat.")
 }
 
-// telegramReplier builds the reply closure for one inbound message: sendMessage to
-// the chat, threaded under the triggering message. Telegram has no ephemeral in a
-// group; the link prompt is safe to post in-chat because redemption re-verifies the
-// Telegram user (Login Widget) — a bystander clicking it links only THEIR own account.
-func telegramReplier(in Inbound) replyFunc {
-	return func(ctx context.Context, text string, _ephemeral bool) error {
-		chatID, _ := strconv.ParseInt(in.Channel, 10, 64)
-		msgID, _ := strconv.ParseInt(in.ThreadID, 10, 64)
-		return telegramSend(ctx, chatID, msgID, text)
-	}
-}
 
 // telegramSend posts a message via the Bot API sendMessage, threaded under
 // replyTo. The bot token is a URL path segment and is never logged.

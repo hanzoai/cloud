@@ -115,8 +115,7 @@ func discordInteractions(s *cloud.Service[state], c *zip.Ctx) error {
 		Channel: it.ChannelID, Text: it.Prompt, DedupeKey: it.ID,
 	}
 	emitIngress(org, in, "")
-	reply := discordReplier(it.AppID, it.Token)
-	channelSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
+	// The turn runs in channels now — emitIngress above is the whole dispatch.
 	// Ack SYNC with a deferred EPHEMERAL response (flags 64) — the async edit stays
 	// ephemeral, so a link URL is never shown to the whole channel.
 	return discordDeferredEphemeral(c)
@@ -141,14 +140,6 @@ func discordDeferredEphemeral(c *zip.Ctx) error {
 	})
 }
 
-// discordReplier builds the reply closure: PATCH the deferred response's @original
-// message via the interaction webhook (the interaction token authenticates — no bot
-// token needed). ephemeral is already fixed by the deferred ack, so it is ignored.
-func discordReplier(appID, token string) replyFunc {
-	return func(ctx context.Context, text string, _ephemeral bool) error {
-		return discordEditOriginal(ctx, appID, token, text)
-	}
-}
 
 // discordEditOriginal edits the original (deferred) interaction response with the
 // answer. Content is capped at Discord's 2000-char limit.

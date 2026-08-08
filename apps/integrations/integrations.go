@@ -516,6 +516,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, zapp, s)
 
+	serveIdentity()
 	b.Log.Info(
 		"integrations mounted",
 		"providers", len(s.State.providers),
