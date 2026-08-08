@@ -111,7 +111,7 @@ func TestRunnerBuild_IAMAdminLaunches(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, body := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
-		"repo": "https://github.com/hanzoai/app", "sha": "00971263b",
+		"repo": "https://github.com/hanzoai/app", "sha": "00971263b1c4e5f60718293a4b5c6d7e8f90a1b2",
 		"image": "ghcr.io/hanzoai/app-web:00971263b"})
 	if code != http.StatusAccepted {
 		t.Fatalf("IAM org-admin same-org build: want 202, got %d (%s)", code, body)
@@ -133,7 +133,7 @@ func TestRunnerBuild_IAMCrossOrgImageRejected(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, _ := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
-		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b",
+		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b1c4e5f60718293a4b5c6d7e8f90a1b2",
 		"image": "ghcr.io/luxfi/wallet-web:00971263b"})
 	if code != http.StatusForbidden {
 		t.Fatalf("IAM cross-org image (hanzo admin → ghcr.io/luxfi): want 403, got %d", code)
@@ -147,7 +147,7 @@ func TestRunnerBuild_IAMSameOrgLuxLaunches(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, body := postRunnerAs(t, app, "lx-uuid", "lux", true, false, map[string]any{
-		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b",
+		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b1c4e5f60718293a4b5c6d7e8f90a1b2",
 		"image": "ghcr.io/luxfi/wallet-web:00971263b"})
 	if code != http.StatusAccepted {
 		t.Fatalf("IAM lux admin same-org build: want 202, got %d (%s)", code, body)
@@ -162,7 +162,7 @@ func TestRunnerBuild_SuperAdminCrossOrgLaunches(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, body := postRunnerAs(t, app, "root-uuid", "hanzo", true, true, map[string]any{
-		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b",
+		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b1c4e5f60718293a4b5c6d7e8f90a1b2",
 		"image": "ghcr.io/luxfi/wallet-web:00971263b"})
 	if code != http.StatusAccepted {
 		t.Fatalf("SuperAdmin cross-org build: want 202, got %d (%s)", code, body)
