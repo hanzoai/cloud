@@ -7,6 +7,7 @@ package cloud
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,6 +123,7 @@ func TestEdgeCORS_PreflightShortCircuits(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodOptions, "/probe", nil)
 	req.Header.Set("Origin", "https://hanzo.ai")
+	req.Header.Set("Access-Control-Request-Headers", "content-type, authorization")
 	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
@@ -135,11 +137,69 @@ func TestEdgeCORS_PreflightShortCircuits(t *testing.T) {
 	if got := res.Header.Get("Access-Control-Allow-Methods"); got != corsAllowMethods {
 		t.Fatalf("ACA-Methods = %q, want %q", got, corsAllowMethods)
 	}
-	if got := res.Header.Get("Access-Control-Allow-Headers"); got != corsAllowHeaders {
-		t.Fatalf("ACA-Headers = %q", got)
+	if got := res.Header.Get("Access-Control-Allow-Headers"); got != "content-type, authorization" {
+		t.Fatalf("ACA-Headers = %q, want the asked-for names", got)
 	}
 	if got := res.Header.Get("Access-Control-Max-Age"); got != corsMaxAge {
 		t.Fatalf("ACA-Max-Age = %q, want %q", got, corsMaxAge)
+	}
+}
+
+// TestEdgeCORS_PreflightAnswersAnyHeaderAsked is the regression for the defect a
+// literal allow-headers list guarantees: a client attaches a header nobody added,
+// the preflight does not name it, and the browser kills the request with an opaque
+// "TypeError: Failed to fetch" that never reaches a server log.
+//
+// X-Idempotency-Key is the one that cost real money. billing.hanzo.ai stamps it on
+// POST /v1/billing/subscribe/card (lib/commerce-client.ts subscribeWithCard) and it
+// was never added to the list, so NO paid subscription could leave the browser: the
+// Square card nonce was minted and the request died at the preflight. The header
+// itself is unremarkable — that is the point. Any of them must work.
+func TestEdgeCORS_PreflightAnswersAnyHeaderAsked(t *testing.T) {
+	app := corsApp(t, []string{"*.hanzo.ai"})
+	for _, ask := range []string{
+		"content-type,x-idempotency-key",          // the billing checkout, verbatim
+		"authorization, x-csrf-token, x-actor-id", // what the console stamps
+		"x-something-nobody-has-added-yet",
+	} {
+		req := httptest.NewRequest(http.MethodOptions, "/probe", nil)
+		req.Header.Set("Origin", "https://billing.hanzo.ai")
+		req.Header.Set("Access-Control-Request-Headers", ask)
+		res, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("test: %v", err)
+		}
+		// Header names match case-insensitively (Fetch), so compare the way a browser
+		// does — otherwise the assertion would flag names that are in fact answered.
+		allowed := res.Header.Get("Access-Control-Allow-Headers")
+		for _, name := range strings.Split(ask, ",") {
+			name = strings.TrimSpace(name)
+			if !strings.Contains(strings.ToLower(allowed), strings.ToLower(name)) {
+				t.Errorf("asked %q, allow-headers %q omits %q — the browser would block the call",
+					ask, allowed, name)
+			}
+		}
+	}
+}
+
+// TestCORSAllowHeaders_EchoesTokensOnly: the echo is a header VALUE, so a
+// hand-written ask must not be able to fold anything into the response.
+func TestCORSAllowHeaders_EchoesTokensOnly(t *testing.T) {
+	cases := []struct{ ask, want string }{
+		{"", ""},
+		{"Content-Type", "Content-Type"},
+		{" x-a , x-b ", "x-a, x-b"},
+		{"x-a,,x-b", "x-a, x-b"},                   // an empty name is not a name
+		{"x-ok\r\nX-Injected: 1", ""},              // CRLF makes the WHOLE name malformed
+		{"x-ok, x-bad\r\nX-Injected: 1", "x-ok"},   // …and only the malformed one is dropped
+		{"x-ok, bad header", "x-ok"},               // a space is not a tchar
+		{"x-ok, \"quoted\"", "x-ok"},               // nor is a quote
+		{"x-idempotency-key", "x-idempotency-key"}, // the header this defect was about
+	}
+	for _, tc := range cases {
+		if got := corsAllowHeaders(tc.ask); got != tc.want {
+			t.Errorf("corsAllowHeaders(%q) = %q, want %q", tc.ask, got, tc.want)
+		}
 	}
 }
 
