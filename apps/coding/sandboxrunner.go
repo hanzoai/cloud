@@ -25,14 +25,24 @@ package coding
 // status 82ms vs 980ms, start 294ms vs 881ms, ~57 MiB either way) — so the
 // boundary has to be switchable by deployment, not by rewrite.
 //
-// READ THAT BENCHMARK AS ABOUT kata-fc, WHICH IS NOT INSTALLED. Measured on the
-// live fleet against the runtimes that ARE (gvisor, kata-clh), gVisor wins both
-// axes and not narrowly: 2306ms vs 3967ms to Running, and 0.25s vs 1.99s for 3000
-// file writes — eight times. Cloud Hypervisor is not Firecracker, and the
-// conclusion does not carry across. So the fast choice among what exists today is
-// gvisor, which is also what the fleet runs; kata-fc stays worth installing to
-// test, on the strength of the original numbers, and until it is a caller naming
-// it is refused by the runtime table rather than handed a pod that sits Pending.
+// ALL THREE ARE INSTALLED, AND RE-MEASURED HERE THE ORDERING IS DIFFERENT. Warm
+// (image already on the node, so this is runtime cost and not a pull): gvisor
+// reaches Running in 3099ms, kata-fc in 4155ms, kata-clh in 4796ms; for 3000 file
+// writes it is gvisor 0.25s, kata-fc 0.20s, kata-clh 1.99s. So gVisor starts
+// FASTEST and its file work is within a quarter of the best, while kata-fc's file
+// advantage — 0.05s per 3000 writes — does not come close to repaying the second
+// it loses at start.
+//
+// The 294ms-vs-881ms above does not reproduce as a pod reaching Running, and the
+// gap it reports is inverted here. Both figures are probably honest about
+// different things: that one reads like container create, this one is measured
+// from apply to Running and therefore includes scheduling, at ±500ms poll
+// precision. Either way the number that matters to a coding run is this one,
+// because a run pays a whole pod.
+//
+// A run is ONE start and then many file operations, so start dominates and gvisor
+// is the choice — which is what the fleet is set to. kata-clh is the boundary to
+// avoid on both axes.
 //
 // # Why the plane and not HTTP
 //
