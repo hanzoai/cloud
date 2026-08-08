@@ -100,12 +100,12 @@ func teamsExchange(ctx context.Context, creds OAuthConfig, redirectURI, code str
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	resp, err := bridgeHTTP.Do(req)
+	resp, err := channelHTTP.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, bridgeMaxBody))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, channelMaxBody))
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("teams token http %d", resp.StatusCode)
 	}

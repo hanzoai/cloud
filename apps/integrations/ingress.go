@@ -53,7 +53,7 @@ func emitIngress(org string, in Inbound, replyRoot string) {
 }
 
 // LinkedSubject returns the Hanzo account subject bound to (org, provider,
-// extUser) by the account-link flow (bridge_link.go / *_link.go). Returns
+// extUser) by the account-link flow (channel_link.go / *_link.go). Returns
 // ("", false, nil) when the user has not linked; an error (fail closed) on an
 // unmounted subsystem, invalid org, or KMS-down.
 func LinkedSubject(org, provider, extUser string) (string, bool, error) {
@@ -142,12 +142,12 @@ func SendDiscord(ctx context.Context, channelID, replyTo, text string) (string, 
 	}
 	req.Header.Set("Authorization", "Bot "+tok)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := bridgeHTTP.Do(req)
+	resp, err := channelHTTP.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, bridgeMaxBody))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, channelMaxBody))
 	if resp.StatusCode/100 != 2 {
 		return "", fmt.Errorf("discord create message http %d", resp.StatusCode)
 	}

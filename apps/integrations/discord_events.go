@@ -54,7 +54,7 @@ const (
 // URL). It Ed25519-verifies the request, answers PING, and routes /hanzo to an
 // on-behalf-of agent run acked with a deferred ephemeral response and edited async.
 func discordInteractions(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	pub := discordPublicKey()
 	if pub == "" {
 		return zip.Errorf(http.StatusServiceUnavailable, "discord interactions not configured")
@@ -89,7 +89,7 @@ func discordInteractions(s *cloud.Service[state], c *zip.Ctx) error {
 	// SHED BEFORE the dedupe write (Red M-1): acquire a pool slot first. Discord does
 	// NOT auto-retry a non-2xx, so a capacity shed is a user-visible ask-to-retry
 	// (an ephemeral message) — nothing is recorded, so the next /hanzo runs cleanly.
-	if !bridgeLim.acquire(org) {
+	if !channelLim.acquire(org) {
 		s.Log.Warn("discord: at capacity, shedding", "org", org)
 		return discordEphemeral(c, "Hanzo is at capacity — please run /hanzo again in a moment.")
 	}
@@ -97,14 +97,14 @@ func discordInteractions(s *cloud.Service[state], c *zip.Ctx) error {
 	// path that does NOT dispatch. Fail CLOSED on error.
 	fresh, err := s.State.store.MarkEvent(c.Context(), "discord", it.ID)
 	if err != nil {
-		bridgeLim.release(org)
+		channelLim.release(org)
 		s.Log.Warn("discord: dedupe error", "err", err)
 		return discordEphemeral(c, "Sorry — please try again.")
 	}
 	if !fresh {
 		// Duplicate delivery: the original already answered. Release the slot and ack
 		// deferred so Discord is satisfied; no second run.
-		bridgeLim.release(org)
+		channelLim.release(org)
 		return discordDeferredEphemeral(c)
 	}
 	if _, gerr := s.State.store.GCEvents(c.Context(), staleEventCutoff()); gerr != nil {
@@ -116,7 +116,7 @@ func discordInteractions(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	emitIngress(org, in, "")
 	reply := discordReplier(it.AppID, it.Token)
-	bridgeSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
+	channelSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
 	// Ack SYNC with a deferred EPHEMERAL response (flags 64) — the async edit stays
 	// ephemeral, so a link URL is never shown to the whole channel.
 	return discordDeferredEphemeral(c)
@@ -163,7 +163,7 @@ func discordEditOriginal(ctx context.Context, appID, token, text string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := bridgeHTTP.Do(req)
+	resp, err := channelHTTP.Do(req)
 	if err != nil {
 		return err
 	}

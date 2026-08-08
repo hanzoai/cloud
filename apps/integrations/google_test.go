@@ -11,7 +11,7 @@ import (
 )
 
 // TestGoogleRegisteredProvider proves the google provider is on the registry with
-// the contract the connector + import bridge depend on: id "google", the two token
+// the contract the connector + import channel depend on: id "google", the two token
 // secret names, and a callback path that matches the generic dispatcher.
 func TestGoogleRegisteredProvider(t *testing.T) {
 	p, ok := registry["google"]

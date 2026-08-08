@@ -40,7 +40,7 @@ import (
 // bound), and routes a message to an on-behalf-of agent run — acking 200 fast and
 // replying proactively via the Bot Connection async, deduped durably on activity id.
 func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	if !teamsConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "teams events not configured")
 	}
@@ -71,7 +71,7 @@ func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	// SHED BEFORE the dedupe write (Red M-1): acquire a pool slot first; if the pool
 	// is full, record NOTHING and return a retriable NON-2xx so the Bot Connection
 	// re-delivers when a slot frees (no lost message, no double-run).
-	if !bridgeLim.acquire(org) {
+	if !channelLim.acquire(org) {
 		s.Log.Warn("teams: at capacity, shedding for retry", "org", org)
 		return zip.Errorf(http.StatusTooManyRequests, "teams agent pool at capacity")
 	}
@@ -79,12 +79,12 @@ func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	// dispatch. Fail CLOSED on a dedupe error.
 	fresh, err := s.State.store.MarkEvent(c.Context(), "teams", act.ID)
 	if err != nil {
-		bridgeLim.release(org)
+		channelLim.release(org)
 		s.Log.Warn("teams: dedupe error, skipping", "err", err)
 		return c.NoContent(http.StatusOK)
 	}
 	if !fresh {
-		bridgeLim.release(org)
+		channelLim.release(org)
 		return c.NoContent(http.StatusOK)
 	}
 	if _, gerr := s.State.store.GCEvents(c.Context(), staleEventCutoff()); gerr != nil {
@@ -100,14 +100,14 @@ func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	emitIngress(org, in, act.ServiceURL)
 	reply := teamsReplier(act.ServiceURL, act.ConversationID)
-	bridgeSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
+	channelSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
 	return c.NoContent(http.StatusOK)
 }
 
 // teamsReplier builds the reply closure: POST a message activity to the Bot
 // Connection at the (JWT-verified) serviceUrl, authed with an AAD app token. Teams
 // has no per-user ephemeral in a channel; a link prompt is safe because when Teams
-// linking is unconfigured the prompt carries no URL (bridgeReply), and when it is
+// linking is unconfigured the prompt carries no URL (channelReply), and when it is
 // configured the link re-verifies the AAD user.
 func teamsReplier(serviceURL, conversationID string) replyFunc {
 	return func(ctx context.Context, text string, _ephemeral bool) error {
@@ -144,12 +144,12 @@ func teamsReplyToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := bridgeHTTP.Do(req)
+	resp, err := channelHTTP.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, bridgeMaxBody))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, channelMaxBody))
 	if resp.StatusCode/100 != 2 {
 		return "", fmt.Errorf("teams reply token http %d", resp.StatusCode)
 	}
@@ -184,7 +184,7 @@ func teamsSendActivity(ctx context.Context, serviceURL, conversationID, text str
 	}
 	req.Header.Set("Authorization", "Bearer "+tok)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := bridgeHTTP.Do(req)
+	resp, err := channelHTTP.Do(req)
 	if err != nil {
 		return err
 	}

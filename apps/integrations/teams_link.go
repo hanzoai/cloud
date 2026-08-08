@@ -18,7 +18,7 @@ import (
 // teams_link.go is Teams' per-user account link: the PLATFORM-IDENTIFY leg is an
 // Azure AD `openid` sign-in in the workspace's tenant (AAD proves which user, via
 // the id_token `oid` — the SAME id the inbound activity carries as
-// from.aadObjectId), then the shared hanzo.id OIDC leg (bridge_link.go):
+// from.aadObjectId), then the shared hanzo.id OIDC leg (channel_link.go):
 //
 //	GET /v1/integrations/teams/link           leg1: set __Host init cookie, redirect to AAD sign-in
 //	GET /v1/integrations/teams/link/aad        leg2: AAD callback; verify oid+tid, bind (tenant,oid)
@@ -51,7 +51,7 @@ func teamsLinkURL(s *cloud.Service[state], tenant, _user string) (string, error)
 // ── leg 1: redirect to AAD sign-in (in the chat's tenant) ───────────────────
 
 func teamsLink(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	if !teamsLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -85,7 +85,7 @@ func teamsLink(s *cloud.Service[state], c *zip.Ctx) error {
 // ── leg 2: AAD callback (verify the AAD identity) ───────────────────────────
 
 func teamsLinkAAD(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	if !teamsLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -144,7 +144,7 @@ func teamsLinkAAD(s *cloud.Service[state], c *zip.Ctx) error {
 // ── leg 3: hanzo.id OIDC callback (bind Teams↔Hanzo) ────────────────────────
 
 func teamsLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	if !teamsLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -197,7 +197,7 @@ func teamsLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
 		clearLinkCookie(c, teamsOIDCCookie)
 		return zip.ErrBadRequest("link failed")
 	}
-	if bridgeSeen.seenAndAdd(nonce, time.Time{}) {
+	if channelSeen.seenAndAdd(nonce, time.Time{}) {
 		clearLinkCookie(c, teamsOIDCCookie)
 		return zip.ErrBadRequest("link already used")
 	}
@@ -219,7 +219,7 @@ func teamsLinkCallback(s *cloud.Service[state], c *zip.Ctx) error {
 	clearLinkCookie(c, teamsOIDCCookie)
 	s.Log.Info("teams: user linked", "tenant", tenant, "aadUser", oid) // no token
 	c.Fiber().Status(http.StatusOK).Type("html")
-	return c.Fiber().SendString(bridgeLinkedHTML("Teams"))
+	return c.Fiber().SendString(channelLinkedHTML("Teams"))
 }
 
 func teamsLinkAADURI(s *cloud.Service[state]) string {
@@ -248,12 +248,12 @@ func teamsExchangeIdentify(ctx context.Context, tenant, code, redirectURI string
 		return "", "", err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := bridgeHTTP.Do(req)
+	resp, err := channelHTTP.Do(req)
 	if err != nil {
 		return "", "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, bridgeMaxBody))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, channelMaxBody))
 	if resp.StatusCode/100 != 2 {
 		return "", "", fmt.Errorf("teams identify token http %d", resp.StatusCode)
 	}

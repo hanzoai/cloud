@@ -19,7 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// bridge.go is the ONE ChatBridge core: the platform-agnostic @hanzo front-door
+// channel.go is the ONE ChatBridge core: the platform-agnostic @hanzo front-door
 // shared by EVERY chat platform (Slack, Teams, Discord, Telegram). It owns
 // everything provider-blind — the normalized inbound message, the bounded per-org
 // agent-turn pool, the ONE agent brain (on-behalf-of RunOnBehalf), and the
@@ -41,9 +41,9 @@ import (
 
 // ── normalized inbound + reply seam ─────────────────────────────────────────
 
-// bridgeTracer emits the per-turn chat span — one tracer for every platform this
-// package bridges, because a turn is the same event whichever one it arrived on.
-var bridgeTracer = otel.Tracer("hanzo.ai/cloud/integrations")
+// channelTracer emits the per-turn chat span — one tracer for every platform this
+// package channels, because a turn is the same event whichever one it arrived on.
+var channelTracer = otel.Tracer("hanzo.ai/cloud/integrations")
 
 // Inbound is the normalized inbound chat event — ONE shape for every platform. An
 // adapter produces it AFTER it has authenticated the request and parsed the
@@ -68,62 +68,62 @@ type replyFunc func(ctx context.Context, text string, ephemeral bool) error
 // ── bounded per-org agent-turn pool (shared across ALL platforms) ───────────
 
 const (
-	// bridgeAgentTimeout bounds one async agent turn end-to-end (org resolve + run
+	// channelAgentTimeout bounds one async agent turn end-to-end (org resolve + run
 	// + platform post). Generous: a run executes a real model completion.
-	bridgeAgentTimeout = 110 * time.Second
-	// bridgeDefaultConcurrency caps simultaneous agent turns ACROSS ALL orgs AND
+	channelAgentTimeout = 110 * time.Second
+	// channelDefaultConcurrency caps simultaneous agent turns ACROSS ALL orgs AND
 	// platforms so no insider can exhaust goroutines/FDs. Override BRIDGE_AGENT_CONCURRENCY.
-	bridgeDefaultConcurrency = 32
-	// bridgeDefaultOrgConcurrency caps simultaneous turns for a SINGLE org (a
+	channelDefaultConcurrency = 32
+	// channelDefaultOrgConcurrency caps simultaneous turns for a SINGLE org (a
 	// fraction of the global pool) so one tenant cannot starve the others.
 	// Override BRIDGE_AGENT_ORG_CONCURRENCY.
-	bridgeDefaultOrgConcurrency = 8
-	// bridgeMaxBody bounds a webhook body the adapters read + sign/verify over.
-	bridgeMaxBody = 1 << 20 // 1 MiB
+	channelDefaultOrgConcurrency = 8
+	// channelMaxBody bounds a webhook body the adapters read + sign/verify over.
+	channelMaxBody = 1 << 20 // 1 MiB
 )
 
 var (
-	bridgeOnce sync.Once
-	bridgeLim  *orgLimiter // the ONE bounded agent-turn pool: global cap + per-org sub-limit
-	bridgeSeen *seenSet    // single-use link-state nonces (process-lifetime)
+	channelOnce sync.Once
+	channelLim  *orgLimiter // the ONE bounded agent-turn pool: global cap + per-org sub-limit
+	channelSeen *seenSet    // single-use link-state nonces (process-lifetime)
 )
 
-// bridgeReady lazily initializes the shared bridge process state (the bounded pool
+// channelReady lazily initializes the shared channel process state (the bounded pool
 // + the single-use link seen-set). Cheap + idempotent; every adapter handler calls
 // it first. The durable dedupe table is created in the store's migrate() at Mount.
-func bridgeReady() {
-	bridgeOnce.Do(func() {
-		bridgeLim = newOrgLimiter(bridgeAgentConcurrency(), bridgeOrgConcurrency())
-		bridgeSeen = newSeenSet(time.Duration(linkStateTTLSec) * time.Second)
+func channelReady() {
+	channelOnce.Do(func() {
+		channelLim = newOrgLimiter(channelAgentConcurrency(), channelOrgConcurrency())
+		channelSeen = newSeenSet(time.Duration(linkStateTTLSec) * time.Second)
 	})
 }
 
-// bridgeSpawn runs an ALREADY-SLOTTED agent turn in a recovered goroutine. Every
-// adapter handler acquires the pool slot SYNCHRONOUSLY (bridgeLim.acquire) BEFORE
+// channelSpawn runs an ALREADY-SLOTTED agent turn in a recovered goroutine. Every
+// adapter handler acquires the pool slot SYNCHRONOUSLY (channelLim.acquire) BEFORE
 // recording the dedupe key, so a capacity SHED returns a retriable non-2xx without
 // burning the event id (Red M-1); the slotted turn is then handed here. Two
 // guarantees: (1) the slot is released on every exit, and (2) a panic anywhere in
-// the turn (bridgeReply → agents.RunOnBehalf → the reply closure — a large surface
+// the turn (channelReply → agents.RunOnBehalf → the reply closure — a large surface
 // over UNTRUSTED platform input) is CONTAINED. On the SHARED multi-tenant cloud
 // binary this is non-negotiable: middleware.Recover() wraps only the sync request
 // goroutine, so an unrecovered panic here would crash EVERY tenant and subsystem
 // (Red M-2). The recover defer is registered LAST so it runs FIRST (LIFO); release
 // still runs after it — a panicking turn frees its slot. ONE spawn+recover for
 // every platform (Slack included).
-func bridgeSpawn(s *cloud.Service[state], org string, run func()) {
+func channelSpawn(s *cloud.Service[state], org string, run func()) {
 	go func() {
-		defer bridgeLim.release(org)
-		defer bridgeRecover(s, org)
+		defer channelLim.release(org)
+		defer channelRecover(s, org)
 		run()
 	}()
 }
 
-// bridgeRecover contains a panic in an async agent turn so it can never crash the
+// channelRecover contains a panic in an async agent turn so it can never crash the
 // shared cloud process. Called ONLY as a deferred func (recover must be a direct
 // call in the deferred function).
-func bridgeRecover(s *cloud.Service[state], org string) {
+func channelRecover(s *cloud.Service[state], org string) {
 	if r := recover(); r != nil {
-		s.Log.Error("bridge: agent turn panic (recovered)", "org", org, "err", r)
+		s.Log.Error("channel: agent turn panic (recovered)", "org", org, "err", r)
 	}
 }
 
@@ -133,7 +133,7 @@ func bridgeRecover(s *cloud.Service[state], org string) {
 // across all orgs) AND a PER-ORG cap (max in-flight for any single org). Data /
 // token / billing isolation already holds via the resolved org; this adds the
 // AVAILABILITY isolation that stops one tenant exhausting the shared worker pool. It
-// lives here (provider-agnostic): bridgeLim (the shared chat pool) above, the Slack
+// lives here (provider-agnostic): channelLim (the shared chat pool) above, the Slack
 // coding pool (codingLim), and every adapter bound against the SAME type.
 type orgLimiter struct {
 	mu       sync.Mutex
@@ -193,7 +193,7 @@ func (l *orgLimiter) release(org string) {
 // PRE-RESOLVED org and deliver it via `reply`. org is the isolation root (resolved
 // in the sync webhook path via OrgForExternalID on a verified payload).
 func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), bridgeAgentTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), channelAgentTimeout)
 	defer cancel()
 
 	// The turn's own span, and the one record that ties a CONVERSATION to a run.
@@ -204,7 +204,7 @@ func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyF
 	// run happened" was two facts with nothing in common — the run knew its own id
 	// and never knew which thread caused it, and the thread knew nothing.
 	//
-	// It carries the run's id (returned by bridgeReply, below) precisely because the
+	// It carries the run's id (returned by channelReply, below) precisely because the
 	// trace cannot be relied on to carry it here: the turn runs on a DETACHED
 	// context by necessity, and the framework forwards trace context only for a
 	// call that has an inbound request behind it — so on a split deployment the
@@ -215,7 +215,7 @@ func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyF
 	// It is opened here rather than per adapter because this is the one body all
 	// four platforms dispatch — Slack, Teams, Discord and Telegram — so a turn is
 	// observed the same way on every one of them.
-	ctx, span := bridgeTracer.Start(ctx, "agent.turn "+in.Provider, trace.WithSpanKind(trace.SpanKindInternal))
+	ctx, span := channelTracer.Start(ctx, "agent.turn "+in.Provider, trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 	span.SetAttributes(
 		// hanzo.org is the key the trace plane files a row under (apps/o11y
@@ -234,7 +234,7 @@ func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyF
 		span.SetAttributes(attribute.String("hanzo.chat.thread", in.ThreadID))
 	}
 
-	text, ephemeral, runID := bridgeReply(s, org, in.Provider, in.ExternalID, in.User, in.Channel, in.Text)
+	text, ephemeral, runID := channelReply(s, org, in.Provider, in.ExternalID, in.User, in.Channel, in.Text)
 	if runID != "" {
 		span.SetAttributes(attribute.String("hanzo.agent.run_id", runID))
 	}
@@ -242,18 +242,18 @@ func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyF
 		return
 	}
 	if err := reply(ctx, text, ephemeral); err != nil {
-		s.Log.Warn("bridge: reply", "provider", in.Provider, "err", err)
+		s.Log.Warn("channel: reply", "provider", in.Provider, "err", err)
 	}
 }
 
-// bridgeReply is the ONE agent brain, shared by every platform's @mention/DM/slash
+// channelReply is the ONE agent brain, shared by every platform's @mention/DM/slash
 // path. It resolves the caller's linked Hanzo identity and either runs the agent ON
 // BEHALF OF them IN-PROCESS (RunOnBehalf — no gateway hop) returning the model's
 // answer, or, when unlinked, returns a short prompt carrying THAT platform's link
 // URL. ephemeral reports whether the reply is the (sensitive) link prompt — the
 // caller MUST deliver those to the user only. Every returned string is safe to
 // post; internal errors are logged (never a token) and surfaced as a terse message.
-// bridgeRunContext is the context ONE agent turn runs on: detached from any
+// channelRunContext is the context ONE agent turn runs on: detached from any
 // request, carrying the tenant it bills, bounded by the turn budget.
 //
 // context.Background() is not an accident and is not merely about cancellation.
@@ -269,11 +269,11 @@ func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyF
 // override one, and this org came from OrgForExternalID on a signature-VERIFIED
 // payload — never a client-supplied field.
 //
-// Detaching is independently required: the turn runs in bridgeSpawn's goroutine
+// Detaching is independently required: the turn runs in channelSpawn's goroutine
 // while the webhook handler has already answered Slack 200, so on the request ctx
 // the model call would be cancelled the instant we reply.
-func bridgeRunContext(org string) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(cloud.For(context.Background(), org), bridgeAgentTimeout)
+func channelRunContext(org string) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(cloud.For(context.Background(), org), channelAgentTimeout)
 }
 
 // It takes NO context on purpose. The turn it dispatches must run on a detached,
@@ -285,8 +285,8 @@ func bridgeRunContext(org string) (context.Context, context.CancelFunc) {
 // run answered this conversation. The id was already in hand and was thrown away
 // everywhere except one failure log, which is why a thread and the run behind it
 // had no value in common.
-func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, room, text string) (reply string, ephemeral bool, runID string) {
-	link, say, ephemeral := bridgeIdentity(s, org, provider, externalID, user)
+func channelReply(s *cloud.Service[state], org, provider, externalID, user, room, text string) (reply string, ephemeral bool, runID string) {
+	link, say, ephemeral := channelIdentity(s, org, provider, externalID, user)
 	if say != "" {
 		// No run happened — an unlinked user gets a prompt, not an agent turn — so
 		// there is no id to name, and saying so with "" is the honest answer.
@@ -300,7 +300,7 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, room,
 	// global. A plugin is a PROCESS: the global is nil unless agents happens to be
 	// in THIS binary, so the direct call made co-residency an undeclared
 	// requirement and answered ErrNoPeer for every deployment that separates them —
-	// which is every real one. It failed the same way for every chat bridge, so the
+	// which is every real one. It failed the same way for every chat channel, so the
 	// door belongs on the plane where the boundary is explicit.
 	// Model is the person's OWN choice from the App Home tab, empty when they have
 	// not chosen — the answering side then uses the deployment default. Carried
@@ -327,10 +327,10 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, room,
 	// resolved from the Slack-verified team_id through the install→org map — never
 	// from a payload field.
 	//
-	// Detaching is independently REQUIRED anyway: the turn runs in bridgeSpawn's
+	// Detaching is independently REQUIRED anyway: the turn runs in channelSpawn's
 	// goroutine, and the webhook handler returns 200 to Slack immediately. On the
 	// request ctx the model call would be cancelled the moment we answer Slack.
-	runCtx, cancel := bridgeRunContext(org)
+	runCtx, cancel := channelRunContext(org)
 	defer cancel()
 	// THE CONVERSATION, not just the newest line of it. channels has been recording
 	// every inbound turn since ingest existed and nothing read them back, so the
@@ -344,14 +344,14 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, room,
 	// the single message it used to send, which is the behaviour it replaces.
 	history := recentTurns(runCtx, provider, room)
 	out, rerr := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](runCtx, "agents", plane.AgentsRunOnBehalf,
-		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: bridgeAgentRef(provider),
+		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: channelAgentRef(provider),
 			Input: text, Model: link.Model, History: history})
 	run := plane.RunOnBehalfOut{}
 	if out != nil {
 		run = *out
 	}
 	if rerr != nil {
-		s.Log.Warn("bridge: agent run", "provider", provider, "org", org, "err", rerr) // never logs a token
+		s.Log.Warn("channel: agent run", "provider", provider, "org", org, "err", rerr) // never logs a token
 		return "Sorry — the agent hit an error handling that. Please try again.", false, run.RunID
 	}
 	if run.Status != "ok" {
@@ -359,10 +359,10 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, room,
 		// back as a non-"ok" status with a nil error (agents.RunOnBehalf's contract),
 		// so this branch — not the one above — is the one a broken inference path
 		// lands in. It logged nothing, and the whole failure was therefore invisible:
-		// the op answered 200, the bridge posted its generic sentence, and the only
+		// the op answered 200, the channel posted its generic sentence, and the only
 		// trace of the cause was the run row. That is how a dead model wire survived
 		// a day of looking. The run id is here so the row is findable.
-		s.Log.Warn("bridge: agent run did not succeed", "provider", provider, "org", org,
+		s.Log.Warn("channel: agent run did not succeed", "provider", provider, "org", org,
 			"status", run.Status, "run_id", run.RunID, "err", run.Error)
 		return "Sorry — the agent hit an error handling that. Please try again.", false, run.RunID
 	}
@@ -372,7 +372,7 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, room,
 	return run.Output, false, run.RunID
 }
 
-// bridgeIdentity resolves the caller's linked Hanzo account, or the sentence to
+// channelIdentity resolves the caller's linked Hanzo account, or the sentence to
 // say INSTEAD of running anything. link is meaningful only when say is empty;
 // ephemeral marks the (sensitive) link prompt, which carries a URL that must
 // reach only the person who asked.
@@ -381,10 +381,10 @@ func bridgeReply(s *cloud.Service[state], org, provider, externalID, user, room,
 // the agent turn above and a registry command (slack_command.go) — and the
 // prompt is the one sentence that must not be written twice: a second copy is a
 // second chance to forget the ephemeral bit.
-func bridgeIdentity(s *cloud.Service[state], org, provider, externalID, user string) (link userLink, say string, ephemeral bool) {
+func channelIdentity(s *cloud.Service[state], org, provider, externalID, user string) (link userLink, say string, ephemeral bool) {
 	link, linked, err := getUserLink(s, org, provider, user)
 	if err != nil {
-		s.Log.Warn("bridge: user link lookup", "provider", provider, "org", org, "err", err)
+		s.Log.Warn("channel: user link lookup", "provider", provider, "org", org, "err", err)
 		return userLink{}, "Sorry — I couldn't reach your Hanzo account just now. Please try again shortly.", false
 	}
 	if linked {
@@ -392,7 +392,7 @@ func bridgeIdentity(s *cloud.Service[state], org, provider, externalID, user str
 	}
 	u, lerr := linkURL(s, provider, externalID, user)
 	if lerr != nil {
-		s.Log.Error("bridge: link url", "provider", provider, "err", lerr)
+		s.Log.Error("channel: link url", "provider", provider, "err", lerr)
 		return userLink{}, "Connect your Hanzo account to use @hanzo.", true
 	}
 	return userLink{}, "Connect your Hanzo account to use @hanzo: " + u, true
@@ -413,7 +413,7 @@ func linkURL(s *cloud.Service[state], provider, externalID, user string) (string
 	case "teams":
 		return teamsLinkURL(s, externalID, user)
 	}
-	return "", fmt.Errorf("bridge: no link flow for provider %q", provider)
+	return "", fmt.Errorf("channel: no link flow for provider %q", provider)
 }
 
 // ── per-user Hanzo binding (KMS-custodied, per-org, per-provider) ────────────
@@ -449,7 +449,7 @@ type userLink struct {
 
 func putUserLink(s *cloud.Service[state], org, provider, extUser string, link userLink) error {
 	if !validOrg(org) {
-		return fmt.Errorf("bridge: invalid org")
+		return fmt.Errorf("channel: invalid org")
 	}
 	blob, err := json.Marshal(link)
 	if err != nil {
@@ -463,7 +463,7 @@ func putUserLink(s *cloud.Service[state], org, provider, extUser string, link us
 // KMS-down.
 func getUserLink(s *cloud.Service[state], org, provider, extUser string) (userLink, bool, error) {
 	if !validOrg(org) {
-		return userLink{}, false, fmt.Errorf("bridge: invalid org")
+		return userLink{}, false, fmt.Errorf("channel: invalid org")
 	}
 	if !kmsReady(s) {
 		return userLink{}, false, kms.ErrMasterKeyMissing
@@ -477,7 +477,7 @@ func getUserLink(s *cloud.Service[state], org, provider, extUser string) (userLi
 	}
 	var link userLink
 	if err := json.Unmarshal(raw, &link); err != nil {
-		return userLink{}, false, fmt.Errorf("bridge: user link decode: %w", err)
+		return userLink{}, false, fmt.Errorf("channel: user link decode: %w", err)
 	}
 	if link.Subject == "" {
 		return userLink{}, false, nil
@@ -487,9 +487,9 @@ func getUserLink(s *cloud.Service[state], org, provider, extUser string) (userLi
 
 // ── config (env, read at call time — operator-injected from KMS) ────────────
 
-// bridgeAgentRef resolves the agent every @hanzo turn runs. Per-platform override
+// channelAgentRef resolves the agent every @hanzo turn runs. Per-platform override
 // {PROVIDER}_AGENT_REF (e.g. SLACK_AGENT_REF) → shared BRIDGE_AGENT_REF → "hanzo".
-func bridgeAgentRef(provider string) string {
+func channelAgentRef(provider string) string {
 	if v := strings.TrimSpace(os.Getenv(strings.ToUpper(provider) + "_AGENT_REF")); v != "" {
 		return v
 	}
@@ -499,21 +499,21 @@ func bridgeAgentRef(provider string) string {
 	return "hanzo"
 }
 
-func bridgeAgentConcurrency() int {
+func channelAgentConcurrency() int {
 	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("BRIDGE_AGENT_CONCURRENCY"))); err == nil && v > 0 {
 		return v
 	}
-	return bridgeDefaultConcurrency
+	return channelDefaultConcurrency
 }
 
-// bridgeOrgConcurrency caps how many agent turns a SINGLE org may run concurrently
+// channelOrgConcurrency caps how many agent turns a SINGLE org may run concurrently
 // (availability isolation) — a fraction of the global pool. Override
 // BRIDGE_AGENT_ORG_CONCURRENCY; clamped to the global cap in newOrgLimiter.
-func bridgeOrgConcurrency() int {
+func channelOrgConcurrency() int {
 	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("BRIDGE_AGENT_ORG_CONCURRENCY"))); err == nil && v > 0 {
 		return v
 	}
-	return bridgeDefaultOrgConcurrency
+	return channelDefaultOrgConcurrency
 }
 
 // recentTurns asks channels for the conversation this message arrived in.

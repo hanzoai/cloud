@@ -15,7 +15,7 @@ import (
 
 // GitLab is an OAuth2 provider on the SAME registry as Slack/Google/GitHub. It
 // custodies a GitLab access token (and refresh token) in the org's KMS namespace
-// under "access_token"/"refresh_token" — the names the git-sync bridge reads via
+// under "access_token"/"refresh_token" — the names the git-sync channel reads via
 // integrations.TokenFor(org,"gitlab","access_token"). One GitLab connection, one
 // token; login (openid/profile/email), the API (read_api), and repo import + the
 // native↔GitLab mirror (read_repository/write_repository) all ride it.

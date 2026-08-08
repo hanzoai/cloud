@@ -299,7 +299,7 @@ func register(p *Provider) {
 
 // state is integrations' own data; shared deps live in the embedded cloud.Base —
 // logger (s.Log), deployment domain (s.Domain, e.g. api.hanzo.ai — builds the
-// redirect_uri). mounted is the in-process seam other subsystems (the bridge) reach
+// redirect_uri). mounted is the in-process seam other subsystems (the channel) reach
 // through the package funcs at the bottom of this file.
 type state struct {
 	store      *Store
@@ -553,7 +553,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 //     302 to a browser. zip.WithStatus PANICS on a non-2xx (typed.go:104), so an op
 //     cannot declare a 302 at all, and a typed dispatch ends in c.JSON(out).
 //   - 5 HTML pages: the three link callbacks and telegram/link's sign-in widget
-//     answer text/html (bridgeLinkedHTML / telegramWidgetHTML). Same c.JSON(out)
+//     answer text/html (channelLinkedHTML / telegramWidgetHTML). Same c.JSON(out)
 //     terminus — an op's Out is a JSON body, so a page cannot be one. The link legs
 //     also SET __Host- cookies, and a typed op holds no response to set them on.
 //   - 6 inbound WEBHOOKS, for two distinct reasons:
@@ -594,7 +594,7 @@ const vendorCall = "\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so 
 	"connected does nothing. Refusals are written with their own status rather than being " +
 	"flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400."
 
-// asyncTurn is the delivery contract the four chat bridges share: ack fast, work
+// asyncTurn is the delivery contract the four chat channels share: ack fast, work
 // later, never twice. Each of the three properties is one a platform integrator
 // has to know to reason about retries.
 const asyncTurn = "\n\nThe answer is acknowledged immediately and the work happens afterwards, because " +
@@ -678,7 +678,7 @@ func init() {
 			"the app's public key — not by HMAC, unlike the Slack webhooks. Interactions "+
 			"work over plain HTTP, so no gateway connection and no message-content intent is "+
 			"involved.\n\n"+
-			"Discord does not retry, so this is the one bridge where being at capacity is "+
+			"Discord does not retry, so this is the one channel where being at capacity is "+
 			"shown to the user as an ephemeral ask-to-run-it-again rather than answered as a "+
 			"retriable failure — nothing is recorded either way, so the next attempt is "+
 			"clean."+vendorCall)
@@ -831,7 +831,7 @@ func init() {
 // /:provider wildcards).
 func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	o := ops{s: s}
-	// bridgeFacts first: every typed op below reads the caller's identity facts off
+	// channelFacts first: every typed op below reads the caller's identity facts off
 	// the request context, and a Use only runs ahead of routes registered after it.
 	//
 	// The ORG is NOT parked here, and this subsystem does not install cloud.Bridge.
@@ -844,10 +844,10 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// these routes are registered on the root, and zip refuses to compose a program
 	// whose middleware could never run. The app then exits rather than listening.
 	//
-	// bridgeFacts stays because it is integrations' own. scope.Use installs it at
+	// channelFacts stays because it is integrations' own. scope.Use installs it at
 	// the root and runs it only for the paths manifest/apps.go says this subsystem
 	// answers, so dropping the group costs no confinement.
-	app.Use(zip.H(bridgeFacts))
+	app.Use(zip.H(channelFacts))
 
 	zip.Get(zapp, "/v1/integrations", o.list)
 	// Slack adapter (slack_events.go / slack_link.go), every route raw on purpose.
@@ -898,8 +898,8 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	zip.Delete(zapp, "/v1/integrations/github/repos/:repo/pages", o.githubPagesDisable)
 	// 202: the build is queued at GitHub, not completed here.
 	zip.Post(zapp, "/v1/integrations/github/repos/:repo/pages/builds", o.githubPagesBuild, zip.WithStatus(http.StatusAccepted))
-	// ChatBridge adapters (bridge.go + discord/teams/telegram). Same discipline as
-	// the slack bridge: the literal paths register BEFORE the /:provider wildcards so
+	// ChatBridge adapters (channel.go + discord/teams/telegram). Same discipline as
+	// the slack channel: the literal paths register BEFORE the /:provider wildcards so
 	// they win under registration-order matching. All PUBLIC at the JWT layer — auth
 	// is done INSIDE each handler: Discord Ed25519 interaction verify, Teams Bot
 	// Framework JWT, Telegram secret-token; the link legs use signed __Host- cookies +
@@ -1640,7 +1640,7 @@ func saveUser(ctx context.Context, s *cloud.Service[state], org, user, label str
 
 // ── in-process seam (mirror agents `var mounted *cloud.Service`) ───────────────
 //
-// Token custody lives ONLY here; the bridge (af3999a) never touches KMS directly.
+// Token custody lives ONLY here; the channel (af3999a) never touches KMS directly.
 // Every func is nil-safe against an unmounted subsystem.
 
 // TokenFor returns a custodied secret for a CONNECTED (org,provider). It fails
@@ -1725,7 +1725,7 @@ func OrgForExternalID(provider, externalID string) (string, bool) {
 // but Go forbids a func and a type sharing an identifier and `Connection` is the
 // domain-noun TYPE (used by SyncHook/WritebackHook, the store, and this return
 // value). The accessor is therefore `ConnectionFor` — the idiomatic Go name for
-// "the Connection for (org,provider)". The bridge calls integrations.ConnectionFor.
+// "the Connection for (org,provider)". The channel calls integrations.ConnectionFor.
 func ConnectionFor(org, provider, owner string) (Connection, bool) {
 	if mounted == nil {
 		return Connection{}, false
