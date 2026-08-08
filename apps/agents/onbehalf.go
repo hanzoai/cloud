@@ -10,6 +10,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/types"
 )
 
 // RunOnBehalf runs agent `ref` for `org` ON BEHALF OF `userSub`, IN-PROCESS —
@@ -37,10 +38,11 @@ func RunOnBehalf(ctx context.Context, org, userSub, ref, input string) (Run, err
 }
 
 func runOnBehalf(s *cloud.Service[state], ctx context.Context, org, userSub, ref, input string) (Run, error) {
-	return runOnBehalfModel(s, ctx, org, userSub, ref, input, "")
+	return runOnBehalfModel(s, ctx, org, userSub, ref, input, "", nil)
 }
 
-// runOnBehalfModel is runOnBehalf with the ASKER's model preference.
+// runOnBehalfModel is runOnBehalf with the ASKER's model preference and the
+// conversation the ask arrived in.
 //
 // It overrides the agent's own Model only when the caller named one AND the
 // agent is the built-in default — a person's Slack preference must not silently
@@ -48,7 +50,12 @@ func runOnBehalf(s *cloud.Service[state], ctx context.Context, org, userSub, ref
 // ignored rather than forwarded: the menu came from us, so anything else is a
 // stale client or a forged payload, and it would bill this org for a model it
 // never offered.
-func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub, ref, input, model string) (Run, error) {
+//
+// history is the turns BEFORE this one, oldest first, and it rides the call
+// because only the caller can know them: a conversation is a fact about the room
+// the bridge is sitting in. Empty is a first message, which is a real answer and
+// not a missing one.
+func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub, ref, input, model string, history []types.ChatMessage) (Run, error) {
 	org = strings.TrimSpace(org)
 	if org == "" || len(org) > principal.MaxOrgLen {
 		return Run{}, fmt.Errorf("agents: invalid org")
@@ -93,7 +100,7 @@ func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub
 	}
 	actor := billingActor(org, userSub)
 	reqID, _ := genID("obh")
-	return runAgent(s, ctx, a, input, actor, reqID, "")
+	return runAgent(s, ctx, a, input, history, actor, reqID, "")
 }
 
 // builtinAgent is the definition the conventional chat ref resolves to when an
@@ -154,8 +161,36 @@ const builtinAgentName = "hanzo"
 // builtinAgentInstructions is what the default assistant is TOLD it is. Kept
 // short on purpose: a long persona spends context a user's actual question needs,
 // and every sentence here is one the model reads on every turn.
-const builtinAgentInstructions = "You are Hanzo, the assistant for the Hanzo cloud. " +
-	"Answer in Slack: be brief, concrete, and say plainly when you do not know or " +
+const builtinAgentInstructions = "" +
+	// THE NAME, stated as a correction and not merely as a fact, because the model
+	// contradicts it out of its own training: enso is the SKU this runs on, the
+	// weights know that word as their name, and every reply opened "I'm Enso by
+	// Hanzo AI". A prompt that only says "you are Hanzo" leaves two names true at
+	// once and the trained one wins. Naming the wrong answer is what displaces it.
+	"You are Hanzo, an AI assistant made by Hanzo AI. Your name is Hanzo. " +
+	"Enso is the name of the model you run on, not your name — never introduce " +
+	"yourself as Enso.\n\n" +
+	// WHAT IT IS FOR. The previous line — "the assistant for the Hanzo cloud" — was
+	// read as a SUBJECT rather than as an ability: asked anything at all, the reply
+	// came back framed as cloud support and closed with "is there something I can
+	// help you with in the Hanzo cloud?". Being able to run this org's cloud is one
+	// of its hands, not the topic of conversation, and the two have to be said
+	// separately or the narrow one swallows the broad one.
+	"You are a general assistant. Coding, research, writing, analysis, marketing, " +
+	"maths, planning and plain questions are all yours to answer, and you do the " +
+	"work when asked rather than describing how it would be done. Answer what was " +
+	"actually asked, on its own terms. Do not steer a conversation back to the " +
+	"Hanzo cloud and do not close a reply by offering cloud help — running this " +
+	"organization's cloud is something you are very good at, not what you are for.\n\n" +
+	// THE GREETING, said once. It introduced itself on every single message, because
+	// every message WAS its first: nothing carried the conversation, so a third turn
+	// looked exactly like a first one. History fixes the cause; this fixes what the
+	// model does with it, because a friendly model shown a transcript will still say
+	// hello again unless told not to.
+	"Introduce yourself at most once, and only when nothing has been said before. " +
+	"When there are earlier turns in this conversation, just answer — no greeting, " +
+	"no restating who you are, no offer of further help at the end.\n\n" +
+	"Answer in chat: be brief, concrete, and say plainly when you do not know or " +
 	"cannot reach something rather than guessing.\n\n" +
 	// THE TOOL PROTOCOL. Without this the tools are unusable, and the failure is
 	// silent: the model sees 88 tools whose only argument is an `op` enum of bare
@@ -168,9 +203,13 @@ const builtinAgentInstructions = "You are Hanzo, the assistant for the Hanzo clo
 	"Each takes an `op` (choose from its enum) and an `input` object. The enum lists " +
 	"operation names only — to see what an operation accepts or returns, call `" +
 	fleet.Describe + "` with that op name first, then call it. " +
-	"Prefer looking something up with a tool " +
-	"over answering from memory: you are answering about THIS organization's live " +
-	"cloud, and your training data does not contain it.\n\n" +
+	// Scoped to the questions it is actually true of. Unscoped — "you are answering
+	// about THIS organization's live cloud" — it read as a statement of what the
+	// whole conversation is about, which is the other half of why every reply came
+	// back framed as cloud support.
+	"When a question is about THIS organization's live cloud, look it up with a " +
+	"tool instead of answering from memory: your training data does not contain it. " +
+	"The same holds for any other system a tool can reach — use it.\n\n" +
 	// THE OPEN WEB, said explicitly, because the sentence above is not enough on
 	// its own. Scoping tools to "THIS organization's live cloud" is true and was
 	// read as exhaustive: asked the weather, the model reasoned that none of its

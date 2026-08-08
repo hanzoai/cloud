@@ -338,7 +338,7 @@ func slackSlashTurn(s *cloud.Service[state], org string, in Inbound, responseURL
 	// A slash command answers synchronously on the request, which already has a
 	// span; the run id is recorded on it for the same reason the async turn records
 	// one — so this invocation can be joined to the run it caused.
-	text, ephemeral, runID := channelReply(s, org, in.Provider, in.ExternalID, in.User, in.Channel, in.Text)
+	text, ephemeral, runID := channelReply(s, org, in)
 	if runID != "" {
 		trace.SpanFromContext(ctx).SetAttributes(attribute.String("hanzo.agent.run_id", runID))
 	}
