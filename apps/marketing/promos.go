@@ -333,8 +333,8 @@ func (s *Store) GetRedemption(ctx context.Context, code, org string) (Redemption
 // omitting the field entirely skipped the only check standing between one
 // person and one redemption per account they could create. An absent instrument
 // is not evidence of a fresh card, it is the ABSENCE of evidence, and a guard
-// that cannot verify must refuse. The uniqueness index deliberately excludes ''
-// (WHERE instrument <> ''), so the database will not catch this either — the
+// that cannot verify must refuse. The uniqueness index deliberately excludes ”
+// (WHERE instrument <> ”), so the database will not catch this either — the
 // refusal has to happen here.
 //
 // redeem() rejects an empty instrument up front with errInstrumentRequired so
