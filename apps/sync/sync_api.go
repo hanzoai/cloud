@@ -236,6 +236,21 @@ type patchSyncIn struct {
 	// Actor is the loop-guard identity the sync writes as. Omitted, the stored actor
 	// stands.
 	Actor *string `json:"actor"`
+	// Source, Target and Kind are DECLARED HERE IN ORDER TO BE REFUSED.
+	//
+	// They are immutable by design — re-pointing a sync is a delete and a create, so
+	// a link can never silently start syncing somewhere else — but an UNDECLARED
+	// field is dropped by the binder before the handler sees it, so a request asking
+	// to repoint answered 200, changed nothing, and said nothing. The operator then
+	// believes a moved repository has been repointed and it has not.
+	//
+	// Live: a sync still naming github.com/hanzoai/cloud after the repository moved
+	// to hanzo-inc/cloud failed every reconcile with "Repository not found", and the
+	// PATCH that appeared to fix it did nothing at all. Declaring the fields is what
+	// lets the documented immutability actually answer.
+	Source *endpointReq `json:"source"`
+	Target *endpointReq `json:"target"`
+	Kind   *string      `json:"kind"`
 }
 
 // Patch updates one sync's mutable policy — direction, trigger and actor — in place.
@@ -261,6 +276,13 @@ func (o syncOps) patch(ctx context.Context, in *patchSyncIn) (*syncView, error) 
 		return nil, zip.ErrNotFound("sync not found")
 	}
 	body := *in
+	// Refused WHOLE and BEFORE anything is applied: a request that asks to repoint
+	// AND to change the direction must not have half of it honoured while the half
+	// the caller cared about is dropped.
+	if body.Source != nil || body.Target != nil || body.Kind != nil {
+		return nil, zip.ErrBadRequest(
+			"a sync's endpoints and kind are immutable: delete this sync and create the one you want, so a link never silently starts syncing somewhere else")
+	}
 	if body.Direction != nil {
 		d := strings.ToLower(strings.TrimSpace(*body.Direction))
 		if !validDirection(d) {
