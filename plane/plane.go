@@ -359,6 +359,16 @@ const (
 	// a process boundary has to look like one.
 	IntegrationsConnection = "integrations_connection"
 
+	// SettingsFleet reads the PLATFORM's own configuration of a product, so a
+	// deployment knob is a value an operator edits at admin.hanzo.ai rather than
+	// an environment variable that needs a rollout to change.
+	//
+	// It answers for the reserved platform org and takes no org argument. That is
+	// the whole of its safety: settings holds tenants' product config, and an op
+	// that let a caller name the org would be a cross-tenant read of it over a
+	// socket that carries no principal.
+	SettingsFleet = "settings_fleet"
+
 	// The observability plane's claim on the ONE event door. analytics owns POST
 	// /v1/event and its subtree, but the o11y PROCESS owns the Sentry runtime —
 	// so the door asks over the socket rather than through a package global,
@@ -766,6 +776,23 @@ type Send struct {
 	To      string `json:"to"`                // phone number for sms, address for email
 	Subject string `json:"subject,omitempty"` // carried on email only
 	Body    string `json:"body"`              // the message, sent verbatim
+}
+
+// Product names the product whose platform configuration is wanted.
+type Product struct {
+	Product string `json:"product"`
+}
+
+// Configured carries the platform's non-secret configuration document for that
+// product, verbatim as stored. Secret fields are excluded: their values live in
+// KMS and a deployment knob is not one.
+//
+// An empty document means nothing has been configured, which every reader must
+// treat as "use the default" — the same answer it gets when the settings store
+// has no row at all, so an unconfigured product and an unreachable one do not
+// need two behaviours.
+type Configured struct {
+	Config string `json:"config"`
 }
 
 // Sent names the provider that carried the message, for the caller's audit trail.

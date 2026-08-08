@@ -219,7 +219,7 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	// runtime and can only have another must be able to see which it got, or the
 	// two are indistinguishable from the outside and a comparison between them
 	// measures nothing.
-	m.Runtime, err = s.State.rt.runtimeFor(m, spec.Runtime)
+	m.Runtime, err = s.State.rt.runtimeFor(m, spec.Runtime, s.State.rt.preference(ctx))
 	if err != nil {
 		return Sandbox{}, zip.ErrBadRequest(err.Error())
 	}
