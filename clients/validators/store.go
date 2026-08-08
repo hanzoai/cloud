@@ -77,6 +77,9 @@ CREATE TABLE IF NOT EXISTS validator_slots (
   cr_name      TEXT NOT NULL,
   namespace    TEXT NOT NULL,
   bls_pubkey   TEXT NOT NULL DEFAULT '',
+  chain        INTEGER NOT NULL DEFAULT 0,
+  collection   TEXT NOT NULL DEFAULT '',
+  owned_at     INTEGER NOT NULL DEFAULT 0,
   status       TEXT NOT NULL DEFAULT 'provisioning',
   created_at   INTEGER NOT NULL,
   updated_at   INTEGER NOT NULL
@@ -89,6 +92,9 @@ CREATE TABLE IF NOT EXISTS validator_registrations (
   org          TEXT NOT NULL,
   node_id      TEXT NOT NULL,
   bls_pubkey   TEXT NOT NULL DEFAULT '',
+  chain        INTEGER NOT NULL DEFAULT 0,
+  collection   TEXT NOT NULL DEFAULT '',
+  owned_at     INTEGER NOT NULL DEFAULT 0,
   weight       INTEGER NOT NULL DEFAULT 0,
   status       TEXT NOT NULL DEFAULT 'pending_owner_approval',
   created_at   INTEGER NOT NULL,
@@ -130,17 +136,27 @@ type Slot struct {
 	CRName    string `json:"crName"`
 	Namespace string `json:"namespace"`
 	BLSPubkey string `json:"blsPubkey"`
-	Status    string `json:"status"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	// Chain, Collection and OwnedAt record WHAT was verified: the EVM chain the
+	// collection lives on, the ERC-721 address, and the block the read was pinned
+	// to. They are persisted rather than derived from current config so a later
+	// contract or RPC change cannot retroactively alter a historical fact. Together
+	// with TokenID, Wallet and NodeID they are the complete claim an ownership
+	// attestation commits to.
+	Chain      uint64 `json:"chain"`
+	Collection string `json:"collection"`
+	OwnedAt    uint64 `json:"ownedAt"`
+	Status     string `json:"status"`
+	CreatedAt  int64  `json:"createdAt"`
+	UpdatedAt  int64  `json:"updatedAt"`
 }
 
-const slotCols = `token_id,org,wallet,node_id,kms_ref,cr_name,namespace,bls_pubkey,status,created_at,updated_at`
+const slotCols = `token_id,org,wallet,node_id,kms_ref,cr_name,namespace,bls_pubkey,chain,collection,owned_at,status,created_at,updated_at`
 
 func scanSlot(sc interface{ Scan(...any) error }) (Slot, error) {
 	var s Slot
 	err := sc.Scan(&s.TokenID, &s.Org, &s.Wallet, &s.NodeID, &s.KMSRef, &s.CRName,
-		&s.Namespace, &s.BLSPubkey, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+		&s.Namespace, &s.BLSPubkey, &s.Chain, &s.Collection, &s.OwnedAt, &s.Status,
+		&s.CreatedAt, &s.UpdatedAt)
 	return s, err
 }
 
@@ -175,9 +191,10 @@ func (s *Store) ClaimSlot(ctx context.Context, sl Slot) (Slot, error) {
 		return Slot{}, err
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO validator_slots (`+slotCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO validator_slots (`+slotCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		sl.TokenID, sl.Org, sl.Wallet, sl.NodeID, sl.KMSRef, sl.CRName, sl.Namespace,
-		sl.BLSPubkey, sl.Status, sl.CreatedAt, sl.UpdatedAt); err != nil {
+		sl.BLSPubkey, sl.Chain, sl.Collection, sl.OwnedAt, sl.Status, sl.CreatedAt,
+		sl.UpdatedAt); err != nil {
 		return Slot{}, fmt.Errorf("insert slot: %w", err)
 	}
 	return sl, nil

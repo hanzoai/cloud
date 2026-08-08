@@ -69,50 +69,87 @@ func (r *nftReader) isValidatorTier(tokenID uint64) bool {
 	return tokenID >= 1 && tokenID <= r.validatorSlots
 }
 
-// ownerOf reads the on-chain owner of tokenId. A revert (nonexistent token)
-// surfaces as an error, never a zero address masquerading as an owner.
-func (r *nftReader) ownerOf(ctx context.Context, tokenID uint64) (common.Address, error) {
+// observation is the complete, citable fact one verification produced: which
+// collection, on which chain, at which block, held by whom. It is what an
+// ownership attestation commits to, and it is persisted with the slot so a later
+// config change cannot retroactively alter what was actually checked.
+type observation struct {
+	Chain      uint64
+	Collection string
+	Token      uint64
+	Owner      common.Address
+	Block      uint64
+}
+
+// ownerOf reads the on-chain owner of tokenId AT an explicit block and reports the
+// whole observation. A revert (nonexistent token) surfaces as an error, never a
+// zero address masquerading as an owner.
+//
+// The block is pinned rather than left implicit ("latest") because ownership is a
+// fact about a moment. An unpinned read cannot be re-checked by anyone else: a
+// later reader sees a different chain tip and cannot tell a transfer from a lie.
+// Pinning is what makes the answer citable instead of an opinion.
+//
+// The chain id comes from the RPC itself rather than from configuration, so the
+// observation always names the chain the read actually happened on.
+func (r *nftReader) ownerOf(ctx context.Context, tokenID uint64) (observation, error) {
+	obs := observation{Collection: strings.ToLower(r.contract.Hex()), Token: tokenID}
 	cl, err := ethclient.DialContext(ctx, r.rpc)
 	if err != nil {
-		return common.Address{}, fmt.Errorf("dial eth rpc: %w", err)
+		return obs, fmt.Errorf("dial eth rpc: %w", err)
 	}
 	defer cl.Close()
 
+	chain, err := cl.ChainID(ctx)
+	if err != nil {
+		return obs, fmt.Errorf("read eth chain id: %w", err)
+	}
+	obs.Chain = chain.Uint64()
+	block, err := cl.BlockNumber(ctx)
+	if err != nil {
+		return obs, fmt.Errorf("read eth block number: %w", err)
+	}
+	obs.Block = block
+
 	data, err := r.parsed.Pack("ownerOf", new(big.Int).SetUint64(tokenID))
 	if err != nil {
-		return common.Address{}, fmt.Errorf("pack ownerOf: %w", err)
+		return obs, fmt.Errorf("pack ownerOf: %w", err)
 	}
-	out, err := cl.CallContract(ctx, ethereum.CallMsg{To: &r.contract, Data: data}, nil)
+	out, err := cl.CallContract(ctx, ethereum.CallMsg{To: &r.contract, Data: data}, new(big.Int).SetUint64(block))
 	if err != nil {
-		return common.Address{}, fmt.Errorf("ownerOf(%d) call: %w", tokenID, err)
+		return obs, fmt.Errorf("ownerOf(%d) call at block %d: %w", tokenID, block, err)
 	}
 	vals, err := r.parsed.Unpack("ownerOf", out)
 	if err != nil || len(vals) == 0 {
-		return common.Address{}, fmt.Errorf("ownerOf(%d) decode: %w", tokenID, err)
+		return obs, fmt.Errorf("ownerOf(%d) decode: %w", tokenID, err)
 	}
 	owner, ok := vals[0].(common.Address)
 	if !ok {
-		return common.Address{}, fmt.Errorf("ownerOf(%d): unexpected return type", tokenID)
+		return obs, fmt.Errorf("ownerOf(%d): unexpected return type", tokenID)
 	}
-	return owner, nil
+	obs.Owner = owner
+	return obs, nil
 }
 
 // verifyOwnership confirms `addr` is the on-chain owner of a Validator-tier
-// tokenId. It fails closed: a non-validator tier, a read error, or an owner
-// mismatch all reject. This is the on-chain half of the entitlement proof; the
-// wallet-control half is recoverSigner.
-func (r *nftReader) verifyOwnership(ctx context.Context, tokenID uint64, addr common.Address) error {
+// tokenId and returns the observation that proves it. It fails closed: a
+// non-validator tier, a read error, or an owner mismatch all reject. This is the
+// on-chain half of the entitlement proof; the wallet-control half is recoverSigner.
+//
+// The returned observation is what a later attestation commits to, so the fact this
+// service checked is the same fact anyone else can re-check.
+func (r *nftReader) verifyOwnership(ctx context.Context, tokenID uint64, addr common.Address) (observation, error) {
 	if !r.isValidatorTier(tokenID) {
-		return fmt.Errorf("token %d is not a Validator-tier slot (1..%d)", tokenID, r.validatorSlots)
+		return observation{}, fmt.Errorf("token %d is not a Validator-tier slot (1..%d)", tokenID, r.validatorSlots)
 	}
-	owner, err := r.ownerOf(ctx, tokenID)
+	obs, err := r.ownerOf(ctx, tokenID)
 	if err != nil {
-		return err
+		return observation{}, err
 	}
-	if owner != addr {
-		return fmt.Errorf("wallet %s does not own validator slot %d (owner is %s)", addr.Hex(), tokenID, owner.Hex())
+	if obs.Owner != addr {
+		return observation{}, fmt.Errorf("wallet %s does not own validator slot %d (owner is %s)", addr.Hex(), tokenID, obs.Owner.Hex())
 	}
-	return nil
+	return obs, nil
 }
 
 // ── wallet-control proof (EIP-191 personal_sign) ────────────────────────────
