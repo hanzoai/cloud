@@ -41,6 +41,20 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// zipdoc lifts the doc comment off each typed op and each In/Out field into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time.
+//
+// The composition root needs it as much as any app, and had it least: the ops
+// declared HERE are the coding run itself, and they reached the door with a bare
+// schema — twelve properties and not one word. An agent was told `tool` is a
+// string and not that the strings are dev, claude, codex, python and node; told
+// `repo` and `project` both exist with nothing to say which one names the code.
+// This is the surface a chat turn uses to start a run, so a guess here is a run
+// spent on the wrong thing.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // mountAgents is the process's Mount: the agents subsystem, then the coding
 // door that rides in the same process. Composition, not a second plugin — the
 // engine has to be here (the session store, the durable engine and the routed

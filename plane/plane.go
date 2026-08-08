@@ -2028,9 +2028,9 @@ type Ownership struct {
 type ChatSendIn struct {
 	Org      string `json:"org"`
 	Provider string `json:"provider"`
-	Room     string `json:"room"`      // channel / conversation / chat id
-	ReplyTo  string `json:"reply_to"`  // thread or message to reply under, "" when unthreaded
-	Root     string `json:"root"`      // transport-verified reply root (Teams' serviceURL), "" elsewhere
+	Room     string `json:"room"`     // channel / conversation / chat id
+	ReplyTo  string `json:"reply_to"` // thread or message to reply under, "" when unthreaded
+	Root     string `json:"root"`     // transport-verified reply root (Teams' serviceURL), "" elsewhere
 	Text     string `json:"text"`
 	// User is who the message is FOR when Private is set — a sign-in prompt
 	// carries a URL bound to a nonce for one person, and a room must never see it.
@@ -2619,14 +2619,34 @@ type RouteRunIn struct {
 // before the hop — because a run spends the org's balance and reaches the org's
 // repos, and a field the caller can set is not an identity.
 type CodingStartIn struct {
-	Subject        string `json:"subject"`
-	Repo           string `json:"repo"`
-	Prompt         string `json:"prompt"`
-	Project        string `json:"project,omitempty"`
-	Base           string `json:"base,omitempty"`
-	AgentRef       string `json:"agentRef,omitempty"`
-	TargetID       string `json:"targetId,omitempty"`
-	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
+	// Subject is the person the run is attributed to — a linked Hanzo identity the
+	// door already proved, never a name the caller picks. Empty is refused rather
+	// than defaulted: a run that lost its human must not execute as the org.
+	Subject string `json:"subject"`
+	// Repo is what to work on, as `owner/name` in the caller's own org. The engine
+	// resolves the clone URL and the push credential from the org itself, so this
+	// says WHICH repository and never how to reach it.
+	Repo string `json:"repo"`
+	// Prompt is the task, in the words you would use with a colleague who has the
+	// checkout open. It is the whole instruction: there is no second field for
+	// context, and a prompt that names files and the outcome it wants gets a run
+	// that does not have to guess either.
+	Prompt string `json:"prompt"`
+	// Project scopes the run to one board's work when the org keeps more than one.
+	// Empty is the org's default.
+	Project string `json:"project,omitempty"`
+	// Base is the branch to start from. Empty takes the repository's default. The
+	// run never writes here — it writes the agent branch it answers with.
+	Base string `json:"base,omitempty"`
+	// AgentRef names a configured agent to run as, which is how an org pins a
+	// harness, a model and a prompt to a name. Empty runs the default agent.
+	AgentRef string `json:"agentRef,omitempty"`
+	// TargetID routes the run to a registered machine the org has claimed instead
+	// of to a sandbox in our cluster. Empty runs it here, which is the usual case.
+	TargetID string `json:"targetId,omitempty"`
+	// TimeoutSeconds bounds the whole run. Unset takes the default budget; a run
+	// that hits the bound is stopped and reports what it had done by then.
+	TimeoutSeconds int `json:"timeoutSeconds,omitempty"`
 	// Tool is which harness runs the prompt — dev | claude | codex | python |
 	// node — and Desktop is whether the run needs a screen. Both are empty by
 	// default, which is `dev` with no screen, and that default is what every
