@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"testing"
+
+	"github.com/hanzoai/cloud/sqlpool"
 	"time"
 )
 
@@ -191,5 +193,80 @@ func TestStoreDeleteIdempotent(t *testing.T) {
 	}
 	if gone, err := s.Delete(ctx, "acme", "", "slack", ""); err != nil || gone {
 		t.Fatalf("second delete must report gone=false: gone=%v err=%v", gone, err)
+	}
+}
+
+// A database created before this schema gained `user`, `label` and `expires_at`
+// must be brought to the declared shape, with its rows intact.
+//
+// This is the production failure, reproduced. `CREATE TABLE IF NOT EXISTS` is a
+// no-op on an existing table, so the new columns reached new databases only, and
+// GET /v1/integrations answered HTTP 500 `no such column: user` on every real one
+// — the Slack workspace read as disconnected to everything that asks this store
+// while its install was live. Without alignConnections this test fails on the very
+// first query, exactly as production did.
+func TestOldConnectionsTableIsBroughtToTheDeclaredShape(t *testing.T) {
+	dir := t.TempDir()
+
+	// The shape this schema had BEFORE user/label/expires_at: no such columns, and
+	// the older (org,provider,owner) key.
+	pre, err := sqlpool.Open("integrations", dir)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if _, err := pre.Exec(`
+CREATE TABLE connections (
+  org           TEXT NOT NULL,
+  provider      TEXT NOT NULL,
+  owner         TEXT NOT NULL DEFAULT '',
+  external_id   TEXT NOT NULL DEFAULT '',
+  account_label TEXT NOT NULL DEFAULT '',
+  bot_user_id   TEXT NOT NULL DEFAULT '',
+  scopes_csv    TEXT NOT NULL DEFAULT '',
+  connected_at  INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  PRIMARY KEY (org, provider, owner)
+);
+INSERT INTO connections (org,provider,owner,external_id,account_label,bot_user_id,scopes_csv,connected_at,updated_at)
+  VALUES ('hanzo','slack','','T0231','Hanzo','U0BOT','chat:write,im:write',1700000000,1700000000);`); err != nil {
+		t.Fatalf("seed old shape: %v", err)
+	}
+	if err := pre.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// Opening the store runs migrate, which must align the table.
+	s, err := openStore(dir)
+	if err != nil {
+		t.Fatalf("openStore on an old database: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	// THE symptom: the query this store makes must prepare.
+	got, err := s.ListFor(context.Background(), "hanzo", "slack")
+	if err != nil {
+		t.Fatalf("ListFor after align: %v — this is the production 500", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("carried %d rows, want 1 — the migration must not lose connections", len(got))
+	}
+	if got[0].ExternalID != "T0231" || got[0].AccountLabel != "Hanzo" {
+		t.Errorf("row not carried faithfully: %+v", got[0])
+	}
+	// A column the old table never had takes its declared default, and '' is what
+	// an org-held connection means.
+	if got[0].User != "" {
+		t.Errorf("user = %q, want the empty default", got[0].User)
+	}
+
+	// Idempotent: a second open must be a no-op, not another rebuild.
+	s2, err := openStore(dir)
+	if err != nil {
+		t.Fatalf("second openStore: %v", err)
+	}
+	defer func() { _ = s2.Close() }()
+	again, err := s2.ListFor(context.Background(), "hanzo", "slack")
+	if err != nil || len(again) != 1 {
+		t.Fatalf("second open: %v rows=%d", err, len(again))
 	}
 }
