@@ -10,6 +10,8 @@ package platform
 // interpreter box — carried a whole X server.
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -115,5 +117,61 @@ func TestOurOwnRegistryIsNameableByItsCanonicalHost(t *testing.T) {
 		if imageAllowed(image) {
 			t.Errorf("imageAllowed(%q) = true, want false", image)
 		}
+	}
+}
+
+// A build must not silently produce an image that cannot name itself.
+//
+// The runner stamps REVISION only for a full commit, which is right: a build
+// context may name a BRANCH, and stamping "main" would make the label look
+// populated while answering a different question. But a value that is hex and
+// SHORT is neither — it is a caller who meant to pass a revision and passed a
+// prefix, and it used to sail through and ship an image whose /v1/health answers
+// `revision: unknown` forever. A fleet that cannot be asked which commit it runs
+// is how a rollback goes unnoticed.
+func TestABuildRefusesAnAbbreviatedRevision(t *testing.T) {
+	const full = "8c8c58108e4b18a4c8b06d4b6a6f91e616a5f6cc"
+	for _, c := range []struct {
+		name, revision string
+		refuse         bool
+	}{
+		{"a full commit is stamped", full, false},
+		{"no revision is honest", "", false},
+		{"a branch is a legitimate context", "main", false},
+		{"a release branch is not hex", "release/2017", false},
+		{"the 12-char tag shape is a mistake", full[:12], true},
+		{"a 7-char prefix is a mistake", full[:7], true},
+		{"one short of a commit is a mistake", full[:39], true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := buildFrontendCmdArgs("ctx.git#x", "Dockerfile", "ghcr.io/x/y:t", c.revision, nil)
+			switch {
+			case c.refuse && err == nil:
+				t.Fatalf("revision %q was accepted; the image it builds cannot name itself", c.revision)
+			case !c.refuse && err != nil:
+				t.Fatalf("revision %q was refused: %v", c.revision, err)
+			}
+			if c.refuse && !strings.Contains(err.Error(), "full 40-character sha") {
+				t.Errorf("refusal does not say how to fix it: %v", err)
+			}
+		})
+	}
+}
+
+// And the full commit actually REACHES buildkit as a build-arg — the property the
+// refusal exists to protect. Asserting the refusal alone would pass even if the
+// stamp were dropped on the way.
+func TestAFullRevisionIsStamped(t *testing.T) {
+	const full = "8c8c58108e4b18a4c8b06d4b6a6f91e616a5f6cc"
+	cmd, err := buildFrontendCmdArgs("ctx.git#x", "Dockerfile", "ghcr.io/x/y:t", full, nil)
+	if err != nil {
+		t.Fatalf("full commit refused: %v", err)
+	}
+	var flat []string
+	for _, a := range cmd {
+		flat = append(flat, fmt.Sprint(a))
+	}
+	if want := "build-arg:REVISION=" + full; !slices.Contains(flat, want) {
+		t.Fatalf("the commit never reached buildkit: %v", flat)
 	}
 }
