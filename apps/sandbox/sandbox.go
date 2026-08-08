@@ -104,11 +104,6 @@ type state struct {
 	// to open a terminal. Per service and in memory — see terminal.go for why
 	// the one credential a WebSocket can carry is minted rather than borrowed.
 	tickets *tickets
-	// grants are the run-scoped INFERENCE credentials a sandbox holds — the only
-	// thing a pod executing model-authored code is given, and good for nothing
-	// but asking a model on its org's behalf until its lease ends. See grant.go
-	// for why the caller's own bearer must never go in there.
-	grants *grants
 	// work is every command in flight, by the sandbox running it, so a caller can
 	// stop one. In memory for the same reason the tickets are: it holds a live
 	// goroutine's cancel, which exists nowhere but here. See work.go.
@@ -148,7 +143,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		stores:  cloud.NewOrgStore(b, "sandbox", openStore),
 		rt:      newRuntime(),
 		tickets: newTickets(),
-		grants:  newGrants(),
 		work:    newWork(),
 	}}
 	Routes(app, s)
@@ -266,7 +260,6 @@ func New(deps cloud.Deps) (*Service, error) {
 		stores:  cloud.NewOrgStore(b, "sandbox", openStore),
 		rt:      newRuntime(),
 		tickets: newTickets(),
-		grants:  newGrants(),
 		work:    newWork(),
 	}}, nil
 }
