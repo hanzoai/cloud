@@ -46,8 +46,8 @@ func teamsNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
 }
 
 // teamsEgress sends via the Bot Connector at the stored reply root. The
-// serviceURL is learned ONLY from JWT-verified inbound (IngressEvent.
-// ReplyRoot); nothing else may mint it — that is both the security invariant
+// serviceURL is learned ONLY from JWT-verified inbound
+// (ChannelsIngestIn.ReplyRoot); nothing else may mint it — that is both the security invariant
 // (no attacker-chosen serviceURL) and the tenancy gate (an org can drive only
 // conversations it was messaged from).
 func teamsEgress(ctx context.Context, s *cloud.Service[state], org string, m Message) (Delivery, error) {
