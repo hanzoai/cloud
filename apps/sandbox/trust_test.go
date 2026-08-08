@@ -47,7 +47,7 @@ func TestRuntimeForAsksWhoOwnsTheCodeAndWhatItKeeps(t *testing.T) {
 	const other = "acme"
 	for _, c := range []struct {
 		name      string
-		deploy    string // SANDBOX_RUNTIME_CLASS
+		deploy    string // the fleet's own setting
 		contained bool
 		ask       string // what a caller asked for, empty for none
 		m         Sandbox
@@ -96,11 +96,11 @@ func TestRuntimeForAsksWhoOwnsTheCodeAndWhatItKeeps(t *testing.T) {
 		{"deriving runc with nowhere to put it", "gvisor", false, "", leased(authz.AdminOrg, ""), "gvisor", ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			r := &runtime{runtimeClass: c.deploy}
+			r := &runtime{}
 			if c.contained {
 				r.bare = bare()
 			}
-			got, err := r.runtimeFor(c.m, c.ask)
+			got, err := r.runtimeFor(c.m, c.ask, c.deploy)
 			if c.wantErr != "" {
 				if err == nil {
 					t.Fatalf("runtimeFor(%+v, %q) = %q, want a refusal", c.m, c.ask, got)
@@ -132,7 +132,7 @@ func TestRuntimeForAsksWhoOwnsTheCodeAndWhatItKeeps(t *testing.T) {
 // The carve-out is honest and it is the one residual: an EMPTY answer is the
 // node's default runtime, which the deployment declined to name at all. That is
 // a deployment fact rather than a derivation fact — production pins
-// SANDBOX_RUNTIME_CLASS=gvisor — and the property below is the exact one the
+// a fleet set to gvisor — and the property below is the exact one the
 // derivation owns: it never NAMES a kernel-sharing boundary for code that is
 // not ours.
 func TestOnlyOurOwnCodeReachesTheNodesKernel(t *testing.T) {
@@ -143,11 +143,11 @@ func TestOnlyOurOwnCodeReachesTheNodesKernel(t *testing.T) {
 			for _, ask := range asks {
 				for _, vol := range []string{"", "m-acme-p-abc"} {
 					for _, contained := range []bool{false, true} {
-						r := &runtime{runtimeClass: deploy}
+						r := &runtime{}
 						if contained {
 							r.bare = bare()
 						}
-						got, err := r.runtimeFor(leased(org, vol), ask)
+						got, err := r.runtimeFor(leased(org, vol), ask, deploy)
 						if err != nil {
 							continue // refused, which is the other acceptable answer
 						}
@@ -187,11 +187,11 @@ func TestRuntimeForNeverAnswersABoundaryTheClusterCannotPlace(t *testing.T) {
 			for _, ask := range append([]string{""}, sorted()...) {
 				for _, vol := range []string{"", "m-acme-p-abc"} {
 					for _, contained := range []bool{false, true} {
-						r := &runtime{runtimeClass: deploy}
+						r := &runtime{}
 						if contained {
 							r.bare = bare()
 						}
-						got, err := r.runtimeFor(leased(org, vol), ask)
+						got, err := r.runtimeFor(leased(org, vol), ask, deploy)
 						if err != nil || got == "" {
 							continue
 						}
@@ -372,45 +372,6 @@ func TestResumeCannotCrossTheTrustBoundary(t *testing.T) {
 	for _, row := range out {
 		if row.ID == m.ID {
 			t.Fatalf("acme's store holds %s, which belongs to %s", row.ID, authz.AdminOrg)
-		}
-	}
-}
-
-// A SANDBOX_RUNTIME_CLASS the table has never heard of stops at STARTUP.
-//
-// It used to reach a pod spec: the old derivation short-circuited on a sandbox
-// with no volume and returned the setting unread, so the pod named a class the
-// apiserver did not have and sat Pending with no reason given. Checked here, the
-// answer arrives once, at boot, with the name of the thing that is wrong.
-func TestAnUnknownRuntimeClassStopsAtStartup(t *testing.T) {
-	away(t)
-	for _, c := range []struct {
-		set     string
-		wantErr string
-	}{
-		{"gvisor", ""},
-		{"kata-clh", ""},
-		{"", ""},
-		{"runsc", "is not one we run"},   // the HANDLER's name, not the class's
-		{"gVisor", "is not one we run"},  // case matters — the apiserver's does
-		{"gvisor ", ""},                  // trimmed on the way in, as before
-		{"default", "is not one we run"}, // a plausible guess, and wrong
-	} {
-		t.Setenv("SANDBOX_RUNTIME_CLASS", c.set)
-		r := newRuntime()
-		if c.wantErr == "" {
-			if r.initErr != "" && strings.Contains(r.initErr, "not one we run") {
-				t.Fatalf("SANDBOX_RUNTIME_CLASS=%q refused: %s", c.set, r.initErr)
-			}
-			continue
-		}
-		if !strings.Contains(r.initErr, c.wantErr) {
-			t.Fatalf("SANDBOX_RUNTIME_CLASS=%q gave initErr %q, want %q", c.set, r.initErr, c.wantErr)
-		}
-		// And it fails CLOSED: every call through ready() carries the reason,
-		// rather than the value arriving at a pod spec.
-		if err := r.ready(); err == nil || !strings.Contains(err.Error(), c.wantErr) {
-			t.Fatalf("SANDBOX_RUNTIME_CLASS=%q: ready() = %v, want the reason", c.set, err)
 		}
 	}
 }
