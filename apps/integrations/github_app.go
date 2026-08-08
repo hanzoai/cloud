@@ -584,6 +584,16 @@ type githubRepoView struct {
 type githubReposOut struct {
 	// Repos is every repo the installation grants. Never null; [] when none.
 	Repos []githubRepoView `json:"repos"`
+	// Unread names the connected accounts this answer could NOT read, so a short
+	// list is distinguishable from a complete one. Absent when the answer is whole.
+	//
+	// The fan-out is per installation, and one account failing used to be dropped
+	// in silence: the response stayed 200 and simply carried fewer repositories,
+	// erroring only when EVERY account failed. Measured, twice in a row, minutes
+	// apart: 1475 repositories, then 1157 — a whole installation missing with
+	// nothing in the answer to say so. Anything driven off the list then
+	// under-covers and reports success, which is the failure this field ends.
+	Unread []string `json:"unread,omitempty"`
 }
 
 // githubRepos lists the org's granted GitHub repositories, each annotated with its
@@ -598,7 +608,7 @@ func (o ops) githubRepos(ctx context.Context, _ *noArgs) (*githubReposOut, error
 	if err != nil {
 		return nil, err
 	}
-	repos, err := reachableRepos(ctx, org)
+	repos, unread, err := reachableRepos(ctx, org)
 	if err != nil {
 		return nil, err
 	}
@@ -626,7 +636,7 @@ func (o ops) githubRepos(ctx context.Context, _ *noArgs) (*githubReposOut, error
 		}
 		out = append(out, v)
 	}
-	return &githubReposOut{Repos: out}, nil
+	return &githubReposOut{Repos: out, Unread: unread}, nil
 }
 
 // githubImportIn selects which of the installation's granted repositories to
@@ -725,7 +735,7 @@ func (o ops) githubImport(ctx context.Context, in *githubImportIn) (*githubImpor
 	if !in.All && len(in.Repos) == 0 {
 		return nil, zip.ErrBadRequest("provide repos[] or all:true")
 	}
-	granted, err := reachableRepos(ctx, org)
+	granted, _, err := reachableRepos(ctx, org)
 	if err != nil {
 		return nil, err
 	}
@@ -766,13 +776,13 @@ func githubTokenFor(ctx context.Context, org, owner string) (string, error) {
 // a caller can report a partial view honestly, while the accounts that answered
 // still return their repositories. Losing every repo because one installation was
 // revoked would be worse than reporting the gap.
-func reachableRepos(ctx context.Context, org string) ([]githubRepo, error) {
+func reachableRepos(ctx context.Context, org string) ([]githubRepo, []string, error) {
 	conns := Connections(org, "github")
 	if len(conns) == 0 {
-		return nil, zip.Errorf(http.StatusConflict, "github is not connected for this organization")
+		return nil, nil, zip.Errorf(http.StatusConflict, "github is not connected for this organization")
 	}
 	if !githubConfigured() {
-		return nil, zip.Errorf(http.StatusServiceUnavailable, "github integration is not configured on this deployment")
+		return nil, nil, zip.Errorf(http.StatusServiceUnavailable, "github integration is not configured on this deployment")
 	}
 	// The accounts are read CONCURRENTLY. Each is an independent installation with
 	// its own token and its own pagination, so reading them in series made the wall
@@ -825,9 +835,9 @@ func reachableRepos(ctx context.Context, org string) ([]githubRepo, error) {
 		}
 	}
 	if len(all) == 0 && len(failures) > 0 {
-		return nil, zip.Errorf(http.StatusBadGateway, "list github repositories: every connected account failed (%s)", strings.Join(failures, ", "))
+		return nil, failures, zip.Errorf(http.StatusBadGateway, "list github repositories: every connected account failed (%s)", strings.Join(failures, ", "))
 	}
-	return all, nil
+	return all, failures, nil
 }
 
 // ── bounded background import ─────────────────────────────────────────────────
