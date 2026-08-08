@@ -167,53 +167,50 @@ func TestSendDiscordHTTPErrorRedacted(t *testing.T) {
 	}
 }
 
-func TestEmitIngressDelivers(t *testing.T) {
-	t.Cleanup(func() { ingressFn = nil })
-	got := make(chan IngressEvent, 1)
-	deadline := make(chan bool, 1)
-	RegisterIngress(func(ctx context.Context, ev IngressEvent) {
-		_, ok := ctx.Deadline()
-		deadline <- ok
-		got <- ev
-	})
+// The three tests that stood here registered an in-process consumer through
+// RegisterIngress and asserted it received the event. They passed on every run —
+// while production dropped every event, because the consumer runs in ANOTHER
+// PROCESS and the function pointer they installed was one this process happened
+// to hold. A test that only ever builds the co-resident case says nothing about
+// the deployed one, which is the same trap that let a chat bridge call
+// agents.RunOnBehalf directly for as long as it did.
+//
+// What can be checked from here is the mapping, and that emitting never delays
+// the webhook. Whether channels TOOK the event is channels' own test, and
+// whether the hop works at all is the compose check.
 
+func TestIngestEventCarriesTheVerifiedFields(t *testing.T) {
 	in := Inbound{Provider: "slack", ExternalID: "T1", User: "u1", Channel: "C1", ThreadID: "th", Text: "hi", DedupeKey: "e1"}
-	emitIngress("org1", in, "root")
+	got := ingestIn("org1", in, "root")
 
-	select {
-	case ev := <-got:
-		if ev.Org != "org1" || ev.ReplyRoot != "root" || ev.In != in {
-			t.Fatalf("event = %+v, want the emitted fields intact", ev)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("ingress event not delivered")
+	if got.Org != "org1" {
+		t.Errorf("org = %q — the isolation root, resolved from the signed payload", got.Org)
 	}
-	if ok := <-deadline; !ok {
-		t.Fatal("consumer context must carry the bounded deadline")
+	if got.Provider != in.Provider || got.ExternalID != in.ExternalID || got.User != in.User {
+		t.Errorf("identity fields = %+v, want them from %+v", got, in)
+	}
+	if got.Channel != in.Channel || got.ThreadID != in.ThreadID {
+		t.Errorf("reply target = %q/%q, want %q/%q", got.Channel, got.ThreadID, in.Channel, in.ThreadID)
+	}
+	if got.Text != in.Text || got.DedupeKey != in.DedupeKey {
+		t.Errorf("text/dedupe = %q/%q, want %q/%q", got.Text, got.DedupeKey, in.Text, in.DedupeKey)
+	}
+	if got.ReplyRoot != "root" {
+		t.Errorf("reply root = %q, want the transport-verified one", got.ReplyRoot)
 	}
 }
 
-func TestEmitIngressRecoversPanic(t *testing.T) {
-	t.Cleanup(func() { ingressFn = nil })
-	entered := make(chan struct{})
-	RegisterIngress(func(context.Context, IngressEvent) {
-		close(entered)
-		panic("boom")
-	})
-
-	emitIngress("org1", Inbound{Provider: "slack"}, "")
+func TestEmitIngressNeverDelaysTheWebhook(t *testing.T) {
+	// No plane peer here, so the call fails — which is the point: the webhook
+	// path must return regardless of whether the inbox is reachable.
+	done := make(chan struct{})
+	go func() { defer close(done); emitIngress("org1", Inbound{Provider: "slack"}, "") }()
 	select {
-	case <-entered:
-	case <-time.After(5 * time.Second):
-		t.Fatal("consumer never ran")
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("emitIngress blocked the caller")
 	}
-	// The deferred recover in emitIngress owns the panic; give the goroutine a
-	// beat to unwind — the process staying alive IS the assertion.
+	// Give the detached goroutine a beat to fail and unwind; the process staying
+	// alive IS the assertion.
 	time.Sleep(50 * time.Millisecond)
-}
-
-func TestEmitIngressUnregistered(t *testing.T) {
-	ingressFn = nil
-	// No consumer registered (fresh process state): emit must be a silent no-op.
-	emitIngress("org1", Inbound{Provider: "slack"}, "")
 }

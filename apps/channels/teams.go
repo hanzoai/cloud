@@ -7,6 +7,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/integrations"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // teams.go is the Teams transport: envelope normalization from the ingress
@@ -28,8 +29,8 @@ var teamsTransport = transport{
 // envelope. Bot Framework contract: channel/group-chat conversation ids are
 // 19:...@thread.*; personal chats are a:.... Unknown shapes classify DM —
 // the fail-safe direction, since dmPolicy defaults to pairing (strictest).
-func teamsNormalize(ev integrations.IngressEvent) (Message, bool) {
-	in := ev.In
+func teamsNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
+	in := ev
 	kind := RoomDM
 	if strings.HasPrefix(in.Channel, "19:") {
 		kind = RoomGroup
