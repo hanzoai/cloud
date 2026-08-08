@@ -52,11 +52,12 @@ func TestRuntimeForAsksTheVolumeNotTheClass(t *testing.T) {
 		{"rollback: volumeless", "gvisor", "", keeps, "gvisor", ""},
 		{"rollback: volume", "gvisor", "", dev, "gvisor", ""},
 
-		// Empty is the node's DEFAULT runtime, which is a different request from
-		// any named class. A cluster with no gVisor installed must not be handed
-		// one because a sandbox happened to have a volume.
-		{"unset stays unset, volumeless", "", "", keeps, "", ""},
-		{"unset stays unset, with a volume", "", "", dev, "", ""},
+		// An UNCONFIGURED fleet gets the boundary that isolates, not the node's
+		// own runtime. Empty meant the node default while runsc still had to be
+		// installed; it is installed, and an unset field putting a tenant's
+		// sandbox on the node's kernel is a downgrade nobody would see.
+		{"unset isolates, volumeless", "", "", keeps, "gvisor", ""},
+		{"unset isolates, with a volume", "", "", dev, "gvisor", ""},
 
 		// kata-clh DOES share a filesystem (configuration-clh.toml sets
 		// shared_fs = "virtio-fs"), so it holds a volume and is not derived away.
