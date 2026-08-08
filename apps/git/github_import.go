@@ -248,7 +248,23 @@ func (s *storage) importFetch(ctx context.Context, org, project, name, srcURL st
 		if !branchRE.MatchString(b) {
 			continue // skip a source branch whose name can't be a native ref
 		}
-		res, err := s.inboundFastForward(ctx, org, project, name, b, srcURL, cred)
+		// THE FULL REF, which is what inboundFastForward documents and requires.
+		// lsRemoteHeads strips refs/heads/, and handing the SHORT name on made the
+		// refspec "2017:2017" — ambiguous on the source, where it matches both the
+		// branch and a tag of that name, and DWIM'd to refs/heads/2017 on the way
+		// in. git then refused to write a tag object to a branch and the whole
+		// import died at that one branch:
+		//
+		//	cannot update ref 'refs/heads/2017': trying to write non-commit
+		//	object ... to branch 'refs/heads/2017'
+		//
+		// It read as a tag bug and was a naming bug. A short name resolves fine
+		// until something else answers to it, so every ordinary branch worked and
+		// only repositories tagging a release after its branch failed — silently,
+		// as a warn line, which is why the native git held a fraction of what was
+		// declared for it. The short name is still what the OUTCOME is keyed by,
+		// because that is the branch a caller asked about.
+		res, err := s.inboundFastForward(ctx, org, project, name, "refs/heads/"+b, srcURL, cred)
 		if err != nil {
 			return out, fmt.Errorf("fetch branch %s: %w", b, err)
 		}
@@ -394,10 +410,22 @@ func (s *storage) inboundFastForward(ctx context.Context, org, project, name, re
 	// the ref. protocol.version=2 = cheaper negotiation; credential.
 	// helper= disables any leaky helper; --no-write-fetch-head keeps the bare repo
 	// clean; the pack streams to disk under a pack slot (bounded memory).
+	//
+	// --no-tags because THIS FETCH IS FOR ONE BRANCH. git otherwise auto-follows
+	// tags that point into the history it just downloaded, and a tag sharing a
+	// name with a branch is then resolved by short name onto the ref this very
+	// refspec created: "cannot update ref 'refs/heads/2017': trying to write
+	// non-commit object ... to branch". The whole import failed at that branch, so
+	// a repository carrying a release tag named like its release branch could not
+	// be imported at all — and nothing said so except a warn line, which is why
+	// the native git held a fraction of what it was declared to hold.
+	//
+	// Nothing is lost by refusing them here: tags are fetched by fetchTags
+	// immediately after, create-only into refs/tags/*, which is where a tag goes.
 	refspec := localRef + ":" + localRef
 	args := append(packConfigArgs(""),
 		"-c", "protocol.version=2", "-c", "credential.helper=",
-		"--git-dir="+bareDir, "fetch", "--no-write-fetch-head", srcURL, refspec)
+		"--git-dir="+bareDir, "fetch", "--no-write-fetch-head", "--no-tags", srcURL, refspec)
 	cmd, err := gitCmd(ctx, env, args...)
 	if err != nil {
 		return ffResult{}, err
