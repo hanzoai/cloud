@@ -19801,6 +19801,11 @@ components:
         displayName:
           type: string
         enableCodeSignin:
+          description: |-
+            EnableCodeSignin offers sign-in by an emailed or texted one-time code
+            beside the password. A POINTER for the same reason as IsShared: a plain
+            bool reads as false on every reconcile that says nothing and would switch
+            the method off for every app whose caller never mentioned it.
           type: boolean
         expireInHours:
           description: |-
