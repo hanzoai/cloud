@@ -322,11 +322,15 @@ func truncateToolResult(s string) string {
 // return the model's last tool REQUEST as if it were an answer; offering nothing
 // forces the model to say what it has, which is a real reply to the person
 // waiting on it.
-func completeWithTools(ctx context.Context, ai types.AIClient, org, actor, prompt, model, fallback string, defs []types.ToolDef, runID string) (*types.ChatResponse, string, error, int) {
+//
+// It is HANDED the conversation rather than a prompt string. The loop's whole job
+// is appending to a transcript, and one that began by wrapping a string in a
+// single user turn could only ever be given the newest message — the turns before
+// it had nowhere to go.
+func completeWithTools(ctx context.Context, ai types.AIClient, org, actor string, msgs []types.ChatMessage, model, fallback string, defs []types.ToolDef, runID string) (*types.ChatResponse, string, error, int) {
 	ctx, cancel := context.WithTimeout(ctx, toolRunBudget)
 	defer cancel()
 
-	msgs := []types.ChatMessage{{Role: types.RoleUser, Content: prompt}}
 	used := model
 	calls := 0
 	for round := 0; round <= maxToolRounds; round++ {
