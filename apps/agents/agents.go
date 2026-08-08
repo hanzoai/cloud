@@ -307,6 +307,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("agents.Mount: nil deps.Logger")
 	}
 	log = log.New("subsystem", "agents")
+
+	// The tool-using conversation surface, folded in from what used to be a second
+	// app called `agent`. One concept does not get two plugins, and two apps whose
+	// names differ by an `s` are a reader's problem forever.
+	if err := mountConversation(app, deps); err != nil {
+		return err
+	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("agents.Mount: empty DataDir")
 	}
