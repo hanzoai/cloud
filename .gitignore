@@ -5,7 +5,16 @@
 /host
 # A bare `go build ./plugin/<app>/` writes <app> HERE, not into /bin where the
 # Makefile puts it: 150MB of unstripped ELF in a checkout several sessions share.
-/o11y
+#
+# /cloud, /hanzo, /host and /o11y were each added AFTER one rode in on a
+# `git add -A`. There are 125 apps, so listing them one at a time loses: a 108MB
+# `commerce` reached a commit and GitHub refused the push, and a 52MB aarch64
+# `sandboxes` had been tracked for a while under the 100MB limit, silently.
+# Name the shape instead — a lowercase root file with no extension is a binary
+# here; source files carry .go, config carries .yml, and docs are capitalised.
+/[a-z]*
+!/[a-z]*.*
+!/[a-z]*/
 
 # Local build directories
 /dist/
