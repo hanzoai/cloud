@@ -142,7 +142,7 @@ func TestOutputLeavesTheSandboxWhileTheCommandIsStillRunning(t *testing.T) {
 			t.Fatalf("the command finished before its output was readable (%q) — output that "+
 				"only arrives with the result is not a live run", r.Stdout)
 		case <-deadline:
-			t.Fatalf("the command has been running for two seconds and nothing has left the "+
+			t.Fatalf("the command has been running for two seconds and nothing has left the " +
 				"sandbox; a watcher would be looking at a blank screen")
 		case <-time.After(5 * time.Millisecond):
 		}
