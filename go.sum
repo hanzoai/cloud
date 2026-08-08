@@ -1010,6 +1010,8 @@ github.com/hanzoai/commerce v1.50.31 h1:1DZHKHYlT75eENKciWZaSUdcu6R5BiS/Ms3fg++O
 github.com/hanzoai/commerce v1.50.31/go.mod h1:BUr5bLwbLhZYebEi6Dc9X75/FhH8EPcI0EsjvbJh+9c=
 github.com/hanzoai/commerce v1.50.34 h1:Ga6L67zjLU58gv42b3hjcmB8wfA5seY2u6dy9hcO+7c=
 github.com/hanzoai/commerce v1.50.34/go.mod h1:BUr5bLwbLhZYebEi6Dc9X75/FhH8EPcI0EsjvbJh+9c=
+github.com/hanzoai/commerce v1.50.36 h1:57NnWdbZv7tx3KD3xBi5RZptNiDUOrDAz/j/861KoNc=
+github.com/hanzoai/commerce v1.50.36/go.mod h1:BUr5bLwbLhZYebEi6Dc9X75/FhH8EPcI0EsjvbJh+9c=
 github.com/hanzoai/csqlite v0.1.2 h1:4DzdgUfKADhzEP66Y30/HwepuBLrwt7NsemJMfrPGl4=
 github.com/hanzoai/csqlite v0.1.2/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
