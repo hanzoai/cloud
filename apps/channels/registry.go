@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/integrations"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // registry.go is the closed transport registry — exactly the four connected
@@ -67,7 +67,7 @@ type capabilities struct {
 type transport struct {
 	id        string
 	caps      capabilities
-	normalize func(ev integrations.IngressEvent) (Message, bool)
+	normalize func(ev plane.ChannelsIngestIn) (Message, bool)
 	send      func(ctx context.Context, s *cloud.Service[state], org string, m Message) (Delivery, error)
 }
 

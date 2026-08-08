@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/integrations"
+	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -254,10 +254,10 @@ func spyDiscord(t *testing.T) *doorRec {
 
 // ingressEv builds one seam event; realistic per-transport values live at the
 // call sites.
-func ingressEv(org, provider, externalID, user, channel, thread, text, key, replyRoot string) integrations.IngressEvent {
-	return integrations.IngressEvent{
-		Org:       org,
-		In:        integrations.Inbound{Provider: provider, ExternalID: externalID, User: user, Channel: channel, ThreadID: thread, Text: text, DedupeKey: key},
+func ingressEv(org, provider, externalID, user, channel, thread, text, key, replyRoot string) plane.ChannelsIngestIn {
+	return plane.ChannelsIngestIn{
+		Org: org, Provider: provider, ExternalID: externalID, User: user,
+		Channel: channel, ThreadID: thread, Text: text, DedupeKey: key,
 		ReplyRoot: replyRoot,
 	}
 }
@@ -502,7 +502,7 @@ func TestIngestGroupPolicy(t *testing.T) {
 	ctx := context.Background()
 	const org = "acme-group"
 	st := e.store(t)
-	group := func(key, text string) integrations.IngressEvent {
+	group := func(key, text string) plane.ChannelsIngestIn {
 		return ingressEv(org, "slack", "T024ABC", "u9", "C024BE91L", "", text, key, "")
 	}
 
