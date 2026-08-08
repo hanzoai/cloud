@@ -5,7 +5,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/hanzoai/cloud"
+	"github.com/zap-proto/zip"
+
 	"github.com/hanzoai/cloud/apps/integrations"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // ingest is the registered integrations ingress consumer (channels.Mount):
@@ -19,13 +23,13 @@ const gcEverySec = 600
 
 var lastGC atomic.Int64
 
-func ingest(ctx context.Context, ev integrations.IngressEvent) {
+func ingest(ctx context.Context, ev plane.ChannelsIngestIn) {
 	s := mounted.Load()
 	if s == nil {
 		return
 	}
 	st := s.State.store
-	tr, ok := transportFor(ev.In.Provider)
+	tr, ok := transportFor(ev.Provider)
 	if !ok {
 		return
 	}
@@ -35,7 +39,7 @@ func ingest(ctx context.Context, ev integrations.IngressEvent) {
 	}
 	// Identity is best-effort: an unlinked user or KMS-down leaves UserID empty
 	// and never blocks ingest.
-	if subj, found, err := integrations.LinkedSubject(ev.Org, ev.In.Provider, ev.In.User); err == nil && found {
+	if subj, found, err := integrations.LinkedSubject(ev.Org, ev.Provider, ev.User); err == nil && found {
 		m.Sender.UserID = subj
 	}
 	now := time.Now().Unix()
@@ -124,4 +128,38 @@ func ingest(ctx context.Context, ev integrations.IngressEvent) {
 
 func pairingText(code string) string {
 	return "Pairing code: " + code + " — an org admin can approve it in the Hanzo console (expires in 1 hour)."
+}
+
+// serveIngest publishes the inbound door on the plane.
+//
+// The adapters live in the integrations PROCESS and this inbox lives in this
+// one, so the door has to be an address rather than a function pointer. It was a
+// pointer — integrations.RegisterIngress, installed at Mount — and a package
+// global is per-process: on the emitting side it was nil, and every event
+// returned at the nil check. Nothing logged, because dropping is what a nil
+// consumer is for. The inbox held nothing and the gates below never ran on real
+// traffic for as long as the seam existed.
+func serveIngest() {
+	zip.Post[plane.ChannelsIngestIn, plane.ChannelsIngestOut](cloud.Plane(), "/channels/ingest", planeIngest,
+		zip.WithOperationID(plane.ChannelsIngest),
+		zip.WithSummary("Take one authenticated inbound chat event from a platform adapter"))
+}
+
+// planeIngest answers an adapter's event.
+//
+// The org travels IN the request rather than coming from the caller's plane
+// identity, for the same reason AgentsRunOnBehalf does: the tenant is the one
+// that connected the workspace, which the adapter resolved from the signed
+// team/guild/chat id, and the adapter plugin's own identity is not it. Taken
+// reports whether this inbox carries the transport — a fact worth returning,
+// since the silent version of that answer is the bug this door replaces.
+func planeIngest(ctx context.Context, in *plane.ChannelsIngestIn) (*plane.ChannelsIngestOut, error) {
+	if in == nil || mounted.Load() == nil {
+		return &plane.ChannelsIngestOut{}, nil
+	}
+	if _, ok := transportFor(in.Provider); !ok {
+		return &plane.ChannelsIngestOut{}, nil
+	}
+	ingest(ctx, *in)
+	return &plane.ChannelsIngestOut{Taken: true}, nil
 }

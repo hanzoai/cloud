@@ -310,6 +310,16 @@ const (
 	// not, and every @hanzo turn in Slack died on ErrNoPeer.
 	AgentsRunOnBehalf = "agents_run_on_behalf"
 
+	// ChannelsIngest carries one authenticated inbound chat event from the platform
+	// adapters to the channels inbox. It replaces integrations.RegisterIngress — a
+	// package-global function pointer that channels.Mount installed, which is the
+	// same mistake AgentsRunOnBehalf above was written to undo. In production
+	// integrations, channels and agents are three separate processes, so that
+	// pointer was nil on the emitting side and EVERY event was dropped: the inbox
+	// took nothing, and the pairing and allowlist gates never saw real traffic.
+	// Nothing failed loudly, because a nil consumer simply returns.
+	ChannelsIngest = "channels_ingest"
+
 	// The x402 rail, across the process boundary. Four ops, because the four
 	// things a settlement needs live in four binaries: the RAIL is x402's, the
 	// PRICE is the marketplace's, the PAYEE is wallets', and the LEDGER is
@@ -1920,6 +1930,31 @@ type Ownership struct {
 // agents and integrations in one binary.
 //
 // No field here is a map — the encoder refuses one at the plane boundary.
+// ChannelsIngestIn is one authenticated inbound chat event crossing to channels.
+// Org is resolved by the adapter via OrgForExternalID on a signature-VERIFIED
+// payload — never a client-supplied field — and is the isolation root: a
+// workspace's events reach only the org that connected that workspace.
+type ChannelsIngestIn struct {
+	Org        string `json:"org"`
+	Provider   string `json:"provider"`    // "slack","teams","discord","telegram"
+	ExternalID string `json:"external_id"` // workspace/tenant/guild/chat id
+	User       string `json:"user"`        // platform-verified user id
+	Channel    string `json:"channel"`     // reply target
+	ThreadID   string `json:"thread_id"`   // thread to reply under, "" when unthreaded
+	Text       string `json:"text"`        // the prompt, mention stripped
+	DedupeKey  string `json:"dedupe_key"`  // event id, "" when non-dedupable
+	// ReplyRoot is a transport-verified reply root: Teams' JWT-verified
+	// serviceURL, "" everywhere else.
+	ReplyRoot string `json:"reply_root"`
+}
+
+// ChannelsIngestOut reports whether the event was taken. A consumer that is not
+// mounted, or an event for a transport it does not carry, answers false — which
+// is a fact worth having rather than a silent drop.
+type ChannelsIngestOut struct {
+	Taken bool `json:"taken"`
+}
+
 type RunOnBehalfIn struct {
 	// Org is the isolation gate, the tenant, and the balance the run bills.
 	Org string `json:"org"`
