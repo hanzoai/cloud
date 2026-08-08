@@ -164,20 +164,22 @@ func turn(s *cloud.Service[state], tr transport, org string, m Message) {
 	}
 	// An ephemeral answer carries a sign-in URL bound to a nonce for THIS person.
 	// Posted in a room, a colleague could click it and bind their own account to
-	// this chat user — account takeover, not an inconvenience. So it is not sent.
+	// this chat user — account takeover, not an inconvenience. So it goes back
+	// privately, to the one person who asked.
 	//
-	// It is also not swallowed. `capabilities` here is DM/Group/Thread and has no
-	// private reply, so this path CANNOT presently deliver and the person is left
-	// unlinked with no way to know why. That is a missing capability, stated
-	// loudly rather than logged at debug and forgotten: the fix is either an
-	// ephemeral send on the transports that have one (Slack's chat.postEphemeral)
-	// or routing the prompt to the asker's DM, and until one exists this is a hole.
+	// Not every transport has a private reply. Where none exists the prompt cannot
+	// be delivered at all and the person is left unlinked with no way to know why,
+	// so that is an error and not a shrug.
 	if ephemeral {
-		err := errors.New("no private reply on this transport")
-		s.Log.Error("channels: sign-in prompt undeliverable, user left unlinked",
-			"channel", m.Channel, "org", org, "room", m.Room.ID, "err", err)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
+		if _, err := post(ctx, plane.ChatSendIn{
+			Org: org, Provider: m.Channel, Room: m.Room.ID,
+			User: m.Sender.ExternalID, Private: true, Text: text,
+		}); err != nil {
+			s.Log.Error("channels: sign-in prompt undeliverable, user left unlinked",
+				"channel", m.Channel, "org", org, "room", m.Room.ID, "err", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
 		return
 	}
 	if _, err := tr.send(ctx, s, org, Message{
