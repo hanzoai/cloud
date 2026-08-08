@@ -47,6 +47,7 @@ package analytics
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -86,12 +87,29 @@ func planeCapture(ctx context.Context, in *planeops.EventIn) (*planeops.EventCap
 	if name == "" {
 		return nil, zip.ErrBadRequest("capture: 'name' is required — an unnamed act is unroutable")
 	}
+	attrs := stated(in.Attributes)
+	revenue, _ := strconv.ParseFloat(said(attrs, "revenue"), 64)
+	quantity, _ := strconv.ParseUint(said(attrs, "quantity"), 10, 32)
 	res, err := ingestEvents(ctx, org, sourcePlane, []CaptureEvent{{
 		Event:      name,
 		Product:    strings.TrimSpace(in.Product),
 		DistinctID: strings.TrimSpace(in.Subject),
 		Timestamp:  strings.TrimSpace(in.At),
-		Properties: stated(in.Attributes),
+		// THE FOUR COMMERCE FACTS ARE COLUMNS, and this door has to say so. Every
+		// value on this plane is TEXT ([planeops.Signal] is its one name/value pair),
+		// so a peer's sale arrived with revenue, currency, product and quantity
+		// sitting in the property bag as strings while the fields the rest of the
+		// program reads them from stayed zero — the /v1/insights commerce lens summed
+		// nothing, and apps/destinations forwarded a purchase worth nothing to every
+		// connected platform. They are read under the SAME names the HTTP wire spells
+		// them with (CaptureEvent's json tags), so one sale has one vocabulary
+		// whichever door it came in through, and an unparseable value is simply the
+		// zero it already was.
+		Revenue:    revenue,
+		Currency:   said(attrs, "currency"),
+		ProductID:  said(attrs, "productId"),
+		Quantity:   uint32(quantity),
+		Properties: attrs,
 	}})
 	if err != nil {
 		return nil, err
@@ -119,4 +137,12 @@ func stated(list []planeops.Signal) map[string]any {
 		}
 	}
 	return out
+}
+
+// said returns what the peer stated under name, trimmed, "" if it stated nothing.
+// Every value on this plane is text, so this is the only shape a stated fact has —
+// which is why the columns above are parsed out of it rather than type-asserted.
+func said(attrs map[string]any, name string) string {
+	s, _ := attrs[name].(string)
+	return strings.TrimSpace(s)
 }
