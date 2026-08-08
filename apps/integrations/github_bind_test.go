@@ -168,9 +168,11 @@ func TestStoreRefusesAccountHeldByAnotherOrg(t *testing.T) {
 	}
 }
 
-// TestClaimRefusesHeldAccount proves the sudo verb obeys the same rule: platform
-// sudo may bind an account nobody holds, never take one from the org using it.
-func TestClaimRefusesHeldAccount(t *testing.T) {
+// TestClaimNeverTakesAHeldAccount proves the rule the sudo verb obeys: it may
+// give this org an account another org holds, and never TAKES it from them.
+// Sharing is how one installation serves two of our orgs; the holder's row
+// standing afterwards is what keeps that from being a seizure.
+func TestClaimNeverTakesAHeldAccount(t *testing.T) {
 	withGithubApp(t, mockInstallations(t, twoAccounts()))
 	app := newApp(t, newKMS(t))
 	if err := mounted.State.store.Upsert(context.Background(), Connection{
@@ -182,14 +184,18 @@ func TestClaimRefusesHeldAccount(t *testing.T) {
 
 	r := postJSON(t, app, "/v1/integrations/github/claim", "lux", true,
 		map[string]any{"accounts": []string{"hanzoai"}})
-	if r.Code != http.StatusConflict {
-		t.Fatalf("claiming a held account want 409, got %d (%s)", r.Code, r.Body)
+	if r.Code != http.StatusOK {
+		t.Fatalf("claiming a held account want 200, got %d (%s)", r.Code, r.Body)
 	}
-	if conns := Connections("lux", "github"); len(conns) != 0 {
-		t.Fatalf("a refused claim must write nothing, got %+v", conns)
+	if got := claimOut(t, r.Body).Claimed; len(got) != 1 || got[0] != "hanzoai" {
+		t.Errorf("claimed = %v, want [hanzoai] — the second org gains the account", got)
 	}
+	// The whole invariant: the org that was using it still is.
 	if conns := Connections("hanzo", "github"); len(conns) != 1 {
-		t.Fatalf("the holder keeps its binding, got %+v", conns)
+		t.Fatalf("the holder must keep its binding, got %+v", conns)
+	}
+	if conns := Connections("lux", "github"); len(conns) != 1 {
+		t.Fatalf("the claiming org must hold it too, got %+v", conns)
 	}
 }
 
@@ -231,5 +237,47 @@ func TestCollisionsReportsSharedAccounts(t *testing.T) {
 	}
 	if len(got[0].Orgs) != 2 {
 		t.Fatalf("want both orgs named, got %v", got[0].Orgs)
+	}
+}
+
+// One installation may be held by SEVERAL of our orgs, and a tenant still cannot
+// take one another org holds.
+//
+// The GitHub org `luxfi` is developed from the `hanzo` org and is also Lux's own,
+// so a single binding leaves one of those two contexts unable to see its own
+// repositories. Share permits that; Upsert — the write every self-service connect
+// goes through — must keep refusing, because the App here is Hanzo's own and a
+// customer installs it on THEIR GitHub org: if exclusivity were merely a
+// parameter, one tenant could bind another tenant's installation and read their
+// private repositories.
+func TestOneInstallationCanBeHeldBySeveralOrgs(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	row := func(org string) Connection {
+		return Connection{Org: org, Provider: "github", Label: "luxfi",
+			ExternalID: "55512345", AccountLabel: "luxfi"}
+	}
+
+	if err := s.Upsert(ctx, row("hanzo")); err != nil {
+		t.Fatalf("first bind: %v", err)
+	}
+	// The refusal that protects a customer's repositories is still there.
+	if err := s.Upsert(ctx, row("lux")); !errors.Is(err, errBound) {
+		t.Fatalf("Upsert into a second org = %v, want errBound — self-service must not take another org's account", err)
+	}
+	// Sudo sharing is what the second context needs.
+	if err := s.Share(ctx, row("lux")); err != nil {
+		t.Fatalf("Share into a second org: %v", err)
+	}
+
+	// BOTH orgs now see it, which is the whole point.
+	for _, org := range []string{"hanzo", "lux"} {
+		got, ok, err := s.Get(ctx, org, "", "github", "luxfi")
+		if err != nil || !ok {
+			t.Fatalf("%s cannot see the shared installation: ok=%v err=%v", org, ok, err)
+		}
+		if got.ExternalID != "55512345" {
+			t.Errorf("%s got external id %q, want the installation's", org, got.ExternalID)
+		}
 	}
 }
