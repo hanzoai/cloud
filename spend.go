@@ -273,7 +273,12 @@ var inference = map[string]bool{
 // plugin/<name>/main.go and fails on a Metered surface missing from here — the check
 // spend.go's own comment claimed for a test that did not exist.
 var meteredApps = []string{
-	"agent",        // the agent orchestrator's round.
+	// "agent" was here and named nothing: there is no plugin/agent and no
+	// apps/agent — only the plural `agents`, which is the orchestrator and is
+	// listed below. A name here that no surface answers to is not inert, it
+	// gates: standing is required for a path nobody charges for, so a customer
+	// is 402'd for free work. Removed rather than given a Price, because there
+	// is no surface to price.
 	"agents",       // per-run agent fee.
 	"ai",           // LLM token costs (ai self-meters).
 	"ask",          // the answer engine's per-question fee.
