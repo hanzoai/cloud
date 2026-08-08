@@ -90,7 +90,38 @@ tenant gets gVisor and our own agents get runc.
   no devmapper) came within 15% of kata-fc, so the microVM costs ~4x and the pool
   is ~15% of that. Do not conflate launch latency with the runtime.
 
-## Why chat has no computer, and the one-line reason
+## Chat and the sandbox — what is actually wired
+
+CORRECTION. An earlier version of this section said `apps/coding` registers zero
+typed ops and that chat therefore has no computer. That was wrong, and wrong in
+a way worth remembering: it was concluded from grepping `apps/` alone, and the
+doors are registered in `plugin/`.
+
+Both exist, in `plugin/agents/coding.go`:
+
+```go
+zip.Post[...](cloud.ZipApp(app), "/v1/coding",    httpCodingStart)   // product op -> agent tool
+zip.Post[...](cloud.Plane(),     "/coding/start", planeCodingStart)  // plane op   -> chat bridge
+```
+
+So the sandbox IS a typed product op and DOES project as a tool an agent can
+call. The `code:` prefix in Slack (`codingIntent`, slack_coding.go) is a
+SHORTCUT onto the plane door, not the only way in — a keyword that skips the
+model rather than one the model needs.
+
+The credential is already right and needs no redesign: `start.go` resolves it
+server-side via `agentCredential(ctx, repo, project, "refs/heads/"+branch, ttl)`
+AFTER the session exists, because the session names the branch and the branch is
+what the grant is FOR. It expires with the run's own budget plus a minute. A
+sandbox run without one fails closed rather than discovering at push time that
+it cannot write.
+
+What is genuinely unverified is whether a chat turn ever REACHES it — whether
+the tool is offered and chosen. That is a question to answer by watching one
+turn, not by reading more code, and it is the next thing to check rather than
+anything to build.
+
+## How the shortcut works, and why it reads as the only path
 
 `apps/agents` is the chat brain and reaches no sandbox. `apps/coding` has the
 sandbox and no chat. Slack bridges them with a literal prefix:
