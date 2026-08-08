@@ -57,8 +57,77 @@ func runBuildReconciler(s *cloud.Service[state], ctx context.Context) {
 			return
 		case <-t.C:
 			reconcileBuilds(s, ctx)
+			reconcileDirectBuilds(s, ctx)
 		}
 	}
+}
+
+// reconcileDirectBuilds records the outcome of builds that have no deployment.
+//
+// A build made through POST /v1/runner is not attached to a Deployment, and
+// reconcileBuild returns early for anything whose Source is not "git" — so
+// nothing advanced these rows and every one of them stayed "queued" for the life
+// of the row, whether its Job had pushed an image, failed, or never been
+// scheduled at all.
+//
+// The cost was not cosmetic. GET /v1/builds could not answer the only question it
+// is asked, because a build that SUCCEEDED and a build that could not be
+// scheduled read identically. Six builds sat unschedulable for five days looking
+// exactly like six in flight, which is why nobody saw it. This closes that: the
+// row now says what happened.
+//
+// It only ever writes a TERMINAL status from the Job's own terminal state. A
+// cluster that is briefly unreachable, or a Job still running, leaves the row
+// exactly as it is and re-drives next tick — the same rule the deployment path
+// follows, because a build must never be called failed for a control-plane blip.
+// A Job that has been TTL-cleaned away is the one case where absence is an
+// answer: the row cannot be resolved from the cluster any more, so past the
+// deadline it is failed honestly rather than left pending forever.
+func reconcileDirectBuilds(s *cloud.Service[state], ctx context.Context) {
+	if s.State.k8s.ready() != nil {
+		return
+	}
+	builds, err := s.State.store.ListUnfinishedBuilds(ctx)
+	if err != nil {
+		s.Log.Warn("reconcile: list unfinished builds", "err", err)
+		return
+	}
+	for _, b := range builds {
+		if b.DeploymentID != "" {
+			continue // the deployment path owns this one
+		}
+		done, succeeded, jErr := s.State.k8s.jobResult(ctx, b.JobName)
+		switch {
+		case jErr != nil:
+			// Includes a TTL-deleted Job (NotFound). Only the deadline decides,
+			// never a transient read.
+			if time.Now().Unix()-b.CreatedAt > int64(buildDeadline.Seconds()) {
+				finishDirectBuild(s, ctx, b, "failed")
+			}
+		case !done:
+			// Still running. A Job that outlives the deadline is stuck, not slow.
+			if time.Now().Unix()-b.CreatedAt > int64(buildDeadline.Seconds()) {
+				finishDirectBuild(s, ctx, b, "failed")
+			}
+		case succeeded:
+			finishDirectBuild(s, ctx, b, "succeeded")
+		default:
+			finishDirectBuild(s, ctx, b, "failed")
+		}
+	}
+}
+
+// finishDirectBuild writes one terminal status. Its only job is to make the row
+// tell the truth, so a write that fails is logged and retried next tick rather
+// than silently dropped — a build whose outcome cannot be recorded is exactly the
+// state this function exists to end.
+func finishDirectBuild(s *cloud.Service[state], ctx context.Context, b Build, status string) {
+	b.Status, b.UpdatedAt = status, time.Now().Unix()
+	if err := s.State.store.UpdateBuild(ctx, b); err != nil {
+		s.Log.Warn("reconcile: record build outcome", "build", b.ID, "status", status, "err", err)
+		return
+	}
+	s.Log.Info("build finished", "build", b.ID, "image", b.Image, "status", status)
 }
 
 // reconcileBuilds advances every "building" deployment one step. Cluster
