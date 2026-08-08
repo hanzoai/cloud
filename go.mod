@@ -20,7 +20,7 @@ require (
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
-	github.com/hanzoai/iam v1.34.36
+	github.com/hanzoai/iam v1.34.38
 	github.com/hanzoai/kafka v1.3.1
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
