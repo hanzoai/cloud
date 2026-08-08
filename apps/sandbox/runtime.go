@@ -12,8 +12,10 @@
 // WHICH boundary is a derivation and not a setting — see runtimeFor, which is
 // the one place that decides it, over two facts a sandbox already states about
 // itself: whose code it runs, and whether it keeps anything.
-// `SANDBOX_RUNTIME_CLASS` states the deployment's preference among them and is
-// checked against the table at startup.
+// A deployment states its preference among them as the `runtime` field of the
+// platform's own sandbox settings — see preference — and the table checks it at
+// the read, because a value an operator can change under a running fleet has no
+// boot to be checked at.
 //
 // Empty is honest, not a hole: it means the node's default runtime, which is
 // the containment a normal pod gets. It ships that way because runsc has to be
@@ -132,10 +134,9 @@ type streamer interface {
 }
 
 type runtime struct {
-	ns           string
-	image        string // oci.hanzo.ai/hanzoai/sandbox, without a tag
-	tag          string
-	runtimeClass string
+	ns    string
+	image string // oci.hanzo.ai/hanzoai/sandbox, without a tag
+	tag   string
 	// bare is the boundary our OWN code takes — the one with no kernel of its
 	// own — and it is empty until the cluster keeps that boundary to nodes of its
 	// own. Resolved once, against the cluster, because containment is the
@@ -159,7 +160,6 @@ func newRuntime() *runtime {
 		ns:           envOr("SANDBOX_NAMESPACE", "hanzo-sandboxes"),
 		image:        envOr("SANDBOX_IMAGE_REPO", "oci.hanzo.ai/hanzoai/sandbox"),
 		tag:          envOr("SANDBOX_IMAGE_TAG", ""),
-		runtimeClass: strings.TrimSpace(os.Getenv("SANDBOX_RUNTIME_CLASS")),
 		startTimeout: time.Duration(atoiOr(os.Getenv("SANDBOX_START_TIMEOUT_SEC"), 120)) * time.Second,
 		execTimeout:  time.Duration(atoiOr(os.Getenv("SANDBOX_EXEC_TIMEOUT_SEC"), 900)) * time.Second,
 	}
@@ -173,25 +173,6 @@ func newRuntime() *runtime {
 		return r
 	}
 	r.bound = b
-
-	// SANDBOX_RUNTIME_CLASS IS CHECKED AGAINST THE TABLE, AT STARTUP.
-	//
-	// It was read straight through to the pod spec, so a value the table had
-	// never heard of arrived at the apiserver as a runtimeClassName and the
-	// sandbox sat Pending with nothing said — the same silence the caller-facing
-	// refusal exists to end, one level up and with nobody watching for it. Worse,
-	// it only did that for a volumeless sandbox: the old derivation short-
-	// circuited on `m.Volume == ""` and never consulted the table at all, so the
-	// one path that skipped validation was also the common one.
-	//
-	// A deployment's runtime is decided once, so it is checked once, here, where
-	// the reason has somewhere to go. Everything downstream may then take a
-	// non-empty r.runtimeClass as a name we run.
-	if _, ok := runtimes[r.runtimeClass]; r.runtimeClass != "" && !ok {
-		r.initErr = fmt.Sprintf("SANDBOX_RUNTIME_CLASS=%q is not one we run (%s)",
-			r.runtimeClass, runtimeNames())
-		return r
-	}
 
 	cfg, cerr := rest.InClusterConfig()
 	if cerr != nil {
@@ -365,7 +346,7 @@ const shared = "gvisor"
 //
 // It is one and not three because it was two, briefly, and the third path was
 // the bug: the derivation consulted the topology, the by-name request did not,
-// and the deployment's own setting did not either — so `SANDBOX_RUNTIME_CLASS=runc`
+// and the deployment's own setting did not either — so a fleet preference of runc
 // put our sandboxes on the node's kernel wherever the scheduler felt like,
 // which is the entire thing confine exists to prevent. A fact that only some
 // callers consult is a fact that has already drifted.
@@ -422,11 +403,14 @@ func bare() string {
 //
 //   - The DEPLOYMENT states a preference, so it is derived down. A fleet set to
 //     the fast runtime still has to run dev sandboxes, and refusing them would
-//     make the setting unusable.
+//     make the setting unusable. It arrives as an argument because it is now a
+//     LIVE value an operator edits at admin.hanzo.ai (see preference) rather than
+//     an environment variable frozen at boot, and because a decision that is a
+//     pure function of its facts can be tested over all of them.
 //   - A CALLER states a request, so a contradiction is refused rather than
 //     corrected. Handing back a runtime nobody asked for is the same silence
 //     this table exists to end, one level up.
-func (r *runtime) runtimeFor(m Sandbox, want string) (string, error) {
+func (r *runtime) runtimeFor(m Sandbox, want, fleet string) (string, error) {
 	// THE TWO FACTS. authz.AdminOrg is the reserved platform org — the issuer's
 	// own constant, the same predicate admin-guard and the audit trail read, so
 	// there is no second notion of "ours" here to drift from IAM's.
@@ -472,8 +456,8 @@ func (r *runtime) runtimeFor(m Sandbox, want string) (string, error) {
 	// different request from any named class, and a cluster with no gVisor
 	// installed must not be handed one. Every named value has been through the
 	// table at startup, so what reaches a pod spec here is a name we run.
-	if r.runtimeClass == "" || r.fits(r.runtimeClass, kernel, shares) {
-		return r.runtimeClass, nil
+	if fleet = strings.TrimSpace(fleet); fleet == "" || r.fits(fleet, kernel, shares) {
+		return fleet, nil
 	}
 	return shared, nil
 }

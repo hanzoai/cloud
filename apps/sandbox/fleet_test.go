@@ -1,0 +1,122 @@
+// Copyright © 2026 Hanzo AI. MIT License.
+
+package sandbox
+
+import (
+	"context"
+	"encoding/json"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/zap-proto/zip"
+)
+
+// serveFleet stands the settings app up on a REAL plane socket answering one
+// runtime, which is how a sandbox learns the fleet's preference in production.
+//
+// A real peer and not a stub field: the value has to survive the same JSON
+// document, socket and typed op that carry it in the fleet, and a field set in a
+// test would prove only that the derivation reads a field.
+func serveFleet(t *testing.T, runtime string) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("ZIP_RUNTIME_DIR", dir)
+	plane.Unbind()
+	cloud.ResetPlane()
+
+	doc, err := json.Marshal(map[string]string{"runtime": runtime})
+	if err != nil {
+		t.Fatalf("marshal config: %v", err)
+	}
+	zip.Post[plane.Product, plane.Configured](cloud.Plane(), "/settings/fleet",
+		func(context.Context, *plane.Product) (*plane.Configured, error) {
+			return &plane.Configured{Config: string(doc)}, nil
+		},
+		zip.WithOperationID(plane.SettingsFleet))
+
+	stop, err := cloud.ServePlane("settings", nil)
+	if err != nil {
+		t.Fatalf("ServePlane(settings): %v", err)
+	}
+	t.Cleanup(func() { _ = stop(); cloud.ResetPlane(); plane.Unbind() })
+	waitBound(t, filepath.Join(dir, "settings.sock"))
+}
+
+// waitBound blocks until the peer has actually bound. ServePlane returns before the
+// listener accepts, and zip.DialApp is lazy — it hands back a live client for a
+// peer that is not there — so a call made too early reads as "not configured"
+// rather than as a race.
+func waitBound(t *testing.T, sock string) {
+	t.Helper()
+	for range 200 {
+		if c, err := zip.Dial(sock); err == nil {
+			_ = c.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("peer never bound %s", sock)
+}
+
+// A knob an operator turns must reach a sandbox WITHOUT A ROLLOUT. That is the
+// whole point of moving it out of the environment, and it is the one property a
+// unit test of the derivation cannot show: runtimeFor is pure over three facts,
+// so it proves what happens GIVEN a preference, never that the live one arrives.
+func TestTheFleetsSettingReachesASandbox(t *testing.T) {
+	serveFleet(t, "kata-fc")
+	r := newRuntime()
+	if got := r.preference(context.Background()); got != "kata-fc" {
+		t.Fatalf("preference = %q, want kata-fc — the setting did not reach the sandbox", got)
+	}
+}
+
+// An operator can mistype, and an unknown runtimeClassName is a pod that waits
+// Pending with nothing said. It used to be refused at BOOT, which only worked
+// while the value could only come from the environment: a setting that changes
+// under a running fleet has no boot to be refused at. So the table catches it at
+// the read, and what a typo gets is the boundary that can serve the sandbox —
+// never the apiserver's silence.
+func TestAMistypedSettingFallsToTheBoundaryThatServes(t *testing.T) {
+	m := Sandbox{ID: "m_1", Org: "acme", Volume: "m-acme-p-abc"}
+	for _, c := range []struct{ set, want string }{
+		{"gvisor", "gvisor"},
+		{"kata-clh", "kata-clh"},
+		{"", ""},              // unconfigured: the node's own default
+		{"gvisor ", "gvisor"}, // trimmed on the way in
+		{"runsc", shared},     // the HANDLER's name, not the class's
+		{"gVisor", shared},    // case matters — the apiserver's does
+		{"default", shared},   // a plausible guess, and wrong
+		{"kata-fc", shared},   // known, but it cannot hold this volume
+	} {
+		t.Run(c.set, func(t *testing.T) {
+			serveFleet(t, c.set)
+			r := newRuntime()
+			got, err := r.runtimeFor(m, "", r.preference(context.Background()))
+			if err != nil {
+				t.Fatalf("fleet setting %q must not fail a lease: %v", c.set, err)
+			}
+			if got != c.want {
+				t.Fatalf("fleet %q gave runtime %q, want %q", c.set, got, c.want)
+			}
+		})
+	}
+}
+
+// Settings being down is not a reason to refuse a sandbox. Unreachable answers
+// the same as unconfigured — the node's own default — because the alternative
+// trades a configurable boundary for an outage, and the boundary it would be
+// protecting is the one the fleet already had before anyone configured it.
+func TestNoSettingsPeerAnswersLikeUnconfigured(t *testing.T) {
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	plane.Unbind()
+	cloud.ResetPlane()
+	t.Cleanup(func() { cloud.ResetPlane(); plane.Unbind() })
+
+	r := newRuntime()
+	if got := r.preference(context.Background()); got != "" {
+		t.Fatalf("preference with no peer = %q, want empty", got)
+	}
+}

@@ -67,7 +67,7 @@ func TestLiveTerminalIsARealShell(t *testing.T) {
 	// The isolation boundary comes from the SAME derivation production uses, so the
 	// live proof runs under whatever the fleet is set to rather than under the
 	// node default. want is empty, and runtimeFor cannot refuse an empty ask.
-	m.Runtime, _ = r.runtimeFor(m, "")
+	m.Runtime, _ = r.runtimeFor(m, "", r.preference(ctx))
 	if err := r.start(ctx, m, cred{}); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestLiveTerminalNamedSession(t *testing.T) {
 	// The isolation boundary comes from the SAME derivation production uses, so the
 	// live proof runs under whatever the fleet is set to rather than under the
 	// node default. want is empty, and runtimeFor cannot refuse an empty ask.
-	m.Runtime, _ = r.runtimeFor(m, "")
+	m.Runtime, _ = r.runtimeFor(m, "", r.preference(ctx))
 	if err := r.start(ctx, m, cred{}); err != nil {
 		t.Fatalf("start: %v", err)
 	}

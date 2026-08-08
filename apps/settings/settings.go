@@ -95,6 +95,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	mounted = s
 
 	routes(app, s)
+	exposeFleet(s)
 
 	log.Info("settings surface mounted", "prefix", "/v1/settings", "brand", deps.Brand, "kms", deps.KMS != nil)
 	return nil
