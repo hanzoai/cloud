@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/integrations"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -346,39 +346,26 @@ type chatChannels struct {
 // order is fixed, so a console can render the same rows every time. A policy that
 // cannot be read leaves that channel's policy fields empty rather than failing
 // the whole listing.
-// orgConnection answers the question this surface actually asks — has the ORG
-// connected this transport — and answers it from the same query that decides the
-// same thing on /v1/integrations.
+// askConnection asks integrations whether this org has the transport connected.
 //
-// It replaces integrations.ConnectionFor(org, id, ""), which asks a narrower
-// question: give me the row filed under this EXACT composite key. A connection is
-// keyed (org, user, provider, label), where user is "" only when the org owns it
-// and label is "" only for a provider with a single account — so a lookup that
-// hardcodes both empty finds a row only when the install happened to write it that
-// way. Slack was connected, /v1/integrations said so, and this listing said
-// `connected: false` for the same workspace: one install, two answers, and a send
-// refused on the strength of the wrong one.
+// It is an ASK, not a call, because integrations is a different PROCESS and owns
+// that store. This surface used to call integrations.ConnectionFor in-process,
+// which resolves a package-level handle that is only ever set inside integrations
+// itself — so every answer here was a silent "not connected". Measured:
+// /v1/integrations reported the Slack workspace, its team id and nine scopes while
+// this listing reported connected:false for the same install, and a send was
+// refused on the strength of that.
 //
-// Asking "does the org have any" removes the guess. Where an org holds several
-// accounts for one provider, the ORG-held one wins: a channel posts as the
-// WORKSPACE, never as some member's personal link, and that preference is stated
-// here rather than left to whichever row the store returned first.
-func orgConnection(org, provider string) (integrations.Connection, bool) {
-	return pickOrgConnection(integrations.Connections(org, provider))
-}
-
-// pickOrgConnection is the choice itself, pure so it can be tested without a
-// mounted integrations app: the ORG-held account wins, else the first, else none.
-func pickOrgConnection(conns []integrations.Connection) (integrations.Connection, bool) {
-	for _, c := range conns {
-		if c.User == "" {
-			return c, true
-		}
+// A read that cannot be answered leaves the row UNCONNECTED rather than failing
+// the whole listing, which is the same rule the policy read beside it follows: one
+// unreachable peer must not blank every channel a console renders.
+func askConnection(ctx context.Context, provider string) plane.Connection {
+	out, err := plane.Ask[plane.ConnectionIn, plane.Connection](ctx, "integrations",
+		plane.IntegrationsConnection, &plane.ConnectionIn{Provider: provider})
+	if err != nil || out == nil {
+		return plane.Connection{}
 	}
-	if len(conns) > 0 {
-		return conns[0], true
-	}
-	return integrations.Connection{}, false
+	return *out
 }
 
 func (o ops) list(ctx context.Context, _ *noInput) (*chatChannels, error) {
@@ -397,16 +384,16 @@ func (o ops) list(ctx context.Context, _ *noInput) (*chatChannels, error) {
 	}
 	out := make([]channelView, 0, len(transports))
 	for _, tr := range transports {
-		conn, connected := orgConnection(org, tr.id)
+		conn := askConnection(ctx, tr.id)
 		// Absent row ⇒ defaults (policyFor); a read error leaves zero policy
 		// fields rather than failing the whole listing.
 		p, _ := policyFor(ctx, s.State.store, org, tr.id)
 		out = append(out, channelView{
 			ID:        tr.id,
-			Connected: connected,
+			Connected: conn.Connected,
 			// C2-7: account is the id-shaped fact (lowercased external id),
 			// accountLabel the human label — never swapped, on any surface.
-			Account:        strings.ToLower(conn.ExternalID),
+			Account:        strings.ToLower(conn.Account),
 			AccountLabel:   conn.AccountLabel,
 			Capabilities:   tr.caps,
 			DMPolicy:       p.DM,
