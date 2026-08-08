@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"io"
 	"net/http"
 	"os"
@@ -110,27 +111,68 @@ func TestUploadPackStreamReapsOnEarlyClose(t *testing.T) {
 	releasePackSlot()
 }
 
-// TestMirrorCredHostAllowlist proves HIGH-1: the shared GIT_MIRROR_TOKEN is only
-// attached to allowlisted hosts, so a tenant pointing /mirror at an
-// attacker-controlled https source cannot capture the token.
-func TestMirrorCredHostAllowlist(t *testing.T) {
-	t.Setenv(mirrorEnvToken, "secret-token")
+// TestMirrorCredNeverLeavesItsHost proves HIGH-1 — a tenant pointing /mirror at
+// an attacker-controlled source cannot capture a credential — and the stronger
+// property the allowlist it replaces did NOT have: a token minted for one host is
+// never offered to another.
+//
+// That second half was the live bug. One env var served every allowlisted host,
+// so our GitHub token went to git.hanzo.ai, authenticated nothing, and the fetch
+// died reporting a MISSING credential ("could not read Username") when the real
+// fault was a wrong one. The old test passed throughout, because it asserted the
+// mechanism (a host list) rather than the property (a credential stays on the
+// host it was minted for).
+func TestMirrorCredNeverLeavesItsHost(t *testing.T) {
+	t.Setenv("GIT_MIRROR_TOKEN_GITHUB_COM", "github-token")
+
 	if mirrorAuthHeader("https://github.com/hanzoai/cloud.git") == "" {
-		t.Fatal("github.com (default allowlist) should receive the credential")
+		t.Fatal("github.com holds a credential and must receive it")
+	}
+	// THE BUG: the forge is ours and was allowlisted, and it STILL must not be
+	// handed GitHub's token — a credential for one forge is not one for another.
+	if h := mirrorAuthHeader("https://git.hanzo.ai/hanzoai/cloud.git"); h != "" {
+		t.Fatalf("git.hanzo.ai got a token minted for github.com: %q", h)
 	}
 	if h := mirrorAuthHeader("https://attacker.example/x.git"); h != "" {
-		t.Fatalf("non-allowlisted host must NOT receive the token, got %q", h)
+		t.Fatalf("a host we hold nothing for must fetch anonymously, got %q", h)
 	}
 	if h := mirrorAuthHeader("http://github.com/x.git"); h != "" {
 		t.Fatalf("non-TLS source must not receive the token, got %q", h)
 	}
-	// Explicit override list replaces the default.
-	t.Setenv(mirrorAllowHostsEnv, "git.internal.example")
-	if mirrorAuthHeader("https://github.com/x.git") != "" {
-		t.Fatal("override list must exclude github.com")
+
+	// Each host names its own, so adding one is a secret rather than a code change.
+	t.Setenv("GIT_MIRROR_TOKEN_GIT_HANZO_AI", "forge-token")
+	if mirrorAuthHeader("https://git.hanzo.ai/hanzoai/cloud.git") == "" {
+		t.Fatal("git.hanzo.ai now holds a credential and must receive it")
 	}
-	if mirrorAuthHeader("https://git.internal.example/x.git") == "" {
-		t.Fatal("override list must include git.internal.example")
+	if want := base64Cred("forge-token"); mirrorAuthHeader("https://git.hanzo.ai/x.git") != want {
+		t.Fatal("git.hanzo.ai must receive ITS OWN token, not another host's")
+	}
+	if want := base64Cred("github-token"); mirrorAuthHeader("https://github.com/x.git") != want {
+		t.Fatal("github.com must still receive its own token")
+	}
+}
+
+// base64Cred renders the credential mirrorAuthHeader is expected to produce, so a
+// test asserts WHICH token arrived rather than merely that one did.
+func base64Cred(tok string) string {
+	return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
+}
+
+// envHost turns a hostname into the tail of an env var name; a host that differs
+// only by case or by a character an env name cannot hold must not become a
+// DIFFERENT credential slot, or a deployment would set one and the fetch would
+// read another.
+func TestEnvHostNamesOneSlotPerHost(t *testing.T) {
+	for _, c := range []struct{ host, want string }{
+		{"github.com", "GITHUB_COM"},
+		{"GitHub.com", "GITHUB_COM"},
+		{"git.hanzo.ai", "GIT_HANZO_AI"},
+		{"git-host.example", "GIT_HOST_EXAMPLE"},
+	} {
+		if got := envHost(c.host); got != c.want {
+			t.Errorf("envHost(%q) = %q, want %q", c.host, got, c.want)
+		}
 	}
 }
 
