@@ -74,7 +74,21 @@ const DefaultModel = "enso-flash"
 //
 // A person who wants a different tier pins one in the Slack App Home menu, and that
 // pin wins over this.
-const ChatModel = "enso"
+//
+// IT IS enso-flash, AND THE REASON IS THE FIRST TURN. `enso` is the auto SKU and
+// `enso-ultra` the premium one; flash is the tier that is guaranteed fast and
+// cheap. A conversational bridge turn is mostly "hi" — measured on the live
+// deployment, one such turn spent 14.7s inside agents_run_on_behalf before the
+// bridge could say anything at all, because a greeting was being routed through a
+// 1M-context tier. Latency IS the product on a chat surface: a reply nobody waits
+// for is a reply nobody reads.
+//
+// Escalation is a pin, not a guess. Anyone who needs more depth selects it in App
+// Home and that choice wins here; `code:` runs are a different path entirely and
+// carry their own model. Defaulting the cheap fast tier and letting the rare hard
+// turn be asked for is the right way round — the reverse makes every greeting pay
+// for the hardest question anyone might ask.
+const ChatModel = "enso-flash"
 
 // FallbackModel is the model the autonomous agent runner fails over to when an
 // agent's own model stays throttled (429/overloaded) after bounded retries. It
