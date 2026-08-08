@@ -181,25 +181,21 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 			Channel: route.Channel, ThreadID: route.ThreadTS, Text: route.Text, DedupeKey: key,
 		}
 		emitIngress(org, in, "")
-		reply := slackReplier(s, org, route.Channel, route.ThreadTS, route.User)
-		channelSpawn(s, org, func() {
-			// SAY SOMETHING IMMEDIATELY. A turn is a real model completion and
-			// measured 9,955 / 35,893 / 52,985 ms in production — the plumbing is
-			// ~25ms of it. Until this, the person saw an empty thread for the whole
-			// of that, which is indistinguishable from the bot being broken; the
-			// day's actual bug reports were "it does nothing" for a system that was
-			// working and slow.
-			//
-			// setStatus is Slack's own affordance for exactly this and it is the
-			// only one available: there is NO SSE to a Slack client, so "streaming"
-			// here means a status and then a message, never a token stream.
-			//
-			// Best-effort by construction: a failed status must never cost the
-			// answer, so the error is dropped rather than returned. Slack clears it
-			// when the reply lands.
-			slackThinking(s, org, route.Channel, route.ThreadTS)
-			runBridgeTurn(s, org, in, reply)
-		})
+		// SAY SOMETHING IMMEDIATELY. A turn is a real model completion and measured
+		// 9,955 / 35,893 / 52,985 ms in production — the plumbing is ~25ms of it.
+		// Until this, the person saw an empty thread for the whole of that, which is
+		// indistinguishable from the bot being broken; the day's actual bug reports
+		// were "it does nothing" for a system that was working and slow.
+		//
+		// setStatus is Slack's own affordance for exactly this and it is the only
+		// one available: there is NO SSE to a Slack client, so "streaming" here
+		// means a status and then a message, never a token stream.
+		//
+		// It stays in the ADAPTER while the turn moved to channels, because it is
+		// Slack's own gesture and nothing portable answers to it. Best-effort by
+		// construction: a failed status must never cost the answer, so the error is
+		// dropped. Slack clears it when the reply lands.
+		channelSpawn(s, org, func() { slackThinking(s, org, route.Channel, route.ThreadTS) })
 		return c.NoContent(http.StatusOK)
 	default: // slackRouteAck / slackRouteIgnore — valid but nothing to act on
 		return c.NoContent(http.StatusOK)
@@ -269,26 +265,6 @@ func parseSlashCommand(raw []byte) (team, channel, user, text, responseURL, trig
 
 // ── Slack dispatch: chat via the channel, coding via its own flow ────────────
 
-// slackReplier is the Slack Events reply seam handed to runBridgeTurn: it fetches
-// THIS org's bot token (the isolation-scoped reply sink) and posts the agent's
-// answer in-thread, or — for the (sensitive) account-link prompt — EPHEMERALLY so a
-// link URL never reaches a whole channel. Bound to the resolved org (never a payload
-// field), so the reply can only ever use the connecting org's token.
-func slackReplier(s *cloud.Service[state], org, channel, threadTS, user string) replyFunc {
-	return func(ctx context.Context, text string, ephemeral bool) error {
-		tok, err := TokenFor(ctx, org, "slack", slackBotTokenSecret)
-		if err != nil {
-			return err
-		}
-		// The model writes Markdown; Slack reads mrkdwn. Untranslated, a reply
-		// arrives with its asterisks and hashes showing.
-		text = mrkdwn(text)
-		if ephemeral {
-			return slackPostEphemeral(ctx, string(tok), channel, user, text)
-		}
-		return slackPostThread(ctx, string(tok), channel, threadTS, text)
-	}
-}
 
 // slackCodingEvent runs the @mention/DM CODING path for a PRE-RESOLVED org: it
 // fetches THIS org's bot token (the reply sink) and hands off to slack_coding.go,

@@ -320,6 +320,14 @@ const (
 	// Nothing failed loudly, because a nil consumer simply returns.
 	ChannelsIngest = "channels_ingest"
 
+	// ChatIdentity resolves the Hanzo account a chat user has linked, for the
+	// process that runs the turn. Token custody stays in integrations — this
+	// answers WHO, never with what. It exists because integrations.LinkedSubject
+	// gates on that package's `mounted` global and channels is a different
+	// process, so the in-process call answered "not mounted" every time and the
+	// turn ran as nobody.
+	ChatIdentity = "chat_identity"
+
 	// ChannelsRecent reads the last turns of ONE room back out of the inbox, so a
 	// chat bridge can answer with the conversation in front of it instead of a
 	// single message.
@@ -2007,6 +2015,27 @@ type Ownership struct {
 // Org is resolved by the adapter via OrgForExternalID on a signature-VERIFIED
 // payload — never a client-supplied field — and is the isolation root: a
 // workspace's events reach only the org that connected that workspace.
+// ChatIdentityIn names one chat user at one workspace. The org is the isolation
+// root the adapter already resolved from a signature-verified payload.
+type ChatIdentityIn struct {
+	Org        string `json:"org"`
+	Provider   string `json:"provider"`
+	ExternalID string `json:"external_id"`
+	User       string `json:"user"`
+}
+
+// ChatIdentityOut is the linked account, or the sentence to say instead of
+// running anything. Subject is meaningful only when Say is empty; Ephemeral
+// marks a reply that carries a sign-in URL and must reach only the asker.
+//
+// It carries NO token. A turn needs to know who it runs as, not how to prove it.
+type ChatIdentityOut struct {
+	Subject   string `json:"subject"`
+	Model     string `json:"model"`
+	Say       string `json:"say"`
+	Ephemeral bool   `json:"ephemeral"`
+}
+
 type ChannelsIngestIn struct {
 	Org        string `json:"org"`
 	Provider   string `json:"provider"`    // "slack","teams","discord","telegram"

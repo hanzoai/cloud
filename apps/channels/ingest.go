@@ -8,7 +8,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/cloud/apps/integrations"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -37,11 +36,11 @@ func ingest(ctx context.Context, ev plane.ChannelsIngestIn) {
 	if !ok {
 		return
 	}
-	// Identity is best-effort: an unlinked user or KMS-down leaves UserID empty
-	// and never blocks ingest.
-	if subj, found, err := integrations.LinkedSubject(ev.Org, ev.Provider, ev.User); err == nil && found {
-		m.Sender.UserID = subj
-	}
+	// Identity is NOT resolved here. integrations.LinkedSubject is a Go call
+	// gated on that package's `mounted` global, and integrations is a different
+	// process — it answered "not mounted" every time and left UserID empty while
+	// looking best-effort. The turn below resolves the asker properly, over the
+	// plane, where the answer can actually cross.
 	now := time.Now().Unix()
 	// Gate BEFORE any write (C1-F4): a channel_route row is a send capability,
 	// so a blocked sender must not mint one.
@@ -93,6 +92,11 @@ func ingest(ctx context.Context, ev plane.ChannelsIngestIn) {
 		}); ierr != nil {
 			s.Log.Warn("channels: inbox insert", "channel", m.Channel, "err", ierr)
 		}
+		// AND ANSWER. This is the half that used to live beside the inbox in
+		// integrations: every adapter emitted the event here and separately ran a
+		// turn of its own, so one message drove two mechanisms. The inbox row above
+		// records that it happened; this replies to it.
+		spawn(s, ev.Org, func() { turn(s, tr, ev.Org, m) })
 	case v.Pair:
 		code, created, perr := upsertPairing(ctx, st, ev.Org, m.Channel, m.Sender.ExternalID, now)
 		if perr != nil {

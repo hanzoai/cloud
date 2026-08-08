@@ -281,16 +281,17 @@ func TestTelegramWebhookAuthAndIsolation(t *testing.T) {
 	if code := post(secret, `{"update_id":3,"message":{"message_id":8,"text":"hello","from":{"id":9},"chat":{"id":555,"type":"private"}}}`); code != http.StatusOK {
 		t.Fatalf("bound chat want 200, got %d", code)
 	}
+	// The REPLY is no longer observable from here: the turn moved to channels, so
+	// this package accepts the update, resolves the org from the bound chat, and
+	// emits. What that resolution answers is the isolation root and is asserted
+	// above; the connect prompt an unlinked user sees is channels' test to make.
 	select {
 	case s := <-sent:
-		if s.Get("chat_id") != "555" {
-			t.Fatalf("reply must go to the BOUND chat 555, got chat_id=%q", s.Get("chat_id"))
-		}
-		if !strings.Contains(s.Get("text"), "Connect your Hanzo account") {
-			t.Fatalf("unlinked user must get the connect prompt, got %q", s.Get("text"))
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("bound chat must produce a reply")
+		t.Fatalf("this package must not answer a turn any more, but posted %q", s.Get("text"))
+	case <-time.After(300 * time.Millisecond):
+	}
+	if org, ok := OrgForExternalID("telegram", "555"); !ok || org == "" {
+		t.Fatalf("ISOLATION: the bound chat must resolve to its org, got %q ok=%v", org, ok)
 	}
 }
 

@@ -15,8 +15,6 @@ import (
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/plane"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // channel.go is the ONE ChatBridge core: the platform-agnostic @hanzo front-door
@@ -189,62 +187,6 @@ func (l *orgLimiter) release(org string) {
 
 // ── the ONE agent brain (shared by every platform + its @mention/DM/slash) ──
 
-// runBridgeTurn is the async body every adapter dispatches: compute the reply for a
-// PRE-RESOLVED org and deliver it via `reply`. org is the isolation root (resolved
-// in the sync webhook path via OrgForExternalID on a verified payload).
-func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), channelAgentTimeout)
-	defer cancel()
-
-	// The turn's own span, and the one record that ties a CONVERSATION to a run.
-	//
-	// A chat turn had no telemetry at all: the webhook's request span ended when we
-	// answered the platform 200, and everything that matters happens after that, in
-	// the goroutine below. So "someone asked @hanzo something in this thread and a
-	// run happened" was two facts with nothing in common — the run knew its own id
-	// and never knew which thread caused it, and the thread knew nothing.
-	//
-	// It carries the run's id (returned by channelReply, below) precisely because the
-	// trace cannot be relied on to carry it here: the turn runs on a DETACHED
-	// context by necessity, and the framework forwards trace context only for a
-	// call that has an inbound request behind it — so on a split deployment the
-	// run's spans are in a trace of their own. The id is the join that holds
-	// regardless: thread -> this span -> run_id -> the run row -> its trace_id ->
-	// its spans. One chain, whether the fleet runs fused or as separate processes.
-	//
-	// It is opened here rather than per adapter because this is the one body all
-	// four platforms dispatch — Slack, Teams, Discord and Telegram — so a turn is
-	// observed the same way on every one of them.
-	ctx, span := channelTracer.Start(ctx, "agent.turn "+in.Provider, trace.WithSpanKind(trace.SpanKindInternal))
-	defer span.End()
-	span.SetAttributes(
-		// hanzo.org is the key the trace plane files a row under (apps/o11y
-		// planesink.go planeOrg); without it this span is the platform's, not the
-		// tenant's, and the tenant cannot read its own conversation.
-		attribute.String("hanzo.org", org),
-		attribute.String("hanzo.chat.provider", in.Provider),
-	)
-	// The thread, which is how a human arrives here: they are looking at a Slack
-	// conversation and want the run behind it. Absent on a platform or a turn that
-	// has none, rather than empty — a DM is legitimately unthreaded.
-	if in.Channel != "" {
-		span.SetAttributes(attribute.String("hanzo.chat.channel", in.Channel))
-	}
-	if in.ThreadID != "" {
-		span.SetAttributes(attribute.String("hanzo.chat.thread", in.ThreadID))
-	}
-
-	text, ephemeral, runID := channelReply(s, org, in)
-	if runID != "" {
-		span.SetAttributes(attribute.String("hanzo.agent.run_id", runID))
-	}
-	if text == "" {
-		return
-	}
-	if err := reply(ctx, text, ephemeral); err != nil {
-		s.Log.Warn("channel: reply", "provider", in.Provider, "err", err)
-	}
-}
 
 // channelReply is the ONE agent brain, shared by every platform's @mention/DM/slash
 // path. It resolves the caller's linked Hanzo identity and either runs the agent ON

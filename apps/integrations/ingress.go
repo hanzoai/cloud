@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
+	"github.com/zap-proto/zip"
 )
 
 // ingress.go is the chat-ingress seam between the platform adapters and the
@@ -167,4 +169,33 @@ func ingestIn(org string, in Inbound, replyRoot string) *plane.ChannelsIngestIn 
 		Channel: in.Channel, ThreadID: in.ThreadID, Text: in.Text,
 		DedupeKey: in.DedupeKey, ReplyRoot: replyRoot,
 	}
+}
+
+// serveIdentity publishes the linked-account lookup on the plane.
+//
+// integrations.LinkedSubject is a Go function gated on this package's `mounted`
+// global, and a package global is per-process. The turn runs in channels, which
+// is a different process, so every call there answered "integrations: not
+// mounted" and the turn ran as nobody — silently, because the caller treats
+// identity as best-effort. Custody is the reason this stays here: the link lives
+// in KMS under this subsystem, and only the answer crosses.
+func serveIdentity() {
+	zip.Post[plane.ChatIdentityIn, plane.ChatIdentityOut](cloud.Plane(), "/integrations/chat-identity", planeChatIdentity,
+		zip.WithOperationID(plane.ChatIdentity),
+		zip.WithSummary("Resolve the Hanzo account a chat user has linked"))
+}
+
+// planeChatIdentity answers WHO a chat turn runs as, and never with what.
+//
+// The org rides the request rather than the caller's plane identity, for the
+// same reason AgentsRunOnBehalf does: the tenant is the one that connected the
+// workspace, which the adapter resolved from a signed id, and the calling
+// plugin's own identity is not it. No token is returned under any branch.
+func planeChatIdentity(ctx context.Context, in *plane.ChatIdentityIn) (*plane.ChatIdentityOut, error) {
+	s := mounted
+	if s == nil || in == nil {
+		return &plane.ChatIdentityOut{Say: "Sorry — I couldn't reach your Hanzo account just now. Please try again shortly."}, nil
+	}
+	link, say, ephemeral := channelIdentity(s, in.Org, in.Provider, in.ExternalID, in.User)
+	return &plane.ChatIdentityOut{Subject: link.Subject, Model: link.Model, Say: say, Ephemeral: ephemeral}, nil
 }
