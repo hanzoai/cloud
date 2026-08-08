@@ -19,7 +19,7 @@ package coding
 // it: a real pod under runsc, digest-pinned, no service-account token, with
 // hanzo-mcp answering over stdio inside it.
 //
-// SANDBOX_RUNTIME_CLASS stays one string (gvisor | kata-fc | kata-clh | empty)
+// the fleet's runtime stays one string (gvisor | kata-fc | kata-clh | empty)
 // and never a fork in code. That is load-bearing rather than tidy: a benchmark
 // inverted the expected answer — Firecracker beat gVisor on BOTH axes (git
 // status 82ms vs 980ms, start 294ms vs 881ms, ~57 MiB either way) — so the

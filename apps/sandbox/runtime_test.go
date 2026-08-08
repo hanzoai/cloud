@@ -34,7 +34,7 @@ func TestRuntimeForAsksTheVolumeNotTheClass(t *testing.T) {
 
 	for _, c := range []struct {
 		name string
-		// deploy is SANDBOX_RUNTIME_CLASS: what the deployment states.
+		// deploy is the fleet's own setting: what the deployment states.
 		deploy string
 		// ask is the caller's explicit request, empty for none.
 		ask     string
@@ -78,8 +78,8 @@ func TestRuntimeForAsksTheVolumeNotTheClass(t *testing.T) {
 		{"case matters — the apiserver's does", "gvisor", "gVisor", keeps, "", "is not one we run"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			r := &runtime{runtimeClass: c.deploy}
-			got, err := r.runtimeFor(c.m, c.ask)
+			r := &runtime{}
+			got, err := r.runtimeFor(c.m, c.ask, c.deploy)
 			if c.wantErr != "" {
 				if err == nil {
 					t.Fatalf("runtimeFor(%+v, %q) = %q, want a refusal", c.m, c.ask, got)
@@ -113,11 +113,11 @@ func TestRuntimeForNeverPutsAVolumeOnARuntimeThatCannotHoldIt(t *testing.T) {
 		for _, deploy := range append([]string{""}, sorted()...) {
 			for _, want := range append([]string{""}, sorted()...) {
 				for _, contained := range []bool{false, true} {
-					r := &runtime{runtimeClass: deploy}
+					r := &runtime{}
 					if contained {
 						r.bare = bare()
 					}
-					got, err := r.runtimeFor(m, want)
+					got, err := r.runtimeFor(m, want, deploy)
 					if err != nil {
 						continue // refused, which is the other acceptable answer
 					}
@@ -263,7 +263,7 @@ func TestASandboxReportsTheRuntimeItGotNotTheOneItAskedFor(t *testing.T) {
 	// A fleet set to the fast runtime. A dev sandbox cannot have it — it mounts a
 	// volume — so the deployment preference is derived down to the shared one,
 	// and that, not "kata-fc", is what the row must say.
-	s.State.rt.runtimeClass = "kata-fc"
+	serveFleet(t, "kata-fc")
 	// No cluster, said once and immediately. A developer machine may well have a
 	// kubeconfig, and then this test spends the full start timeout waiting for a
 	// pod it does not need — the row is written before the cluster is asked, so
