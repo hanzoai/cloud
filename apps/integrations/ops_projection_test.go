@@ -130,7 +130,7 @@ func TestSurfaceIsRegistered(t *testing.T) {
 
 // TestProjectionsFailClosed is the security half of making these ops projections.
 // zip publishes every typed op as an MCP tool and a CLI command, and NEITHER
-// passes through the route group, so neither carries the bridge that parks the
+// passes through the route group, so neither carries the channel that parks the
 // validated org. Every org-scoped op must therefore refuse an invocation that
 // arrives that way — with the same 403 an unauthenticated REST call gets, from the
 // handler's own gate. A tenant-scoped op that answered here would serve data with

@@ -25,9 +25,9 @@ func recordTurns(t *testing.T) *tracetest.SpanRecorder {
 	t.Helper()
 	sr := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
-	prev := bridgeTracer
-	bridgeTracer = tp.Tracer("test")
-	t.Cleanup(func() { bridgeTracer = prev; _ = tp.Shutdown(context.Background()) })
+	prev := channelTracer
+	channelTracer = tp.Tracer("test")
+	t.Cleanup(func() { channelTracer = prev; _ = tp.Shutdown(context.Background()) })
 	return sr
 }
 
@@ -50,7 +50,7 @@ func turnAttr(sp sdktrace.ReadOnlySpan, key string) string {
 // is needed.
 func TestTurnRecordsTheConversationItCameFrom(t *testing.T) {
 	sr := recordTurns(t)
-	bridgeReady()
+	channelReady()
 
 	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{}}
 	in := Inbound{
@@ -103,7 +103,7 @@ func TestTurnRecordsTheConversationItCameFrom(t *testing.T) {
 // a value every query returns and none can explain.
 func TestUnthreadedTurnSaysNothingRatherThanEmpty(t *testing.T) {
 	sr := recordTurns(t)
-	bridgeReady()
+	channelReady()
 
 	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{}}
 	runBridgeTurn(s, "acme", Inbound{Provider: "slack", ExternalID: "T0", User: "U0", Channel: "D0", Text: "hi"},

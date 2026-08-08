@@ -22,7 +22,7 @@ import (
 //	parse        : parseTelegramUpdate (pure) → the core's brain inputs
 //	reply        : telegramSendMessage (sendMessage over the ONE env bot token)
 //
-// — and delegates EVERYTHING provider-blind to the core (bridgeSpawn dedupe org
+// — and delegates EVERYTHING provider-blind to the core (channelSpawn dedupe org
 // resolve, the brain, the per-user link). ISOLATION ROOT: the org comes ONLY from
 // OrgForExternalID("telegram", chat_id), and chat_id is trustworthy only because
 // the whole webhook is secret-token-verified first.
@@ -86,7 +86,7 @@ func (o ops) telegramConnect(ctx context.Context, _ *noArgs) (*authorizeOut, err
 // an @hanzo trigger to an on-behalf-of agent run — always acking 200 fast and doing
 // billed work async, deduped durably on update_id.
 func telegramWebhook(s *cloud.Service[state], c *zip.Ctx) error {
-	bridgeReady()
+	channelReady()
 	secret := telegramWebhookSecret()
 	if secret == "" {
 		return zip.Errorf(http.StatusServiceUnavailable, "telegram webhook not configured")
@@ -126,7 +126,7 @@ func telegramWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	// SHED BEFORE the dedupe write (Red M-1): acquire a pool slot first; if the pool
 	// is full, record NOTHING and return a retriable NON-2xx so Telegram re-delivers
 	// when a slot frees (no lost message, no double-run).
-	if !bridgeLim.acquire(org) {
+	if !channelLim.acquire(org) {
 		s.Log.Warn("telegram: at capacity, shedding for retry", "org", org)
 		return zip.Errorf(http.StatusTooManyRequests, "telegram agent pool at capacity")
 	}
@@ -134,12 +134,12 @@ func telegramWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	// that does NOT dispatch. Fail CLOSED on a dedupe error.
 	fresh, err := s.State.store.MarkEvent(c.Context(), "telegram", strconv.FormatInt(m.UpdateID, 10))
 	if err != nil {
-		bridgeLim.release(org)
+		channelLim.release(org)
 		s.Log.Warn("telegram: dedupe error, skipping", "err", err)
 		return c.NoContent(http.StatusOK)
 	}
 	if !fresh {
-		bridgeLim.release(org)
+		channelLim.release(org)
 		return c.NoContent(http.StatusOK)
 	}
 	if _, gerr := s.State.store.GCEvents(c.Context(), staleEventCutoff()); gerr != nil {
@@ -152,7 +152,7 @@ func telegramWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	emitIngress(org, in, "")
 	reply := telegramReplier(in)
-	bridgeSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
+	channelSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
 	return c.NoContent(http.StatusOK)
 }
 
@@ -211,12 +211,12 @@ func telegramSend(ctx context.Context, chatID, replyTo int64, text string) error
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := bridgeHTTP.Do(req)
+	resp, err := channelHTTP.Do(req)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, bridgeMaxBody))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, channelMaxBody))
 	var r struct {
 		OK          bool   `json:"ok"`
 		Description string `json:"description"`
