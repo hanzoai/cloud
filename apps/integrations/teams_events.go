@@ -99,21 +99,10 @@ func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		Channel: act.ConversationID, Text: stripTeamsMentions(act.Text), DedupeKey: act.ID,
 	}
 	emitIngress(org, in, act.ServiceURL)
-	reply := teamsReplier(act.ServiceURL, act.ConversationID)
-	channelSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
+	// The turn runs in channels now — emitIngress above is the whole dispatch.
 	return c.NoContent(http.StatusOK)
 }
 
-// teamsReplier builds the reply closure: POST a message activity to the Bot
-// Connection at the (JWT-verified) serviceUrl, authed with an AAD app token. Teams
-// has no per-user ephemeral in a channel; a link prompt is safe because when Teams
-// linking is unconfigured the prompt carries no URL (channelReply), and when it is
-// configured the link re-verifies the AAD user.
-func teamsReplier(serviceURL, conversationID string) replyFunc {
-	return func(ctx context.Context, text string, _ephemeral bool) error {
-		return teamsSendActivity(ctx, serviceURL, conversationID, text)
-	}
-}
 
 // ── Bot Connection reply (serviceUrl + AAD app token) ────────────────────────
 
