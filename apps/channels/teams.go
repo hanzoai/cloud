@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/integrations"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -15,7 +14,10 @@ import (
 // (integrations.SendTeams).
 
 // teamsDoor is the send door; tests spy it, prod never repoints.
-var teamsDoor = integrations.SendTeams
+var teamsDoor = func(ctx context.Context, serviceURL, conversationID, text string) error {
+	_, err := post(ctx, plane.ChatSendIn{Provider: "teams", Root: serviceURL, Room: conversationID, Text: text})
+	return err
+}
 
 var teamsTransport = transport{
 	id:        "teams",

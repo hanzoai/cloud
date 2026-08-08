@@ -310,12 +310,16 @@ func TestIngestPairingDefault(t *testing.T) {
 	if inbox, _ := st.listInbox(ctx, org, 0, 0); len(inbox) != 0 {
 		t.Fatalf("inbox = %d rows; a pairing-gated message is never stored", len(inbox))
 	}
-	// Integrations is unmounted here, so the telegram chat has NO org bind and
-	// C1-F1 gates even the pairing reply. In prod the bind exists by
-	// construction — the adapter resolved the org from this very chat.
-	if tg.count() != 0 {
-		t.Fatal("telegram door must not fire for an unbound chat")
-	}
+	// The pairing reply GOES OUT. This asserted the opposite, and its own comment
+	// gave the reason: "integrations is unmounted here, so the chat has NO org
+	// bind" — an expectation built on a nil package global reached from another
+	// process, which is the defect and not the contract. The comment even named
+	// the truth next to it: in prod the bind exists by construction, because the
+	// adapter resolved this org from this very chat.
+	//
+	// What actually protects a send to a chat this org does not own is the absence
+	// of a channel_route row, and TestSendTelegramBinding covers that directly.
+	tg.find(t, "Pairing code: ")
 
 	// Same sender again: the request is refreshed — same code, one row.
 	ingest(ctx, ingressEv(org, "telegram", "hanzobot", "42", "777", "", "hi again", "k2", ""))

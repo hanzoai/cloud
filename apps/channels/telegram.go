@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/integrations"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -23,7 +22,15 @@ import (
 var errRoomNotBound = errors.New("channels: room not bound to org")
 
 // telegramDoor is the send door; tests spy it, prod never repoints.
-var telegramDoor = integrations.SendTelegram
+var telegramDoor = func(ctx context.Context, chatID, replyTo int64, text string) error {
+	room := strconv.FormatInt(chatID, 10)
+	reply := ""
+	if replyTo != 0 {
+		reply = strconv.FormatInt(replyTo, 10)
+	}
+	_, err := post(ctx, plane.ChatSendIn{Provider: "telegram", Room: room, ReplyTo: reply, Text: text})
+	return err
+}
 
 var telegramTransport = transport{
 	id:        "telegram",
@@ -71,9 +78,22 @@ func telegramRoomKind(chatID string) (RoomKind, bool) {
 // chat→org bind is the isolation root — the global bot token never fires for
 // an unbound or foreign chat. This is also the connected-check: an org that
 // never onboarded Telegram has no bind and fails closed.
-func telegramEgress(ctx context.Context, _ *cloud.Service[state], org string, m Message) (Delivery, error) {
-	boundOrg, ok := integrations.OrgForExternalID("telegram", m.Room.ID)
-	if !ok || boundOrg != org {
+func telegramEgress(ctx context.Context, s *cloud.Service[state], org string, m Message) (Delivery, error) {
+	// TENANCY, checked HERE against a table this process owns. A channel_route row
+	// exists only after an ALLOWED inbound in that chat, so its presence is this
+	// org's verified capability to send there — the same datum discord uses.
+	//
+	// It used to ask integrations.OrgForExternalID, an in-process call to another
+	// PROCESS: nil global, "not bound", every telegram send refused. Failing closed
+	// is why that looked like nothing rather than an outage.
+	//
+	// The bind is ALSO verified on the answering side, where the global bot token
+	// lives. Both, deliberately: one process holding the token and another deciding
+	// who may spend it is exactly where a single check becomes a single point of
+	// failure.
+	if _, ok, err := s.State.store.routeFor(ctx, org, "telegram", m.Room.ID); err != nil {
+		return Delivery{}, err
+	} else if !ok {
 		return Delivery{}, errRoomNotBound
 	}
 	chatID, err := strconv.ParseInt(m.Room.ID, 10, 64)

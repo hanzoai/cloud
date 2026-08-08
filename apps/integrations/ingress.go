@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -198,4 +199,67 @@ func planeChatIdentity(ctx context.Context, in *plane.ChatIdentityIn) (*plane.Ch
 	}
 	link, say, ephemeral := channelIdentity(s, in.Org, in.Provider, in.ExternalID, in.User)
 	return &plane.ChatIdentityOut{Subject: link.Subject, Model: link.Model, Say: say, Ephemeral: ephemeral}, nil
+}
+
+// serveSend publishes the outbound door on the plane.
+//
+// The four Send* helpers above are Go calls, and every one of them ends at
+// TokenFor, which is gated on this package's `mounted` global. channels holds
+// them as function values (slackDoor = integrations.SendSlack) and runs in a
+// DIFFERENT PROCESS, so each answered "integrations: not mounted" and a reply
+// was never posted — a turn that ran perfectly and then spoke into nothing.
+//
+// The send stays here because the per-org bot token IS the tenancy gate: an org
+// that never connected Slack cannot post, and that property only holds where the
+// token is. Only the intent crosses.
+func serveSend() {
+	zip.Post[plane.ChatSendIn, plane.ChatSendOut](cloud.Plane(), "/integrations/chat-send", planeChatSend,
+		zip.WithOperationID(plane.ChatSend),
+		zip.WithSummary("Post one message back to a chat platform as the org"))
+}
+
+// planeChatSend dispatches to the transport that owns the provider.
+//
+// The org rides the request rather than the caller's plane identity, as with the
+// other chat ops: the tenant is the one that connected the workspace, resolved
+// by the adapter from a signed id. It is safe because the send can only spend
+// THAT org's own token — TokenFor fails closed for an org that never connected —
+// and reads nothing across tenants.
+func planeChatSend(ctx context.Context, in *plane.ChatSendIn) (*plane.ChatSendOut, error) {
+	if mounted == nil {
+		return nil, fmt.Errorf("integrations: not mounted")
+	}
+	if in == nil || strings.TrimSpace(in.Text) == "" {
+		return nil, fmt.Errorf("integrations: chat send needs text")
+	}
+	switch in.Provider {
+	case "slack":
+		id, err := SendSlackAt(ctx, in.Org, in.Room, in.ReplyTo, "", in.Text)
+		return &plane.ChatSendOut{MessageID: id}, err
+	case "discord":
+		id, err := SendDiscord(ctx, in.Room, in.ReplyTo, in.Text)
+		return &plane.ChatSendOut{MessageID: id}, err
+	case "teams":
+		return &plane.ChatSendOut{}, SendTeams(ctx, in.Root, in.Room, in.Text)
+	case "telegram":
+		// THE ISOLATION ROOT for telegram, and it has to be asked here. There is
+		// ONE global bot token, so the chat→org bind is the only thing standing
+		// between an org and a chat it never onboarded. channels used to ask
+		// OrgForExternalID itself — in-process, from another process, so it always
+		// answered "not bound" and every telegram send failed closed. Failing
+		// closed hid it; the check still has to be real.
+		if boundOrg, ok := OrgForExternalID("telegram", in.Room); !ok || boundOrg != in.Org {
+			return nil, fmt.Errorf("integrations: telegram chat %q is not bound to %q", in.Room, in.Org)
+		}
+		chat, err := strconv.ParseInt(in.Room, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("integrations: telegram chat id %q: %w", in.Room, err)
+		}
+		var replyTo int64
+		if in.ReplyTo != "" {
+			replyTo, _ = strconv.ParseInt(in.ReplyTo, 10, 64)
+		}
+		return &plane.ChatSendOut{}, SendTelegram(ctx, chat, replyTo, in.Text)
+	}
+	return nil, fmt.Errorf("integrations: no transport for %q", in.Provider)
 }
