@@ -38,7 +38,12 @@ var frozen = []string{
 	"bots", "audit", "affiliates", "esign", "product", "evals",
 	"benchmark", "research", "experiments", "books", "treasury", "admin",
 	"admission", "tasks", "automations", "flow", "engine", "registry", "auto", "tools", "marketplace", "referrals",
-	"guide", "company", "compliance", "legal", "agent", "ask",
+	// `agent` is GONE from this sequence on purpose: it was a second app beside
+	// `agents`, one concept with two plugins and a pair of names differing by an
+	// `s`. Its surface (/v1/agent and its presets/conversations) is mounted by
+	// agents now, so there is one app, one plugin and one name. This edit is the
+	// deliberate one this freeze exists to demand.
+	"guide", "company", "compliance", "legal", "ask",
 	// ai precedes zen — a DECISION, not drift: both claim "/v1", equal patterns
 	// resolve by mount order, and the /v1 remainder (the OpenAI-compatible
 	// surface) must land on ai. zen's row is deliberately shadowed on the light

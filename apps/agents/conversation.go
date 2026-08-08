@@ -12,7 +12,7 @@
 //
 // /v1/agent is a DISTINCT path (not /v1/chat, which ai owns as completions), so a
 // specific route wins over ai's /v1/* glob — no collision.
-package agent
+package agents
 
 import (
 	"bytes"
@@ -48,7 +48,7 @@ const maxCompletionResponse = 8 << 20
 //
 //   - Every operation resolves its caller through a `func(*zip.Ctx) (Principal,
 //     bool)` (Deps.Principal, supplied below), and POST /v1/agent additionally
-//     dispatches server-executed tools with the LIVE *zip.Ctx (toolPlane.Dispatch)
+//     dispatches server-executed tools with the LIVE *zip.Ctx (orchestratorTools.Dispatch)
 //     and replays the caller's own credential HEADERS into the in-process
 //     completion (credential, below). A typed op receives only a context, and
 //     hanzoai/agent deliberately imports neither cloud nor ai, so it cannot use
@@ -118,7 +118,11 @@ func init() {
 
 // Mount wires POST /v1/agent (+ reads) into cloud, injecting the ai completion and
 // the tool plane. The caller identity comes from cloud's validated principal.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// mountConversation registers the tool-using conversation surface (/v1/agent and
+// its presets/conversations) inside this app. It was a SECOND app named `agent`
+// beside this one named `agents` — one concept, two plugins, and a pair of names a
+// reader could not tell apart.
+func mountConversation(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("agent.Mount: nil app")
 	}
@@ -143,7 +147,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			}
 			return hz.Principal{Org: p.Org, Project: p.Project, User: p.User, Cred: credential(c)}, true
 		},
-	}, aiCompleter{app: app}, toolPlane{})
+	}, aiCompleter{app: app}, orchestratorTools{})
 	return err
 }
 
@@ -188,9 +192,9 @@ func (a aiCompleter) Complete(ctx context.Context, cred map[string]string, req o
 
 // ── ToolPlane: adapter over the unified registry ──────────────────────────────────
 
-type toolPlane struct{}
+type orchestratorTools struct{}
 
-func (toolPlane) List(ctx context.Context, scope hz.Scope) []hz.Tool {
+func (orchestratorTools) List(ctx context.Context, scope hz.Scope) []hz.Tool {
 	ts := tools.Default().List(ctx, tools.Scope{Org: scope.Org, Project: scope.Project})
 	out := make([]hz.Tool, 0, len(ts))
 	for _, t := range ts {
@@ -205,14 +209,14 @@ func (toolPlane) List(ctx context.Context, scope hz.Scope) []hz.Tool {
 	return out
 }
 
-func (toolPlane) Exists(ctx context.Context, scope hz.Scope, name string) bool {
+func (orchestratorTools) Exists(ctx context.Context, scope hz.Scope, name string) bool {
 	return tools.Default().Exists(ctx, tools.Scope{Org: scope.Org, Project: scope.Project}, name)
 }
 
 // Dispatch resolves the caller the ONE canonical way — tools.PrincipalFrom(c) — so
 // the tool runs under the SAME validated identity + credential as a direct call.
 // No reconstruction: the credential is only ever read from the live request.
-func (toolPlane) Dispatch(c *zip.Ctx, name string, args map[string]any) (any, error) {
+func (orchestratorTools) Dispatch(c *zip.Ctx, name string, args map[string]any) (any, error) {
 	p, ok := tools.PrincipalFrom(c)
 	if !ok {
 		return nil, zip.ErrForbidden("a validated principal is required")
