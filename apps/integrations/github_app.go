@@ -3,7 +3,6 @@ package integrations
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -421,6 +420,9 @@ type githubClaimOut struct {
 // account reinstalled on GitHub — new id, same login — self-heals instead of
 // minting tokens against a dead installation.
 //
+// Claiming an account another org holds ADDS this org's row and leaves theirs
+// standing, so no org loses an integration it is using.
+//
 // Response: {"claimed":["hanzoai","luxfi"],"already":["zooai"]}
 func (o ops) githubClaim(ctx context.Context, in *githubClaimIn) (*githubClaimOut, error) {
 	org, err := authed(ctx, principalRequired)
@@ -471,18 +473,18 @@ func (o ops) githubClaim(ctx context.Context, in *githubClaimIn) (*githubClaimOu
 			return nil, gerr
 		}
 		// Written even when bound, so a reinstalled account's new id lands.
-		if uerr := o.s.State.store.Upsert(ctx, Connection{
+		//
+		// SHARED, because one installation legitimately belongs to more than one of
+		// our orgs. `luxfi` is developed from the `hanzo` org and is also Lux's own,
+		// so binding it once would leave one of those two contexts unable to see its
+		// own repositories. Exclusivity remains the default everywhere else: Upsert
+		// still refuses an account another org holds, so a tenant's self-service
+		// connect cannot take one — and reaching the sharing write means naming it,
+		// which only this platform-sudo path does.
+		if uerr := o.s.State.store.Share(ctx, Connection{
 			Org: org, Provider: "github", Label: ins.Login,
 			ExternalID: strconv.FormatInt(ins.ID, 10), AccountLabel: ins.Login,
 		}); uerr != nil {
-			// An account another org already holds is a conflict to resolve, not a
-			// fault: the holder disconnects first. Sudo may bind an unheld account,
-			// never move one, so a slip of the org header cannot take a live
-			// integration away from the tenant using it.
-			if errors.Is(uerr, errBound) {
-				return nil, zip.Errorf(http.StatusConflict,
-					"%s is bound to another org; disconnect it there first", ins.Login)
-			}
 			return nil, uerr
 		}
 		if bound {
