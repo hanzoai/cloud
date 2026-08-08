@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/integrations"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -15,7 +14,10 @@ import (
 // (integrations.SendSlack).
 
 // slackDoor is the send door; tests spy it, prod never repoints.
-var slackDoor = integrations.SendSlack
+var slackDoor = func(ctx context.Context, org, channel, threadTS, text string) error {
+	_, err := post(ctx, plane.ChatSendIn{Org: org, Provider: "slack", Room: channel, ReplyTo: threadTS, Text: text})
+	return err
+}
 
 var slackTransport = transport{
 	id:        "slack",

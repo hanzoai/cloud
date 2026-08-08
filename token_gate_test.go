@@ -69,7 +69,7 @@ var allowedTokenPrimitives = map[string]string{
 		"timestamp+body, Slack's contract.",
 	"apps/integrations/state.go": "OAuth state MAC — tamper-proofs the (org, nonce) binding across " +
 		"the round trip so a callback cannot be bound to a foreign org. A CSRF seal, not a bearer.",
-	"apps/integrations/bridge_state.go": "the shared signed-state primitive the bridge and Slack " +
+	"apps/integrations/channel_state.go": "the shared signed-state primitive the channel and Slack " +
 		"flows compose — the same CSRF seal as state.go.",
 	"apps/integrations/telegram_link.go": "Telegram login verification — HMAC under SHA256(bot " +
 		"token), Telegram's published scheme.",
