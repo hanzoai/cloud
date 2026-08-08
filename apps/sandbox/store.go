@@ -52,6 +52,14 @@ type Sandbox struct {
 	CreatedAt  int64  `json:"createdAt"`
 	LastUsedAt int64  `json:"lastUsedAt"`
 	ExpiresAt  int64  `json:"expiresAt,omitempty"`
+	// Grant is the run's INFERENCE credential — the only thing a pod executing
+	// model-authored code is given, good for asking a model on this org's behalf
+	// and nothing else, expiring with the lease above. Never the caller's bearer.
+	//
+	// `json:"-"` deliberately: it is handed to the POD, not published on the row.
+	// A sandbox listing that carried every live credential would hand a reader of
+	// /v1/sandboxes the keys to every run in the org.
+	Grant string `json:"-"`
 }
 
 // Store is one org's sandbox registry — ONE SQLite file per org at
