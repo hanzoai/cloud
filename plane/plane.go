@@ -336,6 +336,17 @@ const (
 	// process that owns it, over the socket, exactly like a debit asks commerce.
 	IntegrationsSlackSend = "integrations_slack_send"
 
+	// IntegrationsConnection answers whether the CALLER'S OWN org has connected a
+	// provider, and hands back the non-secret metadata describing it.
+	//
+	// It is on the plane because integrations OWNS that store and every other app
+	// is a different PROCESS. The package used to export the same answer as a
+	// function reading a package-level handle, which meant a caller in another
+	// process got a silent "not connected" for a workspace that was plainly
+	// connected — no error, no log, just the wrong answer. A question that crosses
+	// a process boundary has to look like one.
+	IntegrationsConnection = "integrations_connection"
+
 	// The observability plane's claim on the ONE event door. analytics owns POST
 	// /v1/event and its subtree, but the o11y PROCESS owns the Sentry runtime —
 	// so the door asks over the socket rather than through a package global,
@@ -1258,6 +1269,29 @@ type ObsErrorOut struct {
 	Status      int    `json:"status"`
 	ContentType string `json:"contentType,omitempty"`
 	Body        []byte `json:"body,omitempty"`
+}
+
+// ConnectionIn names the provider being asked about. The ORG is the CALLER's,
+// read from the plane context and never an argument — the same rule SlackSendIn
+// follows, and for the same reason: an org a caller could name is an org a caller
+// could read another tenant's connections from.
+type ConnectionIn struct {
+	Provider string `json:"provider" validate:"required"`
+}
+
+// Connection is what an app needs to know about a connection, and nothing more.
+// No token, no secret, no credential of any kind: an app that must ACT on a
+// connection asks the owner to act (IntegrationsSlackSend), rather than fetching
+// the material and acting itself.
+type Connection struct {
+	// Connected is the whole answer to "may I offer this". False leaves the rest
+	// empty.
+	Connected bool `json:"connected"`
+	// Account is the id-shaped fact — the provider-side external id (a Slack team
+	// id, a Discord guild id). AccountLabel is the human name. Never swapped.
+	Account      string   `json:"account,omitempty"`
+	AccountLabel string   `json:"accountLabel,omitempty"`
+	Scopes       []string `json:"scopes,omitempty"`
 }
 
 // SlackSendIn posts one message to an org's Slack channel. The ORG is the

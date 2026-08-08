@@ -512,6 +512,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Publish the Slack egress on the internal plane so a peer plugin can reach
 	// this process's bot-token store over the socket (slack_rpc.go).
 	exposeSlack()
+	exposeConnection()
 
 	routes(app, zapp, s)
 
