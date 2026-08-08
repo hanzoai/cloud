@@ -15,6 +15,8 @@ package channels
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -23,6 +25,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -145,18 +148,36 @@ func turn(s *cloud.Service[state], tr transport, org string, m Message) {
 		span.SetAttributes(attribute.String("hanzo.chat.thread", m.ReplyTo))
 	}
 
-	text, ephemeral, runID := answer(ctx, s, org, m)
+	text, ephemeral, runID, err := answer(ctx, s, org, m)
 	if runID != "" {
 		span.SetAttributes(attribute.String("hanzo.agent.run_id", runID))
+	}
+	// LOUD, on the span too. A turn that failed and left an ok span is a turn
+	// nobody finds: the trace is the one place a human looks after the fact, and
+	// a green span is an assertion that nothing went wrong.
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 	}
 	if text == "" {
 		return
 	}
-	// An ephemeral answer carries a sign-in URL and must reach only the person
-	// who asked. No transport here has a private reply, so it is not sent to the
-	// room — saying it to everyone is worse than not saying it.
+	// An ephemeral answer carries a sign-in URL bound to a nonce for THIS person.
+	// Posted in a room, a colleague could click it and bind their own account to
+	// this chat user — account takeover, not an inconvenience. So it is not sent.
+	//
+	// It is also not swallowed. `capabilities` here is DM/Group/Thread and has no
+	// private reply, so this path CANNOT presently deliver and the person is left
+	// unlinked with no way to know why. That is a missing capability, stated
+	// loudly rather than logged at debug and forgotten: the fix is either an
+	// ephemeral send on the transports that have one (Slack's chat.postEphemeral)
+	// or routing the prompt to the asker's DM, and until one exists this is a hole.
 	if ephemeral {
-		s.Log.Debug("channels: reply withheld, needs a private channel", "channel", m.Channel)
+		err := errors.New("no private reply on this transport")
+		s.Log.Error("channels: sign-in prompt undeliverable, user left unlinked",
+			"channel", m.Channel, "org", org, "room", m.Room.ID, "err", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return
 	}
 	if _, err := tr.send(ctx, s, org, Message{
@@ -193,29 +214,30 @@ func turnContext(org string) (context.Context, context.CancelFunc) {
 // sentence to say instead. Every string it returns is safe to post: internal
 // failures are logged and surfaced as one terse line, never as an error a
 // platform would render.
-func answer(ctx context.Context, s *cloud.Service[state], org string, m Message) (reply string, ephemeral bool, runID string) {
+func answer(ctx context.Context, s *cloud.Service[state], org string, m Message) (reply string, ephemeral bool, runID string, err error) {
 	who, err := plane.Ask[plane.ChatIdentityIn, plane.ChatIdentityOut](ctx, "integrations", plane.ChatIdentity,
 		&plane.ChatIdentityIn{Org: org, Provider: m.Channel, ExternalID: m.Account, User: m.Sender.ExternalID})
 	if err != nil || who == nil {
-		// SILENT, and deliberately. This is a transport failure — the identity door
-		// is unreachable — which is our problem and not the asker's. Answering it
-		// would post an apology into every room on every message for as long as a
-		// socket is down, which is worse than saying nothing and is not a fact the
-		// person can act on. A LINKED-ACCOUNT problem is different and is told to
-		// them below, because that one they can fix.
-		s.Log.Warn("channels: identity unreachable, turn dropped", "channel", m.Channel, "org", org, "err", err)
-		return "", false, ""
+		// ERROR, not warn, and SAID. Someone asked a question; a bot that goes quiet
+		// is indistinguishable from a broken one, and "it does nothing" is the bug
+		// report that follows. The person cannot fix an unreachable identity door,
+		// but they can stop waiting, and we can be found in the logs and the trace.
+		if err == nil {
+			err = errors.New("identity door returned nothing")
+		}
+		s.Log.Error("channels: identity unreachable", "channel", m.Channel, "org", org, "err", err)
+		return "I could not reach your Hanzo account just now, so I have not run anything. This is on our side — please try again shortly.", false, "", err
 	}
 	if who.Say != "" {
 		// No run happened, so there is nothing to attribute and nothing to bill.
-		return who.Say, who.Ephemeral, ""
+		return who.Say, who.Ephemeral, "", nil
 	}
 
 	run, err := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](ctx, "agents", plane.AgentsRunOnBehalf,
 		&plane.RunOnBehalfIn{Org: org, Subject: who.Subject, Ref: agentFor(m.Channel), Input: m.Text, Model: who.Model})
 	if err != nil {
-		s.Log.Warn("channels: agent run", "channel", m.Channel, "org", org, "err", err) // never a token
-		return "Sorry — the agent hit an error handling that. Please try again.", false, ""
+		s.Log.Error("channels: agent run", "channel", m.Channel, "org", org, "err", err) // never a token
+		return "The agent hit an error handling that. This is on our side — please try again.", false, "", err
 	}
 	if run == nil || run.Status != "ok" {
 		// SAID, not merely returned. A run that EXECUTED and whose model failed
@@ -228,13 +250,14 @@ func answer(ctx context.Context, s *cloud.Service[state], org string, m Message)
 		if run != nil {
 			status, id = run.Status, run.RunID
 		}
-		s.Log.Warn("channels: agent run did not succeed", "channel", m.Channel, "org", org, "status", status, "run_id", id)
-		return "Sorry — the agent hit an error handling that. Please try again.", false, id
+		s.Log.Error("channels: agent run did not succeed", "channel", m.Channel, "org", org, "status", status, "run_id", id)
+		return "The agent did not finish that run. This is on our side — please try again.", false, id,
+			fmt.Errorf("run %s status %q", id, status)
 	}
 	if strings.TrimSpace(run.Output) == "" {
-		return "(the agent returned an empty response)", false, run.RunID
+		return "(the agent returned an empty response)", false, run.RunID, errors.New("empty output")
 	}
-	return run.Output, false, run.RunID
+	return run.Output, false, run.RunID, nil
 }
 
 // agentFor names the agent a channel's turns run. One agent for every channel

@@ -15,6 +15,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
+	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
@@ -99,12 +100,16 @@ func TestTurnRecordsTheConversationItCameFrom(t *testing.T) {
 			t.Fatalf("turn span %s = %q, want %q", want.key, got, want.value)
 		}
 	}
-	// And it said NOTHING, which is the other half of the contract. The identity
-	// door is unreachable here, and that is our failure rather than the asker's —
-	// posting an apology into the room on every message while a socket is down is
-	// worse than silence. The span is what remains, which is exactly the case
-	// someone goes looking for.
-	if sent != 0 {
-		t.Fatalf("an unreachable identity door must not answer the room, sent %d", sent)
+	// AND IT SAID SO. A bot that goes quiet is indistinguishable from a broken
+	// one, and "it does nothing" is the bug report that follows. The person cannot
+	// fix an unreachable identity door, but they can stop waiting.
+	if sent != 1 {
+		t.Fatalf("a turn that cannot run must still answer, sent %d", sent)
+	}
+	// The span carries the failure too, because a green span on a failed turn is
+	// an assertion that nothing went wrong — and the trace is where a human looks
+	// after the fact.
+	if sp.Status().Code != codes.Error {
+		t.Fatalf("span status = %v, want Error on a turn that could not run", sp.Status().Code)
 	}
 }

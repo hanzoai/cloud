@@ -190,6 +190,28 @@ func (r *doorRec) count() int {
 	return len(r.calls)
 }
 
+// find returns the ONE recorded call whose text contains substr.
+//
+// Assertions read as "what was said" rather than "how many times a door was
+// touched", which is what they actually mean — and unlike an index it does not
+// depend on a turn's reply losing a race with the message under test. An allowed
+// message is answered now, so both arrive on the same door.
+func (r *doorRec) find(t *testing.T, substr string) doorCall {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var hit []doorCall
+	for _, c := range r.calls {
+		if strings.Contains(c.text, substr) {
+			hit = append(hit, c)
+		}
+	}
+	if len(hit) != 1 {
+		t.Fatalf("want exactly one call saying %q, got %d of %d recorded", substr, len(hit), len(r.calls))
+	}
+	return hit[0]
+}
+
 func (r *doorRec) call(t *testing.T, i int) doorCall {
 	t.Helper()
 	r.mu.Lock()
@@ -527,9 +549,7 @@ func TestIngestGroupPolicy(t *testing.T) {
 
 	// Pair + approve the same sender over DM…
 	ingest(ctx, ingressEv(org, "slack", "T024ABC", "u9", "D9", "", "pair me", "d1", ""))
-	if sl.count() != 1 {
-		t.Fatalf("pairing reply calls = %d, want 1", sl.count())
-	}
+	sl.find(t, "Pairing code: ")
 	pend, _ := listPairing(ctx, st, org, time.Now().Unix())
 	if len(pend) != 1 {
 		t.Fatalf("pending = %+v", pend)
@@ -596,10 +616,7 @@ func TestIngestRouteAfterGate(t *testing.T) {
 	if !ok2 || got2 != root2 {
 		t.Fatalf("pair-branch route = %q ok=%v, want %q", got2, ok2, root2)
 	}
-	if tm.count() != 2 {
-		t.Fatalf("door calls = %d, want the pairing reply as the 2nd", tm.count())
-	}
-	reply := tm.call(t, 1)
+	reply := tm.find(t, "Pairing code: ")
 	if reply.root != root2 || reply.room != dmConv || !strings.Contains(reply.text, "Pairing code: ") {
 		t.Fatalf("pairing reply = %+v", reply)
 	}
@@ -690,10 +707,7 @@ func TestIngestDiscordRoute(t *testing.T) {
 	if d.MessageID != "m-1" {
 		t.Fatalf("delivery = %+v, want the door's message id", d)
 	}
-	if dc.count() != 1 {
-		t.Fatalf("door calls = %d, want 1", dc.count())
-	}
-	if got := dc.call(t, 0); got.room != "c-99" {
+	if got := dc.find(t, "pong"); got.room != "c-99" {
 		t.Fatalf("door call = %+v, want room c-99", got)
 	}
 }
