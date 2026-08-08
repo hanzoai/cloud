@@ -591,6 +591,14 @@ func (r *runtime) start(ctx context.Context, m Sandbox, cr cred) error {
 	if err := r.waitRunning(ctx, m); err != nil {
 		return err
 	}
+	// THE POD IS RUNNING; SAY SO ON THE COPY WE HOLD. The row still reads pending
+	// because the API layer flips it only after start() returns, and `m` came in
+	// by value — so every read below sees the state this sandbox was in BEFORE it
+	// came up. exec refuses a sandbox that is not running, which made the write
+	// below fail itself with "sandbox is pending" on every SuperAdmin lease, every
+	// time. Not flaky: waitRunning had already proven the pod was up, and the only
+	// thing that disagreed was a stale field in a local struct.
+	m.Status = "running"
 	// THE KUBECONFIG ARRIVES LAST AND THROUGH THE EXEC CHANNEL, so it exists in
 	// the pod and in no Kubernetes object — see cred.go for why the bigger
 	// credential takes this route and the DO token does not. It is empty for every
