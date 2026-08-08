@@ -1982,6 +1982,11 @@ type RunOnBehalfOut struct {
 	Status string `json:"status"`
 	Output string `json:"output"`
 	RunID  string `json:"runId,omitempty"`
+	// Why a non-"ok" run failed. A run that EXECUTED and whose model failed comes
+	// back with a nil error and a status, so without this the cause was reachable
+	// only by finding the run row by hand — which is how a broken inference wire
+	// survived a day of looking while the bridge posted a generic sentence.
+	Error string `json:"error,omitempty"`
 }
 
 // ---- sandbox ---------------------------------------------------------------
