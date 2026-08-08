@@ -33,11 +33,16 @@
 // letting registration order decide silently, and at api.hanzo.ai those two were
 // already answered by IAM anyway (ingress routes /v1/iam/* there).
 //
-// The store is embedded SQLite under {DataDir}/iam (server.OpenSQLite, WAL) — this
-// embed owns its OWN orm.DB outright, so the old fork's "ai bootstrap unable to
-// open database file (14)" crash is gone. Config (orgs/apps/providers/signing certs) is
-// seeded from the same init_data.json the deployment already provides (server.Seed,
-// new-only + idempotent), so hanzo.id's OAuth/OIDC semantics are preserved.
+// THE STORE IS THE IDENTITY STORE — {DataDir}/iam/iam.db, opened with IAM's own
+// opener (iamstore.Open: plain SQLite, WAL, busy timeout). It is the same file the
+// standalone iam is pointed at with --db, which is the whole point: mount the identity
+// volume there and this graft serves the identities that exist, rather than a second
+// database that agrees with none of them. See openStore for what that costs and why
+// the alternative is worse. This embed owns its OWN orm.DB outright, so the old fork's
+// "ai bootstrap unable to open database file (14)" crash is gone. Config
+// (orgs/apps/providers/signing certs) is seeded from the same init_data.json the
+// deployment already provides (server.Seed, new-only + idempotent), so hanzo.id's
+// OAuth/OIDC semantics are preserved.
 //
 // IN-PROCESS STORE ACCESS. DB() exposes the opened orm.DB to sibling subsystems that
 // REFLECT the IAM-owned Project resource in-process (clients/platform, clients/deploy)
@@ -80,21 +85,17 @@ package iam
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/cloud/sqlpool"
+	iamstore "github.com/hanzoai/iam/pkg/store"
 	iamserver "github.com/hanzoai/iam/server"
 	"github.com/hanzoai/orm"
-	ormdb "github.com/hanzoai/orm/db"
 	"github.com/zap-proto/zip"
-
-	"github.com/hanzoai/cek"
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/namespace"
 )
 
 // Prefixes are the canonical absolute prefixes the IAM identity surface owns — this
@@ -125,13 +126,6 @@ var Prefixes = []string{
 // a nil DB the way they used to guard a nil ormer.
 var embeddedDB orm.DB
 
-// embeddedConn is the connection embeddedDB was adapted from. orm's adapter takes a
-// BORROWED handle and deliberately never closes one it did not open — "the caller
-// closes what the caller opened" — and this package is that caller, so the handle is
-// held here and closed by Shutdown. It has to be closed: the database is written back
-// at close, so a store nothing ever closes is a store nothing ever persists.
-var embeddedConn *sql.DB
-
 // DB returns the embedded IAM store's orm.DB for in-process readers (clients/platform,
 // clients/deploy) that reflect the IAM-owned Project resource via
 // github.com/hanzoai/iam/pkg/store. It is nil until Mount has run (IAM not enabled, or
@@ -140,13 +134,16 @@ var embeddedConn *sql.DB
 func DB() orm.DB { return embeddedDB }
 
 // Shutdown releases the embedded IAM store. Idempotent.
+//
+// The ORM owns the pool it opened (iamstore.Open), so closing the orm.DB closes the
+// database — which the standalone iam does the same way, from its own shutdown hook.
 func Shutdown() error {
-	conn := embeddedConn
-	embeddedDB, embeddedConn = nil, nil
-	if conn == nil {
+	db := embeddedDB
+	embeddedDB = nil
+	if db == nil {
 		return nil
 	}
-	return conn.Close()
+	return db.Close()
 }
 
 // Mount opens IAM's embedded store, seeds config from the same init_data.json the
@@ -163,23 +160,35 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	dir, initDataPath := paths(deps)
 
-	db, conn, err := openStore(dir)
+	db, err := openStore(dir)
 	if err != nil {
-		log.Error("iam store open failed — serving fail-closed 503 (cloud stays up; standalone iam pod unaffected)", "err", err, "dir", dir)
+		log.Error("iam store open failed — serving fail-closed 503 (cloud stays up)", "err", err, "dir", dir)
 		mountFailClosed(app)
 		return nil
 	}
 	// Publish the opened store for in-process readers (DB()) — set only after a clean
 	// open so DB() is nil whenever the subsystem is fail-closed.
-	embeddedDB, embeddedConn = db, conn
+	embeddedDB = db
 
-	// Bind the transport that carries a verification code to a person — IAM's own,
-	// not a second one written here. Delivery is a ZAP op to notify over its socket,
-	// so the org travels as an ARGUMENT and every tenant this binary answers for can
-	// be reached with no credential to mint, mount or rotate. PlaneSender answers a
-	// truthful nil when notify is not mounted, so binding it unconditionally still
-	// leaves email/SMS sign-in and both delivered second factors correctly hidden.
-	iamserver.BindSender(iamserver.PlaneSender())
+	// Bind the transport that carries a verification code to a person (sender.go).
+	// Binding is an ASSERTION: it tells IAM that a code handed over will reach
+	// someone, and email/SMS sign-in plus both delivered second factors turn on
+	// together because of it. So the only question here is whether this deployment
+	// has a notify to reach at all.
+	//
+	// plane.Reach settles it with the ROUTER, which owns the app list — and starts a
+	// cold notify while it is there, so the first person to ask for a code does not
+	// pay for its boot. Nothing observable at this instant could have answered:
+	// notify's socket is bound after Mount runs, and in the fleet it belongs to a
+	// sibling child the router may not have started yet.
+	//
+	// ErrNoPeer is the ONLY answer that may hide the method — it means no such app is
+	// deployed here, and saying so is honest. EVERY OTHER failure is an outage and
+	// delivery is bound anyway: a send will then report the real fault, where reading
+	// it as an absence would hide the method permanently. That distinction is not
+	// pedantry — a stale socket read as "up" once left commerce unwoken for three days
+	// and refused every prepaid-balance read behind it.
+	bindDelivery(log)
 
 	// Seed is NON-FATAL: new-only + idempotent config bootstrap (orgs/apps/providers/
 	// certs) from the SAME init_data.json the standalone iam seeds from. A missing or
@@ -204,59 +213,56 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return nil
 	}
 
-	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — iam-v1 retired)", "dir", dir, "store", storeSubsystem, "prefixes", Prefixes)
+	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — iam-v1 retired)", "store", dbPath(dir), "prefixes", Prefixes)
 	return nil
 }
 
-// The store's name — which PRINCIPAL PARTITION it holds.
+// dbPath resolves the identity database within a data directory: {dir}/iam/iam.db.
 //
-// This store is IAM's GLOBAL partition — the cross-org configuration every tenant is
-// resolved against: orgs, applications, providers, signing certs. Naming it after its
-// partition leaves room for the ones that do not exist yet: a per-org or per-user IAM
-// store would be a different namespace and be named for THAT, so the split is visible
-// on disk instead of inferred.
-//
-// A version number never appears here. One that exists only to not be a lower one is
-// scar tissue, and a version in a name is a migration waiting to be mistaken for an
-// identity.
-const storeSubsystem = "global"
+// It is IAM's own name for its own file — the standalone iam binary is pointed at
+// exactly this with --db. That is the point: ONE file, opened by whichever process is
+// serving identity, never copied and never mirrored. Mounting the identity volume at
+// {dir}/iam is therefore the whole of what a deployment has to say, and this function
+// is the one place the name is spelled.
+func dbPath(dir string) string { return filepath.Join(dir, "iam", "iam.db") }
 
-// openStore opens IAM's store through cek — the SAME opener every other cloud store
-// opens through — and layers the ORM over that handle.
+// openStore opens THE identity store — with IAM's own opener.
 //
-// It replaces iamserver.OpenSQLite, which builds its own pool from a plain path and
-// has no key to give it: orm's SQLiteDBConfig carries no master key, so that path
-// wrote the store with the literal `SQLite format 3` header — every identity, org
-// membership, and credential hash readable from a lifted PV snapshot or an in-cluster
-// volume read. That is precisely the exposure encryption-at-rest exists to remove; this
-// store was the counterexample. The hashes are argon2id, so a lifted file was never a
-// password disclosure — but the identity graph and every credential record were in the
-// clear. Now the key is derived from the process master and this database's name, and a
-// process with no master opens nothing.
+// The store is not cloud's to open. iamstore.Open is the ONE path IAM's serving binary
+// and its migrator both take, so a store this process writes and a store the iam CLI
+// reads are byte-compatible by construction rather than by agreement: the same WAL
+// mode, the same busy timeout, the same file. Opening it any other way makes a second
+// format for one database, and the second one only ever has the wrong rows in it.
 //
-// ONE connection serves reads and writes, which is what AdaptSQLDB documents and what
-// every per-org store already does (OrgDB pins MaxOpenConns(1)). It is also required
-// rather than merely tidy: on a pure-Go build the codec envelope is single-writer, so
-// a second pool over the same keyed file is not an option to begin with.
+// IT USED TO OPEN THROUGH cek, and the reason it stopped is worth keeping. cek gives a
+// keyed handle, which made this store encrypted at rest — a real property, and the
+// argument for it was sound: an identity graph and every credential record readable
+// from a lifted volume is exactly the exposure encryption exists to remove. What the
+// argument missed is that it was protecting the WRONG FILE. cek derives its own path,
+// so this opened {DataDir}/orgs/_platform/global.db while every identity in production
+// lives in a plain SQLite file the standalone iam wrote; the encrypted store held four
+// kilobytes and no users, and asking it for the signing keys returned {"keys":[]}. A
+// fully-mounted, completely empty identity service is not a security posture.
 //
-// It returns the ORM handle AND the connection it was adapted from: orm's adapter
-// borrows the handle and never closes one it did not open, so the connection is the
-// caller's to close — and it must be closed, because that is when the database is
-// written back.
-func openStore(dir string) (orm.DB, *sql.DB, error) {
-	conn, err := cek.Open(namespace.System(), storeSubsystem, dir)
+// cek cannot be pointed at the real file either — not "should not": it derives a key
+// unconditionally and refuses a plaintext database at open, which is measured, not
+// assumed. So the choice is between an encrypted store with no identities in it and
+// the store that has them. Encrypting the one that has them means re-keying an
+// existing file, which is a migration, and the directive here is forward-only: one
+// store, pointed at, never converted.
+//
+// SO THE IDENTITY STORE IS PLAINTEXT AT REST, exactly as it is today, and that is a
+// cost named rather than hidden. The only shape that changes it without a migration is
+// a NEW store born encrypted with the old one retired, and that is a separate decision
+// this open cannot smuggle in.
+//
+// cek keeps opening cloud's OWN stores. Each store is opened by whoever owns it.
+func openStore(dir string) (orm.DB, error) {
+	db, err := iamstore.Open("sqlite", dbPath(dir))
 	if err != nil {
-		return nil, nil, fmt.Errorf("iam: open store: %w", err)
+		return nil, fmt.Errorf("iam: open store: %w", err)
 	}
-	// The same single-writer posture openOrgDB applies: cek returns a keyed handle,
-	// not a pooled one.
-	sqlpool.Single(conn)
-	sdb, err := ormdb.AdaptSQLDB(conn)
-	if err != nil {
-		_ = conn.Close()
-		return nil, nil, fmt.Errorf("iam: adapt store: %w", err)
-	}
-	return orm.AdaptDB(sdb), conn, nil
+	return db, nil
 }
 
 // paths derives the data directory IAM's store lives under and its init_data.json
