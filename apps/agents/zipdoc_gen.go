@@ -230,11 +230,14 @@ func init() {
 	zip.Describe("POST /agents/run-on-behalf", zip.Doc{
 		Description: "Answers a bridge's turn.\n\nUnlike the session ops, the org travels IN the request rather than being taken\nfrom the caller's plane identity: the tenant here is the one that connected the\nSlack workspace, resolved by the bridge from the signed team_id, and the bridge\nplugin's own identity is not it. That is safe because this op only SPENDS the\nnamed org's own balance under its own agent — it reads nothing across tenants —\nand because the subject must be a link the bridge already proved.\n\nAn empty subject is refused rather than defaulted. A turn that lost its caller\nmust not run AS THE ORG: that would bill the tenant for an unattributable act\nand hand an unlinked user the org's agent.",
 		Fields: map[string]string{
+			"RunOnBehalfIn.history": "History is the conversation this Input arrived in, oldest first and NOT\nincluding Input itself. Empty is a first message, which is a real answer and\nnot a missing one.\n\nIt rides the turn because the answering side has no way to obtain it: the\nroom is a fact about the transport the bridge is on, and only the bridge knows\nit. Without this the agent saw one message with nothing around it, which is\nhow \"try again\" became \"what would you like me to help you with\".",
 			"RunOnBehalfIn.input":   "Input is the user's message, already stripped of the leading @mention.",
 			"RunOnBehalfIn.model":   "Model is the ASKER's own choice, empty when they have not made one. It is a\npreference of the person, not a property of the agent, which is why it rides\nthe turn instead of being written into an agent row: two people in one\nworkspace can prefer different models of the same assistant.",
 			"RunOnBehalfIn.org":     "Org is the isolation gate, the tenant, and the balance the run bills.",
 			"RunOnBehalfIn.ref":     "Ref names the agent to run.",
 			"RunOnBehalfIn.subject": "Subject is the caller's LINKED Hanzo identity, unqualified. Attribution and\nauthorization both hang off it, so a turn can never run as nobody: the\nanswering side refuses an empty subject rather than falling back to the org.",
+			"RunOnBehalfOut.error":  "Why a non-\"ok\" run failed. A run that EXECUTED and whose model failed comes\nback with a nil error and a status, so without this the cause was reachable\nonly by finding the run row by hand — which is how a broken inference wire\nsurvived a day of looking while the bridge posted a generic sentence.",
+			"Turn.sender":           "Sender is the platform user id, and Self marks the assistant's own turns so a\nreader can tell a question from its answer without parsing either.",
 		},
 	})
 	zip.Describe("POST /agents/sessions/count", zip.Doc{
