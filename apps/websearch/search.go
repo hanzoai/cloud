@@ -208,6 +208,8 @@ var mojeekEngine = engine{
 		return mojeekURL() + "?" + v.Encode()
 	},
 	parse: parseMojeek,
+	// The API when a key is held, the scraped page when not — see mojeek_api.go.
+	fetch: mojeekAPIFetch,
 }
 
 var engineByName = map[string]engine{
@@ -333,6 +335,15 @@ func fetchEngine(ctx context.Context, e engine, query, lang string) answer {
 	// API is the one we least want to ask twice for the same question — and it
 	// reports the same outcomes, so a quota refusal reads as `blind` rather than
 	// as an engine that had nothing to say.
+	// A JSON engine answers for itself, and is cached like any other — a PAID API
+	// is the one we least want to ask twice for the same question.
+	//
+	// (nil, nil) is an engine saying "NOT BY THIS DOOR" rather than "nothing is
+	// there": mojeek without a key. When the engine also has a parser, the static
+	// path below runs and the scraped page answers. That is a fallback chain, not
+	// a second engine — one name, one registry entry, and the credential decides
+	// which door it knocks on. Returning `blind` here instead cost mojeek its
+	// keyless answer entirely, which is the free tier of this product.
 	if e.fetch != nil {
 		out, err := e.fetch(ctx, query, lang)
 		if len(out) > 0 {
@@ -342,7 +353,9 @@ func fetchEngine(ctx context.Context, e engine, query, lang string) answer {
 		if err != nil {
 			return answer{engine: e.name, outcome: failed}
 		}
-		return answer{engine: e.name, outcome: blind}
+		if e.parse == nil {
+			return answer{engine: e.name, outcome: blind}
+		}
 	}
 
 	out, err := fetchEngineStatic(ctx, e, query, lang)
