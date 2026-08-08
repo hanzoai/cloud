@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	planeops "github.com/hanzoai/cloud/plane"
@@ -146,5 +147,100 @@ func TestStated_DropsAnUnnamedPair(t *testing.T) {
 	}
 	if stated(nil) != nil {
 		t.Error("an empty list produced a non-nil bag — an allocation per empty call")
+	}
+}
+
+// TestPlaneCapture_CarriesTheMoneyToTheFanOut is the whole of the commerce bridge,
+// read at the seam the conversion forwarders actually consume.
+//
+// A peer states a sale in the only shape this plane has — TEXT, because Signal is
+// its one name/value pair — and the sink must receive it with the money in the
+// FIELDS: apps/destinations builds every platform's Purchase off SinkEvent.Revenue
+// and SinkEvent.Currency, so a batch that arrives with those zero is a purchase
+// forwarded to Meta, GA4 and the rest as worth nothing at all.
+//
+// Mutation proof: stop lifting the columns in planeCapture and the sink sees
+// Revenue 0 and Currency "" while the raw strings sit uselessly in the properties.
+func TestPlaneCapture_CarriesTheMoneyToTheFanOut(t *testing.T) {
+	fakeWarehouse(t)
+	got := make(chan []SinkEvent, 1)
+	remove := AddSink(func(org string, evs []SinkEvent) {
+		if org == "acme" {
+			got <- evs
+		}
+	})
+	defer remove()
+
+	if _, err := planeCapture(asPeer("acme"), &planeops.EventIn{
+		Name:    "order_completed",
+		Product: "commerce",
+		Subject: "person_42",
+		Attributes: []planeops.Signal{
+			{Name: "event_id", Value: "sq_pay_9x"},
+			{Name: "revenue", Value: "49.5"},
+			{Name: "currency", Value: "eur"},
+			{Name: "productId", Value: "plan_pro"},
+			{Name: "quantity", Value: "2"},
+		},
+	}); err != nil {
+		t.Fatalf("planeCapture: %v", err)
+	}
+
+	select {
+	case evs := <-got:
+		if len(evs) != 1 {
+			t.Fatalf("%d events reached the sink, want 1", len(evs))
+		}
+		ev := evs[0]
+		switch {
+		case ev.Name != "order_completed":
+			t.Errorf("name %q, want order_completed — the name apps/destinations maps onto Purchase", ev.Name)
+		case ev.Revenue != 49.5:
+			t.Errorf("revenue %v, want 49.5 — a sale forwarded with no value is a conversion worth nothing", ev.Revenue)
+		case ev.Currency != "eur":
+			t.Errorf("currency %q, want eur — the money the customer actually paid", ev.Currency)
+		case ev.ProductID != "plan_pro":
+			t.Errorf("productId %q, want plan_pro", ev.ProductID)
+		case ev.Quantity != 2:
+			t.Errorf("quantity %d, want 2", ev.Quantity)
+		case ev.DistinctID != "person_42":
+			t.Errorf("distinctId %q, want person_42 — the match key every adapter hashes", ev.DistinctID)
+		case ev.Properties["event_id"] != "sq_pay_9x":
+			t.Errorf("event_id %v, want sq_pay_9x — the key that dedups this against the browser pixel",
+				ev.Properties["event_id"])
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the sink was never called — a peer's sale reached no consumer")
+	}
+}
+
+// TestPlaneCapture_AnUnparseableAmountIsNoAmount. A peer that states nonsense where a
+// number belongs has stated no number: it lands as the zero it already was, and the
+// occurrence is still filed. Refusing the whole sale over a malformed attribute would
+// lose a payment that really happened.
+func TestPlaneCapture_AnUnparseableAmountIsNoAmount(t *testing.T) {
+	fakeWarehouse(t)
+	got := make(chan []SinkEvent, 1)
+	remove := AddSink(func(org string, evs []SinkEvent) {
+		if org == "acme" {
+			got <- evs
+		}
+	})
+	defer remove()
+
+	out, err := planeCapture(asPeer("acme"), &planeops.EventIn{
+		Name:       "order_completed",
+		Attributes: []planeops.Signal{{Name: "revenue", Value: "several"}},
+	})
+	if err != nil || out.Accepted != 1 {
+		t.Fatalf("planeCapture: %v, receipt %+v — the sale is still a sale", err, out)
+	}
+	select {
+	case evs := <-got:
+		if evs[0].Revenue != 0 {
+			t.Errorf("revenue %v, want 0", evs[0].Revenue)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the sink was never called")
 	}
 }
