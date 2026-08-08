@@ -2032,6 +2032,14 @@ type ChatSendIn struct {
 	ReplyTo  string `json:"reply_to"`  // thread or message to reply under, "" when unthreaded
 	Root     string `json:"root"`      // transport-verified reply root (Teams' serviceURL), "" elsewhere
 	Text     string `json:"text"`
+	// User is who the message is FOR when Private is set — a sign-in prompt
+	// carries a URL bound to a nonce for one person, and a room must never see it.
+	User string `json:"user"`
+	// Private asks the transport for a reply only User can see. Not every
+	// transport has one; the answering side refuses rather than falling back to
+	// the room, because posting a link meant for one person to everyone is the
+	// failure this exists to prevent.
+	Private bool `json:"private"`
 }
 
 // ChatSendOut carries the platform's id for the message, when it gives one.
