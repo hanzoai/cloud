@@ -2170,8 +2170,24 @@ type RunOnBehalfOut struct {
 // expired while they were reading, and a working sandbox with a new id is the
 // honest answer to that.
 type LeaseIn struct {
-	ID      string `json:"id,omitempty"`
-	Class   string `json:"class,omitempty"`
+	// ID names a sandbox to RESUME, and is the id an earlier lease answered with.
+	// Empty asks for a new one. A caller that holds an id and omits it does not get
+	// a second view of the same computer, it gets a second computer.
+	ID string `json:"id,omitempty"`
+	// Class is what KIND of computer to lease, and the set is closed:
+	//
+	//	exec     a throwaway one that keeps nothing. Seconds to minutes.
+	//	dev      a coding one, with the project's own disk attached. Hours.
+	//	desktop  a dev one that also has a screen.
+	//
+	// Empty leases an `exec`, which is the right answer for running a program and
+	// the wrong one for working on a repository, because it keeps nothing.
+	Class string `json:"class,omitempty"`
+	// Project names the disk to attach, and is REQUIRED for every class but `exec`.
+	//
+	// One live sandbox per project: the disk attaches to one computer at a time, so
+	// a second lease over a project that already has one is refused by name rather
+	// than handed a silently empty disk.
 	Project string `json:"project,omitempty"`
 	// Runtime is the isolation boundary asked for: `gvisor` shares a filesystem
 	// and holds a project volume, `kata-fc` is a microVM that boots slower and
@@ -2183,7 +2199,9 @@ type LeaseIn struct {
 	// into a tmpfs and lose the bytes at exit. Read Leased.Runtime for what the
 	// sandbox actually got.
 	Runtime string `json:"runtime,omitempty"`
-	TTLSec  int    `json:"ttlSec,omitempty"`
+	// TTLSec bounds the lease in seconds. Unset takes the class default. Nothing
+	// runs forever, because a sandbox is somebody else's code on our nodes.
+	TTLSec int `json:"ttlSec,omitempty"`
 }
 
 // Leased is the sandbox a lease got.
@@ -2212,12 +2230,24 @@ type Leased struct {
 // RunIn runs one command in a sandbox. Argv is the honest form; Command is the
 // convenience for a caller holding a shell line.
 type RunIn struct {
-	ID         string   `json:"id"`
-	Argv       []string `json:"argv,omitempty"`
-	Command    string   `json:"command,omitempty"`
-	Stdin      string   `json:"stdin,omitempty"`
-	Dir        string   `json:"dir,omitempty"`
-	TimeoutSec int      `json:"timeoutSec,omitempty"`
+	// ID is the sandbox to run in, from an earlier lease.
+	ID string `json:"id"`
+	// Argv is the program and its arguments, already split — the form no shell can
+	// misread. Give this or Command, not both.
+	Argv []string `json:"argv,omitempty"`
+	// Command is a shell line, run by `sh -c`. Use it when a pipeline or a
+	// redirection is the point, and Argv when it is not.
+	Command string `json:"command,omitempty"`
+	// Stdin is fed to the program on standard input. This is how bytes reach a file
+	// without being quoted into a shell line: `cat > path` with the contents here
+	// writes them exactly.
+	Stdin string `json:"stdin,omitempty"`
+	// Dir runs the command somewhere other than the sandbox's working directory,
+	// which Leased.Workdir names.
+	Dir string `json:"dir,omitempty"`
+	// TimeoutSec bounds this ONE command, so a wedged program holds the caller for
+	// its own timeout rather than for the whole lease.
+	TimeoutSec int `json:"timeoutSec,omitempty"`
 	// Session is the live agent session this command narrates into: its output is
 	// appended there AS IT IS PRODUCED, so every surface watching that session
 	// watches the command work instead of a blank pause. A long run is otherwise a
@@ -2242,7 +2272,11 @@ type Ran struct {
 // PathIn names one path inside a sandbox. An empty Path means the sandbox's own
 // working directory.
 type PathIn struct {
-	ID   string `json:"id"`
+	// ID is the sandbox to read from, from an earlier lease.
+	ID string `json:"id"`
+	// Path is read relative to the sandbox's working directory unless it is
+	// absolute, and a path that climbs out of it is refused rather than rewritten.
+	// Empty names the working directory itself, which lists it.
 	Path string `json:"path,omitempty"`
 }
 
@@ -2258,8 +2292,12 @@ type Blob struct {
 
 // WriteIn puts bytes at one path inside a sandbox, creating parents.
 type WriteIn struct {
-	ID   string `json:"id"`
+	// ID is the sandbox to write into, from an earlier lease.
+	ID string `json:"id"`
+	// Path is confined the same way PathIn.Path is. Missing parent directories are
+	// created.
 	Path string `json:"path"`
+	// Data is the file's bytes, and replaces whatever was there.
 	Data []byte `json:"data,omitempty"`
 }
 
@@ -2292,8 +2330,12 @@ type Stopped struct {
 // because ending a lease is reversible and deleting someone's uncommitted work is
 // not.
 type EndIn struct {
-	ID    string `json:"id"`
-	Purge bool   `json:"purge,omitempty"`
+	// ID is the sandbox whose lease ends, from an earlier lease.
+	ID string `json:"id"`
+	// Purge deletes the project's DISK as well. It is opt-in because the disk holds
+	// the only copy of the checkout: ending a lease is cheap and reversible,
+	// deleting someone's uncommitted work is neither.
+	Purge bool `json:"purge,omitempty"`
 }
 
 // ---- coding: every seam one autonomous coding run reaches across ------------
