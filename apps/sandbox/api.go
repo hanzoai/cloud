@@ -25,7 +25,6 @@ package sandbox
 // have to be kept in step.
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"strconv"
@@ -186,6 +185,18 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 		}
 	}
 
+	// THE ONE BRANCH ON WHICH AN IDENTITY REACHES A CREDENTIAL, and it is the same
+	// predicate that reached the image — see cred.go, where both live so they
+	// cannot drift apart. Read HERE, before the row and before the pod, for the
+	// reason runtimeFor is asked here: a lease that cannot be honoured must leave
+	// nothing behind, and a DigitalOcean outage should not strand a row and a PVC.
+	var cr cred
+	if admin(class, super) {
+		if cr, err = credFor(ctx, s.Log); err != nil {
+			return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "admin credentials: %v", err)
+		}
+	}
+
 	id, err := genID()
 	if err != nil {
 		return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "id: %v", err)
@@ -229,7 +240,7 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	// A failure to start is RECORDED on the row and answered 503 — the row stays so
 	// an operator can see what was asked for and why it did not happen, rather than
 	// the request vanishing with the evidence.
-	if err := s.State.rt.start(ctx, m); err != nil {
+	if err := s.State.rt.start(ctx, m, cr); err != nil {
 		m.Status, m.Error = "error", err.Error()
 		_ = store.Put(ctx, m)
 		return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "start sandbox: %v", err)
@@ -368,9 +379,7 @@ func Write(s *Service, ctx context.Context, org, id, path string, data []byte) (
 	if err != nil {
 		return "", 0, err
 	}
-	q := shellQuote(p)
-	r, err := s.State.rt.exec(ctx, m, []string{"sh", "-c",
-		"mkdir -p -- \"$(dirname -- " + q + ")\" && cat > " + q}, bytes.NewReader(data), 0, nil)
+	r, err := s.State.rt.put(ctx, m, p, data)
 	if err != nil {
 		return "", 0, zip.Errorf(http.StatusBadGateway, "fs write: %v", err)
 	}
