@@ -234,7 +234,7 @@ func runBridgeTurn(s *cloud.Service[state], org string, in Inbound, reply replyF
 		span.SetAttributes(attribute.String("hanzo.chat.thread", in.ThreadID))
 	}
 
-	text, ephemeral, runID := channelReply(s, org, in.Provider, in.ExternalID, in.User, in.Channel, in.Text)
+	text, ephemeral, runID := channelReply(s, org, in)
 	if runID != "" {
 		span.SetAttributes(attribute.String("hanzo.agent.run_id", runID))
 	}
@@ -285,8 +285,15 @@ func channelRunContext(org string) (context.Context, context.CancelFunc) {
 // run answered this conversation. The id was already in hand and was thrown away
 // everywhere except one failure log, which is why a thread and the run behind it
 // had no value in common.
-func channelReply(s *cloud.Service[state], org, provider, externalID, user, room, text string) (reply string, ephemeral bool, runID string) {
-	link, say, ephemeral := channelIdentity(s, org, provider, externalID, user)
+//
+// It takes the whole Inbound rather than six of its fields. It used to take the
+// six, and the two it left behind are why the assistant could not follow a
+// thread: the THREAD was one of them, so a turn in a channel asked for the
+// history of the ROOM and every thread in that channel read as one conversation.
+// A normalized event exists so the core can pass it around whole.
+func channelReply(s *cloud.Service[state], org string, in Inbound) (reply string, ephemeral bool, runID string) {
+	provider, text := in.Provider, in.Text
+	link, say, ephemeral := channelIdentity(s, org, provider, in.ExternalID, in.User)
 	if say != "" {
 		// No run happened — an unlinked user gets a prompt, not an agent turn — so
 		// there is no id to name, and saying so with "" is the honest answer.
@@ -342,7 +349,7 @@ func channelReply(s *cloud.Service[state], org, provider, externalID, user, room
 	// A failed read is NOT a failed turn. An unreachable inbox costs context, which
 	// makes a worse answer; refusing to answer at all makes none. So this degrades to
 	// the single message it used to send, which is the behaviour it replaces.
-	history := recentTurns(runCtx, provider, room)
+	history := priorTurns(s, runCtx, org, in)
 	out, rerr := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](runCtx, "agents", plane.AgentsRunOnBehalf,
 		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: channelAgentRef(provider),
 			Input: text, Model: link.Model, History: history})
@@ -514,6 +521,29 @@ func channelOrgConcurrency() int {
 		return v
 	}
 	return channelDefaultOrgConcurrency
+}
+
+// priorTurns is the conversation this message arrived in, oldest first.
+//
+// THE PLATFORM IS ASKED FIRST, where it can answer. Slack holds the real
+// transcript — including the assistant's OWN replies, which the inbox
+// structurally cannot: ingest records what ARRIVES, and an answer leaves. An
+// agent shown only the questions reads its own words as the user's. Slack also
+// keeps a thread apart from the room around it, which the inbox does not, and it
+// is what the person is looking at, so it is the conversation by definition.
+//
+// The inbox answers for the transports there is no read-back for, and for a
+// Slack workspace whose install predates the history scopes. A failed read is
+// never a failed turn: less context makes a worse answer, refusing makes none.
+func priorTurns(s *cloud.Service[state], ctx context.Context, org string, in Inbound) []plane.Turn {
+	if in.Provider == "slack" {
+		turns, err := slackTurns(ctx, org, in)
+		if err == nil {
+			return turns
+		}
+		s.Log.Warn("channel: slack transcript", "org", org, "err", err)
+	}
+	return recentTurns(ctx, in.Provider, in.Channel)
 }
 
 // recentTurns asks channels for the conversation this message arrived in.

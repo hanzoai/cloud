@@ -99,7 +99,7 @@ func TestRunCallsTools(t *testing.T) {
 
 	a := mk("maxpower", "greeter")
 	a.Tools = []string{"weather"}
-	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "weather in Tokyo?", "", "run_test")
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "weather in Tokyo?", nil, "", "run_test")
 
 	if r.Status != "ok" {
 		t.Fatalf("want ok, got %q err=%q", r.Status, r.Error)
@@ -123,22 +123,31 @@ func TestRunCallsTools(t *testing.T) {
 	if len(ai.seen[0].Tools) != 1 || ai.seen[0].Tools[0].Name != "weather" {
 		t.Fatalf("the first completion must OFFER the declared tool, got %+v", ai.seen[0].Tools)
 	}
-	// The second completion must carry the whole transcript: the user turn, the
-	// assistant's tool call, and the tool result linked back by id.
+	// The second completion must carry the whole transcript: who the agent is, the
+	// user turn, the assistant's tool call, and the tool result linked back by id.
 	msgs := ai.seen[1].Messages
-	if len(msgs) != 3 {
-		t.Fatalf("want user+assistant+tool in the second turn, got %d: %+v", len(msgs), msgs)
+	want := []string{types.RoleSystem, types.RoleUser, types.RoleAssistant, types.RoleTool}
+	if len(msgs) != len(want) {
+		t.Fatalf("want %v in the second turn, got %d: %+v", want, len(msgs), msgs)
 	}
-	if msgs[1].Role != types.RoleAssistant || len(msgs[1].ToolCalls) != 1 {
-		t.Fatalf("assistant turn must carry its tool calls, got %+v", msgs[1])
+	for i, role := range want {
+		if msgs[i].Role != role {
+			t.Fatalf("turn %d must be %s, got %+v", i, role, msgs[i])
+		}
 	}
-	if msgs[2].Role != types.RoleTool || msgs[2].ToolCallID != "c1" || msgs[2].Content != `{"temp":21}` {
-		t.Fatalf("tool result must be linked to the call by id, got %+v", msgs[2])
+	if len(msgs[2].ToolCalls) != 1 {
+		t.Fatalf("assistant turn must carry its tool calls, got %+v", msgs[2])
+	}
+	if msgs[3].ToolCallID != "c1" || msgs[3].Content != `{"temp":21}` {
+		t.Fatalf("tool result must be linked to the call by id, got %+v", msgs[3])
 	}
 }
 
 // An agent with no tools — or one whose declared names the plane does not offer —
-// must behave EXACTLY as before: one completion, a flat prompt, no tools field.
+// takes one completion with no tools field, and is shown exactly what it is and
+// what it was asked. The instructions are a SYSTEM turn rather than a string glued
+// to the front of the question: prior turns have to sit between the two, and a
+// concatenation has no between.
 func TestRunWithoutToolsIsUnchanged(t *testing.T) {
 	plane := &fakePlane{} // offers nothing
 	withPlane(t, plane)
@@ -147,7 +156,7 @@ func TestRunWithoutToolsIsUnchanged(t *testing.T) {
 	a := mk("maxpower", "greeter")
 	a.Instructions = "You are a greeter."
 	a.Tools = []string{"weather"} // declared, but the plane offers nothing
-	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "say hi", "", "run_test")
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "say hi", nil, "", "run_test")
 
 	if r.Status != "ok" || r.Output != "hi there" {
 		t.Fatalf("want the plain completion, got %+v", r)
@@ -155,11 +164,14 @@ func TestRunWithoutToolsIsUnchanged(t *testing.T) {
 	if len(ai.seen) != 1 {
 		t.Fatalf("want exactly one completion, got %d", len(ai.seen))
 	}
-	if len(ai.seen[0].Tools) != 0 || len(ai.seen[0].Messages) != 0 {
-		t.Fatalf("no-tools path must send the flat prompt and no tools, got %+v", ai.seen[0])
+	if len(ai.seen[0].Tools) != 0 {
+		t.Fatalf("no-tools path must offer no tools, got %+v", ai.seen[0].Tools)
 	}
-	if ai.seen[0].Prompt != "You are a greeter.\n\nsay hi" {
-		t.Fatalf("prompt must compose instructions + input, got %q", ai.seen[0].Prompt)
+	msgs := ai.seen[0].Messages
+	if len(msgs) != 2 ||
+		msgs[0].Role != types.RoleSystem || msgs[0].Content != "You are a greeter." ||
+		msgs[1].Role != types.RoleUser || msgs[1].Content != "say hi" {
+		t.Fatalf("want the instructions as system and the ask as user, got %+v", msgs)
 	}
 	if len(plane.calls) != 0 {
 		t.Fatalf("nothing may be dispatched, got %+v", plane.calls)
@@ -178,7 +190,7 @@ func TestToolFailureReachesTheModel(t *testing.T) {
 
 	a := mk("maxpower", "greeter")
 	a.Tools = []string{"weather"}
-	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "weather?", "", "run_test")
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "weather?", nil, "", "run_test")
 
 	if r.Status != "ok" {
 		t.Fatalf("a failed tool must not fail the run, got %q err=%q", r.Status, r.Error)
@@ -186,7 +198,8 @@ func TestToolFailureReachesTheModel(t *testing.T) {
 	if r.Output != "I could not reach the weather service." {
 		t.Fatalf("the model must get to answer, got %q", r.Output)
 	}
-	result := ai.seen[1].Messages[2]
+	msgs := ai.seen[1].Messages
+	result := msgs[len(msgs)-1]
 	if result.Role != types.RoleTool || !strings.Contains(result.Content, "connector offline") {
 		t.Fatalf("the failure must be handed back as the tool result, got %+v", result)
 	}
@@ -209,7 +222,7 @@ func TestToolLoopIsBounded(t *testing.T) {
 
 	a := mk("maxpower", "greeter")
 	a.Tools = []string{"weather"}
-	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "go", "", "run_test")
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "go", nil, "", "run_test")
 
 	if r.Status != "ok" || r.Output != "done" {
 		t.Fatalf("bounded loop must still answer, got %+v", r)
@@ -265,7 +278,7 @@ func TestNestedAgentsAreBoundedByDepth(t *testing.T) {
 	}
 	a := mk("maxpower", "greeter")
 	a.Tools = []string{"weather"}
-	r := executeRun(ctx, ai, "maxpower", "maxpower/u1", a, "go", "", "run_test")
+	r := executeRun(ctx, ai, "maxpower", "maxpower/u1", a, "go", nil, "", "run_test")
 
 	if r.Status != "ok" || r.Output != "at the bottom" {
 		t.Fatalf("a run at the depth limit must still answer, got %+v", r)
@@ -289,7 +302,7 @@ func TestDispatchDeepensTheContext(t *testing.T) {
 	}}
 	a := mk("maxpower", "greeter")
 	a.Tools = []string{"weather"}
-	if r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "go", "", "run_test"); r.Status != "ok" {
+	if r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "go", nil, "", "run_test"); r.Status != "ok" {
 		t.Fatalf("run failed: %+v", r)
 	}
 	if saw != 1 {

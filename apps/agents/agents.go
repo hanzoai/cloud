@@ -889,7 +889,7 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	// org — recorded on the debit for attribution. Gating here means an unfunded
 	// org gets 402 and NO free inference; an unreachable commerce gets 503.
 	actor := billingActor(org, c.User())
-	r, gateErr := runAgent(s, c.Context(), a, body.Input, actor, c.RequestID(), cloud.ClientIP(c))
+	r, gateErr := runAgent(s, c.Context(), a, body.Input, nil, actor, c.RequestID(), cloud.ClientIP(c))
 	if gateErr != nil {
 		return cloud.DenyResource(c, gateErr)
 	}
@@ -908,7 +908,11 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 // denial (out-of-funds / commerce-unknown) that the caller renders (402/503) —
 // it means no run happened. A run that executed but the model failed returns a
 // recorded error-status Run and a nil error.
-func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, actor, requestID, clientIP string) (Run, error) {
+// history is the conversation this input arrived in, oldest first and NOT
+// including input itself. Nil is a run with nothing before it — a scheduled run,
+// an API call, or a genuine first message — which is the shape every run had
+// before chat could remember one.
+func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input string, history []types.ChatMessage, actor, requestID, clientIP string) (Run, error) {
 	// Root span per run — the whole trace (balance gate → step → LLM call)
 	// nests under it, shipped over ZAP to o11y.
 	ctx, span := agentTracer.Start(ctx, "agent.run "+a.Name, trace.WithSpanKind(trace.SpanKindInternal))
@@ -959,7 +963,7 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, acto
 		return Run{}, err
 	}
 
-	r := executeRun(ctx, s.State.ai, a.Org, actor, a, input, s.State.failoverModel, id)
+	r := executeRun(ctx, s.State.ai, a.Org, actor, a, input, history, s.State.failoverModel, id)
 	// The trace this run IS, written onto the run itself. Without it the console
 	// has a run with no way to reach its spans and a trace with no way to name its
 	// run: two records of one event that cannot be joined. It is read off the live
@@ -1046,7 +1050,7 @@ const (
 //
 // actor is the run's billing identity (billingActor's "org/sub"), threaded so a
 // tool dispatch runs as the principal the run is charged to.
-func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Agent, input, fallback, runID string) Run {
+func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Agent, input string, history []types.ChatMessage, fallback, runID string) Run {
 	// Child step span; the AI client opens its own GenAI span nested under this.
 	ctx, span := agentTracer.Start(ctx, "agent.step", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
@@ -1065,13 +1069,7 @@ func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Age
 		attribute.String("hanzo.org", org),
 	)
 
-	prompt := a.Instructions
-	if in := strings.TrimSpace(input); in != "" {
-		if prompt != "" {
-			prompt += "\n\n"
-		}
-		prompt += in
-	}
+	msgs := conversation(a.Instructions, history, input)
 	start := time.Now()
 	var (
 		resp  *types.ChatResponse
@@ -1096,10 +1094,10 @@ func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Age
 	)
 	var tools int
 	if len(defs) > 0 {
-		resp, used, aiErr, tools = completeWithTools(ctx, ai, org, actor, prompt, a.Model, fallback, defs, runID)
+		resp, used, aiErr, tools = completeWithTools(ctx, ai, org, actor, msgs, a.Model, fallback, defs, runID)
 	} else {
 		resp, used, aiErr = completeWithFailover(ctx, ai,
-			&types.ChatRequest{Model: a.Model, Org: org, Prompt: prompt, RunID: runID}, fallback)
+			&types.ChatRequest{Model: a.Model, Org: org, Messages: msgs, RunID: runID}, fallback)
 	}
 	dur := time.Since(start).Milliseconds()
 	r := Run{
@@ -1122,6 +1120,34 @@ func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Age
 		}
 	}
 	return r
+}
+
+// conversation is what the model is shown for one turn: who it is, what was said
+// before, and the message it has to answer.
+//
+// The instructions used to be GLUED to the input as a single user string. That
+// was fine while a turn was one message and became wrong the moment there was a
+// conversation: earlier turns belong BETWEEN what the agent is and what it was
+// just asked, and a concatenated string has no between. Three roles, in the
+// order they are read.
+//
+// The one exception is a run with nothing to answer — a scheduled agent, whose
+// input is empty and whose instructions ARE the ask. It asks as a user turn,
+// exactly as it did before, rather than handing a model a system message and no
+// question.
+func conversation(instructions string, history []types.ChatMessage, input string) []types.ChatMessage {
+	msgs := make([]types.ChatMessage, 0, len(history)+2)
+	if s := strings.TrimSpace(instructions); s != "" {
+		msgs = append(msgs, types.ChatMessage{Role: types.RoleSystem, Content: s})
+	}
+	msgs = append(msgs, history...)
+	if in := strings.TrimSpace(input); in != "" {
+		msgs = append(msgs, types.ChatMessage{Role: types.RoleUser, Content: in})
+	}
+	if len(msgs) == 1 && msgs[0].Role == types.RoleSystem {
+		msgs[0].Role = types.RoleUser
+	}
+	return msgs
 }
 
 // completeWithFailover runs one completion on req's own model with a bounded

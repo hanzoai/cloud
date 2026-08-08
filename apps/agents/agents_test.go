@@ -31,15 +31,21 @@ func mk(org, name string) Agent {
 // fakeAI is a deterministic AIClient for exercising executeRun without a real
 // gateway — proves the compose + record contract, not the model.
 type fakeAI struct {
-	gotModel  string
+	gotModel string
+	// gotPrompt is what the model was actually shown, whether the caller sent a
+	// conversation or the one string this used to be — ChatRequest.Text is the
+	// accessor that answers for both, so "no inference ran" is still the empty
+	// string and does not quietly become true when the shape changes.
 	gotPrompt string
+	gotMsgs   []types.ChatMessage
 	content   string
 	err       error
 }
 
 func (f *fakeAI) ChatCompletion(_ context.Context, req *types.ChatRequest) (*types.ChatResponse, error) {
 	f.gotModel = req.Model
-	f.gotPrompt = req.Prompt
+	f.gotPrompt = req.Text()
+	f.gotMsgs = req.Messages
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -156,7 +162,7 @@ func TestExecuteRunOK(t *testing.T) {
 	ai := &fakeAI{content: "hi there"}
 	a := mk("maxpower", "greeter")
 	a.Instructions = "You are a greeter."
-	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "say hi", "", "run_test")
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", a, "say hi", nil, "", "run_test")
 
 	if r.Status != "ok" {
 		t.Fatalf("want ok, got %q err=%q", r.Status, r.Error)
@@ -167,8 +173,10 @@ func TestExecuteRunOK(t *testing.T) {
 	if ai.gotModel != "gpt-4o-mini" {
 		t.Fatalf("run must use the agent's model, got %q", ai.gotModel)
 	}
-	if ai.gotPrompt != "You are a greeter.\n\nsay hi" {
-		t.Fatalf("prompt must compose instructions + input, got %q", ai.gotPrompt)
+	if len(ai.gotMsgs) != 2 ||
+		ai.gotMsgs[0].Role != types.RoleSystem || ai.gotMsgs[0].Content != "You are a greeter." ||
+		ai.gotMsgs[1].Role != types.RoleUser || ai.gotMsgs[1].Content != "say hi" {
+		t.Fatalf("the model must be shown what it is and what it was asked, got %+v", ai.gotMsgs)
 	}
 	if r.Org != "maxpower" || r.AgentName != "greeter" {
 		t.Fatalf("run must be scoped to the org+agent, got %+v", r)
@@ -177,7 +185,7 @@ func TestExecuteRunOK(t *testing.T) {
 
 func TestExecuteRunRecordsError(t *testing.T) {
 	ai := &fakeAI{err: errors.New("model unavailable")}
-	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", mk("maxpower", "x"), "in", "", "run_test")
+	r := executeRun(context.Background(), ai, "maxpower", "maxpower/u1", mk("maxpower", "x"), "in", nil, "", "run_test")
 	if r.Status != "error" {
 		t.Fatalf("want error status, got %q", r.Status)
 	}

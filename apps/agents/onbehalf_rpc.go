@@ -17,6 +17,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
 
@@ -76,9 +77,37 @@ func planeRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunO
 	// apps/integrations/bridge.go. By the time we are here it has already arrived as
 	// a header and rides onward for free. in.Org remains in the payload because the
 	// run RECORD needs it; it is not what authorizes the spend.
-	run, err := runOnBehalfModel(mounted, ctx, in.Org, in.Subject, in.Ref, in.Input, in.Model)
+	run, err := runOnBehalfModel(mounted, ctx, in.Org, in.Subject, in.Ref, in.Input, in.Model, transcript(in.History))
 	if err != nil {
 		return nil, err
 	}
 	return &plane.RunOnBehalfOut{Status: run.Status, Output: run.Output, RunID: run.ID, Error: run.Error}, nil
+}
+
+// transcript turns the room's turns into the conversation the model reads.
+//
+// Self is the whole of it: a turn the assistant SAID has to come back as an
+// assistant turn, or the model reads its own answers as things the user told it
+// and starts agreeing with itself. The bridge knows which are which because it
+// asked the platform; nothing in this process could work it out.
+//
+// The turns arrived over the plane, which is why the conversion exists at all:
+// plane.Turn is the wire's shape and types.ChatMessage is the model's, and
+// neither package should have to know the other's.
+func transcript(turns []plane.Turn) []types.ChatMessage {
+	if len(turns) == 0 {
+		return nil
+	}
+	msgs := make([]types.ChatMessage, 0, len(turns))
+	for _, t := range turns {
+		if strings.TrimSpace(t.Text) == "" {
+			continue // an event with no words is not a turn
+		}
+		role := types.RoleUser
+		if t.Self {
+			role = types.RoleAssistant
+		}
+		msgs = append(msgs, types.ChatMessage{Role: role, Content: t.Text})
+	}
+	return msgs
 }

@@ -260,7 +260,7 @@ func TestRunAgentGateFailClosedOnUnreachableCommerce(t *testing.T) {
 	ai := &fakeAI{content: "must not run"}
 	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{stores: testStores(t), ai: ai, bill: cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind)}}
 	a := mk("acme", "x")
-	_, gateErr := runAgent(s, context.Background(), a, "hi", "acme", "", "")
+	_, gateErr := runAgent(s, context.Background(), a, "hi", nil, "acme", "", "")
 	if gateErr == nil {
 		t.Fatal("unreachable commerce must fail closed (non-nil gate error)")
 	}

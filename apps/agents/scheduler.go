@@ -206,7 +206,7 @@ func (sc *scheduler) launch(ctx context.Context, a Agent, key string) {
 		defer cancel()
 
 		// Scheduled runs carry no HTTP request/IP; requestID/clientIP are empty.
-		r, gateErr := runAgent(sc.s, runCtx, a, "", scheduledActor(a), "", "")
+		r, gateErr := runAgent(sc.s, runCtx, a, "", nil, scheduledActor(a), "", "")
 
 		ok := gateErr == nil && r.Status == "ok"
 		sc.mu.Lock()
