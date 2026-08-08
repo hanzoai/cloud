@@ -307,22 +307,27 @@ func TestSlackBridgeOrgIsolation(t *testing.T) {
 		t.Fatalf("globex token = %q err=%v, want xoxb-globex", tok, err)
 	}
 
-	// END TO END: an app_mention from TACME (valid HMAC), an UNLINKED user → the
-	// link prompt is posted EPHEMERALLY with ACME's bot token. If the channel ever
-	// resolved the wrong org, the captured bearer would be globex's — an isolation
-	// breach — or the post would never fire.
+	// END TO END: an app_mention from TACME with a valid HMAC is accepted, and the
+	// team it was signed by resolves to ACME and to nothing else. That resolution
+	// IS the isolation root — the org rides the emitted event from here, and every
+	// downstream hop takes it rather than deriving one.
+	//
+	// It used to assert the bearer captured on the REPLY, which is a stronger
+	// end-to-end claim but no longer observable from this package: the turn moved
+	// to channels, so no post fires here. The reply's tenancy is now channels' test
+	// to make, and what remains here is the fact this package is actually
+	// responsible for.
 	body := `{"type":"event_callback","team_id":"TACME","event_id":"EvIso1","event":{"type":"app_mention","user":"Uacme","text":"<@BACME> hi","channel":"C1","ts":"9.9"}}`
 	if res := slackPost(t, app, "/v1/integrations/slack/events", "iso-secret", "application/json", body); res.Code != http.StatusOK {
 		t.Fatalf("events ack want 200, got %d (%s)", res.Code, res.Body)
 	}
-	select {
-	case auth := <-authCh:
-		if auth != "Bearer xoxb-acme" {
-			t.Fatalf("ISOLATION BREACH: reply used %q, want acme's token 'Bearer xoxb-acme'", auth)
-		}
-	case <-time.After(4 * time.Second):
-		t.Fatal("no reply post observed (org resolution / token fetch failed)")
+	if org, ok := OrgForExternalID("slack", "TACME"); !ok || org != "acme" {
+		t.Fatalf("ISOLATION: TACME resolved to %q ok=%v, want acme", org, ok)
 	}
+	if org, ok := OrgForExternalID("slack", "TGLOBEX"); !ok || org != "globex" {
+		t.Fatalf("ISOLATION: TGLOBEX resolved to %q ok=%v, want globex", org, ok)
+	}
+	_ = authCh
 
 	// And a forged team the attacker never connected resolves to NO org — the
 	// bridge drops it (no org, no token, no run).
