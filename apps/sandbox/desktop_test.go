@@ -13,22 +13,12 @@ package sandbox
 
 import "testing"
 
+// podFor is the container of an ORDINARY sandbox — the zero cred, which is what
+// every lease but a SuperAdmin's own carries. podWith (cred_test.go) is the same
+// render with the identity's credentials stated.
 func podFor(t *testing.T, class string) map[string]any {
 	t.Helper()
-	r := &runtime{ns: "hanzo-sandboxes", image: "oci.hanzo.ai/hanzoai/sandbox"}
-	u := r.podSpec(Sandbox{ID: "m_1", Class: class, Pod: "m-1", Org: "acme", Image: "img"})
-	spec, ok := u.Object["spec"].(map[string]any)
-	if !ok {
-		t.Fatalf("%s: no spec", class)
-	}
-	cs, ok := spec["containers"].([]any)
-	if !ok || len(cs) != 1 {
-		t.Fatalf("%s: want one container, got %v", class, spec["containers"])
-	}
-	c, ok := cs[0].(map[string]any)
-	if !ok {
-		t.Fatalf("%s: container is not an object", class)
-	}
+	_, c := podWith(t, class, cred{})
 	return c
 }
 

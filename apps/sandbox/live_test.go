@@ -58,7 +58,7 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 	// live proof runs under whatever the fleet is set to rather than under the
 	// node default. want is empty, and runtimeFor cannot refuse an empty ask.
 	m.Runtime, _ = r.runtimeFor(m, "")
-	if err := r.start(ctx, m); err != nil {
+	if err := r.start(ctx, m, cred{}); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	// Always clean up: a leaked pod on a shared cluster is somebody else's
@@ -157,7 +157,7 @@ func TestLiveSandboxDoesGit(t *testing.T) {
 	// live proof runs under whatever the fleet is set to rather than under the
 	// node default. want is empty, and runtimeFor cannot refuse an empty ask.
 	m.Runtime, _ = r.runtimeFor(m, "")
-	if err := r.start(ctx, m); err != nil {
+	if err := r.start(ctx, m, cred{}); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	defer func() {
