@@ -79,13 +79,14 @@ func funded(t *testing.T) finance.Client {
 // to be registered after the Unbind it must precede.
 func quiet(t *testing.T) {
 	t.Helper()
+	mute(t)
 	prior := teach
 	teach = func(context.Context, *plane.RiskObserveIn) (*plane.RiskObserved, error) {
 		return &plane.RiskObserved{Learned: 1}, nil
 	}
 	t.Cleanup(func() {
 		if !released(3 * time.Second) {
-			t.Errorf("%d teaching slot(s) never came back — the detached record leaked", len(teaching))
+			t.Errorf("%d detached hand-off(s) never came back — a settlement's record leaked", inflight())
 		}
 		teach = prior
 	})

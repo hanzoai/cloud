@@ -139,3 +139,47 @@ func TestTranslateLiftUser(t *testing.T) {
 		t.Errorf("properties not carried through: %+v", cv.Properties)
 	}
 }
+
+// TestTranslateAServerSidePurchase is the last link of the commerce bridge, read
+// where the conversion actually leaves: a sale apps/commerce stated when a card
+// SETTLED, carried over the event plane and handed here by the fan-out.
+//
+// The browser pixel was the only Purchase these platforms ever received — fired from
+// a page, blocked by every content blocker, lost on every navigation away. This one
+// is the payment itself, so all three facts a platform bids on have to survive the
+// trip: WHAT it was worth, in WHICH money, and WHICH sale it was.
+//
+// The last of those is the dedup key. Every adapter renders EventID as the platform's
+// own order identity (Meta's order_id, GA4's transaction_id, Pinterest's order_id),
+// and apps/commerce states the SETTLEMENT's reference there — so the browser pixel
+// and this server event collapse onto one conversion, and a settlement replayed by a
+// webhook does not report the sale twice.
+func TestTranslateAServerSidePurchase(t *testing.T) {
+	cv := Translate(analytics.SinkEvent{
+		Name:       "order_completed",
+		MessageID:  "minted-per-call",
+		DistinctID: "person_42",
+		Revenue:    49.5,
+		Currency:   "eur",
+		ProductID:  "plan_pro",
+		Quantity:   2,
+		Properties: map[string]any{"event_id": "sq_pay_9Xk2"},
+	})
+	switch {
+	case cv.Standard != EventPurchase:
+		t.Errorf("standard %q, want %q — a settled payment is a Purchase to every platform",
+			cv.Standard, EventPurchase)
+	case cv.Value != 49.5:
+		t.Errorf("value %v, want 49.5 — the money the card was charged", cv.Value)
+	case cv.Currency != "EUR":
+		t.Errorf("currency %q, want EUR", cv.Currency)
+	case cv.EventID != "sq_pay_9Xk2":
+		t.Errorf("eventID = %q, want the settlement reference — the minted message id would "+
+			"give the browser pixel and this event two identities for one sale", cv.EventID)
+	case cv.User.ExternalID != "person_42":
+		t.Errorf("externalID = %q, want person_42", cv.User.ExternalID)
+	}
+	if len(cv.Items) != 1 || cv.Items[0].ID != "plan_pro" || cv.Items[0].Quantity != 2 {
+		t.Errorf("contents = %+v, want one plan_pro x2 — what the platforms report the sale against", cv.Items)
+	}
+}

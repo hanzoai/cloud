@@ -330,6 +330,17 @@ type payment struct {
 	// by-name call on zip's op plane. The pair is the only way an operator can see
 	// that a payment arrived through the agent plane at all.
 	via string
+	// cents and currency are the amount the door was asked to move, in that
+	// currency's minor unit — the pair both mints declare under the same two names
+	// ([wireAmount], PaymentIn) because both are projections of one core.
+	//
+	// They are kept as themselves rather than read back out of facts, which holds the
+	// SCORER's vocabulary: there the amount is nano-USD, converted, and absent
+	// entirely for a currency this process cannot state in USD ([paymentFacts]). That
+	// is the right value for a model of one organisation's behaviour and the wrong one
+	// for a sale, which happened in the money the customer actually paid.
+	cents    int64
+	currency string
 	// facts are the observations in the scorer's vocabulary ([paymentSignals]).
 	facts map[string]string
 }
@@ -430,7 +441,8 @@ func (s screen) route(next zip.Handler) zip.Handler {
 	}
 }
 
-// record is what a door does with a charge that CLEARED: the money, then the model.
+// record is what a door does with a charge that CLEARED: the money, then the model,
+// then the sale.
 //
 // THE MONEY GOES FIRST, and unlike the model it can refuse the door: commerce's card
 // core credits its own transaction store, which nothing in this binary spends from, so
@@ -449,12 +461,22 @@ func (s screen) route(next zip.Handler) zip.Handler {
 // payment (it is detached, bounded and dropped under pressure), so nothing about
 // running it on the refusal path can reach the customer.
 //
-// It is ONE function because both doors run the same two halves in the same order and
+// AND THE SALE IS STATED ON THE SAME TERMS THE MODEL IS TAUGHT ON. [screen.emit] tells
+// the event plane that an order completed, which is what puts a REAL purchase in front
+// of the org's connected ad platforms (apps/destinations forwards it as a server-side
+// conversion). It sits here for [screen.learn]'s reason and shares its posture: the
+// customer's card cleared, so the sale is a fact about the past whatever this process
+// managed to do with the credit afterwards, and a conversion that went missing whenever
+// the deposit refused would under-report exactly the payments an operator is already
+// chasing. It cannot fail the payment either.
+//
+// It is ONE function because both doors run the same three halves in the same order and
 // the order is the whole point: a second call site is a second chance to write them the
 // other way round.
 func (s screen) record(ctx context.Context, p payment, ref, id string) error {
 	credit := s.settle(ctx, p, ref, id)
 	s.learn(p, ref)
+	s.emit(p, ref)
 	return credit
 }
 
@@ -653,12 +675,14 @@ func (s screen) decide(ctx context.Context, p payment) error {
 func seen(c *zip.Ctx, door string, amountCents int64, currency string) payment {
 	ledger := payerOrg(c)
 	return payment{
-		org:     chargedOrg(c),
-		ledger:  ledger,
-		subject: principal.Subject(c, ledger),
-		door:    door,
-		via:     c.Path(),
-		facts:   paymentSignals(c, amountCents, currency),
+		org:      chargedOrg(c),
+		ledger:   ledger,
+		subject:  principal.Subject(c, ledger),
+		door:     door,
+		via:      c.Path(),
+		cents:    amountCents,
+		currency: currency,
+		facts:    paymentSignals(c, amountCents, currency),
 	}
 }
 
