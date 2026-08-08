@@ -213,7 +213,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return nil
 	}
 
-	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — iam-v1 retired)", "store", dbPath(dir), "prefixes", Prefixes)
+	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — iam-v1 retired)", "store", StorePath(dir), "prefixes", Prefixes)
 	return nil
 }
 
@@ -224,7 +224,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // serving identity, never copied and never mirrored. Mounting the identity volume at
 // {dir}/iam is therefore the whole of what a deployment has to say, and this function
 // is the one place the name is spelled.
-func dbPath(dir string) string { return filepath.Join(dir, "iam", "iam.db") }
+// StorePath is WHERE THE IDENTITY STORE LIVES under a data directory, named once
+// so nobody spells it a second time.
+//
+// Exported because this process refuses to CREATE the store (see openStore), which
+// makes its location something a caller has to be able to ask for rather than
+// guess: anything standing a real embedded IAM up — the migrator, a sibling app
+// proving it reads the real store and not a stand-in — needs IAM's own opener
+// pointed here first. A second copy of this path is the mounting fault openStore
+// exists to refuse, written by hand.
+func StorePath(dir string) string { return filepath.Join(dir, "iam", "iam.db") }
 
 // openStore opens THE identity store — with IAM's own opener.
 //
@@ -276,7 +285,7 @@ func openStore(dir string) (orm.DB, error) {
 	// path. A loud 503 is recoverable in a minute; a silently empty identity
 	// service is not recoverable at all, because by then clients have been told
 	// their accounts do not exist.
-	path := dbPath(dir)
+	path := StorePath(dir)
 	if _, err := os.Stat(path); err != nil {
 		return nil, fmt.Errorf("iam: the identity store is not at %s, so this process has nothing to serve — check that the volume holding it is mounted there: %w", path, err)
 	}
