@@ -10,19 +10,6 @@ func init() {
 	zip.Describe("DELETE /v1/tracker/projects/:key", zip.Doc{
 		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second door onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
 	})
-	zip.Describe("GET /v1/tracker/issues", zip.Doc{
-		Description: "Answers across every project in the org.\n\nThe org comes from the validated principal and never from the request: a\ncaller able to name the org could read another tenant's backlog, and a search\nis exactly the shape that would quietly return it.",
-		Fields: map[string]string{
-			"issueSearch.assignee": "Assignee keeps issues held by one person. Pass \"me\" for yourself.",
-			"issueSearch.kind":     "Kind keeps one shape: issue, pr, epic.",
-			"issueSearch.limit":    "Limit caps the answer; 0 means the default, and anything above the ceiling\nis clamped rather than refused — a search that errors on being too broad\nteaches people to guess.",
-			"issueSearch.project":  "Project narrows to one team key; \"\" searches every project in the org,\nwhich is the point of this op.",
-			"issueSearch.q":        "Q matches an issue's title or description. A word from the issue, which is\nwhat someone remembers — not its number, which is what they are looking up.",
-			"issueSearch.repo":     "Repo keeps issues bound to one git repository.",
-			"issueSearch.source":   "Source keeps one origin: team, git, crm, helpdesk, cms, agent. \"git\" is\nhow you ask for the mirrored GitHub issues specifically.",
-			"issueSearch.status":   "Status keeps one board column: backlog, todo, in_progress, done, canceled.",
-		},
-	})
 	zip.Describe("GET /v1/tracker/milestones", zip.Doc{
 		Description: "Returns every milestone across your org's repositories, each\nstamped with the repository it belongs to.\n\nThe forge scopes milestones to a repository and publishes no org-level list,\nso this is a server-side fan-out over the repositories you can see. It runs\nhere rather than in the browser because a client-side fan-out would need the\nforge reachable from the page and a credential held there.",
 	})
@@ -109,8 +96,5 @@ func init() {
 			"newIssue.status":      "Status is the board column to open into: backlog, todo, in_progress, done\nor canceled. Empty opens into backlog.",
 			"newIssue.title":       "Title is required.",
 		},
-	})
-	zip.Describe("POST /v1/tracker/projects/:key/issues/:num/claim", zip.Doc{
-		Description: "Takes an issue: it becomes yours and it moves to in_progress.\n\nThe holder is the CALLER, never an argument. \"Assign this to someone else\" is\na different act with different authority, and it already exists as a PATCH;\nconflating them would let anyone hand work to anyone by naming them.\n\nClaiming something already held by someone else is refused rather than\nsilently taken — two agents on one issue is the failure this prevents, and a\nclaim that quietly wins a race is worse than one that says no.",
 	})
 }

@@ -234,9 +234,22 @@ func planeChatSend(ctx context.Context, in *plane.ChatSendIn) (*plane.ChatSendOu
 	}
 	switch in.Provider {
 	case "slack":
+		if in.Private {
+			if in.User == "" {
+				return nil, fmt.Errorf("integrations: a private reply needs someone to send it to")
+			}
+			tok, terr := TokenFor(ctx, in.Org, "slack", "bot_token")
+			if terr != nil {
+				return nil, terr
+			}
+			return &plane.ChatSendOut{}, slackPostEphemeral(ctx, string(tok), in.Room, in.User, in.Text)
+		}
 		id, err := SendSlackAt(ctx, in.Org, in.Room, in.ReplyTo, "", in.Text)
 		return &plane.ChatSendOut{MessageID: id}, err
 	case "discord":
+		if in.Private {
+			return nil, fmt.Errorf("integrations: discord has no private reply here")
+		}
 		id, err := SendDiscord(ctx, in.Room, in.ReplyTo, in.Text)
 		return &plane.ChatSendOut{MessageID: id}, err
 	case "teams":
