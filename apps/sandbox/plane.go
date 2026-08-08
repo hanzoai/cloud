@@ -32,6 +32,19 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// zipdoc lifts the doc comment off each typed op and each In/Out field into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make describe`.
+//
+// Without it these ops reached the fleet door NAMED AND UNDESCRIBED: an agent was
+// told `class` is a string and not that the strings are exec, dev and desktop,
+// told `project` exists and not that a dev sandbox has no disk without one, told
+// `id` exists and not that it is how you get back the computer you already hold.
+// An op you have to guess the arguments of is one you use wrong on the first try,
+// which for a coding run is a lease spent on a mistake.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // mounted is the service the plane ops answer from. A plane handler is registered
 // once per process and has no receiver, so the only way to reach the mounted
 // service is a package value — the same shape apps/git and apps/agents use.
@@ -74,8 +87,12 @@ func live(ctx context.Context) (*Service, string, error) {
 	return s, org, nil
 }
 
-// planeLease leases the caller's sandbox, or returns the one it named if that lease
-// is still running. Named handlers, not closures, so zipdoc can lift this prose.
+// planeLease leases the caller's sandbox, or returns the one it named if that
+// lease is still running.
+//
+// What comes back is a real computer: a pod under a runtime boundary with a
+// toolchain already in it, its own filesystem, and a lease that ends it. Every
+// other op here acts on the one this returns.
 func planeLease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
 	s, org, err := live(ctx)
 	if err != nil {
