@@ -58,16 +58,12 @@ const mirrorRefSpec = "+refs/*:refs/*"
 // the unknown refspec, which fails the mirror closed — the safe direction.)
 const mirrorExcludeAgent = "^" + agentRefPrefix + "*"
 
-// mirrorEnvToken names the env var — KMS-injected via a KMSSecret sync, never
-// hardcoded, never logged — holding the credential for mirroring a PRIVATE
-// https source. Empty means an anonymous fetch (public sources need none).
+// mirrorEnvToken is the STEM of the env var — KMS-injected via a KMSSecret sync,
+// never hardcoded, never logged — holding the credential for mirroring a PRIVATE
+// https source. The host is the rest of the name (see mirrorCredential): the
+// credential for github.com is GIT_MIRROR_TOKEN_GITHUB_COM. Nothing held for a
+// host means an anonymous fetch, which is all a public source needs.
 const mirrorEnvToken = "GIT_MIRROR_TOKEN"
-
-// mirrorAllowHostsEnv (comma-separated) is the allowlist of hosts the mirror
-// credential (GIT_MIRROR_TOKEN) may be sent to; empty ⇒ the default set
-// {github.com, git.hanzo.ai}. Any other source fetches anonymously so a
-// tenant-supplied URL can never capture the shared token.
-const mirrorAllowHostsEnv = "GIT_MIRROR_ALLOW_HOSTS"
 
 // mirrorOutAllowHostsEnv (comma-separated) overrides the OUTBOUND mirror-target
 // allowlist; empty ⇒ the default {github.com, gitlab.com}. The local git host is
@@ -379,37 +375,60 @@ func gitConfigEnv(kv ...string) []string {
 }
 
 // mirrorAuthHeader returns the base64 "x-access-token:<token>" basic-auth
-// credential for an https source ONLY when the source host is on the credential
-// allowlist (GIT_MIRROR_ALLOW_HOSTS, default {github.com, git.hanzo.ai}). A
-// tenant-supplied URL to any other host fetches anonymously, so the shared
-// GIT_MIRROR_TOKEN can never be captured by an attacker-controlled source
-// (HIGH-1). Returns "" for http, no token, or a non-allowlisted host.
+// credential for an https source, or "" for http and for a host we hold no
+// credential for. A tenant-supplied URL cannot capture a credential (HIGH-1)
+// because there is none to capture: see mirrorCredential.
 func mirrorAuthHeader(srcURL string) string {
-	tok := strings.TrimSpace(os.Getenv(mirrorEnvToken))
-	if tok == "" {
-		return ""
-	}
 	u, err := url.Parse(srcURL)
 	if err != nil || u.Scheme != "https" {
 		return ""
 	}
-	if !mirrorHostAllowed(u.Hostname()) {
+	tok := mirrorCredential(u.Hostname())
+	if tok == "" {
 		return ""
 	}
 	return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
 }
 
-// mirrorHostAllowed reports whether host may receive the INBOUND mirror credential
-// (GIT_MIRROR_TOKEN) when fetching a private source. GIT_MIRROR_ALLOW_HOSTS
-// (comma-separated) overrides the default {github.com, git.hanzo.ai}. This gate is
-// DISTINCT from the outbound-target gate (mirrorOutHostAllowed): a host we trust to
-// FETCH from is not automatically a host we will PUSH tenant code to.
-func mirrorHostAllowed(host string) bool {
-	if v := strings.TrimSpace(os.Getenv(mirrorAllowHostsEnv)); v != "" {
-		return hostInList(host, mirrorAllowHostsEnv)
+// mirrorCredential returns the token minted FOR host, or "" if we hold none.
+//
+// ONE TOKEN PER HOST, and it is not a refinement — a credential minted for one
+// forge is not a credential for another. One env var served every allowlisted
+// host, so our GitHub token was offered to git.hanzo.ai: it authenticates
+// nothing there, git falls back to prompting, and the fetch dies "could not read
+// Username for 'https://git.hanzo.ai'" — which reads as a MISSING credential and
+// is really a WRONG one. That cost the whole mirror path: cloud could not import
+// a repository from our own forge. It also handed a GitHub token to a different
+// trust domain on the way, which is the part that would matter if the two hosts
+// were not both ours.
+//
+// POSSESSION IS THE ALLOWLIST, so the separate host list is gone. It existed to
+// stop a tenant-supplied URL from capturing a shared token; with the credential
+// named after the host it wants, a URL to any host we hold nothing for finds
+// nothing and fetches anonymously. One fact, one place, nothing to drift.
+func mirrorCredential(host string) string {
+	name := strings.TrimSpace(host)
+	if name == "" {
+		return ""
 	}
-	host = strings.ToLower(host)
-	return host == "github.com" || host == "git.hanzo.ai"
+	return strings.TrimSpace(os.Getenv(mirrorEnvToken + "_" + envHost(name)))
+}
+
+// envHost renders a hostname as the tail of an environment-variable name: upper
+// case, and every character that cannot appear in one becomes an underscore. So
+// git.hanzo.ai names GIT_MIRROR_TOKEN_GIT_HANZO_AI, and adding a host is a
+// deployment writing a secret rather than a code change.
+func envHost(host string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(host) {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
 }
 
 // mirrorOutHostAllowed reports whether host is a permitted OUTBOUND mirror TARGET
