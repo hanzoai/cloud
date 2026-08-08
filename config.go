@@ -578,11 +578,11 @@ func (c *Config) Validate() error {
 	if c.DataDir == "" {
 		return fmt.Errorf("data-dir is required")
 	}
-	// Embedded IAM (clients/iam) keeps its identity store as a per-pod embedded
-	// SQLite file ({DataDir}/iam/global.db), so a horizontally scaled app tier would give
-	// each replica its OWN divergent identity store — a user/session written on one
-	// replica is absent on the next. Refuse to boot an iam-enabled cloud above a single
-	// replica. CLOUD_REPLICAS=0 (unset) is the unmanaged/dev case and is allowed — the
+	// Embedded IAM (apps/iam) keeps its identity store as a single SQLite file
+	// ({DataDir}/iam/iam.db) on a read-write-once volume, so a horizontally scaled app
+	// tier would give each replica its OWN divergent identity store — a user/session
+	// written on one replica is absent on the next. Refuse to boot an iam-enabled cloud
+	// above a single replica. CLOUD_REPLICAS=0 (unset) is the unmanaged/dev case — the
 	// helm chart pins replicas=1 whenever Enabled("iam") holds, which includes the
 	// empty (mount-all) enable list, so a managed deployment always sets it. Point IAM
 	// at a shared external store to lift this.
