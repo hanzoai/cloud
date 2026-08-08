@@ -754,6 +754,46 @@ func (s *Store) GetBuild(ctx context.Context, org, id string) (Build, error) {
 	return b, nil
 }
 
+// ListUnfinishedBuilds returns every build still in a non-terminal state that
+// carries a Job name, oldest first, across ALL orgs.
+//
+// It exists because a build made through POST /v1/runner has NO deployment. The
+// reconciler drove itself off ListBuildingDeployments alone, and reconcileBuild
+// returns early for anything whose Source is not "git" — so a direct build's row
+// was written "queued" and NOTHING ever advanced it. Its status stayed "queued"
+// for the life of the row, whether the Job had succeeded, failed, or never been
+// scheduled at all.
+//
+// That is not a cosmetic gap. It made GET /v1/builds unable to answer the only
+// question it is asked: a build that pushed an image and a build that could not
+// be scheduled read IDENTICALLY. Six builds sat unschedulable for five days and
+// looked exactly like six that were merely in flight, which is precisely why
+// nobody could see it.
+//
+// Keyed on status, not org, for the same reason as ListBuildingDeployments: the
+// reconciler is stateless and resumes after a restart because the store IS the
+// state. Rows with no job_name are skipped — there is no Job to ask about, and
+// the deadline sweep in the deployment path owns that case.
+func (s *Store) ListUnfinishedBuilds(ctx context.Context) ([]Build, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+buildCols+` FROM platform_builds
+		  WHERE status NOT IN ('succeeded','failed') AND job_name<>''
+		  ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("list unfinished builds: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Build
+	for rows.Next() {
+		b, err := scanBuild(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan build: %w", err)
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
 // ListBuildsByOrg returns every build record for org across ALL apps,
 // newest-created first. Org-wide input to the console builds aggregate
 // (console.go); org is the only tenancy predicate. These are REAL BuildKit build

@@ -300,3 +300,93 @@ func TestBuildReconcilerVersionMonotonic(t *testing.T) {
 		t.Fatalf("live workload must stay at v2, got tag %q", tag)
 	}
 }
+
+// A direct build — POST /v1/runner, no deployment — must be able to reach a
+// terminal status. It could not: the reconciler drove only off building
+// DEPLOYMENTS and reconcileBuild returns early for anything not sourced from git,
+// so these rows stayed "queued" for the life of the row whether the Job had
+// pushed an image, failed, or never been scheduled at all.
+//
+// That made GET /v1/builds unable to answer the only question it is asked. Six
+// builds sat unschedulable for five days and read exactly like six in flight,
+// which is why the outage was invisible. This test pins the query the fix needs:
+// a non-terminal row WITH a job is offered for reconciliation, and a terminal one
+// or a row with no job never is.
+func TestUnfinishedBuildsAreOfferedForReconciliation(t *testing.T) {
+	store, err := openStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().Unix()
+	seed := []Build{
+		{ID: "b-queued", Org: "hanzo", Status: "queued", Image: "img:1", JobName: "job-1", CreatedAt: now},
+		{ID: "b-building", Org: "hanzo", Status: "building", Image: "img:2", JobName: "job-2", CreatedAt: now},
+		{ID: "b-succeeded", Org: "hanzo", Status: "succeeded", Image: "img:3", JobName: "job-3", CreatedAt: now},
+		{ID: "b-failed", Org: "hanzo", Status: "failed", Image: "img:4", JobName: "job-4", CreatedAt: now},
+		{ID: "b-nojob", Org: "hanzo", Status: "queued", Image: "img:5", JobName: "", CreatedAt: now},
+	}
+	for _, b := range seed {
+		if err := store.InsertBuild(ctx, b); err != nil {
+			t.Fatalf("insert %s: %v", b.ID, err)
+		}
+	}
+
+	got, err := store.ListUnfinishedBuilds(ctx)
+	if err != nil {
+		t.Fatalf("ListUnfinishedBuilds: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, b := range got {
+		ids[b.ID] = true
+	}
+	for _, want := range []string{"b-queued", "b-building"} {
+		if !ids[want] {
+			t.Errorf("%s was not offered — it would stay queued forever", want)
+		}
+	}
+	for _, no := range []string{"b-succeeded", "b-failed"} {
+		if ids[no] {
+			t.Errorf("%s is terminal and must not be reconciled again", no)
+		}
+	}
+	if ids["b-nojob"] {
+		t.Error("a row with no job_name has no Job to ask about and must not be offered")
+	}
+}
+
+// Recording an outcome must make the row TELL THE TRUTH — the whole point of the
+// fix. A build that succeeded must read succeeded, not queued.
+func TestRecordingAnOutcomeMakesTheRowTruthful(t *testing.T) {
+	store, err := openStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	ctx := context.Background()
+	b := Build{ID: "b-1", Org: "hanzo", Status: "queued", Image: "img:1", JobName: "job-1", CreatedAt: time.Now().Unix()}
+	if err := store.InsertBuild(ctx, b); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	b.Status, b.UpdatedAt = "succeeded", time.Now().Unix()
+	if err := store.UpdateBuild(ctx, b); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	got, err := store.GetBuild(ctx, "hanzo", "b-1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Status != "succeeded" {
+		t.Errorf("status = %q, want succeeded — a build that pushed an image must not read queued", got.Status)
+	}
+	left, err := store.ListUnfinishedBuilds(ctx)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, x := range left {
+		if x.ID == "b-1" {
+			t.Error("a finished build is still offered for reconciliation — it would be rewritten every tick")
+		}
+	}
+}
