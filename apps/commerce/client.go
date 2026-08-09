@@ -21,6 +21,7 @@ package commerce
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -199,12 +200,7 @@ func tier(ctx context.Context, slug string) (*commerceplan.Plan, bool, error) {
 }
 
 func containsFeature(features []string, want string) bool {
-	for _, f := range features {
-		if f == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(features, want)
 }
 
 func unixOrZero(t time.Time) int64 {

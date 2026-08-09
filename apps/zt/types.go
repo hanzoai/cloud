@@ -22,7 +22,10 @@
 
 package zt
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // orgRolePrefix + regionRolePrefix are the ONE role-attribute conventions this
 // subsystem reads. "org-<org>" is the tenant key; "region-<slug>" optionally
@@ -123,12 +126,7 @@ type routerView struct {
 
 // hasRole reports whether attrs contains the exact role attribute want.
 func hasRole(attrs []string, want string) bool {
-	for _, a := range attrs {
-		if a == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(attrs, want)
 }
 
 // filterServices keeps only the org's services (roleAttributes ∋ "org-<org>").

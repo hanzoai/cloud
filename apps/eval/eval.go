@@ -58,6 +58,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 
 	"strings"
 	"sync"
@@ -1060,7 +1061,7 @@ func (s *service) validateScore(ctx context.Context, org, name string, body scor
 		if len(label) > 256 {
 			return ScoreEvent{}, zip.ErrBadRequest("stringValue too long")
 		}
-		if hasCfg && !containsStr(cfg.Categories, label) {
+		if hasCfg && !slices.Contains(cfg.Categories, label) {
 			return ScoreEvent{}, zip.ErrBadRequest("stringValue not in the configured category set")
 		}
 		ev.StringValue = label
@@ -1656,15 +1657,6 @@ func cleanCategories(xs []string) []string {
 		}
 	}
 	return out
-}
-
-func containsStr(xs []string, target string) bool {
-	for _, x := range xs {
-		if x == target {
-			return true
-		}
-	}
-	return false
 }
 
 // normalizeJudge fills a judge spec: the judge model defaults to the model under
