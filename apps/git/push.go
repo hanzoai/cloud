@@ -15,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/storer"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -144,10 +145,7 @@ func corePush(s *cloud.Service[state], ctx context.Context, org, project string,
 		return "", "", fmt.Errorf("open store: %w", err)
 	}
 	if _, gerr := store.Get(ctx, org, project, name); errors.Is(gerr, errNotFound) {
-		id, ierr := genID("repo")
-		if ierr != nil {
-			return "", "", fmt.Errorf("rng: %w", ierr)
-		}
+		id := mint.ID("repo")
 		now := time.Now().Unix()
 		r := Repo{ID: id, Org: org, Project: project, Name: name, DefaultBranch: branch, CreatedAt: now, UpdatedAt: now}
 		if perr := provision(s, ctx, store, r); perr != nil && !errors.Is(perr, errConflict) {

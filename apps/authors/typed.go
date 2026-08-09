@@ -34,6 +34,7 @@ package authors
 // is to split the address, which is an API decision, not a typing one.
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -42,6 +43,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -303,7 +305,7 @@ func (o ops) connect(ctx context.Context, in *connectRequest) (*enrolment, error
 	provider := normalizeProvider(in.Provider)
 
 	// Prefer IAM's linked forge identity for the provider (strong proof of the login).
-	login := normalizeLogin(firstNonEmpty(in.Login, in.GithubLogin))
+	login := normalizeLogin(cmp.Or(strings.TrimSpace(in.Login), in.GithubLogin))
 	identityVerified := false
 	if l, _, linked, lerr := o.s.State.forge.linkedAccount(ctx, provider, org, userSub); lerr != nil {
 		o.s.Log.Warn("authors: linked-account lookup failed", "org", org, "provider", provider, "err", lerr)
@@ -315,14 +317,8 @@ func (o ops) connect(ctx context.Context, in *connectRequest) (*enrolment, error
 		return nil, zip.ErrBadRequest("login is required (no linked " + provider + " account found)")
 	}
 
-	id, err := genID("aut")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	verifyCode, err := genID("avc")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("aut")
+	verifyCode := mint.ID("avc")
 	a, isNew, err := o.s.State.store.Connect(ctx, id, org, login, verifyCode, defaultShareBps, identityVerified, time.Now().Unix())
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "connect: %v", err)
@@ -402,10 +398,7 @@ func (o ops) verifyRepo(ctx context.Context, in *verifyRequest) (*claim, error) 
 			"could not verify ownership of %s — grant the Hanzo %s app OR add %s containing your verify code (%s) to the default branch",
 			target.canonical, providerForHost(host), verifyFile, a.VerifyCode)
 	}
-	repoID, err := genID("arp")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	repoID := mint.ID("arp")
 	repo, isNew, err := o.s.State.store.UpsertVerifiedRepo(ctx, repoID, a.ID, target.canonical, method, time.Now().Unix())
 	if err != nil {
 		if err == errRepoOwned {
@@ -431,10 +424,7 @@ func (o ops) verifyOwner(ctx context.Context, c *zip.Ctx, a Author, org string, 
 			"could not verify ownership of the %s owner %q — grant the Hanzo %s app admin on %s/%s OR add %s carrying your verify code (%s) to its default branch",
 			providerForHost(t.host), t.owner, providerForHost(t.host), t.owner, orgProofRepo, verifyFile, a.VerifyCode)
 	}
-	orgID, err := genID("aog")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	orgID := mint.ID("aog")
 	rec, isNew, err := o.s.State.store.UpsertVerifiedOrg(ctx, orgID, a.ID, t.canonical, method, time.Now().Unix())
 	if err != nil {
 		if err == errOrgOwned {
@@ -530,10 +520,7 @@ func (o ops) recordDeploy(ctx context.Context, in *deployRequest) (*deployRecord
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "resolve repo: %v", err)
 	}
-	id, err := genID("ade")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("ade")
 	edge, isNew, err := o.s.State.store.RecordDeploy(ctx, id, authorID, repoURL, project, deployingOrg, time.Now().Unix())
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "record deploy: %v", err)

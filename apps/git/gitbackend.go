@@ -15,6 +15,7 @@
 package git
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -82,7 +83,7 @@ func (g *gitRepository) Resolve(_ context.Context, ref string) (Revision, string
 		if h, err := g.repo.Head(); err == nil {
 			label = h.Name().Short()
 		} else {
-			label = firstNonEmptyStr(g.meta.DefaultBranch, defaultBranchName)
+			label = cmp.Or(g.meta.DefaultBranch, defaultBranchName)
 		}
 	}
 	hash, err := g.repo.ResolveRevision(plumbing.Revision(label))

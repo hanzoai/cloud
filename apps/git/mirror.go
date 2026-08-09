@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -255,10 +256,7 @@ func ensureRepo(s *cloud.Service[state], ctx context.Context, store *Store, org,
 	if !errors.Is(err, errNotFound) {
 		return Repo{}, err
 	}
-	id, err := genID("repo")
-	if err != nil {
-		return Repo{}, err
-	}
+	id := mint.ID("repo")
 	now := time.Now().Unix()
 	fresh := Repo{
 		ID: id, Org: org, Project: project, Name: name,

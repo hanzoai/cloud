@@ -25,6 +25,7 @@ package sandbox
 // have to be kept in step.
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"strconv"
@@ -204,7 +205,7 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	now := time.Now().Unix()
 	m := Sandbox{
 		ID: id, Org: org, Kind: KindSandbox, Class: class, Project: project,
-		Image: firstNonEmpty(spec.Image, s.State.rt.imageFor(class, super)),
+		Image: cmp.Or(strings.TrimSpace(spec.Image), s.State.rt.imageFor(class, super)),
 		Pod:   podName(id), Status: "pending",
 		CreatedAt: now, LastUsedAt: now,
 	}
@@ -364,7 +365,7 @@ func Read(s *Service, ctx context.Context, org, id, path string) (Entry, error) 
 	case dirExit:
 		return Entry{Path: p, Dir: true, Entries: lines(r.Stdout)}, nil
 	}
-	return Entry{}, zip.ErrNotFound(strings.TrimSpace(firstNonEmpty(r.Stderr, "no such path")))
+	return Entry{}, zip.ErrNotFound(cmp.Or(strings.TrimSpace(r.Stderr), "no such path"))
 }
 
 // Write writes data to one file, creating parent directories. It answers the

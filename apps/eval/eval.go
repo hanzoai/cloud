@@ -66,6 +66,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -260,41 +261,6 @@ func Shutdown() error {
 }
 
 // ── tenant ───────────────────────────────────────────────────────────────────
-
-// tenant resolves the org — the tenant isolation KEY — for a request, but ONLY
-// for a VALIDATED principal. Two gates, both mandatory:
-//
-//  1. A validated principal MUST be present: c.User() (X-User-Id) is non-empty.
-//     SanitizeIdentity sets X-User-Id ONLY from a token/session it verified, and
-//     strips any client copy on ingress — so c.User() is the one unforgeable
-//     "this request carried a validated identity" signal. Its Phase-1 residual
-//     RESTORES a client-supplied X-Org-Id on the NO-principal path (bearer-less,
-//     opaque pk-/sk- API key, or invalid bearer). Without this gate, a
-//     direct-to-pod / in-cluster caller could send `X-Org-Id: victim` with no
-//     bearer and read/write/DELETE the victim org's datasets (golden outputs +
-//     PII), scores and runs — a cross-tenant break (Red HIGH). This is the SAME
-//     trust signal the audit layer uses (audit_middleware.go actorFromCtx): no
-//     validated sub ⇒ untrusted org, treated as anonymous.
-//  2. The org (c.Org()) MUST be present and sane. It is used verbatim — never
-//     lowercased/trimmed/truncated — because normalizing collapses DISTINCT
-//     owners into one storage bucket (Red HIGH-1). X-Org-Id is minted by
-//     SanitizeIdentity from the validated owner claim; a client X-Org-Id/
-//     X-Project-Id is stripped, so it is never a cross-tenant selector.
-//
-// Fails closed: an unvalidated or org-less request gets no tenant, so the op
-// returns 403 — never a fake success, never another org's data.
-//
-// A typed op receives a context.Context and nothing else, so it reads the org
-// principal.WithOrg parked rather than the request. The org is never an In field:
-// an In field is caller-supplied, and a tenant key the caller asserts for itself
-// is not a boundary.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
 
 // scope is the caller's project narrowing as a storage key: "" for the default
 // project, which denotes the org's whole dataset, else the server-minted slug.
@@ -535,7 +501,7 @@ type none struct{}
 // validated owner claim, never from a client X-Org-Id, so a dataset can only ever
 // be written under the caller's own tenant. A description over 64 KiB is 400.
 func (s *service) createDataset(ctx context.Context, in *datasetReq) (*datasetView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -550,10 +516,7 @@ func (s *service) createDataset(ctx context.Context, in *datasetReq) (*datasetVi
 	if len(in.Description) > maxContent {
 		return nil, zip.ErrBadRequest("description too large")
 	}
-	id, err := genID("ds")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("ds")
 	d, err := s.store.UpsertDataset(ctx, Dataset{
 		ID: id, Org: org, Name: name, Description: in.Description, Metadata: meta,
 		UpdatedAt: time.Now().Unix(),
@@ -573,7 +536,7 @@ func (s *service) createDataset(ctx context.Context, in *datasetReq) (*datasetVi
 // there is no parameter that reaches another tenant's datasets. The item count is
 // NOT populated here — read one dataset to get it.
 func (s *service) listDatasets(ctx context.Context, in *page) (*datasetList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -594,7 +557,7 @@ func (s *service) listDatasets(ctx context.Context, in *page) (*datasetList, err
 // A name this org does not have is 404, which is also what another tenant's
 // dataset looks like from here. Requires a validated principal; 403 without one.
 func (s *service) getDataset(ctx context.Context, in *datasetRef) (*datasetView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -624,7 +587,7 @@ func (s *service) getDataset(ctx context.Context, in *datasetRef) (*datasetView,
 // validated principal; 403 without one. Runs and scores already recorded against
 // the dataset are telemetry events and are NOT deleted with it.
 func (s *service) deleteDataset(ctx context.Context, in *datasetRef) (*none, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -679,7 +642,7 @@ type itemPage struct {
 // That dataset MUST already exist for this org: an unknown one is 404, never a
 // silent create. Requires a validated principal; 403 without one.
 func (s *service) createItem(ctx context.Context, in *itemReq) (*itemView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -712,9 +675,7 @@ func (s *service) createItem(ctx context.Context, in *itemReq) (*itemView, error
 	}
 	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		if id, err = genID("item"); err != nil {
-			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-		}
+		id = mint.ID("item")
 	} else if !nameRE.MatchString(id) {
 		return nil, zip.ErrBadRequest("id must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
@@ -740,7 +701,7 @@ func (s *service) createItem(ctx context.Context, in *itemReq) (*itemView, error
 // the read is filtered on the validated org, so naming another tenant's dataset
 // returns nothing rather than its contents.
 func (s *service) listItems(ctx context.Context, in *itemPage) (*itemList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -778,7 +739,7 @@ type evaluatorReq struct {
 // Like a dataset, the NAME is the key: re-posting a name edits that judge rather
 // than adding a second one. Requires a validated principal; 403 without one.
 func (s *service) createEvaluator(ctx context.Context, in *evaluatorReq) (*evaluatorView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -795,10 +756,7 @@ func (s *service) createEvaluator(ctx context.Context, in *evaluatorReq) (*evalu
 	} else if !nameRE.MatchString(scoreName) {
 		return nil, zip.ErrBadRequest("scoreName must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
-	id, err := genID("eval")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("eval")
 	e, err := s.store.UpsertEvaluator(ctx, Evaluator{
 		ID: id, Org: org, Name: name, Model: strings.TrimSpace(in.Model),
 		Criteria: in.Criteria, ScoreName: scoreName, UpdatedAt: time.Now().Unix(),
@@ -816,7 +774,7 @@ func (s *service) createEvaluator(ctx context.Context, in *evaluatorReq) (*evalu
 // Requires a validated principal; 403 without one, and the listing is filtered on
 // the validated org.
 func (s *service) listEvaluators(ctx context.Context, in *page) (*evaluatorList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -863,7 +821,7 @@ type scoreConfigReq struct {
 // A CATEGORICAL rubric with no categories is 400, as is a non-finite bound or a
 // minValue above maxValue. Requires a validated principal; 403 without one.
 func (s *service) createScoreConfig(ctx context.Context, in *scoreConfigReq) (*scoreConfigView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -891,10 +849,7 @@ func (s *service) createScoreConfig(ctx context.Context, in *scoreConfigReq) (*s
 	if dt == "CATEGORICAL" && len(cats) == 0 {
 		return nil, zip.ErrBadRequest("CATEGORICAL config requires at least one category")
 	}
-	id, err := genID("sc")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("sc")
 	cfg, err := s.store.UpsertScoreConfig(ctx, ScoreConfig{
 		ID: id, Org: org, Name: name, DataType: dt,
 		MinValue: in.MinValue, MaxValue: in.MaxValue, Categories: cats,
@@ -913,7 +868,7 @@ func (s *service) createScoreConfig(ctx context.Context, in *scoreConfigReq) (*s
 // Requires a validated principal; 403 without one, and the listing is filtered on
 // the validated org.
 func (s *service) listScoreConfigs(ctx context.Context, in *page) (*scoreConfigList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -973,7 +928,7 @@ type scoreReq struct {
 // Requires a validated principal; 403 without one, and the org is stamped from
 // the validated claim rather than read off the body.
 func (s *service) createScore(ctx context.Context, in *scoreReq) (*scoreView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1026,10 +981,7 @@ func (s *service) validateScore(ctx context.Context, org, name string, body scor
 		Dataset: strings.TrimSpace(body.Dataset), ItemID: strings.TrimSpace(body.ItemID),
 		Comment: truncate(body.Comment, maxComment),
 	}
-	id, err := genID("score")
-	if err != nil {
-		return ScoreEvent{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("score")
 	ev.ID = id
 
 	switch dt {
@@ -1100,7 +1052,7 @@ type traceFilter struct {
 // datastore, so a deployment with none wired answers 503 rather than an empty
 // page that would read as "no scores".
 func (s *service) listScores(ctx context.Context, in *scoreFilter) (*scoreList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1133,7 +1085,7 @@ func (s *service) listScores(ctx context.Context, in *scoreFilter) (*scoreList, 
 // principal; 403 without one. Traces live in the datastore, so a deployment with
 // none wired answers 503 rather than an empty page.
 func (s *service) listTraces(ctx context.Context, in *traceFilter) (*traceList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1304,7 +1256,7 @@ type runs struct {
 // produces, so a deployment with no datastore wired is 503 up front. Requires a
 // validated principal; 403 without one.
 func (s *service) runHandler(ctx context.Context, in *runRequest) (*runSummary, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1390,14 +1342,13 @@ func (s *service) runHandler(ctx context.Context, in *runRequest) (*runSummary, 
 
 	// Persist the durable run record (metastore), best-effort — a metastore write
 	// failure is logged, never masks the run result.
-	if id, gerr := genID("run"); gerr == nil {
-		if _, uerr := s.store.UpsertRun(ctx, DatasetRun{
-			ID: id, Org: org, Dataset: in.Dataset, Name: runName, Model: in.Model,
-			JudgeModel: judge.Model, Items: summary.Items, Scored: summary.Scored,
-			AvgScore: summary.AvgScore, UpdatedAt: time.Now().Unix(),
-		}); uerr != nil {
-			s.log.Warn("run record not persisted", "run", runName, "err", uerr)
-		}
+	id := mint.ID("run")
+	if _, uerr := s.store.UpsertRun(ctx, DatasetRun{
+		ID: id, Org: org, Dataset: in.Dataset, Name: runName, Model: in.Model,
+		JudgeModel: judge.Model, Items: summary.Items, Scored: summary.Scored,
+		AvgScore: summary.AvgScore, UpdatedAt: time.Now().Unix(),
+	}); uerr != nil {
+		s.log.Warn("run record not persisted", "run", runName, "err", uerr)
 	}
 	return &summary, nil
 }
@@ -1450,7 +1401,7 @@ func (s *service) runItem(ctx context.Context, org, authz, runName, model string
 	}
 	res.Score = score
 	if s.tel != nil {
-		id, _ := genID("score")
+		id := mint.ID("score")
 		if err := s.tel.RecordScore(ctx, ScoreEvent{
 			ID: id, Org: org, Name: judge.Name, TraceID: traceID, RunName: runName,
 			Dataset: it.Dataset, ItemID: it.ID, DataType: "NUMERIC", Value: score,
@@ -1472,7 +1423,7 @@ func (s *service) runItem(ctx context.Context, org, authz, runName, model string
 // so they are readable on a deployment with no telemetry wired — but a run's
 // traces and scores are not.
 func (s *service) listRuns(ctx context.Context, in *runFilter) (*runs, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1681,15 +1632,6 @@ func normalizeJudge(j *judgeSpec, model string) judgeSpec {
 		}
 	}
 	return out
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // genUUID returns a v4 UUID (trace ids follow the OTel trace-id shape).

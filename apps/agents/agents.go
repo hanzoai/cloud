@@ -35,8 +35,6 @@ package agents
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	mrand "math/rand/v2"
@@ -52,6 +50,7 @@ import (
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
@@ -576,10 +575,7 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 				"long-running agent limit reached for this org (max %d)", longRunningCap())
 		}
 	}
-	id, err := genID("agent")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("agent")
 	now := time.Now().Unix()
 	a := Agent{
 		ID: id, Org: org, Name: name, Model: model, Instructions: body.Instructions,
@@ -928,7 +924,7 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input strin
 	// round by round. The id existed only on the record of a thing that was
 	// already over. Minting it here is what lets one value be on the span, on the
 	// row and on the money, which is the whole of "drill into this run".
-	id, _ := genID("run")
+	id := mint.ID("run")
 
 	// hanzo.org, not a name of this package's own, because the TRACE PLANE reads
 	// exactly this key: apps/o11y/planesink.go planeOrg files each row under
@@ -1611,14 +1607,6 @@ func cleanList(xs []string) []string {
 		}
 	}
 	return out
-}
-
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // Shutdown stops the scheduler (draining in-flight runs, bounded by ctx) and

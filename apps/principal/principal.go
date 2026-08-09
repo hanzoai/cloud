@@ -247,22 +247,39 @@ func OrgFrom(ctx context.Context) (string, bool) {
 //
 // The doc at the top of this package promises the trust decision "lives once and
 // can never drift between six hand-rolled copies". It had drifted into
-// thirty-three: every org-scoped op wrapped OrgFrom in the same five lines, under
-// two names, and the copies disagreed about what to TELL the caller — nine
-// different refusals for one condition, so the explanation a client got depended
-// on which app it happened to reach.
+// thirty-seven: every org-scoped op wrapped OrgFrom in the same five lines, under
+// two names, and they gave NINE different refusals for one call — so what a client
+// was told depended on which app it reached.
 //
-// The refusal names both halves of what OrgFrom decides, because either can be
-// what failed: a validated caller, and an org for it. "X-Org-Id required" was the
-// most common wording and the most misleading one — an off-gateway caller that
-// sends the header with no credential is refused by OrgOf's blank-user rule and
-// would read that as an instruction to send what it already sent.
+// The nine were not arbitrary, which is the useful part. OrgFrom answers ONE
+// question by collapsing TWO, and each author described whichever half they had in
+// mind: some said "a validated principal is required", others "X-Org-Id required".
+// Both halves are refused here and each is NAMED, so the answer says which it was:
+//
+//   - nobody attested the caller — no credential, or none this process can read.
+//     The CLI's local invoke lands here too, since nothing parks a principal off
+//     the HTTP path.
+//   - the caller IS attested and still resolves no org — a machine token, or one
+//     minted before IAM's orgs claim, so there is no tenant to act for.
+//
+// "X-Org-Id required" was the most common wording and the most misleading, since a
+// caller sending that header with no credential is refused for the OTHER half and
+// would read it as an instruction to send what it already sent.
+//
+// THE STATUS IS 403 FOR BOTH, which is what thirty-six of the thirty-seven
+// answered. 401 is the better reading of the first half — we do not know who is
+// asking — and one surface (webhooks, whose whole contract is 401 on every route)
+// says so. Changing the other thirty-six would move an externally visible code for
+// every unauthenticated caller in the fleet, which is a decision about the API and
+// not a duplicate to delete, so it is left alone and left visible.
 func Acting(ctx context.Context) (string, error) {
-	org, ok := OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated org is required")
+	if org, ok := OrgFrom(ctx); ok {
+		return org, nil
 	}
-	return org, nil
+	if !ValidatedFrom(ctx) {
+		return "", zip.ErrForbidden("a validated principal is required")
+	}
+	return "", zip.ErrForbidden("an org scope is required")
 }
 
 // validatedKey names the slot the WEAKER fact crosses the same seam in.

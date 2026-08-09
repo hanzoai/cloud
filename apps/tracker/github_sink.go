@@ -9,6 +9,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // github_sink.go implements cloud.IssueSink: it mirrors an external work item (today
@@ -87,10 +88,7 @@ func upsertIssue(ctx context.Context, in cloud.IssueUpsert) (cloud.IssueUpsertRe
 	if !errors.Is(err, errNotFound) {
 		return cloud.IssueUpsertResult{}, err
 	}
-	id, err := genID("issue")
-	if err != nil {
-		return cloud.IssueUpsertResult{}, err
-	}
+	id := mint.ID("issue")
 	created, err := store.CreateIssue(ctx, Issue{
 		ID: id, ProjectID: p.ID, Org: org,
 		Kind: normKindDefault(in.Kind), Source: "git",
@@ -121,10 +119,7 @@ func ensureProject(ctx context.Context, store *Store, org, key, name string) (Pr
 	if name == "" {
 		name = "GitHub"
 	}
-	id, err := genID("prj")
-	if err != nil {
-		return Project{}, err
-	}
+	id := mint.ID("prj")
 	now := time.Now().Unix()
 	p := Project{ID: id, Org: org, Key: key, Name: clampStr(name, maxField),
 		Description: "Mirrored external issues.", CreatedAt: now, UpdatedAt: now}

@@ -2,6 +2,7 @@ package content
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -205,7 +206,7 @@ func (g *aiStudioGenerator) persistOrLink(ctx context.Context, org, design strin
 	if g.vfs == nil || len(img.bytes) == 0 {
 		return viewURL
 	}
-	key := fmt.Sprintf("orgs/%s/output/%s/%s", pathSeg(org), pathSeg(firstNonEmpty(design, "asset")), pathSeg(img.Filename))
+	key := fmt.Sprintf("orgs/%s/output/%s/%s", pathSeg(org), pathSeg(cmp.Or(strings.TrimSpace(design), "asset")), pathSeg(img.Filename))
 	if err := g.vfs.Put(ctx, key, img.bytes); err != nil {
 		g.log.Warn("asset blob store failed (linking studio view instead)", "org", org, "key", key, "err", err)
 		return viewURL
@@ -356,7 +357,7 @@ func (c *studioClient) view(ctx context.Context, img studioImage) ([]byte, error
 
 // viewURL is the canonical /view URL for a rendered output.
 func (c *studioClient) viewURL(img studioImage) string {
-	q := url.Values{"filename": {img.Filename}, "type": {firstNonEmpty(img.Type, "output")}}
+	q := url.Values{"filename": {img.Filename}, "type": {cmp.Or(strings.TrimSpace(img.Type), "output")}}
 	if img.Subfolder != "" {
 		q.Set("subfolder", img.Subfolder)
 	}
@@ -391,7 +392,7 @@ func buildQwenEditGraph(source, positive, negative string, seed int64, filenameP
 	// slug through the same last-line guard as blob keys so a traversal slug (when an
 	// explicit source_media bypasses the source-path validation) cannot escape the
 	// studio's output dir.
-	filenamePrefix = pathSeg(firstNonEmpty(strings.TrimSpace(filenamePrefix), "content"))
+	filenamePrefix = pathSeg(cmp.Or(strings.TrimSpace(filenamePrefix), "content"))
 	return map[string]any{
 		"1": node("CLIPLoader", map[string]any{"clip_name": studioCLIP, "type": "qwen_image", "device": "default"}),
 		"2": node("VAELoader", map[string]any{"vae_name": studioVAE}),

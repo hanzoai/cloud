@@ -15,6 +15,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"crypto/subtle"
 	"net/http"
@@ -372,7 +373,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 		return startRelease(s, ctx, req)
 	}
 
-	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
+	ref := cmp.Or(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
 	if len(req.Binaries) > 0 {
 		return runnerArtifactBuild(s, ctx, c, req, ref, viaIAM)
 	}
@@ -420,10 +421,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 		}
 	}
 
-	bldID, err := genID("bld")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	bldID := genID("bld")
 
 	jobName, err := s.State.k8s.launchDirectBuild(ctx, platformBuildOrg, req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID, req.Args)
 	if err != nil {
@@ -433,7 +431,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 	// Record the build (org "platform" — a fabric-owned direct build, not
 	// tenant-scoped). Best-effort: a record miss must not fail a launched build.
 	now := time.Now().Unix()
-	b := Build{ID: bldID, Org: firstNonEmpty(buildOrg, platformBuildOrg), Status: "queued", Image: req.Image, JobName: jobName, CreatedAt: now, UpdatedAt: now}
+	b := Build{ID: bldID, Org: cmp.Or(buildOrg, platformBuildOrg), Status: "queued", Image: req.Image, JobName: jobName, CreatedAt: now, UpdatedAt: now}
 	if err := s.State.store.InsertBuild(ctx, b); err != nil {
 		s.Log.Warn("runner build record insert failed (build already launched)", "job", jobName, "err", err)
 	}
@@ -472,11 +470,11 @@ func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ct
 	// The publish path segment. Defaults to the pinned ref (a tag publishes at
 	// its tag, a commit at its sha — both immutable); a branch ref carries a '/'
 	// and would nest the layout, so it must be named explicitly.
-	tag := firstNonEmpty(strings.TrimSpace(req.Tag), ref)
+	tag := cmp.Or(strings.TrimSpace(req.Tag), ref)
 	if !artifactNameRE.MatchString(tag) {
 		return nil, zip.ErrBadRequest("tag must be a flat version/commit segment (set `tag` when building a branch)")
 	}
-	bucket := firstNonEmpty(strings.TrimSpace(req.Bucket), defaultArtifactBucket)
+	bucket := cmp.Or(strings.TrimSpace(req.Bucket), defaultArtifactBucket)
 	if !bucketRE.MatchString(bucket) {
 		return nil, zip.ErrBadRequest("bucket must be a valid object-store bucket name")
 	}
@@ -490,10 +488,7 @@ func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ct
 		}
 	}
 
-	bldID, err := genID("bld")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	bldID := genID("bld")
 	slug := repoSlug(repoURL)
 	base := artifactBase(bucket, slug, tag)
 	jobName, err := s.State.k8s.launchArtifactBuild(ctx, repoURL, ref, tag, base, artifactPutBase(bucket, slug, tag), req.Binaries, bldID)

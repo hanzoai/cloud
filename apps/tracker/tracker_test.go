@@ -10,6 +10,7 @@ import (
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -330,9 +331,6 @@ func TestCheckSchedule(t *testing.T) {
 
 func genMust(t *testing.T) string {
 	t.Helper()
-	id, err := genID("issue")
-	if err != nil {
-		t.Fatalf("genID: %v", err)
-	}
+	id := mint.ID("issue")
 	return id
 }

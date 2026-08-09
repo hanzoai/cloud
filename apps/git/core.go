@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // core.go is the transport-agnostic business logic for git's control plane —
@@ -66,10 +67,7 @@ func coreCreate(s *cloud.Service[state], ctx context.Context, org, headerProject
 		return repoView{}, badInput("description too large (max 4KiB)")
 	}
 
-	id, err := genID("repo")
-	if err != nil {
-		return repoView{}, fmt.Errorf("rng: %w", err)
-	}
+	id := mint.ID("repo")
 	now := time.Now().Unix()
 	r := Repo{
 		ID: id, Org: org, Project: project, Name: name,

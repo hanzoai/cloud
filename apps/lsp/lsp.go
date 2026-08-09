@@ -233,7 +233,7 @@ func (s *state) complete(ctx context.Context, in *Query) (*Answer, error) {
 // served work nobody can be billed for; the debit is after the answer so nothing
 // is charged for work that failed.
 func (s *state) query(ctx context.Context, in *Query, op string) (*Answer, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -407,18 +407,6 @@ func text(b []byte) bool {
 }
 
 // ── the identity seam ────────────────────────────────────────────────────────
-
-// tenant is the VALIDATED org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of Query. A Query field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. Fails closed off the HTTP path.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("valid principal required")
-	}
-	return org, nil
-}
 
 // as is the context a git-plane call rides: THIS request's principal, delegated
 // unchanged, so git answers for the caller's own authority and this package can

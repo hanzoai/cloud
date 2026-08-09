@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -118,11 +119,7 @@ func TestSessionEventSeqConcurrent(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func(i int) {
 			defer wg.Done()
-			id, err := genID("evt")
-			if err != nil {
-				errs[i] = err
-				return
-			}
+			id := mint.ID("evt")
 			e, err := s.AppendEvent(ctx, Event{
 				ID: id, SessionID: "root", Org: "acme", Kind: KindLog,
 				CreatedAt: time.Now().Unix(),
@@ -157,10 +154,7 @@ func TestSessionEventSeqConcurrent(t *testing.T) {
 
 func genIDMust(t *testing.T) string {
 	t.Helper()
-	id, err := genID("evt")
-	if err != nil {
-		t.Fatalf("genID: %v", err)
-	}
+	id := mint.ID("evt")
 	return id
 }
 

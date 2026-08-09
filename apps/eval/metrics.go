@@ -9,6 +9,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -212,7 +213,7 @@ type boardQuery struct {
 // valid board with zero totals and a flat series rather than a fabricated number
 // or a 500. Requires a validated principal; 403 without one.
 func (s *service) metricsBoard(ctx context.Context, in *boardQuery) (*Board, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
