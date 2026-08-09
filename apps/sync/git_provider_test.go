@@ -69,32 +69,30 @@ func TestGitResolve(t *testing.T) {
 }
 
 // TestGitTokenFallback pins the credential preference order: the event token wins;
-// for github with no App connected (integrations unmounted here → InstallationToken
-// errors) it falls back to the shared GIT_MIRROR_TOKEN, then to anonymous — NEVER a
-// hard error (a public repo needs no credential, so the whole reconcile must not fail
-// just because the App is absent). A non-github provider gets no minted token.
+// everything else mints NOTHING here and returns no error (a public repo needs no
+// credential, so the whole reconcile must not fail because the App is absent).
+//
+// "Nothing" is not the same as anonymous. An empty token leaves the import with a zero
+// gitCred, and the git plane then resolves the credential for the source's OWN HOST.
+// This package used to name a second env var for that same secret and read it whole —
+// which stopped being the same secret when the credential became per-host, leaving a
+// private repo fetching anonymously while the comment claimed one path. The env var it
+// read is gone, and with it the second spelling.
 func TestGitTokenFallback(t *testing.T) {
 	ctx := context.Background()
 
-	// The event's own token always wins, regardless of provider/env.
-	t.Setenv(gitMirrorTokenEnv, "mirror-tok")
+	// The event's own token always wins.
 	if tok, err := gitToken(ctx, provGitHub, "acme", "", "event-tok"); err != nil || tok != "event-tok" {
 		t.Fatalf("event token must win, got (%q,%v)", tok, err)
 	}
 
-	// github + App not connected + GIT_MIRROR_TOKEN set → the shared mirror token.
-	if tok, err := gitToken(ctx, provGitHub, "acme", "", ""); err != nil || tok != "mirror-tok" {
-		t.Fatalf("github fallback want mirror-tok, got (%q,%v)", tok, err)
-	}
-
-	// github + App not connected + GIT_MIRROR_TOKEN unset → anonymous, NO error.
-	t.Setenv(gitMirrorTokenEnv, "")
+	// github, App not connected (integrations unmounted here, so InstallationToken
+	// errors) → nothing minted, no error. The git plane resolves per host from here.
 	if tok, err := gitToken(ctx, provGitHub, "acme", "", ""); err != nil || tok != "" {
-		t.Fatalf("github no-cred want anonymous (\"\",nil), got (%q,%v)", tok, err)
+		t.Fatalf("github with no App want (\"\",nil) so the git plane resolves it, got (%q,%v)", tok, err)
 	}
 
-	// A non-github provider mints nothing here (event-carried creds only).
-	t.Setenv(gitMirrorTokenEnv, "mirror-tok")
+	// A non-github provider mints nothing here either (event-carried creds only).
 	if tok, err := gitToken(ctx, provGitLab, "acme", "", ""); err != nil || tok != "" {
 		t.Fatalf("gitlab want no minted token, got (%q,%v)", tok, err)
 	}
