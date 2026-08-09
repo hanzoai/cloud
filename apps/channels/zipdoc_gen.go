@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/channels", zip.Doc{
-		Description: "Returns every chat transport channels can talk to — Discord, Slack, Teams\nand Telegram — with the caller org's own facts on each: whether it is\nconnected and to which account, what the transport supports, the org's DM and\ngroup access policies, and how many pairing requests are pending approval. The\norder is fixed, so a console can render the same rows every time. A policy that\ncannot be read leaves that channel's policy fields empty rather than failing\nthe whole listing.",
+		Description: "Reports every chat channel this org can send through, and whether it can\nsend through it right now.\n\nA channel appears here whether or not it is connected — an empty list would\nleave a caller unable to tell \"this org has no Slack\" from \"Slack is down\",\nwhich are different problems with different fixes. Each entry carries the\nconnection behind it, so the answer to \"why can I not post?\" is in the same\nresponse as the channel that cannot post.",
 		Fields: map[string]string{
 			"capabilities.actions":       "Actions is whether the transport renders an INTERACTIVE control natively, and\nit is the flag to read before composing one. The vocabulary is a closed\nkind-tagged union (envelope.go), exactly four kinds, each carrying only its\nown field plus an optional label:\n\n\tcommand  — a bot command to run (`command`), rendered as a button that\n\t           invokes it.\n\turl      — an external link (`url`), rendered as a link button.\n\tselect   — a menu (`options`, each a label and the value choosing it\n\t           returns), rendered as a picker.\n\tapproval — a reference to an approval request (`approval.id`), rendered as\n\t           approve/deny controls bound to that id.\n\nFalse on all four transports this pass, and nothing refuses a send for it:\nactions are accepted, validated per kind, and flattened by renderText to one\nline each after the text — `[label] command`, `[label] url`,\n`[label] opt | opt`, `[label] approval requested: <id>`. So a caller that\nneeds a real control must read this flag and degrade itself; a caller that\nonly needs the choice communicated can send actions and take the text form.",
 			"capabilities.dm":            "DM is whether the transport carries a DIRECT message at all. True for slack,\nteams and telegram. False for discord, honestly: that ingress is guild-scoped\nslash commands — an interaction without a guild id is refused at the door —\nso nothing ever arrives classified as a DM, no reply route is ever learned\nfor one, and a send addressed at a Discord DM is refused 409.",
@@ -83,6 +83,14 @@ func init() {
 			"ChannelsIngestIn.text":        "the prompt, mention stripped",
 			"ChannelsIngestIn.thread_id":   "thread to reply under, \"\" when unthreaded",
 			"ChannelsIngestIn.user":        "platform-verified user id",
+		},
+	})
+	zip.Describe("POST /channels/recent", zip.Doc{
+		Description: "Answers with the conversation, oldest first.\n\nThe ORG is the CALLER'S, read from the plane context and never an argument. It\ncan be, because a caller that reaches this op already knows the tenant — it\nresolved it from a signed team/guild/chat id before it could answer at all, and\nit states it on the run context it already builds. An org a caller could PASS is\nan org whose conversations any caller could read, and no amount of the plane\nbeing unreachable from the edge makes that a good shape.\n\nOrder is fixed HERE and not left to the caller. The store returns rows by id and\na reader needs them in the order they were said; a bridge that had to sort them\nitself is a bridge that will one day forget to, and a transcript in the wrong\norder is worse than none — it invents an exchange that never happened.",
+		Fields: map[string]string{
+			"RecentIn.channel": "Channel is the transport (slack, discord, telegram) and Room the id within\nit. Both are required: a room id is only unique inside its transport.",
+			"RecentIn.limit":   "Limit caps how many turns come back, newest last. Zero takes a sane default;\nthe owner clamps it, because an unbounded history is a prompt that costs more\nthan the answer.",
+			"Turn.sender":      "Sender is the platform user id, and Self marks the assistant's own turns so a\nreader can tell a question from its answer without parsing either.",
 		},
 	})
 	zip.Describe("POST /v1/channels/:channel/send", zip.Doc{
