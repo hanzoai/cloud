@@ -1,0 +1,285 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package web3 is the chain-access surface: which chains this deployment can reach, a JSON-RPC door onto each, and the two token reads every wallet UI needs.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "chains"
+    },
+    {
+      "name": "rpc"
+    },
+    {
+      "name": "tokens"
+    }
+  ],
+  "paths": {
+    "/v1/chains": {
+      "get": {
+        "operationId": "get_v1_chains",
+        "summary": "Reports the chains this deployment can reach.",
+        "description": "Reports the chains this deployment can reach. The list is the\ndeclared registry, so it is exactly what /v1/rpc will accept — a chain that\nappears here is one this deployment actually has an upstream for.",
+        "tags": [
+          "chains"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/chainList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/chains/{chain}": {
+      "get": {
+        "operationId": "get_v1_chains_by_chain",
+        "summary": "Reports one chain and whether its upstream is answering.",
+        "description": "Reports one chain and whether its upstream is answering. An\nunreachable chain is still a 200 with live:false — the chain is configured,\nwhich is a different fact from the chain being up, and a 502 here would make\na console page error rather than show the outage.",
+        "tags": [
+          "chains"
+        ],
+        "parameters": [
+          {
+            "name": "chain",
+            "in": "path",
+            "required": true,
+            "description": "Chain is the registry id, as in /v1/chains/lux.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/chainStatus"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/rpc/{chain}": {
+      "post": {
+        "operationId": "post_v1_rpc_by_chain",
+        "summary": "Forwards a JSON-RPC call to the named chain and returns its answer unchanged.",
+        "description": "Forwards a JSON-RPC call to the named chain and returns its answer\nunchanged. Only declared chains are reachable, and only to a caller with a\nvalidated principal — this is the deployment's upstream, not an open relay.",
+        "tags": [
+          "rpc"
+        ],
+        "parameters": [
+          {
+            "name": "chain",
+            "in": "path",
+            "required": true,
+            "description": "Chain is the registry id, from the URL.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/rpcIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/rpcOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/tokens/{chain}/{address}": {
+      "get": {
+        "operationId": "get_v1_tokens_by_chain_by_address",
+        "summary": "Reads an address's native balance on a chain.",
+        "description": "Reads an address's native balance on a chain.\n\nERC-20 positions are NOT enumerated here: eth_getBalance answers the native\none, but \"every token this address holds\" is an indexer question — there is no\nRPC call that answers it, and walking a token list would return a number that\nsilently omits whatever the list missed. explorer owns the indexer\nrelationship; this returns the balance the chain itself can prove.",
+        "tags": [
+          "tokens"
+        ],
+        "parameters": [
+          {
+            "name": "chain",
+            "in": "path",
+            "required": true,
+            "description": "Chain is the registry id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "description": "Address is the account, 0x-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/balances"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Chain": {
+        "properties": {
+          "chainId": {
+            "description": "ChainID is the EIP-155 id, so a caller can check it matches the wallet\nthey are about to sign with.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the URL name: the value of :chain.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is for humans.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "balances": {
+        "properties": {
+          "address": {
+            "description": "Address is the account they belong to.",
+            "type": "string"
+          },
+          "chain": {
+            "description": "Chain is the chain the balances were read from.",
+            "type": "string"
+          },
+          "native": {
+            "description": "Native is the chain's own currency, as a 0x-quantity — the RPC's own\nencoding, not a float, because a wei value does not survive float64.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "chainList": {
+        "properties": {
+          "chains": {
+            "description": "Chains is every chain this deployment is configured to reach, sorted by\nid. Empty when none are configured — never a fabricated entry.",
+            "items": {
+              "$ref": "#/components/schemas/Chain"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "chainStatus": {
+        "properties": {
+          "chainId": {
+            "type": "integer"
+          },
+          "height": {
+            "description": "Height is the latest block, omitted when the chain did not answer rather\nthan reported as zero — a zero height is a real value on a fresh chain.",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "live": {
+            "description": "Live is whether the upstream answered eth_blockNumber.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "rpcError": {
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "rpcIn": {
+        "properties": {
+          "chain": {
+            "description": "Chain is the registry id, from the URL.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is echoed back untouched."
+          },
+          "jsonrpc": {
+            "description": "JSONRPC must be \"2.0\" when present.",
+            "type": "string"
+          },
+          "method": {
+            "description": "Method is the RPC method, e.g. eth_getBalance.",
+            "type": "string"
+          },
+          "params": {
+            "description": "Params is the method's parameters, passed through unread."
+          }
+        },
+        "type": "object"
+      },
+      "rpcOut": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/rpcError"
+          },
+          "id": {},
+          "jsonrpc": {
+            "type": "string"
+          },
+          "result": {}
+        },
+        "type": "object"
+      }
+    }
+  }
+}
