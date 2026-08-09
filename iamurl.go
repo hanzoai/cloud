@@ -3,6 +3,8 @@ package cloud
 import (
 	"os"
 	"strings"
+
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // IAMBaseURL resolves the IAM base URL a SERVER-SIDE caller inside the cluster
@@ -63,7 +65,7 @@ func issuerFor(pinned, brandID string) string {
 // construction — see issuerFor. This form exists for the callers that have no
 // Config in hand.
 func IAMIssuer() string {
-	return issuerFor(os.Getenv("CLOUD_IAM_ISSUER"), getenv("CLOUD_BRAND", DefaultBrand))
+	return issuerFor(os.Getenv("CLOUD_IAM_ISSUER"), environ.Or("CLOUD_BRAND", DefaultBrand))
 }
 
 // IAMBase is IAMBaseURL against this deployment's OWN issuer — what a caller
