@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -58,18 +59,13 @@ func envFloat(k string, d float64) float64 {
 	}
 	return d
 }
-func engineRepo() string      { return envOr("DEPLOY_ENGINE_REPO", "https://github.com/hanzoai/universe") }
-func engineRef() string       { return envOr("DEPLOY_ENGINE_REF", "main") }
-func enginePath() string      { return envOr("DEPLOY_ENGINE_PATH", "infra/k8s/operator/crs") }
-func engineInstance() string  { return envOr("DEPLOY_ENGINE_INSTANCE", "universe") }
-func engineDefaultNS() string { return envOr("DEPLOY_ENGINE_NAMESPACE", "hanzo") }
-
-func envOr(k, d string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return d
+func engineRepo() string {
+	return environ.Or("DEPLOY_ENGINE_REPO", "https://github.com/hanzoai/universe")
 }
+func engineRef() string       { return environ.Or("DEPLOY_ENGINE_REF", "main") }
+func enginePath() string      { return environ.Or("DEPLOY_ENGINE_PATH", "infra/k8s/operator/crs") }
+func engineInstance() string  { return environ.Or("DEPLOY_ENGINE_INSTANCE", "universe") }
+func engineDefaultNS() string { return environ.Or("DEPLOY_ENGINE_NAMESPACE", "hanzo") }
 
 // registerEngineRoutes adds the engine (write) route alongside the existing
 // read/visualize routes. Called from routes() in deploy.go.

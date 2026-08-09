@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/brand"
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // The ONE resolution of the site-edge configuration.
@@ -29,9 +30,9 @@ import (
 // which made the deployment's own host a fact stated in two places, brand-blind
 // in both.
 func ConfigFromEnv(domain string) Config {
-	apex := env("CLOUD_SITES_APEX", "hanzo.app")
+	apex := environ.Or("CLOUD_SITES_APEX", "hanzo.app")
 	if domain = strings.TrimSpace(domain); domain == "" {
-		domain = env("CLOUD_DOMAIN", brand.APIHost(env("CLOUD_BRAND", brand.Default)))
+		domain = environ.Or("CLOUD_DOMAIN", brand.APIHost(environ.Or("CLOUD_BRAND", brand.Default)))
 	}
 	return Config{
 		Apex: apex,
@@ -52,9 +53,9 @@ func ConfigFromEnv(domain string) Config {
 		// CLOUD_DOMAIN and no deployment states it. A set whose job is to deny must
 		// not be expressible as a replacement.
 		SelfDomains:     append(selfFloor(apex, domain), list("CLOUD_SITES_SELF_DOMAINS")...),
-		FirstPartyApex:  env("CLOUD_SITES_FIRSTPARTY_APEX", "hanzo.ai"),
+		FirstPartyApex:  environ.Or("CLOUD_SITES_FIRSTPARTY_APEX", "hanzo.ai"),
 		FirstPartySites: list("CLOUD_SITES_FIRSTPARTY", "cd", "flow", "gallery"),
-		FirstPartyOrg:   env("CLOUD_SITES_FIRSTPARTY_ORG", "hanzo"),
+		FirstPartyOrg:   environ.Or("CLOUD_SITES_FIRSTPARTY_ORG", "hanzo"),
 	}
 }
 
@@ -89,14 +90,6 @@ func selfFloor(apex, domain string) []string {
 // lux.network, zoo.ngo) are all single-label suffixes, which is why nothing
 // noticed. brand.Apex is the same reduction platform and git need, done once.
 func registrableDomain(host string) string { return brand.Apex(host) }
-
-// env reads a non-blank environment value, else def.
-func env(k, def string) string {
-	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-		return v
-	}
-	return def
-}
 
 // list splits a comma-separated environment value, dropping blanks, else def.
 // Blanks MUST drop: an empty label is the apex itself, so a trailing comma would

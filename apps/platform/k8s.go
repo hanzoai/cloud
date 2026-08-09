@@ -28,6 +28,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/namespace"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -1065,9 +1066,9 @@ const cacheBucket = "buildcache"
 // hanzo-build ingress to the s3 service, set the endpoint, and the cache moves
 // with no code change. Until then the registry backend is what works.
 func cacheArgs(repo string) []string {
-	if ep := strings.TrimSpace(getenv("BUILD_CACHE_S3_ENDPOINT", "")); ep != "" {
-		common := "type=s3,bucket=" + getenv("BUILD_CACHE_S3_BUCKET", cacheBucket) +
-			",region=" + getenv("S3_REGION", "us-east-1") +
+	if ep := strings.TrimSpace(environ.Or("BUILD_CACHE_S3_ENDPOINT", "")); ep != "" {
+		common := "type=s3,bucket=" + environ.Or("BUILD_CACHE_S3_BUCKET", cacheBucket) +
+			",region=" + environ.Or("S3_REGION", "us-east-1") +
 			",endpoint_url=" + s3CacheEndpoint(ep) +
 			",use_path_style=true,name=" + cacheKey(repo)
 		// mode=min, for the reason spelled out on the registry branch below: max
@@ -1121,7 +1122,7 @@ func s3CacheEndpoint(ep string) string {
 	if strings.HasPrefix(ep, "http://") || strings.HasPrefix(ep, "https://") {
 		return ep
 	}
-	if strings.EqualFold(getenv("S3_ADMIN_SECURE", "false"), "true") {
+	if strings.EqualFold(environ.Or("S3_ADMIN_SECURE", "false"), "true") {
 		return "https://" + ep
 	}
 	return "http://" + ep

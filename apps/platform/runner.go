@@ -24,6 +24,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
@@ -248,7 +249,7 @@ func stripBearer(h string) string {
 // header) — the token path simply does not authorize, and the endpoint stays
 // available via the IAM path rather than ever accepting an empty credential.
 func runnerTokenOK(c *zip.Ctx) bool {
-	want := strings.TrimSpace(getenv("PLATFORM_BUILD_CALLBACK_TOKEN", ""))
+	want := strings.TrimSpace(environ.Or("PLATFORM_BUILD_CALLBACK_TOKEN", ""))
 	if want == "" {
 		return false
 	}

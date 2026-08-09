@@ -47,6 +47,7 @@ import (
 	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/internal/datadir"
 	"github.com/hanzoai/cloud/internal/edge"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/writerlease"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
@@ -63,8 +64,8 @@ func main() {
 	// completion longer than that (transport.go).
 	useLongPluginDeadline()
 
-	listen := flag.String("listen", getenv("CLOUD_LISTEN", ":8080"), "HTTP listen address")
-	zapAddr := flag.String("zap", getenv("CLOUD_ZAP_LISTEN", ":9653"), "ZAP-RPC listen address")
+	listen := flag.String("listen", environ.Or("CLOUD_LISTEN", ":8080"), "HTTP listen address")
+	zapAddr := flag.String("zap", environ.Or("CLOUD_ZAP_LISTEN", ":9653"), "ZAP-RPC listen address")
 	// The operator flags helm and universe pass to the ENTRYPOINT. The host
 	// consumes none of them itself — it is a router; it opens no store and
 	// validates no token — but the per-app CHILDREN read them from the environment
@@ -765,10 +766,3 @@ func childEnv(app, secret, rootKey string) []string {
 
 // enabled parses the subsystem allowlist. nil means every app, which is the
 // default and the shape a full deployment runs.
-
-func getenv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}

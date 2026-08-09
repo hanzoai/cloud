@@ -15,6 +15,7 @@ import (
 	"github.com/hanzoai/cloud/apps/domain/namecom"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/environ"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -112,15 +113,8 @@ func configFromEnv() Config {
 		Nameservers: nsEnv("HANZO_NAMESERVERS", []string{"ns1.hanzo.ai", "ns2.hanzo.ai"}),
 		// The registrar env is EXPLICIT and fail-safe: only "prod" hits the live,
 		// billable registrar; anything else (incl. unset) is the sandbox.
-		Env: envOr("NAMECOM_ENV", "test"),
+		Env: environ.Or("NAMECOM_ENV", "test"),
 	}
-}
-
-func envOr(key, def string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return def
 }
 
 func floatEnv(key string, def float64) float64 {
