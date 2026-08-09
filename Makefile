@@ -90,7 +90,7 @@ APP_BINS := $(addprefix bin/,$(APPS))
 # gate (check) sat behind a door with no handle.
 include mk/fleet.mk
 
-.PHONY: help deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run dev smoke zipdoc-check closure closure-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
+.PHONY: help deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe ramfs ramfs-check run dev smoke zipdoc-check closure closure-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
