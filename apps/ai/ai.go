@@ -18,6 +18,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	aimod "github.com/hanzoai/ai"
@@ -48,48 +49,60 @@ import (
 // itself, so nothing here has to say what is behind the door and nothing here can
 // be wrong about it.
 //
-// routers.App is the ai runtime's ONE router — every /v1 route registers on it
-// (routers/router.go) — and Patterns is its own accessor for the table, exported
-// there precisely so a caller can assert things about it from outside. Prose is
-// the second half: the sentence each of those routes owes a reader, lifted by
-// hanzoai/ai's own cmd/routerdoc from the doc comment on the handler the
-// registration names, because Go drops comments at compile time and a sentence
-// written anywhere else is a second source for one fact. Its own tests hold the
-// bijection — every route has a sentence, every sentence has a route — so a hole
-// there is red in the repo that can fix it.
+// routers.Document is what it hands over: ai's WHOLE surface as one OpenAPI
+// document, built there from its own live router and its own tables. Membership
+// is routers.App, the ai runtime's ONE router — every /v1 route registers on it —
+// so the addresses are the ones that answer. Prose is the doc comment on the
+// handler the registration names, lifted by hanzoai/ai's own cmd/routerdoc,
+// because Go drops comments at compile time and a sentence written anywhere else
+// is a second source for one fact. Bodies are the resource table's own
+// declaration, from the same rows that register the routes.
 //
-// Both are read out of the PINNED MODULE at describe time: no network, no vendored
-// copy, no second list, reproducible from a checkout and a go.mod. What that buys
-// is EXISTENCE, PLACEMENT, VERB, OPERATIONID and PROSE for every route ai serves.
-// What it does not buy is schemas: App.Router names a controller method and the
-// body types are read off the beego context inside the handler, never declared, so
-// there is nothing to reflect. That is per-operation typing work in hanzoai/ai, and
-// it is a different job from this one.
+// It is read out of the PINNED MODULE at describe time: no network, no vendored
+// copy, no second list, reproducible from a checkout and a go.mod.
+//
+// THE LIMIT, stated because it is easy to overstate what this buys. Two hundred
+// and thirty-eight of the operations now carry a real 2xx contract, and it is the
+// envelope — {status,msg,data,data2} — whose `data` is deliberately untyped: a
+// resource answers through that shape and what is inside depends on the operation.
+// Per-resource bodies, and bodies for the OpenAI-compatible half at all, are
+// per-operation typing work in hanzoai/ai where those handlers live. Declaring
+// them a second time here would be a second implementation of somebody else's
+// wire format, wrong the moment it disagreed.
 func init() {
-	door := openapi.Table("github.com/hanzoai/ai", "/v1", airouters.App.Patterns, aiProse)
-	// /v1 is a REMAINDER, not a namespace: this row is last in manifest.Apps, so
-	// what it answers is everything under /v1 no earlier app claimed. Fifteen of
-	// ai's own registrations are delivered to a sibling instead, and four of those
-	// 404 on api.hanzo.ai because the sibling does not serve them. The door reads
-	// which ones from the fleet's routing table rather than carrying a list beside
-	// it — manifest/router_test.go asks the real router the same question, so a
-	// wrong answer here is a red gate and not a shipped phantom.
-	door.Yields = manifest.Elsewhere("ai")
-	openapi.Front(door)
+	openapi.Front(openapi.Relay{
+		Source: "github.com/hanzoai/ai",
+		Prefix: "/v1",
+		// /v1 is a REMAINDER, not a namespace: this row is last in manifest.Apps,
+		// so what it answers is everything under /v1 no earlier app claimed.
+		// Fifteen of ai's own registrations are delivered to a sibling instead, and
+		// four of those 404 on api.hanzo.ai because the sibling does not serve
+		// them. The door reads which ones from the fleet's routing table rather
+		// than carrying a list beside it — manifest/router_test.go asks the real
+		// router the same question, so a wrong answer here is a red gate and not a
+		// shipped phantom.
+		Yields: manifest.Elsewhere("ai"),
+		Behind: document,
+	})
 }
 
-// aiProse restates hanzoai/ai's own prose in this package's vocabulary. It is a
-// rename and nothing else: two repositories cannot share a struct without one
-// depending on the other's document type, and the door is the wrong place for that
-// coupling — hanzoai/ai must stay able to say what its routes do without importing
-// a fleet document format.
-func aiProse() map[string]openapi.Said {
-	said := airouters.Prose()
-	out := make(map[string]openapi.Said, len(said))
-	for key, d := range said {
-		out[key] = openapi.Said{Summary: d.Summary, Description: d.Description}
+// document is hanzoai/ai's own document, in this repo's type.
+//
+// It crosses as JSON because that is what an OpenAPI document is. Two
+// repositories cannot share a document type without one depending on the other's,
+// and the door is the wrong place for that coupling — hanzoai/ai must stay able to
+// describe itself without importing a fleet document format. openapi.Typed reads
+// zip's spec the same way for the same reason.
+func document() (*openapi.Document, error) {
+	raw, err := json.Marshal(airouters.Document())
+	if err != nil {
+		return nil, fmt.Errorf("encode the model API's document: %w", err)
 	}
-	return out
+	doc := &openapi.Document{}
+	if err := json.Unmarshal(raw, doc); err != nil {
+		return nil, fmt.Errorf("read the model API's document: %w", err)
+	}
+	return doc, nil
 }
 
 // installWebSearch closes the web-search seam over a meta-search function.
@@ -399,13 +412,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// static path over All("/v1/*") either way).
 	mountMCP(zapp)
 	// The door: ONE `app.All("/v1/*")` (hanzoai/ai mount.go) adapting the legacy
-	// beego ControllerRegister through zip.AdaptNetHTTP, so ai's ~200 real routes —
+	// router through zip.AdaptNetHTTP, so ai's ~200 real routes —
 	// /v1/chat/completions, /v1/models, /v1/messages and the rest — reach the wire
 	// through a single greedy wildcard.
 	//
 	// That is a routing fact, not a documentation one, and it stays: All has no typed
 	// registrar, a `{wildcard1}` segment cannot be a bound In field, and the adapter
-	// relays the beego handler's own status and Content-Type verbatim. What the door
+	// relays the handler's own status and Content-Type verbatim. What the door
 	// no longer costs is the DOCUMENT — the relay declared in this package's init
 	// projects routers.App's own table through it, so the published surface is ai's
 	// 192 paths rather than one wildcard. Typed request and response schemas for them
