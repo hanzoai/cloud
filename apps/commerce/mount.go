@@ -289,18 +289,31 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// fails below. Typed, so the probe is a published op like every other.
 	zip.Get(zapp, "/_/commerce/healthz", health)
 
-	// /v1/commerce/org is NOT registered here, and that is the whole point of the
-	// mount: commerce serves its own public checkout surface, and this binary
-	// mounts it. Cloud registered a second copy of the address once, which zip
-	// refuses to build — two declarations of one route is not a route with a
-	// fallback, it is a program that cannot say what it serves.
+	// GET /v1/commerce/org — the public org projection the pay SPA reads on every
+	// boot — is COMMERCE'S, and is deliberately not re-declared here.
 	//
-	// The address itself is braided and comes apart upstream: it answers WHO THIS
-	// ORG IS (brand, IAM issuer, client id) and HOW CHECKOUT WORKS HERE (payment
-	// methods, return allowlist, public Square config) in one body. The first half
-	// is IAM's — hanzoai/iam is the one org authority — and commerce should ask it
-	// rather than keep a second answer. What stays commerce's is the checkout
-	// half, which nothing else knows.
+	// It used to be declared here, because commerce served that route only from
+	// its standalone router and the embed mounted the merchant table alone, so
+	// the one public route existed nowhere. That is no longer true: commerce
+	// registers it on the host's app (`public.Get("/org")`, commerce.go), and two
+	// declarations of one path is the one thing zip will not compose. It refuses
+	// the whole projection and panics — and because this plugin is LAZY, the
+	// panic lands on the first request rather than at boot, so the binary looks
+	// healthy while `/v1/commerce/*` is dead and every balance read answers 502.
+	// A funded account then reads $0.00, because the callers' documented
+	// fall-through lands on a ledger production does not fund.
+	//
+	// Commerce's is also the better of the two. Both concerns this copy existed
+	// to serve are handled there: it is on a group carrying only
+	// `forwardedHostMiddleware` — public, no `IAMTokenRequired`, so no deadlock —
+	// and its loader is cached 60s with a 2s deadline that fails to a MISS, which
+	// is the fix for the pool exhaustion at commerce 1.42.44 that motivated the
+	// `NewOrgResolver(nil)` here. That nil loader ALWAYS misses, so this copy
+	// could only ever answer with the synthetic default, never a real org; and it
+	// read the ingress-rewritten host, which `forwardedHostMiddleware` corrects.
+	//
+	// If it ever needs to come back, it comes back as one declaration — inject
+	// the resolver into the embed, do not add a second route.
 
 	// commerce persists its per-org SQLite + `base` tree under <DataDir>/commerce,
 	// NEVER at DataDir directly: cloud already owns DataDir/orgs and DataDir/base,
