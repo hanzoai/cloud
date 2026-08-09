@@ -67,6 +67,7 @@
 package account
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -765,7 +766,7 @@ func resolveOnboardName(s *cloud.Service[state], body onboardReq, cr caller) (ba
 	if body.Personal {
 		baseSlug = personalOrgSlug(cr.name)
 		if len(baseSlug) < minOrgSlug || isReservedOrg(baseSlug) {
-			baseSlug = "org-" + firstNonEmpty(slugifyOrg(cr.name), "workspace")
+			baseSlug = "org-" + cmp.Or(slugifyOrg(cr.name), "workspace")
 		}
 		return baseSlug, humanize(cr.name), nil
 	}
@@ -878,15 +879,6 @@ func humanize(username string) string {
 		parts[i] = strings.ToUpper(p[:1]) + p[1:]
 	}
 	return strings.Join(parts, " ")
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func getenv(key, dflt string) string {
