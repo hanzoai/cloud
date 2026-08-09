@@ -36,6 +36,8 @@ var typedOps = []string{
 	"GET /v1/integrations/:provider",
 	"GET /v1/integrations/github/installations",
 	"GET /v1/integrations/github/repos",
+	"POST /v1/integrations/github/search",
+	"POST /v1/integrations/github/fork",
 	"GET /v1/integrations/github/repos/:repo/pages",
 	"POST /v1/integrations/:provider/connect",
 	"POST /v1/integrations/:provider/disconnect",
