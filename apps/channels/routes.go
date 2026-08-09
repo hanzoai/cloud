@@ -368,6 +368,14 @@ func askConnection(ctx context.Context, provider string) plane.Connection {
 	return *out
 }
 
+// list reports every chat channel this org can send through, and whether it can
+// send through it right now.
+//
+// A channel appears here whether or not it is connected — an empty list would
+// leave a caller unable to tell "this org has no Slack" from "Slack is down",
+// which are different problems with different fixes. Each entry carries the
+// connection behind it, so the answer to "why can I not post?" is in the same
+// response as the channel that cannot post.
 func (o ops) list(ctx context.Context, _ *noInput) (*chatChannels, error) {
 	s := o.s
 	org, err := tenant(ctx)

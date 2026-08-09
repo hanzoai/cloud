@@ -19,8 +19,8 @@
     "/v1/channels": {
       "get": {
         "operationId": "get_v1_channels",
-        "summary": "Returns every chat transport channels can talk to — Discord, Slack, Teams and Telegram — with the caller org's own facts on each: whether it is connected and to which account, what the transport supports, the org's DM and group access policies, and how many pairing requests are pending approval.",
-        "description": "Returns every chat transport channels can talk to — Discord, Slack, Teams\nand Telegram — with the caller org's own facts on each: whether it is\nconnected and to which account, what the transport supports, the org's DM and\ngroup access policies, and how many pairing requests are pending approval. The\norder is fixed, so a console can render the same rows every time. A policy that\ncannot be read leaves that channel's policy fields empty rather than failing\nthe whole listing.",
+        "summary": "Reports every chat channel this org can send through, and whether it can send through it right now.",
+        "description": "Reports every chat channel this org can send through, and whether it can\nsend through it right now.\n\nA channel appears here whether or not it is connected — an empty list would\nleave a caller unable to tell \"this org has no Slack\" from \"Slack is down\",\nwhich are different problems with different fixes. Each entry carries the\nconnection behind it, so the answer to \"why can I not post?\" is in the same\nresponse as the channel that cannot post.",
         "tags": [
           "channels"
         ],
