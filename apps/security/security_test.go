@@ -25,6 +25,10 @@ var testCfg = zip.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// cloud.Bridge parks the validated org, the project and the request a typed op
+	// reads off its context. The composer installs it once at the root in
+	// production (serve.go); this test composes the same way.
+	app.Use(cloud.Bridge())
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -66,7 +70,7 @@ func TestSubmitScanFindsAndRedacts(t *testing.T) {
 	secret := "AKIAIOSFODNN7EXAMPLE"
 
 	code, body := do(t, app, http.MethodPost, "/v1/security/scans", "acme", submitReq{
-		Files: []fileInput{{Path: "config.py", Content: "aws_key = \"" + secret + "\"\nok = 1"}},
+		Files: []scan{{Path: "config.py", Content: "aws_key = \"" + secret + "\"\nok = 1"}},
 	})
 	if code != http.StatusCreated {
 		t.Fatalf("submit want 201, got %d (%s)", code, body)
@@ -110,7 +114,7 @@ func TestTenantIsolation(t *testing.T) {
 	app := mountApp(t)
 
 	code, body := do(t, app, http.MethodPost, "/v1/security/scans", "acme", submitReq{
-		Files: []fileInput{{Path: "a.py", Content: `k = "AKIAIOSFODNN7EXAMPLE"`}},
+		Files: []scan{{Path: "a.py", Content: `k = "AKIAIOSFODNN7EXAMPLE"`}},
 	})
 	if code != http.StatusCreated {
 		t.Fatalf("acme submit want 201, got %d (%s)", code, body)
@@ -155,7 +159,7 @@ func TestNoPrincipalIsForbidden(t *testing.T) {
 		}
 	}
 	if code, _ := do(t, app, http.MethodPost, "/v1/security/scans", "",
-		submitReq{Files: []fileInput{{Path: "x", Content: "y"}}}); code != http.StatusForbidden {
+		submitReq{Files: []scan{{Path: "x", Content: "y"}}}); code != http.StatusForbidden {
 		t.Fatalf("submit no-principal want 403, got %d", code)
 	}
 }
@@ -166,7 +170,7 @@ func TestFindingsSeverityFilter(t *testing.T) {
 	// A critical (aws key) and a medium (jwt) in one scan.
 	content := "k = \"AKIAIOSFODNN7EXAMPLE\"\nt = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhYmMifQ.SGVsbG9TaWduYXR1cmU"
 	if code, body := do(t, app, http.MethodPost, "/v1/security/scans", "acme",
-		submitReq{Files: []fileInput{{Path: "m.txt", Content: content}}}); code != http.StatusCreated {
+		submitReq{Files: []scan{{Path: "m.txt", Content: content}}}); code != http.StatusCreated {
 		t.Fatalf("submit want 201, got %d (%s)", code, body)
 	}
 
@@ -224,7 +228,7 @@ func TestValidationAndOpenRoutes(t *testing.T) {
 func TestCleanScanZeroFindings(t *testing.T) {
 	app := mountApp(t)
 	code, body := do(t, app, http.MethodPost, "/v1/security/scans", "acme",
-		submitReq{Files: []fileInput{{Path: "clean.go", Content: "package main\nfunc main(){}"}}})
+		submitReq{Files: []scan{{Path: "clean.go", Content: "package main\nfunc main(){}"}}})
 	if code != http.StatusCreated {
 		t.Fatalf("clean submit want 201, got %d (%s)", code, body)
 	}

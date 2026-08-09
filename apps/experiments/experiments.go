@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"strconv"
+
 	"strings"
 	"time"
 
@@ -20,7 +20,6 @@ import (
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/research"
-	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -146,247 +145,219 @@ func Shutdown() error {
 	return mounted.stores.CloseAll()
 }
 
-func routes(app cloud.Router, s *cloud.Service[*state]) {
-	g := app.Group("/v1/experiments")
-	g.Get("/health", cloud.Handle(s, health)) // static before :id
-	app.Post("/v1/experiments", cloud.Handle(s, create))
-	app.Get("/v1/experiments", cloud.Handle(s, list))
-	g.Get("/:id", cloud.Handle(s, get))
-	g.Get("/:id/assign", cloud.Handle(s, assignRoute))
-	g.Post("/:id/analyze", cloud.Handle(s, analyzeRoute))
-	g.Post("/:id/decide", cloud.Handle(s, decideRoute))
-}
-
-// The prose for this surface, declared beside the wire fact above.
+// routes declares the seven ops of this surface, all typed: the input and the
+// answer are Go types, so the schema, the prose, the MCP tool, the CLI command
+// and every generated SDK method are projections of the handler itself.
 //
-// A typed op's prose is lifted from its handler's doc comment by zipdoc; every
-// route here is a raw cloud.Handle, so there is no typed op to lift from and
-// openapi.Describe is the seam. Without it these seven publish an operationId and
-// nothing else — an SDK method that cannot explain itself, an MCP tool with no
-// description, a CLI command with no help. Keyed by the fiber pattern verbatim, so
-// a description whose route is not in the router simply never renders and the
-// document still cannot disagree with the route table.
-func init() {
-	openapi.Describe("/v1/experiments/health", http.MethodGet,
-		"Whether the experiments subsystem is mounted and serving in this process.",
-		"Answers {\"ok\":true,\"subsystem\":\"experiments\"} unconditionally. It proves exactly "+
-			"one thing — that this binary registered the experiments routes and is dispatching "+
-			"them — and deliberately no more: it reads no principal, opens no per-org registry, "+
-			"and touches neither the flags engine nor the analytics plane, so a 200 here says "+
-			"nothing about whether a given tenant's store will open or whether an analysis can "+
-			"run. It is the only route on this surface that needs no org.\n\n"+
-			"The static path is registered ahead of the /:id read, so it always wins the "+
-			"first-match scan. `health` is a legal experiment id, which means an experiment "+
-			"created under that id can never be fetched by id — pick another.")
+// zipdoc lifts the doc comment off each op and its In/Out fields into
+// zipdoc_gen.go, which is the only way prose reaches the published registry: Go
+// drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+func routes(app cloud.Router, s *cloud.Service[*state]) {
+	o := ops{s: s}
+	za := cloud.ZipApp(app)
+	g := app.Group("/v1/experiments")
 
-	openapi.Describe("/v1/experiments", http.MethodPost,
-		"Create a controlled experiment and put its assignment flag live.",
-		"Registers the experiment AND writes its multivariate assignment flag, in that order, "+
-			"so the arms start bucketing subjects the moment this returns 201 — the flag is "+
-			"created active at 100% rollout, with each variant weighted as declared. There is no "+
-			"separate start call; creating IS starting.\n\n"+
-			"The body names the experiment (`id`, a slug that is claimed once), what it measures "+
-			"(`metricEvent`, required; `exposureEvent` defaults to the SDK's "+
-			"`$feature_flag_called` marker), the unit it assigns (`subjectKind`: user, org, "+
-			"session or audience — user by default), and at least two `variants`. A variant "+
-			"carries an opaque `payload` this primitive never interprets: a feature config, an "+
-			"ad-creative id, a subject line, a model id. Weights that are all zero become an even "+
-			"split; otherwise they must sum to 100. At most one variant may be flagged `control`; "+
-			"with none, the first arm is the baseline. `flagKey` defaults to `exp_<id>`.\n\n"+
-			"Requires a validated principal, and refuses without one. The org and project are "+
-			"taken from that principal and the creator is stamped from the credential — none of "+
-			"the three is a body field, so an experiment cannot be filed against another tenant. "+
-			"An id already used in this project is a conflict, never a silent overwrite: "+
-			"re-creating would stomp the assignment flag of a run in progress.\n\n"+
-			"It fails closed on the flag write. An experiment whose assignment flag does not "+
-			"exist would assign nobody, so if that write fails nothing is registered.")
-
-	openapi.Describe("/v1/experiments", http.MethodGet,
-		"Every experiment in the caller's org, with its variants, status and decision.",
-		"Returns {data, total} ordered by project then id. Scoped to the org resolved from the "+
-			"validated principal — a distinct org is a distinct physical store, so no query here "+
-			"can reach another tenant's rows — and further narrowed to the caller's project scope "+
-			"when the credential carries one. A principal with NO project scope sees the org's "+
-			"experiments across all of its projects, which is the answer a reader most often "+
-			"expects to be filtered and is not.\n\n"+
-			"Requires a validated principal; refuses without one rather than answering an empty "+
-			"list.")
-
-	openapi.Describe("/v1/experiments/:id", http.MethodGet,
-		"One experiment's definition and lifecycle: variants, weights, control arm, status and "+
-			"winner.",
-		"Reads the registry row only — the definition and the decision, never live measurements. "+
-			"Assignment lives in the flags plane and outcomes in analytics; this is the value that "+
-			"names both.\n\n"+
-			"Scoped to the caller's org and project from the validated principal, so another "+
-			"tenant's experiment of the same id is simply not found. An id that is not a legal "+
-			"slug is answered the same way, without a store read — the shape check and the "+
-			"existence check are one answer, so neither leaks the other.")
-
-	openapi.Describe("/v1/experiments/:id/assign", http.MethodGet,
-		"The variant one subject is bucketed into, and the payload that variant carries.",
-		"Evaluates the experiment's assignment flag for the `subject` in the query and answers "+
-			"{experiment, subject, variant, on, payload}. The bucketing is a deterministic hash of "+
-			"the subject, so the same subject gets the same arm on every call for as long as the "+
-			"flag definition is unchanged — and this is a pure READ: it records nothing. In "+
-			"particular it does NOT record an exposure. The caller's SDK must emit the "+
-			"experiment's exposure event itself, or the analysis has an empty denominator and "+
-			"every arm measures zero.\n\n"+
-			"`subject` is required. `props` may carry a JSON object of person properties for "+
-			"targeting; a `props` value that is not valid JSON is dropped silently rather than "+
-			"refused, so a malformed one changes the bucketing without saying so.\n\n"+
-			"An empty `variant` with `on` false is not an error — it means the flag returned "+
-			"nothing for this subject, so the subject is not enrolled. A flags engine that is "+
-			"unavailable refuses rather than defaulting to an arm. Requires a validated "+
-			"principal, and the experiment must exist in the caller's org and project.")
-
-	openapi.Describe("/v1/experiments/:id/analyze", http.MethodPost,
-		"Per-variant conversion, lift and statistical significance against the control arm.",
-		"Reads per-subject outcomes from the analytics plane over a window, folds them into "+
-			"per-variant samples, and returns each arm's exposed count, conversions, rate, lift "+
-			"versus control, two-proportion z, two-tailed p-value and whether it clears alpha. "+
-			"Arms with no data still appear with zero exposed, so the read is complete over the "+
-			"experiment's declared arms; the control arm sorts first. The pooled-variance "+
-			"estimator is used and the p-value is exact; a degenerate comparison (an empty arm, no "+
-			"variance) answers z 0 and p 1 — not significant, never an error.\n\n"+
-			"The window is `start`/`end` in RFC3339 if given, otherwise the last `days` (1 to 365, "+
-			"30 by default) up to now. `alpha` overrides the 0.05 two-tailed threshold when it "+
-			"lies strictly between 0 and 1; anything else leaves the default in place.\n\n"+
-			"Only EXPOSED subjects are counted, and each is joined to its arm by re-evaluating "+
-			"the assignment flag AT ANALYSIS TIME — not from what was in force during the window. "+
-			"That is the one rule to get right: analyzing an experiment after its winner has been "+
-			"promoted re-buckets every subject into the promoted arm, collapsing the control to "+
-			"zero exposed and making the result meaningless. Read the analysis before deciding. A "+
-			"subject the flag cannot place is dropped rather than allowed to poison the fold.\n\n"+
-			"`winner` in the response is ADVISORY — the significant, control-beating arm with the "+
-			"highest rate, or empty when inconclusive. It promotes nothing; the decision is a "+
-			"separate, explicit act.\n\n"+
-			"Every plane read is scoped to the caller's org. Per-variant samples are also written "+
-			"to the research evidence plane as immutable `ab` rows, best-effort: the analysis is "+
-			"still returned if that write fails, because the samples are recomputable, and the "+
-			"failure is logged rather than swallowed.")
-
-	openapi.Describe("/v1/experiments/:id/decide", http.MethodPost,
-		"Promote one variant to the whole rollout and record who decided.",
-		"Rewrites the assignment flag so the named `winner` serves 100% of the rollout and every "+
-			"other arm 0%, preserving the flag's targeting groups and payloads, then stamps the "+
-			"experiment decided with the winner, the deciding credential and the time. This is a "+
-			"production behaviour change that takes effect immediately for every subject the flag "+
-			"evaluates.\n\n"+
-			"Requires an ORG ADMIN of the caller's own org — a stricter gate than the rest of "+
-			"this surface, matching the flags write plane, because promoting is a flag write. The "+
-			"admin check runs AFTER the experiment is found, so a caller from another tenant is "+
-			"answered not-found rather than forbidden and learns nothing about what exists.\n\n"+
-			"`winner` is required and must name one of the experiment's own variants. An "+
-			"experiment whose assignment flag has gone missing is a conflict rather than a silent "+
-			"no-op — there is nothing to promote.\n\n"+
-			"Deciding is NOT terminal. A second call re-promotes a different variant and "+
-			"re-stamps the row; the status stays decided and the previous winner is overwritten "+
-			"with no record that it was ever chosen. Nothing here reverts the flag to its original "+
-			"weights either, so an experiment cannot be un-decided through this route — restoring "+
-			"a split means writing the flag definition back through the flags plane.")
+	zip.Get(g, "/health", o.health) // static before :id
+	zip.Post(za, "/v1/experiments", o.create, zip.WithStatus(http.StatusCreated))
+	zip.Get(za, "/v1/experiments", o.list)
+	zip.Get(g, "/:id", o.get)
+	zip.Get(g, "/:id/assign", o.assign)
+	zip.Post(g, "/:id/analyze", o.analyze)
+	zip.Post(g, "/:id/decide", o.decide)
 }
 
-// tenant resolves the org (the isolation KEY) from the validated principal and the
-// project sub-scope — the ONE place tenant identity is derived, never a client field.
-func tenant(c *zip.Ctx) (org, project string, ok bool) {
-	org, ok = principal.Org(c)
-	return org, principal.ProjectScope(c), ok
+// ops binds the service to the typed ops. A TypedHandler takes no service
+// parameter, so the service arrives as a RECEIVER and every op is a method value
+// — also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[*state] }
+
+// tenant resolves the org (the isolation KEY) and the project sub-scope from the
+// validated principal cloud.Bridge parked — the ONE place tenant identity is
+// derived, never a client field. Fails closed: no validated principal, no tenant.
+func tenant(ctx context.Context) (org, project string, err error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", "", zip.ErrForbidden("X-Org-Id required")
+	}
+	project = principal.ProjectFrom(ctx)
+	if principal.IsDefaultProject(project) {
+		project = ""
+	}
+	return org, project, nil
 }
 
-func health(s *cloud.Service[*state], c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]any{"ok": true, "subsystem": "experiments"})
+// actor is the credential's email — what a create or a decision is stamped with.
+// It needs the REQUEST rather than the tenant, because the identity lives in a
+// header principal.OrgFrom does not carry. Empty off the HTTP path.
+func actorOf(ctx context.Context) string {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return ""
+	}
+	return c.UserEmail()
+}
+
+// health is the answer to the liveness read.
+type health struct {
+	// OK is true whenever this route answers at all: reaching the handler IS the
+	// proof that the routes are registered and dispatching.
+	OK bool `json:"ok"`
+	// Subsystem names what answered, so a health response read out of context still
+	// says which surface it came from.
+	Subsystem string `json:"subsystem"`
+}
+
+// noIn is the input of an op that takes nothing: no body, no path parameter, no
+// query.
+type noIn struct{}
+
+// health is whether the experiments subsystem is mounted and serving in this
+// process.
+//
+// It answers unconditionally. It proves exactly one thing — that this binary
+// registered the experiments routes and is dispatching them — and deliberately no
+// more: it reads no principal, opens no per-org registry, and touches neither the
+// flags engine nor the analytics plane, so a 200 here says nothing about whether a
+// given tenant's store will open or whether an analysis can run. It is the only
+// route on this surface that needs no org.
+//
+// The static path is registered ahead of the /:id read, so it always wins the
+// first-match scan. "health" is a legal experiment id, which means an experiment
+// created under that id can never be fetched by id — pick another.
+func (o ops) health(ctx context.Context, _ *noIn) (*health, error) {
+	return &health{OK: true, Subsystem: "experiments"}, nil
 }
 
 // ── create ───────────────────────────────────────────────────────────────────
 
+// createBody declares a controlled experiment: what it measures, the unit it
+// assigns, and the arms it splits between.
 type createBody struct {
-	ID            string      `json:"id"`
-	Name          string      `json:"name"`
-	SubjectKind   SubjectKind `json:"subjectKind"`
-	FlagKey       string      `json:"flagKey"`
-	ExposureEvent string      `json:"exposureEvent"`
-	MetricEvent   string      `json:"metricEvent"`
-	Variants      []Variant   `json:"variants"`
+	// ID is the experiment's slug, claimed once per project. It must match
+	// [A-Za-z0-9][A-Za-z0-9._-]{0,127}.
+	ID string `json:"id" validate:"required"`
+	// Name is free text for a reader; the id is what addresses the experiment.
+	Name string `json:"name"`
+	// SubjectKind is the unit assigned and measured: user (the default), org,
+	// session or audience.
+	SubjectKind SubjectKind `json:"subjectKind"`
+	// FlagKey names the assignment flag this experiment writes, defaulting to
+	// exp_<id>. It must be a slug.
+	FlagKey string `json:"flagKey"`
+	// ExposureEvent is the event that marks a subject as enrolled — the analysis
+	// denominator — defaulting to the SDK's $feature_flag_called marker.
+	ExposureEvent string `json:"exposureEvent"`
+	// MetricEvent is the event that counts as a conversion — the analysis
+	// numerator.
+	MetricEvent string `json:"metricEvent" validate:"required"`
+	// Arms are the arms, at least two. Weights that are all zero become an
+	// even split; otherwise they must sum to 100, and at most one arm may be
+	// flagged control.
+	Arms []Arm `json:"variants" validate:"required"`
 }
 
-// create registers a new experiment: it writes the multivariate ASSIGNMENT flag
-// (flags.PutDef) then the registry row. Project + identity are server-stamped. Fails
-// closed if the flag write fails — an experiment with no assignment flag would assign
-// nothing.
-func create(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, project, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var body createBody
-	if err := c.Bind(&body); err != nil {
-		return zip.ErrBadRequest("invalid experiment body")
-	}
-	exp, err := normalize(body, project, c.UserEmail())
+// experimentRef addresses one of the caller's experiments.
+type experimentRef struct {
+	// ID is the experiment the URL names.
+	ID string `json:"id"`
+}
+
+// experimentList is the answer to an experiment listing.
+type experimentList struct {
+	// Data is the org's experiments, ordered by project then id.
+	Data []Trial `json:"data"`
+	// Total is how many rows Data holds.
+	Total int `json:"total"`
+}
+
+// create registers a controlled experiment AND puts its assignment flag live, in
+// that order, so the arms start bucketing subjects the moment this returns 201 —
+// the flag is created active at 100% rollout, with each variant weighted as
+// declared. There is no separate start call; creating IS starting.
+//
+// A variant carries an opaque payload this primitive never interprets: a feature
+// config, an ad-creative id, a subject line, a model id.
+//
+// Requires a validated principal, and refuses without one. The org and project are
+// taken from that principal and the creator is stamped from the credential — none
+// of the three is a body field, so an experiment cannot be filed against another
+// tenant. An id already used in this project is a conflict, never a silent
+// overwrite: re-creating would stomp the assignment flag of a run in progress.
+//
+// It fails closed on the flag write. An experiment whose assignment flag does not
+// exist would assign nobody, so if that write fails nothing is registered.
+func (o ops) create(ctx context.Context, in *createBody) (*Trial, error) {
+	org, project, err := tenant(ctx)
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, err
+	}
+	actor := actorOf(ctx)
+	exp, err := normalize(*in, project, actor)
+	if err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 
-	st, err := storeFor(s, org, project)
+	st, err := storeFor(o.s, org, project)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if _, found, err := st.get(c.Context(), project, exp.ID); err != nil {
-		return err
+	if _, found, err := st.get(ctx, project, exp.ID); err != nil {
+		return nil, err
 	} else if found {
-		return zip.Errorf(http.StatusConflict, "experiment %q already exists", exp.ID)
+		return nil, zip.Errorf(http.StatusConflict, "experiment %q already exists", exp.ID)
 	}
 
 	def, err := exp.flagDef()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := flags.PutDef(org, project, exp.FlagKey, def, c.UserEmail()); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "register assignment flag: %v", err)
+	if err := flags.PutDef(org, project, exp.FlagKey, def, actor); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "register assignment flag: %v", err)
 	}
-	if err := st.create(c.Context(), exp); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "create experiment: %v", err)
+	if err := st.create(ctx, exp); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "create experiment: %v", err)
 	}
-	return c.JSON(http.StatusCreated, exp)
+	return &exp, nil
 }
 
-// normalize validates + fills a create body into a stored Experiment. It is pure
+// normalize validates + fills a create body into a stored Trial. It is pure
 // (no I/O), so the create-validation tests drive it directly.
-func normalize(body createBody, project, actor string) (Experiment, error) {
+func normalize(body createBody, project, actor string) (Trial, error) {
 	id := strings.TrimSpace(body.ID)
 	if !slugRE.MatchString(id) {
-		return Experiment{}, fmt.Errorf("id must be a slug [A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+		return Trial{}, fmt.Errorf("id must be a slug [A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 	}
 	if strings.TrimSpace(body.MetricEvent) == "" {
-		return Experiment{}, fmt.Errorf("metricEvent is required")
+		return Trial{}, fmt.Errorf("metricEvent is required")
 	}
 	kind := body.SubjectKind
 	if kind == "" {
 		kind = SubjectUser
 	}
 	if !kind.valid() {
-		return Experiment{}, fmt.Errorf("subjectKind must be one of user|org|session|audience")
+		return Trial{}, fmt.Errorf("subjectKind must be one of user|org|session|audience")
 	}
-	if len(body.Variants) < 2 {
-		return Experiment{}, fmt.Errorf("an experiment needs at least 2 variants")
+	if len(body.Arms) < 2 {
+		return Trial{}, fmt.Errorf("an experiment needs at least 2 variants")
 	}
 	flagKey := strings.TrimSpace(body.FlagKey)
 	if flagKey == "" {
 		flagKey = "exp_" + id
 	}
 	if !slugRE.MatchString(flagKey) {
-		return Experiment{}, fmt.Errorf("flagKey must be a slug")
+		return Trial{}, fmt.Errorf("flagKey must be a slug")
 	}
-	variants, err := normalizeVariants(body.Variants)
+	variants, err := normalizeVariants(body.Arms)
 	if err != nil {
-		return Experiment{}, err
+		return Trial{}, err
 	}
 	exposure := strings.TrimSpace(body.ExposureEvent)
 	if exposure == "" {
 		exposure = defaultExposureEvent
 	}
-	return Experiment{
+	return Trial{
 		Project:       project,
 		ID:            id,
 		Name:          strings.TrimSpace(body.Name),
@@ -394,7 +365,7 @@ func normalize(body createBody, project, actor string) (Experiment, error) {
 		FlagKey:       flagKey,
 		ExposureEvent: exposure,
 		MetricEvent:   strings.TrimSpace(body.MetricEvent),
-		Variants:      variants,
+		Arms:          variants,
 		Status:        StatusRunning,
 		CreatedBy:     actor,
 		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
@@ -404,7 +375,7 @@ func normalize(body createBody, project, actor string) (Experiment, error) {
 // normalizeVariants validates variant keys (unique, slug-safe) and weights: all-zero
 // weights become an even split; otherwise the weights must sum to ~100. At most one
 // variant may be flagged control; when none is, the first arm is the baseline.
-func normalizeVariants(in []Variant) ([]Variant, error) {
+func normalizeVariants(in []Arm) ([]Arm, error) {
 	seen := map[string]bool{}
 	controls := 0
 	var sum float64
@@ -428,9 +399,9 @@ func normalizeVariants(in []Variant) ([]Variant, error) {
 	if controls > 1 {
 		return nil, fmt.Errorf("at most one variant may be the control")
 	}
-	out := make([]Variant, len(in))
+	out := make([]Arm, len(in))
 	for i, v := range in {
-		out[i] = Variant{Key: strings.TrimSpace(v.Key), Weight: v.Weight, Control: v.Control, Payload: v.Payload}
+		out[i] = Arm{Key: strings.TrimSpace(v.Key), Weight: v.Weight, Control: v.Control, Payload: v.Payload}
 	}
 	if sum == 0 {
 		even := round4(100.0 / float64(len(out)))
@@ -447,10 +418,10 @@ func normalizeVariants(in []Variant) ([]Variant, error) {
 // evaluator consumes: a 100%-rollout group (targeting is a follow-on) + the variants
 // as weighted multivariate arms + per-variant payloads. The variant KIND is
 // irrelevant here — the payload is opaque JSON.
-func (e Experiment) flagDef() (json.RawMessage, error) {
-	variants := make([]map[string]any, 0, len(e.Variants))
+func (e Trial) flagDef() (json.RawMessage, error) {
+	variants := make([]map[string]any, 0, len(e.Arms))
 	payloads := map[string]json.RawMessage{}
-	for _, v := range e.Variants {
+	for _, v := range e.Arms {
 		variants = append(variants, map[string]any{"key": v.Key, "rollout_percentage": v.Weight})
 		if len(v.Payload) > 0 {
 			payloads[v.Key] = v.Payload
@@ -470,93 +441,229 @@ func (e Experiment) flagDef() (json.RawMessage, error) {
 
 // ── read ─────────────────────────────────────────────────────────────────────
 
-func get(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, project, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	exp, found, err := loadExperiment(s, c.Context(), org, project, idParam(c))
+// get is one experiment's definition and lifecycle: variants, weights, control
+// arm, status and winner.
+//
+// It reads the registry row only — the definition and the decision, never live
+// measurements. Assignment lives in the flags plane and outcomes in analytics;
+// this is the value that names both.
+//
+// Scoped to the caller's org and project from the validated principal, so another
+// tenant's experiment of the same id is simply not found. An id that is not a
+// legal slug is answered the same way, without a store read — the shape check and
+// the existence check are one answer, so neither leaks the other.
+func (o ops) get(ctx context.Context, in *experimentRef) (*Trial, error) {
+	org, project, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	exp, found, err := loadExperiment(o.s, ctx, org, project, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, err
 	}
 	if !found {
-		return zip.ErrNotFound("experiment not found")
+		return nil, zip.ErrNotFound("experiment not found")
 	}
-	return c.JSON(http.StatusOK, exp)
+	return &exp, nil
 }
 
-func list(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, project, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	st, err := storeFor(s, org, project)
+// list is every experiment in the caller's org, with its variants, status and
+// decision, ordered by project then id.
+//
+// Scoped to the org resolved from the validated principal — a distinct org is a
+// distinct physical store, so no query here can reach another tenant's rows — and
+// further narrowed to the caller's project scope when the credential carries one.
+// A principal with NO project scope sees the org's experiments across all of its
+// projects, which is the answer a reader most often expects to be filtered and is
+// not.
+//
+// Requires a validated principal; refuses without one rather than answering an
+// empty list.
+func (o ops) list(ctx context.Context, _ *noIn) (*experimentList, error) {
+	org, project, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	exps, err := st.list(c.Context(), project)
+	st, err := storeFor(o.s, org, project)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": exps, "total": len(exps)})
+	exps, err := st.list(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	return &experimentList{Data: exps, Total: len(exps)}, nil
 }
 
 // ── assign (composes flags) ────────────────────────────────────────────────────
 
-func assignRoute(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, project, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	subject := strings.TrimSpace(c.Query("subject"))
-	if subject == "" {
-		return zip.ErrBadRequest("subject query parameter is required")
-	}
-	exp, found, err := loadExperiment(s, c.Context(), org, project, idParam(c))
+// assignQuery asks which arm one subject is bucketed into.
+type assignQuery struct {
+	// ID is the experiment the URL names.
+	ID string `json:"id"`
+	// Subject is the unit to bucket — a user, org, session or audience key,
+	// matching the experiment's subjectKind.
+	Subject string `json:"subject" validate:"required"`
+	// Props is a JSON object of person properties for targeting. A value that is
+	// not valid JSON is dropped rather than refused, so a malformed one changes
+	// the bucketing without saying so.
+	Props string `json:"props"`
+}
+
+// assignment is the arm one subject got, and what that arm carries.
+type assignment struct {
+	// Trial is the experiment that was evaluated.
+	Trial string `json:"experiment"`
+	// Subject is the unit that was bucketed.
+	Subject string `json:"subject"`
+	// Arm is the arm the subject falls in, empty when the flag enrolled it in
+	// none.
+	Arm string `json:"variant"`
+	// On is false when the flag returned nothing for this subject, which means the
+	// subject is not enrolled — not an error.
+	On bool `json:"on"`
+	// Payload is the opaque JSON the winning arm carries, which the caller
+	// interprets: a feature config, an ad-creative id, a subject line, a model id.
+	Payload json.RawMessage `json:"payload"`
+}
+
+// assign is the variant one subject is bucketed into, and the payload that
+// variant carries.
+//
+// The bucketing is a deterministic hash of the subject, so the same subject gets
+// the same arm on every call for as long as the flag definition is unchanged —
+// and this is a pure READ: it records nothing. In particular it does NOT record an
+// exposure. The caller's SDK must emit the experiment's exposure event itself, or
+// the analysis has an empty denominator and every arm measures zero.
+//
+// An empty variant with on false is not an error — it means the flag returned
+// nothing for this subject, so the subject is not enrolled. A flags engine that is
+// unavailable refuses rather than defaulting to an arm. Requires a validated
+// principal, and the experiment must exist in the caller's org and project.
+func (o ops) assign(ctx context.Context, in *assignQuery) (*assignment, error) {
+	org, project, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	subject := strings.TrimSpace(in.Subject)
+	if subject == "" {
+		return nil, zip.ErrBadRequest("subject query parameter is required")
+	}
+	exp, found, err := loadExperiment(o.s, ctx, org, project, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, err
 	}
 	if !found {
-		return zip.ErrNotFound("experiment not found")
+		return nil, zip.ErrNotFound("experiment not found")
 	}
 	var props json.RawMessage
-	if p := strings.TrimSpace(c.Query("props")); p != "" && json.Valid([]byte(p)) {
+	if p := strings.TrimSpace(in.Props); p != "" && json.Valid([]byte(p)) {
 		props = json.RawMessage(p)
 	}
 	a, err := flags.Assign(org, project, exp.FlagKey, subject, props)
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "assign: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "assign: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"experiment": exp.ID,
-		"subject":    subject,
-		"variant":    a.Variant,
-		"on":         a.On,
-		"payload":    a.Payload,
-	})
+	return &assignment{
+		Trial: exp.ID, Subject: subject,
+		Arm: a.Variant, On: a.On, Payload: a.Payload,
+	}, nil
 }
 
 // ── analyze (composes analytics + flags + research) ────────────────────────────
 
-func analyzeRoute(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, project, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	exp, found, err := loadExperiment(s, c.Context(), org, project, idParam(c))
+// analyzeQuery bounds an analysis: the window it reads and the significance
+// threshold it judges by.
+type analyzeQuery struct {
+	// ID is the experiment the URL names.
+	ID string `json:"id"`
+	// Start is the window's inclusive start in RFC3339. Given, it wins over days.
+	Start string `json:"start"`
+	// End is the window's exclusive end in RFC3339, defaulting to now.
+	End string `json:"end"`
+	// Days is how far back to read when no start is given: 1 to 365, 30 by
+	// default. A value outside that range leaves the default in place.
+	Days int `json:"days"`
+	// Alpha overrides the 0.05 two-tailed significance threshold when it lies
+	// strictly between 0 and 1; anything else leaves the default in place.
+	Alpha float64 `json:"alpha"`
+}
+
+// analyze is per-variant conversion, lift and statistical significance against
+// the control arm.
+//
+// It reads per-subject outcomes from the analytics plane over a window, folds them
+// into per-variant samples, and returns each arm's exposed count, conversions,
+// rate, lift versus control, two-proportion z, two-tailed p-value and whether it
+// clears alpha. Arms with no data still appear with zero exposed, so the read is
+// complete over the experiment's declared arms; the control arm sorts first. The
+// pooled-variance estimator is used and the p-value is exact; a degenerate
+// comparison (an empty arm, no variance) answers z 0 and p 1 — not significant,
+// never an error.
+//
+// Only EXPOSED subjects are counted, and each is joined to its arm by re-evaluating
+// the assignment flag AT ANALYSIS TIME — not from what was in force during the
+// window. That is the one rule to get right: analyzing an experiment after its
+// winner has been promoted re-buckets every subject into the promoted arm,
+// collapsing the control to zero exposed and making the result meaningless. Read
+// the analysis before deciding. A subject the flag cannot place is dropped rather
+// than allowed to poison the fold.
+//
+// The winner in the response is ADVISORY — the significant, control-beating arm
+// with the highest rate, or empty when inconclusive. It promotes nothing; the
+// decision is a separate, explicit act.
+//
+// Every plane read is scoped to the caller's org. Per-variant samples are also
+// written to the research evidence plane as immutable ab rows, best-effort: the
+// analysis is still returned if that write fails, because the samples are
+// recomputable, and the failure is logged rather than swallowed.
+func (o ops) analyze(ctx context.Context, in *analyzeQuery) (*Analysis, error) {
+	org, project, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	exp, found, err := loadExperiment(o.s, ctx, org, project, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, err
 	}
 	if !found {
-		return zip.ErrNotFound("experiment not found")
+		return nil, zip.ErrNotFound("experiment not found")
 	}
-	start, end := windowFrom(c)
-	alpha := alphaFrom(c)
-	res, err := runAnalyze(s.State, c.Context(), org, exp, start, end, alpha)
+	start, end := in.window()
+	res, err := runAnalyze(o.s.State, ctx, org, exp, start, end, in.alpha())
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "analyze: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "analyze: %v", err)
 	}
-	return c.JSON(http.StatusOK, res)
+	return &res, nil
+}
+
+// window resolves [start,end): explicit start/end (RFC3339) win, else the last
+// days (30 by default) up to now.
+func (q analyzeQuery) window() (time.Time, time.Time) {
+	end := time.Now().UTC()
+	if e := strings.TrimSpace(q.End); e != "" {
+		if t, err := time.Parse(time.RFC3339, e); err == nil {
+			end = t.UTC()
+		}
+	}
+	if s := strings.TrimSpace(q.Start); s != "" {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			return t.UTC(), end
+		}
+	}
+	days := defaultWindow
+	if q.Days > 0 && q.Days <= 365 {
+		days = time.Duration(q.Days) * 24 * time.Hour
+	}
+	return end.Add(-days), end
+}
+
+// alpha is the two-tailed significance threshold this analysis judges by.
+func (q analyzeQuery) alpha() float64 {
+	if q.Alpha > 0 && q.Alpha < 1 {
+		return q.Alpha
+	}
+	return defaultAlpha
 }
 
 // runAnalyze is the analysis composition: read per-subject outcomes from the
@@ -564,7 +671,7 @@ func analyzeRoute(s *cloud.Service[*state], c *zip.Ctx) error {
 // assignment, persist the per-variant samples to the research evidence plane, and
 // return the computed lift + significance. Pure statistics; impure only at the three
 // plane reads/writes, each org-scoped.
-func runAnalyze(st *state, ctx context.Context, org string, exp Experiment, start, end time.Time, alpha float64) (Analysis, error) {
+func runAnalyze(st *state, ctx context.Context, org string, exp Trial, start, end time.Time, alpha float64) (Analysis, error) {
 	outcomes, err := st.metric.Outcomes(ctx, org, exp.ExposureEvent, exp.MetricEvent, start, end)
 	if err != nil {
 		return Analysis{}, err
@@ -591,16 +698,16 @@ func runAnalyze(st *state, ctx context.Context, org string, exp Experiment, star
 	return analysis, nil
 }
 
-// evidenceRows maps an analysis into research Experiment rows — one per variant,
+// evidenceRows maps an analysis into research Trial rows — one per variant,
 // keyed <expID>:<variant>, kind "ab". value is the conversion rate, n the exposed
 // sample size; the pairwise stats (lift, z, p, significance) ride meta. The
 // experiment's own project scopes them so the org's R&D board groups them.
-func evidenceRows(exp Experiment, a Analysis, at time.Time) []research.Experiment {
-	rows := make([]research.Experiment, 0, len(a.Results))
-	for _, r := range a.Results {
+func evidenceRows(exp Trial, a Analysis, at time.Time) []research.Experiment {
+	rows := make([]research.Experiment, 0, len(a.Outcomes))
+	for _, r := range a.Outcomes {
 		meta, _ := json.Marshal(map[string]any{
 			"experiment":  exp.ID,
-			"variant":     r.Variant,
+			"variant":     r.Arm,
 			"control":     r.Control,
 			"converted":   r.Converted,
 			"lift":        r.Lift,
@@ -610,9 +717,9 @@ func evidenceRows(exp Experiment, a Analysis, at time.Time) []research.Experimen
 			"flagKey":     exp.FlagKey,
 		})
 		rows = append(rows, research.Experiment{
-			ID:      exp.ID + ":" + r.Variant,
+			ID:      exp.ID + ":" + r.Arm,
 			Kind:    evidenceKind,
-			Subject: r.Variant,
+			Subject: r.Arm,
 			Task:    exp.ID,
 			Metric:  exp.MetricEvent,
 			Value:   r.Rate,
@@ -627,68 +734,98 @@ func evidenceRows(exp Experiment, a Analysis, at time.Time) []research.Experimen
 
 // ── decide (composes flags) ────────────────────────────────────────────────────
 
+// decideBody promotes one arm to the whole rollout.
 type decideBody struct {
-	Winner string `json:"winner"`
+	// ID is the experiment the URL names.
+	ID string `json:"-" url:"id"`
+	// Winner is the variant to promote. It must name one of this experiment's own
+	// arms.
+	Winner string `json:"winner" validate:"required"`
 }
 
-// decideRoute promotes a winner: it rewrites the assignment flag so the winning
-// variant serves 100% of the rollout (others 0%), then records the decision. Same
-// authorization as any flag write (a validated principal in this org+project) — the
-// promotion IS a flag write.
-func decideRoute(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, project, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var body decideBody
-	if err := c.Bind(&body); err != nil {
-		return zip.ErrBadRequest("invalid decide body")
-	}
-	winner := strings.TrimSpace(body.Winner)
-	if winner == "" {
-		return zip.ErrBadRequest("winner is required")
-	}
-	exp, found, err := loadExperiment(s, c.Context(), org, project, idParam(c))
+// decide promotes one variant to the whole rollout and records who decided.
+//
+// It rewrites the assignment flag so the named winner serves 100% of the rollout
+// and every other arm 0%, preserving the flag's targeting groups and payloads,
+// then stamps the experiment decided with the winner, the deciding credential and
+// the time. This is a production behaviour change that takes effect immediately
+// for every subject the flag evaluates.
+//
+// It requires an ORG ADMIN of the caller's own org — a stricter gate than the rest
+// of this surface, matching the flags write plane, because promoting is a flag
+// write. The admin check runs AFTER the experiment is found, so a caller from
+// another tenant is answered not-found rather than forbidden and learns nothing
+// about what exists.
+//
+// An experiment whose assignment flag has gone missing is a conflict rather than a
+// silent no-op — there is nothing to promote.
+//
+// Deciding is NOT terminal. A second call re-promotes a different variant and
+// re-stamps the row; the status stays decided and the previous winner is
+// overwritten with no record that it was ever chosen. Nothing here reverts the
+// flag to its original weights either, so an experiment cannot be un-decided
+// through this route — restoring a split means writing the flag definition back
+// through the flags plane.
+func (o ops) decide(ctx context.Context, in *decideBody) (*Trial, error) {
+	org, project, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	winner := strings.TrimSpace(in.Winner)
+	if winner == "" {
+		return nil, zip.ErrBadRequest("winner is required")
+	}
+	exp, found, err := loadExperiment(o.s, ctx, org, project, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, err
 	}
 	if !found {
-		return zip.ErrNotFound("experiment not found")
+		return nil, zip.ErrNotFound("experiment not found")
 	}
 	// Promoting a winner rewrites the assignment flag to serve one variant to 100%
 	// of the org's users — a production behavior change. Gate on own-org admin
 	// (parity with the flags/connector write plane), after the found-check so a
 	// cross-tenant caller gets 404 (no existence leak) rather than 403.
-	if !principal.IsOrgAdmin(c) {
-		return zip.ErrForbidden("promoting an experiment winner requires org admin")
+	if !orgAdmin(ctx) {
+		return nil, zip.ErrForbidden("promoting an experiment winner requires org admin")
 	}
 	if !exp.hasVariant(winner) {
-		return zip.ErrBadRequest(fmt.Sprintf("winner %q is not a variant of this experiment", winner))
+		return nil, zip.ErrBadRequest(fmt.Sprintf("winner %q is not a variant of this experiment", winner))
 	}
 
 	def, ok, err := flags.GetDef(org, project, exp.FlagKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !ok {
-		return zip.Errorf(http.StatusConflict, "assignment flag %q missing", exp.FlagKey)
+		return nil, zip.Errorf(http.StatusConflict, "assignment flag %q missing", exp.FlagKey)
 	}
 	promoted, err := promoteVariant(def, winner)
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
-	if err := flags.PutDef(org, project, exp.FlagKey, promoted, c.UserEmail()); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "promote winner: %v", err)
+	actor := actorOf(ctx)
+	if err := flags.PutDef(org, project, exp.FlagKey, promoted, actor); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "promote winner: %v", err)
 	}
-	st, err := storeFor(s, org, project)
+	st, err := storeFor(o.s, org, project)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := st.decide(c.Context(), project, exp.ID, winner, c.UserEmail(), time.Now().UTC().Format(time.RFC3339)); err != nil {
-		return err
+	if err := st.decide(ctx, project, exp.ID, winner, actor, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return nil, err
 	}
-	exp, _, _ = st.get(c.Context(), project, exp.ID)
-	return c.JSON(http.StatusOK, exp)
+	exp, _, _ = st.get(ctx, project, exp.ID)
+	return &exp, nil
+}
+
+// orgAdmin reports that the caller administers its OWN org — the gate a flag
+// write takes. It needs the REQUEST rather than the tenant, because admin-ness
+// lives in a header principal.OrgFrom does not carry. False off the HTTP path:
+// no request, no attested caller, no admin rights.
+func orgAdmin(ctx context.Context) bool {
+	c, ok := cloud.Request(ctx)
+	return ok && principal.IsOrgAdmin(c)
 }
 
 // promoteVariant rewrites a flag definition's multivariate weights so winner serves
@@ -774,48 +911,13 @@ func Analyze(ctx context.Context, org, project, experimentID string, start, end 
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────
-
-func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
-
-func loadExperiment(s *cloud.Service[*state], ctx context.Context, org, project, id string) (Experiment, bool, error) {
+func loadExperiment(s *cloud.Service[*state], ctx context.Context, org, project, id string) (Trial, bool, error) {
 	if !slugRE.MatchString(id) {
-		return Experiment{}, false, nil
+		return Trial{}, false, nil
 	}
 	st, err := storeFor(s, org, project)
 	if err != nil {
-		return Experiment{}, false, err
+		return Trial{}, false, err
 	}
 	return st.get(ctx, project, id)
-}
-
-// windowFrom resolves [start,end): explicit ?start/?end (RFC3339) win, else the last
-// ?days (default 30) up to now.
-func windowFrom(c *zip.Ctx) (time.Time, time.Time) {
-	end := time.Now().UTC()
-	if e := strings.TrimSpace(c.Query("end")); e != "" {
-		if t, err := time.Parse(time.RFC3339, e); err == nil {
-			end = t.UTC()
-		}
-	}
-	if s := strings.TrimSpace(c.Query("start")); s != "" {
-		if t, err := time.Parse(time.RFC3339, s); err == nil {
-			return t.UTC(), end
-		}
-	}
-	days := defaultWindow
-	if d := strings.TrimSpace(c.Query("days")); d != "" {
-		if n, err := strconv.Atoi(d); err == nil && n > 0 && n <= 365 {
-			days = time.Duration(n) * 24 * time.Hour
-		}
-	}
-	return end.Add(-days), end
-}
-
-func alphaFrom(c *zip.Ctx) float64 {
-	if a := strings.TrimSpace(c.Query("alpha")); a != "" {
-		if f, err := strconv.ParseFloat(a, 64); err == nil && f > 0 && f < 1 {
-			return f
-		}
-	}
-	return defaultAlpha
 }

@@ -16,6 +16,10 @@ import (
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// cloud.Bridge parks the validated org, the project and the request a typed op
+	// reads off its context. The composer installs it once at the root in
+	// production (serve.go); this test composes the same way.
+	app.Use(cloud.Bridge())
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
