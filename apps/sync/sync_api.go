@@ -248,9 +248,13 @@ type patchSyncIn struct {
 	// to hanzo-inc/cloud failed every reconcile with "Repository not found", and the
 	// PATCH that appeared to fix it did nothing at all. Declaring the fields is what
 	// lets the documented immutability actually answer.
+	// Source names a new upstream, and is refused. Delete this sync and create the
+	// one you want.
 	Source *endpointReq `json:"source"`
+	// Target names a new native repository, and is refused, for the same reason.
 	Target *endpointReq `json:"target"`
-	Kind   *string      `json:"kind"`
+	// Kind names a different kind of sync, and is refused, for the same reason.
+	Kind *string `json:"kind"`
 }
 
 // Patch updates one sync's mutable policy — direction, trigger and actor — in place.
