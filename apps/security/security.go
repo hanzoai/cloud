@@ -6,12 +6,12 @@
 package security
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,7 +19,6 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/security/detect"
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -102,93 +101,39 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 }
 
 // routes registers the security surface. Static routes register before the :id
+// routes registers the security surface. Static routes register before the :id
 // params so a scan id can never shadow /rules or /health (Fiber first-match).
+//
+// Every op is TYPED: the input and the answer are Go types, so the schema, the
+// prose, the MCP tool, the CLI command and every generated SDK method are
+// projections of the handler itself. zipdoc lifts the doc comments into
+// zipdoc_gen.go, which is the only way prose reaches the published registry — Go
+// drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/security")
-	g.Get("/health", cloud.Handle(s, health))
-	g.Get("/rules", cloud.Handle(s, listRules))
-	g.Post("/scans", cloud.Handle(s, submitScan))
-	g.Get("/scans", cloud.Handle(s, listScans))
-	g.Get("/findings", cloud.Handle(s, listFindings))
-	g.Get("/scans/:id", cloud.Handle(s, getScan))
-	g.Get("/findings/:id", cloud.Handle(s, getFinding))
+	// cloud.DenyEnvelope BEFORE the leaves, because fiber runs middleware in
+	// registration order and one installed after its leaves never runs. Submitting
+	// a scan gates on the caller's balance, and the envelope is what makes that
+	// refusal the fleet's own nested {"error":{"code","message"}} rather than a
+	// second vocabulary for a refusal the platform already has words for.
+	g.Use(cloud.DenyEnvelope())
+	o := ops{s: s}
+
+	zip.Get(g, "/health", o.health)
+	zip.Get(g, "/rules", o.listRules)
+	zip.Post(g, "/scans", o.submitScan, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/scans", o.listScans)
+	zip.Get(g, "/findings", o.listFindings)
+	zip.Get(g, "/scans/:id", o.getScan)
+	zip.Get(g, "/findings/:id", o.getFinding)
 }
 
-// The surface's prose, declared beside the route table it describes.
-//
-// Every handler here is a cloud.Handle relay rather than a typed op, so zipdoc has
-// no doc comment to lift and the document would otherwise publish seven
-// operationIds and nothing else — seven SDK methods that cannot explain themselves
-// and seven CLI commands with no help text. openapi.Describe is the seam for
-// exactly that, and it stays drift-proof the same way Register does: a description
-// whose route is not in the router simply never renders.
-func init() {
-	openapi.Describe("/v1/security/health", http.MethodGet,
-		"Liveness, and how many detection rules are loaded",
-		"Reports that the scanning subsystem is serving and how many secret-detection rules "+
-			"the engine holds. It has no external dependency — the answer is ok whenever the "+
-			"findings store opened — so it measures this process rather than anything "+
-			"downstream. Reads no tenant: a prober that sends no principal is answered, not "+
-			"refused.")
-
-	openapi.Describe("/v1/security/rules", http.MethodGet,
-		"The secret-detection catalog the engine scans with",
-		"Returns every rule a scan can fire — the id, name and severity a finding cites — so "+
-			"a caller can render or triage results without hard-coding the catalog. It is the "+
-			"same for everyone and discloses nothing tenant-specific, so it carries no org "+
-			"scope.")
-
-	openapi.Describe("/v1/security/scans", http.MethodPost,
-		"Scan submitted source for hardcoded secrets",
-		"Runs the detection engine over a batch of {path, content} files and answers 201 with "+
-			"the scan summary: how many files were read, how many findings fired, and the tally "+
-			"by severity.\n\n"+
-			"THE SUBMITTED CONTENT IS NEVER STORED. It is scanned in memory; what persists is "+
-			"the finding — its rule, its path and line, a MASKED preview (first and last "+
-			"characters kept, the middle starred) and the SHA-256 fingerprint of the raw secret. "+
-			"The fingerprint is what makes the same secret recognisable across scans and after "+
-			"rotation without the secret ever being written down.\n\n"+
-			"Requires a validated org, which scopes the stored scan and every finding on it; a "+
-			"caller with no org is refused. `project` in the body names the sub-scope and is "+
-			"refused with 400 if it is not a valid slug; omit it and the caller's project header "+
-			"is used instead, where an unusable value is simply ignored. Bounded at 500 files "+
-			"and 8 MiB of total "+
-			"content per submission — split a larger tree across scans. One scan is one metered "+
-			"unit, and the scan is recorded in the audit log with its tally, never with its "+
-			"findings.")
-
-	openapi.Describe("/v1/security/scans", http.MethodGet,
-		"The org's scan history",
-		"Lists the caller org's scans, newest first, each as the same summary the submission "+
-			"answered — files read, findings fired, tally by severity. `limit` caps the page. "+
-			"Strictly org-scoped: a caller only ever sees its own scans, and one with no "+
-			"validated org is refused.")
-
-	openapi.Describe("/v1/security/scans/:id", http.MethodGet,
-		"One scan and every finding on it",
-		"Returns the scan summary together with all of its findings, so the detail view is one "+
-			"round-trip rather than a list call per scan. The findings carry masked previews and "+
-			"fingerprints, never secrets.\n\n"+
-			"Scoped to the caller's org: a scan id belonging to another org is the same 404 as "+
-			"an id that never existed, so a probe learns nothing about what exists elsewhere. No "+
-			"validated org is refused.")
-
-	openapi.Describe("/v1/security/findings", http.MethodGet,
-		"The org's findings, across scans or within one",
-		"Lists the caller org's findings — rule, severity, path, line, masked preview and "+
-			"fingerprint — newest first. `scanId` narrows to a single scan, `minSeverity` "+
-			"(critical | high | medium | low) drops everything below that rank, and `limit` caps "+
-			"the page; a minSeverity outside that set is refused with 400 rather than quietly "+
-			"ignored, so a filter typo cannot read as \"no findings\". Strictly org-scoped, and "+
-			"a caller with no validated org is refused.")
-
-	openapi.Describe("/v1/security/findings/:id", http.MethodGet,
-		"One finding",
-		"Returns a single finding: which rule fired, where (path and line), the masked preview "+
-			"and the SHA-256 fingerprint of the secret — the raw secret is not stored and cannot "+
-			"be read back. Scoped to the caller's org, and a finding belonging to another org is "+
-			"the same 404 as one that never existed.")
-}
+// ops binds the service to the typed ops. A TypedHandler takes no service
+// parameter, so the service arrives as a RECEIVER and every op is a method value
+// — also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
 
 // Shutdown closes the findings store. Idempotent; safe if Mount never ran.
 func Shutdown() error {
@@ -202,39 +147,141 @@ func Shutdown() error {
 
 // ---- request/response shapes ----
 
-type fileInput struct {
-	Path    string `json:"path"`
+// scan is one file to scan. Its content is read in memory and never stored.
+type scan struct {
+	// Path is where the file lives, recorded on any finding so a result can be
+	// located in the tree it came from.
+	Path string `json:"path"`
+	// Content is the source to scan. It is NEVER stored: what persists is the
+	// finding, with a masked preview and a fingerprint.
 	Content string `json:"content"`
 }
 
+// submitReq is a batch of files to scan for hardcoded secrets.
 type submitReq struct {
-	Project string      `json:"project"`
-	Files   []fileInput `json:"files"`
+	// Project names the sub-scope the scan is filed under. It must be a slug; omit
+	// it and the caller's project header is used instead.
+	Project string `json:"project"`
+	// Files is the batch to scan, at most 500 files and 8 MiB of content in total.
+	Files []scan `json:"files" validate:"required"`
 }
 
+// scanView is one scan and what it found, without any of what it read.
 type scanView struct {
-	ID        string `json:"id"`
-	Project   string `json:"project,omitempty"`
-	Files     int    `json:"files"`
-	Findings  int    `json:"findings"`
-	Critical  int    `json:"critical"`
-	High      int    `json:"high"`
-	Medium    int    `json:"medium"`
-	Low       int    `json:"low"`
-	CreatedAt int64  `json:"createdAt"`
+	// ID addresses this scan and every finding on it.
+	ID string `json:"id"`
+	// Project is the sub-scope the scan was filed under.
+	Project string `json:"project,omitempty"`
+	// Files is how many files the scan read.
+	Files int `json:"files"`
+	// Findings is how many secrets fired across them.
+	Findings int `json:"findings"`
+	// Critical is how many findings carry the highest severity.
+	Critical int `json:"critical"`
+	// High is how many findings rank high.
+	High int `json:"high"`
+	// Medium is how many findings rank medium.
+	Medium int `json:"medium"`
+	// Low is how many findings rank low.
+	Low int `json:"low"`
+	// CreatedAt is when the scan ran, in Unix milliseconds.
+	CreatedAt int64 `json:"createdAt"`
 }
 
+// findingView is one detected secret, redacted.
 type findingView struct {
-	ID          string `json:"id"`
-	ScanID      string `json:"scanId"`
-	RuleID      string `json:"ruleId"`
-	RuleName    string `json:"ruleName"`
-	Severity    string `json:"severity"`
-	Path        string `json:"path"`
-	Line        int    `json:"line"`
-	Preview     string `json:"preview"`
+	// ID addresses this finding.
+	ID string `json:"id"`
+	// ScanID is the scan that produced it.
+	ScanID string `json:"scanId"`
+	// RuleID is the detection rule that fired.
+	RuleID string `json:"ruleId"`
+	// RuleName is that rule's human name.
+	RuleName string `json:"ruleName"`
+	// Severity ranks the finding: critical, high, medium or low.
+	Severity string `json:"severity"`
+	// Path is the file the secret was found in.
+	Path string `json:"path"`
+	// Line is where in that file.
+	Line int `json:"line"`
+	// Preview is the secret MASKED — first and last characters kept, the middle
+	// starred — so a reviewer can recognise it without it being disclosed.
+	Preview string `json:"preview"`
+	// Fingerprint is the SHA-256 of the raw secret. It is what makes the same
+	// secret recognisable across scans and after rotation without the secret ever
+	// being written down.
 	Fingerprint string `json:"fingerprint"`
-	CreatedAt   int64  `json:"createdAt"`
+	// CreatedAt is when the finding was recorded, in Unix milliseconds.
+	CreatedAt int64 `json:"createdAt"`
+}
+
+// ruleset is the answer to the liveness read.
+type ruleset struct {
+	// Status is "ok" whenever the findings store opened.
+	Status string `json:"status"`
+	// Rules is how many detection rules the engine holds.
+	Rules int `json:"rules"`
+}
+
+// ruleList is the detection catalog.
+type ruleList struct {
+	// Data is every rule a scan can fire, each with the id, name and severity a
+	// finding cites.
+	Data []detect.RuleView `json:"data"`
+}
+
+// scanList is the answer to a scan listing.
+type scanList struct {
+	// Data is the caller org's scans, newest first.
+	Data []scanView `json:"data"`
+}
+
+// scanDetail is one scan together with everything it found.
+type scanDetail struct {
+	// Scan is the summary.
+	Scan scanView `json:"scan"`
+	// Findings is every finding on that scan, so the detail view is one round-trip.
+	Findings []findingView `json:"findings"`
+}
+
+// findingList is the answer to a finding listing.
+type findingList struct {
+	// Data is the caller org's findings, newest first.
+	Data []findingView `json:"data"`
+}
+
+// noIn is the input of an op that takes nothing: no body, no path parameter, no
+// query.
+type noIn struct{}
+
+// scanPage bounds a scan listing.
+type scanPage struct {
+	// Limit caps the page.
+	Limit int `json:"limit"`
+}
+
+// scanRef addresses one of the caller org's scans.
+type scanRef struct {
+	// ID is the scan the URL names.
+	ID string `json:"id"`
+}
+
+// findingRef addresses one of the caller org's findings.
+type findingRef struct {
+	// ID is the finding the URL names.
+	ID string `json:"id"`
+}
+
+// findingFilter narrows a finding listing.
+type findingFilter struct {
+	// ScanID narrows to a single scan.
+	ScanID string `json:"scanId"`
+	// MinSeverity drops everything below that rank: critical, high, medium or low.
+	// A value outside that set is refused rather than quietly ignored, so a filter
+	// typo cannot read as "no findings".
+	MinSeverity string `json:"minSeverity"`
+	// Limit caps the page.
+	Limit int `json:"limit"`
 }
 
 func toScanView(s Scan) scanView {
@@ -253,75 +300,110 @@ func toFindingView(f StoredFinding) findingView {
 	}
 }
 
+// tenant resolves the org — the isolation KEY — from the validated principal
+// cloud.Bridge parked. A typed op receives a context.Context and nothing else, so
+// it reads the org there rather than off the request. Fails closed.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return org, nil
+}
+
 // ---- handlers ----
 
-// health is fail-open: the subsystem has no external dependency, so it reports
-// ok whenever the store opened. Registered before the generic liveness route so
-// the real probe is not shadowed (mirrors s3svc/kms).
-func health(s *cloud.Service[state], c *zip.Ctx) error {
-	return c.JSON(200, map[string]any{"status": "ok", "rules": detect.RuleCount()})
+// health reports that the scanning subsystem is serving and how many
+// secret-detection rules the engine holds.
+//
+// It has no external dependency — the answer is ok whenever the findings store
+// opened — so it measures this process rather than anything downstream. It reads
+// no tenant: a prober that sends no principal is answered, not refused.
+func (o ops) health(ctx context.Context, _ *noIn) (*ruleset, error) {
+	return &ruleset{Status: "ok", Rules: detect.RuleCount()}, nil
 }
 
-// listRules serves the detection catalog. No tenant scope — the catalog is the
-// same for everyone and discloses nothing tenant-specific.
-func listRules(s *cloud.Service[state], c *zip.Ctx) error {
-	return c.JSON(200, map[string]any{"data": detect.Rules()})
+// listRules is the secret-detection catalog the engine scans with.
+//
+// It returns every rule a scan can fire — the id, name and severity a finding
+// cites — so a caller can render or triage results without hard-coding the
+// catalog. It is the same for everyone and discloses nothing tenant-specific, so
+// it carries no org scope.
+func (o ops) listRules(ctx context.Context, _ *noIn) (*ruleList, error) {
+	return &ruleList{Data: detect.Rules()}, nil
 }
 
-// submitScan runs the engine over the submitted files, persists the scan +
-// redacted findings, meters one unit, emits an audit event, and returns the
-// scan summary. The raw content is scanned in memory and never stored.
-func submitScan(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// submitScan runs the detection engine over a batch of files and answers 201 with
+// the scan summary: how many files were read, how many findings fired, and the
+// tally by severity.
+//
+// THE SUBMITTED CONTENT IS NEVER STORED. It is scanned in memory; what persists is
+// the finding — its rule, its path and line, a MASKED preview (first and last
+// characters kept, the middle starred) and the SHA-256 fingerprint of the raw
+// secret. The fingerprint is what makes the same secret recognisable across scans
+// and after rotation without the secret ever being written down.
+//
+// It requires a validated org, which scopes the stored scan and every finding on
+// it; a caller with no org is refused. Bounded at 500 files and 8 MiB of total
+// content per submission — split a larger tree across scans. One scan is one
+// metered unit, and the scan is recorded in the audit log with its tally, never
+// with its findings.
+func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body submitReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	// The billing gate, the meter and the audit record all need the REQUEST — the
+	// payer, the request id and the caller's address are facts principal.OrgFrom
+	// does not carry. Off the HTTP path there is no request and so no payer, which
+	// is a refusal rather than an unbilled scan.
+	c, onHTTP := cloud.Request(ctx)
+	if !onHTTP {
+		return nil, cloud.Denied(cloud.ErrNoLedger)
 	}
-	if len(body.Files) == 0 {
-		return zip.ErrBadRequest("files is required (at least one {path,content})")
+	if len(in.Files) == 0 {
+		return nil, zip.ErrBadRequest("files is required (at least one {path,content})")
 	}
-	if len(body.Files) > maxFiles {
-		return zip.ErrBadRequest(fmt.Sprintf("too many files (max %d)", maxFiles))
+	if len(in.Files) > maxFiles {
+		return nil, zip.ErrBadRequest(fmt.Sprintf("too many files (max %d)", maxFiles))
 	}
-	project := strings.TrimSpace(body.Project)
+	project := strings.TrimSpace(in.Project)
 	if project == "" {
 		project = projectScope(c)
 	} else if !projectRE.MatchString(project) {
-		return zip.ErrBadRequest("project must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+		return nil, zip.ErrBadRequest("project must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 	}
 
 	var total int
-	for _, f := range body.Files {
+	for _, f := range in.Files {
 		total += len(f.Content)
 	}
 	if total > maxBytes {
-		return zip.ErrBadRequest(fmt.Sprintf("scan too large (%d bytes, max %d)", total, maxBytes))
+		return nil, zip.ErrBadRequest(fmt.Sprintf("scan too large (%d bytes, max %d)", total, maxBytes))
 	}
 
 	// Prepaid: the balance covers the scan BEFORE the engine runs, never after. A
 	// gate downstream of the work is a bill for compute already spent.
 	fee := cloud.ResourceFeeCents(feeEnvPrefix, "scan")
 	scopeProject, projectValidated := principal.ValidatedProject(c)
-	if err := s.State.bill.Gate(c.Context(), principal.Ledger(c), scopeProject, projectValidated, meterKind, fee); err != nil {
-		return cloud.DenyResource(c, err)
+	if err := s.State.bill.Gate(ctx, principal.Ledger(c), scopeProject, projectValidated, meterKind, fee); err != nil {
+		return nil, cloud.Denied(err)
 	}
 
 	scanID, err := genID("scan")
 	if err != nil {
-		return zip.Errorf(500, "rng: %v", err)
+		return nil, zip.Errorf(500, "rng: %v", err)
 	}
 	now := time.Now().UTC().UnixMilli()
 
-	sc := Scan{ID: scanID, Org: org, Project: project, Files: len(body.Files), CreatedAt: now}
+	sc := Scan{ID: scanID, Org: org, Project: project, Files: len(in.Files), CreatedAt: now}
 	var stored []StoredFinding
-	for _, f := range body.Files {
+	for _, f := range in.Files {
 		for _, fnd := range detect.ScanContent(f.Path, f.Content) {
 			id, err := genID("fnd")
 			if err != nil {
-				return zip.Errorf(500, "rng: %v", err)
+				return nil, zip.Errorf(500, "rng: %v", err)
 			}
 			stored = append(stored, StoredFinding{
 				ID: id, ScanID: scanID, Org: org,
@@ -343,8 +425,8 @@ func submitScan(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	sc.Findings = len(stored)
 
-	if err := s.State.store.SaveScan(c.Context(), sc, stored); err != nil {
-		return zip.Errorf(500, "save scan: %v", err)
+	if err := s.State.store.SaveScan(ctx, sc, stored); err != nil {
+		return nil, zip.Errorf(500, "save scan: %v", err)
 	}
 
 	// One metered unit per scan (product=security), at the fee the Gate above
@@ -356,85 +438,107 @@ func submitScan(s *cloud.Service[state], c *zip.Ctx) error {
 	// (never the secrets) are the evidence; the tally is the AU-3 outcome.
 	emitAudit(s, c, org, sc)
 
-	return c.JSON(201, toScanView(sc))
+	out := toScanView(sc)
+	return &out, nil
 }
 
-func listScans(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	limit, _ := strconv.Atoi(c.Query("limit"))
-	rows, err := s.State.store.ListScans(c.Context(), org, limit)
+// listScans is the org's scan history, newest first, each as the same summary the
+// submission answered — files read, findings fired, tally by severity.
+//
+// Strictly org-scoped: a caller only ever sees its own scans, and one with no
+// validated org is refused.
+func (o ops) listScans(ctx context.Context, in *scanPage) (*scanList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(500, "list scans: %v", err)
+		return nil, err
+	}
+	rows, err := o.s.State.store.ListScans(ctx, org, in.Limit)
+	if err != nil {
+		return nil, zip.Errorf(500, "list scans: %v", err)
 	}
 	out := make([]scanView, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, toScanView(r))
 	}
-	return c.JSON(200, map[string]any{"data": out})
+	return &scanList{Data: out}, nil
 }
 
-func getScan(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// getScan returns one scan together with every finding on it, so the detail view
+// is one round-trip rather than a list call per scan. The findings carry masked
+// previews and fingerprints, never secrets.
+//
+// Scoped to the caller's org: a scan id belonging to another org is the same 404
+// as an id that never existed, so a ruleset learns nothing about what exists
+// elsewhere. No validated org is refused.
+func (o ops) getScan(ctx context.Context, in *scanRef) (*scanDetail, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	sc, err := s.State.store.GetScan(c.Context(), org, c.Param("id"))
+	sc, err := o.s.State.store.GetScan(ctx, org, in.ID)
 	if err == errNotFound {
-		return zip.ErrNotFound("scan not found")
+		return nil, zip.ErrNotFound("scan not found")
 	}
 	if err != nil {
-		return zip.Errorf(500, "get scan: %v", err)
+		return nil, zip.Errorf(500, "get scan: %v", err)
 	}
-	// Include this scan's findings so the detail view is one round-trip.
-	fs, err := s.State.store.ListFindings(c.Context(), org, sc.ID, "", 0)
+	fs, err := o.s.State.store.ListFindings(ctx, org, sc.ID, "", 0)
 	if err != nil {
-		return zip.Errorf(500, "list findings: %v", err)
+		return nil, zip.Errorf(500, "list findings: %v", err)
 	}
 	fv := make([]findingView, 0, len(fs))
 	for _, f := range fs {
 		fv = append(fv, toFindingView(f))
 	}
-	resp := toScanView(sc)
-	return c.JSON(200, map[string]any{"scan": resp, "findings": fv})
+	return &scanDetail{Scan: toScanView(sc), Findings: fv}, nil
 }
 
-func listFindings(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	limit, _ := strconv.Atoi(c.Query("limit"))
-	minSev := strings.ToLower(strings.TrimSpace(c.Query("minSeverity")))
-	if minSev != "" && detect.SeverityRank(minSev) == 0 {
-		return zip.ErrBadRequest("minSeverity must be one of critical|high|medium|low")
-	}
-	fs, err := s.State.store.ListFindings(c.Context(), org, strings.TrimSpace(c.Query("scanId")), minSev, limit)
+// listFindings is the org's findings — rule, severity, path, line, masked preview
+// and fingerprint — newest first, across scans or within one.
+//
+// A minSeverity outside critical|high|medium|low is refused rather than quietly
+// ignored, so a filter typo cannot read as "no findings". Strictly org-scoped, and
+// a caller with no validated org is refused.
+func (o ops) listFindings(ctx context.Context, in *findingFilter) (*findingList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(500, "list findings: %v", err)
+		return nil, err
+	}
+	minSev := strings.ToLower(strings.TrimSpace(in.MinSeverity))
+	if minSev != "" && detect.SeverityRank(minSev) == 0 {
+		return nil, zip.ErrBadRequest("minSeverity must be one of critical|high|medium|low")
+	}
+	fs, err := o.s.State.store.ListFindings(ctx, org, strings.TrimSpace(in.ScanID), minSev, in.Limit)
+	if err != nil {
+		return nil, zip.Errorf(500, "list findings: %v", err)
 	}
 	out := make([]findingView, 0, len(fs))
 	for _, f := range fs {
 		out = append(out, toFindingView(f))
 	}
-	return c.JSON(200, map[string]any{"data": out})
+	return &findingList{Data: out}, nil
 }
 
-func getFinding(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// getFinding returns a single finding: which rule fired, where (path and line),
+// the masked preview and the SHA-256 fingerprint of the secret — the raw secret is
+// not stored and cannot be read back.
+//
+// Scoped to the caller's org, and a finding belonging to another org is the same
+// 404 as one that never existed.
+func (o ops) getFinding(ctx context.Context, in *findingRef) (*findingView, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	f, err := s.State.store.GetFinding(c.Context(), org, c.Param("id"))
+	f, err := o.s.State.store.GetFinding(ctx, org, in.ID)
 	if err == errNotFound {
-		return zip.ErrNotFound("finding not found")
+		return nil, zip.ErrNotFound("finding not found")
 	}
 	if err != nil {
-		return zip.Errorf(500, "get finding: %v", err)
+		return nil, zip.Errorf(500, "get finding: %v", err)
 	}
-	return c.JSON(200, toFindingView(f))
+	out := toFindingView(f)
+	return &out, nil
 }
 
 // ---- helpers ----

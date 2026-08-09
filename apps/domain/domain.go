@@ -74,23 +74,23 @@ type Zones interface {
 	EnsureZone(ctx context.Context, org, domainName string) (nameservers []string, err error)
 }
 
-// Record is the domain↔org ownership row Hanzo issues on a successful purchase.
-type Record struct {
-	Org          string   `json:"org"`
-	Domain       string   `json:"domain"`
-	RegisteredAt int64    `json:"registeredAt"` // unix seconds
-	ExpiresAt    string   `json:"expiresAt,omitempty"`
-	PriceCents   int64    `json:"priceCents"` // what the customer paid (sell)
-	CostCents    int64    `json:"costCents"`  // wholesale cost
-	Nameservers  []string `json:"nameservers,omitempty"`
-	Order        int64    `json:"order,omitempty"` // registrar order id
+// Holding is the domain↔org ownership row Hanzo issues on a successful purchase.
+type Holding struct {
+	Org          string   `json:"org"`                   // the org that owns the domain
+	Domain       string   `json:"domain"`                // the name owned
+	RegisteredAt int64    `json:"registeredAt"`          // unix seconds
+	ExpiresAt    string   `json:"expiresAt,omitempty"`   // when the registration lapses, RFC3339
+	PriceCents   int64    `json:"priceCents"`            // what the customer paid (sell)
+	CostCents    int64    `json:"costCents"`             // wholesale cost
+	Nameservers  []string `json:"nameservers,omitempty"` // the authoritative nameservers the name points at
+	Order        int64    `json:"order,omitempty"`       // registrar order id
 }
 
 // Store persists ownership records.
 type Store interface {
-	Put(rec Record) error
-	Get(org, domainName string) (Record, bool, error)
-	ListByOrg(org string) ([]Record, error)
+	Put(rec Holding) error
+	Get(org, domainName string) (Holding, bool, error)
+	ListByOrg(org string) ([]Holding, error)
 }
 
 // Config tunes pricing and the DNS handoff.

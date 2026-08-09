@@ -58,14 +58,13 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strconv"
+
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -187,231 +186,56 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s
 
-	// Static sub-routes are registered before any :name param route so a real
-	// dataset name can never shadow a collection route.
-	g := app.Group("/v1/evals")
-	g.Post("/datasets", s.createDataset)
-	g.Get("/datasets", s.listDatasets)
-	g.Get("/datasets/:name", s.getDataset)
-	g.Delete("/datasets/:name", s.deleteDataset)
-
-	g.Post("/datasets/:name/items", s.createItem)
-	g.Get("/datasets/:name/items", s.listItems)
-
-	g.Post("/evaluators", s.createEvaluator)
-	g.Get("/evaluators", s.listEvaluators)
-
-	g.Post("/rubrics", s.createScoreConfig)
-	g.Get("/rubrics", s.listScoreConfigs)
-
-	g.Post("/scores", s.createScore)
-	g.Get("/scores", s.listScores)
-
-	g.Get("/traces", s.listTraces)
-
-	// AI observability dashboard (the native Langfuse home): per-org / per-project
-	// counts, cost, tokens, error & success rate, and latency percentiles over a
-	// window — aggregated from the SAME cloud_usage ledger + GenAI spans.
-	g.Get("/metrics", s.metricsBoard)
-
-	g.Post("/runs", s.runHandler)
-	g.Get("/runs", s.listRuns)
+	routes(app, s)
 
 	log.Info("evals surface mounted (native)", "brand", deps.Brand, "telemetry", tel != nil)
 	return nil
 }
 
-// The surface's prose, in the route table's own order so a path and what it means
-// are read (and changed) together. None of these sixteen is a typed op — each
-// binds its input by hand off the query string or the body — so there is no doc
-// comment for zipdoc to lift, and without this every one of them publishes an
-// operationId and NOTHING else: an SDK method that cannot explain itself and a
-// CLI command with no help text. Declared through the same registry Register
-// uses, so a description renders only while the router actually serves the route
-// and this list can never invent a path.
-func init() {
-	openapi.Describe("/v1/evals/datasets", http.MethodPost,
-		"Create a dataset, or edit the one with that name",
-		"Writes a dataset — the named set of graded examples a run scores a model against — under "+
-			"the caller's org and answers 201 with it. The NAME is the key, not an id: posting a "+
-			"name the org already has updates that dataset's description and metadata and keeps its "+
-			"original creation time, so this is create-or-edit and never a duplicate. Its items are "+
-			"untouched.\n\n"+
-			"Requires a validated principal; 403 without one. The org comes from the validated "+
-			"owner claim, never from a client `X-Org-Id`, so a dataset can only ever be written "+
-			"under the caller's own tenant. `name` is required and must match "+
-			"`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`; a description over 64 KiB is 400.")
+// routes declares the sixteen ops of this surface. Every one is TYPED — its input
+// and its answer are Go types, so the schema, the prose, the MCP tool, the CLI
+// command and every generated SDK method are projections of the handler itself
+// rather than of a hand-written table beside it.
+//
+// zipdoc lifts the doc comment off each op and each In/Out field into
+// zipdoc_gen.go, which is the only way prose reaches the published registry: Go
+// drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+func routes(app cloud.Router, s *service) {
+	// Static sub-routes are registered before any :name param route so a real
+	// dataset name can never shadow a collection route.
+	g := app.Group("/v1/evals")
 
-	openapi.Describe("/v1/evals/datasets", http.MethodGet,
-		"The datasets your org has",
-		"Lists the caller org's datasets as `{data:[…]}`, each with its name, description, metadata "+
-			"and timestamps. `limit` defaults to 100 and is capped at 500; an unparseable or "+
-			"non-positive value falls back to the default rather than failing.\n\n"+
-			"Requires a validated principal; 403 without one. Every row is filtered on the "+
-			"validated org, so there is no parameter that reaches another tenant's datasets. The "+
-			"`items` count is NOT populated here — read one dataset to get it.")
+	zip.Post(g, "/datasets", s.createDataset, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/datasets", s.listDatasets)
+	zip.Get(g, "/datasets/:name", s.getDataset)
+	zip.Delete(g, "/datasets/:name", s.deleteDataset)
 
-	openapi.Describe("/v1/evals/datasets/:name", http.MethodGet,
-		"One dataset, with how many examples it holds",
-		"Returns a single dataset of the caller's org by name, together with its live item count — "+
-			"the one read that answers how big the set actually is. A name this org does not have "+
-			"is 404, which is also what another tenant's dataset looks like from here. Requires a "+
-			"validated principal; 403 without one.")
+	zip.Post(g, "/datasets/:name/items", s.createItem, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/datasets/:name/items", s.listItems)
 
-	openapi.Describe("/v1/evals/datasets/:name", http.MethodDelete,
-		"Delete a dataset and every example in it",
-		"Removes the named dataset of the caller's org AND all of its items, in one transaction, "+
-			"and answers 204. This is not a detach: the examples are gone with the set, so a "+
-			"dataset cannot be resurrected by re-creating the name.\n\n"+
-			"A name this org does not have is 404 — never a silent success — and a name belonging "+
-			"to another tenant is the same 404, because the delete is predicated on the validated "+
-			"org. Requires a validated principal; 403 without one. Runs and scores already recorded "+
-			"against the dataset are telemetry events and are NOT deleted with it.")
+	zip.Post(g, "/evaluators", s.createEvaluator, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/evaluators", s.listEvaluators)
 
-	openapi.Describe("/v1/evals/datasets/:name/items", http.MethodPost,
-		"Add a graded example to one of your datasets",
-		"Writes one example — its `input`, its `expectedOutput`, free-form metadata and a status — "+
-			"into the dataset named in the path, and answers 201 with it. That dataset MUST "+
-			"already exist for this org: an unknown one is 404, never a silent create, so an "+
-			"example can never be attached to a set the caller does not own."+
-			"\n\n"+
-			"Supply `id` to make the write idempotent — re-posting the same id replaces that "+
-			"example in place — or omit it and one is generated. An id that already exists in a "+
-			"DIFFERENT dataset is 409 rather than a move. `status` is `ACTIVE` (the default) or "+
-			"`ARCHIVED`; only ACTIVE examples are fed to a run, which is how an example is retired "+
-			"without deleting it. `input` and `expectedOutput` are stored as raw JSON exactly as "+
-			"sent. Requires a validated principal; 403 without one.")
+	zip.Post(g, "/rubrics", s.createScoreConfig, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/rubrics", s.listScoreConfigs)
 
-	openapi.Describe("/v1/evals/datasets/:name/items", http.MethodGet,
-		"The examples in one of your datasets",
-		"Lists the examples of ONE dataset as `{data:[…]}` — the set is named in the path, "+
-			"because this collection only exists inside one. Archived examples are included, so "+
-			"the caller sees the whole set rather than only "+
-			"what a run would use. `limit` defaults to 100 and is capped at 500.\n\n"+
-			"Requires a validated principal; 403 without one, and the read is filtered on the "+
-			"validated org, so naming another tenant's dataset returns nothing rather than its "+
-			"contents.")
+	zip.Post(g, "/scores", s.createScore, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/scores", s.listScores)
 
-	openapi.Describe("/v1/evals/evaluators", http.MethodPost,
-		"Define a judge: a model plus the criteria it grades by",
-		"Saves a reusable evaluator for the caller's org — the judge model and the written criteria "+
-			"it grades against — and answers 201 with it. Like a dataset, the NAME is the key: "+
-			"re-posting a name edits that evaluator rather than adding a second one.\n\n"+
-			"`scoreName` is the name the resulting scores are filed under and defaults to the "+
-			"evaluator's own name; both must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`. Criteria "+
-			"over 64 KiB is 400. Requires a validated principal; 403 without one.")
+	zip.Get(g, "/traces", s.listTraces)
 
-	openapi.Describe("/v1/evals/evaluators", http.MethodGet,
-		"The judges your org has defined",
-		"Lists the caller org's evaluators as `{data:[…]}`, each with its judge model, criteria and "+
-			"the score name it writes under. `limit` defaults to 100 and is capped at 500. Requires "+
-			"a validated principal; 403 without one, and the listing is filtered on the validated "+
-			"org.")
+	// AI observability dashboard (the native Langfuse home): per-org / per-project
+	// counts, cost, tokens, error & success rate, and latency percentiles over a
+	// window — aggregated from the SAME cloud_usage ledger + GenAI spans.
+	zip.Get(g, "/metrics", s.metricsBoard)
 
-	openapi.Describe("/v1/evals/rubrics", http.MethodPost,
-		"Declare what a score named X is allowed to be",
-		"Defines the shape of one score name for the caller's org — `NUMERIC` (the default, "+
-			"optionally bounded by `minValue`/`maxValue`), `CATEGORICAL` (a closed set of "+
-			"`categories`) or `BOOLEAN` — and answers 201 with it. The NAME is the key, so "+
-			"re-posting a name replaces its rules.\n\n"+
-			"This is the integrity contract, not documentation: once a config exists for a name, "+
-			"every score recorded under that name is checked against it and the config's data type "+
-			"is AUTHORITATIVE — a caller cannot claim a different one. Out-of-range values, "+
-			"unlisted labels and non-finite numbers are refused at write time.\n\n"+
-			"A `CATEGORICAL` config with no categories is 400, as is a non-finite bound or a "+
-			"`minValue` above `maxValue`. Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/evals/rubrics", http.MethodGet,
-		"The score shapes your org has declared",
-		"Lists the caller org's rubrics as `{data:[…]}` — each name's data type, its numeric "+
-			"bounds and its allowed categories. `limit` defaults to 100 and is capped at 500. "+
-			"Requires a validated principal; 403 without one, and the listing is filtered on the "+
-			"validated org.")
-
-	openapi.Describe("/v1/evals/scores", http.MethodPost,
-		"Record a score against a trace, a run or an example",
-		"Files one score event for the caller's org and answers 201 with it. This is how human "+
-			"review and out-of-band graders land beside the automatic ones: name the score, give it "+
-			"a `value` (or a `stringValue` for a categorical label), and attach it to a `traceId`, "+
-			"a `runName`, a `datasetName`/`datasetItemId`, or any combination.\n\n"+
-			"Scores are validated fail-closed. A value must be FINITE — NaN and Inf are 400 — and "+
-			"if the org has declared a score config for this name, that config decides the type and "+
-			"the value must satisfy it: inside the numeric bounds, or one of the allowed "+
-			"categories. A caller cannot override the declared type by sending a different "+
-			"`dataType`. Comments are truncated at 2000 characters.\n\n"+
-			"A score is TELEMETRY, not metadata, so it needs the datastore: a deployment with no "+
-			"datastore wired answers 503 rather than accepting a score it cannot persist. Requires "+
-			"a validated principal; 403 without one, and the org is stamped from the validated "+
-			"claim rather than read off the body.")
-
-	openapi.Describe("/v1/evals/scores", http.MethodGet,
-		"Score events, filtered",
-		"Lists the caller org's score events as `{data:[…]}`, narrowed by any of `name`, `runName` "+
-			"and `traceId`; an absent filter simply does not narrow. `limit` defaults to 100 and is "+
-			"capped at 500.\n\n"+
-			"The org is bound as an authoritative predicate on the query, never taken from a "+
-			"header, so a filter can narrow the caller's own scores but can never widen past them. "+
-			"Requires a validated principal; 403 without one. Scores live in the datastore, so a "+
-			"deployment with none wired answers 503 rather than an empty page that would read as "+
-			"'no scores'.")
-
-	openapi.Describe("/v1/evals/traces", http.MethodGet,
-		"The traces behind your evaluations",
-		"Lists the caller org's traces as `{data:[…]}` — one per model call an evaluation made, "+
-			"carrying its input, output, model and timing — narrowed by any of `sessionId`, "+
-			"`runName` and `datasetName`. `limit` defaults to 100 and is capped at 500.\n\n"+
-			"Scoped by org AND by project: the project is the caller's server-minted scope, not a "+
-			"parameter, so it cannot be widened by asking. Requires a validated principal; 403 "+
-			"without one. Traces live in the datastore, so a deployment with none wired answers 503 "+
-			"rather than an empty page.")
-
-	openapi.Describe("/v1/evals/metrics", http.MethodGet,
-		"Your org's AI overview board",
-		"Returns the whole observability board for the caller's org over a window: totals "+
-			"(generations, prompt and completion tokens, cost in cents, errors, success rate, "+
-			"distinct models and users), a gap-filled time series, a per-model breakdown with the "+
-			"long tail folded into `other`, and latency percentiles read from the GenAI spans.\n\n"+
-			"`range` is `24h` (the default), `7d` or `30d`, and anything else normalises to `24h` "+
-			"rather than failing; `interval` overrides the bucket with `hour` or `day`. The window "+
-			"the answer was actually computed over is echoed back, so a client never has to infer "+
-			"it. A platform admin sees the board across ALL orgs; everyone else sees their own.\n\n"+
-			"The board is HONEST-EMPTY where it cannot be computed: with no datastore wired, or "+
-			"under a named project scope the usage ledger does not yet carry, it answers a valid "+
-			"board with zero totals and a flat series rather than a fabricated number or a 500. "+
-			"Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/evals/runs", http.MethodPost,
-		"Score a dataset through a model and a judge, now",
-		"Runs a real evaluation and answers the summary when it is finished — this is synchronous "+
-			"work, not a job id. For each ACTIVE example in the dataset it calls the model under "+
-			"test, records a trace, calls the LLM-as-judge, and records the judge's score with its "+
-			"reasoning. The answer carries the per-item results (item id, trace id, score, output "+
-			"or error) alongside `items`, `scored` and `avgScore`.\n\n"+
-			"`dataset` and `model` are required; the dataset must belong to the caller's org (404 "+
-			"otherwise) and must have at least one ACTIVE example (422 otherwise). `judge` is "+
-			"optional — omitted, the model under test grades itself against a default correctness "+
-			"criterion under the score name `llm-judge`. `limit` defaults to 20 and anything above "+
-			"100 falls back to the default. `runName` is generated from the clock when omitted.\n\n"+
-			"It runs as YOU: the caller's own `Authorization` bearer drives the model gateway, so a "+
-			"request without one is 401 rather than a run made anonymously or under a service "+
-			"identity. Only a non-reversible hash of that credential is recorded on the traces.\n\n"+
-			"Bounded and honest about it: an org may have at most 4 runs in flight and the fifth is "+
-			"429 rather than queued, and the whole run is capped at 10 minutes — items past the "+
-			"deadline come back with an error instead of a score, and `scored` counts only real "+
-			"successes. A run where NOTHING scored answers 502, not a 200 that looks like an "+
-			"evaluation. A run must be able to persist what it produces, so a deployment with no "+
-			"datastore wired is 503 up front. Requires a validated principal; 403 without one.")
-
-	openapi.Describe("/v1/evals/runs", http.MethodGet,
-		"Past runs and how they scored",
-		"Lists the caller org's durable run records as `{data:[…]}` — the dataset and model, the "+
-			"judge model, how many examples were attempted and how many scored, the average score, "+
-			"and when it happened. Narrow to one dataset with `datasetName`; `limit` defaults to "+
-			"100 and is capped at 500.\n\n"+
-			"Requires a validated principal; 403 without one, and rows are filtered on the "+
-			"validated org. These records come from the metastore rather than the datastore, so "+
-			"they are readable on a deployment with no telemetry wired — but a run's traces and "+
-			"scores are not.")
+	// A run answers 200 with its summary, or 502 with the SAME summary when
+	// nothing scored — the body is the evidence either way, which is why the
+	// failure is a declared status rather than an error envelope.
+	zip.Post(g, "/runs", s.runHandler, zip.WithStatus(http.StatusOK, http.StatusBadGateway))
+	zip.Get(g, "/runs", s.listRuns)
 }
 
 // Shutdown releases the eval stores. Idempotent.
@@ -456,437 +280,718 @@ func Shutdown() error {
 //     SanitizeIdentity from the validated owner claim; a client X-Org-Id/
 //     X-Project-Id is stripped, so it is never a cross-tenant selector.
 //
-// Fails closed: an unvalidated or org-less request gets no tenant, so the caller
+// Fails closed: an unvalidated or org-less request gets no tenant, so the op
 // returns 403 — never a fake success, never another org's data.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+//
+// A typed op receives a context.Context and nothing else, so it reads the org
+// principal.WithOrg parked rather than the request. The org is never an In field:
+// an In field is caller-supplied, and a tenant key the caller asserts for itself
+// is not a boundary.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return org, nil
+}
+
+// scope is the caller's project narrowing as a storage key: "" for the default
+// project, which denotes the org's whole dataset, else the server-minted slug.
+// It composes principal.ProjectFrom with the default-project rule, which is the
+// context-side twin of principal.ProjectScope.
+func scope(ctx context.Context) string {
+	p := principal.ProjectFrom(ctx)
+	if principal.IsDefaultProject(p) {
+		return ""
+	}
+	return p
+}
+
+// page is the bound every list on this surface takes. It is embedded rather than
+// repeated so one rule about how many rows a read returns is stated once.
+type page struct {
+	// Limit caps the rows returned. It defaults to 100 and is capped at 500; a
+	// non-positive or unparseable value falls back to the default rather than
+	// failing, because a typo about paging is not a reason to refuse a read.
+	Limit int `json:"limit"`
+}
+
+// rows is the bounded row count a list actually reads.
+func (p page) rows() int {
+	if p.Limit <= 0 {
+		return defaultListLimit
+	}
+	if p.Limit > maxListLimit {
+		return maxListLimit
+	}
+	return p.Limit
+}
 
 // ── HTTP shapes (the contract the FE port consumes) ──────────────────────────
 
+// datasetView is one dataset: the named set of graded examples a run scores a
+// model against.
 type datasetView struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Metadata    map[string]any `json:"metadata"`
-	Items       int            `json:"items,omitempty"`
-	CreatedAt   string         `json:"createdAt"`
-	UpdatedAt   string         `json:"updatedAt"`
-}
-
-type itemView struct {
-	ID        string         `json:"id"`
-	Dataset   string         `json:"datasetName"`
-	Input     any            `json:"input"`
-	Expected  any            `json:"expectedOutput"`
-	Metadata  map[string]any `json:"metadata"`
-	Status    string         `json:"status"`
-	CreatedAt string         `json:"createdAt"`
-	UpdatedAt string         `json:"updatedAt"`
-}
-
-type evaluatorView struct {
-	Name      string `json:"name"`
-	Model     string `json:"model"`
-	Criteria  string `json:"criteria"`
-	ScoreName string `json:"scoreName"`
+	// Name is the dataset's org-unique handle and the segment that addresses it.
+	Name string `json:"name"`
+	// Description is free text the org wrote about what this set measures.
+	Description string `json:"description"`
+	// Metadata is the free-form object stored with the set, echoed back verbatim.
+	Metadata map[string]any `json:"metadata"`
+	// Items is how many examples the set holds. It is filled only by the single
+	// read — a listing does not count, so it is absent there rather than zero.
+	Items int `json:"items,omitempty"`
+	// CreatedAt is when the name was first written, kept across later edits.
 	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is when the description or metadata last changed.
 	UpdatedAt string `json:"updatedAt"`
 }
 
+// datasetList is the answer to a dataset listing.
+type datasetList struct {
+	// Data is the caller org's datasets, newest first, bounded by limit.
+	Data []datasetView `json:"data"`
+}
+
+// itemView is one graded example: an input, the output it should produce, and
+// the status that decides whether a run feeds it to the model.
+type itemView struct {
+	// ID is the example's handle, unique within the caller's org.
+	ID string `json:"id"`
+	// Dataset is the set this example belongs to.
+	Dataset string `json:"datasetName"`
+	// Input is what the model under test is given, as it was written.
+	Input any `json:"input"`
+	// Expected is the answer a correct model produces, which the judge grades against.
+	Expected any `json:"expectedOutput"`
+	// Metadata is the free-form object stored with the example.
+	Metadata map[string]any `json:"metadata"`
+	// Status is ACTIVE or ARCHIVED. Only ACTIVE examples are fed to a run, which
+	// is how one is retired without being deleted.
+	Status string `json:"status"`
+	// CreatedAt is when the example was first written.
+	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is when it last changed.
+	UpdatedAt string `json:"updatedAt"`
+}
+
+// itemList is the answer to an example listing.
+type itemList struct {
+	// Data is the examples of the one dataset named in the path, archived ones
+	// included, so the caller sees the whole set rather than what a run would use.
+	Data []itemView `json:"data"`
+}
+
+// evaluatorView is one judge: the model that grades, and the criteria it grades by.
+type evaluatorView struct {
+	// Name is the judge's org-unique handle.
+	Name string `json:"name"`
+	// Model is the model that does the grading.
+	Model string `json:"model"`
+	// Criteria is the written standard the judge applies.
+	Criteria string `json:"criteria"`
+	// ScoreName is the name the resulting scores are filed under.
+	ScoreName string `json:"scoreName"`
+	// CreatedAt is when the judge was first defined.
+	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is when it last changed.
+	UpdatedAt string `json:"updatedAt"`
+}
+
+// evaluatorList is the answer to a judge listing.
+type evaluatorList struct {
+	// Data is the caller org's judges, bounded by limit.
+	Data []evaluatorView `json:"data"`
+}
+
+// scoreConfigView is one rubric: what a score of a given name is allowed to be.
 type scoreConfigView struct {
-	Name       string   `json:"name"`
-	DataType   string   `json:"dataType"`
-	MinValue   *float64 `json:"minValue,omitempty"`
-	MaxValue   *float64 `json:"maxValue,omitempty"`
+	// Name is the score name this rubric governs.
+	Name string `json:"name"`
+	// DataType is NUMERIC, CATEGORICAL or BOOLEAN, and is authoritative — a
+	// score recorded under this name cannot claim a different one.
+	DataType string `json:"dataType"`
+	// MinValue is the inclusive floor a NUMERIC score must clear, absent when unbounded.
+	MinValue *float64 `json:"minValue,omitempty"`
+	// MaxValue is the inclusive ceiling a NUMERIC score must stay under, absent when unbounded.
+	MaxValue *float64 `json:"maxValue,omitempty"`
+	// Categories is the closed set of labels a CATEGORICAL score may carry.
 	Categories []string `json:"categories,omitempty"`
-	CreatedAt  string   `json:"createdAt"`
-	UpdatedAt  string   `json:"updatedAt"`
+	// CreatedAt is when the rubric was first declared.
+	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is when it last changed.
+	UpdatedAt string `json:"updatedAt"`
 }
 
+// scoreConfigList is the answer to a rubric listing.
+type scoreConfigList struct {
+	// Data is the caller org's rubrics, bounded by limit.
+	Data []scoreConfigView `json:"data"`
+}
+
+// scoreView is one recorded score event.
 type scoreView struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	TraceID     string  `json:"traceId,omitempty"`
-	RunName     string  `json:"runName,omitempty"`
-	DataType    string  `json:"dataType"`
-	Value       float64 `json:"value"`
-	StringValue string  `json:"stringValue,omitempty"`
-	Comment     string  `json:"comment,omitempty"`
-	Timestamp   string  `json:"timestamp"`
+	// ID is the score event's handle.
+	ID string `json:"id"`
+	// Name is the score name, which a rubric of the same name governs.
+	Name string `json:"name"`
+	// TraceID is the model call this score grades, when it grades one.
+	TraceID string `json:"traceId,omitempty"`
+	// RunName is the run this score was recorded under, when it came from one.
+	RunName string `json:"runName,omitempty"`
+	// DataType is NUMERIC, CATEGORICAL or BOOLEAN.
+	DataType string `json:"dataType"`
+	// Value is the numeric score; for BOOLEAN it is 0 or 1.
+	Value float64 `json:"value"`
+	// StringValue is the label of a CATEGORICAL score.
+	StringValue string `json:"stringValue,omitempty"`
+	// Comment is the grader's reasoning, truncated at 2000 characters.
+	Comment string `json:"comment,omitempty"`
+	// Timestamp is when the score was recorded.
+	Timestamp string `json:"timestamp"`
 }
 
+// scoreList is the answer to a score listing.
+type scoreList struct {
+	// Data is the caller org's score events matching the filters, bounded by limit.
+	Data []scoreView `json:"data"`
+}
+
+// traceView is one model call an evaluation made.
 type traceView struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
+	// ID is the trace's handle, the value a score points at.
+	ID string `json:"id"`
+	// Name is the trace's label, "eval:<run>" for a call a run made.
+	Name string `json:"name"`
+	// ProjectID is the sub-scope within the org the call was made under.
 	ProjectID string `json:"projectId,omitempty"`
+	// SessionID groups the calls of one run.
 	SessionID string `json:"sessionId,omitempty"`
-	Dataset   string `json:"datasetName,omitempty"`
-	ItemID    string `json:"datasetItemId,omitempty"`
-	RunName   string `json:"runName,omitempty"`
-	Model     string `json:"model,omitempty"`
-	Input     any    `json:"input,omitempty"`
-	Output    string `json:"output,omitempty"`
+	// Dataset is the set the graded example came from.
+	Dataset string `json:"datasetName,omitempty"`
+	// ItemID is the example the call answered.
+	ItemID string `json:"datasetItemId,omitempty"`
+	// RunName is the run the call belongs to.
+	RunName string `json:"runName,omitempty"`
+	// Model is the model that answered.
+	Model string `json:"model,omitempty"`
+	// Input is what the model was given.
+	Input any `json:"input,omitempty"`
+	// Output is what it answered.
+	Output string `json:"output,omitempty"`
 	// LatencyMs is EndTime-StartTime in milliseconds, nil when the trace carries
 	// no timing (so the console renders "—", never a fabricated 0).
 	LatencyMs *float64 `json:"latencyMs,omitempty"`
-	StartTime string   `json:"startTime,omitempty"`
-	EndTime   string   `json:"endTime,omitempty"`
-	Timestamp string   `json:"timestamp"`
-	// APIKeyHash is the non-reversible credential ref (never a plaintext key).
+	// StartTime is when the call began.
+	StartTime string `json:"startTime,omitempty"`
+	// EndTime is when it returned.
+	EndTime string `json:"endTime,omitempty"`
+	// Timestamp is the trace's own clock, equal to StartTime for a timed call.
+	Timestamp string `json:"timestamp"`
+	// APIKeyHash is the non-reversible credential ref (never a plaintext key), so
+	// a trace correlates to the key that drove it without the store holding a secret.
 	APIKeyHash string `json:"apiKeyHash,omitempty"`
+}
+
+// traceList is the answer to a trace listing.
+type traceList struct {
+	// Data is the caller org's traces matching the filters, bounded by limit.
+	Data []traceView `json:"data"`
 }
 
 // ── datasets ─────────────────────────────────────────────────────────────────
 
+// datasetReq creates or edits one dataset. The NAME is the key: posting a name
+// the org already has edits that dataset rather than adding a second one.
 type datasetReq struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Metadata    map[string]any `json:"metadata"`
+	// Name is the dataset's org-unique handle and the segment that will address
+	// it, so it must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$.
+	Name string `json:"name" validate:"required"`
+	// Description is free text about what this set measures; over 64 KiB is refused.
+	Description string `json:"description"`
+	// Metadata is a free-form object stored with the set and echoed back verbatim.
+	Metadata map[string]any `json:"metadata"`
 }
 
-func (s *service) createDataset(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var body datasetReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name, err := requireName(body.Name)
+// datasetRef addresses one of the caller org's datasets by name.
+type datasetRef struct {
+	// Name is the dataset the URL names.
+	Name string `json:"name"`
+}
+
+// none is the answer of an op that removes something: there is nothing left to
+// describe, so it answers 204 and no body.
+type none struct{}
+
+// createDataset writes a dataset — the named set of graded examples a run scores
+// a model against — under the caller's org and answers 201 with it.
+//
+// The NAME is the key, not an id: posting a name the org already has updates that
+// dataset's description and metadata and keeps its original creation time, so this
+// is create-or-edit and never a duplicate. Its items are untouched.
+//
+// Requires a validated principal; 403 without one. The org comes from the
+// validated owner claim, never from a client X-Org-Id, so a dataset can only ever
+// be written under the caller's own tenant. A description over 64 KiB is 400.
+func (s *service) createDataset(ctx context.Context, in *datasetReq) (*datasetView, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	meta, err := encodeMeta(body.Metadata)
+	name, err := requireName(in.Name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if len(body.Description) > maxContent {
-		return zip.ErrBadRequest("description too large")
+	meta, err := encodeMeta(in.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	if len(in.Description) > maxContent {
+		return nil, zip.ErrBadRequest("description too large")
 	}
 	id, err := genID("ds")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	now := time.Now().Unix()
-	d, err := s.store.UpsertDataset(c.Context(), Dataset{
-		ID: id, Org: org, Name: name, Description: body.Description, Metadata: meta, UpdatedAt: now,
+	d, err := s.store.UpsertDataset(ctx, Dataset{
+		ID: id, Org: org, Name: name, Description: in.Description, Metadata: meta,
+		UpdatedAt: time.Now().Unix(),
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toDatasetView(d, 0))
+	out := toDatasetView(d, 0)
+	return &out, nil
 }
 
-func (s *service) listDatasets(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.store.ListDatasets(c.Context(), org, listLimit(c))
+// listDatasets is the datasets your org has, each with its name, description,
+// metadata and timestamps.
+//
+// It is the only way to enumerate what an org holds. Requires a validated
+// principal; 403 without one. Every row is filtered on the validated org, so
+// there is no parameter that reaches another tenant's datasets. The item count is
+// NOT populated here — read one dataset to get it.
+func (s *service) listDatasets(ctx context.Context, in *page) (*datasetList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
+	}
+	rows, err := s.store.ListDatasets(ctx, org, in.rows())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]datasetView, 0, len(rows))
 	for _, d := range rows {
 		out = append(out, toDatasetView(d, 0))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &datasetList{Data: out}, nil
 }
 
-func (s *service) getDataset(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// getDataset returns one dataset of the caller's org by name, together with its
+// live item count — the one read that answers how big the set actually is.
+//
+// A name this org does not have is 404, which is also what another tenant's
+// dataset looks like from here. Requires a validated principal; 403 without one.
+func (s *service) getDataset(ctx context.Context, in *datasetRef) (*datasetView, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	name := strings.TrimSpace(c.Param("name"))
-	d, err := s.store.GetDataset(c.Context(), org, name)
+	name := strings.TrimSpace(in.Name)
+	d, err := s.store.GetDataset(ctx, org, name)
 	if err == errNotFound {
-		return zip.ErrNotFound("dataset not found")
+		return nil, zip.ErrNotFound("dataset not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	n, err := s.store.CountItems(c.Context(), org, name)
+	n, err := s.store.CountItems(ctx, org, name)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "items: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "items: %v", err)
 	}
-	return c.JSON(http.StatusOK, toDatasetView(d, n))
+	out := toDatasetView(d, n)
+	return &out, nil
 }
 
-func (s *service) deleteDataset(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	name := strings.TrimSpace(c.Param("name"))
-	deleted, err := s.store.DeleteDataset(c.Context(), org, name)
+// deleteDataset removes the named dataset of the caller's org AND all of its
+// examples, in one transaction.
+//
+// This is not a detach: the examples are gone with the set, so a dataset cannot
+// be resurrected by re-creating the name. A name this org does not have is 404 —
+// never a silent success — and a name belonging to another tenant is the same
+// 404, because the delete is predicated on the validated org. Requires a
+// validated principal; 403 without one. Runs and scores already recorded against
+// the dataset are telemetry events and are NOT deleted with it.
+func (s *service) deleteDataset(ctx context.Context, in *datasetRef) (*none, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	deleted, err := s.store.DeleteDataset(ctx, org, strings.TrimSpace(in.Name))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("dataset not found")
+		return nil, zip.ErrNotFound("dataset not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ── dataset items ────────────────────────────────────────────────────────────
 
+// itemReq adds a graded example to the dataset the URL names.
 type itemReq struct {
-	ID       string          `json:"id"`
-	Input    json.RawMessage `json:"input"`
+	// Dataset is the set the example is written into, taken from the path. It
+	// must already exist for the caller's org: an unknown one is 404, never a
+	// silent create, so an example can never be attached to a set the caller does
+	// not own. It rides the URL only, so the body never carries it.
+	Dataset string `json:"-" url:"name"`
+	// ID makes the write idempotent — re-posting the same id replaces that example
+	// in place. Omit it and one is generated. An id that already exists in a
+	// DIFFERENT dataset is 409 rather than a move.
+	ID string `json:"id"`
+	// Input is what the model under test will be given, stored as raw JSON exactly
+	// as sent, up to 64 KiB.
+	Input json.RawMessage `json:"input"`
+	// Expected is the answer a correct model produces, which the judge grades
+	// against, stored as raw JSON exactly as sent, up to 64 KiB.
 	Expected json.RawMessage `json:"expectedOutput"`
-	Metadata map[string]any  `json:"metadata"`
-	Status   string          `json:"status"`
+	// Metadata is a free-form object stored with the example.
+	Metadata map[string]any `json:"metadata"`
+	// Status is ACTIVE (the default) or ARCHIVED. Only ACTIVE examples are fed to
+	// a run, which is how an example is retired without being deleted.
+	Status string `json:"status"`
 }
 
-func (s *service) createItem(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// itemPage lists the examples of one dataset.
+type itemPage struct {
+	// Dataset is the set to read, from the path — this collection only exists
+	// inside one.
+	Dataset string `json:"name"`
+	page
+}
+
+// createItem writes one graded example — its input, its expected output,
+// free-form metadata and a status — into the dataset named in the path, and
+// answers 201 with it.
+//
+// That dataset MUST already exist for this org: an unknown one is 404, never a
+// silent create. Requires a validated principal; 403 without one.
+func (s *service) createItem(ctx context.Context, in *itemReq) (*itemView, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body itemReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	dataset := strings.TrimSpace(c.Param("name"))
+	dataset := strings.TrimSpace(in.Dataset)
 	// The dataset MUST exist for THIS org — an item can never be attached to a
 	// dataset the caller doesn't own (a real 404, not a silent create).
-	if _, err := s.store.GetDataset(c.Context(), org, dataset); err == errNotFound {
-		return zip.ErrNotFound("dataset not found")
+	if _, err := s.store.GetDataset(ctx, org, dataset); err == errNotFound {
+		return nil, zip.ErrNotFound("dataset not found")
 	} else if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "dataset: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "dataset: %v", err)
 	}
-	input, err := rawJSON(body.Input, "input")
+	input, err := rawJSON(in.Input, "input")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	expected, err := rawJSON(body.Expected, "expectedOutput")
+	expected, err := rawJSON(in.Expected, "expectedOutput")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	meta, err := encodeMeta(body.Metadata)
+	meta, err := encodeMeta(in.Metadata)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	status := strings.ToUpper(strings.TrimSpace(body.Status))
+	status := strings.ToUpper(strings.TrimSpace(in.Status))
 	if status == "" {
 		status = "ACTIVE"
 	}
 	if status != "ACTIVE" && status != "ARCHIVED" {
-		return zip.ErrBadRequest("status must be ACTIVE or ARCHIVED")
+		return nil, zip.ErrBadRequest("status must be ACTIVE or ARCHIVED")
 	}
-	id := strings.TrimSpace(body.ID)
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
 		if id, err = genID("item"); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 		}
 	} else if !nameRE.MatchString(id) {
-		return zip.ErrBadRequest("id must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("id must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
-	now := time.Now().Unix()
-	it, err := s.store.PutItem(c.Context(), DatasetItem{
+	it, err := s.store.PutItem(ctx, DatasetItem{
 		ID: id, Org: org, Dataset: dataset, Input: input, Expected: expected,
-		Metadata: meta, Status: status, UpdatedAt: now,
+		Metadata: meta, Status: status, UpdatedAt: time.Now().Unix(),
 	})
 	if err == errConflict {
-		return zip.ErrConflict("item id already exists in a different dataset")
+		return nil, zip.ErrConflict("item id already exists in a different dataset")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toItemView(it))
+	out := toItemView(it)
+	return &out, nil
 }
 
-func (s *service) listItems(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	dataset := strings.TrimSpace(c.Param("name"))
-	items, err := s.store.ListItems(c.Context(), org, dataset, false, listLimit(c))
+// listItems is the examples in one of your datasets — the set is named in the
+// path, because this collection only exists inside one.
+//
+// Archived examples are included, so the caller sees the whole set rather than
+// only what a run would use. Requires a validated principal; 403 without one, and
+// the read is filtered on the validated org, so naming another tenant's dataset
+// returns nothing rather than its contents.
+func (s *service) listItems(ctx context.Context, in *itemPage) (*itemList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
+	}
+	items, err := s.store.ListItems(ctx, org, strings.TrimSpace(in.Dataset), false, in.rows())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]itemView, 0, len(items))
 	for _, it := range items {
 		out = append(out, toItemView(it))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &itemList{Data: out}, nil
 }
 
 // ── evaluators ───────────────────────────────────────────────────────────────
 
+// evaluatorReq defines a judge: a model plus the criteria it grades by.
 type evaluatorReq struct {
-	Name      string `json:"name"`
-	Model     string `json:"model"`
-	Criteria  string `json:"criteria"`
+	// Name is the judge's org-unique handle, matching
+	// ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. Re-posting a name edits that judge
+	// rather than adding a second one.
+	Name string `json:"name" validate:"required"`
+	// Model is the model that will do the grading.
+	Model string `json:"model"`
+	// Criteria is the written standard the judge applies; over 64 KiB is refused.
+	Criteria string `json:"criteria"`
+	// ScoreName is the name the resulting scores are filed under. It defaults to
+	// the judge's own name and must match the same pattern.
 	ScoreName string `json:"scoreName"`
 }
 
-func (s *service) createEvaluator(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var body evaluatorReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name, err := requireName(body.Name)
+// createEvaluator saves a reusable judge for the caller's org — the judge model
+// and the written criteria it grades against — and answers 201 with it.
+//
+// Like a dataset, the NAME is the key: re-posting a name edits that judge rather
+// than adding a second one. Requires a validated principal; 403 without one.
+func (s *service) createEvaluator(ctx context.Context, in *evaluatorReq) (*evaluatorView, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if len(body.Criteria) > maxContent {
-		return zip.ErrBadRequest("criteria too large")
+	name, err := requireName(in.Name)
+	if err != nil {
+		return nil, err
 	}
-	scoreName := strings.TrimSpace(body.ScoreName)
+	if len(in.Criteria) > maxContent {
+		return nil, zip.ErrBadRequest("criteria too large")
+	}
+	scoreName := strings.TrimSpace(in.ScoreName)
 	if scoreName == "" {
 		scoreName = name
 	} else if !nameRE.MatchString(scoreName) {
-		return zip.ErrBadRequest("scoreName must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("scoreName must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
 	id, err := genID("eval")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	now := time.Now().Unix()
-	e, err := s.store.UpsertEvaluator(c.Context(), Evaluator{
-		ID: id, Org: org, Name: name, Model: strings.TrimSpace(body.Model),
-		Criteria: body.Criteria, ScoreName: scoreName, UpdatedAt: now,
+	e, err := s.store.UpsertEvaluator(ctx, Evaluator{
+		ID: id, Org: org, Name: name, Model: strings.TrimSpace(in.Model),
+		Criteria: in.Criteria, ScoreName: scoreName, UpdatedAt: time.Now().Unix(),
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toEvaluatorView(e))
+	out := toEvaluatorView(e)
+	return &out, nil
 }
 
-func (s *service) listEvaluators(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.store.ListEvaluators(c.Context(), org, listLimit(c))
+// listEvaluators is the judges your org has defined, each with its judge model,
+// criteria and the score name it writes under.
+//
+// Requires a validated principal; 403 without one, and the listing is filtered on
+// the validated org.
+func (s *service) listEvaluators(ctx context.Context, in *page) (*evaluatorList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
+	}
+	rows, err := s.store.ListEvaluators(ctx, org, in.rows())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]evaluatorView, 0, len(rows))
 	for _, e := range rows {
 		out = append(out, toEvaluatorView(e))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &evaluatorList{Data: out}, nil
 }
 
 // ── score configs ────────────────────────────────────────────────────────────
 
+// scoreConfigReq declares what a score of a given name is allowed to be.
 type scoreConfigReq struct {
-	Name       string   `json:"name"`
-	DataType   string   `json:"dataType"`
-	MinValue   *float64 `json:"minValue"`
-	MaxValue   *float64 `json:"maxValue"`
+	// Name is the score name this rubric governs, matching
+	// ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. The name is the key, so re-posting one
+	// replaces its rules.
+	Name string `json:"name" validate:"required"`
+	// DataType is NUMERIC (the default), CATEGORICAL or BOOLEAN.
+	DataType string `json:"dataType"`
+	// MinValue is the inclusive floor a NUMERIC score must clear. It must be
+	// finite and must not exceed MaxValue.
+	MinValue *float64 `json:"minValue"`
+	// MaxValue is the inclusive ceiling a NUMERIC score must stay under, finite.
+	MaxValue *float64 `json:"maxValue"`
+	// Categories is the closed set of labels a CATEGORICAL score may carry. A
+	// CATEGORICAL rubric with none is refused.
 	Categories []string `json:"categories"`
 }
 
-func (s *service) createScoreConfig(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var body scoreConfigReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name, err := requireName(body.Name)
+// createScoreConfig defines the shape of one score name for the caller's org and
+// answers 201 with it.
+//
+// This is the integrity contract, not documentation: once a rubric exists for a
+// name, every score recorded under that name is checked against it and the
+// rubric's data type is AUTHORITATIVE — a caller cannot claim a different one.
+// Out-of-range values, unlisted labels and non-finite numbers are refused at
+// write time.
+//
+// A CATEGORICAL rubric with no categories is 400, as is a non-finite bound or a
+// minValue above maxValue. Requires a validated principal; 403 without one.
+func (s *service) createScoreConfig(ctx context.Context, in *scoreConfigReq) (*scoreConfigView, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	dt := strings.ToUpper(strings.TrimSpace(body.DataType))
+	name, err := requireName(in.Name)
+	if err != nil {
+		return nil, err
+	}
+	dt := strings.ToUpper(strings.TrimSpace(in.DataType))
 	if dt == "" {
 		dt = "NUMERIC"
 	}
 	if !validDataTypes[dt] {
-		return zip.ErrBadRequest("dataType must be NUMERIC, CATEGORICAL, or BOOLEAN")
+		return nil, zip.ErrBadRequest("dataType must be NUMERIC, CATEGORICAL, or BOOLEAN")
 	}
-	if body.MinValue != nil && !finite(*body.MinValue) {
-		return zip.ErrBadRequest("minValue must be finite")
+	if in.MinValue != nil && !finite(*in.MinValue) {
+		return nil, zip.ErrBadRequest("minValue must be finite")
 	}
-	if body.MaxValue != nil && !finite(*body.MaxValue) {
-		return zip.ErrBadRequest("maxValue must be finite")
+	if in.MaxValue != nil && !finite(*in.MaxValue) {
+		return nil, zip.ErrBadRequest("maxValue must be finite")
 	}
-	if body.MinValue != nil && body.MaxValue != nil && *body.MinValue > *body.MaxValue {
-		return zip.ErrBadRequest("minValue must not exceed maxValue")
+	if in.MinValue != nil && in.MaxValue != nil && *in.MinValue > *in.MaxValue {
+		return nil, zip.ErrBadRequest("minValue must not exceed maxValue")
 	}
-	cats := cleanCategories(body.Categories)
+	cats := cleanCategories(in.Categories)
 	if dt == "CATEGORICAL" && len(cats) == 0 {
-		return zip.ErrBadRequest("CATEGORICAL config requires at least one category")
+		return nil, zip.ErrBadRequest("CATEGORICAL config requires at least one category")
 	}
 	id, err := genID("sc")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	now := time.Now().Unix()
-	cfg, err := s.store.UpsertScoreConfig(c.Context(), ScoreConfig{
+	cfg, err := s.store.UpsertScoreConfig(ctx, ScoreConfig{
 		ID: id, Org: org, Name: name, DataType: dt,
-		MinValue: body.MinValue, MaxValue: body.MaxValue, Categories: cats, UpdatedAt: now,
+		MinValue: in.MinValue, MaxValue: in.MaxValue, Categories: cats,
+		UpdatedAt: time.Now().Unix(),
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toScoreConfigView(cfg))
+	out := toScoreConfigView(cfg)
+	return &out, nil
 }
 
-func (s *service) listScoreConfigs(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.store.ListScoreConfigs(c.Context(), org, listLimit(c))
+// listScoreConfigs is the score shapes your org has declared — each name's data
+// type, its numeric bounds and its allowed categories.
+//
+// Requires a validated principal; 403 without one, and the listing is filtered on
+// the validated org.
+func (s *service) listScoreConfigs(ctx context.Context, in *page) (*scoreConfigList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
+	}
+	rows, err := s.store.ListScoreConfigs(ctx, org, in.rows())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]scoreConfigView, 0, len(rows))
 	for _, cfg := range rows {
 		out = append(out, toScoreConfigView(cfg))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &scoreConfigList{Data: out}, nil
 }
 
 // ── scores (telemetry events) ────────────────────────────────────────────────
 
+// scoreReq records one score against a trace, a run or an example.
 type scoreReq struct {
-	Name        string   `json:"name"`
-	TraceID     string   `json:"traceId"`
-	RunName     string   `json:"runName"`
-	Dataset     string   `json:"datasetName"`
-	ItemID      string   `json:"datasetItemId"`
-	DataType    string   `json:"dataType"`
-	Value       *float64 `json:"value"`
-	StringValue string   `json:"stringValue"`
-	Comment     string   `json:"comment"`
+	// Name is the score name. A rubric of the same name, if the org has declared
+	// one, decides this score's type and the values it may take.
+	Name string `json:"name" validate:"required"`
+	// TraceID attaches the score to one model call.
+	TraceID string `json:"traceId"`
+	// RunName attaches the score to one run.
+	RunName string `json:"runName"`
+	// Dataset attaches the score to one dataset.
+	Dataset string `json:"datasetName"`
+	// ItemID attaches the score to one graded example.
+	ItemID string `json:"datasetItemId"`
+	// DataType is NUMERIC, CATEGORICAL or BOOLEAN. A declared rubric overrides it
+	// — a caller cannot claim a type the org's rubric contradicts.
+	DataType string `json:"dataType"`
+	// Value is the numeric score, which must be finite: NaN and Inf are refused.
+	// A BOOLEAN score takes 0 or 1.
+	Value *float64 `json:"value"`
+	// StringValue is the label of a CATEGORICAL score, which must be one the
+	// rubric allows.
+	StringValue string `json:"stringValue"`
+	// Comment is the grader's reasoning, truncated at 2000 characters.
+	Comment string `json:"comment"`
 }
 
-func (s *service) createScore(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// createScore files one score event for the caller's org and answers 201 with it.
+//
+// This is how human review and out-of-band graders land beside the automatic
+// ones: name the score, give it a value (or a stringValue for a categorical
+// label), and attach it to a trace, a run, a dataset example, or any combination.
+//
+// Scores are validated fail-closed. A value must be FINITE — NaN and Inf are 400
+// — and if the org has declared a rubric for this name, that rubric decides the
+// type and the value must satisfy it: inside the numeric bounds, or one of the
+// allowed categories. A caller cannot override the declared type by sending a
+// different dataType.
+//
+// A score is TELEMETRY, not metadata, so it needs the datastore: a deployment
+// with none wired answers 503 rather than accepting a score it cannot persist.
+// Requires a validated principal; 403 without one, and the org is stamped from
+// the validated claim rather than read off the body.
+func (s *service) createScore(ctx context.Context, in *scoreReq) (*scoreView, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if s.tel == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
 	}
-	var body scoreReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name, err := requireName(body.Name)
+	name, err := requireName(in.Name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ev, err := s.validateScore(c.Context(), org, name, body)
+	ev, err := s.validateScore(ctx, org, name, *in)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := s.tel.RecordScore(c.Context(), ev); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "record score: %v", err)
+	if err := s.tel.RecordScore(ctx, ev); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "record score: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toScoreView(ev))
+	out := toScoreView(ev)
+	return &out, nil
 }
 
 // validateScore turns a score request into a validated, org-stamped ScoreEvent.
@@ -963,142 +1068,286 @@ func (s *service) validateScore(ctx context.Context, org, name string, body scor
 	return ev, nil
 }
 
-func (s *service) listScores(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// scoreFilter narrows a score listing. An absent filter simply does not narrow.
+type scoreFilter struct {
+	// Name narrows to one score name.
+	Name string `json:"name"`
+	// RunName narrows to the scores of one run.
+	RunName string `json:"runName"`
+	// TraceID narrows to the scores on one model call.
+	TraceID string `json:"traceId"`
+	page
+}
+
+// traceFilter narrows a trace listing. An absent filter simply does not narrow.
+type traceFilter struct {
+	// SessionID narrows to one session, which for an evaluation is one run.
+	SessionID string `json:"sessionId"`
+	// RunName narrows to the calls one run made.
+	RunName string `json:"runName"`
+	// Dataset narrows to the calls made against one dataset.
+	Dataset string `json:"datasetName"`
+	page
+}
+
+// listScores is the score events your org has recorded, narrowed by any of name,
+// runName and traceId.
+//
+// The org is bound as an authoritative predicate on the query, never taken from a
+// header, so a filter can narrow the caller's own scores but can never widen past
+// them. Requires a validated principal; 403 without one. Scores live in the
+// datastore, so a deployment with none wired answers 503 rather than an empty
+// page that would read as "no scores".
+func (s *service) listScores(ctx context.Context, in *scoreFilter) (*scoreList, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if s.tel == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
 	}
-	scores, err := s.tel.ListScores(c.Context(), ScoreFilter{
+	scores, err := s.tel.ListScores(ctx, ScoreFilter{
 		Org:     org, // authoritative — never a client header
-		Name:    strings.TrimSpace(c.Query("name")),
-		RunName: strings.TrimSpace(c.Query("runName")),
-		TraceID: strings.TrimSpace(c.Query("traceId")),
-		Limit:   listLimit(c),
+		Name:    strings.TrimSpace(in.Name),
+		RunName: strings.TrimSpace(in.RunName),
+		TraceID: strings.TrimSpace(in.TraceID),
+		Limit:   in.rows(),
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list scores: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list scores: %v", err)
 	}
 	out := make([]scoreView, 0, len(scores))
 	for _, sc := range scores {
 		out = append(out, toScoreView(sc))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &scoreList{Data: out}, nil
 }
 
-func (s *service) listTraces(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// listTraces is the traces behind your evaluations — one per model call an
+// evaluation made, carrying its input, output, model and timing — narrowed by any
+// of sessionId, runName and datasetName.
+//
+// Scoped by org AND by project: the project is the caller's server-minted scope,
+// not a parameter, so it cannot be widened by asking. Requires a validated
+// principal; 403 without one. Traces live in the datastore, so a deployment with
+// none wired answers 503 rather than an empty page.
+func (s *service) listTraces(ctx context.Context, in *traceFilter) (*traceList, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if s.tel == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
 	}
-	traces, err := s.tel.ListTraces(c.Context(), TraceFilter{
-		Org:       org,                       // authoritative
-		ProjectID: principal.ProjectScope(c), // server-minted; "" for the default project (whole org)
-		SessionID: strings.TrimSpace(c.Query("sessionId")),
-		RunName:   strings.TrimSpace(c.Query("runName")),
-		Dataset:   strings.TrimSpace(c.Query("datasetName")),
-		Limit:     listLimit(c),
+	traces, err := s.tel.ListTraces(ctx, TraceFilter{
+		Org:       org,        // authoritative
+		ProjectID: scope(ctx), // server-minted; "" for the default project (whole org)
+		SessionID: strings.TrimSpace(in.SessionID),
+		RunName:   strings.TrimSpace(in.RunName),
+		Dataset:   strings.TrimSpace(in.Dataset),
+		Limit:     in.rows(),
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list traces: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list traces: %v", err)
 	}
 	out := make([]traceView, 0, len(traces))
 	for _, tr := range traces {
 		out = append(out, toTraceView(tr))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &traceList{Data: out}, nil
 }
 
 // ── run orchestration ────────────────────────────────────────────────────────
 
+// judgeSpec is the judge one run grades with.
 type judgeSpec struct {
-	Model    string `json:"model"`
+	// Model is the model that grades. It defaults to the model under test, so a
+	// run with no judge named has the model grade itself.
+	Model string `json:"model"`
+	// Criteria is the standard the judge applies, defaulting to a correctness
+	// criterion.
 	Criteria string `json:"criteria"`
-	Name     string `json:"name"`
+	// Name is the score name the judge's grades are filed under, "llm-judge" by
+	// default. A name that is not a legal handle falls back to that default
+	// rather than being stored as sent.
+	Name string `json:"name"`
 }
 
+// runRequest scores a dataset through a model and a judge, synchronously.
 type runRequest struct {
-	Dataset string     `json:"dataset"`
-	Model   string     `json:"model"`
-	RunName string     `json:"runName"`
-	Limit   int        `json:"limit"`
-	Judge   *judgeSpec `json:"judge"`
+	// Dataset is the set to score, which must belong to the caller's org and hold
+	// at least one ACTIVE example.
+	Dataset string `json:"dataset" validate:"required"`
+	// Model is the model under test.
+	Model string `json:"model" validate:"required"`
+	// RunName labels the run and is generated from the clock when omitted. It
+	// must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$.
+	RunName string `json:"runName"`
+	// Limit caps how many examples this run scores. It defaults to 20, and
+	// anything above 100 falls back to that default.
+	Limit int `json:"limit"`
+	// Judge is the judge to grade with. Omitted, the model under test grades
+	// itself against a default correctness criterion under the score name
+	// "llm-judge".
+	Judge *judgeSpec `json:"judge"`
+	// Authorization is the caller's own bearer, which drives the model gateway: a
+	// run happens AS YOU, never anonymously or under a service identity, and a
+	// request without one is 401 — a missing credential, not a malformed request.
+	// Only a non-reversible hash of it is recorded on the traces.
+	Authorization string `json:"-" url:"-" header:"Authorization"`
 }
 
+// itemResult is what one graded example produced.
 type itemResult struct {
-	ItemID  string  `json:"itemId"`
-	TraceID string  `json:"traceId,omitempty"`
-	Score   float64 `json:"score"`
-	Output  string  `json:"output,omitempty"`
-	Error   string  `json:"error,omitempty"`
+	// ItemID is the example that was scored.
+	ItemID string `json:"itemId"`
+	// TraceID is the model call this result came from.
+	TraceID string `json:"traceId,omitempty"`
+	// Score is the judge's grade.
+	Score float64 `json:"score"`
+	// Output is what the model under test answered, truncated at 2000 characters.
+	Output string `json:"output,omitempty"`
+	// Error is why this example produced no score — the model, the judge, or the
+	// run's deadline. A result carrying one is not counted in Scored.
+	Error string `json:"error,omitempty"`
 }
 
+// runSummary is a finished run.
 type runSummary struct {
-	Dataset    string       `json:"dataset"`
-	Model      string       `json:"model"`
-	JudgeModel string       `json:"judgeModel"`
-	RunName    string       `json:"runName"`
-	Items      int          `json:"items"`
-	Scored     int          `json:"scored"`
-	AvgScore   float64      `json:"avgScore"`
-	Results    []itemResult `json:"results"`
+	// Dataset is the set that was scored.
+	Dataset string `json:"dataset"`
+	// Model is the model under test.
+	Model string `json:"model"`
+	// JudgeModel is the model that graded.
+	JudgeModel string `json:"judgeModel"`
+	// RunName is the run's label, which scores and traces are filed under.
+	RunName string `json:"runName"`
+	// Items is how many examples the run attempted.
+	Items int `json:"items"`
+	// Scored is how many produced a real score. It counts successes only, so a
+	// partial run is honest about what it achieved.
+	Scored int `json:"scored"`
+	// AvgScore is the mean over the scored examples, 0 when none scored.
+	AvgScore float64 `json:"avgScore"`
+	// Results is one row per attempted example.
+	Results []itemResult `json:"results"`
 }
 
-func (s *service) runHandler(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// StatusCode is 200 for a run that scored something and 502 for one that scored
+// nothing. A run where NOTHING scored is a real failure, not a 200 that looks
+// like an evaluation — and the summary is the evidence, so it rides the failure
+// rather than being replaced by an error envelope.
+func (r *runSummary) StatusCode() int {
+	if r.Scored == 0 {
+		return http.StatusBadGateway
+	}
+	return http.StatusOK
+}
+
+// runFilter narrows a run listing.
+type runFilter struct {
+	// Dataset narrows to the runs against one dataset.
+	Dataset string `json:"datasetName"`
+	page
+}
+
+// runRecord is one durable run record.
+type runRecord struct {
+	// Dataset is the set that was scored.
+	Dataset string `json:"dataset"`
+	// RunName is the run's label.
+	RunName string `json:"runName"`
+	// Model is the model under test.
+	Model string `json:"model"`
+	// JudgeModel is the model that graded.
+	JudgeModel string `json:"judgeModel"`
+	// Items is how many examples were attempted.
+	Items int `json:"items"`
+	// Scored is how many produced a real score.
+	Scored int `json:"scored"`
+	// AvgScore is the mean over the scored examples.
+	AvgScore float64 `json:"avgScore"`
+	// CreatedAt is when the run first landed.
+	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is when the record last changed.
+	UpdatedAt string `json:"updatedAt"`
+}
+
+// runs is the answer to a run listing.
+type runs struct {
+	// Data is the caller org's runs, bounded by limit.
+	Data []runRecord `json:"data"`
+}
+
+// runHandler runs a real evaluation and answers the summary when it is finished —
+// this is synchronous work, not a job id.
+//
+// For each ACTIVE example in the dataset it calls the model under test, records a
+// trace, calls the LLM-as-judge, and records the judge's score with its
+// reasoning. The answer carries the per-item results (item id, trace id, score,
+// output or error) alongside items, scored and avgScore.
+//
+// The dataset must belong to the caller's org (404 otherwise) and must have at
+// least one ACTIVE example (422 otherwise).
+//
+// It runs as YOU: the caller's own Authorization bearer drives the model gateway,
+// so a request without one is 401 rather than a run made anonymously or under a
+// service identity. Only a non-reversible hash of that credential is recorded on
+// the traces.
+//
+// Bounded and honest about it: an org may have at most 4 runs in flight and the
+// fifth is 429 rather than queued, and the whole run is capped at 10 minutes —
+// examples past the deadline come back with an error instead of a score, and
+// scored counts only real successes. A run where NOTHING scored answers 502, not
+// a 200 that looks like an evaluation. A run must be able to persist what it
+// produces, so a deployment with no datastore wired is 503 up front. Requires a
+// validated principal; 403 without one.
+func (s *service) runHandler(ctx context.Context, in *runRequest) (*runSummary, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	// A run has no durable record without telemetry — a real eval PERSISTS its
 	// traces + scores. Rather than run models and return scores we can't store
 	// (a fake success), fail closed when the datastore is not wired, exactly as
 	// createScore/listScores do.
 	if s.tel == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "evals/runs: telemetry (datastore) not configured; a run cannot persist traces/scores")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "evals/runs: telemetry (datastore) not configured; a run cannot persist traces/scores")
 	}
 	// The model gateway needs the caller's own credential — fail closed rather
 	// than run models anonymously or with a service identity.
-	authz := c.Header("Authorization")
+	authz := strings.TrimSpace(in.Authorization)
 	if authz == "" {
-		return zip.ErrUnauthorized("evals/runs: missing Authorization bearer; the model gateway needs the caller's key/JWT")
+		return nil, zip.ErrUnauthorized("evals/runs: missing Authorization bearer; the model gateway needs the caller's key/JWT")
 	}
-	var rr runRequest
-	if err := c.Bind(&rr); err != nil {
-		return err
-	}
-	if strings.TrimSpace(rr.Dataset) == "" || strings.TrimSpace(rr.Model) == "" {
-		return zip.ErrBadRequest("evals/runs: 'dataset' and 'model' are required")
+	if strings.TrimSpace(in.Dataset) == "" || strings.TrimSpace(in.Model) == "" {
+		return nil, zip.ErrBadRequest("evals/runs: 'dataset' and 'model' are required")
 	}
 	// The dataset must belong to THIS org (a real 404, never a cross-tenant read).
-	if _, err := s.store.GetDataset(c.Context(), org, rr.Dataset); err == errNotFound {
-		return zip.ErrNotFound("dataset not found")
+	if _, err := s.store.GetDataset(ctx, org, in.Dataset); err == errNotFound {
+		return nil, zip.ErrNotFound("dataset not found")
 	} else if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "dataset: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "dataset: %v", err)
 	}
 
-	limit := rr.Limit
+	limit := in.Limit
 	if limit <= 0 || limit > maxRunItems {
 		limit = defaultRunItems
 	}
-	runName := strings.TrimSpace(rr.RunName)
+	runName := strings.TrimSpace(in.RunName)
 	if runName == "" {
 		runName = "run-" + time.Now().UTC().Format("20060102T150405Z")
 	} else if !nameRE.MatchString(runName) {
-		return zip.ErrBadRequest("runName must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("runName must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
-	judge := normalizeJudge(rr.Judge, rr.Model)
+	judge := normalizeJudge(in.Judge, in.Model)
 
-	items, err := s.store.ListItems(c.Context(), org, rr.Dataset, true, limit)
+	items, err := s.store.ListItems(ctx, org, in.Dataset, true, limit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "items: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "items: %v", err)
 	}
 	if len(items) == 0 {
-		return zip.Errorf(http.StatusUnprocessableEntity, "evals/runs: dataset %q has no active items", rr.Dataset)
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "evals/runs: dataset %q has no active items", in.Dataset)
 	}
 
 	// Bound the run (Red MED): fail fast if this org is already at its concurrent-
@@ -1106,19 +1355,19 @@ func (s *service) runHandler(c *zip.Ctx) error {
 	// can't pin the request + a shared-gateway slot. The slot is released and the
 	// context cancelled on every return path.
 	if !acquireRunSlot(org) {
-		return zip.Errorf(http.StatusTooManyRequests,
+		return nil, zip.Errorf(http.StatusTooManyRequests,
 			"evals/runs: too many concurrent runs for this org (max %d); retry when one finishes", maxConcurrentRunsPerOrg)
 	}
 	defer releaseRunSlot(org)
-	runCtx, cancel := context.WithTimeout(c.Context(), maxRunDuration)
+	runCtx, cancel := context.WithTimeout(ctx, maxRunDuration)
 	defer cancel()
 
 	// Attribution threaded into every item trace: the caller's server-minted
 	// project narrows within the validated org; the credential is stored only as a
 	// non-reversible ref, never in plaintext.
-	attr := runAttribution{projectID: principal.ProjectScope(c), apiKeyHash: hashCredential(authz)}
+	attr := runAttribution{projectID: scope(ctx), apiKeyHash: hashCredential(authz)}
 
-	summary := runSummary{Dataset: rr.Dataset, Model: rr.Model, JudgeModel: judge.Model, RunName: runName, Items: len(items)}
+	summary := runSummary{Dataset: in.Dataset, Model: in.Model, JudgeModel: judge.Model, RunName: runName, Items: len(items)}
 	var sum float64
 	for _, it := range items {
 		// Stop early once the deadline is hit; remaining items are unrun, and the
@@ -1127,7 +1376,7 @@ func (s *service) runHandler(c *zip.Ctx) error {
 			summary.Results = append(summary.Results, itemResult{ItemID: it.ID, Error: "run: " + runCtx.Err().Error()})
 			continue
 		}
-		res := s.runItem(runCtx, org, authz, runName, rr.Model, judge, attr, it)
+		res := s.runItem(runCtx, org, authz, runName, in.Model, judge, attr, it)
 		summary.Results = append(summary.Results, res)
 		if res.Error == "" {
 			sum += res.Score
@@ -1141,21 +1390,15 @@ func (s *service) runHandler(c *zip.Ctx) error {
 	// Persist the durable run record (metastore), best-effort — a metastore write
 	// failure is logged, never masks the run result.
 	if id, gerr := genID("run"); gerr == nil {
-		if _, uerr := s.store.UpsertRun(c.Context(), DatasetRun{
-			ID: id, Org: org, Dataset: rr.Dataset, Name: runName, Model: rr.Model,
+		if _, uerr := s.store.UpsertRun(ctx, DatasetRun{
+			ID: id, Org: org, Dataset: in.Dataset, Name: runName, Model: in.Model,
 			JudgeModel: judge.Model, Items: summary.Items, Scored: summary.Scored,
 			AvgScore: summary.AvgScore, UpdatedAt: time.Now().Unix(),
 		}); uerr != nil {
 			s.log.Warn("run record not persisted", "run", runName, "err", uerr)
 		}
 	}
-
-	// Nothing scored is a real failure, not a fake 200.
-	status := http.StatusOK
-	if summary.Scored == 0 {
-		status = http.StatusBadGateway
-	}
-	return c.JSON(status, summary)
+	return &summary, nil
 }
 
 // runAttribution is the per-run observability context threaded into every item
@@ -1219,30 +1462,32 @@ func (s *service) runItem(ctx context.Context, org, authz, runName, model string
 	return res
 }
 
-func (s *service) listRuns(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	runs, err := s.store.ListRuns(c.Context(), org, strings.TrimSpace(c.Query("datasetName")), listLimit(c))
+// listRuns is your past runs and how they scored — the dataset and model, the
+// judge model, how many examples were attempted and how many scored, the average
+// score, and when it happened.
+//
+// Requires a validated principal; 403 without one, and rows are filtered on the
+// validated org. These records come from the metastore rather than the datastore,
+// so they are readable on a deployment with no telemetry wired — but a run's
+// traces and scores are not.
+func (s *service) listRuns(ctx context.Context, in *runFilter) (*runs, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list runs: %v", err)
+		return nil, err
 	}
-	out := make([]map[string]any, 0, len(runs))
-	for _, r := range runs {
-		out = append(out, map[string]any{
-			"dataset":    r.Dataset,
-			"runName":    r.Name,
-			"model":      r.Model,
-			"judgeModel": r.JudgeModel,
-			"items":      r.Items,
-			"scored":     r.Scored,
-			"avgScore":   r.AvgScore,
-			"createdAt":  rfc3339(r.CreatedAt),
-			"updatedAt":  rfc3339(r.UpdatedAt),
+	rows, err := s.store.ListRuns(ctx, org, strings.TrimSpace(in.Dataset), in.rows())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list runs: %v", err)
+	}
+	out := make([]runRecord, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, runRecord{
+			Dataset: r.Dataset, RunName: r.Name, Model: r.Model, JudgeModel: r.JudgeModel,
+			Items: r.Items, Scored: r.Scored, AvgScore: r.AvgScore,
+			CreatedAt: rfc3339(r.CreatedAt), UpdatedAt: rfc3339(r.UpdatedAt),
 		})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &runs{Data: out}, nil
 }
 
 // ── view converters ──────────────────────────────────────────────────────────
@@ -1444,18 +1689,6 @@ func normalizeJudge(j *judgeSpec, model string) judgeSpec {
 		}
 	}
 	return out
-}
-
-// listLimit reads a bounded ?limit from the request (metastore lists).
-func listLimit(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
-		return defaultListLimit
-	}
-	if n > maxListLimit {
-		return maxListLimit
-	}
-	return n
 }
 
 // genID returns a prefixed, collision-resistant id (prefix + 128 random bits).

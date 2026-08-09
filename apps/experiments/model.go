@@ -14,7 +14,7 @@
 //
 // The experiment is the VALUE that composes them:
 //
-//	Experiment = { id, org, name, subjectKind, variants (payload is variant-kind
+//	Trial = { id, org, name, subjectKind, variants (payload is variant-kind
 //	               AGNOSTIC), flagKey (-> the assignment def), metric/exposure events
 //	               (-> the analytics outcome grain), status, winner }
 //
@@ -62,57 +62,57 @@ const (
 	StatusDecided Status = "decided"
 )
 
-// Variant is one arm of an experiment: a key, its rollout Weight within the
+// Arm is one arm of an experiment: a key, its rollout Weight within the
 // experiment (percentages across variants sum to 100), whether it is the Control
 // (baseline) arm, and a variant-kind-AGNOSTIC Payload the assignment carries —
 // a feature config, an ad-creative id, an email subject, a model id. The experiment
 // primitive never interprets the payload; the consumer does.
-type Variant struct {
-	Key     string          `json:"key"`
-	Weight  float64         `json:"weight"`
-	Control bool            `json:"control,omitempty"`
-	Payload json.RawMessage `json:"payload,omitempty"`
+type Arm struct {
+	Key     string          `json:"key"`               // the arm's slug, unique within the experiment
+	Weight  float64         `json:"weight"`            // its share of the rollout; the arms sum to 100
+	Control bool            `json:"control,omitempty"` // true on the baseline arm every other arm is compared to
+	Payload json.RawMessage `json:"payload,omitempty"` // opaque JSON the arm carries, which the consumer interprets
 }
 
-// Experiment is the primitive: the definition + lifecycle of one controlled
+// Trial is the primitive: the definition + lifecycle of one controlled
 // experiment. Project + ID are the server-stamped identity (project from the
 // validated principal, never a client field). FlagKey links the assignment plane;
 // MetricEvent + ExposureEvent link the measurement plane.
-type Experiment struct {
-	Project       string      `json:"project"`
-	ID            string      `json:"id"`
-	Name          string      `json:"name"`
-	SubjectKind   SubjectKind `json:"subjectKind"`
-	FlagKey       string      `json:"flagKey"`
-	ExposureEvent string      `json:"exposureEvent"`
-	MetricEvent   string      `json:"metricEvent"`
-	Variants      []Variant   `json:"variants"`
-	Status        Status      `json:"status"`
-	Winner        string      `json:"winner,omitempty"`
-	CreatedBy     string      `json:"createdBy,omitempty"`
-	CreatedAt     string      `json:"createdAt,omitempty"`
-	DecidedBy     string      `json:"decidedBy,omitempty"`
-	DecidedAt     string      `json:"decidedAt,omitempty"`
+type Trial struct {
+	Project       string      `json:"project"`             // the sub-scope within the org, stamped from the principal
+	ID            string      `json:"id"`                  // the experiment's slug, unique within the project
+	Name          string      `json:"name"`                // free text for a reader
+	SubjectKind   SubjectKind `json:"subjectKind"`         // the unit assigned and measured: user, org, session or audience
+	FlagKey       string      `json:"flagKey"`             // the assignment flag this experiment drives
+	ExposureEvent string      `json:"exposureEvent"`       // the event that enrols a subject — the analysis denominator
+	MetricEvent   string      `json:"metricEvent"`         // the event that counts as a conversion — the numerator
+	Arms          []Arm       `json:"variants"`            // the arms, weighted, one of them the control
+	Status        Status      `json:"status"`              // running while it assigns and measures, decided once a winner is promoted
+	Winner        string      `json:"winner,omitempty"`    // the arm promoted to the whole rollout
+	CreatedBy     string      `json:"createdBy,omitempty"` // the credential that registered it
+	CreatedAt     string      `json:"createdAt,omitempty"` // when it started assigning
+	DecidedBy     string      `json:"decidedBy,omitempty"` // the credential that promoted the winner
+	DecidedAt     string      `json:"decidedAt,omitempty"` // when the promotion took effect
 }
 
 // controlKey returns the experiment's control variant key: the arm flagged
 // Control, else the FIRST variant (deterministic baseline). "" only when there are
 // no variants (a create-time invariant forbids that).
-func (e Experiment) controlKey() string {
-	for _, v := range e.Variants {
+func (e Trial) controlKey() string {
+	for _, v := range e.Arms {
 		if v.Control {
 			return v.Key
 		}
 	}
-	if len(e.Variants) > 0 {
-		return e.Variants[0].Key
+	if len(e.Arms) > 0 {
+		return e.Arms[0].Key
 	}
 	return ""
 }
 
 // hasVariant reports whether key names one of the experiment's variants.
-func (e Experiment) hasVariant(key string) bool {
-	for _, v := range e.Variants {
+func (e Trial) hasVariant(key string) bool {
+	for _, v := range e.Arms {
 		if v.Key == key {
 			return true
 		}

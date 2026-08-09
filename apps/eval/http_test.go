@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -29,22 +30,12 @@ func mountApp(t *testing.T) (*zip.App, *service) {
 	s := &service{store: store, tel: newMemTelemetry(), runner: stubRunner{}, log: luxlog.New("test")}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Post("/v1/evals/datasets", s.createDataset)
-	app.Get("/v1/evals/datasets", s.listDatasets)
-	app.Get("/v1/evals/datasets/:name", s.getDataset)
-	app.Delete("/v1/evals/datasets/:name", s.deleteDataset)
-	app.Post("/v1/evals/datasets/:name/items", s.createItem)
-	app.Get("/v1/evals/datasets/:name/items", s.listItems)
-	app.Post("/v1/evals/evaluators", s.createEvaluator)
-	app.Get("/v1/evals/evaluators", s.listEvaluators)
-	app.Post("/v1/evals/rubrics", s.createScoreConfig)
-	app.Get("/v1/evals/rubrics", s.listScoreConfigs)
-	app.Post("/v1/evals/scores", s.createScore)
-	app.Get("/v1/evals/scores", s.listScores)
-	app.Get("/v1/evals/traces", s.listTraces)
-	app.Get("/v1/evals/metrics", s.metricsBoard)
-	app.Post("/v1/evals/runs", s.runHandler)
-	app.Get("/v1/evals/runs", s.listRuns)
+	// cloud.Bridge is what parks the validated org, the project and the request a
+	// typed op reads off its context. The composer installs it once at the root in
+	// production (serve.go); these tests compose the same way, so a route reached
+	// here is reached exactly as it is served.
+	app.Use(cloud.Bridge())
+	routes(app, s)
 	return app, s
 }
 
