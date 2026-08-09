@@ -1556,28 +1556,77 @@ components:
     CodingStartIn:
       properties:
         agentRef:
+          description: |-
+            AgentRef names a configured agent to run as, which is how an org pins a
+            harness, a model and a prompt to a name. Empty runs the default agent.
           type: string
         base:
+          description: |-
+            Base is the branch to start from. Empty takes the repository's default. The
+            run never writes here — it writes the agent branch it answers with.
           type: string
         desktop:
           type: boolean
         project:
+          description: |-
+            Project scopes the run to one board's work when the org keeps more than one.
+            Empty is the org's default.
           type: string
         prompt:
+          description: |-
+            Prompt is the task, in the words you would use with a colleague who has the
+            checkout open. It is the whole instruction: there is no second field for
+            context, and a prompt that names files and the outcome it wants gets a run
+            that does not have to guess either.
           type: string
         replyChannel:
+          description: |-
+            ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the door
+            that started it has somewhere for it to talk. Empty means nobody is
+            listening and the run simply does not narrate — which is the app door's
+            case, because /v1/coding hands back a session id and the session stream is
+            a better progress feed than any message could be.
+
+            It is an ADDRESS and not a token: the engine says "put this text there",
+            and the process that owns the workspace's bot credential is the one that
+            actually posts. So a run reports into a Slack thread without the engine
+            ever holding the token that could post anywhere else in that workspace.
           type: string
         replyThread:
           type: string
         repo:
+          description: |-
+            Repo is what to work on, as `owner/name` in the caller's own org. The engine
+            resolves the clone URL and the push credential from the org itself, so this
+            says WHICH repository and never how to reach it.
           type: string
         subject:
+          description: |-
+            Subject is the person the run is attributed to — a linked Hanzo identity the
+            door already proved, never a name the caller picks. Empty is refused rather
+            than defaulted: a run that lost its human must not execute as the org.
           type: string
         targetId:
+          description: |-
+            TargetID routes the run to a registered machine the org has claimed instead
+            of to a sandbox in our cluster. Empty runs it here, which is the usual case.
           type: string
         timeoutSeconds:
+          description: |-
+            TimeoutSeconds bounds the whole run. Unset takes the default budget; a run
+            that hits the bound is stopped and reports what it had done by then.
           type: integer
         tool:
+          description: |-
+            Tool is which harness runs the prompt — dev | claude | codex | python |
+            node — and Desktop is whether the run needs a screen. Both are empty by
+            default, which is `dev` with no screen, and that default is what every
+            caller gets until it says otherwise.
+
+            They are two fields because they are two questions. The harness decides
+            what argv starts; the screen decides which image carries an X server. A
+            caller may want claude WITH a browser it can see, and a single enum would
+            have made that combination unsayable.
           type: string
       type: object
     CodingStarted:
@@ -2405,8 +2454,13 @@ components:
     EndIn:
       properties:
         id:
+          description: ID is the sandbox whose lease ends, from an earlier lease.
           type: string
         purge:
+          description: |-
+            Purge deletes the project's DISK as well. It is opt-in because the disk holds
+            the only copy of the checkout: ending a lease is cheap and reversible,
+            deleting someone's uncommitted work is neither.
           type: boolean
       type: object
     Endpoint:
@@ -4048,14 +4102,43 @@ components:
     LeaseIn:
       properties:
         class:
+          description: "Class is what KIND of computer to lease, and the set is closed:\n\n\texec
+            \    a throwaway one that keeps nothing. Seconds to minutes.\n\tdev      a
+            coding one, with the project's own disk attached. Hours.\n\tdesktop  a
+            dev one that also has a screen.\n\nEmpty leases an `exec`, which is the
+            right answer for running a program and\nthe wrong one for working on a
+            repository, because it keeps nothing."
           type: string
         id:
+          description: |-
+            ID names a sandbox to RESUME, and is the id an earlier lease answered with.
+            Empty asks for a new one. A caller that holds an id and omits it does not get
+            a second view of the same computer, it gets a second computer.
           type: string
         project:
+          description: |-
+            Project names the disk to attach, and is REQUIRED for every class but `exec`.
+
+            One live sandbox per project: the disk attaches to one computer at a time, so
+            a second lease over a project that already has one is refused by name rather
+            than handed a silently empty disk.
           type: string
         runtime:
+          description: |-
+            Runtime is the isolation boundary asked for: `gvisor` shares a filesystem
+            and holds a project volume, `kata-fc` is a microVM that boots slower and
+            reads files faster but has no shared filesystem at all. Empty asks for the
+            fleet's default, which is the right answer unless you are measuring.
+
+            It is a REQUEST. The owner decides, and refuses a combination it cannot
+            honour — a volume under a runtime with no shared filesystem would write
+            into a tmpfs and lose the bytes at exit. Read Leased.Runtime for what the
+            sandbox actually got.
           type: string
         ttlSec:
+          description: |-
+            TTLSec bounds the lease in seconds. Unset takes the class default. Nothing
+            runs forever, because a sandbox is somebody else's code on our nodes.
           type: integer
       type: object
     Leased:
@@ -4065,6 +4148,11 @@ components:
         id:
           type: string
         runtime:
+          description: |-
+            Runtime is the boundary this sandbox GOT, which need not be the one asked
+            for — carried for the same reason Workdir is, that it is a fact only the
+            owner knows and a caller assuming it would be holding a second copy. Empty
+            is the node's default runtime, and a real answer.
           type: string
         status:
           type: string
@@ -4923,8 +5011,13 @@ components:
     PathIn:
       properties:
         id:
+          description: ID is the sandbox to read from, from an earlier lease.
           type: string
         path:
+          description: |-
+            Path is read relative to the sandbox's working directory unless it is
+            absolute, and a path that climbs out of it is refused rather than rewritten.
+            Empty names the working directory itself, which lists it.
           type: string
       type: object
     PaymentIn:
@@ -6756,20 +6849,47 @@ components:
     RunIn:
       properties:
         argv:
+          description: |-
+            Argv is the program and its arguments, already split — the form no shell can
+            misread. Give this or Command, not both.
           items:
             type: string
           type: array
         command:
+          description: |-
+            Command is a shell line, run by `sh -c`. Use it when a pipeline or a
+            redirection is the point, and Argv when it is not.
           type: string
         dir:
+          description: |-
+            Dir runs the command somewhere other than the sandbox's working directory,
+            which Leased.Workdir names.
           type: string
         id:
+          description: ID is the sandbox to run in, from an earlier lease.
           type: string
         session:
+          description: |-
+            Session is the live agent session this command narrates into: its output is
+            appended there AS IT IS PRODUCED, so every surface watching that session
+            watches the command work instead of a blank pause. A long run is otherwise a
+            silence with a verdict at the end.
+
+            It names a SESSION and never a tenant. The org is the one the caller already
+            proved, so a session belonging to somebody else is simply absent from the org
+            this call acts for and the append is refused there. Empty means nothing is
+            watching, and then nothing is sent.
           type: string
         stdin:
+          description: |-
+            Stdin is fed to the program on standard input. This is how bytes reach a file
+            without being quoted into a shell line: `cat > path` with the contents here
+            writes them exactly.
           type: string
         timeoutSec:
+          description: |-
+            TimeoutSec bounds this ONE command, so a wedged program holds the caller for
+            its own timeout rather than for the whole lease.
           type: integer
       type: object
     SaaSCategory:
@@ -8911,10 +9031,15 @@ components:
       properties:
         data:
           contentEncoding: base64
+          description: Data is the file's bytes, and replaces whatever was there.
           type: string
         id:
+          description: ID is the sandbox to write into, from an earlier lease.
           type: string
         path:
+          description: |-
+            Path is confined the same way PathIn.Path is. Missing parent directories are
+            created.
           type: string
       type: object
     Wrote:
@@ -16619,6 +16744,34 @@ components:
             type: string
           type: array
       type: object
+    githubForkOut:
+      properties:
+        clone_url:
+          type: string
+        default_branch:
+          type: string
+        existing:
+          description: |-
+            Existing reports that the fork was already there. GitHub answers 202 either
+            way, so without this a caller cannot tell "made you one" from "you had one".
+          type: boolean
+        full_name:
+          type: string
+        html_url:
+          type: string
+      type: object
+    githubForkReq:
+      properties:
+        org:
+          description: |-
+            Org is the GitHub account to fork INTO; empty forks to the installation's
+            own account, which is the common case.
+          type: string
+        repo:
+          description: Repo is a repository the org's installation was GRANTED, by
+            name.
+          type: string
+      type: object
     githubImportIn:
       properties:
         all:
@@ -16849,6 +17002,62 @@ components:
           items:
             $ref: '#/components/schemas/githubRepoView'
           type: array
+        unread:
+          description: |-
+            Unread names the connected accounts this answer could NOT read, so a short
+            list is distinguishable from a complete one. Absent when the answer is whole.
+
+            The fan-out is per installation, and one account failing used to be dropped
+            in silence: the response stayed 200 and simply carried fewer repositories,
+            erroring only when EVERY account failed. Measured, twice in a row, minutes
+            apart: 1475 repositories, then 1157 — a whole installation missing with
+            nothing in the answer to say so. Anything driven off the list then
+            under-covers and reports success, which is the failure this field ends.
+          items:
+            type: string
+          type: array
+      type: object
+    githubSearchHit:
+      properties:
+        clone_url:
+          type: string
+        default_branch:
+          type: string
+        description:
+          type: string
+        full_name:
+          type: string
+        html_url:
+          type: string
+        language:
+          type: string
+        private:
+          type: boolean
+        stars:
+          type: integer
+      type: object
+    githubSearchOut:
+      properties:
+        count:
+          type: integer
+        repos:
+          items:
+            $ref: '#/components/schemas/githubSearchHit'
+          type: array
+      type: object
+    githubSearchReq:
+      properties:
+        limit:
+          description: |-
+            Limit caps the answer; 0 takes the default and anything above the ceiling
+            is clamped rather than refused.
+          type: integer
+        q:
+          description: |-
+            Q is GitHub's own search syntax, passed through: "tetris language:go",
+            "org:hanzoai stars:>10". Passing it through rather than inventing a
+            vocabulary means one thing to learn, and it is theirs.
+          type: string
       type: object
     gpuAlertList:
       properties:
@@ -19266,6 +19475,16 @@ components:
           type: string
         mfaRememberDeadline:
           type: string
+        mfaRememberDigest:
+          description: |-
+            MfaRememberDigest is the digest of the token held by the ONE browser the
+            deadline above applies to. Without it the deadline is account-wide and "don't
+            ask again on this browser" switches the second factor off everywhere. It is a
+            digest, never the token, so a database dump yields nothing presentable — and it
+            carries a REAL json tag because orm persists via json.Marshal, so `json:"-"`
+            would never be stored (the trap PasswordHash documents above); Mask() strips it
+            from every response instead.
+          type: string
         microsoftonline:
           type: string
         multiFactorAuths:
@@ -20220,6 +20439,8 @@ components:
         mfaRadiusUsername:
           type: string
         mfaRememberDeadline:
+          type: string
+        mfaRememberDigest:
           type: string
         microsoftonline:
           type: string
@@ -34958,6 +35179,25 @@ components:
         id:
           description: ID is the sync to update, from the path.
           type: string
+        kind:
+          type: string
+        source:
+          $ref: '#/components/schemas/endpointReq'
+          description: |-
+            Source, Target and Kind are DECLARED HERE IN ORDER TO BE REFUSED.
+
+            They are immutable by design — re-pointing a sync is a delete and a create, so
+            a link can never silently start syncing somewhere else — but an UNDECLARED
+            field is dropped by the binder before the handler sees it, so a request asking
+            to repoint answered 200, changed nothing, and said nothing. The operator then
+            believes a moved repository has been repointed and it has not.
+
+            Live: a sync still naming github.com/hanzoai/cloud after the repository moved
+            to hanzo-inc/cloud failed every reconcile with "Repository not found", and the
+            PATCH that appeared to fix it did nothing at all. Declaring the fields is what
+            lets the documented immutability actually answer.
+        target:
+          $ref: '#/components/schemas/endpointReq'
         trigger:
           description: Trigger is webhook, poll or manual. Omitted, the stored trigger
             stands.
@@ -43375,66 +43615,6 @@ paths:
           description: ok
       summary: Answers ok whenever the commerce subsystem is mounted.
       x-app: commerce
-  /_/commerce/providers:
-    get:
-      description: Returns the caller's own tenant row projected to a public view
-        with the KMS paths stripped, so a provider's name and enabled flag are visible
-        and its credential location never is. The tenant is derived from the IAM owner
-        claim and from nothing else — there is no tenant parameter to supply, so a
-        cross-tenant read is not expressible. A tenant admin or a platform admin may
-        call it; a plain authenticated user is refused 403 and an anonymous one 401.
-        A caller whose owner claim has no tenant row gets a 404 byte-identical to
-        the one a cross-tenant probe would get.
-      operationId: get___commerce_providers
-      summary: List the payment providers configured for your own tenant
-      x-app: commerce
-  /_/commerce/providers/{name}:
-    put:
-      description: 'Sets the enabled flag on ONE named rail — square, stripe, braintree,
-        plaid, wire or crypto — for the tenant the caller''s IAM owner claim resolves
-        to, and answers the tenant name with the same name-and-enabled projection
-        the provider list serves, so a console can render the result without a second
-        read. One rail per call is a correctness requirement rather than a taste:
-        a provider record also carries the KMS path naming where its credentials live,
-        the list read deliberately strips that path, and a PUT that replaced the whole
-        list from what a UI can see would write every rail back with an EMPTY path
-        and silently disconnect each one from its credentials. Naming a single rail
-        copies every other record forward byte for byte. The body must be an explicit
-        enabled true or false — an absent field is 400, never a disable — and a name
-        outside the known set is 400 that lists the names that mean something downstream,
-        because a typo which reports success is worse than one that does not. A tenant
-        admin or a platform admin may call it; anonymous is 401 and a signed-in non-admin
-        403. No tenant id is accepted from the client, so a cross-tenant write is
-        not expressible, and a caller with no tenant row gets a 404 byte-identical
-        to the one a probe for someone else''s tenant would get. Setting a rail to
-        the state it already holds succeeds and changes nothing; a rail the tenant
-        has never carried is appended, which is how one is turned on for the first
-        time — and it is appended with no credential path, so enabling a rail here
-        does not by itself connect it to any credentials.'
-      operationId: put___commerce_providers_by_name
-      parameters:
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      summary: Turn one payment rail on or off for your own tenant
-      x-app: commerce
-  /_/commerce/tenants:
-    post:
-      description: Registers a new hosted-checkout tenant so its hostnames resolve
-        to their own branding, identity config, payment providers and broker backend.
-        PLATFORM admin only — the reserved admin org's owner claim; an org owner with
-        the org-level admin bit is refused 403 and an anonymous caller 401, so a tenant
-        can never be minted from inside a tenant. A duplicate name is 409 and a malformed
-        hostname 400. The response echoes only the identity and timestamps, never
-        the provider records the caller just sent, and the mutation is audited by
-        hash rather than by content so a credential that slips into the body is not
-        replayable from the log.
-      operationId: post___commerce_tenants
-      summary: 'Create a checkout tenant: hostnames, brand, IAM, IDV, providers and
-        backend'
-      x-app: commerce
   /{org}/{project}/{repo}/git-receive-pack:
     post:
       description: |-
@@ -48319,7 +48499,7 @@ paths:
       summary: Run one tool-calling round against your org's own tools
       tags:
       - agent
-      x-app: agent
+      x-app: agents
   /v1/agent/conversations:
     get:
       description: |-
@@ -48330,7 +48510,7 @@ paths:
       summary: List the agent threads in your org
       tags:
       - agent
-      x-app: agent
+      x-app: agents
   /v1/agent/conversations/{id}:
     get:
       description: |-
@@ -48347,7 +48527,7 @@ paths:
       summary: Read one agent thread in full
       tags:
       - agent
-      x-app: agent
+      x-app: agents
   /v1/agent/presets:
     get:
       description: |-
@@ -48358,7 +48538,7 @@ paths:
       summary: List the agent presets available to a caller
       tags:
       - agent
-      x-app: agent
+      x-app: agents
   /v1/agents:
     get:
       description: |-
@@ -57064,13 +57244,14 @@ paths:
   /v1/channels:
     get:
       description: |-
-        Returns every chat transport channels can talk to — Discord, Slack, Teams
-        and Telegram — with the caller org's own facts on each: whether it is
-        connected and to which account, what the transport supports, the org's DM and
-        group access policies, and how many pairing requests are pending approval. The
-        order is fixed, so a console can render the same rows every time. A policy that
-        cannot be read leaves that channel's policy fields empty rather than failing
-        the whole listing.
+        Reports every chat channel this org can send through, and whether it can
+        send through it right now.
+
+        A channel appears here whether or not it is connected — an empty list would
+        leave a caller unable to tell "this org has no Slack" from "Slack is down",
+        which are different problems with different fixes. Each entry carries the
+        connection behind it, so the answer to "why can I not post?" is in the same
+        response as the channel that cannot post.
       operationId: get_v1_channels
       responses:
         "200":
@@ -57079,10 +57260,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/chatChannels'
           description: ok
-      summary: 'Returns every chat transport channels can talk to — Discord, Slack,
-        Teams and Telegram — with the caller org''s own facts on each: whether it
-        is connected and to which account, what the transport supports, the org''s
-        DM and group access policies, and how many pairing requests are pending approval.'
+      summary: Reports every chat channel this org can send through, and whether it
+        can send through it right now.
       tags:
       - channels
       x-app: channels
@@ -59068,6 +59247,16 @@ paths:
       x-app: code
   /v1/coding:
     post:
+      description: |-
+        Is the app's door. It answers 202 with the run's handle the
+        moment the run is ADMITTED — not when it finishes. A coding run takes minutes;
+        holding a request open for one would tie a connection to a model loop and give
+        the caller nothing it cannot get better from the session stream.
+
+        The handle is a session id, and that is deliberate: the session is already the
+        run's durable record and its live stream (/v1/agents/sessions/{id}/stream), so
+        this door does not grow a progress endpoint, a status endpoint or a cancel
+        endpoint of its own. One way to watch a run, whoever started it.
       operationId: post_v1_coding
       requestBody:
         content:
@@ -60252,6 +60441,19 @@ paths:
       tags:
       - commerce
       x-app: commerce
+  /v1/commerce/org:
+    get:
+      description: 'The public configuration for the org that owns this hostname:
+        its branding, its checkout options and the return URLs it will accept. Unauthenticated
+        and cached briefly, because a storefront asks for it before anyone has signed
+        in. An unknown host is a plain 404 that does not echo the host back, so it
+        cannot be used to discover which orgs exist.'
+      operationId: get_v1_commerce_org
+      summary: 'The public configuration for the org that owns this hostname: its
+        branding, its checkout options and the return URLs it will accept.'
+      tags:
+      - commerce
+      x-app: commerce
   /v1/commerce/product/:
     get:
       description: 'A product is a sellable catalog item: slug, SKU and UPC, name
@@ -61331,23 +61533,6 @@ paths:
         schema:
           type: string
       summary: Replace a subscriber outright
-      tags:
-      - commerce
-      x-app: commerce
-  /v1/commerce/tenant:
-    get:
-      description: Answers the branding, identity issuer and client id, identity-verification
-        config, enabled payment providers, return-URL allowlist and public payment
-        application config for the tenant the request HOST resolves to. It is genuinely
-        public and unauthenticated — a checkout page calls it before anyone has signed
-        in — and it carries the same public payment config the authenticated config
-        read does, so the card iframe can never initialize against a different application
-        than the one that will be charged. Only ENABLED providers are listed and no
-        credential path is ever projected. An unresolvable host answers a constant
-        404 that does not echo the host, so the endpoint cannot be used to enumerate
-        tenants; a successful answer is cacheable for a minute.
-      operationId: get_v1_commerce_tenant
-      summary: The public tenant configuration a checkout page boots from
       tags:
       - commerce
       x-app: commerce
@@ -72497,13 +72682,16 @@ paths:
   /v1/iam/delete-mfa:
     post:
       description: |-
-        Turns off the authenticator app for an account, so sign-in stops
-        asking for a code. People may do this for themselves; doing it for somebody
-        else takes an administrator, which is what makes it the reset path when a
+        Turns a factor off, so sign-in stops asking for it. Naming no factor turns
+        off ALL of them — the reset path. People may do this for themselves; doing it for
+        somebody else takes an administrator, which is what makes it the way back in when a
         phone is lost.
+
+        The recovery codes go with the last factor: they are the way past a challenge, so
+        keeping them alive for an account with nothing to challenge would leave a standing
+        credential behind.
       operationId: post_v1_iam_delete-mfa
-      summary: Turns off the authenticator app for an account, so sign-in stops asking
-        for a code.
+      summary: Turns a factor off, so sign-in stops asking for it.
       tags:
       - iam
       x-app: iam
@@ -73482,6 +73670,22 @@ paths:
       tags:
       - iam
       x-app: iam
+  /v1/iam/link:
+    post:
+      description: |-
+        Starts connecting another sign-in identity to the account you are already
+        signed in as. It answers with the provider's URL for the browser to follow; when
+        the provider returns, that identity is attached and you come back to returnUri.
+
+        Your account is fixed here, from the credential you are already holding, and is
+        carried server-side for the rest of the round-trip — so nothing that happens at
+        the provider can point the link at somebody else.
+      operationId: post_v1_iam_link
+      summary: Starts connecting another sign-in identity to the account you are already
+        signed in as.
+      tags:
+      - iam
+      x-app: iam
   /v1/iam/linked-accounts:
     get:
       description: |-
@@ -73569,66 +73773,69 @@ paths:
   /v1/iam/mfa/disable:
     post:
       description: |-
-        Turns off the authenticator app for an account, so sign-in stops
-        asking for a code. People may do this for themselves; doing it for somebody
-        else takes an administrator, which is what makes it the reset path when a
+        Turns a factor off, so sign-in stops asking for it. Naming no factor turns
+        off ALL of them — the reset path. People may do this for themselves; doing it for
+        somebody else takes an administrator, which is what makes it the way back in when a
         phone is lost.
+
+        The recovery codes go with the last factor: they are the way past a challenge, so
+        keeping them alive for an account with nothing to challenge would leave a standing
+        credential behind.
       operationId: post_v1_iam_mfa_disable
-      summary: Turns off the authenticator app for an account, so sign-in stops asking
-        for a code.
+      summary: Turns a factor off, so sign-in stops asking for it.
       tags:
       - iam
       x-app: iam
   /v1/iam/mfa/preferred:
     post:
       description: |-
-        Picks which second factor an account is asked for first when it
-        has more than one enrolled.
+        Picks which second factor an account is asked for first when it has
+        more than one. Only a factor the account actually holds: storing an unheld one told
+        the login gate "MFA is on" — factor.Enabled reads that column — while leaving it
+        nothing to ask for, so the sign-in required the password alone.
       operationId: post_v1_iam_mfa_preferred
       summary: Picks which second factor an account is asked for first when it has
-        more than one enrolled.
+        more than one.
       tags:
       - iam
       x-app: iam
   /v1/iam/mfa/setup/enable:
     post:
       description: |-
-        Finishes the enrolment: from here the account's sign-ins ask for a code
-        from the authenticator app. Repeating it re-enrols rather than failing.
+        Finishes the enrolment: from here the account's sign-ins ask for this factor.
+        It requires the proof initiate handed out — a passcode from the authenticator, or the
+        code that was sent — and verifies it BEFORE writing anything.
+
+        It used to write on the strength of a `secret` field alone. A client that skipped
+        the verify step, scanned the QR into the wrong app, or was simply buggy switched on
+        a factor no code would ever satisfy, and the account was then locked out with no
+        self-service way back: the gate holds the sign-in before minting, so the person
+        cannot obtain the bearer that disable requires.
+
+        The recovery codes are minted here and returned ONCE, on the first factor the
+        account adds. Answering with them is the way back in when no factor can be
+        produced, so they are the same value the row's digests were made from — by
+        construction, not by a client echoing them back.
       operationId: post_v1_iam_mfa_setup_enable
       summary: 'Finishes the enrolment: from here the account''s sign-ins ask for
-        a code from the authenticator app.'
+        this factor.'
       tags:
       - iam
       x-app: iam
   /v1/iam/mfa/setup/initiate:
     post:
-      description: |-
-        Starts enrolling an authenticator app: it returns a fresh secret, a
-        URL to render as a QR code, and one recovery code to keep somewhere safe.
-
-        Nothing is switched on yet. The enrolment counts only once it is confirmed with
-        a code from the app, so abandoning this step leaves the account exactly as it
-        was. Response:
-        {status:"ok", data:{secret, url, recoveryCodes:[code]}}.
+      description: "Starts enrolling a factor and hands over whatever the person needs
+        to prove\nthey hold it:\n\n\tapp   a fresh secret and the otpauth:// URL to
+        render as a QR code\n\tsms   a code texted to the number on the account\n\temail
+        a code mailed to the address on the account\n\nNothing is switched on yet,
+        so abandoning this step leaves the account exactly as\nit was. Response: {status:\"ok\",
+        data:{mfaType, secret, url}} — secret and url only\nfor the authenticator."
       operationId: post_v1_iam_mfa_setup_initiate
-      summary: 'Starts enrolling an authenticator app: it returns a fresh secret,
-        a URL to render as a QR code, and one recovery code to keep somewhere safe.'
-      tags:
-      - iam
-      x-app: iam
-  /v1/iam/mfa/setup/verify:
-    post:
-      description: |-
-        Checks a six-digit code against an enrolment in progress, so somebody
-        can confirm their authenticator app is set up correctly before it starts being
-        required. Clocks a step out either way are accepted.
-        A valid code → {status:"ok"}; an invalid one → 200 {status:"error"} (the
-        casibase convention: clients branch on status, not the HTTP code).
-      operationId: post_v1_iam_mfa_setup_verify
-      summary: Checks a six-digit code against an enrolment in progress, so somebody
-        can confirm their authenticator app is set up correctly before it starts being
-        required.
+      summary: 'Starts enrolling a factor and hands over whatever the person needs
+        to prove they hold it: app a fresh secret and the otpauth:// URL to render
+        as a QR code sms a code texted to the number on the account email a code mailed
+        to the address on the account Nothing is switched on yet, so abandoning this
+        step leaves the account exactly as it was.'
       tags:
       - iam
       x-app: iam
@@ -73735,15 +73942,23 @@ paths:
   /v1/iam/oauth/device/info:
     post:
       description: |-
-        Answers "what am I approving?" for a pending user_code, so the approval page can name the application a human is about to authorize. Both fields come off the pending code's OWN application — never off the portal the browser happens to be on — so the screen cannot name one application while the code belongs to another.
+        Answers "what am I approving?" for a pending device code.
 
-        Requires a signed-in session, resolved from the browser's session cookie exactly as the approval itself resolves it. Not signed in is not a refusal to explain: it carries the stable login-required code the approval page branches on to sign the human in first.
+        The approval page exists to tell a human WHICH application they are authorizing;
+        a page that names the wrong one defeats the control it implements. It used to
+        render the portal's own app name — a constant, `hanzo-console` for every code —
+        so a device code minted by `hanzo-cli` was approved under a screen naming a
+        different application entirely. The client is a property of the CODE, so it is
+        read from the code's row here and nowhere else.
 
-        POST for a read, deliberately, for the same reason RFC 7662 introspection beside it is POST: the argument is a SECRET. A user_code in a request line is copied into ingress and proxy access logs, which a POST body is not.
-
-        Unknown, expired, already used and already approved all get ONE opaque refusal — the same one the approval attempt would get. The user_code carries only 40 bits, so an answer that distinguished those states would be an oracle for hunting live codes; gated and opaque, this reveals strictly less than the approval the same caller could already attempt.
+        Requires a signed-in session, and answers with the same ONE opaque refusal
+        approveDevice uses. That is deliberate: the user_code is only 40 bits and is the
+        one secret in this flow, so an unauthenticated lookup — or one that
+        distinguished unknown from expired from already-approved — would be an oracle
+        for hunting live codes. Gated and opaque, it reveals strictly less than the
+        approval the same caller could already attempt.
       operationId: post_v1_iam_oauth_device_info
-      summary: Name the application a pending device code is asking to sign in.
+      summary: Answers "what am I approving?" for a pending device code.
       tags:
       - iam
       x-app: iam
@@ -74076,6 +74291,26 @@ paths:
           description: ok
       summary: Changes an organization's display, its defaults and the sign-in rules
         everyone in it inherits.
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/password:
+    put:
+      description: |-
+        Replaces the calling person's password. Only their own —
+        there is no shape of this request that writes somebody else's.
+
+        Prove who you are with the password you are replacing, or — when you cannot
+        sign in at all — with a code sent to the address the account already holds.
+        Exactly one of the two: a request carrying both proves nothing more than
+        either, and answering it would mean deciding which one mattered.
+
+        A reset also clears the account lockout, in the SAME transaction as the
+        digest. Replacing a credential retires the run of guesses against the old one,
+        and without this a person who reset a forgotten password was still refused for
+        up to fifteen more minutes — with the brand-new password they had just chosen.
+      operationId: put_v1_iam_password
+      summary: Replaces the calling person's password.
       tags:
       - iam
       x-app: iam
@@ -74904,16 +75139,15 @@ paths:
   /v1/iam/send-verification-code:
     post:
       description: |-
-        Validates the request, mints + persists an OTP, and
-        reports success. The request fields are read via fiber's FormValue — the
-        escape hatch zip exposes for form bodies (multipart or urlencoded) — since the
-        typed JSON Bind does not apply here. v1 also accepts countryCode/method/
-        checkUser/captchaType; iam ignores them (the captcha/forget/MFA flows those
-        drive are not ported), and CAPTCHA verification is likewise not enforced —
-        iam models no captcha provider — so the code is issued once the destination
-        and application validate.
+        Validates the request and asks otp to get a code to the
+        person. The request fields are read via fiber's FormValue — the escape hatch zip
+        exposes for form bodies (multipart or urlencoded) — since the typed JSON Bind does
+        not apply here. v1 also accepts countryCode/method/checkUser/captchaType; iam
+        ignores them (the captcha/forget/MFA flows those drive are not ported), and
+        CAPTCHA verification is likewise not enforced — iam models no captcha provider —
+        so the code is issued once the destination and application validate.
       operationId: post_v1_iam_send-verification-code
-      summary: Validates the request, mints + persists an OTP, and reports success.
+      summary: Validates the request and asks otp to get a code to the person.
       tags:
       - iam
       x-app: iam
@@ -75144,11 +75378,13 @@ paths:
   /v1/iam/set-preferred-mfa:
     post:
       description: |-
-        Picks which second factor an account is asked for first when it
-        has more than one enrolled.
+        Picks which second factor an account is asked for first when it has
+        more than one. Only a factor the account actually holds: storing an unheld one told
+        the login gate "MFA is on" — factor.Enabled reads that column — while leaving it
+        nothing to ask for, so the sign-in required the password alone.
       operationId: post_v1_iam_set-preferred-mfa
       summary: Picks which second factor an account is asked for first when it has
-        more than one enrolled.
+        more than one.
       tags:
       - iam
       x-app: iam
@@ -75649,16 +75885,15 @@ paths:
   /v1/iam/verification-codes:
     post:
       description: |-
-        Validates the request, mints + persists an OTP, and
-        reports success. The request fields are read via fiber's FormValue — the
-        escape hatch zip exposes for form bodies (multipart or urlencoded) — since the
-        typed JSON Bind does not apply here. v1 also accepts countryCode/method/
-        checkUser/captchaType; iam ignores them (the captcha/forget/MFA flows those
-        drive are not ported), and CAPTCHA verification is likewise not enforced —
-        iam models no captcha provider — so the code is issued once the destination
-        and application validate.
+        Validates the request and asks otp to get a code to the
+        person. The request fields are read via fiber's FormValue — the escape hatch zip
+        exposes for form bodies (multipart or urlencoded) — since the typed JSON Bind does
+        not apply here. v1 also accepts countryCode/method/checkUser/captchaType; iam
+        ignores them (the captcha/forget/MFA flows those drive are not ported), and
+        CAPTCHA verification is likewise not enforced — iam models no captcha provider —
+        so the code is issued once the destination and application validate.
       operationId: post_v1_iam_verification-codes
-      summary: Validates the request, mints + persists an OTP, and reports success.
+      summary: Validates the request and asks otp to get a code to the person.
       tags:
       - iam
       x-app: iam
@@ -77048,7 +77283,7 @@ paths:
 
         Requests are verified by ED25519 SIGNATURE over the timestamp and body against the app's public key — not by HMAC, unlike the Slack webhooks. Interactions work over plain HTTP, so no gateway connection and no message-content intent is involved.
 
-        Discord does not retry, so this is the one bridge where being at capacity is shown to the user as an ephemeral ask-to-run-it-again rather than answered as a retriable failure — nothing is recorded either way, so the next attempt is clean.
+        Discord does not retry, so this is the one channel where being at capacity is shown to the user as an ephemeral ask-to-run-it-again rather than answered as a retriable failure — nothing is recorded either way, so the next attempt is clean.
 
         The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
       operationId: post_v1_integrations_discord_interactions
@@ -77121,6 +77356,9 @@ paths:
         it under `already`. Re-claiming also REFRESHES the installation id, so an
         account reinstalled on GitHub — new id, same login — self-heals instead of
         minting tokens against a dead installation.
+
+        Claiming an account another org holds ADDS this org's row and leaves theirs
+        standing, so no org loses an integration it is using.
       operationId: post_v1_integrations_github_claim
       requestBody:
         content:
@@ -77144,6 +77382,42 @@ paths:
       summary: Binds installations the App ALREADY holds to the org the caller is
         acting in — the reconciliation for a grant that happened outside our connect
         flow.
+      tags:
+      - integrations
+      x-app: integrations
+  /v1/integrations/github/fork:
+    post:
+      description: |-
+        Forks a granted repository.
+
+        GitHub's fork is ASYNCHRONOUS: it answers 202 with the target repo and
+        populates it in the background, and it answers the same 202 when the fork
+        already exists. So this reports what GitHub said rather than waiting — a call
+        that blocked until the clone finished would time out on a large repository and
+        tell the caller nothing it does not already know.
+      operationId: post_v1_integrations_github_fork
+      requestBody:
+        content:
+          application/json:
+            example:
+              repo: widgets
+            schema:
+              $ref: '#/components/schemas/githubForkReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                clone_url: https://github.com/acme/widgets.git
+                default_branch: main
+                existing: false
+                full_name: acme/widgets
+                html_url: https://github.com/acme/widgets
+              schema:
+                $ref: '#/components/schemas/githubForkOut'
+          description: ok
+      summary: Forks a granted repository.
       tags:
       - integrations
       x-app: integrations
@@ -77483,6 +77757,42 @@ paths:
                 $ref: '#/components/schemas/githubImportOut'
           description: accepted
       summary: Imports the selected (or all) granted repos into git.hanzo.ai.
+      tags:
+      - integrations
+      x-app: integrations
+  /v1/integrations/github/search:
+    post:
+      description: |-
+        Finds repositories on GitHub.
+
+        This reads the PUBLIC index and returns nothing an installation unlocks: it is
+        how you find a repository to fork, not a way to see inside one. The org's own
+        token is used only so the query is rate-limited against the installation
+        rather than anonymously — the results are the same ones anyone would get.
+      operationId: post_v1_integrations_github_search
+      requestBody:
+        content:
+          application/json:
+            example:
+              limit: 5
+              q: language:go raft
+            schema:
+              $ref: '#/components/schemas/githubSearchReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                count: 1
+                repos:
+                - full_name: hashicorp/raft
+                  language: Go
+                  stars: 8000
+              schema:
+                $ref: '#/components/schemas/githubSearchOut'
+          description: ok
+      summary: Finds repositories on GitHub.
       tags:
       - integrations
       x-app: integrations
@@ -100959,6 +101269,9 @@ paths:
       x-app: sandboxes
   /v1/sandboxes/end:
     post:
+      description: |-
+        Ends the caller's sandbox lease: the pod goes, and the volume goes only
+        when the caller asked for that too.
       operationId: end_sandbox
       requestBody:
         content:
@@ -100975,6 +101288,13 @@ paths:
       x-app: sandboxes
   /v1/sandboxes/lease:
     post:
+      description: |-
+        Leases the caller's sandbox, or returns the one it named if that
+        lease is still running.
+
+        What comes back is a real computer: a pod under a runtime boundary with a
+        toolchain already in it, its own filesystem, and a lease that ends it. Every
+        other op here acts on the one this returns.
       operationId: lease_sandbox
       requestBody:
         content:
@@ -100995,6 +101315,9 @@ paths:
       x-app: sandboxes
   /v1/sandboxes/read:
     post:
+      description: |-
+        Reads one path in the caller's sandbox: a file's bytes, or a
+        directory's entries when the path names one.
       operationId: read_sandbox_file
       requestBody:
         content:
@@ -101015,6 +101338,21 @@ paths:
       x-app: sandboxes
   /v1/sandboxes/run:
     post:
+      description: |-
+        Runs one command inside the caller's sandbox and answers its exit code,
+        stdout and stderr. A non-zero exit is a successful call carrying a failed
+        program, so it comes back as data and not as an error.
+
+        Name a `session` and the command NARRATES INTO IT: its output is appended to
+        that session's live log as the program produces it, so anything watching the
+        session — GET /v1/agents/sessions/stream, scoped to one run with ?root= —
+        watches the work happen rather than waiting for the verdict. Without it the
+        call is what it always was: silent until it returns, which for an agentic run
+        is twenty-five minutes of blank screen.
+
+        The session is named; the TENANT is not. It is the org the caller already
+        proved, so a session belonging to somebody else is absent from the org this
+        call acts for and the append is refused there.
       operationId: run_in_sandbox
       requestBody:
         content:
@@ -101035,6 +101373,10 @@ paths:
       x-app: sandboxes
   /v1/sandboxes/stop:
     post:
+      description: |-
+        Interrupts whatever the caller's sandbox is running and answers how
+        many commands it ended. The sandbox stays leased — stop ends the WORK, end ends
+        the RESOURCE — so whoever stopped a run can still read what it left behind.
       operationId: stop_run
       requestBody:
         content:
@@ -101055,6 +101397,9 @@ paths:
       x-app: sandboxes
   /v1/sandboxes/write:
     post:
+      description: |-
+        Writes bytes to one path in the caller's sandbox, creating parents,
+        and answers the resolved path.
       operationId: write_sandbox_file
       requestBody:
         content:
@@ -107085,8 +107430,8 @@ tags:
 - description: Package affiliates is a partner program that pays commission on what
     your referrals spend.
   name: affiliates
-- description: Package agent is a conversation that uses your org's own tools to get
-    an answer.
+- description: 'Package agents is autonomous agents for your org: define them, run
+    them, keep every run.'
   name: agent
 - description: 'Package agents is autonomous agents for your org: define them, run
     them, keep every run.'

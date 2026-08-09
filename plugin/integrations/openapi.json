@@ -459,7 +459,7 @@
       "post": {
         "operationId": "post_v1_integrations_discord_interactions",
         "summary": "Discord interactions endpoint",
-        "description": "The Interactions Endpoint URL for the Discord app. It answers Discord's PING with a PONG, and handles the `/hanzo` slash command by acknowledging with a deferred ephemeral reply and editing that reply with the answer once the agent has run. Any other interaction is acknowledged and ignored.\n\nRequests are verified by ED25519 SIGNATURE over the timestamp and body against the app's public key — not by HMAC, unlike the Slack webhooks. Interactions work over plain HTTP, so no gateway connection and no message-content intent is involved.\n\nDiscord does not retry, so this is the one bridge where being at capacity is shown to the user as an ephemeral ask-to-run-it-again rather than answered as a retriable failure — nothing is recorded either way, so the next attempt is clean.\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.",
+        "description": "The Interactions Endpoint URL for the Discord app. It answers Discord's PING with a PONG, and handles the `/hanzo` slash command by acknowledging with a deferred ephemeral reply and editing that reply with the answer once the agent has run. Any other interaction is acknowledged and ignored.\n\nRequests are verified by ED25519 SIGNATURE over the timestamp and body against the app's public key — not by HMAC, unlike the Slack webhooks. Interactions work over plain HTTP, so no gateway connection and no message-content intent is involved.\n\nDiscord does not retry, so this is the one channel where being at capacity is shown to the user as an ephemeral ask-to-run-it-again rather than answered as a retriable failure — nothing is recorded either way, so the next attempt is clean.\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.",
         "tags": [
           "integrations"
         ]
@@ -499,7 +499,7 @@
       "post": {
         "operationId": "post_v1_integrations_github_claim",
         "summary": "Binds installations the App ALREADY holds to the org the caller is acting in — the reconciliation for a grant that happened outside our connect flow.",
-        "description": "Binds installations the App ALREADY holds to the org the caller is\nacting in — the reconciliation for a grant that happened outside our connect\nflow.\n\nAn installation IS the grant: GitHub recorded the consent when the App was\ninstalled, and our connection row is bookkeeping that never got written because\nnobody came through our callback. This writes that row from the App's own view,\nso 23 accounts granted straight from GitHub stop reading as nothing.\n\nThe org is taken from the VALIDATED PRINCIPAL and never from the body, because\nit is the one part GitHub cannot tell us. An installation carries an account\nlogin, a type and a repository selection — nothing that names a Hanzo org. So\nthe binding cannot be DERIVED, only asserted, and the only unforgeable assertion\navailable is the org the caller is already acting in. Inferring one from the\naccount name would be a guess the store cannot catch: its key is\n(org,provider,owner), so a wrong org is a valid row, and a valid row is a\nmirror pointed at the wrong tenant.\n\nSUPER ADMIN only, for that same reason. A tenant's proof that an account is\ntheirs is GitHub's own consent screen — the connect flow — and without it any\norg could claim any account the App holds. Platform sudo is already the scope\nthat reads the whole install list, so it is the scope that may bind from it;\ngiving a tenant this verb would hand it every other tenant's repositories.\n\nIdempotent: the row is keyed (org,provider,owner) and connected_at survives an\nupsert, so claiming twice rebinds the same account to the same org and reports\nit under `already`. Re-claiming also REFRESHES the installation id, so an\naccount reinstalled on GitHub — new id, same login — self-heals instead of\nminting tokens against a dead installation.",
+        "description": "Binds installations the App ALREADY holds to the org the caller is\nacting in — the reconciliation for a grant that happened outside our connect\nflow.\n\nAn installation IS the grant: GitHub recorded the consent when the App was\ninstalled, and our connection row is bookkeeping that never got written because\nnobody came through our callback. This writes that row from the App's own view,\nso 23 accounts granted straight from GitHub stop reading as nothing.\n\nThe org is taken from the VALIDATED PRINCIPAL and never from the body, because\nit is the one part GitHub cannot tell us. An installation carries an account\nlogin, a type and a repository selection — nothing that names a Hanzo org. So\nthe binding cannot be DERIVED, only asserted, and the only unforgeable assertion\navailable is the org the caller is already acting in. Inferring one from the\naccount name would be a guess the store cannot catch: its key is\n(org,provider,owner), so a wrong org is a valid row, and a valid row is a\nmirror pointed at the wrong tenant.\n\nSUPER ADMIN only, for that same reason. A tenant's proof that an account is\ntheirs is GitHub's own consent screen — the connect flow — and without it any\norg could claim any account the App holds. Platform sudo is already the scope\nthat reads the whole install list, so it is the scope that may bind from it;\ngiving a tenant this verb would hand it every other tenant's repositories.\n\nIdempotent: the row is keyed (org,provider,owner) and connected_at survives an\nupsert, so claiming twice rebinds the same account to the same org and reports\nit under `already`. Re-claiming also REFRESHES the installation id, so an\naccount reinstalled on GitHub — new id, same login — self-heals instead of\nminting tokens against a dead installation.\n\nClaiming an account another org holds ADDS this org's row and leaves theirs\nstanding, so no org loses an integration it is using.",
         "tags": [
           "integrations"
         ],
@@ -528,6 +528,48 @@
                 },
                 "schema": {
                   "$ref": "#/components/schemas/githubClaimOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/integrations/github/fork": {
+      "post": {
+        "operationId": "post_v1_integrations_github_fork",
+        "summary": "Forks a granted repository.",
+        "description": "Forks a granted repository.\n\nGitHub's fork is ASYNCHRONOUS: it answers 202 with the target repo and\npopulates it in the background, and it answers the same 202 when the fork\nalready exists. So this reports what GitHub said rather than waiting — a call\nthat blocked until the clone finished would time out on a large repository and\ntell the caller nothing it does not already know.",
+        "tags": [
+          "integrations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "repo": "widgets"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/githubForkReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "clone_url": "https://github.com/acme/widgets.git",
+                  "default_branch": "main",
+                  "existing": false,
+                  "full_name": "acme/widgets",
+                  "html_url": "https://github.com/acme/widgets"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/githubForkOut"
                 }
               }
             },
@@ -919,6 +961,52 @@
               }
             },
             "description": "accepted"
+          }
+        }
+      }
+    },
+    "/v1/integrations/github/search": {
+      "post": {
+        "operationId": "post_v1_integrations_github_search",
+        "summary": "Finds repositories on GitHub.",
+        "description": "Finds repositories on GitHub.\n\nThis reads the PUBLIC index and returns nothing an installation unlocks: it is\nhow you find a repository to fork, not a way to see inside one. The org's own\ntoken is used only so the query is rate-limited against the installation\nrather than anonymously — the results are the same ones anyone would get.",
+        "tags": [
+          "integrations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "limit": 5,
+                "q": "language:go raft"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/githubSearchReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "repos": [
+                    {
+                      "full_name": "hashicorp/raft",
+                      "language": "Go",
+                      "stars": 8000
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/githubSearchOut"
+                }
+              }
+            },
+            "description": "ok"
           }
         }
       }
@@ -1666,6 +1754,40 @@
         },
         "type": "object"
       },
+      "githubForkOut": {
+        "properties": {
+          "clone_url": {
+            "type": "string"
+          },
+          "default_branch": {
+            "type": "string"
+          },
+          "existing": {
+            "description": "Existing reports that the fork was already there. GitHub answers 202 either\nway, so without this a caller cannot tell \"made you one\" from \"you had one\".",
+            "type": "boolean"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "html_url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "githubForkReq": {
+        "properties": {
+          "org": {
+            "description": "Org is the GitHub account to fork INTO; empty forks to the installation's\nown account, which is the common case.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is a repository the org's installation was GRANTED, by name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "githubImportIn": {
         "properties": {
           "all": {
@@ -1927,6 +2049,69 @@
               "$ref": "#/components/schemas/githubRepoView"
             },
             "type": "array"
+          },
+          "unread": {
+            "description": "Unread names the connected accounts this answer could NOT read, so a short\nlist is distinguishable from a complete one. Absent when the answer is whole.\n\nThe fan-out is per installation, and one account failing used to be dropped\nin silence: the response stayed 200 and simply carried fewer repositories,\nerroring only when EVERY account failed. Measured, twice in a row, minutes\napart: 1475 repositories, then 1157 — a whole installation missing with\nnothing in the answer to say so. Anything driven off the list then\nunder-covers and reports success, which is the failure this field ends.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "githubSearchHit": {
+        "properties": {
+          "clone_url": {
+            "type": "string"
+          },
+          "default_branch": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "html_url": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "private": {
+            "type": "boolean"
+          },
+          "stars": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "githubSearchOut": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "repos": {
+            "items": {
+              "$ref": "#/components/schemas/githubSearchHit"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "githubSearchReq": {
+        "properties": {
+          "limit": {
+            "description": "Limit caps the answer; 0 takes the default and anything above the ceiling\nis clamped rather than refused.",
+            "type": "integer"
+          },
+          "q": {
+            "description": "Q is GitHub's own search syntax, passed through: \"tetris language:go\",\n\"org:hanzoai stars:\u003e10\". Passing it through rather than inventing a\nvocabulary means one thing to learn, and it is theirs.",
+            "type": "string"
           }
         },
         "type": "object"
