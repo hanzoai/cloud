@@ -60,6 +60,25 @@ Five properties, each killing one of the failures above:
 Giving an org an agent identity means CREATING `<org>-agent` in IAM, not
 elevating something that exists.
 
+**The machinery already exists — VERIFIED, not assumed.** IAM serves
+`POST /v1/iam/applications` (create) and `POST /v1/iam/oauth/token`
+(client-credentials), and `internal/provision/provision.go:504` already upserts
+applications programmatically against `/v1/iam/admin/applications/upsert`. So
+this needs NO new auth machinery, which is the whole reason the previous three
+attempts were wrong: each invented a credential rather than asking the service
+whose job it is.
+
+What is missing is only the two ends:
+1. nothing CREATES `<org>-agent` — the natural place is wherever an org is
+   created, beside whatever else an org gets by default;
+2. nothing DELIVERS its token to a sandbox — `cred.go` is where that belongs,
+   next to the SuperAdmin delivery it already does, and by the same rule: read a
+   credential the issuing service already made, mint nothing.
+
+Sequence matters. (1) is inert on its own — an application nobody uses — so it
+can land and be reviewed by itself. (2) is the part that hands a capability to a
+running pod and is the part to review hardest.
+
 A user's own key (BYO OpenAI/Anthropic/Hanzo) and the org's agent identity are
 two different credentials for two different questions — "whose model do I call"
 versus "who is this pod". Do not braid them.
