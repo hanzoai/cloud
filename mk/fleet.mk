@@ -281,7 +281,52 @@ dist: ## Build every app for every platform into <root>/dist as <app>-<os>-<arch
 # defect in `meet`. Two real defects were braided by one truncation. A gate that
 # hides what it did not check is worse than one that checks nothing, because it
 # is believed. `make -k` is that property, kept by make instead of by hand.
+# THE SCRATCH THIS NEEDS, AND HOW TO GET IT ON A MAC.
+#
+# Every app opens its cek-encrypted store to mount, and the pure-Go SQLCipher
+# codec refuses to decrypt onto persistent storage: it wants RAM-backed scratch,
+# and it verifies that rather than believing a flag. On Linux /dev/shm is already
+# tmpfs, so this is invisible there — which is exactly how it stayed unfixed on
+# darwin while the release train ran on Linux.
+#
+# macOS ships tmpfs and mounts none by default. `make ramfs` mounts one; it is
+# the only step that needs root, it is needed once per boot, and after it
+# `make describe` behaves identically on both platforms. An hdiutil RAM disk is
+# NOT a substitute and is correctly rejected — it is HFS+/APFS on a device statfs
+# cannot tell from a real disk, so accepting it would mean trusting a claim the
+# codec cannot verify.
+RAMFS ?= /tmp/hanzo-ramfs
+
+# Say it ONCE, up front, instead of 121 identical codec errors after a build.
+# The failure this replaces named the codec and the env var but not the command,
+# so it read as "this platform cannot" — and that is the conclusion somebody
+# reached, twice.
+ramfs-check:
+ifeq ($(shell uname),Darwin)
+	@if [ -z "$$HANZO_SQLITE_RAMFS_DIR" ] && [ "$$(/usr/bin/stat -f %T $(RAMFS) 2>/dev/null)" != "tmpfs" ]; then \
+	  echo "describe needs RAM-backed scratch and macOS mounts no tmpfs by default."; \
+	  echo "    make ramfs      # once per boot, needs sudo"; \
+	  exit 1; \
+	fi
+endif
+
+
+ramfs: ## Mount the RAM-backed scratch the codec requires (macOS: needs sudo, once per boot).
+ifeq ($(shell uname),Darwin)
+	@if [ "$$(/usr/bin/stat -f %T $(RAMFS) 2>/dev/null)" = "tmpfs" ] || mount | grep -q " $(RAMFS) "; then \
+	  echo ">> ramfs: $(RAMFS) already mounted"; \
+	else \
+	  mkdir -p $(RAMFS); \
+	  echo ">> ramfs: mounting tmpfs at $(RAMFS) (sudo)"; \
+	  sudo /sbin/mount_tmpfs $(RAMFS); \
+	fi
+	@echo ">> ramfs: export HANZO_SQLITE_RAMFS_DIR=$(RAMFS)"
+else
+	@echo ">> ramfs: /dev/shm is already tmpfs on this platform — nothing to do"
+endif
+
 describe: ## Every app describes itself (one binary per app, all at once).
+	@$(MAKE) --no-print-directory ramfs-check
 	@GOOS= GOARCH= $(GO) generate -run zipdoc $(ROOT)/...
 	@echo ">> build-only: $(UNMOUNTABLE) — no standalone mount to project (broker / coresident)"
 	+@$(call fan,$(addprefix describe/,$(DESCRIBABLE)) $(addprefix build/,$(UNMOUNTABLE)))
