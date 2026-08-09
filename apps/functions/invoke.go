@@ -11,6 +11,7 @@ import (
 	"github.com/hanzoai/cloud/apps/exec"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -134,7 +135,7 @@ type invokeReq struct {
 // output. Scoped to the caller's org; requires a validated principal.
 func (o ops) invoke(ctx context.Context, in *invokeReq) (*invocationView, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +181,7 @@ func (o ops) invoke(ctx context.Context, in *invokeReq) (*invocationView, error)
 	}
 	dur := time.Since(start).Milliseconds()
 
-	id, _ := genID("inv")
+	id := mint.ID("inv")
 	iv := Invocation{
 		ID: id, Org: org, FunctionName: name, Method: "POST",
 		DurationMs: dur, CreatedAt: time.Now().Unix(),

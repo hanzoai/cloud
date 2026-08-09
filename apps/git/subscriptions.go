@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -125,10 +126,7 @@ func (o ops) subscribe(ctx context.Context, in *subscribeReq) (*subscriptionView
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	id, err := genID("sub")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("sub")
 	v := Subscription{
 		ID: id, Org: t.org, Project: t.project, Repo: name,
 		Channel: channel, Events: events, CreatedAt: time.Now().Unix(),
@@ -262,10 +260,7 @@ func (o ops) addMirror(ctx context.Context, in *mirrorTargetReq) (*mirrorTargetV
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	id, err := genID("mir")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("mir")
 	v := MirrorTarget{
 		ID: id, Org: t.org, Project: t.project, Repo: name,
 		Host: host, URL: target, CreatedAt: time.Now().Unix(),

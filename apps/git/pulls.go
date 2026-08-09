@@ -20,12 +20,14 @@ package git
 // revisions and never touches a plumbing.Hash.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -158,7 +160,7 @@ func (o ops) openPull(ctx context.Context, in *openReq) (*pullView, error) {
 	}
 	base := strings.TrimSpace(in.Base)
 	if base == "" {
-		base = firstNonEmptyStr(meta.DefaultBranch, defaultBranchName)
+		base = cmp.Or(meta.DefaultBranch, defaultBranchName)
 	}
 	if !branchRE.MatchString(base) {
 		return nil, zip.ErrBadRequest("base must be a branch name")
@@ -173,10 +175,7 @@ func (o ops) openPull(ctx context.Context, in *openReq) (*pullView, error) {
 		return nil, zip.ErrBadRequest("base branch does not exist: " + base)
 	}
 
-	id, err := genID("pr")
-	if err != nil {
-		return nil, internalErr(err)
-	}
+	id := mint.ID("pr")
 	now := time.Now().Unix()
 	saved, err := store.CreatePull(ctx, Pull{
 		ID: id, Org: t.org, Project: t.project, Repo: name,

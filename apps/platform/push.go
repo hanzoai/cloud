@@ -9,6 +9,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"strings"
 	"time"
@@ -63,11 +64,7 @@ func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPus
 			s.Log.Warn("push build: version alloc failed", "org", ev.Org, "app", a.Slug, "err", verr)
 			continue
 		}
-		depID, derr := genID("dep")
-		if derr != nil {
-			s.Log.Warn("push build: rng failed", "org", ev.Org, "app", a.Slug, "err", derr)
-			continue
-		}
+		depID := genID("dep")
 		_, jobName, _, berr := startGitBuild(s, ctx, ev.Org, a, depID, version, now, ev.Commit, s.State.k8s.ready())
 		if berr != nil {
 			s.Log.Warn("push build failed", "org", ev.Org, "app", a.Slug, "err", berr)
@@ -116,5 +113,5 @@ func normRepo(u string) string {
 // tracksBranch reports whether app a's tracked branch is the pushed branch. An
 // empty RepoBranch defaults to "main", matching app-create (branchDefault).
 func tracksBranch(a Application, branch string) bool {
-	return firstNonEmpty(a.RepoBranch, "main") == branch
+	return cmp.Or(a.RepoBranch, "main") == branch
 }

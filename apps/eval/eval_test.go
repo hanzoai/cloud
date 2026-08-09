@@ -11,6 +11,7 @@ import (
 
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
+	"github.com/hanzoai/cloud/apps/principal"
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 
 	"github.com/hanzoai/cloud"
@@ -19,7 +20,7 @@ import (
 )
 
 // TestTenantIgnoresClientProjectID pins the cross-tenant isolation invariant
-// (RED MED-1): tenant() scopes EVERY metastore query + telemetry read, and MUST
+// (RED MED-1): principal.Acting scopes EVERY metastore query + telemetry read, and MUST
 // use ONLY the sanitized org (c.Org(), set by SanitizeIdentity from the validated
 // bearer owner), NEVER the client-controllable X-Project-Id. A forged
 // `X-Project-Id: victim-org` must not change the resolved tenant — otherwise a
@@ -30,12 +31,12 @@ func TestTenantIgnoresClientProjectID(t *testing.T) {
 	// reads, so the gate under test is reached exactly as it is in production.
 	app.Use(cloud.Bridge())
 	app.Get("/echo-tenant", func(c *zip.Ctx) error {
-		org, _ := tenant(c.Context())
+		org, _ := principal.Acting(c.Context())
 		return c.String(http.StatusOK, org)
 	})
 
 	// user is the VALIDATED principal signal (X-User-Id, set only by
-	// SanitizeIdentity from a verified token). When empty, tenant() must fail
+	// SanitizeIdentity from a verified token). When empty, principal.Acting must fail
 	// closed regardless of X-Org-Id (Red HIGH: the restored X-Org-Id is untrusted
 	// without a validated principal).
 	call := func(user, orgHeader, projectHeader string) string {

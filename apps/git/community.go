@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -48,10 +49,7 @@ func publish(ctx context.Context, org string, ev plane.Visibility) error {
 	// Name/Description seed the repo only at creation. Re-imposing them on every
 	// event would overwrite an author who edited their own repo description —
 	// visibility is ours to enforce, their prose is not.
-	id, err := genID("repo")
-	if err != nil {
-		return fmt.Errorf("community: id: %w", err)
-	}
+	id := mint.ID("repo")
 	now := time.Now().Unix()
 	err = provision(s, ctx, store, Repo{
 		ID: id, Org: org, Name: ev.Slug,

@@ -35,8 +35,6 @@ package ads
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -45,6 +43,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -190,28 +189,7 @@ type noContent = struct{}
 // owner claim (HIP-0026): never lowercased, stripped, or truncated.
 func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
-// tenantOf is tenant for a TYPED op — the same validated org, read from the
-// context cloud.Bridge parked it on. It is never an In field: an In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. Fails closed off the HTTP path.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
-
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}
 
 // clip trims and bounds a text field to maxField.
 func clip(s string) string {
@@ -377,7 +355,7 @@ type adSummary struct {
 //
 // Example: {"name": "Spring Launch", "platform": "meta", "objective": "conversions", "budget": 50000}
 func (o ops) createCampaign(ctx context.Context, in *campaignInput) (*AdCampaign, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -393,10 +371,7 @@ func (o ops) createCampaign(ctx context.Context, in *campaignInput) (*AdCampaign
 	if !okSt {
 		return nil, zip.ErrBadRequest("status must be one of draft, active, paused, completed")
 	}
-	id, err := genID("camp")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("camp")
 	now := time.Now().Unix()
 	camp := AdCampaign{
 		ID: id, Org: org, Name: name, Platform: platform, Account: clip(in.Account), Status: status,
@@ -416,7 +391,7 @@ func (o ops) createCampaign(ctx context.Context, in *campaignInput) (*AdCampaign
 //
 // Example: {"status": "active", "limit": 50}
 func (o ops) listCampaigns(ctx context.Context, in *listCampaignsIn) (*campaignList, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -433,7 +408,7 @@ func (o ops) listCampaigns(ctx context.Context, in *listCampaignsIn) (*campaignL
 //
 // Example: {"id": "camp_2f9c1d"}
 func (o ops) getCampaign(ctx context.Context, in *campaignRef) (*AdCampaign, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +427,7 @@ func (o ops) getCampaign(ctx context.Context, in *campaignRef) (*AdCampaign, err
 //
 // Example: {"id": "camp_2f9c1d", "name": "Spring Launch", "platform": "meta", "status": "paused", "budget": 75000}
 func (o ops) updateCampaign(ctx context.Context, in *updateCampaignIn) (*AdCampaign, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +462,7 @@ func (o ops) updateCampaign(ctx context.Context, in *updateCampaignIn) (*AdCampa
 //
 // Example: {"id": "camp_2f9c1d"}
 func (o ops) deleteCampaign(ctx context.Context, in *campaignRef) (*noContent, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -569,7 +544,7 @@ type noInput struct{}
 // all of them. Budget and spend are MINOR units (cents), the same units the
 // campaign rows carry. It counts only this org's campaigns.
 func (o ops) summary(ctx context.Context, _ *noInput) (*adSummary, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

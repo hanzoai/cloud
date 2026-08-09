@@ -290,10 +290,7 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 // lane /v1/runner drives — one build path, one set of validations, one job spec.
 // The output image is the one derived above, never a caller's string.
 func launchDeclareBuild(s *cloud.Service[state], c *zip.Ctx, req declareReq, org, repository, name string) (*buildRef, error) {
-	id, err := genID("bld")
-	if err != nil {
-		return nil, zip.ErrInternal("could not mint a build id")
-	}
+	id := genID("bld")
 	image := repository + ":" + id
 	url, dockerfile, ref, image, err := validateBuildInputs(req.Repo, req.Dockerfile, req.Ref, image)
 	if err != nil {

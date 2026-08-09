@@ -3,6 +3,8 @@ package legal
 import (
 	"context"
 	"fmt"
+
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // providers.go declares the two external seams a generated document rides to
@@ -44,7 +46,7 @@ func (stubEsign) Request(_ context.Context, org, docID, title string, signers []
 	if len(signers) == 0 {
 		return "", fmt.Errorf("legal: no signers")
 	}
-	return genID("esign")
+	return mint.ID("esign"), nil
 }
 
 func (stubEsign) Status(_ context.Context, org, ref string) (bool, error) {

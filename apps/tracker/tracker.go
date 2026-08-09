@@ -36,8 +36,6 @@
 package tracker
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -51,6 +49,7 @@ import (
 	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	trackerui "github.com/hanzoai/cloud/apps/tracker/ui"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -423,10 +422,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx) error {
 		return cloud.DenyResource(c, err)
 	}
 
-	id, err := genID("prj")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("prj")
 	now := time.Now().Unix()
 	p := Project{ID: id, Org: org, Key: key, Name: name, Description: desc, CreatedAt: now, UpdatedAt: now}
 	if err := store.CreateProject(c.Context(), p); err != nil {
@@ -540,10 +536,7 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 		return cloud.DenyResource(c, err)
 	}
 
-	id, err := genID("issue")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("issue")
 	now := time.Now().Unix()
 	i := Issue{
 		ID: id, ProjectID: p.ID, Org: org,
@@ -732,15 +725,6 @@ func parseFee(s string) (int64, bool) {
 		return 0, false
 	}
 	return n, true
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // Shutdown closes every open per-(org,project) tracker store. Idempotent.

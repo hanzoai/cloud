@@ -181,18 +181,6 @@ func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 // ── the identity seam ────────────────────────────────────────────────────────
 
-// tenant is the VALIDATED org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. Fails closed off the HTTP path.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("valid principal required")
-	}
-	return org, nil
-}
-
 // meter resolves the two facts a retrieval charges and scopes against, beyond
 // the tenant — the ONE reason this package reaches for the REQUEST.
 //
@@ -205,7 +193,7 @@ func tenant(ctx context.Context) (string, error) {
 // In field.
 //
 // Off the HTTP path both are empty, which is the unbilled, default-project
-// answer — and tenant() has already refused before any op reaches here.
+// answer — and principal.Acting has already refused before any op reaches here.
 func meter(ctx context.Context) (billingOrg, project string) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
@@ -389,7 +377,7 @@ type askPostIn struct {
 //
 // Example: {"q": "func openStore", "type": "hybrid", "repo": "cloud", "limit": 20}
 func (s *service) search(ctx context.Context, in *searchIn) (*searchResults, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -436,7 +424,7 @@ func (s *service) search(ctx context.Context, in *searchIn) (*searchResults, err
 //
 // Example: {"query": "how does the store open a per-org database", "budgetTokens": 4000, "repo": "cloud"}
 func (s *service) context(ctx context.Context, in *contextIn) (*ContextBundle, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -474,7 +462,7 @@ func (s *service) context(ctx context.Context, in *contextIn) (*ContextBundle, e
 //
 // Example: {"repo": "cloud"}
 func (s *service) tree(ctx context.Context, in *treeIn) (*repoTree, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +493,7 @@ func (s *service) tree(ctx context.Context, in *treeIn) (*repoTree, error) {
 //
 // Example: {"repo": "cloud", "path": "apps/code/store.go"}
 func (s *service) file(ctx context.Context, in *fileIn) (*fileContent, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -563,7 +551,7 @@ func (s *service) askPost(ctx context.Context, in *askPostIn) (*AskAnswer, error
 // answer is the ONE cited-RAG path both /ask forms take, so the two verbs can
 // never drift into two behaviours.
 func (s *service) answer(ctx context.Context, rawQuery, rawRepo string) (*AskAnswer, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -602,7 +590,7 @@ func (s *service) answer(ctx context.Context, rawQuery, rawRepo string) (*AskAns
 //
 // Example: {"repo": "cloud", "files": [{"path": "main.go", "content": "package main\n"}], "prune": true}
 func (s *service) index(ctx context.Context, in *indexIn) (*indexResult, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

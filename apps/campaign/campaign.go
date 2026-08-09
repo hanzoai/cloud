@@ -57,8 +57,6 @@
 package campaign
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -178,15 +176,6 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}
 
 // clip trims and bounds a text field to maxField.
 func clip(s string) string {
