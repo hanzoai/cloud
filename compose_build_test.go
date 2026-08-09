@@ -43,23 +43,24 @@ import (
 // manifest.App.Prefixes, the paths the host ROUTES to it. zen is the case that
 // proves they are different: it routes nothing and gates "/v1".
 //
-// scoped says this subsystem is mounted through MountAll in the binary. commerce
-// is the one that is not: it ships as a LAZY PLUGIN with its own program
-// (plugin/commerce/main.go), so the bare-app path below is the one that matches
-// how it actually runs, and it is the path that caught the duplicate route.
-// Through MountAll it additionally fails on a grant — "commerce installed
-// middleware at /v1, outside the prefixes it owns" — which is a real finding
-// about `commerce.Prefixes` and NOT what took production down; asserting it here
-// would pin a shape commerce does not deploy in. Left as its own piece of work.
+// global is [cloud.Plugin.Global], and it must match what the subsystem's own
+// composition root declares, because the grant decides which Router Mount is
+// handed: Global gets the bare app, everyone else gets a scope bound to their
+// prefixes. commerce is Global — `plugin/commerce/main.go` says so and says why
+// ("commerce wraps ALL of /v1 (mount.go: app.Group("/v1").Use(...)), so the
+// grant is real and stated"). Testing it with `commerce.Prefixes` instead
+// reports "installed middleware at /v1, outside the prefixes it owns", which
+// looks like a finding and is only the wrong grant — a test asserting a shape
+// the binary does not deploy in.
 var composed = []struct {
 	name     string
 	mount    cloud.MountFunc
 	prefixes []string
-	scoped   bool
+	global   bool
 }{
-	{"audit", auditlog.Mount, nil, true},
-	{"catalog", catalog.Mount, nil, true},
-	{"zen", zen.Mount, []string{"/v1"}, true},
+	{"audit", auditlog.Mount, nil, false},
+	{"catalog", catalog.Mount, nil, false},
+	{"zen", zen.Mount, []string{"/v1"}, false},
 	// commerce was NOT here, and that is the whole reason a duplicate route
 	// reached production. It declared GET /v1/commerce/org itself while the
 	// embedded commerce module declares /org under the same prefix, and zip
@@ -69,7 +70,7 @@ var composed = []struct {
 	// and a funded account rendered $0.00 with nothing anywhere saying why.
 	// A subsystem that is not in this list is a subsystem whose program only
 	// production checks.
-	{"commerce", commerce.Mount, commerce.Prefixes, false},
+	{"commerce", commerce.Mount, commerce.Prefixes, true},
 }
 
 // TestSubsystemComposesThroughMountAll is the PRODUCTION path: MountAll hands
@@ -79,13 +80,10 @@ var composed = []struct {
 // table instead of its own spec.
 func TestSubsystemComposesThroughMountAll(t *testing.T) {
 	for _, c := range composed {
-		if !c.scoped {
-			continue
-		}
 		t.Run(c.name, func(t *testing.T) {
 			app := newApp()
 			err := cloud.MountAll(app,
-				[]cloud.Plugin{{Name: c.name, Mount: c.mount, Prefixes: c.prefixes}},
+				[]cloud.Plugin{{Name: c.name, Mount: c.mount, Prefixes: c.prefixes, Global: c.global}},
 				&cloud.Config{Enable: []string{c.name}},
 				cloud.Deps{Logger: luxlog.NewNoOpLogger(), DataDir: t.TempDir()})
 			if err != nil {
