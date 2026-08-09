@@ -16,7 +16,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
 // TestGetTokenAnswersARawTokenAsText is refusal #1. The office client reads the
@@ -24,11 +23,11 @@ import (
 // always marshals its Out through c.JSON, so converting this route would ship
 // `"<token>"` under application/json and break every published bundle in the field.
 func TestGetTokenAnswersARawTokenAsText(t *testing.T) {
-	app := mount(t, teamSecret, apiKey, apiSecret)
+	app := mount(t, apiKey, apiSecret)
 	body, _ := json.Marshal(request{RoomName: roomIn(workspaceA), ParticipantName: "Ada"})
 	req := httptest.NewRequest(http.MethodPost, "/v1/meet/getToken", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix()))
+	req.Header.Set("Authorization", "Bearer "+access(t, ada))
 
 	resp, err := app.Test(req)
 	if err != nil {
@@ -69,7 +68,7 @@ func TestHealthCarriesABodyAtBOTHStatuses(t *testing.T) {
 		{"unconfigured", "", "", http.StatusServiceUnavailable, false, "degraded"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			app := mount(t, teamSecret, tc.key, tc.sec)
+			app := mount(t, tc.key, tc.sec)
 			resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil))
 			if err != nil {
 				t.Fatalf("GET /v1/meet/health: %v", err)

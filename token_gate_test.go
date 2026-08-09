@@ -50,9 +50,12 @@ var allowedTokenPrimitives = map[string]string{
 	"apps/analytics/team.go": "reader of the condemned team token — the ingest trust order already resolves " +
 		"a validated IAM bearer ahead of it (eventTenant step 1), so this arm dies with the cutover and " +
 		"needs no IAM lane of its own.",
-	"apps/meet/meet.go": "two halves: mints the LiveKit room-join token — the media server's own wire " +
+	"apps/meet/meet.go": "ONE half now: mints the LiveKit room-join token — the media server's own wire " +
 		"contract, an HS256 JWT under the LiveKit key the server itself validates, granting no Hanzo " +
-		"surface — and reads the condemned team token, which dies with the cutover.",
+		"surface. It no longer READS anything: the second arm, which decoded the condemned team token " +
+		"and let a workspace claim be its own authorization, is gone. A caller arrives with an IAM " +
+		"identity or is refused, and what that identity may do is asked of the process that owns the " +
+		"membership rows.",
 	"apps/wallets/safeclient.go": "speaks the mpc ring's CURRENT wire: the ring (iss=mpc.lux.network, " +
 		"aud=mpc-api) accepts an HS256 bearer under a shared MPC_JWT_SECRET, so cloud signs what the " +
 		"server demands. That authority contract is the ring's own debt — retiring it means the ring " +
