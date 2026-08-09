@@ -456,9 +456,11 @@ func (s *Store) ListFor(ctx context.Context, org, provider string) ([]Connection
 	return out, rows.Err()
 }
 
-// Delete disconnects a provider for an org, removing EVERY owner's connection.
-// Disconnecting is a statement about the provider, not about one of its accounts.
-// Reports whether any row went (idempotent caller).
+// Delete removes ONE account: the row this principal holds for a provider under
+// a given label. Reports whether a row went, so a caller may repeat itself.
+//
+// Removing every account for a provider is Disconnect, which is why this takes a
+// label and that one does not.
 func (s *Store) Delete(ctx context.Context, org, user, provider, label string) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`DELETE FROM connections WHERE org=? AND user=? AND provider=? AND label=?`, org, user, provider, label)
@@ -527,14 +529,21 @@ type collision struct {
 	Orgs       []string
 }
 
-// Collisions reports provider accounts held by more than one org — the shape a
-// cross-tenant bind leaves behind, and the only place it becomes visible.
+// Collisions reports provider accounts held by more than one org.
 //
-// Upsert refuses to write one, so a hit here is history: a row from before that
-// refusal existed. It is REPORTED, never repaired and never fatal. Which org
-// should keep an account is not a question this process can answer, and refusing
-// to boot over rows already written would take the whole surface down to protect
-// them.
+// TWO DIFFERENT THINGS LOOK IDENTICAL HERE, and this query cannot tell them apart:
+//
+//   - a DELIBERATE share. Share writes exactly this shape, because one installation
+//     legitimately serves more than one of our orgs — luxfi is developed from the
+//     hanzo org and is also Lux's own. That is a platform-sudo decision, and the
+//     expected steady state for those accounts.
+//   - a LEGACY cross-tenant bind, from before Upsert refused to write one.
+//
+// So a hit is a QUESTION, not a fault. It was described here as history, which was
+// true until sharing existed and is now wrong for the accounts a person shared on
+// purpose. Reported, never repaired and never fatal: which org should hold an
+// account is not a question this process can answer, and refusing to boot over rows
+// already written would take the whole surface down to protect them.
 func (s *Store) Collisions(ctx context.Context) ([]collision, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT provider, external_id, GROUP_CONCAT(DISTINCT org) FROM connections
