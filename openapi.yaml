@@ -22313,6 +22313,31 @@ components:
         provider:
           $ref: '#/components/schemas/iam.Provider'
       type: object
+    iam.passwordBody:
+      properties:
+        code:
+          description: Code is the one-time code delivered to the account's own address.
+          type: string
+        oldPassword:
+          description: |-
+            OldPassword is the credential being replaced, the proof a signed-in caller
+            gives instead of a code.
+          type: string
+        organization:
+          description: |-
+            The account being recovered, for a caller who cannot be signed in. Read on
+            the CODE arm only — a signed-in caller is resolved from its own session or
+            token, never from these.
+          type: string
+        password:
+          description: |-
+            Password is the new credential. It must satisfy the platform floor and the
+            organization's own complexity options.
+          type: string
+        username:
+          description: email, username OR phone
+          type: string
+      type: object
     iam.permission.DeleteResponse:
       properties:
         deleted:
@@ -82564,6 +82589,36 @@ paths:
         and without this a person who reset a forgotten password was still refused for
         up to fifteen more minutes — with the brand-new password they had just chosen.
       operationId: put_v1_iam_password
+      parameters:
+      - in: header
+        name: Cookie
+        required: false
+        schema:
+          type: string
+      - in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.passwordBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
       summary: Replaces the calling person's password.
       tags:
       - iam
