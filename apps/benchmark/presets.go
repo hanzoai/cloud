@@ -13,44 +13,76 @@ package benchmark
 // auditable, not vibes.
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
 // Preset is one user-authored router blend. Arms are catalog model ids (or BYO); rank
 // is the escalation order (probe = rank[0], panel = rank[:panel]); panel bounds fan-out.
 type Preset struct {
-	Name   string   `json:"name"`             // served as enso-<name>
-	Owner  string   `json:"owner"`            // scoping org (never cross-tenant)
-	Arms   []string `json:"arms"`             // the blend — model ids from the arena
-	Rank   []string `json:"rank"`             // escalation order over arms
-	Panel  int      `json:"panel"`            // fan-out width (>=1)
-	Note   string   `json:"note,omitempty"`   // why this blend (audit)
+	Name  string   `json:"name"`           // served as enso-<name>
+	Owner string   `json:"owner"`          // scoping org (never cross-tenant)
+	Arms  []string `json:"arms"`           // the blend — model ids from the arena
+	Rank  []string `json:"rank"`           // escalation order over arms
+	Panel int      `json:"panel"`          // fan-out width (>=1)
+	Note  string   `json:"note,omitempty"` // why this blend (audit)
 }
 
-// presetRoutes is folded into routes() (one Mount). Kept here for cohesion.
-func presetRoutes(g zip.Router, s *cloud.Service[state]) {
-	g.Get("/presets", cloud.Handle(s, listPresets))
-	g.Post("/presets", cloud.Handle(s, createPreset))
+// presetList is the answer to a preset read.
+type presetList struct {
+	// Data is the blends available to compose from.
+	Data []Preset `json:"data"`
 }
 
-func listPresets(s *cloud.Service[state], c *zip.Ctx) error {
+// presetAccepted is the answer to a composed blend: what was checked, and what it
+// would be served as.
+type presetAccepted struct {
+	// Status is "accepted": the blend is well-formed, not that it is now served.
+	Status string `json:"status"`
+	// ServedAs is the model id the serving layer would resolve this blend under.
+	ServedAs string `json:"served_as"`
+	// Preset is the blend with its defaults filled in.
+	Preset Preset `json:"preset"`
+	// Note explains what acceptance does and does not promise.
+	Note string `json:"note"`
+}
+
+// presets are the router blends available to compose from — a named set of model
+// arms, the rank they escalate through and the panel width that bounds fan-out —
+// each served by the model layer as enso-<name>.
+//
+// Today it answers exactly one row, the reference blend: a worked example written
+// in models we name, published as an example of the FORM. It is deliberately not
+// the composition of a Hanzo-served tier — the tier name exists to abstract that —
+// so fork it and swap arms by what the leaderboard measures on your own tasks
+// rather than reading it as a disclosure.
+func (o ops) presets(ctx context.Context, _ *noIn) (*presetList, error) {
 	// v1: presets are org-scoped catalog entries; the store lands next to attempts.
 	// Returns the built-in enso-ultra blend as the reference preset until user presets persist.
-	return c.JSON(http.StatusOK, map[string]any{"data": []Preset{referenceBlend()}})
+	return &presetList{Data: []Preset{referenceBlend()}}, nil
 }
 
-func createPreset(s *cloud.Service[state], c *zip.Ctx) error {
-	var p Preset
-	if err := c.Bind(&p); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid preset"})
-	}
+// compose validates a router blend — its name, its arms, the rank they escalate
+// through and the panel fan-out width — and answers 202 with the preset and the
+// enso-<name> it would be served as.
+//
+// It VALIDATES AND ECHOES: the definition is not persisted yet, so a preset
+// accepted here is not one the model layer will resolve. Treat the response as a
+// check on the blend, not a promise to serve it.
+//
+// Defaults fill the shape rather than refusing it: an omitted rank becomes the arms
+// in declared order and a panel below 1 becomes 1. The one real invariant is that
+// rank may only name arms the blend declares — the same rule the model catalog
+// enforces — and a rank naming anything else is a 422 listing exactly which entries
+// were undeclared. A blend with no name or no arms is a 400.
+func (o ops) compose(ctx context.Context, in *Preset) (*presetAccepted, error) {
+	p := *in
 	p.Name = strings.TrimSpace(p.Name)
 	if p.Name == "" || len(p.Arms) == 0 {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "preset needs a name and at least one arm"})
+		return nil, zip.ErrBadRequest("preset needs a name and at least one arm")
 	}
 	if p.Panel < 1 {
 		p.Panel = 1
@@ -70,12 +102,13 @@ func createPreset(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 	}
 	if len(bad) > 0 {
-		return c.JSON(http.StatusUnprocessableEntity, map[string]any{"error": "rank references undeclared arms", "unknown": bad})
+		return nil, zip.Errorf(http.StatusUnprocessableEntity,
+			"rank references undeclared arms: %s", strings.Join(bad, ", "))
 	}
-	return c.JSON(http.StatusAccepted, map[string]any{
-		"status": "accepted", "served_as": "enso-" + p.Name, "preset": p,
-		"note": "resolved by the enso serving layer; author from the leaderboard's measured winners for your tasks.",
-	})
+	return &presetAccepted{
+		Status: "accepted", ServedAs: "enso-" + p.Name, Preset: p,
+		Note: "resolved by the enso serving layer; author from the leaderboard's measured winners for your tasks.",
+	}, nil
 }
 
 // referenceBlend is the worked example a user forks — a blend written in models

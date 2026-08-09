@@ -3,29 +3,29 @@ package namecom
 // The request/response shapes below mirror the name.com Core API v4 JSON. Only the
 // fields Hanzo Domains uses are modeled; unknown fields are ignored on decode.
 
-// Contact is a WHOIS/registration contact. name.com requires registrant/admin/tech/
+// Registrant is a WHOIS/registration contact. name.com requires registrant/admin/tech/
 // billing contacts on register; missing ones default to the reseller account.
-type Contact struct {
-	FirstName string `json:"firstName,omitempty"`
-	LastName  string `json:"lastName,omitempty"`
-	Company   string `json:"companyName,omitempty"`
-	Address1  string `json:"address1,omitempty"`
-	Address2  string `json:"address2,omitempty"`
-	City      string `json:"city,omitempty"`
-	State     string `json:"state,omitempty"`
-	Zip       string `json:"zip,omitempty"`
-	Country   string `json:"country,omitempty"` // ISO-3166 alpha-2, e.g. "US"
-	Phone     string `json:"phone,omitempty"`   // +NN.NNNNNNN
-	Fax       string `json:"fax,omitempty"`
-	Email     string `json:"email,omitempty"`
+type Registrant struct {
+	FirstName string `json:"firstName,omitempty"`   // the contact's given name
+	LastName  string `json:"lastName,omitempty"`    // the contact's family name
+	Company   string `json:"companyName,omitempty"` // the organisation the contact acts for
+	Address1  string `json:"address1,omitempty"`    // street address
+	Address2  string `json:"address2,omitempty"`    // second address line
+	City      string `json:"city,omitempty"`        // city or locality
+	State     string `json:"state,omitempty"`       // state, province or region
+	Zip       string `json:"zip,omitempty"`         // postal code
+	Country   string `json:"country,omitempty"`     // ISO-3166 alpha-2, e.g. "US"
+	Phone     string `json:"phone,omitempty"`       // +NN.NNNNNNN
+	Fax       string `json:"fax,omitempty"`         // fax number, in the same form as phone
+	Email     string `json:"email,omitempty"`       // where WHOIS correspondence is sent
 }
 
 // Contacts is the four-role contact set for a domain.
 type Contacts struct {
-	Registrant *Contact `json:"registrant,omitempty"`
-	Admin      *Contact `json:"admin,omitempty"`
-	Tech       *Contact `json:"tech,omitempty"`
-	Billing    *Contact `json:"billing,omitempty"`
+	Registrant *Registrant `json:"registrant,omitempty"` // who owns the domain
+	Admin      *Registrant `json:"admin,omitempty"`      // who administers it
+	Tech       *Registrant `json:"tech,omitempty"`       // who is reached about technical matters
+	Billing    *Registrant `json:"billing,omitempty"`    // who is reached about payment
 }
 
 // Domain is a domain record as name.com returns it (get/create/renew/setNameservers).

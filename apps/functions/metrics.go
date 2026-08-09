@@ -1,10 +1,10 @@
 package functions
 
 import (
+	"context"
 	"net/http"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -24,31 +24,42 @@ var rangeSpecs = map[string]metricsRange{
 	"30D": {30 * 24 * time.Hour, 30},
 }
 
+// pointView is one bucket of the invocation series.
 type pointView struct {
-	T string `json:"t"`
-	V int    `json:"v"`
+	T string `json:"t"` // the bucket's start, RFC3339 (UTC)
+	V int    `json:"v"` // how many invocations fell in it — a real count, never interpolated
 }
 
-type seriesLine struct {
-	Key    string      `json:"key"`
-	Points []pointView `json:"points"`
+// costLine is one function's invocation series over the window.
+type costLine struct {
+	Key    string      `json:"key"`    // the function the line is about
+	Points []pointView `json:"points"` // one point per bucket, oldest first
 }
 
+// statusBreakdown is how the window's invocations ended.
 type statusBreakdown struct {
-	Success int `json:"success"`
-	Timeout int `json:"timeout"`
-	Error   int `json:"error"`
+	Success int `json:"success"` // invocations whose code ran and wrote nothing to stderr
+	Timeout int `json:"timeout"` // invocations that hit their configured deadline
+	Error   int `json:"error"`   // invocations that ran and failed
 }
 
-type metricsView struct {
-	Series    []seriesLine    `json:"series"`
-	Status    statusBreakdown `json:"status"`
+// usage is the functions dashboard for one window.
+type usage struct {
+	Series    []costLine      `json:"series"`    // one line per function that ran in the window
+	Status    statusBreakdown `json:"status"`    // how those invocations ended
 	CostCents *int64          `json:"costCents"` // null — no per-invocation cost source
+}
+
+// metricsQuery is the window a dashboard read covers.
+type metricsQuery struct {
+	// Range is 1H, 6H, 24H (the default), 7D or 30D. Anything else falls back to
+	// 24H rather than failing.
+	Range string `json:"range"`
 }
 
 // buildMetrics buckets real invocation rows into a per-function series + a
 // status donut. Pure over its inputs (now injectable) so it is unit-tested.
-func buildMetrics(invs []Invocation, spec metricsRange, now time.Time) metricsView {
+func buildMetrics(invs []Invocation, spec metricsRange, now time.Time) usage {
 	start := now.Add(-spec.dur)
 	bucketDur := spec.dur / time.Duration(spec.buckets)
 
@@ -88,34 +99,45 @@ func buildMetrics(invs []Invocation, spec metricsRange, now time.Time) metricsVi
 		perFn[iv.FunctionName] = row
 	}
 
-	series := make([]seriesLine, 0, len(perFn))
+	series := make([]costLine, 0, len(perFn))
 	for name, counts := range perFn {
 		points := make([]pointView, spec.buckets)
 		for i := 0; i < spec.buckets; i++ {
 			points[i] = pointView{T: labels[i], V: counts[i]}
 		}
-		series = append(series, seriesLine{Key: name, Points: points})
+		series = append(series, costLine{Key: name, Points: points})
 	}
-	return metricsView{Series: series, Status: st, CostCents: nil}
+	return usage{Series: series, Status: st, CostCents: nil}
 }
 
-func metrics(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// metrics is the org's serverless dashboard over a window: a per-function
+// invocation costLine and how those invocations ended.
+//
+// Every point is a REAL count of rows that fell in that bucket — nothing is
+// interpolated or invented, so an empty window draws a flat line rather than a
+// fabricated one.
+//
+// costCents is null and stays null: there is no per-invocation cost source to read,
+// and reporting a number computed some other way would be a guess presented as a
+// measurement. Requires a validated principal; the read is scoped to its org.
+func (o ops) metrics(ctx context.Context, in *metricsQuery) (*usage, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	spec, ok := rangeSpecs[c.Query("range")]
+	store, err := storeFor(o.s, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	spec, ok := rangeSpecs[in.Range]
 	if !ok {
 		spec = rangeSpecs["24H"]
 	}
 	since := time.Now().Add(-spec.dur).Unix()
-	invs, err := store.InvocationsSince(c.Context(), org, since, 5000)
+	invs, err := store.InvocationsSince(ctx, org, since, 5000)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
 	}
-	return c.JSON(http.StatusOK, buildMetrics(invs, spec, time.Now()))
+	out := buildMetrics(invs, spec, time.Now())
+	return &out, nil
 }

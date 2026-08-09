@@ -29,19 +29,18 @@
 package functions
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -95,48 +94,75 @@ func storeFor(s *cloud.Service[state], org string) (*Store, error) {
 
 // ---- HTTP response shapes (console functions.ts contract) ----
 
+// functionView is one published function and its real 7-day rollup.
 type functionView struct {
-	Name           string   `json:"name"`
-	Namespace      string   `json:"namespace"`
-	Environment    string   `json:"environment"`
-	Status         string   `json:"status"`
-	Image          string   `json:"image,omitempty"`
-	Endpoint       string   `json:"endpoint"`
-	EnvCount       int      `json:"envCount"`
-	TimeoutSec     int      `json:"timeoutSec"`
-	MemoryLimit    string   `json:"memoryLimit"`
-	Invocations7d  *int     `json:"invocations7d,omitempty"`
-	SuccessRate    *float64 `json:"successRate,omitempty"`
-	AvgDurationMs  *float64 `json:"avgDurationMs,omitempty"`
-	Errors7d       *int     `json:"errors7d,omitempty"`
-	Target         string   `json:"target,omitempty"`
-	CreatedAt      string   `json:"createdAt"`
-	LastDeployedAt string   `json:"lastDeployedAt"`
+	Name           string   `json:"name"`                    // the function's org-unique handle
+	Namespace      string   `json:"namespace"`               // the display group it belongs to; the org is the isolation key
+	Environment    string   `json:"environment"`             // the language it runs under
+	Status         string   `json:"status"`                  // whether it is ready to serve
+	Image          string   `json:"image,omitempty"`         // the prebuilt image it runs, when it runs one instead of source
+	Endpoint       string   `json:"endpoint"`                // the path that invokes it
+	EnvCount       int      `json:"envCount"`                // how many secret NAMES it mounts; values are never carried
+	TimeoutSec     int      `json:"timeoutSec"`              // its per-invocation deadline
+	MemoryLimit    string   `json:"memoryLimit"`             // the memory it runs with, and the multiplier on its compute charge
+	Invocations7d  *int     `json:"invocations7d,omitempty"` // runs in the last 7 days; ABSENT, never 0, when it has not run
+	SuccessRate    *float64 `json:"successRate,omitempty"`   // share of those runs that succeeded, 0..1
+	AvgDurationMs  *float64 `json:"avgDurationMs,omitempty"` // mean wall-clock of those runs
+	Errors7d       *int     `json:"errors7d,omitempty"`      // how many of those runs failed
+	Target         string   `json:"target,omitempty"`        // where it runs: empty for the sandbox, "fleet" for the org's GPU fleet
+	CreatedAt      string   `json:"createdAt"`               // when it was first published
+	LastDeployedAt string   `json:"lastDeployedAt"`          // when its code last changed
 }
 
+// triggerView is how one function is reached.
 type triggerView struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	Enabled      bool   `json:"enabled"`
-	Target       string `json:"target"`
-	FunctionName string `json:"functionName"`
+	ID           string `json:"id"`           // the trigger's handle
+	Name         string `json:"name"`         // a human label for it
+	Type         string `json:"type"`         // what kind of trigger it is; HTTP is the only one today
+	Enabled      bool   `json:"enabled"`      // whether it currently fires
+	Target       string `json:"target"`       // the path it calls
+	FunctionName string `json:"functionName"` // the function it calls
 }
 
+// invocationView is one recorded run.
+//
+// It also states the HTTP status an invoke reply carries, because that status is a
+// property of the RUN — clean, failed, or never attempted because this deployment
+// has no sandbox — and a value that states its own status cannot disagree with the
+// one on the wire.
 type invocationView struct {
-	ID         string `json:"id"`
-	StatusCode int    `json:"statusCode"`
-	Status     string `json:"status"`
-	Method     string `json:"method"`
-	Time       string `json:"time"`
-	DurationMs int64  `json:"durationMs"`
+	ID string `json:"id"` // the invocation's handle
+	// Code is the status the function's OWN code answered with, which is not the
+	// status of the reply — a program can answer 500 through a healthy sandbox.
+	Code       int    `json:"statusCode"`
+	Status     string `json:"status"`     // how the run ended: ok, error or timeout
+	Method     string `json:"method"`     // the HTTP method that triggered it
+	Time       string `json:"time"`       // when it ran, RFC3339
+	DurationMs int64  `json:"durationMs"` // how long it took
+	// reply is the status the invoke ANSWER carries. It is off the wire: the
+	// status is the status, and repeating it in the body would be a second place
+	// for it to disagree. Zero on a row read back from the store, which answers
+	// nothing.
+	reply int `json:"-"`
 }
 
+// StatusCode is 200 when the org's code ran clean, 502 when it ran and failed, and
+// 503 when this deployment cannot run code at all. "This deployment cannot run
+// code" is not "the run failed" — it is a deployment fact, and 503 is the status a
+// caller retries against a healthy replica on.
+func (v *invocationView) StatusCode() int { return v.reply }
+
+// functionDetail is one function with everything a detail page needs in one
+// round-trip. It EMBEDS functionView, so the wire carries that shape's fields
+// alongside these three.
 type functionDetail struct {
 	functionView
-	Triggers          []triggerView    `json:"triggers"`
+	// Triggers is how this function is reached.
+	Triggers []triggerView `json:"triggers"`
+	// RecentInvocations is its twenty most recent runs, newest first.
 	RecentInvocations []invocationView `json:"recentInvocations"`
-	Secrets           []string         `json:"secrets"`
+	// Secrets are the NAMES it mounts. Values are never read or returned.
+	Secrets []string `json:"secrets"`
 }
 
 func rfc3339(unix int64) string {
@@ -207,453 +233,465 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // routes registers the functions surface. Static sub-routes before the :name
 // param route so a real function can never shadow
 // /metrics|/triggers|/deployments|/secrets.
+//
+// Every op is TYPED — its input and its answer are Go types — so the schema, the
+// prose, the MCP tool, the CLI command and every generated SDK method are
+// projections of the handler itself. zipdoc lifts the doc comments into
+// zipdoc_gen.go, which is the only way prose reaches the published registry: Go
+// drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	o := ops{s: s}
+	za := cloud.ZipApp(app)
+
 	// Collection root stays flat: Group("/v1/functions").Get("") would register
 	// "/v1/functions/", not the bare collection path.
-	app.Get("/v1/functions", cloud.Handle(s, list))
-	app.Post("/v1/functions", cloud.Handle(s, create))
+	zip.Get(za, "/v1/functions", o.list)
+	zip.Post(za, "/v1/functions", o.create, zip.WithStatus(http.StatusCreated))
 
 	g := app.Group("/v1/functions")
-	g.Get("/metrics", cloud.Handle(s, metrics))
-	g.Get("/triggers", cloud.Handle(s, triggers))
-	g.Get("/deployments", cloud.Handle(s, deployments))
-	g.Get("/secrets", cloud.Handle(s, secrets))
-	g.Get("/:name", cloud.Handle(s, get))
-	g.Delete("/:name", cloud.Handle(s, del))
-	g.Get("/:name/invocations", cloud.Handle(s, invocations))
-	g.Get("/:name/logs", cloud.Handle(s, logs))
-	g.Post("/:name/invoke", cloud.Handle(s, invoke))
+	// cloud.DenyEnvelope BEFORE the leaves, because fiber runs middleware in
+	// registration order and one installed after its leaves never runs. An invoke
+	// gates on the caller's balance, and the envelope is what makes that refusal
+	// the fleet's own nested {"error":{"code","message"}}.
+	g.Use(cloud.DenyEnvelope())
+
+	zip.Get(g, "/metrics", o.metrics)
+	zip.Get(g, "/triggers", o.triggers)
+	zip.Get(g, "/deployments", o.deployments)
+	zip.Get(g, "/secrets", o.secrets)
+	zip.Get(g, "/:name", o.get)
+	zip.Delete(g, "/:name", o.del, zip.WithStatus(http.StatusNoContent))
+	zip.Get(g, "/:name/invocations", o.invocations)
+	zip.Get(g, "/:name/logs", o.logs)
+	// An invoke answers the invocation record whatever happened to it: 200 when the
+	// org's code ran clean, 502 when it ran and failed, 503 when this deployment
+	// cannot run code at all. The record IS the evidence, so it rides the failure
+	// rather than being replaced by an error envelope.
+	zip.Post(g, "/:name/invoke", o.invoke,
+		zip.WithStatus(http.StatusOK, http.StatusBadGateway, http.StatusServiceUnavailable))
 }
 
-// The prose for this surface, declared beside the route table it describes.
-//
-// None of these handlers is a typed op — they bind and answer through zip.Ctx
-// (c.Bind, c.Query, c.Param, map bodies), so zipdoc has no doc comment to lift
-// and the document would otherwise publish an operationId and nothing else:
-// eleven SDK methods that cannot explain themselves and eleven CLI commands with
-// no help text. Describe is the seam for exactly that, keyed by the fiber pattern
-// verbatim, so a route that leaves the table takes its prose with it.
-func init() {
-	openapi.Describe("/v1/functions", http.MethodGet,
-		"Every serverless function the caller's org has published, with its real 7-day rollup",
-		"A row carries the function's runtime, resource limits, deployment target and its "+
-			"invoke endpoint, plus envCount — how many secrets it mounts. The registry holds "+
-			"secret NAMES only; a value never enters this store and is never returned.\n\n"+
-			"The rollup (invocations7d, errors7d, successRate, avgDurationMs) is counted from "+
-			"real invocation rows over the trailing 7 days and is OMITTED for a function with "+
-			"no calls in that window rather than sent as zero, so a consumer must render "+
-			"absence as unknown, not as an idle function. Ordered most-recently-deployed first.\n\n"+
-			"Scoped to the caller's own org — one store per org, with the org column on every "+
-			"query. Requires a validated principal: an org claim with no verified credential "+
-			"behind it is refused, never answered with an empty list.")
-
-	openapi.Describe("/v1/functions", http.MethodPost,
-		"Publish a function, or redeploy an existing one under the same name",
-		"Org and name together identify a function, so a second call for a name the org "+
-			"already owns is a REDEPLOY: the spec is replaced, the deploy version advances, "+
-			"and the original creation time is kept. There is no separate update call, and no "+
-			"way to take over a name another org owns.\n\n"+
-			"What is accepted is a closed set. runtime is one of node, python, go, deno, bash "+
-			"or container; name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ and may not be one "+
-			"of the reserved static names (metrics, triggers, deployments, secrets); source is "+
-			"capped at 256 KiB. timeoutSec is CLAMPED to the 900s ceiling rather than rejected, "+
-			"and an absent one defaults to 30s with 256Mi of memory. target=fleet runs the "+
-			"function on the org's own linked GPU fleet and is accepted for runtime=python "+
-			"only; everything else runs on the shared sandbox.\n\n"+
-			"envNames declares which secrets the function mounts BY NAME — values live in KMS "+
-			"and are resolved sandbox-side at run time, so no secret value is sent here or "+
-			"stored here. Scoped to the caller's org; requires a validated principal.")
-
-	openapi.Describe("/v1/functions/metrics", http.MethodGet,
-		"Invocation chart and status breakdown across every function in the caller's org",
-		"One series per function that actually ran in the window, bucketed, plus a "+
-			"success/timeout/error donut over the same rows. Every point is a COUNT of real "+
-			"invocation rows that fell in that bucket — nothing is interpolated, and a function "+
-			"with no invocations in the window has no series at all.\n\n"+
-			"The `range` query selects the window and its bucket count: 1H, 6H, 24H, 7D or 30D. "+
-			"An absent or unrecognized value falls back to 24H rather than failing. At most the "+
-			"5000 newest rows are read, so a very busy org's oldest buckets in a wide range can "+
-			"undercount.\n\n"+
-			"costCents is always null: this view has no per-invocation cost source, and reports "+
-			"nothing rather than a fabricated figure. Scoped to the caller's org; requires a "+
-			"validated principal.")
-
-	openapi.Describe("/v1/functions/triggers", http.MethodGet,
-		"Every trigger attached to the caller's org's functions",
-		"A function has exactly ONE trigger today and it is derived, not stored: an "+
-			"always-enabled HTTP trigger whose target is that function's own invoke endpoint, "+
-			"listed once per function.\n\n"+
-			"There is no trigger table behind this and no call that creates, disables or "+
-			"deletes one. The list is a projection of the function registry, so it changes only "+
-			"when a function is published or deleted.\n\n"+
-			"Scoped to the caller's org; requires a validated principal.")
-
-	openapi.Describe("/v1/functions/deployments", http.MethodGet,
-		"The live deployment of every function in the caller's org",
-		"A function's current record IS its deployment, so this answers in the same shape the "+
-			"function list does — runtime, resource limits, target, endpoint, and when it was "+
-			"last deployed.\n\n"+
-			"Two things not to assume. The invocation rollup is never populated here, even for "+
-			"a function that has run: those fields are omitted unconditionally, and the function "+
-			"list is where they are filled in. And this is an inventory of what is live, not a "+
-			"history — there is exactly one entry per function, and a redeploy replaces it "+
-			"rather than appending to it.\n\n"+
-			"Scoped to the caller's org; requires a validated principal.")
-
-	openapi.Describe("/v1/functions/secrets", http.MethodGet,
-		"The names of the secrets mounted by the caller's org's functions",
-		"NAMES only. A secret's value is not held by this subsystem and is not read on this "+
-			"path — values live in KMS and are resolved sandbox-side when a function runs — so "+
-			"nothing in this answer is a credential.\n\n"+
-			"The list is derived from the mount declarations on the function records and "+
-			"deduplicated by namespace and name, so a name mounted by several functions appears "+
-			"ONCE: mountedBy names the first function that claimed it in deploy order, not every "+
-			"function that mounts it. Read it as a hint about origin, not as a complete usage "+
-			"map.\n\n"+
-			"Scoped to the caller's org; requires a validated principal.")
-
-	openapi.Describe("/v1/functions/:name", http.MethodGet,
-		"One function in full: spec, trailing-7-day rollup, trigger, latest runs and mounted secret names",
-		"Extends the list row with the function's single derived HTTP trigger, its 20 most "+
-			"recent invocations (newest first, metadata only — no captured output), and "+
-			"`secrets`, the NAMES of the secrets it mounts. No secret value is stored or "+
-			"returned.\n\n"+
-			"Lookup is keyed on (org, name), so a function that exists but belongs to another "+
-			"org answers exactly as one that never existed — not found, never a signal that the "+
-			"name is taken elsewhere. The 7-day rollup fields are omitted rather than zeroed "+
-			"when the function has not run in the window.\n\n"+
-			"Requires a validated principal.")
-
-	openapi.Describe("/v1/functions/:name", http.MethodDelete,
-		"Delete a function and its entire invocation history",
-		"One transaction removes the function record and every invocation row recorded "+
-			"against its name, so that history also leaves the metrics chart and the invocation "+
-			"list. This is not a soft delete and there is no restore.\n\n"+
-			"Deletion is keyed on (org, name): a name owned by another org is not found here, "+
-			"exactly like a name that never existed, so the call cannot be used to probe for or "+
-			"destroy another tenant's function. A successful delete answers with no body.\n\n"+
-			"Requires a validated principal.")
-
-	openapi.Describe("/v1/functions/:name/invocations", http.MethodGet,
-		"Recent invocation history for one function, newest first",
-		"Each entry is invocation METADATA — id, status, HTTP status code, wall-clock "+
-			"duration and when it ran. The captured stdout/stderr is not on this path; the logs "+
-			"call returns it, for the latest run only.\n\n"+
-			"`limit` defaults to 100 and is clamped: at or below zero, above 500, or not a "+
-			"number at all, it falls back to 100. An unknown function name is NOT an error here "+
-			"— nothing has ever run under it, so the answer is an empty list rather than a not-"+
-			"found, and a caller testing existence must ask for the function itself.\n\n"+
-			"Scoped to the caller's org, so it can only ever return the calling tenant's own "+
-			"runs. Requires a validated principal.")
-
-	openapi.Describe("/v1/functions/:name/logs", http.MethodGet,
-		"The captured output of a function's most recent invocation",
-		"One string, from the LATEST invocation only. This is not a log stream and carries no "+
-			"history; the invocations list is where earlier runs are enumerated.\n\n"+
-			"When that run failed, the string is its ERROR text rather than its stdout — the two "+
-			"share one field, so success cannot be told from failure by this value alone and the "+
-			"invocation's status is what answers that. Output was truncated to 64 KiB when the "+
-			"run was recorded, error text to 16 KiB.\n\n"+
-			"A function that has never run — or a name that does not exist in the caller's org — "+
-			"answers with an empty string, not a not-found. Scoped to the caller's org; requires "+
-			"a validated principal.")
-
-	openapi.Describe("/v1/functions/:name/invoke", http.MethodPost,
-		"Run a function and get back the recorded invocation",
-		"The body's `input` is handed to the function on stdin. Execution NEVER happens in "+
-			"this process: the runtime and source go to the sandboxed code executor, or, for a "+
-			"function published with target=fleet, to the org's own linked GPU fleet as an "+
-			"fn.run job this call blocks on until it finishes. Either way it is bounded by the "+
-			"function's own timeout, itself capped at 900s.\n\n"+
-			"The answer is the invocation record — id, status, duration — and its HTTP status is "+
-			"about the RUN, not about this API: a function whose own code fails answers 502 "+
-			"with a recorded `error` invocation, which is a successful invocation of a failing "+
-			"program. The captured output is not in this reply; the logs call returns it.\n\n"+
-			"MONEY. The caller's org ledger is gated BEFORE any compute runs, so an org out of "+
-			"credit or over its spend cap is refused 402 and nothing executes, and a billing "+
-			"plane that cannot answer refuses rather than granting free compute. A run that "+
-			"actually executed is then debited twice — a flat per-invocation fee, and GB-seconds "+
-			"of compute derived from the measured duration and the function's configured memory. "+
-			"A run that never reached its executor (unreachable, or timed out in transport) "+
-			"consumed nothing and is not charged; a run whose code exited non-zero DID consume "+
-			"compute and is. An operator who prices either half at zero makes it a no-op, and a "+
-			"zero request fee removes the balance gate with it.\n\n"+
-			"When the sandbox is not configured on this deployment, a non-fleet function fails "+
-			"closed before anything is recorded — no execution and no fabricated output. Scoped "+
-			"to the caller's org; requires a validated principal.")
-}
+// ops binds the service to the typed ops. A TypedHandler takes no service
+// parameter, so the service arrives as a RECEIVER and every op is a method value
+// — also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
 
 // ---- handlers ----
 
-type createReq struct {
-	Name        string   `json:"name"`
-	Environment string   `json:"environment"`
-	Runtime     string   `json:"runtime"`
-	Namespace   string   `json:"namespace"`
-	Image       string   `json:"image"`
-	Code        string   `json:"code"`
-	Handler     string   `json:"handler"`
-	TimeoutSec  int      `json:"timeoutSec"`
-	MemoryLimit string   `json:"memoryLimit"`
-	EnvNames    []string `json:"envNames"`
-	Target      string   `json:"target"` // ""|"sandbox" = sandbox, "fleet" = org GPU fleet
+// tenant resolves the org — the isolation KEY — from the validated principal
+// cloud.Bridge parked. It is the org EXACTLY as SanitizeIdentity minted it from
+// the validated IAM owner claim: never lowercased, stripped or truncated, because
+// normalizing collapses distinct owners into one bucket. Fails closed.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return org, nil
 }
 
-func create(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// noIn is the input of an op that takes nothing: no body, no path parameter, no
+// query.
+type noIn struct{}
+
+// fnRef addresses one of the caller org's functions.
+type fnRef struct {
+	// Name is the function the URL names.
+	Name string `json:"name"`
+}
+
+// none is the answer of an op that removes something: there is nothing left to
+// describe, so it answers 204 and no body.
+type none struct{}
+
+// fnList is a set of functions.
+type fnList struct {
+	// Functions is one row per published function.
+	Functions []functionView `json:"functions"`
+}
+
+// triggerList is what calls the org's functions.
+type triggerList struct {
+	// Triggers is one row per function, describing how it is reached.
+	Triggers []triggerView `json:"triggers"`
+}
+
+// secretList is the NAMES of the secrets the org's functions mount.
+type secretList struct {
+	// Secrets is one row per distinct (namespace, name) a function mounts. Values
+	// are NEVER read or returned.
+	Secrets []secretView `json:"secrets"`
+}
+
+// invocationList is a page of past invocations.
+type invocationList struct {
+	// Invocations is one row per past run, newest first.
+	Invocations []invocationView `json:"invocations"`
+}
+
+// invocationPage bounds an invocation listing.
+type invocationPage struct {
+	// Name is the function the URL names.
+	Name string `json:"name"`
+	// Limit caps the page, defaulting to 100.
+	Limit int `json:"limit"`
+}
+
+// logLines is the output of the most recent run.
+type logLines struct {
+	// Logs is that run's error text when it failed, else its output. It is empty
+	// when the function has never run.
+	Logs string `json:"logs"`
+}
+
+// definition publishes a serverless function.
+type definition struct {
+	// Name is the function's org-unique handle and the segment that addresses it,
+	// matching ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. The names that would shadow a
+	// collection route are reserved.
+	Name string `json:"name" validate:"required"`
+	// Environment is a second spelling of runtime, accepted so a console that says
+	// "environment" needs no translation.
+	Environment string `json:"environment"`
+	// Runtime is the language the code runs under: node, python or deno.
+	Runtime string `json:"runtime"`
+	// Namespace groups functions for display. It is cosmetic — the org is the
+	// isolation key — and is normalised to a DNS-safe label.
+	Namespace string `json:"namespace"`
+	// Image names a prebuilt image to run instead of source.
+	Image string `json:"image"`
+	// Code is the source to run, capped so one function cannot amplify the store.
+	Code string `json:"code"`
+	// Handler is the entry point within the code.
+	Handler string `json:"handler"`
+	// TimeoutSec is the per-invocation deadline, defaulting to 30 and clamped at
+	// 900 — a larger value is capped rather than reset to the default.
+	TimeoutSec int `json:"timeoutSec"`
+	// MemoryLimit is the memory the function runs with, defaulting to 256Mi. It is
+	// also the multiplier on the GB-seconds compute charge.
+	MemoryLimit string `json:"memoryLimit"`
+	// EnvNames are the secret NAMES to mount. Values live in the secret store and
+	// are never carried here.
+	EnvNames []string `json:"envNames"`
+	// Target is where the function runs: sandbox (the default) or fleet, the org's
+	// own GPU fleet. fleet supports runtime=python only.
+	Target string `json:"target"`
+}
+
+// create publishes a serverless function under the caller's org and answers 201
+// with it.
+//
+// The name is the key and is claimed once; the names that would shadow a
+// collection route are reserved. runtime and environment are the same field —
+// either spelling is accepted — and default to node.
+//
+// Bounds are clamped rather than refused where a clamp is honest: a timeout above
+// the 900-second ceiling becomes the ceiling instead of silently reverting to the
+// 30-second default, and an omitted memory limit becomes 256Mi. target=fleet runs
+// on the org's own GPU fleet and supports runtime=python only.
+//
+// Requires a validated principal; the function is owned by that principal's org.
+func (o ops) create(ctx context.Context, in *definition) (*functionView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	var body createReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := strings.TrimSpace(body.Name)
+	name := strings.TrimSpace(in.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
 	if reserved[strings.ToLower(name)] {
-		return zip.ErrBadRequest("name is reserved")
+		return nil, zip.ErrBadRequest("name is reserved")
 	}
 	if !nameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
 	// environment (functions.ts) and runtime are the same field; accept either.
-	runtime := strings.ToLower(strings.TrimSpace(firstNonEmpty(body.Runtime, body.Environment)))
+	runtime := strings.ToLower(strings.TrimSpace(firstNonEmpty(in.Runtime, in.Environment)))
 	if runtime == "" {
 		runtime = "node"
 	}
 	if !runtimes[runtime] {
-		return zip.ErrBadRequest("unsupported runtime")
+		return nil, zip.ErrBadRequest("unsupported runtime")
 	}
-	if len(body.Code) > maxCode {
-		return zip.ErrBadRequest("code too large")
+	if len(in.Code) > maxCode {
+		return nil, zip.ErrBadRequest("code too large")
 	}
-	timeout := body.TimeoutSec
+	timeout := in.TimeoutSec
 	if timeout <= 0 {
 		timeout = 30
 	} else if timeout > 900 {
 		timeout = 900 // clamp to the ceiling, don't silently reset to the default
 	}
-	mem := strings.TrimSpace(body.MemoryLimit)
+	mem := strings.TrimSpace(in.MemoryLimit)
 	if mem == "" {
 		mem = "256Mi"
 	}
-	target := strings.ToLower(strings.TrimSpace(body.Target))
+	target := strings.ToLower(strings.TrimSpace(in.Target))
 	if target == "sandbox" {
 		target = ""
 	}
 	if target != "" && target != "fleet" {
-		return zip.ErrBadRequest("target must be sandbox or fleet")
+		return nil, zip.ErrBadRequest("target must be sandbox or fleet")
 	}
 	if target == "fleet" && runtime != "python" {
-		return zip.ErrBadRequest("target=fleet supports runtime=python only")
+		return nil, zip.ErrBadRequest("target=fleet supports runtime=python only")
 	}
 	id, err := genID("fn")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	now := time.Now().Unix()
 	f := Function{
-		ID: id, Org: org, Name: name, Namespace: sanitizeNs(body.Namespace), Runtime: runtime,
-		Image: strings.TrimSpace(body.Image), Code: body.Code, Handler: strings.TrimSpace(body.Handler),
-		TimeoutSec: timeout, MemoryLimit: mem, EnvNames: cleanList(body.EnvNames),
-		Target: target, Status: "ready", LastDeployAt: now,
+		ID: id, Org: org, Name: name, Namespace: sanitizeNs(in.Namespace), Runtime: runtime,
+		Image: strings.TrimSpace(in.Image), Code: in.Code, Handler: strings.TrimSpace(in.Handler),
+		TimeoutSec: timeout, MemoryLimit: mem, EnvNames: cleanList(in.EnvNames),
+		Target: target, Status: "ready", LastDeployAt: time.Now().Unix(),
 	}
-	saved, err := store.Upsert(c.Context(), f)
+	saved, err := store.Upsert(ctx, f)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toView(s, saved, InvStats{}))
+	out := toView(s, saved, InvStats{})
+	return &out, nil
 }
 
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// list is every serverless function the caller's org has published, each with its
+// real 7-day rollup.
+//
+// A row carries the function's runtime, resource limits, deployment target and its
+// invoke endpoint, plus envCount — how many secrets it mounts. The rollup fields
+// are ABSENT rather than zero when the function has not run in the window, so a
+// console renders "—" instead of a fabricated 0.
+//
+// Requires a validated principal; the listing is scoped to its org.
+func (o ops) list(ctx context.Context, _ *noIn) (*fnList, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	rows, err := store.List(c.Context(), org)
+	rows, err := store.List(ctx, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	since := time.Now().Unix() - window7d
 	out := make([]functionView, 0, len(rows))
 	for _, f := range rows {
-		st, err := store.StatsSince(c.Context(), org, f.Name, since)
+		st, err := store.StatsSince(ctx, org, f.Name, since)
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "stats: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "stats: %v", err)
 		}
 		out = append(out, toView(s, f, st))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"functions": out})
+	return &fnList{Functions: out}, nil
 }
 
-func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// get is one function with everything a detail page needs in one round-trip: its
+// definition, its 7-day rollup, its trigger, its twenty most recent invocations
+// and the NAMES of the secrets it mounts.
+//
+// Secret values are never read or returned. A name the caller's org does not hold
+// is 404, which is also what another tenant's function looks like from here.
+func (o ops) get(ctx context.Context, in *fnRef) (*functionDetail, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	name := nameParam(c)
-	f, err := store.Get(c.Context(), org, name)
+	name := strings.TrimSpace(in.Name)
+	f, err := store.Get(ctx, org, name)
 	if err == errNotFound {
-		return zip.ErrNotFound("function not found")
+		return nil, zip.ErrNotFound("function not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
 	since := time.Now().Unix() - window7d
-	st, _ := store.StatsSince(c.Context(), org, name, since)
-	invs, err := store.ListInvocations(c.Context(), org, name, 20)
+	st, _ := store.StatsSince(ctx, org, name, since)
+	invs, err := store.ListInvocations(ctx, org, name, 20)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "invocations: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "invocations: %v", err)
 	}
-	return c.JSON(http.StatusOK, functionDetail{
+	return &functionDetail{
 		functionView:      toView(s, f, st),
 		Triggers:          []triggerView{httpTrigger(f)},
 		RecentInvocations: toInvViews(invs),
 		Secrets:           nonNil(f.EnvNames),
-	})
+	}, nil
 }
 
-func del(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// del removes one of the caller org's functions and answers 204.
+//
+// A name this org does not hold is 404 — never a silent success — and a name
+// belonging to another tenant is the same 404, because the delete is predicated on
+// the validated org.
+func (o ops) del(ctx context.Context, in *fnRef) (*none, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	deleted, err := store.Delete(c.Context(), org, nameParam(c))
+	store, err := storeFor(o.s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	deleted, err := store.Delete(ctx, org, strings.TrimSpace(in.Name))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("function not found")
+		return nil, zip.ErrNotFound("function not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
-func invocations(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// invocations is one function's past runs, newest first — each with its status,
+// HTTP code, method, time and duration.
+//
+// These are real recorded rows, not a projection: an invocation appears here only
+// once it actually ran. Requires a validated principal; the read is scoped to its
+// org.
+func (o ops) invocations(ctx context.Context, in *invocationPage) (*invocationList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	name := nameParam(c)
-	limit := 100
-	if q := strings.TrimSpace(c.Query("limit")); q != "" {
-		if n, err := strconv.Atoi(q); err == nil {
-			limit = n
-		}
-	}
-	invs, err := store.ListInvocations(c.Context(), org, name, limit)
+	store, err := storeFor(o.s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "invocations: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"invocations": toInvViews(invs)})
+	limit := in.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	invs, err := store.ListInvocations(ctx, org, strings.TrimSpace(in.Name), limit)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "invocations: %v", err)
+	}
+	return &invocationList{Invocations: toInvViews(invs)}, nil
 }
 
-func logs(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// logs is the output of a function's most recent run — its error text when that
+// run failed, else what it printed.
+//
+// It is the LAST run only, and it is empty when the function has never run. There
+// is no log retention behind this beyond the recorded invocation itself.
+func (o ops) logs(ctx context.Context, in *fnRef) (*logLines, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	invs, err := store.ListInvocations(c.Context(), org, nameParam(c), 1)
+	store, err := storeFor(o.s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "logs: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	logs := ""
+	invs, err := store.ListInvocations(ctx, org, strings.TrimSpace(in.Name), 1)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "logs: %v", err)
+	}
+	out := ""
 	if len(invs) > 0 {
 		if invs[0].Error != "" {
-			logs = invs[0].Error
+			out = invs[0].Error
 		} else {
-			logs = invs[0].Output
+			out = invs[0].Output
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"logs": logs})
+	return &logLines{Logs: out}, nil
 }
 
-func triggers(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// triggers is what calls the caller org's functions — one row per function.
+//
+// Every function has exactly one trigger today, its HTTP invoke endpoint, so this
+// is the function list read as "how is each of these reached".
+func (o ops) triggers(ctx context.Context, _ *noIn) (*triggerList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	rows, err := store.List(c.Context(), org)
+	store, err := storeFor(o.s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "triggers: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.List(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "triggers: %v", err)
 	}
 	out := make([]triggerView, 0, len(rows))
 	for _, f := range rows {
 		out = append(out, httpTrigger(f))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"triggers": out})
+	return &triggerList{Triggers: out}, nil
 }
 
-func deployments(s *cloud.Service[state], c *zip.Ctx) error {
-	// Each function's current record IS its live deployment; return them as the
-	// deployment inventory (console normalizes this as a function list).
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// deployments is what is live right now — each function's current record IS its
+// live deployment, so this is the deployment inventory.
+//
+// There is no deployment history behind it: a function has one record, and
+// publishing replaces it. The 7-day rollup is deliberately absent here, because
+// this read is about what is deployed rather than about how it has performed.
+func (o ops) deployments(ctx context.Context, _ *noIn) (*fnList, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	rows, err := store.List(c.Context(), org)
+	rows, err := store.List(ctx, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "deployments: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "deployments: %v", err)
 	}
 	out := make([]functionView, 0, len(rows))
 	for _, f := range rows {
 		out = append(out, toView(s, f, InvStats{}))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"functions": out})
+	return &fnList{Functions: out}, nil
 }
 
+// secretView is one mounted secret, by NAME.
 type secretView struct {
-	Name      string `json:"name"`
+	// Name is the environment variable the function mounts.
+	Name string `json:"name"`
+	// Namespace is the group the mounting function belongs to.
 	Namespace string `json:"namespace,omitempty"`
+	// MountedBy is a function that mounts it.
 	MountedBy string `json:"mountedBy,omitempty"`
 }
 
-func secrets(s *cloud.Service[state], c *zip.Ctx) error {
-	// NAMES only — values are NEVER read or returned (Secret-Manager principle).
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// secrets is the NAMES of the secrets the caller org's functions mount.
+//
+// Values are NEVER read or returned — this surface knows which names a function
+// asks for and nothing about what is behind them, which is what makes it safe to
+// list at all. One row per distinct (namespace, name).
+func (o ops) secrets(ctx context.Context, _ *noIn) (*secretList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	rows, err := store.List(c.Context(), org)
+	store, err := storeFor(o.s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "secrets: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.List(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "secrets: %v", err)
 	}
 	seen := map[string]bool{}
 	out := make([]secretView, 0)
@@ -667,7 +705,7 @@ func secrets(s *cloud.Service[state], c *zip.Ctx) error {
 			out = append(out, secretView{Name: n, Namespace: f.Namespace, MountedBy: f.Name})
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"secrets": out})
+	return &secretList{Secrets: out}, nil
 }
 
 // ---- helpers ----
@@ -676,7 +714,7 @@ func toInvViews(invs []Invocation) []invocationView {
 	out := make([]invocationView, 0, len(invs))
 	for _, iv := range invs {
 		out = append(out, invocationView{
-			ID: iv.ID, StatusCode: iv.StatusCode, Status: iv.Status, Method: iv.Method,
+			ID: iv.ID, Code: iv.StatusCode, Status: iv.Status, Method: iv.Method,
 			Time: rfc3339(iv.CreatedAt), DurationMs: iv.DurationMs,
 		})
 	}
