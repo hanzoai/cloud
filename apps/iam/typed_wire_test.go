@@ -237,23 +237,17 @@ func TestServingIsUnchanged(t *testing.T) {
 	}
 }
 
-// TestDegradedLeavesNoIdentityAddressToTheSPA records what the degraded mount does
-// and does NOT cover, because the difference is a live gap rather than a detail.
+// TestDegradedLeavesNoIdentityAddressToTheSPA records what the degraded mount
+// covers and what it does not, because the difference is a live gap.
 //
-// Covered, and asserted: everything the composed IAM app registers refuses 503 with
-// a nil store — including /.well-known/openid-configuration, the hole this gate was
-// originally written for.
+// Covered: everything the composed IAM app registers refuses 503 on a nil store,
+// including /.well-known/openid-configuration.
 //
-// NOT covered: /login/oauth, which Prefixes DECLARES this subsystem owns and which
-// the mount registers nothing under. Degraded, it 404s; in a plugin binary the
-// console catch-all turns that into 200 + HTML, so a browser mid-authorize is handed
-// the console instead of an error. The retired mountFailClosed hung a wildcard on
-// every declared prefix and covered it; nothing replaced that half.
-//
-// This test asserts the covered set and SKIPS with the gap named, so the gap is a
-// standing statement rather than a red build nobody can act on tonight. Closing it
-// is a decision about where the backstop belongs — here, or in iam's own App — and
-// it must not silently re-introduce a route table that changes with a volume.
+// Not covered: /v1/iam and /login/oauth, which Prefixes declares this subsystem
+// owns and the mount registers nothing under. Degraded they 404, and the console
+// catch-all turns that into 200 + HTML — a browser mid-authorize gets the console.
+// The retired mountFailClosed hung a wildcard on every declared prefix; nothing
+// replaced that half. Skips with the gap named rather than reddening the build.
 func TestDegradedLeavesNoIdentityAddressToTheSPA(t *testing.T) {
 	notADir := filepath.Join(t.TempDir(), "occupied")
 	if err := os.WriteFile(notADir, []byte("not a directory"), 0o600); err != nil {
