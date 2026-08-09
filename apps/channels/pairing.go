@@ -201,3 +201,21 @@ func listPairing(ctx context.Context, st *store, org string, now int64) ([]pairi
 	}
 	return out, rows.Err()
 }
+
+// hasOwner reports whether the org has already recorded a channel owner.
+//
+// It is the whole condition on the installer bootstrap: once ANY owner exists,
+// the org has decided who may speak and the bootstrap stops applying. Read with
+// no transaction because a false negative only costs a pairing code, and a
+// false positive is impossible — a row that exists cannot be missed.
+func hasOwner(ctx context.Context, st *store, org string) (bool, error) {
+	var entry string
+	err := st.db.QueryRowContext(ctx, `SELECT entry FROM channel_owner WHERE org = ?`, org).Scan(&entry)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+	return entry != "", nil
+}
