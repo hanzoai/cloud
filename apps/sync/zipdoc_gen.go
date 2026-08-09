@@ -34,9 +34,13 @@ func init() {
 	zip.Describe("PATCH /v1/sync/:id", zip.Doc{
 		Description: "Patch updates one sync's mutable policy — direction, trigger and actor — in place.\nThe endpoints and the kind are immutable: re-pointing a sync is a delete and a\ncreate, so a link can never silently start syncing somewhere else. A field the\nrequest omits is left as it was. Changing the direction immediately reconciles the\nderived outbound mirror, so turning push off stops the upstream being written to\nrather than merely recording the intent.",
 		Fields: map[string]string{
+			"endpointReq.connector": "Connector names the stored credential to reach this endpoint with.",
+			"endpointReq.locator":   "Locator addresses the resource. For a git source it is the https clone URL on\nthe provider's own host, with no embedded credentials; for a native target it\nis the repository name.",
+			"endpointReq.provider":  "Provider is the platform: github or gitlab for a source; a target defaults to\nthe native Hanzo Git plane.",
 			"patchSyncIn.actor":     "Actor is the loop-guard identity the sync writes as. Omitted, the stored actor\nstands.",
 			"patchSyncIn.direction": "Direction is both, pull, push or off. Omitted, the stored direction stands.",
 			"patchSyncIn.id":        "ID is the sync to update, from the path.",
+			"patchSyncIn.source":    "Source, Target and Kind are DECLARED HERE IN ORDER TO BE REFUSED.\n\nThey are immutable by design — re-pointing a sync is a delete and a create, so\na link can never silently start syncing somewhere else — but an UNDECLARED\nfield is dropped by the binder before the handler sees it, so a request asking\nto repoint answered 200, changed nothing, and said nothing. The operator then\nbelieves a moved repository has been repointed and it has not.\n\nLive: a sync still naming github.com/hanzoai/cloud after the repository moved\nto hanzo-inc/cloud failed every reconcile with \"Repository not found\", and the\nPATCH that appeared to fix it did nothing at all. Declaring the fields is what\nlets the documented immutability actually answer.",
 			"patchSyncIn.trigger":   "Trigger is webhook, poll or manual. Omitted, the stored trigger stands.",
 			"syncView.updatedAt":    "bumped on every reconcile — the last-synced time",
 		},

@@ -1258,8 +1258,8 @@
     "/v1/iam/delete-mfa": {
       "post": {
         "operationId": "post_v1_iam_delete-mfa",
-        "summary": "Turns off the authenticator app for an account, so sign-in stops asking for a code.",
-        "description": "Turns off the authenticator app for an account, so sign-in stops\nasking for a code. People may do this for themselves; doing it for somebody\nelse takes an administrator, which is what makes it the reset path when a\nphone is lost.",
+        "summary": "Turns a factor off, so sign-in stops asking for it.",
+        "description": "Turns a factor off, so sign-in stops asking for it. Naming no factor turns\noff ALL of them — the reset path. People may do this for themselves; doing it for\nsomebody else takes an administrator, which is what makes it the way back in when a\nphone is lost.\n\nThe recovery codes go with the last factor: they are the way past a challenge, so\nkeeping them alive for an account with nothing to challenge would leave a standing\ncredential behind.",
         "tags": [
           "iam"
         ]
@@ -2121,6 +2121,16 @@
         }
       }
     },
+    "/v1/iam/link": {
+      "post": {
+        "operationId": "post_v1_iam_link",
+        "summary": "Starts connecting another sign-in identity to the account you are already signed in as.",
+        "description": "Starts connecting another sign-in identity to the account you are already\nsigned in as. It answers with the provider's URL for the browser to follow; when\nthe provider returns, that identity is attached and you come back to returnUri.\n\nYour account is fixed here, from the credential you are already holding, and is\ncarried server-side for the rest of the round-trip — so nothing that happens at\nthe provider can point the link at somebody else.",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
     "/v1/iam/linked-accounts": {
       "get": {
         "operationId": "get_v1_iam_linked-accounts",
@@ -2204,8 +2214,8 @@
     "/v1/iam/mfa/disable": {
       "post": {
         "operationId": "post_v1_iam_mfa_disable",
-        "summary": "Turns off the authenticator app for an account, so sign-in stops asking for a code.",
-        "description": "Turns off the authenticator app for an account, so sign-in stops\nasking for a code. People may do this for themselves; doing it for somebody\nelse takes an administrator, which is what makes it the reset path when a\nphone is lost.",
+        "summary": "Turns a factor off, so sign-in stops asking for it.",
+        "description": "Turns a factor off, so sign-in stops asking for it. Naming no factor turns\noff ALL of them — the reset path. People may do this for themselves; doing it for\nsomebody else takes an administrator, which is what makes it the way back in when a\nphone is lost.\n\nThe recovery codes go with the last factor: they are the way past a challenge, so\nkeeping them alive for an account with nothing to challenge would leave a standing\ncredential behind.",
         "tags": [
           "iam"
         ]
@@ -2214,8 +2224,8 @@
     "/v1/iam/mfa/preferred": {
       "post": {
         "operationId": "post_v1_iam_mfa_preferred",
-        "summary": "Picks which second factor an account is asked for first when it has more than one enrolled.",
-        "description": "Picks which second factor an account is asked for first when it\nhas more than one enrolled.",
+        "summary": "Picks which second factor an account is asked for first when it has more than one.",
+        "description": "Picks which second factor an account is asked for first when it has\nmore than one. Only a factor the account actually holds: storing an unheld one told\nthe login gate \"MFA is on\" — factor.Enabled reads that column — while leaving it\nnothing to ask for, so the sign-in required the password alone.",
         "tags": [
           "iam"
         ]
@@ -2224,8 +2234,8 @@
     "/v1/iam/mfa/setup/enable": {
       "post": {
         "operationId": "post_v1_iam_mfa_setup_enable",
-        "summary": "Finishes the enrolment: from here the account's sign-ins ask for a code from the authenticator app.",
-        "description": "Finishes the enrolment: from here the account's sign-ins ask for a code\nfrom the authenticator app. Repeating it re-enrols rather than failing.",
+        "summary": "Finishes the enrolment: from here the account's sign-ins ask for this factor.",
+        "description": "Finishes the enrolment: from here the account's sign-ins ask for this factor.\nIt requires the proof initiate handed out — a passcode from the authenticator, or the\ncode that was sent — and verifies it BEFORE writing anything.\n\nIt used to write on the strength of a `secret` field alone. A client that skipped\nthe verify step, scanned the QR into the wrong app, or was simply buggy switched on\na factor no code would ever satisfy, and the account was then locked out with no\nself-service way back: the gate holds the sign-in before minting, so the person\ncannot obtain the bearer that disable requires.\n\nThe recovery codes are minted here and returned ONCE, on the first factor the\naccount adds. Answering with them is the way back in when no factor can be\nproduced, so they are the same value the row's digests were made from — by\nconstruction, not by a client echoing them back.",
         "tags": [
           "iam"
         ]
@@ -2234,18 +2244,8 @@
     "/v1/iam/mfa/setup/initiate": {
       "post": {
         "operationId": "post_v1_iam_mfa_setup_initiate",
-        "summary": "Starts enrolling an authenticator app: it returns a fresh secret, a URL to render as a QR code, and one recovery code to keep somewhere safe.",
-        "description": "Starts enrolling an authenticator app: it returns a fresh secret, a\nURL to render as a QR code, and one recovery code to keep somewhere safe.\n\nNothing is switched on yet. The enrolment counts only once it is confirmed with\na code from the app, so abandoning this step leaves the account exactly as it\nwas. Response:\n{status:\"ok\", data:{secret, url, recoveryCodes:[code]}}.",
-        "tags": [
-          "iam"
-        ]
-      }
-    },
-    "/v1/iam/mfa/setup/verify": {
-      "post": {
-        "operationId": "post_v1_iam_mfa_setup_verify",
-        "summary": "Checks a six-digit code against an enrolment in progress, so somebody can confirm their authenticator app is set up correctly before it starts being required.",
-        "description": "Checks a six-digit code against an enrolment in progress, so somebody\ncan confirm their authenticator app is set up correctly before it starts being\nrequired. Clocks a step out either way are accepted.\nA valid code → {status:\"ok\"}; an invalid one → 200 {status:\"error\"} (the\ncasibase convention: clients branch on status, not the HTTP code).",
+        "summary": "Starts enrolling a factor and hands over whatever the person needs to prove they hold it: app a fresh secret and the otpauth:// URL to render as a QR code sms a code texted to the number on the account email a code mailed to the address on the account Nothing is switched on yet, so abandoning this step leaves the account exactly as it was.",
+        "description": "Starts enrolling a factor and hands over whatever the person needs to prove\nthey hold it:\n\n\tapp   a fresh secret and the otpauth:// URL to render as a QR code\n\tsms   a code texted to the number on the account\n\temail a code mailed to the address on the account\n\nNothing is switched on yet, so abandoning this step leaves the account exactly as\nit was. Response: {status:\"ok\", data:{mfaType, secret, url}} — secret and url only\nfor the authenticator.",
         "tags": [
           "iam"
         ]
@@ -2302,8 +2302,8 @@
     "/v1/iam/oauth/device/info": {
       "post": {
         "operationId": "post_v1_iam_oauth_device_info",
-        "summary": "Name the application a pending device code is asking to sign in.",
-        "description": "Answers \"what am I approving?\" for a pending user_code, so the approval page can name the application a human is about to authorize. Both fields come off the pending code's OWN application — never off the portal the browser happens to be on — so the screen cannot name one application while the code belongs to another.\n\nRequires a signed-in session, resolved from the browser's session cookie exactly as the approval itself resolves it. Not signed in is not a refusal to explain: it carries the stable login-required code the approval page branches on to sign the human in first.\n\nPOST for a read, deliberately, for the same reason RFC 7662 introspection beside it is POST: the argument is a SECRET. A user_code in a request line is copied into ingress and proxy access logs, which a POST body is not.\n\nUnknown, expired, already used and already approved all get ONE opaque refusal — the same one the approval attempt would get. The user_code carries only 40 bits, so an answer that distinguished those states would be an oracle for hunting live codes; gated and opaque, this reveals strictly less than the approval the same caller could already attempt.",
+        "summary": "Answers \"what am I approving?\" for a pending device code.",
+        "description": "Answers \"what am I approving?\" for a pending device code.\n\nThe approval page exists to tell a human WHICH application they are authorizing;\na page that names the wrong one defeats the control it implements. It used to\nrender the portal's own app name — a constant, `hanzo-console` for every code —\nso a device code minted by `hanzo-cli` was approved under a screen naming a\ndifferent application entirely. The client is a property of the CODE, so it is\nread from the code's row here and nowhere else.\n\nRequires a signed-in session, and answers with the same ONE opaque refusal\napproveDevice uses. That is deliberate: the user_code is only 40 bits and is the\none secret in this flow, so an unauthenticated lookup — or one that\ndistinguished unknown from expired from already-approved — would be an oracle\nfor hunting live codes. Gated and opaque, it reveals strictly less than the\napproval the same caller could already attempt.",
         "tags": [
           "iam"
         ]
@@ -2575,6 +2575,16 @@
             "description": "ok"
           }
         }
+      }
+    },
+    "/v1/iam/password": {
+      "put": {
+        "operationId": "put_v1_iam_password",
+        "summary": "Replaces the calling person's password.",
+        "description": "Replaces the calling person's password. Only their own —\nthere is no shape of this request that writes somebody else's.\n\nProve who you are with the password you are replacing, or — when you cannot\nsign in at all — with a code sent to the address the account already holds.\nExactly one of the two: a request carrying both proves nothing more than\neither, and answering it would mean deciding which one mattered.\n\nA reset also clears the account lockout, in the SAME transaction as the\ndigest. Replacing a credential retires the run of guesses against the old one,\nand without this a person who reset a forgotten password was still refused for\nup to fifteen more minutes — with the brand-new password they had just chosen.",
+        "tags": [
+          "iam"
+        ]
       }
     },
     "/v1/iam/permissions": {
@@ -3544,8 +3554,8 @@
     "/v1/iam/send-verification-code": {
       "post": {
         "operationId": "post_v1_iam_send-verification-code",
-        "summary": "Validates the request, mints + persists an OTP, and reports success.",
-        "description": "Validates the request, mints + persists an OTP, and\nreports success. The request fields are read via fiber's FormValue — the\nescape hatch zip exposes for form bodies (multipart or urlencoded) — since the\ntyped JSON Bind does not apply here. v1 also accepts countryCode/method/\ncheckUser/captchaType; iam ignores them (the captcha/forget/MFA flows those\ndrive are not ported), and CAPTCHA verification is likewise not enforced —\niam models no captcha provider — so the code is issued once the destination\nand application validate.",
+        "summary": "Validates the request and asks otp to get a code to the person.",
+        "description": "Validates the request and asks otp to get a code to the\nperson. The request fields are read via fiber's FormValue — the escape hatch zip\nexposes for form bodies (multipart or urlencoded) — since the typed JSON Bind does\nnot apply here. v1 also accepts countryCode/method/checkUser/captchaType; iam\nignores them (the captcha/forget/MFA flows those drive are not ported), and\nCAPTCHA verification is likewise not enforced — iam models no captcha provider —\nso the code is issued once the destination and application validate.",
         "tags": [
           "iam"
         ]
@@ -3823,8 +3833,8 @@
     "/v1/iam/set-preferred-mfa": {
       "post": {
         "operationId": "post_v1_iam_set-preferred-mfa",
-        "summary": "Picks which second factor an account is asked for first when it has more than one enrolled.",
-        "description": "Picks which second factor an account is asked for first when it\nhas more than one enrolled.",
+        "summary": "Picks which second factor an account is asked for first when it has more than one.",
+        "description": "Picks which second factor an account is asked for first when it has\nmore than one. Only a factor the account actually holds: storing an unheld one told\nthe login gate \"MFA is on\" — factor.Enabled reads that column — while leaving it\nnothing to ask for, so the sign-in required the password alone.",
         "tags": [
           "iam"
         ]
@@ -4396,8 +4406,8 @@
     "/v1/iam/verification-codes": {
       "post": {
         "operationId": "post_v1_iam_verification-codes",
-        "summary": "Validates the request, mints + persists an OTP, and reports success.",
-        "description": "Validates the request, mints + persists an OTP, and\nreports success. The request fields are read via fiber's FormValue — the\nescape hatch zip exposes for form bodies (multipart or urlencoded) — since the\ntyped JSON Bind does not apply here. v1 also accepts countryCode/method/\ncheckUser/captchaType; iam ignores them (the captcha/forget/MFA flows those\ndrive are not ported), and CAPTCHA verification is likewise not enforced —\niam models no captcha provider — so the code is issued once the destination\nand application validate.",
+        "summary": "Validates the request and asks otp to get a code to the person.",
+        "description": "Validates the request and asks otp to get a code to the\nperson. The request fields are read via fiber's FormValue — the escape hatch zip\nexposes for form bodies (multipart or urlencoded) — since the typed JSON Bind does\nnot apply here. v1 also accepts countryCode/method/checkUser/captchaType; iam\nignores them (the captcha/forget/MFA flows those drive are not ported), and\nCAPTCHA verification is likewise not enforced — iam models no captcha provider —\nso the code is issued once the destination and application validate.",
         "tags": [
           "iam"
         ]
@@ -7616,6 +7626,10 @@
           "mfaRememberDeadline": {
             "type": "string"
           },
+          "mfaRememberDigest": {
+            "description": "MfaRememberDigest is the digest of the token held by the ONE browser the\ndeadline above applies to. Without it the deadline is account-wide and \"don't\nask again on this browser\" switches the second factor off everywhere. It is a\ndigest, never the token, so a database dump yields nothing presentable — and it\ncarries a REAL json tag because orm persists via json.Marshal, so `json:\"-\"`\nwould never be stored (the trap PasswordHash documents above); Mask() strips it\nfrom every response instead.",
+            "type": "string"
+          },
           "microsoftonline": {
             "type": "string"
           },
@@ -8986,6 +9000,9 @@
             "type": "string"
           },
           "mfaRememberDeadline": {
+            "type": "string"
+          },
+          "mfaRememberDigest": {
             "type": "string"
           },
           "microsoftonline": {
