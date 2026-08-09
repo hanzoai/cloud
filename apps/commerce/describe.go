@@ -582,6 +582,29 @@ func describePublic() {
 			"product price picker binds real rows instead of a hardcoded array. It is a "+
 			"default-namespace read shared by every tenant rather than per-org data, and it is "+
 			"public and cacheable.")
+
+	// The deposit-proxy trio and the webhook relay are deliberately absent
+	// here: the module removed those routes — deposits are commerce's own rails
+	// now (topup/token, wire, crypto) and the real webhook receiver is POST
+	// /v1/billing/webhooks/:provider — and prose for a route that does not
+	// exist never renders, so keeping it would only preserve a dead claim.
+	// The name is /org, not /tenant. commerce deleted its own tenant registry —
+	// "the IAM org is the org; commerce keeps no registry of its own" — and the
+	// route moved with the concept, to host → brand → IAM org. Prose for an
+	// address that no longer answers is a dead claim, and this one outlived the
+	// route long enough that the SPA went on asking for it.
+	openapi.Describe("/v1/commerce/org", http.MethodGet,
+		"The public org configuration a checkout page boots from",
+		"Answers the branding, identity issuer and client id, identity-verification config, "+
+			"enabled payment providers, return-URL allowlist and public payment application "+
+			"config for the org the request HOST resolves to. It is genuinely public and "+
+			"unauthenticated — a checkout page calls it before anyone has signed in — and it "+
+			"carries the same public payment config the authenticated config read does, so the "+
+			"card iframe can never initialize against a different application than the one that "+
+			"will be charged. Only ENABLED providers are listed and no credential path is ever "+
+			"projected. An unresolvable host answers a constant 404 that does not echo the host, "+
+			"so the endpoint cannot be used to enumerate orgs; a successful answer is cacheable "+
+			"for a minute.")
 }
 
 // ---- /v1/plans — the platform-admin subscription plan authority ----
