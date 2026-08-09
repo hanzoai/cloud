@@ -50,6 +50,13 @@ const (
 	// bound so the two paths behave identically. A poll fetch is normally seconds;
 	// the initial import of a large repo is the outlier this covers.
 	reconcileTimeout = 15 * time.Minute
+
+	// settle delays the FIRST sweep after boot. Long enough that a starting pod is
+	// not swept while it is still mounting stores, and that a rollout does not turn
+	// into an immediate fetch storm against every upstream at once; short enough
+	// that freshness does not wait on the interval. Clamped to the interval below,
+	// so a short test cadence is not stretched to minutes.
+	settle = 2 * time.Minute
 )
 
 // reconcileInterval resolves the sweep cadence from env. Empty / "0" / "off" / "false"
@@ -74,6 +81,19 @@ func reconcileInterval(log luxlog.Logger) time.Duration {
 // it unconditionally. A tick that lands while the previous sweep is still running is
 // SKIPPED (a slow sweep never stacks), and stop cancels the loop AND waits for an
 // in-flight sweep to drain, so Shutdown never closes a store out from under a reconcile.
+// firstSweep is how long after boot the first sweep waits.
+//
+// Never a full interval when the interval is long — that is the whole point: a
+// fleet redeploying faster than its cadence would otherwise never sweep. And never
+// LONGER than the interval either, so a deliberately tight cadence is not stretched
+// to minutes by a settle meant for an hourly one.
+func firstSweep(interval time.Duration) time.Duration {
+	if interval < settle {
+		return interval
+	}
+	return settle
+}
+
 func startScheduler(s *cloud.Service[state]) func() {
 	interval := reconcileInterval(s.Log)
 	if interval == 0 {
@@ -84,14 +104,39 @@ func startScheduler(s *cloud.Service[state]) func() {
 	done := make(chan struct{})
 	var inflight sync.WaitGroup // tracks the currently-running sweep goroutine
 	var running atomic.Bool     // overlap guard: at most one sweep in flight
+	// THE FIRST SWEEP HAPPENS AT BOOT, not one interval later.
+	//
+	// A bare ticker's first tick is a full interval away, so a fleet that rolls out
+	// more often than its interval NEVER SWEEPS AT ALL. Measured on this deployment:
+	// eight rollouts inside five hours, with gaps of 13, 16, 17, 40, 43, 78 and 84
+	// minutes against a 60m interval — five of the seven shorter than the interval.
+	// The scheduler was enabled and logged nothing wrong, and 1685 declared syncs sat
+	// unimported because the tick that would have imported them was reset every time.
+	// Freshness that only survives a quiet fleet is not freshness.
+	//
+	// Delayed by settle rather than immediate: a pod that has just started is still
+	// mounting stores, and every replica in a rollout would otherwise fetch at once.
+	first := firstSweep(interval)
 	go func() {
 		defer close(done)
+		boot := time.NewTimer(first)
+		defer boot.Stop()
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
+			case <-boot.C:
+				if !running.CompareAndSwap(false, true) {
+					continue
+				}
+				inflight.Add(1)
+				go func() {
+					defer inflight.Done()
+					defer running.Store(false)
+					sweep(s, ctx)
+				}()
 			case <-t.C:
 				if !running.CompareAndSwap(false, true) {
 					s.Log.Warn("sync reconcile: previous sweep still running — skipping tick")
@@ -106,7 +151,7 @@ func startScheduler(s *cloud.Service[state]) func() {
 			}
 		}
 	}()
-	s.Log.Info("sync reconcile scheduler started", "interval", interval)
+	s.Log.Info("sync reconcile scheduler started", "interval", interval, "firstSweepIn", first)
 
 	var once bool
 	return func() {

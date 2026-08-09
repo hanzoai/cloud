@@ -209,3 +209,39 @@ func TestSchedulerLifecycle(t *testing.T) {
 		t.Fatal("enabled scheduler must have run at least one sweep within 2s")
 	}
 }
+
+// The first sweep must not wait a full interval.
+//
+// A bare ticker's first tick is one interval away, so a fleet that rolls out more
+// often than its cadence never sweeps at all. Measured on this deployment: eight
+// rollouts in five hours, gaps of 13, 16, 17, 40, 43, 78 and 84 minutes against a
+// 60m interval — five of seven shorter than the interval. The scheduler reported
+// itself started and 1685 declared syncs sat unimported, because the tick that
+// would have imported them was reset every time.
+func TestFirstSweepDoesNotWaitAWholeInterval(t *testing.T) {
+	for _, c := range []struct{ interval, want time.Duration }{
+		{time.Hour, settle},                  // the live cadence: minutes, not an hour
+		{24 * time.Hour, settle},             // a daily sweep still starts today
+		{settle, settle},                     // exactly the settle
+		{30 * time.Second, 30 * time.Second}, // tighter than settle: unchanged
+		{20 * time.Millisecond, 20 * time.Millisecond},
+	} {
+		if got := firstSweep(c.interval); got != c.want {
+			t.Errorf("firstSweep(%v) = %v, want %v", c.interval, got, c.want)
+		}
+	}
+
+	// The invariant, independent of the table: a long interval never delays the
+	// first sweep by a whole interval, and no interval is ever stretched.
+	for _, interval := range []time.Duration{
+		time.Millisecond, time.Second, time.Minute, time.Hour, 168 * time.Hour,
+	} {
+		first := firstSweep(interval)
+		if first > interval {
+			t.Errorf("firstSweep(%v) = %v, which is LONGER than the interval", interval, first)
+		}
+		if interval > settle && first >= interval {
+			t.Errorf("firstSweep(%v) = %v, which waits the whole interval", interval, first)
+		}
+	}
+}
