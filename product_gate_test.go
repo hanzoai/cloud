@@ -69,6 +69,14 @@ var unextracted = []string{
 	"sites",
 	"storage", "sync", "templates", "tenant", "tools", "tracker", "translate",
 	"treasury", "validators", "venue", "wallets", "webhooks", "websearch",
+	// web3 is the chain-access surface. It REPLACES the api/ half of
+	// hanzoai/bootnode rather than extracting from it — that half was Python
+	// serving four routes, and this is the richer router bootnode's own api-go/
+	// already sketched, finished here. So bootnode is not an upstream to mount:
+	// what it held is retired, and no hanzoai/web3 exists. The decision this pin
+	// owes is the one this bucket names — become hanzoai/web3, or show the chain
+	// surface is cloud's own machinery and belongs below apps/.
+	"web3",
 	"x402",
 }
 
