@@ -2080,6 +2080,11 @@ type ChannelsIngestIn struct {
 	// ReplyRoot is a transport-verified reply root: Teams' JWT-verified
 	// serviceURL, "" everywhere else.
 	ReplyRoot string `json:"reply_root"`
+	// Installer is the provider-side user who completed this workspace's install,
+	// from the connection the adapter already resolved. It rides the event because
+	// the connection lives in the adapter's process and the gate lives in another.
+	// Whoever finished the OAuth was already an admin of this org.
+	Installer string `json:"installer"`
 }
 
 // ChannelsIngestOut reports whether the event was taken. A consumer that is not
