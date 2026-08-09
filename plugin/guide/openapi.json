@@ -557,7 +557,7 @@
           },
           "templates": {
             "items": {
-              "$ref": "#/components/schemas/Template"
+              "$ref": "#/components/schemas/Page"
             },
             "type": "array"
           },
@@ -663,6 +663,23 @@
         },
         "type": "object"
       },
+      "Page": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Principle": {
         "properties": {
           "change": {
@@ -757,23 +774,6 @@
             "type": "array"
           },
           "workload": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "Template": {
-        "properties": {
-          "body": {
-            "type": "string"
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "title": {
             "type": "string"
           }
         },

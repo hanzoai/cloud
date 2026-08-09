@@ -80,9 +80,9 @@ type Principle struct {
 	Domain    string `json:"domain,omitempty"`    // the growth / go-to-market domain it governs
 }
 
-// Template is a reusable prompt/snippet a step references. `body` may carry
+// Page is a reusable prompt/snippet a step references. `body` may carry
 // {placeholder} tokens for client-specific bits ({client_name}, {domain}, {product}).
-type Template struct {
+type Page struct {
 	ID      string `json:"id"`
 	Title   string `json:"title"`
 	Body    string `json:"body"`
@@ -102,7 +102,7 @@ type Blueprint struct {
 	Sections   []Section     `json:"sections,omitempty"`
 	Steps      []JourneyStep `json:"steps"`
 	Strategies []Strategy    `json:"strategies,omitempty"`
-	Templates  []Template    `json:"templates,omitempty"`
+	Templates  []Page    `json:"templates,omitempty"`
 }
 
 // Bounds on the corpus/collections so an org-custom or admin-authored blueprint can't
@@ -162,7 +162,7 @@ func (b Blueprint) clone() Blueprint {
 	b.Sections = append([]Section(nil), b.Sections...)
 	b.Steps = append([]JourneyStep(nil), b.Steps...)
 	b.Strategies = append([]Strategy(nil), b.Strategies...)
-	b.Templates = append([]Template(nil), b.Templates...)
+	b.Templates = append([]Page(nil), b.Templates...)
 	return b
 }
 

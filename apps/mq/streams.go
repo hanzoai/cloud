@@ -400,8 +400,8 @@ func (s streams) purge(ctx context.Context, in *Purge) (*purgeOut, error) {
 // messages carries the broker client onto the direct message-access ops.
 type messages struct{ b *broker }
 
-// Message is one stored message, payload base64-encoded.
-type Message struct {
+// Delivery is one stored message, payload base64-encoded.
+type Delivery struct {
 	// Subject is the org-relative subject the message was stored under.
 	Subject string `json:"subject"`
 	// Data is the payload, base64-encoded.
@@ -419,8 +419,8 @@ type Message struct {
 }
 
 // raw presents one stored broker message org-relative.
-func raw(org string, m *jetstream.RawStreamMsg) Message {
-	return Message{
+func raw(org string, m *jetstream.RawStreamMsg) Delivery {
+	return Delivery{
 		Subject:   relSubject(org, m.Subject),
 		Data:      base64.StdEncoding.EncodeToString(m.Data),
 		Headers:   m.Header,
@@ -447,7 +447,7 @@ type readIn struct {
 // readOut is the messages a direct read found.
 type readOut struct {
 	// Messages is what was read, stream-ordered.
-	Messages []Message `json:"messages"`
+	Messages []Delivery `json:"messages"`
 }
 
 // list reads stored messages without a consumer: by sequence, by newest on a
@@ -477,7 +477,7 @@ func (m messages) list(ctx context.Context, in *readIn) (*readOut, error) {
 		if seq == 0 {
 			seq = 1
 		}
-		out := readOut{Messages: []Message{}}
+		out := readOut{Messages: []Delivery{}}
 		for len(out.Messages) < limit {
 			msg, err := st.GetMsg(ctx, seq, jetstream.WithGetMsgSubject(subj))
 			if errors.Is(err, jetstream.ErrMsgNotFound) {
@@ -499,13 +499,13 @@ func (m messages) list(ctx context.Context, in *readIn) (*readOut, error) {
 		if err != nil {
 			return nil, errHTTP(err)
 		}
-		return &readOut{Messages: []Message{raw(org, msg)}}, nil
+		return &readOut{Messages: []Delivery{raw(org, msg)}}, nil
 	case in.Seq > 0:
 		msg, err := st.GetMsg(ctx, in.Seq)
 		if err != nil {
 			return nil, errHTTP(err)
 		}
-		return &readOut{Messages: []Message{raw(org, msg)}}, nil
+		return &readOut{Messages: []Delivery{raw(org, msg)}}, nil
 	}
 	return nil, zip.ErrBadRequest("one of seq, last_by_subject or next_by_subject is required")
 }
