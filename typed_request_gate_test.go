@@ -75,11 +75,34 @@ var allowedRequestUses = map[string]string{
 		"by onHTTP so it fails closed off the HTTP path, where there is no principal and so nobody to " +
 		"charge; the cold price is gated on every query because whether a workspace is warm is not " +
 		"known until the pool is asked, and the debit in apps/lsp/meter.go charges the real one.",
+	"apps/functions/invoke.go": "gate + meter — invoking a function is a priced act, so standing is " +
+		"required before it runs and the run is debited after. Both halves need strictly more of the " +
+		"validated principal than the org: the LEDGER that pays (principal.Ledger), the validated " +
+		"project sub-scope (principal.ValidatedProject — the project AND whether a claim backs it, which " +
+		"is the per-project cap), and the request id + client IP the debit is attributed with. None is " +
+		"the org and none may be an In field: a caller that could name its own ledger would bill another " +
+		"org. ONE call site, and off the HTTP path it REFUSES rather than computing for free.",
+	"apps/security/security.go": "gate + meter + audit — a scan is priced, so it is gated before it " +
+		"runs, debited after, and recorded. Four facts beyond the org ride on the request: the ledger " +
+		"that pays (principal.Ledger), the validated project sub-scope (principal.ValidatedProject), the " +
+		"request id + client IP the debit and the audit line are attributed with, and the project the " +
+		"caller is validated FOR (projectScope), which supplies the scope when the In does not name one. " +
+		"A caller that could name its own ledger would bill another org, so none of it may become an In " +
+		"field. ONE call site, refusing off the HTTP path where there is nobody to charge.",
 	"apps/o11y/summary.go": "brandForRequest — the o11y summary is white-labelled by the request HOST " +
 		"(BrandForHostOK(c.Host())), a value that is neither the org nor nameable on an In field: it is " +
 		"the vhost the caller reached, read only to pick the brand the summary renders for.",
 	"apps/admin/core/typed.go": "Admit / AdmitScoped — the SuperAdmin and white-label tenant gates. " +
 		"Both read validated identity beyond the org (IsAdmin, the WL allowlist), which principal.OrgFrom does not carry.",
+	"apps/experiments/experiments.go": "actorOf + orgAdmin — two reads of validated identity, neither " +
+		"of which is the org. A create or a decision is STAMPED with the credential's email " +
+		"(c.UserEmail()), and a flag write is gated on the caller administering its own org " +
+		"(principal.IsOrgAdmin). Both live in headers principal.OrgFrom does not carry, and both fail " +
+		"closed off the HTTP path: no request, no attested caller, no rights and no attribution.",
+	"apps/eval/metrics.go": "admin — the platform SuperAdmin predicate (c.IsAdmin(), the claim the " +
+		"identity boundary mints only for a validated owner == AdminOrg). Admin-ness is not the org, and " +
+		"it may never be an In field: a caller that could name it would hand itself cross-tenant reach. " +
+		"False off the HTTP path, where nothing attested the caller.",
 	"apps/account/account.go": "requestCaller — account IS the signed-in caller's own account, and resolving " +
 		"them needs more of the validated principal than the org: the user id (X-User-Id), the IAM username " +
 		"(X-User-Name) that IAM's user-key ops parse, and validated-ness itself, none of which principal.OrgFrom " +
