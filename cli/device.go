@@ -6,6 +6,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -140,7 +141,7 @@ func runDeviceLogin(cmd *cobra.Command, env *Env, scope string) (*Credentials, e
 	if err != nil {
 		return nil, err
 	}
-	link := firstNonEmpty(da.VerificationURIComplete, da.VerificationURI)
+	link := cmp.Or(da.VerificationURIComplete, da.VerificationURI)
 	fmt.Fprintf(out, "\nSign in on any device:\n\n")
 	printQR(out, link)
 	fmt.Fprintf(out, "\n  %s\n", link)

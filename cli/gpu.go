@@ -24,6 +24,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -278,12 +279,12 @@ func newWorker(env *Env, jobsNS string) (*worker, error) {
 		baseURL:         env.CloudURL,
 		identity:        id,
 		hostname:        host,
-		jobsNS:          firstNonEmpty(jobsNS, defaultJobsNS),
+		jobsNS:          cmp.Or(jobsNS, defaultJobsNS),
 		gpus:            detectGPUs(),
 		arch:            detectArch(),
 		cpuModel:        detectCPUModel(),
 		memory:          detectMemTotal(),
-		studioUploadURL: firstNonEmpty(os.Getenv("HANZO_STUDIO_UPLOAD_URL"), defaultStudioUploadURL),
+		studioUploadURL: cmp.Or(os.Getenv("HANZO_STUDIO_UPLOAD_URL"), defaultStudioUploadURL),
 	}
 	policy, err := loadSharePolicy()
 	if err != nil {
@@ -967,8 +968,8 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 	// carries its live model list + reachability.
 	if opts.serveEngine {
 		w.serveEngine = true
-		w.engineURL = firstNonEmpty(opts.engineURL, defaultEngineURL)
-		w.engineAdvURL = firstNonEmpty(opts.engineEndpoint, w.engineURL)
+		w.engineURL = cmp.Or(opts.engineURL, defaultEngineURL)
+		w.engineAdvURL = cmp.Or(opts.engineEndpoint, w.engineURL)
 		w.refreshEngine(ctx)
 	}
 
@@ -1018,7 +1019,7 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 	// render that finished after its activity was reaped (the stranded-late-render
 	// class). Active only when a studio checkout is named (there is local output to
 	// mirror); a nil channel case never fires when it is not.
-	w.studioUploadURL = firstNonEmpty(opts.studioURL, w.studioUploadURL)
+	w.studioUploadURL = cmp.Or(opts.studioURL, w.studioUploadURL)
 	mirrorBase := w.studioUploadURL
 	mirrorDir := ""
 	seen := map[string]int64{}
@@ -1840,7 +1841,7 @@ func (w *worker) uploadOutputs(ctx context.Context, outputs []string, uploadURL,
 	if err != nil {
 		return nil, err
 	}
-	base := strings.TrimRight(firstNonEmpty(uploadURL, w.studioUploadURL), "/")
+	base := strings.TrimRight(cmp.Or(uploadURL, w.studioUploadURL), "/")
 	if base == "" {
 		return nil, fmt.Errorf("no studio upload URL configured")
 	}

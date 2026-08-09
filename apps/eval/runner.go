@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -53,7 +54,7 @@ type gatewayRunner struct {
 
 func newGatewayRunner() *gatewayRunner {
 	return &gatewayRunner{
-		base: loopbackBase(firstNonEmpty(getenv("CLOUD_LISTEN"), ":8080")),
+		base: loopbackBase(cmp.Or(getenv("CLOUD_LISTEN"), ":8080")),
 		hc:   &http.Client{Timeout: 120 * time.Second},
 	}
 }
@@ -214,13 +215,4 @@ func loopbackBase(listen string) string {
 		port = "8080"
 	}
 	return "http://127.0.0.1:" + port
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

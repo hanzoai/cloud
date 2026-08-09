@@ -62,6 +62,7 @@
 package analytics
 
 import (
+	"cmp"
 	"strings"
 	"time"
 )
@@ -211,7 +212,7 @@ func fanOutEvents(org string, evs []CaptureEvent) {
 			continue // unroutable — the write core dropped it too
 		}
 		out = append(out, SinkEvent{
-			MessageID:   firstNonEmptyStr(trim(e.MessageID), randID()),
+			MessageID:   cmp.Or(trim(e.MessageID), randID()),
 			Name:        name,
 			DistinctID:  trim(e.DistinctID),
 			AnonymousID: trim(e.AnonymousID),
@@ -268,7 +269,7 @@ func fanOutErrors(org string, evs []CaptureEvent) {
 		}
 		typ, msg, stack, handled := exceptionOf(e)
 		out = append(out, ErrorEvent{
-			MessageID:     firstNonEmptyStr(trim(e.MessageID), randID()),
+			MessageID:     cmp.Or(trim(e.MessageID), randID()),
 			Time:          clampTS(e.Timestamp, now),
 			ExceptionType: trim(typ),
 			Message:       trim(msg),
@@ -276,9 +277,9 @@ func fanOutErrors(org string, evs []CaptureEvent) {
 			Handled:       handled,
 			Level:         "error",
 			Platform:      propStr(e.Properties, "$platform"),
-			Release:       firstNonEmptyStr(trim(e.Release), propStr(e.Properties, "$release")),
-			Environment:   firstNonEmptyStr(trim(e.Environment), propStr(e.Properties, "$environment")),
-			Transaction:   firstNonEmptyStr(trim(e.Path), trim(e.URL)),
+			Release:       cmp.Or(trim(e.Release), propStr(e.Properties, "$release")),
+			Environment:   cmp.Or(trim(e.Environment), propStr(e.Properties, "$environment")),
+			Transaction:   cmp.Or(trim(e.Path), trim(e.URL)),
 			URL:           trim(e.URL),
 			Path:          trim(e.Path),
 			DistinctID:    trim(e.DistinctID),
@@ -287,8 +288,8 @@ func fanOutErrors(org string, evs []CaptureEvent) {
 			Site:          trim(e.Site),
 			Service:       trim(e.Service),
 			Library:       trim(e.Library),
-			TraceID:       firstNonEmptyStr(trim(e.TraceID), propStr(e.Properties, "$trace_id")),
-			SpanID:        firstNonEmptyStr(trim(e.SpanID), propStr(e.Properties, "$span_id")),
+			TraceID:       cmp.Or(trim(e.TraceID), propStr(e.Properties, "$trace_id")),
+			SpanID:        cmp.Or(trim(e.SpanID), propStr(e.Properties, "$span_id")),
 		})
 	}
 	if len(out) == 0 {
@@ -334,12 +335,12 @@ func fanOutSpans(org string, evs []CaptureEvent) {
 		// The plane's OWN precedence, restated (applySpan, fact.go): the route's default
 		// kind stands unless the envelope names one, and the span BODY refines both —
 		// a client emitting a span knows its role precisely.
-		kind := firstNonEmptyStr(trim(e.Kind), r.kind)
+		kind := cmp.Or(trim(e.Kind), r.kind)
 		if k := trim(b.Kind); k != "" {
 			kind = k
 		}
 		out = append(out, SpanEvent{
-			MessageID: firstNonEmptyStr(trim(e.MessageID), randID()),
+			MessageID: cmp.Or(trim(e.MessageID), randID()),
 			Time:      clampTS(e.Timestamp, now),
 			Name:      resolveName(r, e),
 			Kind:      strings.ToLower(kind),
@@ -351,14 +352,14 @@ func fanOutSpans(org string, evs []CaptureEvent) {
 			// one identity rather than two. The legacy $ spellings are the last resort
 			// for a client that has not moved to the first-class field, exactly as the
 			// error slice above reads them.
-			TraceID:     firstNonEmptyStr(firstNonEmptyStr(trim(e.TraceID), trim(b.Trace)), propStr(props, "$trace_id")),
-			SpanID:      firstNonEmptyStr(firstNonEmptyStr(trim(e.SpanID), trim(b.ID)), propStr(props, "$span_id")),
+			TraceID:     cmp.Or(cmp.Or(trim(e.TraceID), trim(b.Trace)), propStr(props, "$trace_id")),
+			SpanID:      cmp.Or(cmp.Or(trim(e.SpanID), trim(b.ID)), propStr(props, "$span_id")),
 			Parent:      trim(b.Parent),
 			Service:     trim(e.Service),
 			Product:     trim(e.Product),
 			Site:        trim(e.Site),
-			Release:     firstNonEmptyStr(trim(e.Release), propStr(props, "$release")),
-			Environment: firstNonEmptyStr(trim(e.Environment), propStr(props, "$environment")),
+			Release:     cmp.Or(trim(e.Release), propStr(props, "$release")),
+			Environment: cmp.Or(trim(e.Environment), propStr(props, "$environment")),
 			DistinctID:  trim(e.DistinctID),
 			SessionID:   trim(e.SessionID),
 			Properties:  props,

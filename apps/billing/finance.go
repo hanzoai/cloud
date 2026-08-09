@@ -47,6 +47,7 @@ package billing
 // the day an invoice ledger exists — the shape is already stable for the UI.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -409,8 +410,8 @@ func (o ops) financeCredits(ctx context.Context, _ *noInput) (*credits, error) {
 			continue
 		}
 		rows = append(rows, financeCredit{
-			ID:        firstNonEmpty(t.ID, "credit"),
-			Label:     firstNonEmpty(strings.TrimSpace(t.Notes), strings.TrimSpace(t.Tags), "Credit"),
+			ID:        cmp.Or(t.ID, "credit"),
+			Label:     cmp.Or(strings.TrimSpace(t.Notes), strings.TrimSpace(t.Tags), "Credit"),
 			Cents:     abs64(t.Amount),
 			GrantedAt: t.CreatedAt,
 		})
@@ -469,7 +470,7 @@ func (o ops) financeUsage(ctx context.Context, in *window) (*financeUsageView, e
 		cents := abs64(t.Amount)
 		total += cents
 		buckets[bucketOf(ts, hourly)] += cents
-		label := firstNonEmpty(strings.TrimSpace(t.Tags), "Usage")
+		label := cmp.Or(strings.TrimSpace(t.Tags), "Usage")
 		if _, seen := lineCents[label]; !seen {
 			order = append(order, label)
 		}
@@ -561,15 +562,15 @@ func (o ops) financeMethods(ctx context.Context, _ *noInput) (*cards, error) {
 		if err := json.Unmarshal(rm, &pm); err != nil {
 			continue
 		}
-		last4 := last4Of(firstNonEmpty(pm.Last4, pm.Card.Last4, pm.Card.LastFour))
+		last4 := last4Of(cmp.Or(pm.Last4, pm.Card.Last4, pm.Card.LastFour))
 		typ := pm.Type
 		if typ == "" && last4 != "" {
 			typ = "card"
 		}
 		rows = append(rows, financePaymentMethod{
-			ID:        firstNonEmpty(pm.ID, pm.PaymentMethodID, "pm"),
+			ID:        cmp.Or(pm.ID, pm.PaymentMethodID, "pm"),
 			Type:      typ,
-			Brand:     firstNonEmpty(pm.Brand, pm.Card.Brand, pm.Card.Network),
+			Brand:     cmp.Or(pm.Brand, pm.Card.Brand, pm.Card.Network),
 			Last4:     last4,
 			ExpMonth:  firstNonZero(pm.ExpMonth, pm.Card.ExpMonth),
 			ExpYear:   firstNonZero(pm.ExpYear, pm.Card.ExpYear),
@@ -630,12 +631,12 @@ func (o ops) financeLedger(ctx context.Context, in *window) (*postings, error) {
 			cents = -cents
 		}
 		rows = append(rows, financeLedgerEntry{
-			ID:          firstNonEmpty(t.ID, "entry"),
+			ID:          cmp.Or(t.ID, "entry"),
 			Date:        t.CreatedAt,
 			Account:     account,
-			Description: firstNonEmpty(strings.TrimSpace(t.Notes), strings.TrimSpace(t.Tags), kindLabel(t.Kind)),
+			Description: cmp.Or(strings.TrimSpace(t.Notes), strings.TrimSpace(t.Tags), kindLabel(t.Kind)),
 			Cents:       cents,
-			Currency:    firstNonEmpty(strings.ToLower(t.Currency), "usd"),
+			Currency:    cmp.Or(strings.ToLower(t.Currency), "usd"),
 		})
 	}
 	return &rows, nil
@@ -789,15 +790,6 @@ func last4Of(v string) string {
 		return d[len(d)-4:]
 	}
 	return d
-}
-
-func firstNonEmpty(vs ...string) string {
-	for _, v := range vs {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func firstNonZero(vs ...int) int {
