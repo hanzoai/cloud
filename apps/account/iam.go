@@ -631,6 +631,21 @@ func (c *iamClient) moveUserToOrg(ctx context.Context, id, slug string) error {
 	return err
 }
 
+// EXISTING ORGS DO NOT HAVE ONE. This runs where an org is CREATED, so every org
+// that already existed when it shipped — including hanzo's own — has no agent
+// identity and will never grow one from here.
+//
+// That is deliberate rather than forgotten: ensureAgentApplication is idempotent,
+// so the right place to also call it is wherever the identity is first READ, and
+// that read does not exist yet (it belongs with issuing a run token). A boot-time
+// sweep over every org would be the wrong shape — it creates applications for
+// orgs that may never run an agent, and it does it on a path where a failure
+// blocks startup.
+//
+// So: whoever writes the token issuance calls this first. It costs one read when
+// the application is already there, and it means an org that predates this is
+// indistinguishable from one that does not.
+//
 // giveOrgAnAgent provisions an org's agent identity, best-effort and LOUD.
 //
 // Best-effort because the org itself is the thing being created and it is fine
