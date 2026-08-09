@@ -62,6 +62,9 @@ const (
 	dmOpenWildcard      gateReason = "dmOpenWildcard"
 	dmAllowlisted       gateReason = "dmAllowlisted"
 	dmPaired            gateReason = "dmPaired"
+	// dmInstaller: admitted as the person who installed this workspace, before
+	// the org has an owner. See dmGate.
+	dmInstaller gateReason = "dmInstaller"
 	dmNotAllowlisted    gateReason = "dmNotAllowlisted"
 	dmPairingRequired   gateReason = "dmPairingRequired"
 	groupOpen           gateReason = "groupOpen"
@@ -156,7 +159,7 @@ func matches(ctx context.Context, st *store, org, channel, sender string, entrie
 
 // dmGate decides a direct message, in the ported OpenClaw order. mayPair=true
 // lets a pairing-policy miss mint a pairing request instead of a plain block.
-func dmGate(ctx context.Context, st *store, org, channel, sender string, mayPair bool) (verdict, error) {
+func dmGate(ctx context.Context, st *store, org, channel, sender, installer string, mayPair bool) (verdict, error) {
 	p, err := policyFor(ctx, st, org, channel)
 	if err != nil {
 		return verdict{}, err
@@ -193,6 +196,26 @@ func dmGate(ctx context.Context, st *store, org, channel, sender string, mayPair
 		// paired senders without deleting their grants.
 		if slices.Contains(paired, sender) {
 			return verdict{Allow: true, Reason: dmPaired}, nil
+		}
+		// THE INSTALLER, before anyone has been approved. The first approved
+		// pairing becomes the org's channel owner — but nobody can be approved
+		// until an admin approves, and approving needs an admin surface. For an
+		// org that installed the bot itself that is a circle: the person who
+		// completed the OAuth was ALREADY an admin of this org, and asking them to
+		// approve themselves proves nothing that Slack has not already proved.
+		//
+		// Narrow on purpose. It applies ONLY while the org has no owner, and ONLY
+		// to the one person the provider named as having done the install. Once an
+		// owner exists this does nothing, so it cannot widen an org that has
+		// already decided who may speak.
+		if installer != "" && sender == installer {
+			owned, err := hasOwner(ctx, st, org)
+			if err != nil {
+				return verdict{}, err
+			}
+			if !owned {
+				return verdict{Allow: true, Reason: dmInstaller}, nil
+			}
 		}
 		if mayPair {
 			return verdict{Pair: true, Reason: dmPairingRequired}, nil

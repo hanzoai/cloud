@@ -103,6 +103,11 @@ type ExchangeResult struct {
 	ExternalID   string            // provider account id (Slack team.id / GitHub installation_id)
 	AccountLabel string            // human label (Slack team.name / GitHub org login)
 	BotUserID    string            // Slack bot_user_id (non-secret)
+	// Installer is the provider-side user who COMPLETED the install — Slack's
+	// authed_user.id. Non-secret, and load-bearing: whoever finished the OAuth
+	// was already an admin of this org, so they need no second proof to talk to
+	// the bot they just installed.
+	Installer string
 	Scopes       []string          // granted scopes
 	ExpiresAt    int64             // access-token expiry, unix seconds; 0 = non-expiring/unknown. Set by user-plane device/refresh providers; the org plane ignores it.
 }
@@ -1178,6 +1183,7 @@ func connectByCredential(s *cloud.Service[state], ctx context.Context, org strin
 		ExternalID:   res.ExternalID,
 		AccountLabel: res.AccountLabel,
 		BotUserID:    res.BotUserID,
+		Installer:    res.Installer,
 		Scopes:       res.Scopes,
 	}
 	if err := s.State.store.Upsert(ctx, conn); err != nil {
@@ -1332,6 +1338,7 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 		ExternalID:   res.ExternalID,
 		AccountLabel: res.AccountLabel,
 		BotUserID:    res.BotUserID,
+		Installer:    res.Installer,
 		Scopes:       res.Scopes,
 	}
 	if err := s.State.store.Upsert(c.Context(), conn); err != nil {
