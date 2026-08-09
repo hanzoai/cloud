@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
@@ -148,7 +150,7 @@ func init() {
 // apply is the UNAUTHENTICATED public application endpoint. It validates, drops
 // honeypot hits, dedups on (email, company), writes the ProgramApplication (+ a
 // best-effort CRM Company/Contact for sales visibility), and kicks off the AI
-// screen. It NEVER calls tenant(): the org is the fixed program org.
+// screen. It NEVER calls principal.Acting: the org is the fixed program org.
 func apply(s *cloud.Service[state], c *zip.Ctx) error {
 	if body := c.Body(); len(body) > maxIntakeBody {
 		return zip.ErrBadRequest("application too large")
@@ -199,10 +201,7 @@ func apply(s *cloud.Service[state], c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]any{"id": saved.ID, "stage": saved.Stage, "status": "received"})
 	}
 
-	id, gerr := genID("appl")
-	if gerr != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
-	}
+	id := mint.ID("appl")
 	app := ProgramApplication{
 		ID: id, Org: org, Company: company, Website: clip(req.Website),
 		ContactName: name, Email: email, Role: clip(req.Role),
@@ -228,10 +227,7 @@ func apply(s *cloud.Service[state], c *zip.Ctx) error {
 // ids. Reuses the same store + referential-integrity rules as the CRM handlers.
 func projectToCRM(s *cloud.Service[state], ctx context.Context, org string, app ProgramApplication, req applyRequest) (companyID, contactID string) {
 	now := time.Now().Unix()
-	cid, err := genID("comp")
-	if err != nil {
-		return "", ""
-	}
+	cid := mint.ID("comp")
 	comp := Company{
 		ID: cid, Org: org, Name: app.Company, DomainName: domainOf(app.Website),
 		Employees: parseIntField(req.TeamSize), Currency: "USD",
@@ -244,10 +240,7 @@ func projectToCRM(s *cloud.Service[state], ctx context.Context, org string, app 
 	companyID = cid
 
 	first, last := splitName(app.ContactName)
-	ctid, err := genID("cont")
-	if err != nil {
-		return companyID, ""
-	}
+	ctid := mint.ID("cont")
 	ct := Contact{
 		ID: ctid, Org: org, FirstName: first, LastName: last, Email: app.Email,
 		JobTitle: app.Role, CompanyID: companyID, CreatedAt: now, UpdatedAt: now,
@@ -307,7 +300,7 @@ type applicationList struct {
 // Each carries its AI screen and its stage history; a stage narrows the page to
 // one pipeline stage.
 func (o ops) listApplications(ctx context.Context, in *applicationPage) (*applicationList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +320,7 @@ func (o ops) listApplications(ctx context.Context, in *applicationPage) (*applic
 //
 // Example: {"id": "appl_1"}
 func (o ops) getApplication(ctx context.Context, in *ref) (*ProgramApplication, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +355,7 @@ type patchApplicationIn struct {
 //
 // Example: {"id": "appl_1", "stage": "rejected", "reason": "not a fit this round"}
 func (o ops) patchApplication(ctx context.Context, in *patchApplicationIn) (*ProgramApplication, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

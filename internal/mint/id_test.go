@@ -1,11 +1,11 @@
-package cloud_test
+package mint_test
 
 import (
 	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 var idRE = regexp.MustCompile(`^run_[0-9a-f]{32}$`)
@@ -15,12 +15,12 @@ var idRE = regexp.MustCompile(`^run_[0-9a-f]{32}$`)
 func TestIDIsPrefixedAndRandom(t *testing.T) {
 	seen := make(map[string]bool, 1000)
 	for range 1000 {
-		id := cloud.ID("run")
+		id := mint.ID("run")
 		if !idRE.MatchString(id) {
-			t.Fatalf("cloud.ID(%q) = %q, want run_ + 32 hex", "run", id)
+			t.Fatalf("mint.ID(%q) = %q, want run_ + 32 hex", "run", id)
 		}
 		if seen[id] {
-			t.Fatalf("cloud.ID repeated %q — the tail is not random", id)
+			t.Fatalf("mint.ID repeated %q — the tail is not random", id)
 		}
 		seen[id] = true
 	}
@@ -30,10 +30,10 @@ func TestIDIsPrefixedAndRandom(t *testing.T) {
 // the prefix it asked for, up to the first separator.
 func TestIDKeepsThePrefixWhole(t *testing.T) {
 	for _, prefix := range []string{"run", "sync", "wh", "a"} {
-		id := cloud.ID(prefix)
+		id := mint.ID(prefix)
 		got, _, ok := strings.Cut(id, "_")
 		if !ok || got != prefix {
-			t.Errorf("cloud.ID(%q) = %q; prefix reads back as %q", prefix, id, got)
+			t.Errorf("mint.ID(%q) = %q; prefix reads back as %q", prefix, id, got)
 		}
 	}
 }

@@ -7,8 +7,6 @@ package security
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -19,6 +17,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/security/detect"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -300,17 +299,6 @@ func toFindingView(f StoredFinding) findingView {
 	}
 }
 
-// tenant resolves the org — the isolation KEY — from the validated principal
-// cloud.Bridge parked. A typed op receives a context.Context and nothing else, so
-// it reads the org there rather than off the request. Fails closed.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
-
 // ---- handlers ----
 
 // health reports that the scanning subsystem is serving and how many
@@ -350,7 +338,7 @@ func (o ops) listRules(ctx context.Context, _ *noIn) (*ruleList, error) {
 // with its findings.
 func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -391,20 +379,14 @@ func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 		return nil, cloud.Denied(err)
 	}
 
-	scanID, err := genID("scan")
-	if err != nil {
-		return nil, zip.Errorf(500, "rng: %v", err)
-	}
+	scanID := mint.ID("scan")
 	now := time.Now().UTC().UnixMilli()
 
 	sc := Scan{ID: scanID, Org: org, Project: project, Files: len(in.Files), CreatedAt: now}
 	var stored []StoredFinding
 	for _, f := range in.Files {
 		for _, fnd := range detect.ScanContent(f.Path, f.Content) {
-			id, err := genID("fnd")
-			if err != nil {
-				return nil, zip.Errorf(500, "rng: %v", err)
-			}
+			id := mint.ID("fnd")
 			stored = append(stored, StoredFinding{
 				ID: id, ScanID: scanID, Org: org,
 				RuleID: fnd.RuleID, RuleName: fnd.RuleName, Severity: fnd.Severity,
@@ -448,7 +430,7 @@ func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 // Strictly org-scoped: a caller only ever sees its own scans, and one with no
 // validated org is refused.
 func (o ops) listScans(ctx context.Context, in *scanPage) (*scanList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +453,7 @@ func (o ops) listScans(ctx context.Context, in *scanPage) (*scanList, error) {
 // as an id that never existed, so a ruleset learns nothing about what exists
 // elsewhere. No validated org is refused.
 func (o ops) getScan(ctx context.Context, in *scanRef) (*scanDetail, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -500,7 +482,7 @@ func (o ops) getScan(ctx context.Context, in *scanRef) (*scanDetail, error) {
 // ignored, so a filter typo cannot read as "no findings". Strictly org-scoped, and
 // a caller with no validated org is refused.
 func (o ops) listFindings(ctx context.Context, in *findingFilter) (*findingList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -526,7 +508,7 @@ func (o ops) listFindings(ctx context.Context, in *findingFilter) (*findingList,
 // Scoped to the caller's org, and a finding belonging to another org is the same
 // 404 as one that never existed.
 func (o ops) getFinding(ctx context.Context, in *findingRef) (*findingView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -584,12 +566,3 @@ func projectScope(c *zip.Ctx) string {
 // are values the client writes: an address chosen by the party being audited is
 // not evidence.
 func clientIP(c *zip.Ctx) string { return cloud.ClientIP(c) }
-
-// genID mints a prefixed random id (mirrors clients/git.genID).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}

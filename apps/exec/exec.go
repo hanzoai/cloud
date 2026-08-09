@@ -56,6 +56,7 @@
 package exec
 
 import (
+	"cmp"
 	"context"
 	"crypto/subtle"
 	"fmt"
@@ -189,7 +190,9 @@ type CodeFile struct {
 }
 
 // Session is the session a file's bytes live in, whichever name the caller used.
-func (f CodeFile) Session() string { return firstNonEmpty(f.StorageSessionID, f.SessionID) }
+func (f CodeFile) Session() string {
+	return cmp.Or(strings.TrimSpace(f.StorageSessionID), strings.TrimSpace(f.SessionID))
+}
 
 // CodeResult is one run. A program that exited non-zero is a SUCCESSFUL call carrying a
 // failed program — its diagnostics are on Stderr and the status stays 200, because
@@ -294,7 +297,7 @@ func Run(ctx context.Context, org string, in *CodeRun) (*CodeResult, error) {
 	// live in, else a fresh lease. Running where the inputs already are is not an
 	// optimisation — it is the only way a file uploaded in one call is readable by
 	// the next without a second copy of it existing somewhere.
-	sb, err := lease(ctx, firstNonEmpty(in.SessionID, storageSession(in.Files)))
+	sb, err := lease(ctx, cmp.Or(strings.TrimSpace(in.SessionID), storageSession(in.Files)))
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +379,7 @@ func carry(ctx context.Context, f CodeFile, into string) error {
 	if err != nil || b.Dir {
 		return fmt.Errorf("read %s: %v", f.ID, err)
 	}
-	_, err = write(ctx, into, firstNonEmpty(f.ID, f.Name), b.Data)
+	_, err = write(ctx, into, cmp.Or(strings.TrimSpace(f.ID), strings.TrimSpace(f.Name)), b.Data)
 	return err
 }
 
@@ -508,15 +511,6 @@ func Languages() []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func firstNonEmpty(xs ...string) string {
-	for _, x := range xs {
-		if strings.TrimSpace(x) != "" {
-			return x
-		}
-	}
-	return ""
 }
 
 // ---- the three routes that cannot be typed ops -----------------------------

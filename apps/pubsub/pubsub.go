@@ -54,6 +54,7 @@
 package pubsub
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net"
@@ -128,9 +129,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	log := deps.Logger.New("subsystem", "pubsub")
 
-	dataDir := firstNonEmpty(
-		os.Getenv("CLOUD_PUBSUB_STORE_DIR"),
-		filepath.Join(firstNonEmpty(deps.DataDir, "/var/lib/cloud"), "pubsub"),
+	dataDir := cmp.Or(
+		strings.TrimSpace(os.Getenv("CLOUD_PUBSUB_STORE_DIR")),
+		filepath.Join(cmp.Or(strings.TrimSpace(deps.DataDir), "/var/lib/cloud"), "pubsub"),
 	)
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return fmt.Errorf("pubsub.Mount: store dir %s: %w", dataDir, err)
@@ -155,7 +156,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		maxPayload = int32(n)
 	}
 
-	host := firstNonEmpty(os.Getenv("CLOUD_PUBSUB_HOST"), "0.0.0.0")
+	host := cmp.Or(strings.TrimSpace(os.Getenv("CLOUD_PUBSUB_HOST")), "0.0.0.0")
 
 	// Claim the address BEFORE handing it to the embedded server, because the
 	// embedded server cannot report that it failed to take it: Open calls
@@ -177,7 +178,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s, err := psembed.Open(psembed.Options{
 		Host:       host,
 		Port:       port,
-		ServerName: firstNonEmpty(os.Getenv("CLOUD_PUBSUB_SERVER_NAME"), "cloud-pubsub-"+firstNonEmpty(deps.Brand, "hanzo")),
+		ServerName: cmp.Or(strings.TrimSpace(os.Getenv("CLOUD_PUBSUB_SERVER_NAME")), "cloud-pubsub-"+cmp.Or(strings.TrimSpace(deps.Brand), "hanzo")),
 		StoreDir:   dataDir,
 		MaxPayload: maxPayload,
 	})
@@ -218,13 +219,4 @@ func Shutdown(_ context.Context) error {
 		srv = nil
 	}
 	return nil
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }

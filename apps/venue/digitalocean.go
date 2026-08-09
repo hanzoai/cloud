@@ -14,6 +14,7 @@ package venue
 // overridable via DIGITALOCEAN_API_URL for an httptest stub only.
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -96,7 +97,7 @@ func (doDriver) discover(ctx context.Context, cr cred) ([]discovered, error) {
 		}
 		out = append(out, discovered{
 			ID:         cl.ID,
-			Name:       firstNonEmpty(cl.Name, cl.ID),
+			Name:       cmp.Or(cl.Name, cl.ID),
 			Region:     cl.RegionSlug,
 			Endpoint:   strings.TrimSpace(cl.Endpoint),
 			Kubeconfig: cfg.KubeconfigYAML,

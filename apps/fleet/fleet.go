@@ -24,6 +24,7 @@
 package fleet
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -145,7 +146,7 @@ func (r *Registry) Register(ctx context.Context, org, project, name, kubeconfig,
 		return Cluster{}, err
 	}
 	rec := Cluster{
-		Name: name, Org: org, Kind: "byo", Provider: firstNonEmpty(provider, "byo"),
+		Name: name, Org: org, Kind: "byo", Provider: cmp.Or(strings.TrimSpace(provider), "byo"),
 		Endpoint: endpoint, Nodes: inv.nodes, NvidiaGPU: inv.nvidia, AmdGPU: inv.amd,
 		Registered: time.Now().UTC().Format(time.RFC3339), Default: isDefault,
 	}
@@ -244,7 +245,7 @@ func openKMS(brand string) *kms.Client {
 			nodes = append(nodes, t)
 		}
 	}
-	org := firstNonEmpty(os.Getenv("CLOUD_KMS_ORG"), brand, "hanzo")
+	org := cmp.Or(strings.TrimSpace(os.Getenv("CLOUD_KMS_ORG")), strings.TrimSpace(brand), "hanzo")
 	threshold := len(nodes)
 	if v := os.Getenv("CLOUD_KMS_THRESHOLD"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= len(nodes) {
@@ -393,13 +394,4 @@ func upsert(list []Cluster, rec Cluster) []Cluster {
 		}
 	}
 	return append(list, rec)
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }

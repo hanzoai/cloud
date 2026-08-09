@@ -23,6 +23,7 @@ package x402
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
+	"cmp"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -809,7 +810,7 @@ func payerOf(ctx context.Context) string {
 // point of signing, so a misconfigured chain is a mount-time-shaped failure a log
 // names once instead of a signature mismatch every client hits forever.
 func requirements(cfg Config, terms Terms, payee string) (PaymentRequirements, error) {
-	network := firstNonEmpty(terms.Network, cfg.Network, DefaultNetwork)
+	network := cmp.Or(terms.Network, cfg.Network, DefaultNetwork)
 	if _, err := ChainID(network); err != nil {
 		return PaymentRequirements{}, err
 	}
@@ -821,7 +822,7 @@ func requirements(cfg Config, terms Terms, payee string) (PaymentRequirements, e
 		Scheme:            SchemeExact,
 		Network:           network,
 		Amount:            atomicUnits(terms.Amount, cfg.assetDecimals()),
-		Asset:             firstNonEmpty(terms.Asset, cfg.Asset),
+		Asset:             cmp.Or(terms.Asset, cfg.Asset),
 		PayTo:             payee,
 		MaxTimeoutSeconds: maxTimeout,
 		Extra: &Extra{
@@ -911,22 +912,13 @@ func payErr(code, msg string) map[string]any {
 	return map[string]any{"error": map[string]any{"code": code, "message": msg}}
 }
 
-func firstNonEmpty(vs ...string) string {
-	for _, v := range vs {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 func configFromEnv() Config {
 	return Config{
 		Asset:         strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET")),
 		AssetName:     strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET_NAME")),
 		AssetVersion:  strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET_VERSION")),
 		AssetDecimals: envInt("CLOUD_X402_ASSET_DECIMALS", DefaultAssetDecimals),
-		Network:       firstNonEmpty(os.Getenv("CLOUD_X402_NETWORK"), DefaultNetwork),
+		Network:       cmp.Or(strings.TrimSpace(os.Getenv("CLOUD_X402_NETWORK")), DefaultNetwork),
 		MaxTimeout:    int64(envInt("CLOUD_X402_MAX_TIMEOUT_SECONDS", DefaultMaxTimeoutSeconds)),
 	}
 }

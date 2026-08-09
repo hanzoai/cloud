@@ -601,10 +601,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body project
 	}
 
 	now := time.Now().Unix()
-	id, err := genID("proj")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := genID("proj")
 	p := Project{
 		ID: id, Org: org, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: strings.TrimSpace(body.Repo.Branch),

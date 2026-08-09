@@ -13,6 +13,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/connectorruntime"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -265,7 +266,7 @@ type authoredPluginList struct {
 // neither is any credential — a plugin names the connectors provider it needs and
 // reads the credential from ctx.auth at run time.
 func (o toolOps) listAuthoredPlugins(ctx context.Context, _ *noInput) (*authoredPluginList, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +297,7 @@ type pluginDeleted struct {
 // runtime can no longer load it. Scoped to the caller's org, so an id belonging
 // to another tenant answers 404 and is not deleted.
 func (o toolOps) deleteAuthoredPlugin(ctx context.Context, in *pluginRef) (*pluginDeleted, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

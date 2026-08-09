@@ -2,8 +2,6 @@ package company
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -291,15 +289,6 @@ func Shutdown(context.Context) error {
 // the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}
-
 // feeCents is the formation fee, overridable by ops via CLOUD_COMPANY_FEE_CENTS.
 func feeCents() int64 {
 	if v := strings.TrimSpace(os.Getenv("CLOUD_COMPANY_FEE_CENTS")); v != "" {
@@ -310,22 +299,9 @@ func feeCents() int64 {
 	return formationFeeCents
 }
 
-// tenant is the VALIDATED org for this request — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. It fails closed off the HTTP path, where nothing
-// parked an org.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
-
 // load resolves the caller's org and loads its formation, or returns the right error.
 func load(ctx context.Context, s *cloud.Service[state]) (*Formation, string, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -404,7 +380,7 @@ type beginIn struct {
 //
 // Example: {"structure": "c-corp", "jurisdiction": "DE", "name": "Acme Inc."}
 func (o ops) begin(ctx context.Context, in *beginIn) (*formationView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

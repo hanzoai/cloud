@@ -34,6 +34,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -717,14 +718,11 @@ func (o ops) createApp(ctx context.Context, body *createAppReq) (*appView, error
 	domainsJSON, _ := json.Marshal(domains)
 
 	now := time.Now().Unix()
-	id, err := genID("app")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := genID("app")
 	a := Application{
 		ID: id, Org: org, ProjectID: project, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
-		Environment: firstNonEmpty(strings.TrimSpace(body.Environment), "production"), Source: source,
-		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: firstNonEmpty(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
+		Environment: cmp.Or(strings.TrimSpace(body.Environment), "production"), Source: source,
+		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: cmp.Or(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
 		RepoProvider: providerFromURL(body.Repo.URL), ImageRepo: strings.TrimSpace(body.Image.Repository), ImageTag: strings.TrimSpace(body.Image.Tag),
 		BuildType: buildType, Dockerfile: strings.TrimSpace(body.Dockerfile), Port: portOr(body.Port), Replicas: s.State.k8s.limits.clampReplicas(body.Replicas),
 		StorageGB: s.State.k8s.limits.clampStorage(body.StorageGB),
@@ -1099,12 +1097,16 @@ func sanitizeDomains(in []string) []string {
 }
 
 // genID returns "<prefix>_<22-char-url-safe-token>" (96 bits of entropy).
-func genID(prefix string) (string, error) {
+// genID mints this package's ids: sixteen random bytes in base64url, which is the
+// shape its rows already carry — shorter than the hex mint.ID makes, and not
+// interchangeable with it for that reason.
+//
+// No error. crypto/rand.Read fills the buffer or panics; since Go 1.24 it cannot
+// report a short read, so there was never a failure for a caller to handle.
+func genID(prefix string) string {
 	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return prefix + "_" + base64.RawURLEncoding.EncodeToString(b), nil
+	_, _ = rand.Read(b)
+	return prefix + "_" + base64.RawURLEncoding.EncodeToString(b)
 }
 
 func getenv(key, dflt string) string {

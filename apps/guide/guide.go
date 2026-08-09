@@ -387,19 +387,6 @@ func Shutdown() error {
 // principal is refused 403.
 func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
-// tenantOf is tenant() for a TYPED op: the same validated org, resolved off the
-// context cloud.Bridge parked it on because a typed handler receives only a
-// context. It is never an In field — an In field is caller-supplied, so a tenant
-// key read from one is a cross-tenant read the caller asserted for itself. Fails
-// closed off the HTTP path, where nothing parked an org.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
-
 // ledgerOf is principal.Ledger for a typed op — the payer ONE grounded AI
 // completion is billed to. It needs the REQUEST rather than the tenant because
 // the payer is a validated identity beyond the org (the billing org / wallet
@@ -604,7 +591,7 @@ func buildOverview(cur Curriculum, custom bool, rows map[string]StateRow) overvi
 // Auto-detect runs first, so a step the org has already completed elsewhere reads
 // done without anyone marking it.
 func (o ops) overview(ctx context.Context, _ *noInput) (*overviewView, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -636,7 +623,7 @@ type analyticsView struct {
 // unreachable or silent warehouse answers available=false, never a fabricated
 // number.
 func (o ops) analytics(ctx context.Context, _ *noInput) (*analyticsView, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -662,7 +649,7 @@ type profileResponse struct {
 // principal; fail-closed without one. It PRODUCES the profile and classifies the
 // stage; it decides NO recommendation (that is a later surface).
 func (o ops) profile(ctx context.Context, _ *noInput) (*profileResponse, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -696,7 +683,7 @@ type curriculumView struct {
 // whether it comes from the org's OWN override (custom) or from the platform
 // default — the brand blueprint, else the embedded fixture.
 func (o ops) getCurriculum(ctx context.Context, _ *noInput) (*curriculumView, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -744,7 +731,7 @@ func putCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
 // journey it falls back to — the brand blueprint, else the embedded fixture.
 // Clearing an org that never set one is a no-op that answers the same default.
 func (o ops) deleteCurriculum(ctx context.Context, _ *noInput) (*curriculumView, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -772,7 +759,7 @@ type actionsView struct {
 // whether it succeeded. It is the audit-visible record of what the agent did on
 // the org's behalf, and the backing state for the "acted" auto-detect signal.
 func (o ops) listActions(ctx context.Context, _ *noInput) (*actionsView, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -889,7 +876,7 @@ func (o ops) resetStep(ctx context.Context, in *stepRef) (*overviewView, error) 
 // setStep is the ungated transition an op performs: resolve the tenant, then the
 // shared body. Never gated, so applyStep can never hand it a blockedErr.
 func (o ops) setStep(ctx context.Context, in *stepRef, target State) (*overviewView, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

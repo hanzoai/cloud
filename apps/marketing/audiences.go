@@ -13,6 +13,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -278,7 +280,7 @@ type AudienceList struct {
 //
 // Example: {"name": "Model users, last 30d", "event": "model.invoked", "windowDays": 30}
 func (o ops) createAudience(ctx context.Context, in *Audience) (*Audience, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -295,10 +297,7 @@ func (o ops) createAudience(ctx context.Context, in *Audience) (*Audience, error
 	if window > audMaxWindowDays {
 		window = audMaxWindowDays
 	}
-	id, err := genID("aud")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("aud")
 	now := time.Now().Unix()
 	a, err := o.s.State.store.CreateAudience(ctx, Audience{
 		ID: id, Org: org, Name: name, Event: event, WindowDays: window, CreatedAt: now, UpdatedAt: now,
@@ -314,7 +313,7 @@ func (o ops) createAudience(ctx context.Context, in *Audience) (*Audience, error
 //
 // Example: {"limit": 50}
 func (o ops) listAudiences(ctx context.Context, in *Page) (*AudienceList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +329,7 @@ func (o ops) listAudiences(ctx context.Context, in *Page) (*AudienceList, error)
 //
 // Example: {"id": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
 func (o ops) getAudience(ctx context.Context, in *AudienceRef) (*Audience, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +345,7 @@ func (o ops) getAudience(ctx context.Context, in *AudienceRef) (*Audience, error
 //
 // Example: {"id": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
 func (o ops) deleteAudience(ctx context.Context, in *AudienceRef) (*struct{}, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +367,7 @@ func (o ops) deleteAudience(ctx context.Context, in *AudienceRef) (*struct{}, er
 // Example: {"id": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
 // Response: {"available": true, "count": 500, "deliverable": 3, "unmatched": 497, "sample": ["u_1", "u_2"], "source": "event.fact"}
 func (o ops) previewAudience(ctx context.Context, in *AudienceRef) (*AudiencePreview, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -137,7 +137,7 @@ var allowedRequestUses = map[string]string{
 		"different bucket than the create wrote), and an ORG-LESS SuperAdmin is bucketed under the literal " +
 		"\"admin\" org, which OrgFrom cannot express — it refuses an empty org outright, so reading the tenant " +
 		"through it alone would turn that live admin bucket into a 403. ONE function, which all 21 typed ops " +
-		"ask, delegating to the same tenant() the untyped create beside them uses; fails closed off the HTTP " +
+		"ask, delegating to the same principal.Acting the untyped create beside them uses; fails closed off the HTTP " +
 		"path, where there is no principal and therefore no tenant to key on.",
 	"apps/channels/routes.go": "requireOrgAdmin — the mutation gate on the chat plane. Approving a " +
 		"pairing and editing a channel allowlist decide WHO may talk to the org's bots, so both take " +
@@ -165,7 +165,7 @@ var allowedRequestUses = map[string]string{
 		"minter ever validated, so neither may be an In field. ONE function, which all seven typed ops " +
 		"ask; the TENANT is resolved with principal.OrgFrom (tenant, right beside it), never through the " +
 		"request. Fails closed off the HTTP path: no request means the unbilled, default-project answer, " +
-		"and tenant() has already refused before any op reaches it.",
+		"and principal.Acting has already refused before any op reaches it.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
 	"apps/tracker/source.go": "scopeForge. The forge-backed board needs the caller's IAM USERNAME " +
 		"(X-User-Name) as well as their org: the org says WHICH tenant's work to ask the forge for, and the " +
@@ -249,7 +249,7 @@ var allowedRequestUses = map[string]string{
 		"which suffixes the namespace) and platform-admin-ness (X-User-IsAdmin, which buckets an org-less " +
 		"admin under \"ml-admin\" — OrgFrom refuses an empty org outright, so reading the tenant through it " +
 		"alone would turn that live admin bucket into a 403). ONE function, which every typed op asks, " +
-		"delegating to the same tenant() the untyped handlers beside them use; fails closed off the HTTP " +
+		"delegating to the same principal.Acting the untyped handlers beside them use; fails closed off the HTTP " +
 		"path, where there is no principal and therefore no namespace to name.",
 	"apps/risk/typed.go": "gate / caller. gate is the ONE money seam for the model plane, and money is " +
 		"the reason it needs more of the principal than the org: the debit is keyed on the SELECTED billing " +
@@ -434,7 +434,7 @@ var allowedRequestUses = map[string]string{
 		"asserted for itself. ONE function, so every typed op shares one seam; it fails closed off the " +
 		"HTTP path, where there is no principal and therefore no scope and no actor.",
 	"apps/do/do.go": "org — the DigitalOcean plane's ONE tenant-resolution point, and it fails closed " +
-		"in the same place it decides. It reads the request because tenant() turns on two facts the org " +
+		"in the same place it decides. It reads the request because principal.Acting turns on two facts the org " +
 		"key alone does not carry: whether the principal was VALIDATED at all, and whether it is a " +
 		"SuperAdmin, whose empty org falls back to the \"admin\" namespace — which principal.OrgFrom " +
 		"cannot express, since it refuses an empty org outright. Off the HTTP path there is no request, " +
@@ -512,7 +512,7 @@ var allowedRequestUses = map[string]string{
 		"closed off the HTTP path, where there is no principal and therefore no tenant.",
 	"apps/platform/ops.go": "caller / request / admit — the PaaS control plane's three identity seams, " +
 		"in one file, which every one of its 32 typed ops goes through. caller resolves the tenant with " +
-		"platform's own tenant(), not principal.OrgFrom: this surface keys NAMESPACES and per-tenant image " +
+		"platform's own principal.Acting, not principal.OrgFrom: this surface keys NAMESPACES and per-tenant image " +
 		"refs on the org, so it needs the injective namespace.Sanitize form and the \"admin\" bucket a " +
 		"validated SuperAdmin with no org falls into — neither of which principal.OrgFrom can express, since " +
 		"it returns the owner claim verbatim and refuses an empty org outright. It also hands the request " +

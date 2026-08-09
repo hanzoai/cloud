@@ -2,9 +2,7 @@ package authors
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -1158,15 +1156,6 @@ func (s *Store) ListPayouts(ctx context.Context, authorID string, limit int) ([]
 		out = append(out, p)
 	}
 	return out, rows.Err()
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // isUnique reports whether err is a SQLite UNIQUE/PRIMARY-KEY constraint violation

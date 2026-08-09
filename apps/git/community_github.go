@@ -73,7 +73,6 @@ func visibility(listed bool) string {
 	return "private"
 }
 
-// token is our GitHub credential, or "" when none is configured for github.com.
 // secret is our GitHub credential, resolved by the ONE resolver every other git
 // credential goes through. This reader only ever talks to api.github.com, so the host
 // is named here rather than configured.
