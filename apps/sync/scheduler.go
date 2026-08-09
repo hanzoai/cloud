@@ -116,32 +116,28 @@ func startScheduler(s *cloud.Service[state]) func() {
 	//
 	// Delayed by settle rather than immediate: a pod that has just started is still
 	// mounting stores, and every replica in a rollout would otherwise fetch at once.
-	first := firstSweep(interval)
 	go func() {
 		defer close(done)
-		boot := time.NewTimer(first)
-		defer boot.Stop()
+		// SETTLE ONCE, THEN SWEEP AND KEEP SWEEPING — the shape apps/risk/baseline
+		// already uses for a daily job, so there is one way to say "not one whole
+		// interval from now" rather than two.
+		//
+		// The sweep is LAUNCHED rather than called here: it runs in its own goroutine
+		// under the overlap guard so a long sweep never blocks the ticker, which is
+		// the one way this differs from baseline's synchronous run.
+		settleFirst := time.NewTimer(firstSweep(interval))
+		defer settleFirst.Stop()
+		select {
+		case <-ctx.Done():
+			return
+		case <-settleFirst.C:
+		}
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-boot.C:
-				if !running.CompareAndSwap(false, true) {
-					continue
-				}
-				inflight.Add(1)
-				go func() {
-					defer inflight.Done()
-					defer running.Store(false)
-					sweep(s, ctx)
-				}()
-			case <-t.C:
-				if !running.CompareAndSwap(false, true) {
-					s.Log.Warn("sync reconcile: previous sweep still running — skipping tick")
-					continue
-				}
+			if !running.CompareAndSwap(false, true) {
+				s.Log.Warn("sync reconcile: previous sweep still running — skipping tick")
+			} else {
 				inflight.Add(1)
 				go func() {
 					defer inflight.Done()
@@ -149,9 +145,14 @@ func startScheduler(s *cloud.Service[state]) func() {
 					sweep(s, ctx)
 				}()
 			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
 		}
 	}()
-	s.Log.Info("sync reconcile scheduler started", "interval", interval, "firstSweepIn", first)
+	s.Log.Info("sync reconcile scheduler started", "interval", interval, "firstSweepIn", firstSweep(interval))
 
 	var once bool
 	return func() {
