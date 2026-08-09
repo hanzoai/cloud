@@ -883,6 +883,11 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// Bind installations the App already holds to the org the caller acts in.
 	zip.Post(zapp, "/v1/integrations/github/claim", o.githubClaim)
 	zip.Get(zapp, "/v1/integrations/github/repos", o.githubRepos)
+	// FIND ONE, AND TAKE A COPY. Search reads GitHub's public index — how you
+	// find a repository to fork, never a way to see inside one. Fork resolves
+	// against the installation's GRANTED set like every other write here.
+	zip.Post(zapp, "/v1/integrations/github/search", o.githubSearch)
+	zip.Post(zapp, "/v1/integrations/github/fork", o.githubFork)
 	// 202: the import runs in a bounded background worker, so the op DECLARES the
 	// status it has always answered rather than setting it per request.
 	zip.Post(zapp, "/v1/integrations/github/repos/import", o.githubImport, zip.WithStatus(http.StatusAccepted))
