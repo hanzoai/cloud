@@ -509,6 +509,34 @@ var allowedRequestUses = map[string]string{
 		"principal.OrgFrom (tenantOf, right beside it), never through the request. ONE function, so the " +
 		"two mutating ops share one seam; it fails closed off the HTTP path: no request, no attested " +
 		"caller, no mutation.",
+	"apps/security/security.go": "submitScan — a secret scan is a priced act and an audited one, and " +
+		"this is the op's ONE request seam. The prepaid gate and the meter need the payer " +
+		"(principal.Ledger), the validated project sub-scope (principal.ValidatedProject) and the request " +
+		"id + client IP the debit is attributed with; the audit record needs the caller's subject and " +
+		"email, admin-ness, and the method and path actually reached. None of those is the tenant, which " +
+		"is read with principal.OrgFrom (tenant, in this same file), and none may become an In field — a " +
+		"caller that could name its own payer would bill another org. Fails closed off the HTTP path: no " +
+		"request, no payer, and a refusal rather than an unbilled scan.",
+	"apps/functions/invoke.go": "invoke — an invocation is prepaid compute, which is the whole reason " +
+		"it holds the request. The flat request fee is gated BEFORE the sandbox runs and the GB-seconds " +
+		"debit taken after it, and both halves need the payer (principal.Ledger), the validated project " +
+		"(principal.ValidatedProject) and the request id + client IP they are attributed with — facts " +
+		"principal.OrgFrom does not carry and an In field must never supply, since a caller naming its " +
+		"own payer would charge another org. The tenant is read with principal.OrgFrom (tenant, in " +
+		"functions.go). Fails closed off the HTTP path: no request, no payer, and no free compute.",
+	"apps/eval/metrics.go": "admin — the one fact the evals board reads beyond its tenant: platform " +
+		"SuperAdmin-ness (c.IsAdmin(), the X-User-IsAdmin the identity boundary mints only for a " +
+		"validated owner == AdminOrg), which is what widens the board to AllOrgs. That is a CROSS-TENANT " +
+		"authority, so it can never be an In field a caller supplies for itself, and principal.OrgFrom " +
+		"does not carry it. The org every query keys on is authoritative from principal.OrgFrom (tenant, " +
+		"in eval.go). False off the HTTP path: no request, no attested caller, no cross-tenant board.",
+	"apps/experiments/experiments.go": "actorOf / orgAdmin — the experiment plane's two identity seams, " +
+		"and neither of them is the tenant. actorOf is the credential's email (c.UserEmail()), what a " +
+		"create and a decision are STAMPED with — an attribution, never an authority. orgAdmin is the " +
+		"gate promoting a winner takes, org-admin-ness (principal.IsOrgAdmin, X-User-IsOrgAdmin), because " +
+		"a promotion rewrites a flag definition and that is the flag write plane's own gate. The tenant " +
+		"and its project sub-scope are read with principal.OrgFrom (tenant, right above), never through " +
+		"the request. Both fail closed off the HTTP path: no actor to stamp, and no attested admin.",
 }
 
 // TestRequestEscapeHatchIsPinned fails when a new cloud.Request call site
