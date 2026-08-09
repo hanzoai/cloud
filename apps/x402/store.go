@@ -83,13 +83,72 @@ CREATE TABLE IF NOT EXISTS settlements (
   settled     INTEGER NOT NULL DEFAULT 0,
   created_at  INTEGER NOT NULL
 );
+`
+	if _, err := s.db.Exec(ddl); err != nil {
+		return fmt.Errorf("x402 migrate: %w", err)
+	}
+
+	// `CREATE TABLE IF NOT EXISTS` is a NO-OP on a database that already has the
+	// table, so a column added to the DDL above never reaches one — and the DDL
+	// is the only place anyone thinks to add it. Every column below carries a
+	// DEFAULT because every one of them was added after the table shipped; they
+	// exist in the statement above and existed nowhere in production.
+	//
+	// The index then indexes one of them, so the migration did not fail quietly
+	// — it failed the whole mount: `x402 migrate: no such column: settled`,
+	// Mount returns an error, and a lazy plugin that cannot mount answers 503
+	// `no instance running` for every /v1/x402 request, forever. It has been
+	// doing that in production.
+	//
+	// SQLite has no `ADD COLUMN IF NOT EXISTS`, so ask the table what it has.
+	// Adding a NOT NULL column to a populated table is legal precisely because
+	// each of these has a DEFAULT.
+	have := map[string]bool{}
+	rows, err := s.db.Query(`SELECT name FROM pragma_table_info('settlements')`)
+	if err != nil {
+		return fmt.Errorf("x402 migrate: read columns: %w", err)
+	}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("x402 migrate: read columns: %w", err)
+		}
+		have[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("x402 migrate: read columns: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("x402 migrate: read columns: %w", err)
+	}
+
+	// Ordered, so a fresh database and a migrated one end up identical.
+	for _, c := range []struct{ name, def string }{
+		{"payee_subj", "TEXT NOT NULL DEFAULT ''"},
+		{"network", "TEXT NOT NULL DEFAULT ''"},
+		{"tx_hash", "TEXT NOT NULL DEFAULT ''"},
+		{"settled", "INTEGER NOT NULL DEFAULT 0"},
+	} {
+		if have[c.name] {
+			continue
+		}
+		if _, err := s.db.Exec(`ALTER TABLE settlements ADD COLUMN ` + c.name + ` ` + c.def); err != nil {
+			return fmt.Errorf("x402 migrate: add %s: %w", c.name, err)
+		}
+	}
+
+	// AFTER the columns exist — ix_settlements_pending is partial on `settled`,
+	// and that is the statement the missing column killed.
+	const idx = `
 CREATE INDEX IF NOT EXISTS ix_settlements_payer ON settlements(payer_org, created_at);
 -- The sweep's index: the unsettled rows are the ones Reconcile has to find, and
 -- they are a vanishing fraction of the table, so a partial index is the whole scan.
 CREATE INDEX IF NOT EXISTS ix_settlements_pending ON settlements(created_at) WHERE settled = 0;
 `
-	if _, err := s.db.Exec(ddl); err != nil {
-		return fmt.Errorf("x402 migrate: %w", err)
+	if _, err := s.db.Exec(idx); err != nil {
+		return fmt.Errorf("x402 migrate: indexes: %w", err)
 	}
 	return nil
 }
