@@ -21,21 +21,21 @@
 // a direct browser↔LiveKit WebRTC connection (LIVEKIT_WS = wss://live.hanzo.bot);
 // media is not a thing to proxy through an API binary. What moved into this binary
 // is the ONE decision a server has to make about a call — may this caller join this
-// room — which needs the team session secret and the LiveKit signing key, and needs
-// no pod of its own to hold them.
+// room — which needs the LiveKit signing key and an answer from the process that
+// owns the workspace rows, and needs no pod of its own to hold either.
 //
-// TWO KEYS, TWO ROLES, and they never mix:
+// ONE KEY, and it signs the ANSWER only. It is read from the SAME keys.yaml file
+// the LiveKit server itself validates against (Secret `livekit-keys`, mounted
+// read-only). ONE representation of that material, so it cannot drift: a second
+// copy projected into env would mint tokens that look perfect and are refused at
+// the media edge, which is the silent failure this whole package is trying not to
+// have.
 //
-//   - SERVER_SECRET verifies the CALLER. It is the HS256 key apps/team signs
-//     session tokens with, so "is this a real member of this workspace" is answered
-//     against the same signature the rest of /v1/team trusts. It arrives as env from
-//     the KMS-synced `team-secrets`.
-//   - The LiveKit api key/secret signs the ANSWER, and it is read from the SAME
-//     keys.yaml file the LiveKit server itself validates against (Secret
-//     `livekit-keys`, mounted read-only). ONE representation of that material, so it
-//     cannot drift: a second copy projected into env would mint tokens that look
-//     perfect and are refused at the media edge, which is the silent failure this
-//     whole package is trying not to have.
+// The CALLER is verified by IAM and by nothing else. meet holds no key that
+// verifies a caller, so there is no second bearer authority here to disagree with
+// the first: a request arrives with an attested principal or it is refused. What
+// that principal MAY do is not read off the token either — it is asked of apps/team,
+// which owns the membership rows (see roster).
 //
 // Missing or ambiguous material is a 503, LOUDLY: the reason names the file and the
 // Secret in the log at boot, while the caller gets an unadorned "not configured" (an
@@ -109,12 +109,11 @@ const wsEnv = "LIVEKIT_WS"
 // the reason it is unusable when it is. reason is the ONE flag — a non-empty reason
 // IS "not configured", so there is no way for the two to disagree.
 type state struct {
-	teamSecret string // SERVER_SECRET — verifies the caller's team session
-	apiKey     string // LiveKit api key    — the `iss` LiveKit matches on
-	apiSecret  string // LiveKit api secret — signs the minted token
-	ws         string // LIVEKIT_WS — where the browser dials; empty is legible, see wsEnv
-	reason     string // why this is unusable; empty means usable
-	authority  roster // who owns the membership rows; nil means the real peer, see rows
+	apiKey    string // LiveKit api key    — the `iss` LiveKit matches on
+	apiSecret string // LiveKit api secret — signs the minted token
+	ws        string // LIVEKIT_WS — where the browser dials; empty is legible, see wsEnv
+	reason    string // why this is unusable; empty means usable
+	authority roster // who owns the membership rows; nil means the real peer, see rows
 }
 
 // roster is the workspace-membership authority — the process that OWNS the rows,
@@ -172,13 +171,6 @@ func (s state) ready() bool { return s.reason == "" }
 // this used to return a bare zero value, which made a misconfigured deploy an
 // indistinguishable permanent 503 with nothing in the log to chase.
 func load() state {
-	secret := os.Getenv("SERVER_SECRET")
-	if secret == "" || secret == "secret" {
-		// The upstream public default is treated as absent for the reason
-		// apps/team's resolveSecret does: a known key lets anyone mint a session
-		// naming any workspace — here, a join token for a room they were never in.
-		return state{reason: "SERVER_SECRET is unset or the public default literal (K8s Secret team-secrets, key SERVER_SECRET)"}
-	}
 	path := os.Getenv(keyFileEnv)
 	if path == "" {
 		path = keyFile
@@ -187,7 +179,7 @@ func load() state {
 	if err != nil {
 		return state{reason: err.Error()}
 	}
-	return state{teamSecret: secret, apiKey: key, apiSecret: apiSecret, ws: strings.TrimSpace(os.Getenv(wsEnv))}
+	return state{apiKey: key, apiSecret: apiSecret, ws: strings.TrimSpace(os.Getenv(wsEnv))}
 }
 
 // readKeys parses a LiveKit key file: a YAML map of apiKey -> apiSecret, which is the
@@ -316,14 +308,21 @@ func init() {
 // the surface always answers under its OWN name with an honest 503, rather than
 // falling through to some other subsystem's catch-all and reporting a 404 for a
 // service that exists but has no keys.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error { return serve(app, deps, load()) }
+
+// serve hangs the routes on app for a state already assembled. Reading the
+// deployment (load) and hanging the routes are two jobs, and Mount is the one
+// composition of them; a caller that already holds a state — this package's own
+// tests, which must supply the workspace authority the routes ask, since it lives
+// in another process — serves it directly rather than through the environment.
+func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	if app == nil {
 		return fmt.Errorf("meet.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("meet.Mount: nil deps.Logger")
 	}
-	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "meet"), State: load()}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "meet"), State: st}
 
 	// The path suffix is the CALLER's, not ours. The office client POSTs
 	// concatLink(LOVE_ENDPOINT, '/getToken') from a published bundle, so with
@@ -495,6 +494,15 @@ func session(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusUnauthorized, "not signed in")
 	}
 	out := lobby{Identity: sp.Account, Name: sp.Name, WS: s.State.ws, Workspaces: make([]plane.Space, 0, len(sp.Items))}
+	// A workspace is only OFFERED if the caller could actually be seated in it, and
+	// a seat needs the identity LiveKit takes it under — which is the account on the
+	// row. Rows that name a workspace but no account would put a room in front of
+	// someone that mint then refuses, which is the exact drift this route exists to
+	// prevent. An empty lobby is the honest render, and it is the same answer a
+	// caller with no rows at all gets, rather than a second kind of refusal.
+	if sp.Account == "" {
+		sp.Items = nil
+	}
 	for _, w := range sp.Items {
 		// The SAME predicate mint admits on. Offering a workspace this caller holds
 		// only a guest role in would put a room in front of them that getToken then
@@ -516,12 +524,6 @@ func session(s *cloud.Service[state], c *zip.Ctx) error {
 // IAM LANE, selected on principal.Minted for the reason admits documents at
 // length: the org/user headers are the client's in a process where no boundary
 // ran, and here they would decide whose workspaces get listed.
-//
-// HS256 ARM answers from the token itself, because the token IS the answer: a
-// workspace session names exactly one workspace and carries the signed role in it.
-// The workspace's human name is not in the token and is not invented — an
-// unlabelled entry is honest, and this lane's caller (the published office client)
-// does not read this route at all.
 func (s state) spaces(c *zip.Ctx) (plane.Spaces, bool) {
 	if p, ok := principal.Minted(c); ok && p.Subject != "" && p.Org != "" {
 		out, err := s.rows().workspaces(cloud.As(c, p.Org), p.Subject)
@@ -532,29 +534,7 @@ func (s state) spaces(c *zip.Ctx) (plane.Spaces, bool) {
 		}
 		return *out, true
 	}
-	raw := bearer(c.Header("Authorization"))
-	if raw == "" {
-		return plane.Spaces{}, false
-	}
-	t, err := token.Decode(raw, s.teamSecret, true)
-	if err != nil || t.Workspace == "" {
-		return plane.Spaces{}, false
-	}
-	// An ACCOUNT is required here for the same reason mint requires one: it is
-	// the identity a seat is taken under, and mint refuses a token that carries
-	// none. Offering a workspace off a token the mint would then refuse is the
-	// one way these two answers could still disagree — a room shown, chosen, and
-	// declined. token.Generate cannot produce this (it validates the account as a
-	// uuid), so it is not an attacker's path; it is the invariant written down
-	// where the offer is made rather than assumed from where it is granted.
-	account := strings.TrimSpace(t.Account)
-	if account == "" {
-		return plane.Spaces{}, false
-	}
-	return plane.Spaces{
-		Account: account,
-		Items:   []plane.Space{{UUID: t.Workspace, Role: t.Role()}},
-	}, true
+	return plane.Spaces{}, false
 }
 
 // request is the office client's wire. `_id` is the SPA's person ref — accepted because
@@ -611,11 +591,11 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	//
 	// The body's `_id` (the SPA's person ref) is deliberately ignored rather than
 	// checked: verifying it belongs to the caller would need the person<->account
-	// mapping from apps/team, whereas the token already carries an identity that IS
-	// the caller. One fewer seam, and no lookup to get wrong.
+	// mapping, and the row admits already read carries the account, which IS that
+	// mapping's answer. One fewer place to get it wrong.
 	identity := j.account
 	if identity == "" {
-		return zip.Errorf(http.StatusUnauthorized, "token carries no account")
+		return zip.Errorf(http.StatusUnauthorized, "the membership row names no account")
 	}
 	tok, err := st.grant(room, identity, strings.TrimSpace(req.ParticipantName), time.Now())
 	if err != nil {
@@ -670,42 +650,12 @@ type joiner struct{ account string }
 // role and the account id it joined the subject to. A caller with no row, or one
 // whose role is not privileged, is refused, and so is a peer that cannot answer —
 // an unreachable authority is a refusal, never an assumption.
-//
-// HS256 ARM, unchanged, and deleted with the rest of the second bearer authority:
-//
-//   - the token must VERIFY against SERVER_SECRET (signature, exp, nbf) — so a forged
-//     or stale session is not a member;
-//   - its SIGNED workspace claim must equal the room's workspace prefix — this is the
-//     tenant boundary. Without it, any member of any workspace could mint a join token
-//     for any room in any other workspace by naming it;
-//   - an empty workspace claim is refused outright, so a session token that is not
-//     bound to a workspace cannot match a room that has no separator in its name;
-//   - the token must carry a PRIVILEGED workspace role (token.Privileged, the one
-//     predicate that reads the signed extra.role). A guest is a reduced principal and
-//     a seat in a colleague's meeting is not a reduced-session privilege. This used to
-//     compare extra.readonly/extra.guest — claims NOTHING in this repo mints, so the
-//     check was inert and every guest was admitted. selectWorkspace now signs the real
-//     workspace role, and an ABSENT role is unprivileged, so a token that has not
-//     proven a role is refused rather than assumed to be a member.
 func (s state) admits(c *zip.Ctx, room string) (joiner, bool) {
-	if p, ok := principal.Minted(c); ok && p.Subject != "" && p.Org != "" {
-		return s.admitsMember(c, room, p)
-	}
-	raw := bearer(c.Header("Authorization"))
-	if raw == "" {
+	p, ok := principal.Minted(c)
+	if !ok || p.Subject == "" || p.Org == "" {
 		return joiner{}, false
 	}
-	t, err := token.Decode(raw, s.teamSecret, true)
-	if err != nil {
-		return joiner{}, false
-	}
-	if t.Workspace == "" || t.Workspace != workspace(room) {
-		return joiner{}, false
-	}
-	if !t.Privileged() {
-		return joiner{}, false
-	}
-	return joiner{account: strings.TrimSpace(t.Account)}, true
+	return s.admitsMember(c, room, p)
 }
 
 // admitsMember is the IAM lane's authorization: ask the process that owns the
@@ -738,16 +688,6 @@ func privileged(role string) bool {
 	default:
 		return false
 	}
-}
-
-// bearer extracts the token from an "Authorization: Bearer <t>" header (scheme
-// case-insensitive). Empty when absent or not a bearer.
-func bearer(h string) string {
-	h = strings.TrimSpace(h)
-	if len(h) > 7 && strings.EqualFold(h[:7], "Bearer ") {
-		return strings.TrimSpace(h[7:])
-	}
-	return ""
 }
 
 // video is LiveKit's VideoGrant, narrowed to the two fields a join token needs. The

@@ -32,7 +32,7 @@ import (
 // Mirrors apps/tracker/typed_wire_test.go TestAmbientCookieWritesNeedCSRF,
 // because it is the same gate over the same account.RequireCSRF.
 func TestAmbientCookieMintNeedsCSRF(t *testing.T) {
-	app := mount(t, "team-secret", "APIkey", "apisecret")
+	app := mount(t, "APIkey", "apisecret")
 
 	// A request the way a signed-in tab makes it: a session COOKIE and no
 	// Authorization header. That combination is exactly what account's

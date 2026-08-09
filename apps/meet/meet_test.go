@@ -25,17 +25,23 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/internal/iamtest"
+	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
 const (
-	teamSecret = "a-real-team-secret"
 	apiKey     = "APIabcdef123456"
 	apiSecret  = "a-real-livekit-secret"
 	account    = "550e8400-e29b-41d4-a716-446655440000"
 	workspaceA = "11111111-1111-4111-8111-111111111111"
 	workspaceB = "22222222-2222-4222-8222-222222222222"
+	// org is the tenant a session names and the one the rows are read under; ada
+	// is the IAM `sub` those rows are about. They are separate values because they
+	// are separate facts: the org scopes the read, the subject identifies who.
+	org = "acme"
+	ada = "ada@acme.test"
+	bob = "bob@acme.test"
 )
 
 // roomIn builds a room name exactly as the office client does:
@@ -66,38 +72,56 @@ func keyBody(key, secret string) string {
 // mount stands the subsystem up against a real key FILE, which is how production
 // reads it (Secret livekit-keys/keys.yaml, mounted read-only) — not against env
 // scalars, which is the shape that turned out not to exist in the cluster.
-func mount(t *testing.T, team, key, secret string) *zip.App {
+func mount(t *testing.T, key, secret string) *zip.App {
 	t.Helper()
-	return mountWithKeyFile(t, team, keyFileWith(t, keyBody(key, secret)))
+	return mountWithKeyFile(t, keyFileWith(t, keyBody(key, secret)))
 }
 
-func mountWithKeyFile(t *testing.T, team, path string) *zip.App {
+func mountWithKeyFile(t *testing.T, path string) *zip.App {
 	t.Helper()
-	t.Setenv("SERVER_SECRET", team)
+	return mountWith(t, path, holds(map[string]string{workspaceA: token.RoleMember}))
+}
+
+// mountWith serves a state carrying the given workspace authority, in front of
+// the REAL identity boundary.
+//
+// Both are the fixture, and neither is optional. meet holds no key that verifies
+// a caller — IAM does — so an app mounted with no boundary can only ever refuse;
+// and the membership rows live in apps/team, so an app mounted with no authority
+// refuses everyone the boundary admits. A door test that omitted either would
+// pass on a 401 it never earned.
+func mountWith(t *testing.T, path string, rows roster) *zip.App {
+	t.Helper()
+	iamIssuer(t)
 	t.Setenv(keyFileEnv, path)
+	st := load()
+	st.authority = rows
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	app.Use(cloud.IdentityMiddleware(&cloud.Config{IAMIssuer: iamtest.Issuer, JWKSURL: jwksURL}))
+	app.Use(cloud.Bridge())
+	if err := serve(app, cloud.Deps{Logger: luxlog.New("test")}, st); err != nil {
+		t.Fatalf("serve: %v", err)
 	}
 	return app
 }
 
-// workspaceToken mints a workspace session the way selectWorkspace does. The role defaults to
-// member because that is the ordinary caller; pass extra{"role": "guest"} for a guest
-// and extra{"role": ""} to model a token that never proved a role (a pre-workspace
-// session token, or one minted before the claim existed).
-func workspaceToken(t *testing.T, ws, secret string, extra map[string]any, exp int64) string {
+// access mints the IAM access token a signed-in person actually arrives with:
+// signed by the per-test issuer and verified by cloud's own validator, so the
+// claim mapping being exercised is the production one rather than a stub's idea
+// of it.
+func access(t *testing.T, sub string) string {
 	t.Helper()
-	e := map[string]any{"role": token.RoleMember}
-	for k, v := range extra {
-		e[k] = v
+	if issuer == nil {
+		t.Fatal("no issuer — mount (or iamIssuer) has not run, so this token verifies against nothing")
 	}
-	tok, err := token.Generate(account, ws, e, exp, secret)
-	if err != nil {
-		t.Fatalf("token.Generate: %v", err)
-	}
-	return tok
+	return issuer.Sign(t, iamtest.Claims{Sub: sub, Owner: org, Orgs: homeOrg})
 }
+
+// homeOrg is the signed membership set whose FIRST entry is the caller's home org.
+// The boundary refuses org scope without it — a token that names no home is what a
+// machine credential looks like — so it is part of what "a signed-in person" means
+// here rather than an extra a test may forget.
+var homeOrg = []map[string]any{{"org": org, "role": "member"}}
 
 func ask(t *testing.T, app *zip.App, room, id, bearer string) (int, string) {
 	t.Helper()
@@ -162,8 +186,8 @@ func verify(t *testing.T, tok, secret string) map[string]any {
 // name, video). A drift in any one of them is a token the media server rejects, which
 // on a live cluster looks like "the call button does nothing".
 func TestMintProducesVerifiableJoinToken(t *testing.T) {
-	app := mount(t, teamSecret, apiKey, apiSecret)
-	bearer := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	app := mount(t, apiKey, apiSecret)
+	bearer := access(t, ada)
 	room := roomIn(workspaceA)
 
 	before := time.Now()
@@ -209,8 +233,8 @@ func TestMintProducesVerifiableJoinToken(t *testing.T) {
 // least-privilege assertion — a token that never mentions roomAdmin cannot confer it,
 // and a leaked join token stays a join token.
 func TestGrantCarriesNoAdminPrivilege(t *testing.T) {
-	app := mount(t, teamSecret, apiKey, apiSecret)
-	bearer := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	app := mount(t, apiKey, apiSecret)
+	bearer := access(t, ada)
 	_, tok := ask(t, app, roomIn(workspaceA), "person-42", bearer)
 	claims := verify(t, tok, apiSecret)
 
@@ -223,8 +247,8 @@ func TestGrantCarriesNoAdminPrivilege(t *testing.T) {
 	if len(grant) != 2 {
 		t.Errorf("grant has %d fields (%v), want exactly roomJoin+room", len(grant), grant)
 	}
-	// The team session secret must never appear in something handed to a browser.
-	if strings.Contains(tok, teamSecret) || strings.Contains(tok, apiSecret) {
+	// The signing key must never appear in something handed to a browser.
+	if strings.Contains(tok, apiSecret) {
 		t.Fatal("a signing key leaked into the minted token")
 	}
 }
@@ -233,91 +257,119 @@ func TestGrantCarriesNoAdminPrivilege(t *testing.T) {
 
 // TestMintRefusals is the fail-closed table. Every row must be refused; a 200 in any
 // of them is an unauthorized person in a meeting.
+//
+// Two things decide a seat now and they are in two different processes: IAM's
+// signature says WHO the caller is, and the workspace rows say what they may do.
+// Each row below breaks exactly one of them, and the positive control at the end is
+// what keeps the whole table from passing because nothing is ever admitted.
 func TestMintRefusals(t *testing.T) {
-	hour := time.Now().Add(time.Hour).Unix()
+	member := func(t *testing.T) string { return access(t, ada) }
 	cases := []struct {
 		name   string
 		room   string
+		rows   roster // nil ⇒ the ordinary deployment: ada is a member of workspace A
 		bearer func(t *testing.T) string
 	}{
-		{"no bearer at all", roomIn(workspaceA), func(t *testing.T) string { return "" }},
-		{"not a token", roomIn(workspaceA), func(t *testing.T) string { return "not-a-jwt" }},
-		{"forged: signed with another key", roomIn(workspaceA), func(t *testing.T) string {
-			return workspaceToken(t, workspaceA, "attacker-secret", nil, hour)
+		{"no bearer at all", roomIn(workspaceA), nil, func(*testing.T) string { return "" }},
+		{"not a token", roomIn(workspaceA), nil, func(*testing.T) string { return "not-a-jwt" }},
+		// Signed by an issuer this deployment publishes no keys for. IAM's signature
+		// is the ONLY thing that can produce a principal here, so this is the whole
+		// forgery surface — there is no second key that also admits.
+		{"forged: signed by another issuer", roomIn(workspaceA), anyone(), func(t *testing.T) string {
+			return iamtest.New(t).Sign(t, iamtest.Claims{Sub: ada, Owner: org, Orgs: homeOrg})
 		}},
-		{"expired session", roomIn(workspaceA), func(t *testing.T) string {
-			return workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(-time.Hour).Unix())
+		{"expired session", roomIn(workspaceA), anyone(), func(t *testing.T) string {
+			return issuer.Sign(t, iamtest.Claims{Sub: ada, Owner: org, Orgs: homeOrg, Exp: time.Now().Add(-time.Hour)})
 		}},
-		// THE tenant boundary: a real member of workspace B naming a room in
-		// workspace A. Room names are client-chosen, so this is the only thing
-		// stopping cross-workspace eavesdropping.
-		{"member of another workspace", roomIn(workspaceA), func(t *testing.T) string {
-			return workspaceToken(t, workspaceB, teamSecret, nil, hour)
+		// A MACHINE credential: an org and a user, and no `sub`. LiveKit seats
+		// whatever identity it is handed and EVICTS the live participant on a
+		// duplicate, so "which human is in this room" is not a question an API key
+		// gets to ask. The authority says yes to everything, so only the rule refuses.
+		{"machine credential carries no subject", roomIn(workspaceA), anyone(), func(t *testing.T) string {
+			return issuer.Sign(t, iamtest.Claims{Owner: org, Orgs: homeOrg, PreferredUsername: "sk-key-user"})
 		}},
-		{"session not bound to any workspace", roomIn(workspaceA), func(t *testing.T) string {
-			return workspaceToken(t, "", teamSecret, nil, hour)
-		}},
-		// A room name with no separator: workspace(room) is the whole string, and an
-		// unbound session must still not match it.
-		{"separator-less room, unbound session", "lobby", func(t *testing.T) string {
-			return workspaceToken(t, "", teamSecret, nil, hour)
-		}},
-		// The REAL reduced principal: the signed workspace role. These rows used to
-		// set extra.guest/extra.readonly, which NOTHING in this repo mints — so they
-		// passed against a token production never produces while every actual guest
-		// was admitted.
-		{"guest role", roomIn(workspaceA), func(t *testing.T) string {
-			return workspaceToken(t, workspaceA, teamSecret, map[string]any{"role": token.RoleGuest}, hour)
-		}},
-		// FAIL-CLOSED on an unproven role: a token with no role claim has not shown it
-		// is a member, so it does not get a seat.
-		{"no role claim", roomIn(workspaceA), func(t *testing.T) string {
-			return workspaceToken(t, workspaceA, teamSecret, map[string]any{"role": ""}, hour)
-		}},
-		{"unknown future role", roomIn(workspaceA), func(t *testing.T) string {
-			return workspaceToken(t, workspaceA, teamSecret, map[string]any{"role": "observer"}, hour)
-		}},
-		// The claims the old guards read are now meaningless — asserting that keeps
-		// anyone from "restoring" them and believing they do something.
-		{"inert extra.guest does not reduce a member", roomIn(workspaceA), func(t *testing.T) string {
-			return workspaceToken(t, workspaceB, teamSecret, map[string]any{"guest": "true"}, hour)
-		}},
+		// THE tenant boundary: the rows put ada in workspace A and the room names B.
+		// Room names are client-chosen, so this is the only thing stopping
+		// cross-workspace eavesdropping.
+		{"member of another workspace", roomIn(workspaceB), nil, member},
+		// A leading segment that is empty, and a name with no separator at all.
+		// Neither names a workspace this caller holds.
+		{"room with an empty workspace segment", "_standup_1", nil, member},
+		{"separator-less room", "lobby", nil, member},
+		// The role is the ROWS' answer now, never a claim the caller carried. A guest
+		// is a reduced principal, and a seat in a colleague's meeting is not a
+		// reduced-session privilege.
+		{"guest role", roomIn(workspaceA), holds(map[string]string{workspaceA: token.RoleGuest}), member},
+		// FAIL-CLOSED on an unproven role: a row that names none has not shown this
+		// caller is a member.
+		{"no role on the row", roomIn(workspaceA), holds(map[string]string{workspaceA: ""}), member},
+		{"unknown future role", roomIn(workspaceA), holds(map[string]string{workspaceA: "observer"}), member},
+		// The authority ANSWERED, and the answer was no row.
+		{"not a member of anything", roomIn(workspaceA), holds(nil), member},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			app := mount(t, teamSecret, apiKey, apiSecret)
+			rows := c.rows
+			if rows == nil {
+				rows = holds(map[string]string{workspaceA: token.RoleMember})
+			}
+			app := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)), rows)
 			code, body := ask(t, app, c.room, "person-42", c.bearer(t))
 			if code != http.StatusUnauthorized {
 				t.Fatalf("got %d %q, want 401", code, body)
 			}
 		})
 	}
+	// The positive control. Without it every row above passes on a deployment that
+	// admits nobody at all, which is precisely what this fixture looked like before
+	// it had an authority to answer.
+	t.Run("control: the ordinary member IS admitted", func(t *testing.T) {
+		app := mount(t, apiKey, apiSecret)
+		if code, body := ask(t, app, roomIn(workspaceA), "person-42", access(t, ada)); code != http.StatusOK {
+			t.Fatalf("got %d %q, want 200 — the refusals above prove nothing if nobody is ever admitted", code, body)
+		}
+	})
 }
 
-// TestMintRejectsPublicDefaultTeamSecret: with the upstream default "secret" as the
-// team key, anyone can mint a session naming any workspace — so the subsystem must
-// treat that key as absent and refuse everything (503), not verify against it.
-func TestMintRejectsPublicDefaultTeamSecret(t *testing.T) {
-	app := mount(t, "secret", apiKey, apiSecret)
-	bearer := workspaceToken(t, workspaceA, "secret", nil, time.Now().Add(time.Hour).Unix())
-	if code, body := ask(t, app, roomIn(workspaceA), "person-42", bearer); code != http.StatusServiceUnavailable {
-		t.Fatalf("got %d %q, want 503 — the public default key must never verify a caller", code, body)
+// TestTheSecondBearerAuthorityIsClosed.
+//
+// meet used to verify its callers itself, against apps/team's HS256 session key.
+// A token naming a workspace and a role WAS the authorization, so anyone holding
+// that one symmetric key — apps/team, anything with the Secret, anything that ever
+// logged it — could mint a join token for any room in any tenant. The key is gone
+// from this package and so is the lane.
+//
+// The old suite asserted such a token was ADMITTED; these are the same tokens at
+// the same two doors with the opposite expectation, so restoring the lane fails
+// here instead of passing.
+func TestTheSecondBearerAuthorityIsClosed(t *testing.T) {
+	app := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)), anyone())
+	hour := time.Now().Add(time.Hour).Unix()
+	for _, secret := range []string{"a-real-team-secret", "secret"} {
+		tok, err := token.Generate(account, workspaceA, map[string]any{"role": token.RoleOwner}, hour, secret)
+		if err != nil {
+			t.Fatalf("token.Generate: %v", err)
+		}
+		if code, body := ask(t, app, roomIn(workspaceA), "person-42", tok); code != http.StatusUnauthorized {
+			t.Fatalf("SECURITY: an HS256 workspace session minted a join token: %d %q", code, body)
+		}
+		if code, _, body := read(t, app, tok); code != http.StatusUnauthorized {
+			t.Fatalf("SECURITY: an HS256 workspace session read the lobby: %d %q", code, body)
+		}
 	}
 }
 
-// TestMintFailsClosedUnconfigured: a missing key of any kind is a 503, and the route
-// still exists (never a 404) so the failure is attributable to this subsystem.
+// TestMintFailsClosedUnconfigured: a missing key is a 503, and the route still
+// exists (never a 404) so the failure is attributable to this subsystem.
 func TestMintFailsClosedUnconfigured(t *testing.T) {
-	cases := []struct{ name, team, key, secret string }{
-		{"no team secret", "", apiKey, apiSecret},
-		{"empty key file", teamSecret, "", ""},
-		{"api key with an empty secret", teamSecret, apiKey, ""},
-		{"nothing configured", "", "", ""},
+	cases := []struct{ name, key, secret string }{
+		{"empty key file", "", ""},
+		{"api key with an empty secret", apiKey, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			app := mount(t, c.team, c.key, c.secret)
-			bearer := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+			app := mount(t, c.key, c.secret)
+			bearer := access(t, ada)
 			code, body := ask(t, app, roomIn(workspaceA), "person-42", bearer)
 			if code != http.StatusServiceUnavailable {
 				t.Fatalf("got %d %q, want 503", code, body)
@@ -330,8 +382,8 @@ func TestMintFailsClosedUnconfigured(t *testing.T) {
 // an empty _id is a 400 here rather than a token that cannot work. Both checks run
 // BEFORE admission, so a malformed request never reaches the verifier.
 func TestMintRequiresRoomAndIdentity(t *testing.T) {
-	app := mount(t, teamSecret, apiKey, apiSecret)
-	bearer := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	app := mount(t, apiKey, apiSecret)
+	bearer := access(t, ada)
 	if code, _ := ask(t, app, "", "person-42", bearer); code != http.StatusBadRequest {
 		t.Errorf("empty roomName = %d, want 400", code)
 	}
@@ -381,8 +433,8 @@ func TestKeyFileIsTheLiveKitFormat(t *testing.T) {
 		t.Fatalf("readKeys = (%q,%q), want (%q,%q)", key, secret, apiKey, apiSecret)
 	}
 	// And it mints against that pair end to end.
-	app := mountWithKeyFile(t, teamSecret, path)
-	bearer := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	app := mountWithKeyFile(t, path)
+	bearer := access(t, ada)
 	code, tok := ask(t, app, roomIn(workspaceA), "person-42", bearer)
 	if code != http.StatusOK {
 		t.Fatalf("mint = %d %s, want 200", code, tok)
@@ -439,7 +491,6 @@ func TestKeyFileRefusals(t *testing.T) {
 // TestMissingKeyFileIsLoud: the file absent entirely (Secret not mounted, or mounted
 // optional and not present) must name the path and the Secret, not fail silently.
 func TestMissingKeyFileIsLoud(t *testing.T) {
-	t.Setenv("SERVER_SECRET", teamSecret)
 	t.Setenv(keyFileEnv, filepath.Join(t.TempDir(), "absent", "keys.yaml"))
 	st := load()
 	if st.ready() {
@@ -470,7 +521,7 @@ func TestMissingKeyFileIsLoud(t *testing.T) {
 // always true, so an empty reason would flip it from vacuous to always-failing).
 func TestUnconfiguredReasonNeverReachesTheCaller(t *testing.T) {
 	path := keyFileWith(t, "")
-	app := mountWithKeyFile(t, teamSecret, path)
+	app := mountWithKeyFile(t, path)
 	reason := load().reason // same env as the mount above, so this IS the reason it logged
 	if reason == "" {
 		t.Fatal("the fixture is CONFIGURED — there is no reason to withhold and this test proves nothing")
@@ -479,7 +530,7 @@ func TestUnconfiguredReasonNeverReachesTheCaller(t *testing.T) {
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("got %d, want 503", code)
 	}
-	for _, leak := range []string{"livekit-keys", "keys.yaml", "/etc/", "SERVER_SECRET", path, reason} {
+	for _, leak := range []string{"livekit-keys", "keys.yaml", "/etc/", path, reason} {
 		if strings.Contains(body, leak) {
 			t.Errorf("the 503 body leaks %q: %s", leak, body)
 		}
@@ -577,8 +628,8 @@ func TestKeyFileValuesAreByteExact(t *testing.T) {
 // accepts and one holding the trimmed value does not.
 func TestSigningUsesTheFilesSecretVerbatim(t *testing.T) {
 	const padded = "sekrit-with-trailing-space "
-	app := mountWithKeyFile(t, teamSecret, keyFileWith(t, apiKey+": \""+padded+"\"\n"))
-	bearer := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	app := mountWithKeyFile(t, keyFileWith(t, apiKey+": \""+padded+"\"\n"))
+	bearer := access(t, ada)
 	code, tok := ask(t, app, roomIn(workspaceA), "person-42", bearer)
 	if code != http.StatusOK {
 		t.Fatalf("mint = %d %s, want 200", code, tok)
@@ -632,72 +683,93 @@ func admitsOn(t *testing.T, st state, room, auth string, headers map[string]stri
 	return j, ok
 }
 
-// jwksURL is where the per-test issuer publishes; set by iamIssuer below.
-var jwksURL string
+// jwksURL is where the per-test issuer publishes, and issuer is the issuer itself.
+// Package-level rather than threaded through every helper because these tests set
+// environment (t.Setenv), which forbids t.Parallel — so exactly one issuer is alive
+// at a time and the pair cannot be read from the wrong test.
+var (
+	jwksURL string
+	issuer  *iamtest.Issuer0
+)
 
 // iamIssuer stands up the signing issuer these tests mint IAM tokens with.
 func iamIssuer(t *testing.T) *iamtest.Issuer0 {
 	t.Helper()
 	iss := iamtest.New(t)
-	jwksURL = iss.URL
+	jwksURL, issuer = iss.URL, iss
+	t.Cleanup(func() { jwksURL, issuer = "", nil })
 	return iss
 }
 
-// TestAdmitsBindsRoomToTheSignedWorkspace tests `admits`, NOT the workspace() helper.
-// That distinction is the whole point: TestWorkspaceOfRoom pins the parse in isolation
-// and constrains nothing about how admits USES it, so mutating the comparison from
-// exact-segment to prefix survived the entire suite.
+// TestAdmitsAsksAboutTheRoomsOwnWorkspace tests `admits`, NOT the workspace()
+// helper. That distinction is the whole point: TestWorkspaceOfRoom pins the parse
+// in isolation and constrains nothing about how admits USES it, so mutating the
+// comparison from exact-segment to prefix survived the entire suite.
 //
-// Room names are chosen by the client, so this comparison is the ONLY thing standing
-// between a workspace member and a room in someone else's workspace.
-func TestAdmitsBindsRoomToTheSignedWorkspace(t *testing.T) {
-	hour := time.Now().Add(time.Hour).Unix()
-	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
-	member := func(ws string) string {
-		return "Bearer " + workspaceToken(t, ws, teamSecret, nil, hour)
-	}
-	// A UUID cannot be a proper prefix of another UUID (token.Generate enforces
-	// uuid.Validate, so both are 36 chars), but the room's segment 0 is arbitrary
-	// client text. A PREFIX comparison would admit all of these; exact-segment does not.
+// Room names are chosen by the client, so the segment admits asks the rows about is
+// the ONLY thing standing between a workspace member and a room in someone else's
+// workspace. Asserting WHICH workspace was asked about is what pins that: a prefix
+// match would ask about the caller's own workspace for every room whose name merely
+// begins with it.
+func TestAdmitsAsksAboutTheRoomsOwnWorkspace(t *testing.T) {
+	iamIssuer(t)
+	member := "Bearer " + access(t, ada)
+	// A UUID cannot be a proper prefix of another UUID, but the room's segment 0 is
+	// arbitrary client text. A PREFIX comparison would admit all of these.
 	for _, room := range []string{
 		workspaceA + "x_standup_1",             // one extra char before the separator
 		workspaceA + "-evil_standup_1",         // suffixed segment
 		workspaceA + workspaceA + "_standup_1", // segment 0 starts with the real uuid
 	} {
-		if _, ok := admitsOn(t, st, room, member(workspaceA), nil, false); ok {
+		a := holds(map[string]string{workspaceA: token.RoleMember})
+		st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
+		if _, ok := admitsOn(t, st, room, member, nil, true); ok {
 			t.Errorf("admitted room %q for workspace %q — segment 0 is not an exact match", room, workspaceA)
+		}
+		if a.saw == workspaceA {
+			t.Errorf("room %q made the rows answer about %q — the room's segment is not what was asked",
+				room, workspaceA)
 		}
 	}
 	// The exact segment is admitted, so the test discriminates rather than always failing.
-	if _, ok := admitsOn(t, st, roomIn(workspaceA), member(workspaceA), nil, false); !ok {
+	a := holds(map[string]string{workspaceA: token.RoleMember})
+	st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
+	if _, ok := admitsOn(t, st, roomIn(workspaceA), member, nil, true); !ok {
 		t.Fatal("refused the exact-workspace room; the check is not discriminating")
 	}
 	// And the converse direction: a member of A cannot enter B's room.
-	if _, ok := admitsOn(t, st, roomIn(workspaceB), member(workspaceA), nil, false); ok {
+	if _, ok := admitsOn(t, st, roomIn(workspaceB), member, nil, true); ok {
 		t.Error("a member of workspace A was admitted to a workspace B room")
 	}
 }
 
-// TestAdmitsRefusesUnboundSession is load-bearing on its own: without the
-// Workspace=="" refusal, a token that never selected a workspace (workspace claim
-// empty) matches any room whose name STARTS with '_' — segment 0 is then the empty
-// string and the comparison succeeds.
-func TestAdmitsRefusesUnboundSession(t *testing.T) {
-	hour := time.Now().Add(time.Hour).Unix()
-	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
-	unbound := "Bearer " + workspaceToken(t, "", teamSecret, nil, hour)
+// TestAdmitsRefusesARoomThatNamesNoWorkspace is load-bearing on its own: without
+// the workspace=="" refusal, any room whose name STARTS with '_' has an empty
+// leading segment, and an authority asked about the workspace named "" could answer
+// for it.
+//
+// The authority here says YES to everything, so the refusal can only come from
+// meet's own rule — and the ask count proves it happened BEFORE the rows were
+// consulted, which is the difference between refusing and refusing for the right
+// reason.
+func TestAdmitsRefusesARoomThatNamesNoWorkspace(t *testing.T) {
+	iamIssuer(t)
+	member := "Bearer " + access(t, ada)
 	for _, room := range []string{"_standup_1", "_", "_anything"} {
-		if _, ok := admitsOn(t, st, room, unbound, nil, false); ok {
-			t.Errorf("an unbound session was admitted to %q", room)
+		a := anyone()
+		st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
+		if _, ok := admitsOn(t, st, room, member, nil, true); ok {
+			t.Errorf("a room with an empty workspace segment was admitted: %q", room)
+		}
+		if a.asked != 0 {
+			t.Errorf("room %q reached the rows; the empty-segment rule is not what refused it", room)
 		}
 	}
-	// It is also refused for a normal room, and a BOUND session is admitted — so the
-	// refusal is about the empty claim, not about rooms in general.
-	if _, ok := admitsOn(t, st, roomIn(workspaceA), unbound, nil, false); ok {
-		t.Error("an unbound session was admitted to a real workspace room")
-	}
-	if _, ok := admitsOn(t, st, roomIn(workspaceA), "Bearer "+workspaceToken(t, workspaceA, teamSecret, nil, hour), nil, false); !ok {
-		t.Fatal("a bound member was refused; the test is not discriminating")
+	// A real room IS admitted by that same authority, so the refusals are about the
+	// name and not about rooms in general.
+	st := state{apiKey: apiKey, apiSecret: apiSecret, authority: anyone()}
+	if _, ok := admitsOn(t, st, roomIn(workspaceA), member, nil, true); !ok {
+		t.Fatal("a member was refused a real room; the test is not discriminating")
 	}
 }
 
@@ -729,8 +801,8 @@ func TestMultipleApiKeysSelectByName(t *testing.T) {
 	if key != "APIsecond" || secret != "secret-two" {
 		t.Fatalf("selected (%q,%q), want (APIsecond, secret-two)", key, secret)
 	}
-	app := mountWithKeyFile(t, teamSecret, path)
-	bearer := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	app := mountWithKeyFile(t, path)
+	bearer := access(t, ada)
 	code, tok := ask(t, app, roomIn(workspaceA), "person-42", bearer)
 	if code != http.StatusOK {
 		t.Fatalf("mint = %d %s, want 200", code, tok)
@@ -764,7 +836,7 @@ func TestMultipleApiKeysSelectByName(t *testing.T) {
 // and a second posture in a file that deliberately keeps the reason out of the getToken
 // 503; the reason belongs in the boot log, which Mount writes at ERROR.
 func TestHealthSurfacesDegradation(t *testing.T) {
-	app := mount(t, teamSecret, "", "")
+	app := mount(t, "", "")
 	req := httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil)
 	resp, err := app.Test(req)
 	if err != nil {
@@ -788,7 +860,7 @@ func TestHealthSurfacesDegradation(t *testing.T) {
 		t.Errorf("health body carries the internal reason on an unauthenticated endpoint: %v", got)
 	}
 	// Configured ⇒ 200 + ready, so the probe distinguishes.
-	ok := mount(t, teamSecret, apiKey, apiSecret)
+	ok := mount(t, apiKey, apiSecret)
 	req2 := httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil)
 	resp2, _ := ok.Test(req2)
 	defer func() { _ = resp2.Body.Close() }()
@@ -797,13 +869,14 @@ func TestHealthSurfacesDegradation(t *testing.T) {
 	}
 }
 
-// TestIdentityComesFromTheToken: LiveKit uses `sub` as the participant identity and
-// EJECTS an existing participant on a duplicate. So a caller-supplied identity let any
-// member of a workspace kick a colleague out of a call and impersonate them to the room.
-// The signed account is the one identity the caller cannot choose.
-func TestIdentityComesFromTheToken(t *testing.T) {
-	app := mount(t, teamSecret, apiKey, apiSecret)
-	bearer := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+// TestIdentityComesFromTheRowsNotTheBody: LiveKit uses `sub` as the participant
+// identity and EJECTS an existing participant on a duplicate. So a caller-supplied
+// identity let any member of a workspace kick a colleague out of a call and
+// impersonate them to the room. The account on the membership row is the one
+// identity the caller cannot choose.
+func TestIdentityComesFromTheRowsNotTheBody(t *testing.T) {
+	app := mount(t, apiKey, apiSecret)
+	bearer := access(t, ada)
 	room := roomIn(workspaceA)
 
 	// Claim a colleague's person ref in the body. It must not reach the token.
@@ -826,16 +899,21 @@ func TestIdentityComesFromTheToken(t *testing.T) {
 		t.Fatal("the body's _id became the LiveKit identity — a member can eject and impersonate a colleague")
 	}
 	if claims["sub"] != account {
-		t.Fatalf("sub = %v, want the signed account %q", claims["sub"], account)
+		t.Fatalf("sub = %v, want the account on the row %q", claims["sub"], account)
 	}
-	// Two different accounts in the same room get DIFFERENT identities, so a legitimate
-	// second participant is not ejected as a duplicate.
+	// Two different people in the same room get DIFFERENT identities, so a legitimate
+	// second participant is not ejected as a duplicate. The account is the ROWS'
+	// answer, so two callers collide only if the rows say they are one person.
 	const other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-	tok2, err := token.Generate(other, workspaceA, map[string]any{"role": token.RoleMember}, time.Now().Add(time.Hour).Unix(), teamSecret)
-	if err != nil {
-		t.Fatalf("token.Generate: %v", err)
-	}
-	_, body2 := ask(t, app, room, victim, tok2)
+	two := &answers{row: func(_, subject string) plane.Member {
+		seat := account
+		if subject == bob {
+			seat = other
+		}
+		return plane.Member{Member: true, Role: token.RoleMember, Account: seat}
+	}}
+	second := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)), two)
+	_, body2 := ask(t, second, room, victim, access(t, bob))
 	if c2 := verify(t, body2, apiSecret); c2["sub"] != other {
 		t.Errorf("second participant sub = %v, want %q", c2["sub"], other)
 	}
@@ -848,16 +926,16 @@ func TestIdentityComesFromTheToken(t *testing.T) {
 // file.
 func TestHealthLeaksNothingUnauthenticated(t *testing.T) {
 	for _, tc := range []struct {
-		name             string
-		team, key, given string
-		wantCode         int
+		name       string
+		key, given string
+		wantCode   int
 	}{
-		{"unconfigured", teamSecret, "", "", http.StatusServiceUnavailable},
-		{"configured", teamSecret, apiKey, apiSecret, http.StatusOK},
+		{"unconfigured", "", "", http.StatusServiceUnavailable},
+		{"configured", apiKey, apiSecret, http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := keyFileWith(t, keyBody(tc.key, tc.given))
-			app := mountWithKeyFile(t, tc.team, path)
+			app := mountWithKeyFile(t, path)
 			req := httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil)
 			resp, err := app.Test(req)
 			if err != nil {
@@ -874,7 +952,7 @@ func TestHealthLeaksNothingUnauthenticated(t *testing.T) {
 			// also forbids the trap: appending an EMPTY reason to the leak set would
 			// make strings.Contains(body, "") true and fail every configured case, so
 			// the element is only added when it can actually discriminate.
-			leaks := []string{"livekit-keys", "keys.yaml", "/etc/", "SERVER_SECRET", apiKey, apiSecret, path}
+			leaks := []string{"livekit-keys", "keys.yaml", "/etc/", apiKey, apiSecret, path}
 			reason := load().reason
 			if degraded := tc.wantCode == http.StatusServiceUnavailable; (reason != "") != degraded {
 				t.Fatalf("reason %q and status %d disagree about whether meet is configured", reason, tc.wantCode)
@@ -905,54 +983,58 @@ func TestHealthLeaksNothingUnauthenticated(t *testing.T) {
 // create. Both shapes are pinned: with no boundary the headers are inert, and with
 // the boundary they are stripped before anything reads them.
 func TestForgedIdentityHeadersBuyNothing(t *testing.T) {
-	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
 	iamIssuer(t)
 	forged := map[string]string{
-		"X-Org-Id":  "acme",
+		"X-Org-Id":  org,
 		"X-User-Id": "11111111-2222-4333-8444-555555555555",
 	}
+	// The authority says yes to everything, so a header that reached it would buy a
+	// seat. Nothing else can refuse these calls.
 	for _, boundary := range []bool{false, true} {
+		st := state{apiKey: apiKey, apiSecret: apiSecret, authority: anyone()}
 		if j, ok := admitsOn(t, st, roomIn(workspaceA), "", forged, boundary); ok {
 			t.Fatalf("SECURITY (boundary=%v): forged identity headers bought a seat as %q", boundary, j.account)
 		}
 	}
-	// And they do not upgrade a caller who holds nothing else, nor downgrade one who
-	// holds a real HS256 session: the headers are simply not an input.
-	hour := time.Now().Add(time.Hour).Unix()
-	good := "Bearer " + workspaceToken(t, workspaceA, teamSecret, nil, hour)
-	if _, ok := admitsOn(t, st, roomIn(workspaceA), good, forged, false); !ok {
-		t.Fatal("forged headers displaced a valid HS256 session")
+	// And they do not displace a real IAM session presented alongside them: the
+	// headers are simply not an input, in either direction.
+	st := state{apiKey: apiKey, apiSecret: apiSecret, authority: anyone()}
+	if _, ok := admitsOn(t, st, roomIn(workspaceA), "Bearer "+access(t, ada), forged, true); !ok {
+		t.Fatal("forged headers displaced a valid IAM session")
 	}
 }
 
-// TestIAMLaneTakesTheAttestedPrincipalAndFailsClosed proves the other half: a REAL
-// IAM access token, through the REAL boundary, does take the IAM lane — and on that
-// lane the authority is apps/team over the internal plane. There is no team peer
-// here, so the ask cannot be answered, and an authority that cannot answer is a
-// refusal rather than an assumption of membership.
-func TestIAMLaneTakesTheAttestedPrincipalAndFailsClosed(t *testing.T) {
-	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
-	iss := iamIssuer(t)
-	hour := time.Now().Add(time.Hour).Unix()
+// TestAnUnreachableAuthorityRefusesAtTheDoor: a REAL IAM access token through the
+// REAL boundary does produce a principal — and the seat still depends on an answer
+// from the process that owns the workspace rows. When that process cannot answer,
+// the refusal must come from the missing answer and never from an assumption of
+// membership.
+//
+// The discriminating control is the SAME token against an authority that answers.
+// Without it this passes on any deployment that admits nobody, which is exactly
+// what this file's fixture used to be.
+func TestAnUnreachableAuthorityRefusesAtTheDoor(t *testing.T) {
+	iamIssuer(t)
+	member := "Bearer " + access(t, ada)
 
-	// A token that WOULD be admitted on the HS256 arm, presented by the same caller,
-	// so the refusal below is about the lane and not about the credential.
-	good := "Bearer " + workspaceToken(t, workspaceA, teamSecret, nil, hour)
-	if _, ok := admitsOn(t, st, roomIn(workspaceA), good, nil, true); !ok {
-		t.Fatal("the HS256 arm refused a bound member; the test is not discriminating")
+	answering := state{apiKey: apiKey, apiSecret: apiSecret, authority: anyone()}
+	if _, ok := admitsOn(t, answering, roomIn(workspaceA), member, nil, true); !ok {
+		t.Fatal("an authority that answers refused a member; the test is not discriminating")
 	}
-	iamTok := "Bearer " + iss.Sign(t, iamtest.Claims{Sub: "11111111-2222-4333-8444-555555555555", Owner: "acme"})
-	if _, ok := admitsOn(t, st, roomIn(workspaceA), iamTok, nil, true); ok {
-		t.Fatal("the IAM lane admitted a caller with no answer from the workspace rows")
+	// No authority at all: rows() falls back to the real peer, and there is no peer
+	// in this process.
+	silent := state{apiKey: apiKey, apiSecret: apiSecret}
+	if _, ok := admitsOn(t, silent, roomIn(workspaceA), member, nil, true); ok {
+		t.Fatal("a caller was seated with no answer from the workspace rows")
 	}
 	// A room that names no workspace is refused. NOT "before anything is asked" —
 	// strings.Cut returns the whole string when there is no separator, so this is
-	// asked about as a workspace named "no-separator", which nobody has.
-	// roster_test.go's TestTheIAMLaneNeverWidensTheRoom pins that distinction with
-	// an authority that can actually answer; here there is none, so every IAM-lane
-	// call fails closed at the ask and this asserts only the refusal.
-	if _, ok := admitsOn(t, st, "no-separator", iamTok, nil, true); ok {
-		t.Fatal("the IAM lane admitted a room that names no workspace")
+	// asked about as a workspace named "no-separator", which nobody has. The
+	// authority here is the ordinary one, which holds workspace A and nothing else;
+	// roster_test.go's TestTheIAMLaneNeverWidensTheRoom pins WHICH name was asked.
+	real := state{apiKey: apiKey, apiSecret: apiSecret, authority: holds(map[string]string{workspaceA: token.RoleMember})}
+	if _, ok := admitsOn(t, real, "no-separator", member, nil, true); ok {
+		t.Fatal("a room naming a workspace nobody holds was admitted")
 	}
 }
 
@@ -992,7 +1074,7 @@ var machinePrincipals = []principal.Principal{
 }
 
 func TestMachineCredentialIsNotAPerson(t *testing.T) {
-	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
+	st := state{apiKey: apiKey, apiSecret: apiSecret}
 	iamIssuer(t)
 	for _, p := range machinePrincipals {
 		if _, ok := admitsWithPrincipal(t, st, roomIn(workspaceA), p); ok {
