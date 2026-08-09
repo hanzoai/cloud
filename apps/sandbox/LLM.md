@@ -79,33 +79,28 @@ Sequence matters. (1) is inert on its own — an application nobody uses — so 
 can land and be reviewed by itself. (2) is the part that hands a capability to a
 running pod and is the part to review hardest.
 
-**The constraint that decides (1), and it is not obvious.** `iam/pkg/store` —
-the package cloud already uses to read IAM in-process — is READ-ONLY:
-`GetApplicationByName`, `GetApplicationByClientId`, `ListApplicationsByClientId`,
-no create and no upsert. IAM is grafted into cloud at its canonical paths, so
-creation means one of:
+**Where it is created, and there is only one answer.** An earlier version of
+this file listed three "options" — boot seeding, IAM's internal reconcile, the
+public API — which was a mistake: those are three MECHANISMS, and the question is
+who OWNS the act. The owner already exists.
 
-  a. an authenticated `POST /v1/iam/applications` from cloud to the surface
-     cloud is itself serving — a real HTTP hop, and it needs a credential, which
-     is the thing being provisioned;
-  b. `internal/provision`'s upsert against
-     `/v1/iam/admin/applications/upsert` — IAM-internal, so reaching it means
-     either exporting it or living in that repo;
-  c. seeding it the way every other application is seeded — `init_data.json` via
-     `server.Seed`, which is new-only and idempotent and already runs. This is
-     the one that invents nothing, and it is the one to look at first.
+`apps/account/iam.go` holds an `iamClient` that creates an org's IAM objects
+with cloud's own machine identity (`c.basicAuth()`), and already calls
+`POST /v1/iam/add-organization`. `<org>-agent` is created there, beside
+`createOrganization`, by that client. One place, one authority, nothing new.
 
-(a) has a bootstrap problem worth naming: provisioning a credential with a
-credential. (c) does not, which is usually the sign it is the right shape.
+There is no bootstrap problem: the credential doing the provisioning is cloud's
+own, it already exists, and creating IAM objects for an org is precisely what it
+is already for. The "provisioning a credential needs a credential" worry came
+from imagining a caller that does not exist instead of finding the one that does.
 
-And whichever is chosen, `apps/iam` and `apps/sandbox` are SEPARATE PROCESSES,
-so the sandbox can never read the store directly — it asks over the plane. That
-is the sixth instance of the mistake this codebase keeps making, avoided in
-advance rather than after.
+`iam/pkg/store` stays read-only and is not the path — it is how cloud READS IAM
+in-process. Creation is an act, and acts go through the client that holds the
+authority for them.
 
-A user's own key (BYO OpenAI/Anthropic/Hanzo) and the org's agent identity are
-two different credentials for two different questions — "whose model do I call"
-versus "who is this pod". Do not braid them.
+`apps/iam` and `apps/sandbox` are separate PROCESSES, so a sandbox never reads
+this itself; it asks over the plane. Noted in advance because that mistake has
+been made five times in this codebase and caught five times afterwards.
 
 ## The harness
 
