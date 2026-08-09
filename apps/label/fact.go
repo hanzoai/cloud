@@ -13,6 +13,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -154,12 +155,7 @@ const (
 var kinds = []Kind{KindAccount, KindAgent, KindMerchant, KindPayout, KindPerson, KindSession, KindTransaction}
 
 func knownKind(k Kind) bool {
-	for _, v := range kinds {
-		if v == k {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(kinds, k)
 }
 
 func knownDisposition(d Disposition) bool {

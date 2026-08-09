@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -90,7 +91,7 @@ func TestTargetOpsProjectEverywhere(t *testing.T) {
 	if cmd.service != "agents" || cmd.name != "targets-create" {
 		t.Errorf("command = %q %q, want %q %q", cmd.service, cmd.name, "agents", "targets-create")
 	}
-	if !contains(cmd.flags, "label") || !contains(cmd.flags, "host") {
+	if !slices.Contains(cmd.flags, "label") || !slices.Contains(cmd.flags, "host") {
 		t.Errorf("command flags = %v, want the In fields", cmd.flags)
 	}
 
@@ -131,13 +132,4 @@ func keysOfAny(m map[string]any) []string {
 		out = append(out, k)
 	}
 	return out
-}
-
-func contains(xs []string, want string) bool {
-	for _, x := range xs {
-		if x == want {
-			return true
-		}
-	}
-	return false
 }

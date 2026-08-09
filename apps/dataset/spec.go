@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -470,12 +471,7 @@ func instant(field, v string) (time.Time, error) {
 }
 
 func known(kind string) bool {
-	for _, k := range kinds {
-		if k == kind {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(kinds, kind)
 }
 
 // stamp renders an instant the one way this plane renders instants: RFC 3339 in

@@ -475,17 +475,6 @@ func order(entries []Entry) []Entry {
 	return out
 }
 
-// keys returns a value map's keys in sorted order, so the digest of an entry
-// does not depend on Go's map iteration.
-func keys(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
 // text, when, number and pairs read a warehouse column into the type this
 // package wants, tolerating whichever concrete type the driver chose.
 func text(v any) string {

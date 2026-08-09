@@ -790,13 +790,3 @@ func shortTime(unix int64) string {
 	}
 	return time.Unix(unix, 0).Format(time.RFC3339)
 }
-
-// sortedKeys returns the keys of m, sorted — for deterministic help output.
-func sortedKeys(m map[string]string) []string {
-	ks := make([]string, 0, len(m))
-	for k := range m {
-		ks = append(ks, k)
-	}
-	sort.Strings(ks)
-	return ks
-}
