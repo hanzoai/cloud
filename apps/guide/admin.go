@@ -212,7 +212,7 @@ func patchBlueprintItem(s *cloud.Service[state], c *zip.Ctx) error {
 	case "strategies":
 		found, err = patchIn(bp.Strategies, id, func(x Strategy) string { return x.ID }, patch)
 	case "templates":
-		found, err = patchIn(bp.Templates, id, func(x Template) string { return x.ID }, patch)
+		found, err = patchIn(bp.Templates, id, func(x Page) string { return x.ID }, patch)
 	default:
 		return zip.ErrBadRequest("unknown collection " + collection + " (want sections|steps|strategies|templates)")
 	}
@@ -350,7 +350,7 @@ func explicitEnabled(bp Blueprint) Blueprint {
 	for i := range bp.Strategies {
 		bp.Strategies[i].Enabled = boolPtr(on(bp.Strategies[i].Enabled))
 	}
-	bp.Templates = append([]Template(nil), bp.Templates...)
+	bp.Templates = append([]Page(nil), bp.Templates...)
 	for i := range bp.Templates {
 		bp.Templates[i].Enabled = boolPtr(on(bp.Templates[i].Enabled))
 	}

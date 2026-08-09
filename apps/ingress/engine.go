@@ -46,7 +46,7 @@ func newEngine(log luxlog.Logger) *Engine {
 // it in — the hot-reload seam. A route referencing an unknown/failed service or a
 // bad middleware chain is SKIPPED (and counted), so one malformed object can never
 // take the whole edge down. Returns (live, skipped) route counts.
-func (e *Engine) apply(routes []Route, services map[string]Service, mws map[string]Middleware, tlsHosts map[string]struct{}) (live, skipped int) {
+func (e *Engine) apply(routes []Route, services map[string]Upstream, mws map[string]Middleware, tlsHosts map[string]struct{}) (live, skipped int) {
 	built := make(map[string]http.Handler, len(services))
 	c := &compiled{byHost: map[string][]compiledRoute{}, tlsHosts: tlsHosts}
 
@@ -126,7 +126,7 @@ func (e *Engine) counts() (hosts, tlsHosts int) {
 // balancer over its backends. forward.New returns a pre-configured
 // httputil.ReverseProxy; roundrobin picks a backend per request and rewrites the
 // outbound URL. This is the Traefik service/loadBalancer model, reused verbatim.
-func buildService(svc Service) (http.Handler, error) {
+func buildService(svc Upstream) (http.Handler, error) {
 	fwd := forward.New(svc.PassHostHeader)
 	lb, err := roundrobin.New(fwd)
 	if err != nil {

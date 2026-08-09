@@ -81,21 +81,21 @@ func init() {
 		Fields: map[string]string{
 			"Backend.url":              "URL is the upstream server, http(s)://host[:port].",
 			"Backend.weight":           "Weight is this member's share of the round-robin; must be >= 0.",
-			"Service.backends":         "Backends are the upstream servers to balance across: 1..32 of them.",
-			"Service.id":               "ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one. Routes reference it by this id.",
-			"Service.passHostHeader":   "PassHostHeader forwards the client's original Host header upstream instead\nof rewriting it to the backend's.",
+			"Upstream.backends":        "Backends are the upstream servers to balance across: 1..32 of them.",
+			"Upstream.id":              "ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one. Routes reference it by this id.",
+			"Upstream.passHostHeader":  "PassHostHeader forwards the client's original Host header upstream instead\nof rewriting it to the backend's.",
 			"ingressServices.services": "Services is the org's services, ordered by id.",
 		},
 	})
 	zip.Describe("GET /v1/ingress/services/:id", zip.Doc{
 		Description: "Returns one of the caller org's backend pools by id.",
 		Fields: map[string]string{
-			"Backend.url":            "URL is the upstream server, http(s)://host[:port].",
-			"Backend.weight":         "Weight is this member's share of the round-robin; must be >= 0.",
-			"Service.backends":       "Backends are the upstream servers to balance across: 1..32 of them.",
-			"Service.id":             "ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one. Routes reference it by this id.",
-			"Service.passHostHeader": "PassHostHeader forwards the client's original Host header upstream instead\nof rewriting it to the backend's.",
-			"objRef.id":              "ID is the object to act on, from the path.",
+			"Backend.url":             "URL is the upstream server, http(s)://host[:port].",
+			"Backend.weight":          "Weight is this member's share of the round-robin; must be >= 0.",
+			"Upstream.backends":       "Backends are the upstream servers to balance across: 1..32 of them.",
+			"Upstream.id":             "ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one. Routes reference it by this id.",
+			"Upstream.passHostHeader": "PassHostHeader forwards the client's original Host header upstream instead\nof rewriting it to the backend's.",
+			"objRef.id":               "ID is the object to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"app-pool"}`),
 	})
@@ -153,11 +153,11 @@ func init() {
 	zip.Describe("POST /v1/ingress/services", zip.Doc{
 		Description: "Creates or replaces one backend pool and hot-applies it. POST mints\nan id when the body omits one; PUT takes the id from the URL, which wins over\nany id in the body. A pool needs at least one backend and every backend URL\nmust be http(s)://host[:port].",
 		Fields: map[string]string{
-			"Backend.url":            "URL is the upstream server, http(s)://host[:port].",
-			"Backend.weight":         "Weight is this member's share of the round-robin; must be >= 0.",
-			"Service.backends":       "Backends are the upstream servers to balance across: 1..32 of them.",
-			"Service.id":             "ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one. Routes reference it by this id.",
-			"Service.passHostHeader": "PassHostHeader forwards the client's original Host header upstream instead\nof rewriting it to the backend's.",
+			"Backend.url":             "URL is the upstream server, http(s)://host[:port].",
+			"Backend.weight":          "Weight is this member's share of the round-robin; must be >= 0.",
+			"Upstream.backends":       "Backends are the upstream servers to balance across: 1..32 of them.",
+			"Upstream.id":             "ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one. Routes reference it by this id.",
+			"Upstream.passHostHeader": "PassHostHeader forwards the client's original Host header upstream instead\nof rewriting it to the backend's.",
 		},
 		Example: json.RawMessage(`{"id":"app-pool","backends":[{"url":"http://10.0.0.7:8000","weight":1}]}`),
 	})
@@ -186,11 +186,11 @@ func init() {
 	zip.Describe("PUT /v1/ingress/services/:id", zip.Doc{
 		Description: "Creates or replaces one backend pool and hot-applies it. POST mints\nan id when the body omits one; PUT takes the id from the URL, which wins over\nany id in the body. A pool needs at least one backend and every backend URL\nmust be http(s)://host[:port].",
 		Fields: map[string]string{
-			"Backend.url":            "URL is the upstream server, http(s)://host[:port].",
-			"Backend.weight":         "Weight is this member's share of the round-robin; must be >= 0.",
-			"Service.backends":       "Backends are the upstream servers to balance across: 1..32 of them.",
-			"Service.id":             "ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one. Routes reference it by this id.",
-			"Service.passHostHeader": "PassHostHeader forwards the client's original Host header upstream instead\nof rewriting it to the backend's.",
+			"Backend.url":             "URL is the upstream server, http(s)://host[:port].",
+			"Backend.weight":          "Weight is this member's share of the round-robin; must be >= 0.",
+			"Upstream.backends":       "Backends are the upstream servers to balance across: 1..32 of them.",
+			"Upstream.id":             "ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one. Routes reference it by this id.",
+			"Upstream.passHostHeader": "PassHostHeader forwards the client's original Host header upstream instead\nof rewriting it to the backend's.",
 		},
 		Example: json.RawMessage(`{"id":"app-pool","backends":[{"url":"http://10.0.0.7:8000","weight":1}]}`),
 	})

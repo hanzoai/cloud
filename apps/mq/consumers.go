@@ -375,9 +375,9 @@ func (co consumers) next(ctx context.Context, in *nextIn) (*readOut, error) {
 	if err != nil {
 		return nil, errHTTP(err)
 	}
-	out := readOut{Messages: []Message{}}
+	out := readOut{Messages: []Delivery{}}
 	for msg := range msgs.Messages() {
-		item := Message{
+		item := Delivery{
 			Subject: relSubject(org, msg.Subject()),
 			Data:    base64.StdEncoding.EncodeToString(msg.Data()),
 			Headers: msg.Headers(),
