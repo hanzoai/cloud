@@ -3,6 +3,8 @@ package iam
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	luxlog "github.com/luxfi/log"
@@ -28,24 +30,58 @@ func TestPrefixesCoverAuthCritical(t *testing.T) {
 	}
 }
 
-// TestMountFailClosed503 proves the fail-soft path: when the embed cannot boot,
-// mountFailClosed serves an honest JSON 503 on every IAM prefix instead of letting
-// /v1/iam/* fall through to the console SPA (HTML 200). cloud and every co-resident
-// subsystem stay up — the blast-radius isolation the consolidation exists for.
-func TestMountFailClosed503(t *testing.T) {
-	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	mountFailClosed(app)
-	for _, p := range []string{
-		"/v1/iam/oauth/token",
-		"/v1/iam/.well-known/jwks",
-		"/login/oauth/authorize",
+// TestDegradedMountAnswers503 proves the fail-soft path: when the identity store
+// cannot open, the identity addresses answer an honest JSON 503 rather than falling
+// through to the console SPA.
+//
+// It drives Mount itself. The property used to belong to a local helper
+// (mountFailClosed), which iam v1.34.41 made redundant by refusing on a nil store —
+// and the helper was deleted while these tests kept calling it, so this package
+// stopped compiling, `go vet` failed, and every gate behind it went unrun on main.
+//
+// The property is worth more than the helper was. The terminal handler in a plugin
+// binary is the console catch-all, so an address the degraded path misses does not
+// 404 in production — it answers 200 with HTML, and a relying party parses a web
+// page as its discovery document. /.well-known/openid-configuration is asserted
+// here for exactly that reason; it is the first call every relying party makes.
+//
+// Verified by probe, not assumed: with a nil store the full IAM route table is
+// still registered and its handlers refuse 503, so the published document does not
+// depend on whether a volume happened to mount — which is the property the helper's
+// removal was protecting, and it holds.
+//
+// The store is made unopenable by pointing DataDir at a FILE, so the join beneath it
+// cannot be a directory. Hermetic, and no permissions games.
+func TestDegradedMountAnswers503(t *testing.T) {
+	notADir := filepath.Join(t.TempDir(), "occupied")
+	if err := os.WriteFile(notADir, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: notADir}); err != nil {
+		t.Fatalf("Mount must stay up with no store, cloud depends on it: %v", err)
+	}
+	if DB() != nil {
+		t.Error("DB() must be nil with no store so in-process readers can tell")
+	}
+
+	// Method matters: these are the real verbs. A GET against a POST-only address
+	// answers 405, which is neither the refusal nor the SPA and would prove nothing.
+	for _, c := range []struct {
+		method, path string
+	}{
+		{http.MethodPost, "/v1/iam/oauth/token"},
+		{http.MethodGet, "/v1/iam/.well-known/jwks"},
+		{http.MethodGet, "/.well-known/openid-configuration"},
+		{http.MethodGet, "/.well-known/oauth-authorization-server"},
 	} {
-		resp, err := app.Test(httptest.NewRequest(http.MethodGet, p, nil))
+		resp, err := app.Test(httptest.NewRequest(c.method, c.path, nil))
 		if err != nil {
-			t.Fatalf("Test(%s): %v", p, err)
+			t.Fatalf("Test(%s %s): %v", c.method, c.path, err)
 		}
 		if resp.StatusCode != http.StatusServiceUnavailable {
-			t.Errorf("%s = %d, want 503 (fail-closed)", p, resp.StatusCode)
+			t.Errorf("degraded %s %s = %d, want 503 (fail-closed, not the console SPA)", c.method, c.path, resp.StatusCode)
 		}
 		_ = resp.Body.Close()
 	}
