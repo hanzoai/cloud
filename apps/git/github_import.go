@@ -239,14 +239,34 @@ func ensureMirrorTarget(ctx context.Context, store *Store, org, project, repo, r
 // history; later branches reuse those objects (cheap negotiation).
 func (s *storage) importFetch(ctx context.Context, org, project, name, srcURL string, cred gitCred) (map[string]ffResult, error) {
 	env := mirrorGitEnv(srcURL, cred)
-	branches, head, err := s.lsRemoteHeads(ctx, srcURL, env)
+	branches, tags, head, err := s.lsRemoteHeads(ctx, srcURL, env)
 	if err != nil {
 		return nil, fmt.Errorf("list source refs: %w", err)
 	}
 	out := make(map[string]ffResult, len(branches))
-	for _, b := range branches {
+	for _, r := range branches {
+		b := r.name
 		if !branchRE.MatchString(b) {
 			continue // skip a source branch whose name can't be a native ref
+		}
+		// ALREADY OURS? Then there is nothing to fetch, and the advertisement we
+		// have already read is proof of it.
+		//
+		// The tip is in the ls-remote output, and it used to be thrown away — so a
+		// reconcile spawned one `git fetch` per branch, every pass, to discover that
+		// nothing had moved. Measured on this fleet: ~7 branches per repository
+		// across 1685 declared syncs, so roughly 11,800 fetch subprocesses and their
+		// network round trips per sweep, nearly all of them no-ops. That is the
+		// reason a full pass took hours, which is the reason the fleet redeployed
+		// before it finished.
+		//
+		// NoOp is exactly what the fetch would have reported ("upstream tip == native
+		// tip"), so the result a caller sees is unchanged — only the cost of learning
+		// it is. A ref we do not have locally reads as empty and never matches, so a
+		// new branch still fetches.
+		if r.oid != "" && s.revParse(ctx, s.absRepoPath(org, project, name), "refs/heads/"+b) == r.oid {
+			out[b] = ffResult{NoOp: true, Before: r.oid, After: r.oid}
+			continue
 		}
 		// THE FULL REF, which is what inboundFastForward documents and requires.
 		// lsRemoteHeads strips refs/heads/, and handing the SHORT name on made the
@@ -272,7 +292,13 @@ func (s *storage) importFetch(ctx context.Context, org, project, name, srcURL st
 	}
 	// Tags: create-only (non-forcing), so an existing native tag is never clobbered.
 	// Best-effort — a tag that can't create must not fail a branch-complete import.
-	s.fetchTags(ctx, org, project, name, srcURL, env)
+	//
+	// Skipped entirely when the advertisement shows we already hold every tag it
+	// names. Without this a steady-state reconcile still paid one fetch per repo to
+	// learn nothing, which across 1685 syncs is 1685 round trips a sweep.
+	if s.missingTag(ctx, org, project, name, tags) {
+		s.fetchTags(ctx, org, project, name, srcURL, env)
+	}
 	// Point HEAD at the source default branch when native now has it (so a
 	// clone-back resolves the same default the source has).
 	if head != "" {
@@ -284,18 +310,28 @@ func (s *storage) importFetch(ctx context.Context, org, project, name, srcURL st
 // lsRemoteHeads lists the source's branches (refs/heads/*) and its HEAD symref
 // (the default branch) in one bounded ls-remote — the ref list is bounded by ref
 // count, not pack size, so it is safe to buffer.
-func (s *storage) lsRemoteHeads(ctx context.Context, srcURL string, env []string) (branches []string, head string, err error) {
+// remoteRef is one advertised branch: its short name and the object it points at.
+//
+// The OID is kept because the advertisement ALREADY carries it. Discarding it meant
+// every reconcile re-fetched every branch to discover that nothing had moved — see
+// importFetch.
+type remoteRef struct {
+	name string
+	oid  string
+}
+
+func (s *storage) lsRemoteHeads(ctx context.Context, srcURL string, env []string) (branches, tags []remoteRef, head string, err error) {
 	cmd, err := gitCmd(ctx, env,
 		"-c", "protocol.version=2", "-c", "credential.helper=",
 		"ls-remote", "--symref", srcURL)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 	var out bytes.Buffer
 	stderr := &cappedBuffer{cap: stderrCap}
 	cmd.Stdout, cmd.Stderr = &out, stderr
 	if err := cmd.Run(); err != nil {
-		return nil, "", fmt.Errorf("ls-remote: %w: %s", err, sanitizeGitErr(stderr.String()))
+		return nil, nil, "", fmt.Errorf("ls-remote: %w: %s", err, sanitizeGitErr(stderr.String()))
 	}
 	for _, line := range strings.Split(out.String(), "\n") {
 		// "ref: refs/heads/main\tHEAD" — the default-branch symref.
@@ -313,14 +349,48 @@ func (s *storage) lsRemoteHeads(ctx context.Context, srcURL string, env []string
 			continue
 		}
 		if b, ok := strings.CutPrefix(strings.TrimSpace(line[tab+1:]), "refs/heads/"); ok && b != "" {
-			branches = append(branches, b)
+			branches = append(branches, remoteRef{name: b, oid: strings.TrimSpace(line[:tab])})
+			continue
+		}
+		// Tags from the SAME advertisement, so a steady-state reconcile can skip the
+		// tag fetch too.
+		//
+		// The peeled entry is dropped only to avoid redundant work, NOT for
+		// correctness: git resolves the "^{}" suffix itself, so rev-parse of
+		// refs/tags/<x>^{} returns the same commit the advertisement peels to and the
+		// comparison would match either way. Measured — removing this filter keeps
+		// every test green. What it costs is one extra rev-parse subprocess per
+		// annotated tag, on a path that already runs once per repository per sweep.
+		if tg, ok := strings.CutPrefix(strings.TrimSpace(line[tab+1:]), "refs/tags/"); ok && tg != "" && !strings.HasSuffix(tg, "^{}") {
+			tags = append(tags, remoteRef{name: tg, oid: strings.TrimSpace(line[:tab])})
 		}
 	}
-	return branches, head, nil
+	return branches, tags, head, nil
 }
 
 // fetchTags fetches the source's tags into native with create-only (non-forcing)
 // semantics, so an existing native tag is never clobbered. Best-effort.
+// missingTag reports whether the source advertises a tag we do not already hold at
+// that exact object. Any single one is enough to make the tag fetch worth its round
+// trip; none means there is nothing to learn.
+//
+// Create-only is what makes this safe to skip: an existing native tag is never
+// re-pointed by the fetch, so a tag whose object differs locally is one the fetch
+// would refuse anyway — and it is still fetched here, because refusing is the
+// documented answer and silence is not.
+func (s *storage) missingTag(ctx context.Context, org, project, name string, tags []remoteRef) bool {
+	if len(tags) == 0 {
+		return false
+	}
+	bareDir := s.absRepoPath(org, project, name)
+	for _, t := range tags {
+		if s.revParse(ctx, bareDir, "refs/tags/"+t.name) != t.oid {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *storage) fetchTags(ctx context.Context, org, project, name, srcURL string, env []string) {
 	bareDir := s.absRepoPath(org, project, name)
 	args := append(packConfigArgs(""),
