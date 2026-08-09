@@ -172,6 +172,12 @@ type slackOAuthResponse struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	} `json:"team"`
+	// AuthedUser is the person who completed the install. Slack has always sent
+	// it; this never read it, so nothing downstream could tell the installer from
+	// any other member of the workspace.
+	AuthedUser struct {
+		ID string `json:"id"`
+	} `json:"authed_user"`
 }
 
 // slackExchange trades the OAuth code for a bot token via oauth.v2.access. It
@@ -207,6 +213,7 @@ func slackExchange(ctx context.Context, creds OAuthConfig, redirectURI, code str
 		ExternalID:   r.Team.ID,
 		AccountLabel: r.Team.Name,
 		BotUserID:    r.BotUserID,
+		Installer:    r.AuthedUser.ID,
 		Scopes:       splitCSV(r.Scope),
 	}, nil
 }

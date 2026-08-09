@@ -160,7 +160,7 @@ func TestApproveGrantsDMOnly(t *testing.T) {
 	if err != nil || len(paired) != 1 || paired[0] != "42" {
 		t.Fatalf("paired entries = %v err=%v, want [42]", paired, err)
 	}
-	v, err := dmGate(ctx, st, "acme", "telegram", "42", true)
+	v, err := dmGate(ctx, st, "acme", "telegram", "42", "", true)
 	if err != nil || !v.Allow || v.Reason != dmPaired {
 		t.Fatalf("dmGate = %+v err=%v, want allow dmPaired", v, err)
 	}
@@ -187,7 +187,7 @@ func TestPairedRowsOnlyUnderPairingPolicy(t *testing.T) {
 		if err := setPolicy(ctx, st, "acme", "telegram", policyRow{DM: dm, Group: GroupOpen}, t0+2); err != nil {
 			t.Fatalf("setPolicy(%s): %v", dm, err)
 		}
-		v, err := dmGate(ctx, st, "acme", "telegram", "42", true)
+		v, err := dmGate(ctx, st, "acme", "telegram", "42", "", true)
 		if err != nil || v.Allow || v.Pair || v.Reason != dmNotAllowlisted {
 			t.Fatalf("dmGate under %s = %+v err=%v, want plain block", dm, v, err)
 		}
@@ -196,7 +196,7 @@ func TestPairedRowsOnlyUnderPairingPolicy(t *testing.T) {
 	if err := setPolicy(ctx, st, "acme", "telegram", policyRow{DM: DMPairing, Group: GroupOpen}, t0+3); err != nil {
 		t.Fatalf("setPolicy: %v", err)
 	}
-	if v, err := dmGate(ctx, st, "acme", "telegram", "42", true); err != nil || !v.Allow || v.Reason != dmPaired {
+	if v, err := dmGate(ctx, st, "acme", "telegram", "42", "", true); err != nil || !v.Allow || v.Reason != dmPaired {
 		t.Fatalf("dmGate back under pairing = %+v err=%v", v, err)
 	}
 }
@@ -209,24 +209,24 @@ func TestDMOpenSemantics(t *testing.T) {
 		t.Fatalf("setPolicy: %v", err)
 	}
 	// Open is not unconditional: no entries ⇒ block, and never a pairing mint.
-	v, err := dmGate(ctx, st, "acme", "telegram", "55", true)
+	v, err := dmGate(ctx, st, "acme", "telegram", "55", "", true)
 	if err != nil || v.Allow || v.Pair || v.Reason != dmNotAllowlisted {
 		t.Fatalf("open+empty = %+v err=%v, want block", v, err)
 	}
 	if err := putAllow(ctx, st, "acme", "telegram", "dm", []string{"*"}, t0+1); err != nil {
 		t.Fatalf("putAllow: %v", err)
 	}
-	if v, err := dmGate(ctx, st, "acme", "telegram", "55", true); err != nil || !v.Allow || v.Reason != dmOpenWildcard {
+	if v, err := dmGate(ctx, st, "acme", "telegram", "55", "", true); err != nil || !v.Allow || v.Reason != dmOpenWildcard {
 		t.Fatalf("open+wildcard = %+v err=%v", v, err)
 	}
 	// Explicit config match, and only that match.
 	if err := putAllow(ctx, st, "acme", "telegram", "dm", []string{"55"}, t0+2); err != nil {
 		t.Fatalf("putAllow: %v", err)
 	}
-	if v, err := dmGate(ctx, st, "acme", "telegram", "55", true); err != nil || !v.Allow || v.Reason != dmAllowlisted {
+	if v, err := dmGate(ctx, st, "acme", "telegram", "55", "", true); err != nil || !v.Allow || v.Reason != dmAllowlisted {
 		t.Fatalf("open+explicit = %+v err=%v", v, err)
 	}
-	if v, err := dmGate(ctx, st, "acme", "telegram", "56", true); err != nil || v.Allow {
+	if v, err := dmGate(ctx, st, "acme", "telegram", "56", "", true); err != nil || v.Allow {
 		t.Fatalf("open must not admit an unlisted sender: %+v err=%v", v, err)
 	}
 }
@@ -308,10 +308,10 @@ func TestAccessGroups(t *testing.T) {
 	if err := putAllow(ctx, st, "acme", "telegram", "dm", []string{"accessGroup:eng"}, t0); err != nil {
 		t.Fatalf("putAllow: %v", err)
 	}
-	if v, err := dmGate(ctx, st, "acme", "telegram", "7", true); err != nil || !v.Allow || v.Reason != dmAllowlisted {
+	if v, err := dmGate(ctx, st, "acme", "telegram", "7", "", true); err != nil || !v.Allow || v.Reason != dmAllowlisted {
 		t.Fatalf("group member = %+v err=%v", v, err)
 	}
-	if v, err := dmGate(ctx, st, "acme", "telegram", "8", true); err != nil || v.Allow {
+	if v, err := dmGate(ctx, st, "acme", "telegram", "8", "", true); err != nil || v.Allow {
 		t.Fatalf("non-member = %+v err=%v, want block", v, err)
 	}
 	// A '*'-channel group row matches from any channel.
@@ -321,14 +321,14 @@ func TestAccessGroups(t *testing.T) {
 	if err := putAllow(ctx, st, "acme", "slack", "dm", []string{"accessGroup:ops"}, t0); err != nil {
 		t.Fatalf("putAllow: %v", err)
 	}
-	if v, err := dmGate(ctx, st, "acme", "slack", "9", true); err != nil || !v.Allow {
+	if v, err := dmGate(ctx, st, "acme", "slack", "9", "", true); err != nil || !v.Allow {
 		t.Fatalf("shared-group member = %+v err=%v", v, err)
 	}
 	// An unknown group name grants nobody.
 	if err := putAllow(ctx, st, "acme", "slack", "dm", []string{"accessGroup:ghost"}, t0); err != nil {
 		t.Fatalf("putAllow: %v", err)
 	}
-	if v, err := dmGate(ctx, st, "acme", "slack", "9", true); err != nil || v.Allow {
+	if v, err := dmGate(ctx, st, "acme", "slack", "9", "", true); err != nil || v.Allow {
 		t.Fatalf("ghost group = %+v err=%v, want block", v, err)
 	}
 }
@@ -381,10 +381,10 @@ func TestOrgIsolationStore(t *testing.T) {
 	if err := putAllow(ctx, st, "org-a", "telegram", "dm", []string{"*"}, t0); err != nil {
 		t.Fatalf("putAllow: %v", err)
 	}
-	if v, err := dmGate(ctx, st, "org-a", "telegram", "42", true); err != nil || !v.Allow {
+	if v, err := dmGate(ctx, st, "org-a", "telegram", "42", "", true); err != nil || !v.Allow {
 		t.Fatalf("org-a gate = %+v err=%v", v, err)
 	}
-	if v, err := dmGate(ctx, st, "org-b", "telegram", "42", true); err != nil || v.Allow || !v.Pair {
+	if v, err := dmGate(ctx, st, "org-b", "telegram", "42", "", true); err != nil || v.Allow || !v.Pair {
 		t.Fatalf("org-b gate = %+v err=%v, want the pairing default", v, err)
 	}
 	// Pairing rows are org-scoped: invisible and unapprovable across orgs.
