@@ -42,7 +42,6 @@ import (
 	commerceresources "github.com/hanzoai/commerce/api/resources"
 	commercestore "github.com/hanzoai/commerce/api/store"
 	"github.com/hanzoai/commerce/billing/paywall"
-	"github.com/hanzoai/commerce/checkout"
 	commercedatastore "github.com/hanzoai/commerce/datastore"
 	commercemid "github.com/hanzoai/commerce/middleware"
 	"github.com/hanzoai/commerce/middleware/iammiddleware"
@@ -290,27 +289,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// fails below. Typed, so the probe is a published op like every other.
 	zip.Get(zapp, "/_/commerce/healthz", health)
 
-	// GET /v1/commerce/org — the public org projection the pay SPA reads on
-	// every boot to learn WHOSE checkout this is: brand, IAM issuer + client id,
-	// enabled payment methods, return allowlist, public Square config.
+	// /v1/commerce/org is NOT registered here, and that is the whole point of the
+	// mount: commerce serves its own public checkout surface, and this binary
+	// mounts it. Cloud registered a second copy of the address once, which zip
+	// refuses to build — two declarations of one route is not a route with a
+	// fallback, it is a program that cannot say what it serves.
 	//
-	// Registered OUTSIDE the /v1/commerce group on purpose. That group carries
-	// IAMTokenRequired and this endpoint cannot: the SPA reads it to learn HOW to
-	// authenticate. Gating it is a deadlock, not a hardening.
-	//
-	// It was never mounted in this binary at all. commerce serves the public
-	// checkout surface from its standalone router; cloud mounted only the
-	// merchant resource table beneath the same prefix, so the one public route
-	// existed nowhere and every pay host 404'd — on the retired name
-	// (/v1/commerce/tenant) as well. The SPA then fell through to a baked-in
-	// default identity that wore the Hanzo brand, so one missing route showed up
-	// as every brand being wrong.
-	//
-	// The resolver takes a nil loader deliberately, the documented default for
-	// this path: pure host → brand → env, no I/O. A per-request DB read on a
-	// public, unauthenticated boot endpoint under an unbounded context exhausted
-	// the connection pool once already (commerce 1.42.44).
-	zapp.Get("/v1/commerce/org", checkout.OrgJSON(checkout.NewOrgResolver(nil)))
+	// The address itself is braided and comes apart upstream: it answers WHO THIS
+	// ORG IS (brand, IAM issuer, client id) and HOW CHECKOUT WORKS HERE (payment
+	// methods, return allowlist, public Square config) in one body. The first half
+	// is IAM's — hanzoai/iam is the one org authority — and commerce should ask it
+	// rather than keep a second answer. What stays commerce's is the checkout
+	// half, which nothing else knows.
 
 	// commerce persists its per-org SQLite + `base` tree under <DataDir>/commerce,
 	// NEVER at DataDir directly: cloud already owns DataDir/orgs and DataDir/base,
