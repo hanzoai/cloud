@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/o11y/pkg/datastoremetrics"
 	"github.com/hanzoai/o11y/pkg/telemetrystore"
@@ -19,6 +20,10 @@ import (
 // metricsIngest holds the native metrics receiver for the process life: write-only
 // (a deliberate keepalive; nothing reads it), mirroring embeddedRuntime.
 var metricsIngest *zapmetricreceiver.Receiver
+
+// metricsBuffer coalesces batches for metricsIngest; held for the process life
+// alongside it so a shutdown can flush what is still pending.
+var metricsBuffer *metricBuffer
 
 // startNativeMetricsIngest starts o11y-native datastore metrics ingest in-process:
 // a ZAP metric receiver that decodes MsgMetricBatch and writes each batch to the
@@ -55,10 +60,15 @@ func startNativeMetricsIngest(store telemetrystore.TelemetryStore, log luxlog.Lo
 	}
 
 	writer := datastoremetrics.NewWriter(conn)
+	// Batches are coalesced before they reach the datastore — see
+	// metricsbuffer.go for the arithmetic. 5s bounds staleness against a store
+	// whose finest rollup is five minutes wide; 2048 bounds memory if the
+	// datastore stops accepting writes.
+	metricsBuffer = newMetricBuffer(writer.WriteMetricsMany, 5*time.Second, 2048, slog.Default())
 	rcv, err := zapmetricreceiver.New(zapmetricreceiver.Config{
 		Listen:  listen,
 		NodeID:  "cloud-o11y-metrics",
-		OnBatch: writer.WriteMetrics,
+		OnBatch: metricsBuffer.add,
 		Logger:  slog.Default(),
 	})
 	if err != nil {
