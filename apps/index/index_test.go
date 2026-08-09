@@ -3,6 +3,7 @@ package index
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -46,15 +47,6 @@ func titles(t *testing.T, hits []json.RawMessage) []string {
 		out = append(out, stringify(d["title"]))
 	}
 	return out
-}
-
-func has(ss []string, want string) bool {
-	for _, s := range ss {
-		if s == want {
-			return true
-		}
-	}
-	return false
 }
 
 // TestTenantIsolation is the security-critical property: two orgs may hold an
@@ -444,7 +436,7 @@ func TestPrefixRangeStopsAtThePrefix(t *testing.T) {
 		t.Fatalf("index: %v", err)
 	}
 	got := titles(t, hits)
-	if len(got) != 2 || !has(got, "cat") || !has(got, "catalog") {
+	if len(got) != 2 || !slices.Contains(got, "cat") || !slices.Contains(got, "catalog") {
 		t.Errorf("prefix %q matched %v, want exactly [cat catalog]", "cat", got)
 	}
 }
@@ -634,7 +626,7 @@ func TestSearchPaging(t *testing.T) {
 		t.Errorf("paging saw %d of 5 documents", len(seen))
 	}
 	for _, id := range []string{"1", "2", "3", "4", "5"} {
-		if !has(keys(seen), "page item "+id) {
+		if !slices.Contains(keys(seen), "page item "+id) {
 			t.Errorf("paging dropped document %q", id)
 		}
 	}

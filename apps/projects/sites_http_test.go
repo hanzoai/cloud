@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -219,7 +220,7 @@ func TestBuildSite_MetersOnce(t *testing.T) {
 	if resp.Slug != "shop" || resp.Status != "live" || resp.DeploymentID == "" {
 		t.Fatalf("bad response: %+v", resp)
 	}
-	if !contains(resp.Files, "index.html") {
+	if !slices.Contains(resp.Files, "index.html") {
 		t.Fatalf("response files must include index.html: %v", resp.Files)
 	}
 	if ai.calls != 1 {
@@ -456,15 +457,6 @@ func mustJSON(t *testing.T, b []byte, v any) {
 	if err := json.Unmarshal(b, v); err != nil {
 		t.Fatalf("unmarshal %s: %v", b, err)
 	}
-}
-
-func contains(ss []string, want string) bool {
-	for _, s := range ss {
-		if s == want {
-			return true
-		}
-	}
-	return false
 }
 
 func bytesContains(hay, needle string) bool { return bytes.Contains([]byte(hay), []byte(needle)) }

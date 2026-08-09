@@ -32,6 +32,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/zap-proto/zip"
@@ -45,12 +46,7 @@ import (
 var billingSubjectKeys = []string{"user", "userId", "customerId"}
 
 func isSubjectKey(k string) bool {
-	for _, s := range billingSubjectKeys {
-		if s == k {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(billingSubjectKeys, k)
 }
 
 // scopedBillingSearch — pin every billingSubjectKey to subject (OVERWRITING any client
