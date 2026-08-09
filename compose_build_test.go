@@ -30,6 +30,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/auditlog"
 	"github.com/hanzoai/cloud/apps/catalog"
+	"github.com/hanzoai/cloud/apps/commerce"
 	"github.com/hanzoai/cloud/apps/zen"
 	"github.com/hanzoai/cloud/manifest"
 	luxlog "github.com/luxfi/log"
@@ -41,14 +42,34 @@ import (
 // whose middleware this subsystem may install — which is a different fact from
 // manifest.App.Prefixes, the paths the host ROUTES to it. zen is the case that
 // proves they are different: it routes nothing and gates "/v1".
+//
+// scoped says this subsystem is mounted through MountAll in the binary. commerce
+// is the one that is not: it ships as a LAZY PLUGIN with its own program
+// (plugin/commerce/main.go), so the bare-app path below is the one that matches
+// how it actually runs, and it is the path that caught the duplicate route.
+// Through MountAll it additionally fails on a grant — "commerce installed
+// middleware at /v1, outside the prefixes it owns" — which is a real finding
+// about `commerce.Prefixes` and NOT what took production down; asserting it here
+// would pin a shape commerce does not deploy in. Left as its own piece of work.
 var composed = []struct {
 	name     string
 	mount    cloud.MountFunc
 	prefixes []string
+	scoped   bool
 }{
-	{"audit", auditlog.Mount, nil},
-	{"catalog", catalog.Mount, nil},
-	{"zen", zen.Mount, []string{"/v1"}},
+	{"audit", auditlog.Mount, nil, true},
+	{"catalog", catalog.Mount, nil, true},
+	{"zen", zen.Mount, []string{"/v1"}, true},
+	// commerce was NOT here, and that is the whole reason a duplicate route
+	// reached production. It declared GET /v1/commerce/org itself while the
+	// embedded commerce module declares /org under the same prefix, and zip
+	// refuses to compose two declarations of one address. Because this plugin
+	// is LAZY, the panic did not land at boot: the binary served every other
+	// route while /v1/commerce/* was dead, so every balance read answered 502
+	// and a funded account rendered $0.00 with nothing anywhere saying why.
+	// A subsystem that is not in this list is a subsystem whose program only
+	// production checks.
+	{"commerce", commerce.Mount, commerce.Prefixes, false},
 }
 
 // TestSubsystemComposesThroughMountAll is the PRODUCTION path: MountAll hands
@@ -58,6 +79,9 @@ var composed = []struct {
 // table instead of its own spec.
 func TestSubsystemComposesThroughMountAll(t *testing.T) {
 	for _, c := range composed {
+		if !c.scoped {
+			continue
+		}
 		t.Run(c.name, func(t *testing.T) {
 			app := newApp()
 			err := cloud.MountAll(app,

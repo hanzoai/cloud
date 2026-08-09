@@ -42,7 +42,6 @@ import (
 	commerceresources "github.com/hanzoai/commerce/api/resources"
 	commercestore "github.com/hanzoai/commerce/api/store"
 	"github.com/hanzoai/commerce/billing/paywall"
-	"github.com/hanzoai/commerce/checkout"
 	commercedatastore "github.com/hanzoai/commerce/datastore"
 	commercemid "github.com/hanzoai/commerce/middleware"
 	"github.com/hanzoai/commerce/middleware/iammiddleware"
@@ -290,27 +289,31 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// fails below. Typed, so the probe is a published op like every other.
 	zip.Get(zapp, "/_/commerce/healthz", health)
 
-	// GET /v1/commerce/org — the public org projection the pay SPA reads on
-	// every boot to learn WHOSE checkout this is: brand, IAM issuer + client id,
-	// enabled payment methods, return allowlist, public Square config.
+	// GET /v1/commerce/org — the public org projection the pay SPA reads on every
+	// boot — is COMMERCE'S, and is deliberately not re-declared here.
 	//
-	// Registered OUTSIDE the /v1/commerce group on purpose. That group carries
-	// IAMTokenRequired and this endpoint cannot: the SPA reads it to learn HOW to
-	// authenticate. Gating it is a deadlock, not a hardening.
+	// It used to be declared here, because commerce served that route only from
+	// its standalone router and the embed mounted the merchant table alone, so
+	// the one public route existed nowhere. That is no longer true: commerce
+	// registers it on the host's app (`public.Get("/org")`, commerce.go), and two
+	// declarations of one path is the one thing zip will not compose. It refuses
+	// the whole projection and panics — and because this plugin is LAZY, the
+	// panic lands on the first request rather than at boot, so the binary looks
+	// healthy while `/v1/commerce/*` is dead and every balance read answers 502.
+	// A funded account then reads $0.00, because the callers' documented
+	// fall-through lands on a ledger production does not fund.
 	//
-	// It was never mounted in this binary at all. commerce serves the public
-	// checkout surface from its standalone router; cloud mounted only the
-	// merchant resource table beneath the same prefix, so the one public route
-	// existed nowhere and every pay host 404'd — on the retired name
-	// (/v1/commerce/tenant) as well. The SPA then fell through to a baked-in
-	// default identity that wore the Hanzo brand, so one missing route showed up
-	// as every brand being wrong.
+	// Commerce's is also the better of the two. Both concerns this copy existed
+	// to serve are handled there: it is on a group carrying only
+	// `forwardedHostMiddleware` — public, no `IAMTokenRequired`, so no deadlock —
+	// and its loader is cached 60s with a 2s deadline that fails to a MISS, which
+	// is the fix for the pool exhaustion at commerce 1.42.44 that motivated the
+	// `NewOrgResolver(nil)` here. That nil loader ALWAYS misses, so this copy
+	// could only ever answer with the synthetic default, never a real org; and it
+	// read the ingress-rewritten host, which `forwardedHostMiddleware` corrects.
 	//
-	// The resolver takes a nil loader deliberately, the documented default for
-	// this path: pure host → brand → env, no I/O. A per-request DB read on a
-	// public, unauthenticated boot endpoint under an unbounded context exhausted
-	// the connection pool once already (commerce 1.42.44).
-	zapp.Get("/v1/commerce/org", checkout.OrgJSON(checkout.NewOrgResolver(nil)))
+	// If it ever needs to come back, it comes back as one declaration — inject
+	// the resolver into the embed, do not add a second route.
 
 	// commerce persists its per-org SQLite + `base` tree under <DataDir>/commerce,
 	// NEVER at DataDir directly: cloud already owns DataDir/orgs and DataDir/base,
