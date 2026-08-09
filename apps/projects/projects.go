@@ -61,6 +61,7 @@ import (
 	"github.com/hanzoai/cloud/apps/base"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
@@ -264,8 +265,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		cf:          sites.NewPurger(b.Log),
 		ai:          deps.AI, // may be nil (no gateway) — buildSite degrades to 503.
 		bill:        cloud.NewResourceMeter(deps, hostingProvider),
-		apex:        env("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
-		ensureSpace: base.EnsureSpace,                     // wired-by-default Base data space (fail-soft).
+		apex:        environ.Or("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
+		ensureSpace: base.EnsureSpace,                            // wired-by-default Base data space (fail-soft).
 	}}
 	mounted = s
 

@@ -51,6 +51,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/environ"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -106,8 +107,8 @@ func newKMSSyncConfig() kmsSyncConfig {
 		// :8000 is cloud's app listener (HIP-0113 §1 — the http port the Service
 		// exposes; every in-cluster caller reaches cloud at cloud.hanzo.svc:8000,
 		// NOT :80). The operator appends /v1/kms/auth/login and /v1/kms/orgs/… .
-		hostAPI:     getenv("CLOUD_PLATFORM_KMS_HOST_API", "http://cloud.hanzo.svc.cluster.local:8000"),
-		credsSecret: getenv("CLOUD_PLATFORM_KMS_CREDS_SECRET", "platform-kms-auth"),
+		hostAPI:     environ.Or("CLOUD_PLATFORM_KMS_HOST_API", "http://cloud.hanzo.svc.cluster.local:8000"),
+		credsSecret: environ.Or("CLOUD_PLATFORM_KMS_CREDS_SECRET", "platform-kms-auth"),
 	}
 }
 

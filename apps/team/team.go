@@ -287,15 +287,6 @@ func teamAgentsMaxConcurrency() int {
 	return n
 }
 
-// env returns the value of key, or fallback when unset. The ONE env helper for the
-// package (used by the docs store).
-func env(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
 // resolveSecret decides the HS256 signing posture from the RAW SERVER_SECRET env.
 // It returns degraded=true (fail-closed, health-only) when the secret is unset or
 // the upstream public "secret" literal — so no path EVER signs/verifies a team

@@ -67,6 +67,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
@@ -106,10 +107,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	edgeEnabled := boolEnv("CLOUD_INGRESS_EDGE_ENABLED")
 	ecfg := edgeConfig{
-		httpAddr:  getenv("CLOUD_INGRESS_HTTP_ADDR", ":80"),
-		httpsAddr: getenv("CLOUD_INGRESS_HTTPS_ADDR", ":443"),
+		httpAddr:  environ.Or("CLOUD_INGRESS_HTTP_ADDR", ":80"),
+		httpsAddr: environ.Or("CLOUD_INGRESS_HTTPS_ADDR", ":443"),
 		cacheDir:  filepath.Join(deps.DataDir, "ingress", "acme"),
-		email:     getenv("CLOUD_INGRESS_ACME_EMAIL", ""),
+		email:     environ.Or("CLOUD_INGRESS_ACME_EMAIL", ""),
 		staging:   boolEnv("CLOUD_INGRESS_ACME_STAGING"),
 	}
 	role := "app"
@@ -758,13 +759,6 @@ func genID() string {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
-}
-
-func getenv(key, dflt string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return dflt
 }
 
 func boolEnv(key string) bool {

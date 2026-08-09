@@ -8,6 +8,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	kms "github.com/hanzoai/cloud/apps/mpc"
+	"github.com/hanzoai/cloud/internal/environ"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -51,7 +52,7 @@ func openSecrets(brand string, log luxlog.Logger) *secrets {
 		}
 	}
 
-	org := env("CLOUD_KMS_ORG", brand)
+	org := environ.Or("CLOUD_KMS_ORG", brand)
 	if org == "" {
 		org = "hanzo"
 	}
