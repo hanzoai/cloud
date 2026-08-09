@@ -3736,6 +3736,78 @@
         },
         "type": "object"
       },
+      "Machine": {
+        "properties": {
+          "blockedReason": {
+            "type": "string"
+          },
+          "cluster": {
+            "type": "string"
+          },
+          "clusterId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "localDiskGiB": {
+            "type": "integer"
+          },
+          "memoryMiB": {
+            "type": "integer"
+          },
+          "monthlyCents": {
+            "type": "integer"
+          },
+          "mutable": {
+            "description": "Mutable reports whether this droplet may be changed DIRECTLY — deleted or resized.\nOne predicate covers both because one fact decides both: a DOKS node belongs to a\nnode pool, and the pool is the only thing allowed to change it.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pods": {
+            "type": "integer"
+          },
+          "privateIp": {
+            "type": "string"
+          },
+          "publicIp": {
+            "type": "string"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "region": {
+            "type": "string"
+          },
+          "schedulable": {
+            "type": "boolean"
+          },
+          "sizeSlug": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "vcpus": {
+            "type": "integer"
+          },
+          "volumes": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "MetricsData": {
         "properties": {
           "asOf": {
@@ -3821,78 +3893,6 @@
           },
           "status": {
             "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "Node": {
-        "properties": {
-          "blockedReason": {
-            "type": "string"
-          },
-          "cluster": {
-            "type": "string"
-          },
-          "clusterId": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "id": {
-            "type": "integer"
-          },
-          "localDiskGiB": {
-            "type": "integer"
-          },
-          "memoryMiB": {
-            "type": "integer"
-          },
-          "monthlyCents": {
-            "type": "integer"
-          },
-          "mutable": {
-            "description": "Mutable reports whether this droplet may be changed DIRECTLY — deleted or resized.\nOne predicate covers both because one fact decides both: a DOKS node belongs to a\nnode pool, and the pool is the only thing allowed to change it.",
-            "type": "boolean"
-          },
-          "name": {
-            "type": "string"
-          },
-          "pods": {
-            "type": "integer"
-          },
-          "privateIp": {
-            "type": "string"
-          },
-          "publicIp": {
-            "type": "string"
-          },
-          "ready": {
-            "type": "boolean"
-          },
-          "region": {
-            "type": "string"
-          },
-          "schedulable": {
-            "type": "boolean"
-          },
-          "sizeSlug": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "vcpus": {
-            "type": "integer"
-          },
-          "volumes": {
-            "type": "integer"
           }
         },
         "type": "object"
@@ -4372,7 +4372,7 @@
           },
           "nodes": {
             "items": {
-              "$ref": "#/components/schemas/Node"
+              "$ref": "#/components/schemas/Machine"
             },
             "type": "array"
           },
