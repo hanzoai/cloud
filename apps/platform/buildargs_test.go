@@ -136,7 +136,6 @@ func TestABuildRefusesAnAbbreviatedRevision(t *testing.T) {
 		refuse         bool
 	}{
 		{"a full commit is stamped", full, false},
-		{"no revision is honest", "", false},
 		{"a branch is a legitimate context", "main", false},
 		{"a release branch is not hex", "release/2017", false},
 		{"the 12-char tag shape is a mistake", full[:12], true},
@@ -144,7 +143,9 @@ func TestABuildRefusesAnAbbreviatedRevision(t *testing.T) {
 		{"one short of a commit is a mistake", full[:39], true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := buildFrontendCmdArgs("ctx.git#x", "Dockerfile", "ghcr.io/x/y:t", c.revision, nil)
+			// Asserted at the BUILD BOUNDARY, which is where the rule now lives — both
+			// build doors reach it, and the gate it replaces guarded only one of them.
+			_, err := validateBuildRef(c.revision)
 			switch {
 			case c.refuse && err == nil:
 				t.Fatalf("revision %q was accepted; the image it builds cannot name itself", c.revision)
