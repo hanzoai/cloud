@@ -1,6 +1,7 @@
 package team
 
 import (
+	"cmp"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -68,10 +69,10 @@ func TestLocalPartAndFirstNonEmpty(t *testing.T) {
 	if got := localPart("noatsign"); got != "noatsign" {
 		t.Errorf("localPart = %q", got)
 	}
-	if got := firstNonEmpty("", "", "third", "fourth"); got != "third" {
+	if got := cmp.Or("", "", "third", "fourth"); got != "third" {
 		t.Errorf("firstNonEmpty = %q", got)
 	}
-	if got := firstNonEmpty("", ""); got != "" {
+	if got := cmp.Or("", ""); got != "" {
 		t.Errorf("firstNonEmpty empty = %q", got)
 	}
 }

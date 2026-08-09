@@ -54,6 +54,7 @@
 package o11y
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"strings"
@@ -185,11 +186,11 @@ func spanRow(org string, s analytics.SpanEvent) ([]any, bool) {
 	// the wire carried no idempotency key. Without that fallback every unnamed span in
 	// an org would share the identity "" and the ReplacingMergeTree would collapse them
 	// all into one row.
-	spanID := firstNonEmpty(s.SpanID, s.MessageID)
+	spanID := cmp.Or(s.SpanID, s.MessageID)
 	// A span that names no trace is its OWN single-span trace, not a member of the
 	// anonymous "" trace: the traces view groups by trace_id, so sharing the empty
 	// string would fold every orphan LLM call in the org into one bogus trace.
-	traceID := firstNonEmpty(s.TraceID, spanID)
+	traceID := cmp.Or(s.TraceID, spanID)
 	return []any{
 		org,
 		s.Time.UTC(),
@@ -199,7 +200,7 @@ func spanRow(org string, s analytics.SpanEvent) ([]any, bool) {
 		// The emitting workload, then the surface — the SAME precedence the error lens
 		// resolves service_name with, so one span and one error from one caller name
 		// their origin identically.
-		firstNonEmpty(s.Service, s.Product),
+		cmp.Or(s.Service, s.Product),
 		traceID,
 		spanID,
 		s.Parent,

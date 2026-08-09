@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -1016,7 +1017,7 @@ func durableCipher(cfg *Config, log luxlog.Logger) *org.Cipher {
 // the id an operator reads in a status IS the id the ring routes by. Two resolutions
 // that drifted would name the same pod two different things at the worst moment.
 func selfID(cfg *Config) string {
-	return firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr("cloud-0"))
+	return cmp.Or(strings.TrimSpace(cfg.ShardSelf), hostnameOr("cloud-0"))
 }
 
 // hostnameOr returns the OS hostname, or def when unavailable — a stable self id for

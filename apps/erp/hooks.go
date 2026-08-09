@@ -1,6 +1,7 @@
 package erp
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math"
@@ -225,8 +226,8 @@ func stockEntryCancel(ctx context.Context, ev *framework.Event) error {
 // accounts can still post a balanced entry.
 func invoiceLegs(ev *framework.Event) (string, []glLeg) {
 	total := toFloat(ev.Doc.Data["grand_total"])
-	debitTo := firstNonEmpty(toStr(ev.Doc.Data["debit_to"]), "Debtors")
-	income := firstNonEmpty(toStr(ev.Doc.Data["income_account"]), "Sales")
+	debitTo := cmp.Or(toStr(ev.Doc.Data["debit_to"]), "Debtors")
+	income := cmp.Or(toStr(ev.Doc.Data["income_account"]), "Sales")
 	remark := "Sales Invoice " + ev.Doc.Name
 	return toStr(ev.Doc.Data["posting_date"]), []glLeg{
 		{account: debitTo, debit: total, remarks: remark},
@@ -434,16 +435,6 @@ func toFloat(v any) float64 {
 func toStr(v any) string {
 	s, _ := v.(string)
 	return s
-}
-
-// firstNonEmpty returns the first non-empty string, else "".
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // floatEq compares currency amounts within half a cent (avoids float drift on sums).

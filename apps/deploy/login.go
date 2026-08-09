@@ -46,6 +46,7 @@
 package deploy
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -126,13 +127,13 @@ type oauth struct {
 // (deps.IAMIssuer), and the verifier is built from that issuer, so a token this
 // flow accepts is by construction a token cloud accepts.
 func newOAuth(deps cloud.Deps) oauth {
-	issuer := strings.TrimRight(firstNonEmpty(deps.IAMIssuer, os.Getenv("IAM_ENDPOINT"), "https://hanzo.id"), "/")
+	issuer := strings.TrimRight(cmp.Or(deps.IAMIssuer, os.Getenv("IAM_ENDPOINT"), "https://hanzo.id"), "/")
 	return oauth{
 		issuer:       issuer,
-		clientID:     firstNonEmpty(os.Getenv("DEPLOY_IAM_CLIENT_ID"), defaultClientID),
+		clientID:     cmp.Or(os.Getenv("DEPLOY_IAM_CLIENT_ID"), defaultClientID),
 		clientSecret: os.Getenv("DEPLOY_IAM_CLIENT_SECRET"),
-		adminOrg:     firstNonEmpty(os.Getenv("IAM_ADMIN_ORG"), "admin"),
-		publicURL:    strings.TrimRight(firstNonEmpty(os.Getenv("DEPLOY_PUBLIC_URL"), os.Getenv("PUBLIC_ORIGIN")), "/"),
+		adminOrg:     cmp.Or(os.Getenv("IAM_ADMIN_ORG"), "admin"),
+		publicURL:    strings.TrimRight(cmp.Or(os.Getenv("DEPLOY_PUBLIC_URL"), os.Getenv("PUBLIC_ORIGIN")), "/"),
 		http:         &http.Client{Timeout: 15 * time.Second},
 		verify:       cloud.NewTokenValidator(issuer).Validate,
 	}
@@ -473,12 +474,3 @@ func setCookie(c *zip.Ctx, name, value string, maxAge int) {
 }
 
 func clearCookie(c *zip.Ctx, name string) { setCookie(c, name, "", -1) }
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
