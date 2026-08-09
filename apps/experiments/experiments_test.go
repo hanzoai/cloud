@@ -28,6 +28,10 @@ func mountStack(t *testing.T) *zip.App {
 	t.Helper()
 	dir := t.TempDir()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// cloud.Bridge parks the validated org, the project and the request a typed op
+	// reads off its context. The composer installs it once at the root in
+	// production (serve.go); this stack composes the same way.
+	app.Use(cloud.Bridge())
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: dir}
 	if err := flags.Mount(app, deps); err != nil {
 		t.Fatalf("flags mount: %v", err)
@@ -51,10 +55,10 @@ func mountStack(t *testing.T) *zip.App {
 func requireEngine(t *testing.T) {
 	t.Helper()
 	def := json.RawMessage(`{"key":"p","active":true,"filters":{"groups":[{"properties":[],"rollout_percentage":100}],"multivariate":{"variants":[{"key":"a","rollout_percentage":100}]}}}`)
-	if err := flags.PutDef("probe", "", "p", def, "t"); err != nil {
-		t.Fatalf("probe putdef: %v", err)
+	if err := flags.PutDef("health", "", "p", def, "t"); err != nil {
+		t.Fatalf("health putdef: %v", err)
 	}
-	a, err := flags.Assign("probe", "", "p", "s1", nil)
+	a, err := flags.Assign("health", "", "p", "s1", nil)
 	if err != nil {
 		t.Skipf("native flags engine unavailable: %v", err)
 	}
@@ -331,13 +335,13 @@ func subjNum(t *testing.T, subj string) int {
 	return n
 }
 
-func resultFor(t *testing.T, a Analysis, variant string) Result {
+func resultFor(t *testing.T, a Analysis, variant string) Outcome {
 	t.Helper()
-	for _, r := range a.Results {
-		if r.Variant == variant {
+	for _, r := range a.Outcomes {
+		if r.Arm == variant {
 			return r
 		}
 	}
-	t.Fatalf("no result for variant %q in %+v", variant, a.Results)
-	return Result{}
+	t.Fatalf("no result for variant %q in %+v", variant, a.Outcomes)
+	return Outcome{}
 }

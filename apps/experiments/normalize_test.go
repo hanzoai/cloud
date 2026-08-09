@@ -5,13 +5,13 @@ import (
 	"testing"
 )
 
-func twoVariants() []Variant {
-	return []Variant{{Key: "control", Control: true, Weight: 50}, {Key: "treatment", Weight: 50}}
+func twoVariants() []Arm {
+	return []Arm{{Key: "control", Control: true, Weight: 50}, {Key: "treatment", Weight: 50}}
 }
 
 func TestNormalize_HappyPath(t *testing.T) {
 	e, err := normalize(createBody{
-		ID: "checkout", Name: "Checkout CTA", MetricEvent: "order_completed", Variants: twoVariants(),
+		ID: "checkout", Name: "Checkout CTA", MetricEvent: "order_completed", Arms: twoVariants(),
 	}, "web", "z@hanzo.ai")
 	if err != nil {
 		t.Fatalf("normalize: %v", err)
@@ -35,16 +35,16 @@ func TestNormalize_Rejects(t *testing.T) {
 		name string
 		body createBody
 	}{
-		{"empty id", createBody{ID: "", MetricEvent: "m", Variants: twoVariants()}},
-		{"path id", createBody{ID: "../etc", MetricEvent: "m", Variants: twoVariants()}},
-		{"no metric", createBody{ID: "x", MetricEvent: "", Variants: twoVariants()}},
-		{"one variant", createBody{ID: "x", MetricEvent: "m", Variants: []Variant{{Key: "a", Weight: 100}}}},
-		{"bad subjectKind", createBody{ID: "x", MetricEvent: "m", SubjectKind: "planet", Variants: twoVariants()}},
-		{"dup variant", createBody{ID: "x", MetricEvent: "m", Variants: []Variant{{Key: "a", Weight: 50}, {Key: "a", Weight: 50}}}},
-		{"two controls", createBody{ID: "x", MetricEvent: "m", Variants: []Variant{{Key: "a", Control: true, Weight: 50}, {Key: "b", Control: true, Weight: 50}}}},
-		{"weights not 100", createBody{ID: "x", MetricEvent: "m", Variants: []Variant{{Key: "a", Weight: 30}, {Key: "b", Weight: 40}}}},
-		{"bad variant slug", createBody{ID: "x", MetricEvent: "m", Variants: []Variant{{Key: "a/b", Weight: 50}, {Key: "c", Weight: 50}}}},
-		{"bad flagKey", createBody{ID: "x", MetricEvent: "m", FlagKey: "../f", Variants: twoVariants()}},
+		{"empty id", createBody{ID: "", MetricEvent: "m", Arms: twoVariants()}},
+		{"path id", createBody{ID: "../etc", MetricEvent: "m", Arms: twoVariants()}},
+		{"no metric", createBody{ID: "x", MetricEvent: "", Arms: twoVariants()}},
+		{"one variant", createBody{ID: "x", MetricEvent: "m", Arms: []Arm{{Key: "a", Weight: 100}}}},
+		{"bad subjectKind", createBody{ID: "x", MetricEvent: "m", SubjectKind: "planet", Arms: twoVariants()}},
+		{"dup variant", createBody{ID: "x", MetricEvent: "m", Arms: []Arm{{Key: "a", Weight: 50}, {Key: "a", Weight: 50}}}},
+		{"two controls", createBody{ID: "x", MetricEvent: "m", Arms: []Arm{{Key: "a", Control: true, Weight: 50}, {Key: "b", Control: true, Weight: 50}}}},
+		{"weights not 100", createBody{ID: "x", MetricEvent: "m", Arms: []Arm{{Key: "a", Weight: 30}, {Key: "b", Weight: 40}}}},
+		{"bad variant slug", createBody{ID: "x", MetricEvent: "m", Arms: []Arm{{Key: "a/b", Weight: 50}, {Key: "c", Weight: 50}}}},
+		{"bad flagKey", createBody{ID: "x", MetricEvent: "m", FlagKey: "../f", Arms: twoVariants()}},
 	}
 	for _, c := range bad {
 		if _, err := normalize(c.body, "web", "u"); err == nil {
@@ -56,7 +56,7 @@ func TestNormalize_Rejects(t *testing.T) {
 // TestNormalizeVariants_EvenSplit: all-zero weights become an even split summing to
 // 100 (deterministic default), so a caller may omit weights.
 func TestNormalizeVariants_EvenSplit(t *testing.T) {
-	vs, err := normalizeVariants([]Variant{{Key: "a"}, {Key: "b"}, {Key: "c"}, {Key: "d"}})
+	vs, err := normalizeVariants([]Arm{{Key: "a"}, {Key: "b"}, {Key: "c"}, {Key: "d"}})
 	if err != nil {
 		t.Fatalf("even split: %v", err)
 	}
@@ -71,9 +71,9 @@ func TestNormalizeVariants_EvenSplit(t *testing.T) {
 // native evaluator consumes: active, a 100% group, weighted variants, per-variant
 // payloads — and that the variant KIND is opaque (an ad-creative id rides untouched).
 func TestFlagDef_PostHogShape(t *testing.T) {
-	e := Experiment{
+	e := Trial{
 		FlagKey: "exp_banner",
-		Variants: []Variant{
+		Arms: []Arm{
 			{Key: "control", Weight: 50, Payload: json.RawMessage(`{"creative":"cre_a"}`)},
 			{Key: "treatment", Weight: 50, Payload: json.RawMessage(`{"creative":"cre_b"}`)},
 		},
@@ -88,7 +88,7 @@ func TestFlagDef_PostHogShape(t *testing.T) {
 		Filters struct {
 			Groups       []map[string]any `json:"groups"`
 			Multivariate struct {
-				Variants []struct {
+				Arms []struct {
 					Key    string  `json:"key"`
 					Weight float64 `json:"rollout_percentage"`
 				} `json:"variants"`
@@ -105,7 +105,7 @@ func TestFlagDef_PostHogShape(t *testing.T) {
 	if len(def.Filters.Groups) != 1 || def.Filters.Groups[0]["rollout_percentage"].(float64) != 100 {
 		t.Fatalf("want one 100%% group: %s", raw)
 	}
-	if len(def.Filters.Multivariate.Variants) != 2 || def.Filters.Multivariate.Variants[0].Weight != 50 {
+	if len(def.Filters.Multivariate.Arms) != 2 || def.Filters.Multivariate.Arms[0].Weight != 50 {
 		t.Fatalf("variants wrong: %s", raw)
 	}
 	if string(def.Filters.Payloads["treatment"]) != `{"creative":"cre_b"}` {

@@ -43,11 +43,10 @@ func TestLeaderboardServesRealMeasuredVsPublished(t *testing.T) {
 
 func TestCompareIsPairedCommonSet(t *testing.T) {
 	cmp := computeCompare(loadFixture(t), "gpqa_diamond", "grok-4.5", "gpt-5.6-sol")
-	n := cmp["n_common"].(int)
-	if n < 190 {
-		t.Fatalf("grok vs gpt-5.6-sol common set too small: %d", n)
+	if cmp.NCommon < 190 {
+		t.Fatalf("grok vs gpt-5.6-sol common set too small: %d", cmp.NCommon)
 	}
-	t.Logf("grok-4.5 vs gpt-5.6-sol: n=%d net=%v mcnemar_p=%v", n, cmp["net_a_minus_b"], cmp["mcnemar_p"])
+	t.Logf("grok-4.5 vs gpt-5.6-sol: n=%d net=%v mcnemar_p=%v", cmp.NCommon, cmp.NetAMinusB, cmp.McnemarP)
 }
 
 func TestMcnemarExact(t *testing.T) {

@@ -102,7 +102,14 @@ func seedFn(t *testing.T, s *cloud.Service[state], org, name string) {
 func fireInvoke(t *testing.T, s *cloud.Service[state], org, name string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/functions/:name/invoke", cloud.Handle(s, invoke))
+	// cloud.Bridge parks the validated org and the request a typed op reads off
+	// its context; DenyEnvelope writes a refused balance gate in the fleet's own
+	// money envelope. The composer installs both in production, in this order.
+	app.Use(cloud.Bridge())
+	g := app.Group("/v1/functions")
+	g.Use(cloud.DenyEnvelope())
+	zip.Post(g, "/:name/invoke", ops{s: s}.invoke,
+		zip.WithStatus(http.StatusOK, http.StatusBadGateway, http.StatusServiceUnavailable))
 	req := httptest.NewRequest("POST", "/v1/functions/"+name+"/invoke", bytes.NewReader([]byte(`{"input":"x"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {

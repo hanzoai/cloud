@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -72,9 +72,9 @@ type MetricsFilter struct {
 // ── wire shapes ───────────────────────────────────────────────────────────────
 
 type BoardScope struct {
-	Org     string `json:"org"` // "" when AllOrgs
-	Project string `json:"project"`
-	AllOrgs bool   `json:"allOrgs"`
+	Org     string `json:"org"`     // the org the board covers; "" when it covers all of them
+	Project string `json:"project"` // the sub-scope within the org; "" is the whole org
+	AllOrgs bool   `json:"allOrgs"` // true when a platform admin is seeing every org at once
 }
 
 type BoardRange struct {
@@ -85,64 +85,64 @@ type BoardRange struct {
 }
 
 type BoardTotals struct {
-	Generations      int64   `json:"generations"`
-	PromptTokens     int64   `json:"promptTokens"`
-	CompletionTokens int64   `json:"completionTokens"`
-	TotalTokens      int64   `json:"totalTokens"`
-	CostCents        int64   `json:"costCents"`
-	Errors           int64   `json:"errors"`
-	SuccessRate      float64 `json:"successRate"` // 0..1
-	Models           int64   `json:"models"`
-	Users            int64   `json:"users"`
+	Generations      int64   `json:"generations"`      // how many model calls the window holds
+	PromptTokens     int64   `json:"promptTokens"`     // tokens sent to the models
+	CompletionTokens int64   `json:"completionTokens"` // tokens the models answered with
+	TotalTokens      int64   `json:"totalTokens"`      // prompt plus completion
+	CostCents        int64   `json:"costCents"`        // what the window cost, in cents
+	Errors           int64   `json:"errors"`           // calls that did not succeed
+	SuccessRate      float64 `json:"successRate"`      // share of calls that succeeded, 0..1
+	Models           int64   `json:"models"`           // how many distinct models were called
+	Users            int64   `json:"users"`            // how many distinct users called them
 }
 
 // BoardPoint is one gap-filled time bucket for the volume/cost/token/error series.
 type BoardPoint struct {
-	T           string `json:"t"` // RFC3339 (UTC) bucket start
-	Generations int64  `json:"generations"`
-	CostCents   int64  `json:"costCents"`
-	TotalTokens int64  `json:"totalTokens"`
-	Errors      int64  `json:"errors"`
+	T           string `json:"t"`           // RFC3339 (UTC) bucket start
+	Generations int64  `json:"generations"` // model calls in this bucket
+	CostCents   int64  `json:"costCents"`   // what this bucket cost, in cents
+	TotalTokens int64  `json:"totalTokens"` // tokens in this bucket
+	Errors      int64  `json:"errors"`      // calls in this bucket that did not succeed
 }
 
 // ModelStat is one row of the model-usage table (or the folded "other" bucket).
 // The latency percentiles are pointers so "no latency data for this model" is a
 // null the console renders as "—", never a fabricated 0.
 type ModelStat struct {
-	Model            string   `json:"model"`
-	Provider         string   `json:"provider"`
-	Requests         int64    `json:"requests"`
-	PromptTokens     int64    `json:"promptTokens"`
-	CompletionTokens int64    `json:"completionTokens"`
-	TotalTokens      int64    `json:"totalTokens"`
-	CostCents        int64    `json:"costCents"`
-	Errors           int64    `json:"errors"`
-	ErrorRate        float64  `json:"errorRate"` // 0..1
-	CostPct          float64  `json:"costPct"`   // share of total spend, 0..100
-	P50Ms            *float64 `json:"p50Ms"`
-	P95Ms            *float64 `json:"p95Ms"`
-	P99Ms            *float64 `json:"p99Ms"`
+	Model            string   `json:"model"`                // the model this row is about, or "other" for the fold
+	Provider         string   `json:"provider"`             // who serves it
+	Requests         int64    `json:"requests"`             // calls to this model in the window
+	PromptTokens     int64    `json:"promptTokens"`         // tokens sent to it
+	CompletionTokens int64    `json:"completionTokens"`     // tokens it answered with
+	TotalTokens      int64    `json:"totalTokens"`          // prompt plus completion
+	CostCents        int64    `json:"costCents"`            // what this model cost, in cents
+	Errors           int64    `json:"errors"`               // calls to it that did not succeed
+	ErrorRate        float64  `json:"errorRate"`            // share of its calls that failed, 0..1
+	CostPct          float64  `json:"costPct"`              // share of total spend, 0..100
+	P50Ms            *float64 `json:"p50Ms"`                // median latency, null when no spans carry it
+	P95Ms            *float64 `json:"p95Ms"`                // 95th-percentile latency, null when unknown
+	P99Ms            *float64 `json:"p99Ms"`                // 99th-percentile latency, null when unknown
 	ModelCount       int      `json:"modelCount,omitempty"` // >0 only on the "other" fold
 }
 
 // LatencyStat is the board's overall latency. Available=false with nil percentiles
 // is the honest "no GenAI spans" state.
 type LatencyStat struct {
-	Available bool     `json:"available"`
-	P50Ms     *float64 `json:"p50Ms"`
-	P95Ms     *float64 `json:"p95Ms"`
-	P99Ms     *float64 `json:"p99Ms"`
+	Available bool     `json:"available"` // false when no GenAI spans carry timing; the percentiles are then null
+	P50Ms     *float64 `json:"p50Ms"`     // median latency over the window
+	P95Ms     *float64 `json:"p95Ms"`     // 95th-percentile latency
+	P99Ms     *float64 `json:"p99Ms"`     // 99th-percentile latency
 }
 
 // Board is the full AI-overview dashboard payload.
 type Board struct {
-	Scope   BoardScope   `json:"scope"`
-	Range   BoardRange   `json:"range"`
-	Totals  BoardTotals  `json:"totals"`
-	Series  []BoardPoint `json:"series"`
-	ByModel []ModelStat  `json:"byModel"`
-	Other   *ModelStat   `json:"other,omitempty"`
-	Latency LatencyStat  `json:"latency"`
+	Scope   BoardScope   `json:"scope"`           // whose numbers these are
+	Range   BoardRange   `json:"range"`           // the window they were computed over, echoed back
+	Totals  BoardTotals  `json:"totals"`          // the window's headline numbers
+	Series  []BoardPoint `json:"series"`          // one gap-filled bucket per interval, so a chart never breaks
+	ByModel []ModelStat  `json:"byModel"`         // the top models by spend
+	Other   *ModelStat   `json:"other,omitempty"` // the long tail beyond the top models, folded into one row
+	Latency LatencyStat  `json:"latency"`         // overall latency percentiles from the GenAI spans
 }
 
 // latPercentiles is the per-model latency read out of the GenAI spans.
@@ -187,32 +187,48 @@ func scopeOrg(org string, allOrgs bool) string {
 
 // ── HTTP handler ──────────────────────────────────────────────────────────────
 
-// metricsBoard serves GET /v1/evals/metrics — the AI observability dashboard for
-// the caller's org (a validated SuperAdmin, c.IsAdmin(), sees every org). It
-// resolves the window from a fixed range preset (?range, default 24h), optionally
-// overrides the bucket (?interval=hour|day), and threads ?project. Tenant isolation
-// is the principal gate: no validated principal ⇒ 403. When telemetry is disabled
-// (no datastore) or the project is non-default (no ledger attribution yet), the
-// board is honest-empty — a valid, all-zero board, never a 503 or a fabricated
-// number.
-func (s *service) metricsBoard(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// boardQuery is the window and bucket a board is computed over.
+type boardQuery struct {
+	// Range is 24h (the default), 7d or 30d. Anything else normalises to 24h
+	// rather than failing, so the board always has a valid window.
+	Range string `json:"range"`
+	// Interval overrides the bucket the series is grouped into: "hour" or "day".
+	// Any other value leaves the range's own default in place.
+	Interval string `json:"interval"`
+}
+
+// metricsBoard is your org's AI overview board over a window: totals
+// (generations, prompt and completion tokens, cost in cents, errors, success
+// rate, distinct models and users), a gap-filled time series, a per-model
+// breakdown with the long tail folded into "other", and latency percentiles read
+// from the GenAI spans.
+//
+// The window the answer was actually computed over is echoed back, so a client
+// never has to infer it. A platform admin sees the board across ALL orgs;
+// everyone else sees their own.
+//
+// The board is HONEST-EMPTY where it cannot be computed: with no datastore wired,
+// or under a named project scope the usage ledger does not yet carry, it answers a
+// valid board with zero totals and a flat series rather than a fabricated number
+// or a 500. Requires a validated principal; 403 without one.
+func (s *service) metricsBoard(ctx context.Context, in *boardQuery) (*Board, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	label, since, until, interval := resolveRange(strings.TrimSpace(c.Query("range")))
-	if iv := strings.TrimSpace(c.Query("interval")); iv == "hour" || iv == "day" {
+	label, since, until, interval := resolveRange(strings.TrimSpace(in.Range))
+	if iv := strings.TrimSpace(in.Interval); iv == "hour" || iv == "day" {
 		interval = iv
 	}
 	// Project is the server-minted sub-scope ("" for the org's default project ==
 	// whole-org board). Same resolver as the trace path so the two never drift.
-	project := principal.ProjectScope(c)
+	project := scope(ctx)
 
 	f := MetricsFilter{
 		Org:      org, // authoritative — never a client header
 		Project:  project,
-		AllOrgs:  c.IsAdmin(),
+		AllOrgs:  admin(ctx),
 		Since:    since,
 		Until:    until,
 		Interval: interval,
@@ -228,15 +244,25 @@ func (s *service) metricsBoard(c *zip.Ctx) error {
 	// once the ledger carries project; the query plumbing (usageWhere) is already
 	// project-aware and tested.
 	if s.tel != nil && f.Project == "" {
-		b, err := s.tel.Metrics(c.Context(), f)
+		b, err := s.tel.Metrics(ctx, f)
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
 		}
 		board = b
 	}
 	board.Range.Range = label
 	board.Scope.Project = project
-	return c.JSON(http.StatusOK, board)
+	return &board, nil
+}
+
+// admin reports that the caller is a platform SuperAdmin (c.IsAdmin() — the
+// X-User-IsAdmin the identity boundary mints only for a validated owner ==
+// AdminOrg). It needs the REQUEST rather than the tenant because admin-ness lives
+// in a header principal.OrgFrom does not carry. False off the HTTP path: no
+// request, no attested caller, no admin rights.
+func admin(ctx context.Context) bool {
+	c, ok := cloud.Request(ctx)
+	return ok && c.IsAdmin()
 }
 
 // resolveRange maps a range preset to its echoed label, the closed window

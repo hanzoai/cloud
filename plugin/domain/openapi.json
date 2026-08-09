@@ -19,71 +19,517 @@
     "/v1/domain/availability": {
       "get": {
         "operationId": "get_v1_domain_availability",
-        "summary": "Availability and price for names you already have in mind",
-        "description": "Checks exact names rather than searching for them, and answers the same quote shape search does — purchasable, premium, first-term and renewal price in cents. Pass `domain` with one name or several comma-separated to check them in one call; names are lowercased. An empty `domain` is 400.\n\nRequires a validated principal; 403 without one. Nothing is charged and nothing is held. A deployment with no registrar credentials answers 503.",
+        "summary": "Checks exact names rather than searching for them, and answers the same quote shape search does — purchasable, premium, first-term and renewal price in cents.",
+        "description": "Checks exact names rather than searching for them, and answers the\nsame quote shape search does — purchasable, premium, first-term and renewal price\nin cents.\n\nIt requires a validated principal; 403 without one. Nothing is charged and\nnothing is held. A deployment with no registrar credentials answers 503.",
         "tags": [
           "domain"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": true,
+            "description": "Domain is one name, or several comma-separated, to check in one call. Names\nare lowercased. It is required.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/quoteList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/domain/domains": {
       "get": {
         "operationId": "get_v1_domain_domains",
-        "summary": "The domains your org has bought here",
-        "description": "Lists the caller org's domains, newest registration first, each carrying the name, when it was registered, when it expires, what the org paid, the registrar order id and the nameservers it points at. Scoped to the validated principal's org — 403 without one, and there is no parameter that reaches another org's holdings.\n\nThis is the deployment's OWN ownership record, not a query to the registrar: it lists what was bought THROUGH this surface, so a domain the org holds elsewhere is not here. The default store is in-process, so a deployment that has not swapped in a durable store answers from what this process registered.",
+        "summary": "Is the domains your org has bought here, newest registration first, each carrying the name, when it was registered, when it expires, what the org paid, the registrar order id and the nameservers it points at.",
+        "description": "Is the domains your org has bought here, newest registration first, each\ncarrying the name, when it was registered, when it expires, what the org paid,\nthe registrar order id and the nameservers it points at.\n\nScoped to the validated principal's org — 403 without one, and there is no\nparameter that reaches another org's holdings.\n\nThis is the deployment's OWN ownership record, not a query to the registrar: it\nlists what was bought THROUGH this surface, so a domain the org holds elsewhere\nis not here. The default store is in-process, so a deployment that has not\nswapped in a durable store answers from what this process registered.",
         "tags": [
           "domain"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/holdings"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/domain/health": {
       "get": {
         "operationId": "get_v1_domain_health",
-        "summary": "Whether this deployment can actually sell domains, and why not when it cannot",
-        "description": "Reports registrar reachability honestly: `ok` only when the wholesale credentials are present AND name.com accepted them on a live call made while you waited. Missing credentials or an unreachable registrar is 503 carrying `configured`, `reachable` and the reason, so an operator reads the blocker instead of guessing at it. Takes no principal, like every subsystem health probe. The answer also names the registrar `env`, which is the fact that decides whether money moves: only `prod` reaches the live, billable registrar — anything else, including unset, is the sandbox.",
+        "summary": "Reports registrar reachability honestly: ok only when the wholesale credentials are present AND name.com accepted them on a live call made while you waited.",
+        "description": "Reports registrar reachability honestly: ok only when the wholesale\ncredentials are present AND name.com accepted them on a live call made while you\nwaited.\n\nMissing credentials or an unreachable registrar is 503 carrying configured,\nreachable and the reason, so an operator reads the blocker instead of guessing at\nit. It takes no principal, like every subsystem health probe.",
         "tags": [
           "domain"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reachability"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reachability"
+                }
+              }
+            },
+            "description": "service unavailable"
+          }
+        }
       }
     },
     "/v1/domain/register": {
       "post": {
         "operationId": "post_v1_domain_register",
-        "summary": "Buy a domain for your org — charged only once the registrar confirms",
-        "description": "Buys `domain` for `years` (default 1) and answers the ownership record together with the quote it was bought at. The order of operations is the product guarantee: quote, refuse anything unpurchasable or unpriced, AUTHORIZE the org's prepaid balance, provision the authoritative zone in Hanzo DNS, register at the registrar already pointing at Hanzo's nameservers, and only then CAPTURE the charge and record ownership. A registrar failure therefore leaves the balance untouched — the org is never billed for a domain it did not get.\n\nRequires a validated principal; that principal's org owns the domain and is the ledger the charge lands on. Re-buying a name the org already holds is 409, not a second purchase. `contacts` is optional — omit it and the registrar uses the reseller account's default WHOIS contacts.\n\nRefusals are distinct on purpose: 402 when the prepaid balance cannot cover the quoted price, 409 when the name is not available, 503 when the deployment has no registrar credentials, and the registrar's own message with its own 4xx — or 502 for its 5xx — when it rejects the purchase. Zone provisioning is best-effort: if the zone service is down the domain is still registered against Hanzo's nameservers and the zone reconciles afterwards, rather than the purchase failing.",
+        "summary": "Buys a domain for your org and answers the ownership record together with the quote it was bought at.",
+        "description": "Buys a domain for your org and answers the ownership record together\nwith the quote it was bought at.\n\nThe order of operations is the product guarantee: quote, refuse anything\nunpurchasable or unpriced, AUTHORIZE the org's prepaid balance, provision the\nauthoritative zone in Hanzo DNS, register at the registrar already pointing at\nHanzo's nameservers, and only then CAPTURE the charge and record ownership. A\nregistrar failure therefore leaves the balance untouched — the org is never\nbilled for a domain it did not get.\n\nIt requires a validated principal; that principal's org owns the domain and is\nthe ledger the charge lands on. Re-buying a name the org already holds is 409,\nnot a second purchase.\n\nRefusals are distinct on purpose: 402 when the prepaid balance cannot cover the\nquoted price, 409 when the name is not available, 503 when the deployment has no\nregistrar credentials, and the registrar's own message with its own 4xx — or 502\nfor its 5xx — when it rejects the purchase. Zone provisioning is best-effort: if\nthe zone service is down the domain is still registered against Hanzo's\nnameservers and the zone reconciles afterwards, rather than the purchase failing.",
         "tags": [
           "domain"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/order"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/domain/renew": {
       "post": {
         "operationId": "post_v1_domain_renew",
-        "summary": "Extend a domain your org already owns",
-        "description": "Renews `domain` for `years` (default 1) and answers the updated record with its new expiry alongside what was paid. Ownership is the gate: a name the caller's org does not hold is 404, so a renewal can never reach another tenant's domain.\n\nThe price is re-quoted at the CURRENT renewal rate rather than the one paid at purchase. If the registrar returns no renewal price the org's original price is charged instead, so a renewal is never accidentally free. Balance is authorized before the registrar is called and captured after it confirms — 402 when the prepaid balance cannot cover it, 503 when the deployment has no registrar credentials. Requires a validated principal.",
+        "summary": "Extends a domain your org already owns and answers the updated record with its new expiry alongside what was paid.",
+        "description": "Extends a domain your org already owns and answers the updated record with\nits new expiry alongside what was paid.\n\nOwnership is the gate: a name the caller's org does not hold is 404, so a renewal\ncan never reach another tenant's domain.\n\nThe price is re-quoted at the CURRENT renewal rate rather than the one paid at\npurchase. If the registrar returns no renewal price the org's original price is\ncharged instead, so a renewal is never accidentally free. The balance is\nauthorized before the registrar is called and captured after it confirms — 402\nwhen the prepaid balance cannot cover it, 503 when the deployment has no\nregistrar credentials. Requires a validated principal.",
         "tags": [
           "domain"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/renewReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/domain/search": {
       "get": {
         "operationId": "get_v1_domain_search",
-        "summary": "Buyable names for a keyword, priced",
-        "description": "Searches the registrar for names built from the keyword `q`, plus its alternate-TLD suggestions, and answers a quote for each: the name, whether it is purchasable, whether it is premium, the first-term and renewal price in cents, and the TLD. Prices are RETAIL — this deployment's markup is already applied and the wholesale cost is never on the wire. Narrow the TLDs with a comma-separated `tld`; `q` is required and its absence is 400.\n\nRequires a validated principal; 403 without one. Nothing is charged and nothing is held — a quote is not a reservation, and the price is re-quoted at purchase, so a name quoted here can be gone or dearer by the time you buy it. A deployment with no registrar credentials answers 503.",
+        "summary": "Finds names built from the keyword q, plus the registrar's alternate-TLD suggestions, and answers a quote for each: the name, whether it is purchasable, whether it is premium, the first-term and renewal price in cents, and the TLD.",
+        "description": "Finds names built from the keyword q, plus the registrar's alternate-TLD\nsuggestions, and answers a quote for each: the name, whether it is purchasable,\nwhether it is premium, the first-term and renewal price in cents, and the TLD.\n\nPrices are RETAIL — this deployment's markup is already applied and the wholesale\ncost is never on the wire.\n\nIt requires a validated principal; 403 without one. Nothing is charged and\nnothing is held — a quote is not a reservation, and the price is re-quoted at\npurchase, so a name quoted here can be gone or dearer by the time you buy it. A\ndeployment with no registrar credentials answers 503.",
         "tags": [
           "domain"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Q is the keyword to build names from. It is required.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tld",
+            "in": "query",
+            "required": false,
+            "description": "TLD narrows the search to a comma-separated set of top-level domains.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/quoteList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/domain/transfer": {
       "post": {
         "operationId": "post_v1_domain_transfer",
-        "summary": "Move a domain you own at another registrar onto your org here",
-        "description": "Transfers `domain` in using its `authCode` — both required, 400 otherwise — for `years` (default 1), and answers the same record-plus-quote a purchase does. It is priced and charged exactly like a registration: authorize the org's prepaid balance, ask the registrar for the transfer, capture only after the registrar accepts. A name the registrar will not price is 409, an insufficient balance is 402, and a deployment with no registrar credentials is 503.\n\nRequires a validated principal; the ownership record is written under that org as soon as the registrar ACCEPTS the request, which is not the same instant the transfer completes at the losing registrar. Unlike a registration this does not provision a zone, so the record carries this deployment's configured nameservers.",
+        "summary": "Moves a domain you own at another registrar onto your org here, using its authCode, and answers the same record-plus-quote a purchase does.",
+        "description": "Moves a domain you own at another registrar onto your org here, using\nits authCode, and answers the same record-plus-quote a purchase does.\n\nIt is priced and charged exactly like a registration: authorize the org's prepaid\nbalance, ask the registrar for the transfer, capture only after the registrar\naccepts. A name the registrar will not price is 409, an insufficient balance is\n402, and a deployment with no registrar credentials is 503.\n\nIt requires a validated principal; the ownership record is written under that org\nas soon as the registrar ACCEPTS the request, which is not the same instant the\ntransfer completes at the losing registrar. Unlike a registration this does not\nprovision a zone, so the record carries this deployment's configured nameservers.",
         "tags": [
           "domain"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/transferReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Contacts": {
+        "properties": {
+          "admin": {
+            "$ref": "#/components/schemas/Registrant",
+            "description": "who administers it"
+          },
+          "billing": {
+            "$ref": "#/components/schemas/Registrant",
+            "description": "who is reached about payment"
+          },
+          "registrant": {
+            "$ref": "#/components/schemas/Registrant",
+            "description": "who owns the domain"
+          },
+          "tech": {
+            "$ref": "#/components/schemas/Registrant",
+            "description": "who is reached about technical matters"
+          }
+        },
+        "type": "object"
+      },
+      "Holding": {
+        "properties": {
+          "costCents": {
+            "description": "wholesale cost",
+            "type": "integer"
+          },
+          "domain": {
+            "description": "the name owned",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "when the registration lapses, RFC3339",
+            "type": "string"
+          },
+          "nameservers": {
+            "description": "the authoritative nameservers the name points at",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "order": {
+            "description": "registrar order id",
+            "type": "integer"
+          },
+          "org": {
+            "description": "the org that owns the domain",
+            "type": "string"
+          },
+          "priceCents": {
+            "description": "what the customer paid (sell)",
+            "type": "integer"
+          },
+          "registeredAt": {
+            "description": "unix seconds",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Offer": {
+        "properties": {
+          "available": {
+            "description": "whether it can be bought right now",
+            "type": "boolean"
+          },
+          "currency": {
+            "description": "the currency both prices are in",
+            "type": "string"
+          },
+          "domain": {
+            "description": "the name this quote prices",
+            "type": "string"
+          },
+          "premium": {
+            "description": "whether the registry prices it above the standard rate",
+            "type": "boolean"
+          },
+          "priceCents": {
+            "description": "sell (first-term registration)",
+            "type": "integer"
+          },
+          "renewalPriceCents": {
+            "description": "sell (renewal)",
+            "type": "integer"
+          },
+          "tld": {
+            "description": "the top-level domain the name sits under",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RegisterResult": {
+        "properties": {
+          "quote": {
+            "$ref": "#/components/schemas/Offer",
+            "description": "the price it was bought at"
+          },
+          "record": {
+            "$ref": "#/components/schemas/Holding",
+            "description": "the ownership row this purchase issued"
+          }
+        },
+        "type": "object"
+      },
+      "Registrant": {
+        "properties": {
+          "address1": {
+            "description": "street address",
+            "type": "string"
+          },
+          "address2": {
+            "description": "second address line",
+            "type": "string"
+          },
+          "city": {
+            "description": "city or locality",
+            "type": "string"
+          },
+          "companyName": {
+            "description": "the organisation the contact acts for",
+            "type": "string"
+          },
+          "country": {
+            "description": "ISO-3166 alpha-2, e.g. \"US\"",
+            "type": "string"
+          },
+          "email": {
+            "description": "where WHOIS correspondence is sent",
+            "type": "string"
+          },
+          "fax": {
+            "description": "fax number, in the same form as phone",
+            "type": "string"
+          },
+          "firstName": {
+            "description": "the contact's given name",
+            "type": "string"
+          },
+          "lastName": {
+            "description": "the contact's family name",
+            "type": "string"
+          },
+          "phone": {
+            "description": "+NN.NNNNNNN",
+            "type": "string"
+          },
+          "state": {
+            "description": "state, province or region",
+            "type": "string"
+          },
+          "zip": {
+            "description": "postal code",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RenewResult": {
+        "properties": {
+          "paidCents": {
+            "description": "what this renewal cost, in cents",
+            "type": "integer"
+          },
+          "record": {
+            "$ref": "#/components/schemas/Holding",
+            "description": "the ownership row with its new expiry"
+          }
+        },
+        "type": "object"
+      },
+      "holdings": {
+        "properties": {
+          "domains": {
+            "description": "Domains is the caller org's domains, newest registration first.",
+            "items": {
+              "$ref": "#/components/schemas/Holding"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "order": {
+        "properties": {
+          "contacts": {
+            "$ref": "#/components/schemas/Contacts",
+            "description": "Contacts is the WHOIS contact set. Omit it and the registrar uses the\nreseller account's default contacts."
+          },
+          "domain": {
+            "description": "Domain is the name to buy. It is required.",
+            "type": "string"
+          },
+          "years": {
+            "description": "Years is the term to buy, defaulting to 1.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object"
+      },
+      "quoteList": {
+        "properties": {
+          "results": {
+            "description": "Results is one quote per name, priced RETAIL — this deployment's markup is\nalready applied and the wholesale cost is never on the wire.",
+            "items": {
+              "$ref": "#/components/schemas/Offer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "reachability": {
+        "properties": {
+          "configured": {
+            "description": "Configured is whether the wholesale credentials are present at all.",
+            "type": "boolean"
+          },
+          "env": {
+            "description": "Env is the registrar environment. It is the fact that decides whether money\nmoves: only \"prod\" reaches the live, billable registrar — anything else,\nincluding unset, is the sandbox.",
+            "type": "string"
+          },
+          "error": {
+            "description": "Error is the blocker, so an operator reads it instead of guessing at it.",
+            "type": "string"
+          },
+          "reachable": {
+            "description": "Reachable is whether the registrar accepted those credentials on a live call\nmade while the caller waited.",
+            "type": "boolean"
+          },
+          "registrar": {
+            "description": "Registrar names the wholesale registrar behind it.",
+            "type": "string"
+          },
+          "service": {
+            "description": "Service names the subsystem answering.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" when a live call succeeded, else \"degraded\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "renewReq": {
+        "properties": {
+          "domain": {
+            "description": "Domain is the name to extend. It is required, and the caller's org must hold it.",
+            "type": "string"
+          },
+          "years": {
+            "description": "Years is how much longer to hold it, defaulting to 1.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object"
+      },
+      "transferReq": {
+        "properties": {
+          "authCode": {
+            "description": "AuthCode is the transfer authorization the losing registrar issued. It is\nrequired.",
+            "type": "string"
+          },
+          "domain": {
+            "description": "Domain is the name to move in. It is required.",
+            "type": "string"
+          },
+          "years": {
+            "description": "Years is the term to buy on transfer, defaulting to 1.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "domain",
+          "authCode"
+        ],
+        "type": "object"
       }
     }
   }

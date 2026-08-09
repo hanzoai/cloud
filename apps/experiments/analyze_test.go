@@ -47,11 +47,11 @@ func TestTwoProportionZ_NoDifference(t *testing.T) {
 	}
 }
 
-func exp2() Experiment {
-	return Experiment{
+func exp2() Trial {
+	return Trial{
 		ID:          "checkout",
 		MetricEvent: "order_completed",
-		Variants: []Variant{
+		Arms: []Arm{
 			{Key: "control", Control: true, Weight: 50},
 			{Key: "treatment", Weight: 50},
 		},
@@ -68,15 +68,15 @@ func TestComputeAnalysis_LiftSignificanceWinner(t *testing.T) {
 	}
 	a := computeAnalysis(exp2(), samples, 0.05)
 
-	if a.Results[0].Variant != "control" || !a.Results[0].Control {
-		t.Fatalf("control must sort first, got %+v", a.Results[0])
+	if a.Outcomes[0].Arm != "control" || !a.Outcomes[0].Control {
+		t.Fatalf("control must sort first, got %+v", a.Outcomes[0])
 	}
-	if a.Results[0].Lift != 0 || a.Results[0].PValue != 0 {
-		t.Fatalf("control must carry no lift/stats: %+v", a.Results[0])
+	if a.Outcomes[0].Lift != 0 || a.Outcomes[0].PValue != 0 {
+		t.Fatalf("control must carry no lift/stats: %+v", a.Outcomes[0])
 	}
-	tr := a.Results[1]
-	if tr.Variant != "treatment" {
-		t.Fatalf("want treatment second, got %s", tr.Variant)
+	tr := a.Outcomes[1]
+	if tr.Arm != "treatment" {
+		t.Fatalf("want treatment second, got %s", tr.Arm)
 	}
 	if tr.Rate != 0.2 {
 		t.Fatalf("treatment rate = %v want 0.2", tr.Rate)
@@ -103,8 +103,8 @@ func TestComputeAnalysis_InconclusiveNoWinner(t *testing.T) {
 		"treatment": {exposed: 100, converted: 12}, // 12% — well within noise at n=100
 	}
 	a := computeAnalysis(exp2(), samples, 0.05)
-	if a.Results[1].Significant {
-		t.Fatalf("small n, small delta must be inconclusive, p=%v", a.Results[1].PValue)
+	if a.Outcomes[1].Significant {
+		t.Fatalf("small n, small delta must be inconclusive, p=%v", a.Outcomes[1].PValue)
 	}
 	if a.Winner != "" {
 		t.Fatalf("no significant arm -> no winner, got %q", a.Winner)
@@ -115,11 +115,11 @@ func TestComputeAnalysis_InconclusiveNoWinner(t *testing.T) {
 // Exposed 0, so the read is complete over the declared arms.
 func TestComputeAnalysis_MissingArmIsZero(t *testing.T) {
 	a := computeAnalysis(exp2(), map[string]*sample{"control": {exposed: 500, converted: 50}}, 0.05)
-	if len(a.Results) != 2 {
-		t.Fatalf("want a row per declared arm, got %d", len(a.Results))
+	if len(a.Outcomes) != 2 {
+		t.Fatalf("want a row per declared arm, got %d", len(a.Outcomes))
 	}
-	if a.Results[1].Exposed != 0 || a.Results[1].Rate != 0 {
-		t.Fatalf("absent arm must be zeroed, got %+v", a.Results[1])
+	if a.Outcomes[1].Exposed != 0 || a.Outcomes[1].Rate != 0 {
+		t.Fatalf("absent arm must be zeroed, got %+v", a.Outcomes[1])
 	}
 }
 

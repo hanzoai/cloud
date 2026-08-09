@@ -78,6 +78,7 @@ func init() {
 			"ChannelsIngestIn.channel":     "reply target",
 			"ChannelsIngestIn.dedupe_key":  "event id, \"\" when non-dedupable",
 			"ChannelsIngestIn.external_id": "workspace/tenant/guild/chat id",
+			"ChannelsIngestIn.installer":   "Installer is the provider-side user who completed this workspace's install,\nfrom the connection the adapter already resolved. It rides the event because\nthe connection lives in the adapter's process and the gate lives in another.\nWhoever finished the OAuth was already an admin of this org.",
 			"ChannelsIngestIn.provider":    "\"slack\",\"teams\",\"discord\",\"telegram\"",
 			"ChannelsIngestIn.reply_root":  "ReplyRoot is a transport-verified reply root: Teams' JWT-verified\nserviceURL, \"\" everywhere else.",
 			"ChannelsIngestIn.text":        "the prompt, mention stripped",

@@ -13,6 +13,7 @@ import (
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -25,8 +26,11 @@ import (
 // caller reads another org's eval datasets/scores.
 func TestTenantIgnoresClientProjectID(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// cloud.Bridge is what parks the validated org on the context a typed op
+	// reads, so the gate under test is reached exactly as it is in production.
+	app.Use(cloud.Bridge())
 	app.Get("/echo-tenant", func(c *zip.Ctx) error {
-		org, _ := tenant(c)
+		org, _ := tenant(c.Context())
 		return c.String(http.StatusOK, org)
 	})
 
