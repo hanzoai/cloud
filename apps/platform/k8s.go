@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1546,11 +1547,24 @@ func (k *k8sClient) waitForJob(ctx context.Context, jobName string, deadline tim
 // clean boot; 1 (Job fails) on any crash signature, a missing "listening" line, or a
 // process that died after logging it. backoffLimit 0 + restartPolicy Never make the
 // Job's terminal state the smoke verdict, read by waitForJob/jobResult.
-const smokeScript = `set -u
+// smokeBootSeconds is the window the script waits for "zip listening", and it is
+// spent TWICE: once by the loop below, and once by the Job's activeDeadlineSeconds.
+// Those were two constants — 180 here, 120 there — so kubelet killed the pod a
+// minute before the script had finished waiting, and every boot landing in that
+// gap was reported as "never reached listening" by a script that never got to
+// say so. The contract test asserts the SCRIPT's window and passed throughout,
+// because the ceiling that actually applied was not in the script.
+//
+// One number, and the deadline derives from it with slack for scheduling and the
+// image pull, which happen before the script starts and are not part of the boot
+// this is measuring.
+const smokeBootSeconds = 180
+
+var smokeScript = `set -u
 /cloud >/tmp/boot.log 2>&1 &
 pid=$!
 listening=0
-for _ in $(seq 1 180); do
+for _ in $(seq 1 ` + strconv.Itoa(smokeBootSeconds) + `); do
   if grep -q '"message":"zip listening"' /tmp/boot.log 2>/dev/null; then listening=1; break; fi
   kill -0 "$pid" 2>/dev/null || break
   sleep 1
@@ -1603,7 +1617,7 @@ func (k *k8sClient) smokeJobSpec(jobName, image, kmsKey string) *unstructured.Un
 		"spec": map[string]any{
 			"backoffLimit":            int64(0),
 			"ttlSecondsAfterFinished": int64(3600),
-			"activeDeadlineSeconds":   int64(120),
+			"activeDeadlineSeconds":   int64(smokeBootSeconds + 120), // boot window + scheduling/pull slack
 			"template": map[string]any{
 				"spec": map[string]any{
 					"restartPolicy":                "Never",
