@@ -2584,7 +2584,57 @@
         "description": "Replaces the calling person's password. Only their own —\nthere is no shape of this request that writes somebody else's.\n\nProve who you are with the password you are replacing, or — when you cannot\nsign in at all — with a code sent to the address the account already holds.\nExactly one of the two: a request carrying both proves nothing more than\neither, and answering it would mean deciding which one mattered.\n\nA reset also clears the account lockout, in the SAME transaction as the\ndigest. Replacing a credential retires the run of guesses against the old one,\nand without this a person who reset a forgotten password was still refused for\nup to fifteen more minutes — with the brand-new password they had just chosen.",
         "tags": [
           "iam"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "Cookie",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.passwordBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          }
+        }
       }
     },
     "/v1/iam/permissions": {
@@ -8286,6 +8336,31 @@
           },
           "provider": {
             "$ref": "#/components/schemas/iam.Provider"
+          }
+        },
+        "type": "object"
+      },
+      "iam.passwordBody": {
+        "properties": {
+          "code": {
+            "description": "Code is the one-time code delivered to the account's own address.",
+            "type": "string"
+          },
+          "oldPassword": {
+            "description": "OldPassword is the credential being replaced, the proof a signed-in caller\ngives instead of a code.",
+            "type": "string"
+          },
+          "organization": {
+            "description": "The account being recovered, for a caller who cannot be signed in. Read on\nthe CODE arm only — a signed-in caller is resolved from its own session or\ntoken, never from these.",
+            "type": "string"
+          },
+          "password": {
+            "description": "Password is the new credential. It must satisfy the platform floor and the\norganization's own complexity options.",
+            "type": "string"
+          },
+          "username": {
+            "description": "email, username OR phone",
+            "type": "string"
           }
         },
         "type": "object"
