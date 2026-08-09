@@ -55,6 +55,7 @@
 package analytics
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"strconv"
@@ -326,9 +327,9 @@ func normalize(org string, now time.Time, e CaptureEvent) (fact, bool) {
 		signal:    r.signal,
 		org:       org,
 		time:      clampTS(e.Timestamp, now),
-		id:        firstNonEmptyStr(strings.TrimSpace(e.MessageID), randID()),
+		id:        cmp.Or(strings.TrimSpace(e.MessageID), randID()),
 		name:      name,
-		kind:      firstNonEmptyStr(trim(e.Kind), r.kind),
+		kind:      cmp.Or(trim(e.Kind), r.kind),
 		product:   trim(e.Product),
 		session:   trim(e.SessionID),
 		distinct:  trim(e.DistinctID),
@@ -625,7 +626,7 @@ func applyRecord(f *fact, e CaptureEvent) {
 	f.resource = trim(e.Resource)
 	if e.Log != nil {
 		f.message = scrubText(e.Log.Body)
-		f.severity = severityOf(firstNonEmptyStr(e.Log.Severity, e.Level), e.Log.Number, 0)
+		f.severity = severityOf(cmp.Or(e.Log.Severity, e.Level), e.Log.Number, 0)
 		return
 	}
 	f.severity = severityOf(e.Level, 0, 0)

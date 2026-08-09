@@ -1,18 +1,20 @@
 package cloud
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
-	"github.com/hanzoai/cloud/brand"
-	"github.com/hanzoai/cloud/credz"
-	"github.com/hanzoai/cloud/internal/datadir"
-	"github.com/hanzoai/cloud/internal/edge"
-	"github.com/hanzoai/cloud/role"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hanzoai/cloud/brand"
+	"github.com/hanzoai/cloud/credz"
+	"github.com/hanzoai/cloud/internal/datadir"
+	"github.com/hanzoai/cloud/internal/edge"
+	"github.com/hanzoai/cloud/role"
 )
 
 // Config is the cloud binary's startup configuration. Drives which
@@ -288,7 +290,6 @@ type Config struct {
 	// KMS-injected and never logged.
 	AIAuthClientID     string
 	AIAuthClientSecret string
-
 }
 
 // flagsOnce guards the ONE registration of the CLI overrides on the process-global
@@ -330,7 +331,7 @@ func LoadConfig() *Config {
 		WriterURL:         strings.TrimRight(getenv("CLOUD_WRITER_URL", ""), "/"),
 		ReaderRetryBudget: getenvDuration("CLOUD_READER_RETRY_BUDGET", 25*time.Second),
 		ShardPeers:        getenv("CLOUD_PEERS", ""),
-		ShardSelf:         firstNonEmptyStr(getenv("CLOUD_POD_NAME", ""), getenv("POD_NAME", "")),
+		ShardSelf:         cmp.Or(getenv("CLOUD_POD_NAME", ""), getenv("POD_NAME", "")),
 		PeerSelector:      getenv("CLOUD_PEER_SELECTOR", ""),
 		// Billing gate (KMS-backed COMMERCE_SERVICE_TOKEN; never plaintext).
 		CommerceHTTPURL:      getenv("CLOUD_COMMERCE_HTTP_URL", ""),

@@ -24,6 +24,7 @@
 package deploy
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/http"
@@ -299,8 +300,8 @@ func (sc scope) iamProjects() []argoProject {
 // these fields are surfaced (never Tags/Metadata), so nothing unintended leaks.
 func projectFromIAM(p *model.Project) argoProject {
 	proj := synthProject(p.Name)
-	proj.Spec.Description = firstNonEmpty(p.DisplayName, p.Description)
-	if org := namespace.Sanitize(firstNonEmpty(p.Organization, p.Owner)); org != "" {
+	proj.Spec.Description = cmp.Or(p.DisplayName, p.Description)
+	if org := namespace.Sanitize(cmp.Or(p.Organization, p.Owner)); org != "" {
 		proj.Metadata.Labels = map[string]string{orgLabel: org}
 	}
 	return proj

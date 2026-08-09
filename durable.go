@@ -6,6 +6,7 @@
 package cloud
 
 import (
+	"cmp"
 	"context"
 	"net"
 	"os"
@@ -84,12 +85,12 @@ func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 	// cannot collide, which is what the internal plane does everywhere else — and
 	// it is why the collision above cannot recur: two processes cannot want the
 	// same free port when neither wants a port at all.
-	dataDir := filepath.Join(firstNonEmptyStr(deps.DataDir, "/data"), "tasks", firstNonEmptyStr(app, "cloud"))
+	dataDir := filepath.Join(cmp.Or(deps.DataDir, "/data"), "tasks", cmp.Or(app, "cloud"))
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		deps.Logger.Warn("durable ingest: data dir unavailable; ingest runs inline", "err", err)
 		return
 	}
-	sock := zip.SocketPath("tasks-" + firstNonEmptyStr(app, "cloud"))
+	sock := zip.SocketPath("tasks-" + cmp.Or(app, "cloud"))
 	emb, err := tasksengine.Embed(ctx, tasksengine.EmbedConfig{
 		Address: sock,
 		DataDir: dataDir,
@@ -141,16 +142,6 @@ func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 		return
 	}
 	deps.Logger.Info("durable tasks: gated cluster ZAP listener up", "addr", gatedAddr(), "issuer", deps.IAMIssuer)
-}
-
-// firstNonEmptyStr returns the first non-empty string, else the last.
-func firstNonEmptyStr(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // freePort asks the kernel for an unused loopback port and hands back the number.
