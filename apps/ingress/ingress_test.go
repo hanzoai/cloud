@@ -44,8 +44,8 @@ func testService(t *testing.T) *cloud.Service[state] {
 
 // applyOne is a test shortcut: compile a single route/service(/middlewares) into
 // the engine.
-func applyOne(e *Engine, r Route, svcs []Service, mws []Middleware) (int, int) {
-	sm := map[string]Service{}
+func applyOne(e *Engine, r Route, svcs []Upstream, mws []Middleware) (int, int) {
+	sm := map[string]Upstream{}
 	for _, s := range svcs {
 		sm[s.ID] = s
 	}
@@ -111,8 +111,8 @@ func TestEngineRoutesByHostToBackend(t *testing.T) {
 	defer backend.Close()
 
 	e := newEngine(luxlog.NewNoOpLogger())
-	svc := Service{ID: "s1", Backends: []Backend{{URL: backend.URL}}}
-	live, skipped := applyOne(e, Route{ID: "r1", Host: "app.test", Service: "s1"}, []Service{svc}, nil)
+	svc := Upstream{ID: "s1", Backends: []Backend{{URL: backend.URL}}}
+	live, skipped := applyOne(e, Route{ID: "r1", Host: "app.test", Service: "s1"}, []Upstream{svc}, nil)
 	if live != 1 || skipped != 0 {
 		t.Fatalf("apply: live=%d skipped=%d", live, skipped)
 	}
@@ -153,10 +153,10 @@ func TestStripPrefixMiddleware(t *testing.T) {
 	defer backend.Close()
 
 	e := newEngine(luxlog.NewNoOpLogger())
-	svc := Service{ID: "s1", Backends: []Backend{{URL: backend.URL}}}
+	svc := Upstream{ID: "s1", Backends: []Backend{{URL: backend.URL}}}
 	mw := Middleware{ID: "strip", Type: MWStripPrefix, Config: map[string]string{"prefixes": "/api"}}
 	route := Route{ID: "r1", Host: "app.test", Service: "s1", Middlewares: []string{"strip"}}
-	if live, _ := applyOne(e, route, []Service{svc}, []Middleware{mw}); live != 1 {
+	if live, _ := applyOne(e, route, []Upstream{svc}, []Middleware{mw}); live != 1 {
 		t.Fatalf("apply live=%d", live)
 	}
 
@@ -169,10 +169,10 @@ func TestStripPrefixMiddleware(t *testing.T) {
 
 func TestRedirectSchemeMiddleware(t *testing.T) {
 	e := newEngine(luxlog.NewNoOpLogger())
-	svc := Service{ID: "s1", Backends: []Backend{{URL: "http://127.0.0.1:1"}}} // never reached
+	svc := Upstream{ID: "s1", Backends: []Backend{{URL: "http://127.0.0.1:1"}}} // never reached
 	mw := Middleware{ID: "https", Type: MWRedirectScheme, Config: map[string]string{"scheme": "https", "permanent": "true"}}
 	route := Route{ID: "r1", Host: "app.test", Service: "s1", Middlewares: []string{"https"}}
-	applyOne(e, route, []Service{svc}, []Middleware{mw})
+	applyOne(e, route, []Upstream{svc}, []Middleware{mw})
 
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest("GET", "http://app.test/x?y=1", nil))
@@ -189,10 +189,10 @@ func TestHeadersMiddleware(t *testing.T) {
 	defer backend.Close()
 
 	e := newEngine(luxlog.NewNoOpLogger())
-	svc := Service{ID: "s1", Backends: []Backend{{URL: backend.URL}}}
+	svc := Upstream{ID: "s1", Backends: []Backend{{URL: backend.URL}}}
 	mw := Middleware{ID: "sec", Type: MWHeaders, Config: map[string]string{"X-Frame-Options": "DENY"}}
 	route := Route{ID: "r1", Host: "app.test", Service: "s1", Middlewares: []string{"sec"}}
-	applyOne(e, route, []Service{svc}, []Middleware{mw})
+	applyOne(e, route, []Upstream{svc}, []Middleware{mw})
 
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest("GET", "http://app.test/", nil))
@@ -205,8 +205,8 @@ func TestHeadersMiddleware(t *testing.T) {
 
 func TestTLSHostPolicy(t *testing.T) {
 	e := newEngine(luxlog.NewNoOpLogger())
-	svc := Service{ID: "s1", Backends: []Backend{{URL: "http://127.0.0.1:1"}}}
-	applyOne(e, Route{ID: "r1", Host: "secure.test", Service: "s1", TLS: true}, []Service{svc}, nil)
+	svc := Upstream{ID: "s1", Backends: []Backend{{URL: "http://127.0.0.1:1"}}}
+	applyOne(e, Route{ID: "r1", Host: "secure.test", Service: "s1", TLS: true}, []Upstream{svc}, nil)
 
 	if !e.TLSHost("secure.test") {
 		t.Fatal("TLSHost(secure.test) = false, want true")
@@ -254,9 +254,9 @@ func TestValidation(t *testing.T) {
 		{"good route", true, (&Route{ID: "r1", Host: "app.test", Service: "s1"}).validate},
 		{"bad host", false, (&Route{ID: "r1", Host: "app test/x", Service: "s1"}).validate},
 		{"empty service ref", false, (&Route{ID: "r1", Host: "app.test", Service: ""}).validate},
-		{"good service", true, (&Service{ID: "s1", Backends: []Backend{{URL: "http://h:8000"}}}).validate},
-		{"no backends", false, (&Service{ID: "s1"}).validate},
-		{"bad backend url", false, (&Service{ID: "s1", Backends: []Backend{{URL: "notaurl"}}}).validate},
+		{"good service", true, (&Upstream{ID: "s1", Backends: []Backend{{URL: "http://h:8000"}}}).validate},
+		{"no backends", false, (&Upstream{ID: "s1"}).validate},
+		{"bad backend url", false, (&Upstream{ID: "s1", Backends: []Backend{{URL: "notaurl"}}}).validate},
 		{"good middleware", true, (&Middleware{ID: "m1", Type: MWAddPrefix, Config: map[string]string{"prefix": "/x"}}).validate},
 		{"unknown middleware type", false, (&Middleware{ID: "m1", Type: "bogus"}).validate},
 		{"stripPrefix missing config", false, (&Middleware{ID: "m1", Type: MWStripPrefix}).validate},
@@ -285,7 +285,7 @@ func TestPathPrefixAndPriorityOrdering(t *testing.T) {
 	defer apiSrv.Close()
 
 	e := newEngine(luxlog.NewNoOpLogger())
-	svcs := map[string]Service{
+	svcs := map[string]Upstream{
 		"general": {ID: "general", Backends: []Backend{{URL: general.URL}}},
 		"api":     {ID: "api", Backends: []Backend{{URL: apiSrv.URL}}},
 	}
