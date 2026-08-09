@@ -120,6 +120,102 @@
         ]
       }
     },
+    "/v1/tracker/issues": {
+      "get": {
+        "operationId": "get_v1_tracker_issues",
+        "summary": "Answers across every project in the org.",
+        "description": "Answers across every project in the org.\n\nThe org comes from the validated principal and never from the request: a\ncaller able to name the org could read another tenant's backlog, and a search\nis exactly the shape that would quietly return it.",
+        "tags": [
+          "tracker"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q matches an issue's title or description. A word from the issue, which is\nwhat someone remembers — not its number, which is what they are looking up.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows to one team key; \"\" searches every project in the org,\nwhich is the point of this op.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status keeps one board column: backlog, todo, in_progress, done, canceled.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind keeps one shape: issue, pr, epic.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo keeps issues bound to one git repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "Source keeps one origin: team, git, crm, helpdesk, cms, agent. \"git\" is\nhow you ask for the mirrored GitHub issues specifically.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assignee",
+            "in": "query",
+            "required": false,
+            "description": "Assignee keeps issues held by one person. Pass \"me\" for yourself.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the answer; 0 means the default, and anything above the ceiling\nis clamped rather than refused — a search that errors on being too broad\nteaches people to guess.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/issueHits"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/tracker/milestones": {
       "get": {
         "operationId": "get_v1_tracker_milestones",
@@ -420,6 +516,46 @@
           }
         }
       }
+    },
+    "/v1/tracker/projects/{key}/issues/{num}/claim": {
+      "post": {
+        "operationId": "post_v1_tracker_projects_by_key_issues_by_num_claim",
+        "summary": "Takes an issue: it becomes yours and it moves to in_progress.",
+        "description": "Takes an issue: it becomes yours and it moves to in_progress.\n\nThe holder is the CALLER, never an argument. \"Assign this to someone else\" is\na different act with different authority, and it already exists as a PATCH;\nconflating them would let anyone hand work to anyone by naming them.\n\nClaiming something already held by someone else is refused rather than\nsilently taken — two agents on one issue is the failure this prevents, and a\nclaim that quietly wins a race is worse than one that says no.",
+        "tags": [
+          "tracker"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "num",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/issueHit"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -449,6 +585,55 @@
           "title": {
             "description": "Title renames the work item.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "issueHit": {
+        "properties": {
+          "assignee": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "issueHits": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/issueHit"
+            },
+            "type": "array"
           }
         },
         "type": "object"
