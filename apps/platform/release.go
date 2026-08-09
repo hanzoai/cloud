@@ -53,6 +53,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
@@ -770,7 +771,7 @@ func tagRelease(s *cloud.Service[state], ctx context.Context, repo, sha, tag str
 // ghToken is the GitHub PAT for the release seams (list tags, resolve commit, mint
 // tag). GH_PAT — the admin:org + write:packages token release.yml uses — read from
 // env (KMS-provisioned). Empty ⇒ the dependent step fails closed.
-func ghToken() string { return getenv("GH_PAT", "") }
+func ghToken() string { return environ.Or("GH_PAT", "") }
 
 // releaseHTTP is the one client for the release seams — a bounded timeout so a hung
 // GitHub call can never wedge the pipeline goroutine.

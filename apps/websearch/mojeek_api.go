@@ -35,6 +35,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // mojeekKey is the API key, KMS-sourced onto the env like every other secret
@@ -42,7 +44,7 @@ import (
 func mojeekKey() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_MOJEEK_KEY")) }
 
 func mojeekAPIURL() string {
-	return envOr("WEBSEARCH_MOJEEK_API_URL", "https://api.mojeek.com/search")
+	return environ.Or("WEBSEARCH_MOJEEK_API_URL", "https://api.mojeek.com/search")
 }
 
 // mojeekAPICount is how many hits to ask for. The plan allows 40 per request and

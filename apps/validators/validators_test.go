@@ -15,6 +15,7 @@ import (
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // ── the ownership-verify test (the required one) ─────────────────────────────
@@ -397,7 +398,7 @@ func TestLiveOwnerOf(t *testing.T) {
 	if testing.Short() || os.Getenv("VALIDATORS_LIVE_ETH") == "" {
 		t.Skip("live ETH read: set VALIDATORS_LIVE_ETH=1 to run")
 	}
-	rpc := envOr("VALIDATORS_ETH_RPC", "https://ethereum-rpc.publicnode.com")
+	rpc := environ.Or("VALIDATORS_ETH_RPC", "https://ethereum-rpc.publicnode.com")
 	r, err := newNFTReader(rpc, GenesisNFTContract, 100)
 	if err != nil {
 		t.Fatalf("newNFTReader: %v", err)

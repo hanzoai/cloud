@@ -54,6 +54,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
@@ -66,8 +67,11 @@ const defaultUpstream = "https://oci.hanzo.ai"
 // deployment). Overridable via REGISTRY_PKG.
 const defaultPkg = "https://pkg.hanzo.ai"
 
+// env reads a URL base: the variable or the fallback, with any trailing slash
+// removed so a caller can append a path without doubling the separator. The
+// fallback is used as written, being ours rather than an operator's.
 func env(key, fallback string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+	if v := environ.Or(key, ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return fallback

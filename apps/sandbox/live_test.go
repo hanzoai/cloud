@@ -23,6 +23,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 func TestLiveSandboxRunsRealCode(t *testing.T) {
@@ -48,7 +50,7 @@ func TestLiveSandboxRunsRealCode(t *testing.T) {
 		// production and wrong here: proving the mechanism must not require our
 		// image to exist yet, and a stock node:22 exercises the identical
 		// create/exec/edit path.
-		Image: envOr("SANDBOX_LIVE_IMAGE", "node:22"),
+		Image: environ.Or("SANDBOX_LIVE_IMAGE", "node:22"),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
@@ -149,7 +151,7 @@ func TestLiveSandboxDoesGit(t *testing.T) {
 	m := Sandbox{
 		ID: "live-git", Org: "hanzo", Status: "running", Class: "exec",
 		Pod:   fmt.Sprintf("sandbox-live-git-%d", time.Now().Unix()),
-		Image: envOr("SANDBOX_LIVE_IMAGE", "node:22"),
+		Image: environ.Or("SANDBOX_LIVE_IMAGE", "node:22"),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
