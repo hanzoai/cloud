@@ -202,7 +202,7 @@ type Snapshot struct {
 	Totals           Totals              `json:"totals"`
 	Cost             Cost                `json:"cost"`
 	Clusters         []Cluster           `json:"clusters"`
-	Nodes            []Node              `json:"nodes"`
+	Nodes            []Machine              `json:"nodes"`
 	Volumes          []Volume            `json:"volumes"`
 	LoadBalancers    []LoadBalancer      `json:"loadBalancers"`
 	Findings         []Finding           `json:"findings"`
@@ -315,8 +315,8 @@ func (p NodePool) ScaleTo(count int) (bool, string) {
 	return true, ""
 }
 
-// Node is one droplet, joined to the Kubernetes node of the same name.
-type Node struct {
+// Machine is one droplet, joined to the Kubernetes node of the same name.
+type Machine struct {
 	ID           int         `json:"id"`
 	Name         string      `json:"name"`
 	Cluster      string      `json:"cluster"`
@@ -595,12 +595,12 @@ func Analyze(inv Inventory, scans []ClusterScan, sources []core.SourceStatus, at
 		}
 	}
 	clusterByDroplet := make(map[int]string, len(inv.Droplets))
-	snap.Nodes = make([]Node, 0, len(inv.Droplets))
+	snap.Nodes = make([]Machine, 0, len(inv.Droplets))
 	for _, d := range inv.Droplets {
 		cid := clusterIDFromTags(d.Tags)
 		clusterByDroplet[d.ID] = cid
 		ks := nodeByName[d.Name]
-		n := Node{
+		n := Machine{
 			ID: d.ID, Name: d.Name, Cluster: nameByID[cid], ClusterID: cid,
 			Region: d.Region, Status: d.Status, SizeSlug: d.SizeSlug,
 			VCPUs: d.VCPUs, MemoryMiB: d.MemoryMiB, LocalDiskGiB: d.LocalDiskGiB,
@@ -873,7 +873,7 @@ func wastedGiB(sizeGiB int, usedBytes int64) int {
 // — DOKS recreates a node deleted out from under it (so the delete costs an outage and
 // changes nothing) and reverts a hand-resized one to the pool's declared size. The pool
 // is the only lever that actually holds.
-func nodeBlock(n Node) string {
+func nodeBlock(n Machine) string {
 	if n.ClusterID == "" {
 		return ""
 	}
