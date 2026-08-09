@@ -434,7 +434,7 @@ func init() {
 		Fields: map[string]string{
 			"mirrorReq.name":         "Name is the local repo to mirror into, from the :name path segment. It is\nCREATED on first use.",
 			"mirrorReq.project":      "Project is the sub-scope to land the repo in; empty uses the caller's own,\nexactly as a create would.",
-			"mirrorReq.source":       "Source is the http(s) git URL to fetch from. The host is SSRF-guarded and\nthe shared mirror credential is only sent to allowlisted hosts.",
+			"mirrorReq.source":       "Source is the http(s) git URL to fetch from. The host is SSRF-guarded, and a\ncredential is sent only if we hold one NAMED FOR that host — so a\ntenant-supplied URL to anywhere else fetches anonymously.",
 			"repoView.branches":      "Branches are the repo's branch names. Read live, so the detail view carries\nthem and a list row does not.",
 			"repoView.cloneUrl":      "CloneURL is the HTTPS smart-HTTP remote `git clone` takes.",
 			"repoView.createdAt":     "CreatedAt is RFC 3339 UTC.",

@@ -139,7 +139,7 @@ func (githubImporter) InboundSync(ctx context.Context, req cloud.GitInboundReq) 
 	if req.Token != "" {
 		cred = gitCred{User: "x-access-token", Token: req.Token}
 	}
-	res, err := s.State.storage.inboundFastForward(ctx, req.Org, project, name, req.Ref, src, cred)
+	res, err := s.State.storage.inboundFastForward(ctx, req.Org, project, name, req.Ref, src, cred, "")
 	if err != nil {
 		return cloud.GitSyncResult{}, err
 	}
@@ -249,25 +249,17 @@ func (s *storage) importFetch(ctx context.Context, org, project, name, srcURL st
 		if !branchRE.MatchString(b) {
 			continue // skip a source branch whose name can't be a native ref
 		}
-		// ALREADY OURS? Then there is nothing to fetch, and the advertisement we
-		// have already read is proof of it.
+		// The advertised tip rides along, so a branch that has not moved costs no
+		// fetch at all — inboundFastForward compares it to the local tip it already
+		// reads and answers NoOp.
 		//
-		// The tip is in the ls-remote output, and it used to be thrown away — so a
+		// The tip is in the ls-remote output and used to be thrown away, so a
 		// reconcile spawned one `git fetch` per branch, every pass, to discover that
 		// nothing had moved. Measured on this fleet: ~7 branches per repository
 		// across 1685 declared syncs, so roughly 11,800 fetch subprocesses and their
 		// network round trips per sweep, nearly all of them no-ops. That is the
 		// reason a full pass took hours, which is the reason the fleet redeployed
 		// before it finished.
-		//
-		// NoOp is exactly what the fetch would have reported ("upstream tip == native
-		// tip"), so the result a caller sees is unchanged — only the cost of learning
-		// it is. A ref we do not have locally reads as empty and never matches, so a
-		// new branch still fetches.
-		if r.oid != "" && s.revParse(ctx, s.absRepoPath(org, project, name), "refs/heads/"+b) == r.oid {
-			out[b] = ffResult{NoOp: true, Before: r.oid, After: r.oid}
-			continue
-		}
 		// THE FULL REF, which is what inboundFastForward documents and requires.
 		// lsRemoteHeads strips refs/heads/, and handing the SHORT name on made the
 		// refspec "2017:2017" — ambiguous on the source, where it matches both the
@@ -284,7 +276,7 @@ func (s *storage) importFetch(ctx context.Context, org, project, name, srcURL st
 		// as a warn line, which is why the native git held a fraction of what was
 		// declared for it. The short name is still what the OUTCOME is keyed by,
 		// because that is the branch a caller asked about.
-		res, err := s.inboundFastForward(ctx, org, project, name, "refs/heads/"+b, srcURL, cred)
+		res, err := s.inboundFastForward(ctx, org, project, name, "refs/heads/"+b, srcURL, cred, r.oid)
 		if err != nil {
 			return out, fmt.Errorf("fetch branch %s: %w", b, err)
 		}
@@ -307,9 +299,6 @@ func (s *storage) importFetch(ctx context.Context, org, project, name, srcURL st
 	return out, nil
 }
 
-// lsRemoteHeads lists the source's branches (refs/heads/*) and its HEAD symref
-// (the default branch) in one bounded ls-remote — the ref list is bounded by ref
-// count, not pack size, so it is safe to buffer.
 // remoteRef is one advertised branch: its short name and the object it points at.
 //
 // The OID is kept because the advertisement ALREADY carries it. Discarding it meant
@@ -320,6 +309,12 @@ type remoteRef struct {
 	oid  string
 }
 
+// lsRemoteHeads lists the source's branches (refs/heads/*), its tags
+// (refs/tags/*) and its HEAD symref (the default branch) in one bounded ls-remote —
+// the ref list is bounded by ref count, not pack size, so it is safe to buffer.
+//
+// Each entry carries the advertised object id, which is what lets importFetch skip a
+// ref that has not moved without fetching to find out.
 func (s *storage) lsRemoteHeads(ctx context.Context, srcURL string, env []string) (branches, tags []remoteRef, head string, err error) {
 	cmd, err := gitCmd(ctx, env,
 		"-c", "protocol.version=2", "-c", "credential.helper=",
@@ -368,8 +363,6 @@ func (s *storage) lsRemoteHeads(ctx context.Context, srcURL string, env []string
 	return branches, tags, head, nil
 }
 
-// fetchTags fetches the source's tags into native with create-only (non-forcing)
-// semantics, so an existing native tag is never clobbered. Best-effort.
 // missingTag reports whether the source advertises a tag we do not already hold at
 // that exact object. Any single one is enough to make the tag fetch worth its round
 // trip; none means there is nothing to learn.
@@ -391,6 +384,8 @@ func (s *storage) missingTag(ctx context.Context, org, project, name string, tag
 	return false
 }
 
+// fetchTags fetches the source's tags into native with create-only (non-forcing)
+// semantics, so an existing native tag is never clobbered. Best-effort.
 func (s *storage) fetchTags(ctx context.Context, org, project, name, srcURL string, env []string) {
 	bareDir := s.absRepoPath(org, project, name)
 	args := append(packConfigArgs(""),
@@ -448,7 +443,7 @@ var nonFFRE = regexp.MustCompile(`(?i)\[rejected\]|non-fast-forward|would clobbe
 //
 // A non-rejection failure (network/auth) is returned as an error; native is
 // unchanged in that case too (a failed fetch never mutates a ref).
-func (s *storage) inboundFastForward(ctx context.Context, org, project, name, ref, srcURL string, cred gitCred) (ffResult, error) {
+func (s *storage) inboundFastForward(ctx context.Context, org, project, name, ref, srcURL string, cred gitCred, want string) (ffResult, error) {
 	bareDir := s.absRepoPath(org, project, name)
 	env := mirrorGitEnv(srcURL, cred)
 	// ref arrives FULL (refs/heads/<branch> or refs/tags/<tag>), so branches and
@@ -457,6 +452,20 @@ func (s *storage) inboundFastForward(ctx context.Context, org, project, name, re
 	// rejects it and native keeps the tag it already published.
 	localRef := ref
 	before := s.revParse(ctx, bareDir, localRef) // "" when the ref is new to native
+
+	// ALREADY OURS? Then there is nothing to fetch, and `before` is the proof.
+	//
+	// `want` is the object the source ADVERTISED for this ref, or "" from a caller
+	// that has no advertisement (the webhook door). The comparison lives here, beside
+	// the local tip it needs, so there is ONE place that decides a ref has not moved
+	// and ONE rev-parse to decide it with — importFetch asked the same question a
+	// moment earlier and then asked again through this function.
+	//
+	// NoOp is exactly what the fetch would have reported, so a caller's result is
+	// unchanged; only the round trip is gone.
+	if want != "" && before == want {
+		return ffResult{NoOp: true, Before: before, After: before}, nil
+	}
 
 	// THE REF POLICY, on the inbound door (writer 7 in refpolicy.go).
 	//
