@@ -10,6 +10,7 @@ package team
 // net/http — it is an external hop to hanzo.id.
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -505,7 +506,7 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 		return "", "", "org_failed", fmt.Errorf("verified token has empty owner")
 	}
 	org := id.Owner
-	displayName := firstNonEmpty(name, localPart(email))
+	displayName := cmp.Or(name, localPart(email))
 	// The VERIFIED membership set (home ∪ every org the token proves) is the ONE
 	// source that drives BOTH the workspace union (getUserWorkspaces) AND the seat
 	// projection (Seats). Ensuring a workspace — hence a counted member row — in
@@ -1570,15 +1571,6 @@ func originOf(c *zip.Ctx) string {
 		scheme = "http"
 	}
 	return scheme + "://" + host
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func localPart(email string) string {

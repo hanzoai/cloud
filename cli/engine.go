@@ -11,6 +11,7 @@ package cli
 // the same /v1/models probe `hanzo link --serve-engine` advertises with.
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -74,7 +75,7 @@ func newEngineCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 		Short: "Show whether a local hanzo-engine is up and what it serves",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runEngineStatus(cmd, envOf(), firstNonEmpty(url, defaultEngineURL))
+			return runEngineStatus(cmd, envOf(), cmp.Or(url, defaultEngineURL))
 		},
 	}
 	status.Flags().StringVar(&url, "url", defaultEngineURL, "local engine URL to probe (GET /v1/models)")

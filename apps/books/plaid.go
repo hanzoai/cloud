@@ -27,6 +27,7 @@ package books
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -399,7 +400,7 @@ func plaidPostedAt(t plaidTxn) string {
 
 // plaidCurrency is the row's currency, lowercased to match the spine's "usd", defaulting there.
 func plaidCurrency(t plaidTxn) string {
-	return strings.ToLower(firstNonEmpty(strings.TrimSpace(t.ISOCurrency), strings.TrimSpace(t.UnofficialCurr), "usd"))
+	return strings.ToLower(cmp.Or(strings.TrimSpace(t.ISOCurrency), strings.TrimSpace(t.UnofficialCurr), "usd"))
 }
 
 // decodeCursors parses the connector cursor (a JSON map of item_id → Plaid cursor). An empty
