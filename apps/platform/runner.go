@@ -461,7 +461,7 @@ func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ct
 	if err != nil {
 		return nil, zip.ErrBadRequest(err.Error())
 	}
-	if _, err := validateGitRef(ref); err != nil {
+	if _, err := validateBuildRef(ref); err != nil {
 		return nil, zip.ErrBadRequest(err.Error())
 	}
 	for i := range req.Binaries {

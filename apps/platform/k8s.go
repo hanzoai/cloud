@@ -930,22 +930,6 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 // from — and an image that can name a different commit than it was built from is
 // the one lie the whole digest-pinned lane exists to prevent.
 func buildFrontendCmdArgs(buildCtx, dockerfile, image, revision string, args map[string]string) ([]any, error) {
-	// AN ABBREVIATED SHA IS A MISTAKE; A BRANCH NAME IS NOT.
-	//
-	// A build context may legitimately name a branch, and a branch is not a
-	// revision — stamping "main" would make the label look populated while
-	// answering a different question, so those builds correctly ship an image that
-	// says `revision: unknown`. That is honest and stays.
-	//
-	// A value that is hex and SHORTER than a commit is a different thing: a caller
-	// who believes it is stamping a revision and is not. It silently produced an
-	// image that cannot say what it is — /v1/health answers "unknown" forever, and
-	// nobody can ask a running fleet which commit it serves. That is how a rollback
-	// went unnoticed here: the tag said one thing, the image knew nothing, and only
-	// a per-file check told the truth. Refusing names the reason at the door.
-	if isAbbreviatedCommit(revision) {
-		return nil, fmt.Errorf("revision %q is an abbreviated commit, so the image it builds could not name itself: pass the full 40-character sha", revision)
-	}
 	cmd := buildFrontendCmdRev(buildCtx, dockerfile, image, revision)
 	declared := make(map[string]string, len(args))
 	for k, v := range args {
@@ -980,23 +964,6 @@ func buildFrontendCmdArgs(buildCtx, dockerfile, image, revision string, args map
 // release that lost had already been pinned. A version is only a receipt if the
 // image can name its own commit, so the arg is passed here and the label is true
 // no matter which builder ran.
-// isAbbreviatedCommit reports a value that is hex but too short to BE a commit —
-// the shape of a caller who meant to pass a revision and passed a prefix of one.
-//
-// Deliberately narrow. A branch name is not caught (it is a legitimate build
-// context, and cloud.IsCommit already declines to stamp it), and neither is the
-// empty string. Only the mistake is.
-func isAbbreviatedCommit(s string) bool {
-	if len(s) < 7 || len(s) >= 40 {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if c := s[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return false
-		}
-	}
-	return true
-}
 
 func buildFrontendCmdRev(buildCtx, dockerfile, image, revision string) []any {
 	cmd := []any{"buildctl-daemonless.sh", "build"}
