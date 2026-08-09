@@ -57,9 +57,9 @@ type Route struct {
 	Priority int `json:"priority,omitempty"`
 }
 
-// Service is a Traefik-style load-balanced backend pool. Backends are weighted
+// Upstream is a Traefik-style load-balanced backend pool. Backends are weighted
 // round-robin members (github.com/vulcand/oxy/v2 roundrobin).
-type Service struct {
+type Upstream struct {
 	// ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.
 	// A create that omits it gets a generated one. Routes reference it by this id.
 	ID string `json:"id"`
@@ -198,7 +198,7 @@ func (r *Route) validate() error {
 	return nil
 }
 
-func (s *Service) validate() error {
+func (s *Upstream) validate() error {
 	if !validID(s.ID) {
 		return fmt.Errorf("service: invalid id %q", s.ID)
 	}

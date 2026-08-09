@@ -689,6 +689,46 @@
         },
         "type": "object"
       },
+      "Delivery": {
+        "properties": {
+          "data": {
+            "description": "Data is the payload, base64-encoded.",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Headers are the message headers, when any were published.",
+            "type": "object"
+          },
+          "num_delivered": {
+            "description": "Delivered is how many times a consumer has been handed this message (pulls only).",
+            "type": "integer"
+          },
+          "num_pending": {
+            "description": "Remaining is how many messages follow this one for the consumer (pulls only).",
+            "type": "integer"
+          },
+          "sequence": {
+            "description": "Sequence is the message's stream sequence.",
+            "type": "integer"
+          },
+          "subject": {
+            "description": "Subject is the org-relative subject the message was stored under.",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Timestamp is when the broker stored the message.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Durable": {
         "properties": {
           "ack_policy": {
@@ -751,46 +791,6 @@
           },
           "version": {
             "description": "Version is the connected broker's server version; empty while degraded.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "Message": {
-        "properties": {
-          "data": {
-            "description": "Data is the payload, base64-encoded.",
-            "type": "string"
-          },
-          "headers": {
-            "additionalProperties": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "description": "Headers are the message headers, when any were published.",
-            "type": "object"
-          },
-          "num_delivered": {
-            "description": "Delivered is how many times a consumer has been handed this message (pulls only).",
-            "type": "integer"
-          },
-          "num_pending": {
-            "description": "Remaining is how many messages follow this one for the consumer (pulls only).",
-            "type": "integer"
-          },
-          "sequence": {
-            "description": "Sequence is the message's stream sequence.",
-            "type": "integer"
-          },
-          "subject": {
-            "description": "Subject is the org-relative subject the message was stored under.",
-            "type": "string"
-          },
-          "timestamp": {
-            "description": "Timestamp is when the broker stored the message.",
-            "format": "date-time",
             "type": "string"
           }
         },
@@ -1034,7 +1034,7 @@
           "messages": {
             "description": "Messages is what was read, stream-ordered.",
             "items": {
-              "$ref": "#/components/schemas/Message"
+              "$ref": "#/components/schemas/Delivery"
             },
             "type": "array"
           }
