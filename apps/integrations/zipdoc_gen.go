@@ -130,6 +130,7 @@ func init() {
 			"githubRepoView.private":       "Private is GitHub's visibility bit for the repo.",
 			"githubRepoView.syncStatus":    "SyncStatus is \"synced\", \"conflict\", or \"\" when the repo is not imported.",
 			"githubReposOut.repos":         "Repos is every repo the installation grants. Never null; [] when none.",
+			"githubReposOut.unread":        "Unread names the connected accounts this answer could NOT read, so a short\nlist is distinguishable from a complete one. Absent when the answer is whole.\n\nThe fan-out is per installation, and one account failing used to be dropped\nin silence: the response stayed 200 and simply carried fewer repositories,\nerroring only when EVERY account failed. Measured, twice in a row, minutes\napart: 1475 repositories, then 1157 — a whole installation missing with\nnothing in the answer to say so. Anything driven off the list then\nunder-covers and reports success, which is the failure this field ends.",
 		},
 		Response: json.RawMessage(`{"repos":[{"name":"widgets","fullName":"acme/widgets","private":true,"defaultBranch":"main","imported":true,"syncStatus":"synced","lastSyncedAt":"2026-07-01T10:00:00Z","htmlUrl":"https://github.com/acme/widgets"}]}`),
 	})
@@ -150,6 +151,26 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"repo":"widgets"}`),
 		Response: json.RawMessage(`{"repo":"widgets","status":"built","url":"https://acme.github.io/widgets/","cname":"docs.acme.com","custom404":false,"buildType":"legacy","httpsEnforced":true,"source":{"branch":"main","path":"/docs"}}`),
+	})
+	zip.Describe("POST /integrations/chat-identity", zip.Doc{
+		Description: "Answers WHO a chat turn runs as, and never with what.\n\nThe org rides the request rather than the caller's plane identity, for the\nsame reason AgentsRunOnBehalf does: the tenant is the one that connected the\nworkspace, which the adapter resolved from a signed id, and the calling\nplugin's own identity is not it. No token is returned under any branch.",
+	})
+	zip.Describe("POST /integrations/chat-send", zip.Doc{
+		Description: "Dispatches to the transport that owns the provider.\n\nThe org rides the request rather than the caller's plane identity, as with the\nother chat ops: the tenant is the one that connected the workspace, resolved\nby the adapter from a signed id. It is safe because the send can only spend\nTHAT org's own token — TokenFor fails closed for an org that never connected —\nand reads nothing across tenants.",
+		Fields: map[string]string{
+			"ChatSendIn.private":  "Private asks the transport for a reply only User can see. Not every\ntransport has one; the answering side refuses rather than falling back to\nthe room, because posting a link meant for one person to everyone is the\nfailure this exists to prevent.",
+			"ChatSendIn.reply_to": "thread or message to reply under, \"\" when unthreaded",
+			"ChatSendIn.room":     "channel / conversation / chat id",
+			"ChatSendIn.root":     "transport-verified reply root (Teams' serviceURL), \"\" elsewhere",
+			"ChatSendIn.user":     "User is who the message is FOR when Private is set — a sign-in prompt\ncarries a URL bound to a nonce for one person, and a room must never see it.",
+		},
+	})
+	zip.Describe("POST /integrations/connection", zip.Doc{
+		Description: "Answers for the CALLER'S OWN org, which is read from the peer\ncontext and can never be named in an argument — an org a caller could pass is an\norg whose connections a caller could read. A named function, not a closure, so\nzipdoc lifts this prose into the registry.\n\nA provider is connected when ANY of its accounts is, and the ORG-held account is\nthe one described: a caller acting for the org acts as the WORKSPACE, never as\nsome member's personal link. Nothing secret crosses — an app that must ACT on a\nconnection asks this package to act instead of fetching the credential.",
+		Fields: map[string]string{
+			"Connection.account":   "Account is the id-shaped fact — the provider-side external id (a Slack team\nid, a Discord guild id). AccountLabel is the human name. Never swapped.",
+			"Connection.connected": "Connected is the whole answer to \"may I offer this\". False leaves the rest\nempty.",
+		},
 	})
 	zip.Describe("POST /integrations/slack/send", zip.Doc{
 		Description: "Posts one message through the org's own bot token. The ORG is\nthe CALLER's (cloud.Who(ctx).Org, set on the peer context by the caller), never\nan argument — a caller able to name it could post as another tenant. A named\nhandler, not a closure, so zipdoc lifts this prose into the registry.",
@@ -274,7 +295,7 @@ func init() {
 		Response: json.RawMessage(`{"provider":"cloudflare","active":true,"account":"Acme","externalId":"a1b2c3","scopes":["zone:read"]}`),
 	})
 	zip.Describe("POST /v1/integrations/github/claim", zip.Doc{
-		Description: "Binds installations the App ALREADY holds to the org the caller is\nacting in — the reconciliation for a grant that happened outside our connect\nflow.\n\nAn installation IS the grant: GitHub recorded the consent when the App was\ninstalled, and our connection row is bookkeeping that never got written because\nnobody came through our callback. This writes that row from the App's own view,\nso 23 accounts granted straight from GitHub stop reading as nothing.\n\nThe org is taken from the VALIDATED PRINCIPAL and never from the body, because\nit is the one part GitHub cannot tell us. An installation carries an account\nlogin, a type and a repository selection — nothing that names a Hanzo org. So\nthe binding cannot be DERIVED, only asserted, and the only unforgeable assertion\navailable is the org the caller is already acting in. Inferring one from the\naccount name would be a guess the store cannot catch: its key is\n(org,provider,owner), so a wrong org is a valid row, and a valid row is a\nmirror pointed at the wrong tenant.\n\nSUPER ADMIN only, for that same reason. A tenant's proof that an account is\ntheirs is GitHub's own consent screen — the connect flow — and without it any\norg could claim any account the App holds. Platform sudo is already the scope\nthat reads the whole install list, so it is the scope that may bind from it;\ngiving a tenant this verb would hand it every other tenant's repositories.\n\nIdempotent: the row is keyed (org,provider,owner) and connected_at survives an\nupsert, so claiming twice rebinds the same account to the same org and reports\nit under `already`. Re-claiming also REFRESHES the installation id, so an\naccount reinstalled on GitHub — new id, same login — self-heals instead of\nminting tokens against a dead installation.",
+		Description: "Binds installations the App ALREADY holds to the org the caller is\nacting in — the reconciliation for a grant that happened outside our connect\nflow.\n\nAn installation IS the grant: GitHub recorded the consent when the App was\ninstalled, and our connection row is bookkeeping that never got written because\nnobody came through our callback. This writes that row from the App's own view,\nso 23 accounts granted straight from GitHub stop reading as nothing.\n\nThe org is taken from the VALIDATED PRINCIPAL and never from the body, because\nit is the one part GitHub cannot tell us. An installation carries an account\nlogin, a type and a repository selection — nothing that names a Hanzo org. So\nthe binding cannot be DERIVED, only asserted, and the only unforgeable assertion\navailable is the org the caller is already acting in. Inferring one from the\naccount name would be a guess the store cannot catch: its key is\n(org,provider,owner), so a wrong org is a valid row, and a valid row is a\nmirror pointed at the wrong tenant.\n\nSUPER ADMIN only, for that same reason. A tenant's proof that an account is\ntheirs is GitHub's own consent screen — the connect flow — and without it any\norg could claim any account the App holds. Platform sudo is already the scope\nthat reads the whole install list, so it is the scope that may bind from it;\ngiving a tenant this verb would hand it every other tenant's repositories.\n\nIdempotent: the row is keyed (org,provider,owner) and connected_at survives an\nupsert, so claiming twice rebinds the same account to the same org and reports\nit under `already`. Re-claiming also REFRESHES the installation id, so an\naccount reinstalled on GitHub — new id, same login — self-heals instead of\nminting tokens against a dead installation.\n\nClaiming an account another org holds ADDS this org's row and leaves theirs\nstanding, so no org loses an integration it is using.",
 		Fields: map[string]string{
 			"githubClaimIn.accounts": "Accounts names GitHub logins the App is installed on (\"hanzoai\"). Matched\ncase-insensitively, since GitHub logins are. Ignored when all is true.",
 			"githubClaimIn.all":      "All binds every account the App holds, instead of naming them.",
@@ -282,6 +303,16 @@ func init() {
 			"githubClaimOut.claimed": "Claimed are the accounts this call bound. Never null; [] when none.",
 		},
 		Response: json.RawMessage(`{"claimed":["hanzoai","luxfi"],"already":["zooai"]}`),
+	})
+	zip.Describe("POST /v1/integrations/github/fork", zip.Doc{
+		Description: "Forks a granted repository.\n\nGitHub's fork is ASYNCHRONOUS: it answers 202 with the target repo and\npopulates it in the background, and it answers the same 202 when the fork\nalready exists. So this reports what GitHub said rather than waiting — a call\nthat blocked until the clone finished would time out on a large repository and\ntell the caller nothing it does not already know.",
+		Fields: map[string]string{
+			"githubForkOut.existing": "Existing reports that the fork was already there. GitHub answers 202 either\nway, so without this a caller cannot tell \"made you one\" from \"you had one\".",
+			"githubForkReq.org":      "Org is the GitHub account to fork INTO; empty forks to the installation's\nown account, which is the common case.",
+			"githubForkReq.repo":     "Repo is a repository the org's installation was GRANTED, by name.",
+		},
+		Example:  json.RawMessage(`{"repo":"widgets"}`),
+		Response: json.RawMessage(`{"full_name":"acme/widgets","html_url":"https://github.com/acme/widgets","clone_url":"https://github.com/acme/widgets.git","default_branch":"main","existing":false}`),
 	})
 	zip.Describe("POST /v1/integrations/github/issues/backfill", zip.Doc{
 		Description: "Seeds the native tracker with the EXISTING issues across the\norg's granted repos (default state=open); the webhook keeps them live thereafter.\nOrg-scoped by the validated principal — a caller only ever backfills its OWN org.\nSynchronous + bounded (a total time budget and an issue cap) so it returns the\ncounts directly; idempotent by ExtRef, so a re-run continues where a truncated\npass left off and never duplicates.",
@@ -339,6 +370,15 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"repos":["widgets"]}`),
 		Response: json.RawMessage(`{"queued":1,"repos":["widgets"]}`),
+	})
+	zip.Describe("POST /v1/integrations/github/search", zip.Doc{
+		Description: "Finds repositories on GitHub.\n\nThis reads the PUBLIC index and returns nothing an installation unlocks: it is\nhow you find a repository to fork, not a way to see inside one. The org's own\ntoken is used only so the query is rate-limited against the installation\nrather than anonymously — the results are the same ones anyone would get.",
+		Fields: map[string]string{
+			"githubSearchReq.limit": "Limit caps the answer; 0 takes the default and anything above the ceiling\nis clamped rather than refused.",
+			"githubSearchReq.q":     "Q is GitHub's own search syntax, passed through: \"tetris language:go\",\n\"org:hanzoai stars:>10\". Passing it through rather than inventing a\nvocabulary means one thing to learn, and it is theirs.",
+		},
+		Example:  json.RawMessage(`{"q":"language:go raft","limit":5}`),
+		Response: json.RawMessage(`{"repos":[{"full_name":"hashicorp/raft","stars":8000,"language":"Go"}],"count":1}`),
 	})
 	zip.Describe("POST /v1/integrations/telegram/connect", zip.Doc{
 		Description: "Mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit.",
