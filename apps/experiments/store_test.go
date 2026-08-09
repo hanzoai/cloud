@@ -8,11 +8,11 @@ import (
 	"github.com/hanzoai/cloud"
 )
 
-func sampleExp(id string) Experiment {
-	return Experiment{
+func sampleExp(id string) Trial {
+	return Trial{
 		Project: "", ID: id, Name: id, SubjectKind: SubjectUser,
 		FlagKey: "exp_" + id, ExposureEvent: defaultExposureEvent, MetricEvent: "order_completed",
-		Variants: []Variant{
+		Arms: []Arm{
 			{Key: "control", Control: true, Weight: 50, Payload: json.RawMessage(`{"on":false}`)},
 			{Key: "treatment", Weight: 50, Payload: json.RawMessage(`{"on":true}`)},
 		},
@@ -41,11 +41,11 @@ func TestStore_CreateGetListDecide(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("get: %v found=%v", err, found)
 	}
-	if got.FlagKey != "exp_checkout" || len(got.Variants) != 2 || !got.Variants[0].Control {
+	if got.FlagKey != "exp_checkout" || len(got.Arms) != 2 || !got.Arms[0].Control {
 		t.Fatalf("round-trip lost fields: %+v", got)
 	}
-	if string(got.Variants[1].Payload) != `{"on":true}` {
-		t.Fatalf("variant payload lost: %s", got.Variants[1].Payload)
+	if string(got.Arms[1].Payload) != `{"on":true}` {
+		t.Fatalf("variant payload lost: %s", got.Arms[1].Payload)
 	}
 
 	list, err := st.list(ctx, "")

@@ -103,30 +103,59 @@ func (e *execClient) run(ctx context.Context, f Function, input string, timeoutS
 
 var errExecUnconfigured = errors.New("code execution runtime not deployed here")
 
-// invoke runs a function and records a REAL invocation. Fail-closed when the
-// sandbox is unconfigured (503, nothing recorded, nothing fabricated).
-func invoke(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// invokeReq runs one function.
+type invokeReq struct {
+	// Name is the function the URL names.
+	Name string `json:"-" url:"name"`
+	// Input is what the function is given on stdin. It is opaque to this surface.
+	Input string `json:"input"`
+}
+
+// invoke runs a function and records a REAL invocation.
+//
+// The answer is the invocation record whatever happened to it: 200 when the org's
+// code ran clean, 502 when it ran and failed, 503 when this deployment has no
+// sandbox to run code in. The record IS the evidence, so it rides the failure
+// rather than being replaced by an error envelope.
+//
+// Billing is two-part and both parts are prepaid-then-metered on the one shared
+// meter: a flat per-invocation request fee, gated BEFORE any sandbox compute runs
+// so an unfunded org gets 402 and nothing executes, and a usage-native
+// GB-seconds compute debit taken after the run. Either is independently free when
+// its fee is zero, so an operator can bill by request alone, by compute alone, or
+// by both — and a zero request fee removes the balance gate with it.
+//
+// A TRANSPORT failure is not charged: the sandbox being unreachable ran no
+// billable compute. Code that ran and exited non-zero IS charged — that is a
+// successful invocation of a failing program, not a billing failure.
+//
+// When the sandbox is not configured on this deployment, a non-fleet function
+// fails closed before anything is recorded — no execution and no fabricated
+// output. Scoped to the caller's org; requires a validated principal.
+func (o ops) invoke(ctx context.Context, in *invokeReq) (*invocationView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// The balance gate and the meter need the REQUEST — the payer, the request id
+	// and the caller's address are facts principal.OrgFrom does not carry. Off the
+	// HTTP path there is no payer, which is a refusal rather than free compute.
+	c, onHTTP := cloud.Request(ctx)
+	if !onHTTP {
+		return nil, cloud.Denied(cloud.ErrNoLedger)
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	name := nameParam(c)
-	f, err := store.Get(c.Context(), org, name)
+	name := strings.TrimSpace(in.Name)
+	f, err := store.Get(ctx, org, name)
 	if err == errNotFound {
-		return zip.ErrNotFound("function not found")
+		return nil, zip.ErrNotFound("function not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
-	}
-	var body struct {
-		Input string `json:"input"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
 
 	// Pre-invoke balance gate (fail-closed, per-org). Refuse BEFORE any sandbox
@@ -137,17 +166,17 @@ func invoke(s *cloud.Service[state], c *zip.Ctx) error {
 	// the post-success debit; fee==0 or unconfigured billing makes this a no-op.
 	fee := cloud.ResourceFeeCents(invokeFeeEnvPrefix, "invoke")
 	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, "invoke", fee); err != nil {
-		return cloud.DenyResource(c, err)
+	if err := s.Bill.Gate(ctx, principal.Ledger(c), project, projectValidated, "invoke", fee); err != nil {
+		return nil, cloud.Denied(err)
 	}
 
 	start := time.Now()
 	var res execResult
 	var runErr error
 	if f.Target == "fleet" {
-		res, runErr = fleetRun(c.Context(), org, f, body.Input)
+		res, runErr = fleetRun(ctx, org, f, in.Input)
 	} else {
-		res, runErr = s.State.exec.run(c.Context(), f, body.Input, f.TimeoutSec)
+		res, runErr = s.State.exec.run(ctx, f, in.Input, f.TimeoutSec)
 	}
 	dur := time.Since(start).Milliseconds()
 
@@ -170,7 +199,7 @@ func invoke(s *cloud.Service[state], c *zip.Ctx) error {
 		iv.Status = "error"
 		iv.Error = truncate(res.Errout, 16*1024)
 	}
-	if err := store.InsertInvocation(c.Context(), iv); err != nil {
+	if err := store.InsertInvocation(ctx, iv); err != nil {
 		s.Log.Warn("record invocation failed", "org", org, "fn", name, "err", err)
 	}
 	// Debit the caller's org ledger when the sandbox ACTUALLY executed — real
@@ -180,13 +209,6 @@ func invoke(s *cloud.Service[state], c *zip.Ctx) error {
 	// billable compute, so it is NOT charged. Per-org, env-attributed, async
 	// best-effort so the debit never blocks or corrupts this response; a debit
 	// failure is logged for reconciliation.
-	//
-	// Two-part serverless billing, both on the ONE shared meter:
-	//   (1) the flat per-invocation REQUEST fee (gated pre-run above), and
-	//   (2) a usage-native COMPUTE debit = GB-seconds (DurationMs × configured
-	//       memory), priced by CLOUD_FUNCTION_GBSEC_CENTS.
-	// Either is independently free (fee 0 → no-op), so an operator can bill by
-	// request alone, compute alone, or both.
 	if runErr == nil {
 		s.Bill.Meter(principal.Ledger(c), project, "invoke", fee, c.RequestID(), cloud.ClientIP(c))
 		gbSecCents := gbSecondsCents(dur, memLimitMB(f.MemoryLimit), cloud.ResourceFeeCents(gbSecFeeEnvPrefix, "gbsec"))
@@ -201,18 +223,15 @@ func invoke(s *cloud.Service[state], c *zip.Ctx) error {
 	code := http.StatusOK
 	switch {
 	case errors.Is(runErr, errExecUnconfigured):
-		// "This deployment cannot run code" is not "the run failed" — it is a
-		// deployment fact, and 503 is the status a caller retries against a healthy
-		// replica on. 502 would say the sandbox answered badly, which it did not: it
-		// is not here.
 		code = http.StatusServiceUnavailable
 	case iv.Status != "ok":
 		code = http.StatusBadGateway
 	}
-	return c.JSON(code, invocationView{
-		ID: iv.ID, StatusCode: iv.StatusCode, Status: iv.Status, Method: iv.Method,
+	return &invocationView{
+		ID: iv.ID, Code: iv.StatusCode, Status: iv.Status, Method: iv.Method,
 		Time: rfc3339(iv.CreatedAt), DurationMs: iv.DurationMs,
-	})
+		reply: code,
+	}, nil
 }
 
 func truncate(s string, n int) string {

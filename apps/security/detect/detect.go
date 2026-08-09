@@ -207,10 +207,10 @@ func ScanContent(path, content string) []Finding {
 // RuleView is the catalog entry exposed at /v1/security/rules — the rule
 // identity without its internal regex.
 type RuleView struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Severity    string `json:"severity"`
-	Description string `json:"description"`
+	ID          string `json:"id"`          // the rule identifier a finding cites
+	Name        string `json:"name"`        // the rule's human name
+	Severity    string `json:"severity"`    // how serious a match is: critical, high, medium or low
+	Description string `json:"description"` // what kind of secret this rule recognises
 }
 
 // Rules returns the detection catalog (what the engine can find), most severe

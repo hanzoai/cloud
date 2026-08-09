@@ -15,7 +15,6 @@ import (
 	"github.com/hanzoai/cloud/apps/domain/namecom"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -71,119 +70,36 @@ func buildState(b cloud.Base) (state, error) {
 	return state{svc: svc, reg: reg, log: b.Log}, nil
 }
 
+// routes registers the domain surface. Every op is TYPED: the input and the answer
+// are Go types, so the schema, the prose, the MCP tool, the CLI command and every
+// generated SDK method are projections of the handler itself. zipdoc lifts the doc
+// comments into zipdoc_gen.go, which is the only way prose reaches the published
+// registry — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Handlers mount AFTER commerce, whose /v1 error filter flattens a propagated
-	// error to 500 — so wrap in Terminal to preserve real 4xx/402/409 statuses.
-	h := func(fn func(*cloud.Service[state], *zip.Ctx) error) func(*zip.Ctx) error {
-		return cloud.Terminal(cloud.Handle(s, fn))
-	}
 	g := app.Group("/v1/domain")
-	g.Get("/health", cloud.Handle(s, health))
-	g.Get("/search", h(searchHandler))
-	g.Get("/availability", h(availabilityHandler))
-	g.Get("/domains", h(listHandler))
-	g.Post("/register", h(registerHandler))
-	g.Post("/renew", h(renewHandler))
-	g.Post("/transfer", h(transferHandler))
+	// These ops mount AFTER commerce, whose /v1 error filter flattens a PROPAGATED
+	// error to 500. cloud.Terminal writes an HTTPError in band instead, so a 402,
+	// a 409 and the registrar's own 4xx reach the caller as themselves. Used here
+	// as group middleware — Terminal over c.Continue is the same function doing
+	// the same job one level out, which is what lets the leaves be typed ops.
+	g.Use(zip.H(cloud.Terminal(func(c *zip.Ctx) error { return c.Continue() })))
+	o := ops{s: s}
+
+	zip.Get(g, "/health", o.health, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+	zip.Get(g, "/search", o.search)
+	zip.Get(g, "/availability", o.availability)
+	zip.Get(g, "/domains", o.list)
+	zip.Post(g, "/register", o.register)
+	zip.Post(g, "/renew", o.renew)
+	zip.Post(g, "/transfer", o.transfer)
 }
 
-// The surface's prose, beside the route table so path and meaning are read (and
-// changed) together. None of these seven is a typed op — every one of them binds
-// its input by hand off the query string or the body — so there is no doc comment
-// for zipdoc to lift, and without this each would publish an operationId and
-// NOTHING else: an SDK method with no explanation and a CLI command with no help
-// text. Declared through the same registry Register uses, so a description
-// renders only while the router actually serves the route and this list can never
-// invent a path.
-func init() {
-	openapi.Describe("/v1/domain/health", http.MethodGet,
-		"Whether this deployment can actually sell domains, and why not when it cannot",
-		"Reports registrar reachability honestly: `ok` only when the wholesale credentials are "+
-			"present AND name.com accepted them on a live call made while you waited. Missing "+
-			"credentials or an unreachable registrar is 503 carrying `configured`, `reachable` and "+
-			"the reason, so an operator reads the blocker instead of guessing at it. Takes no "+
-			"principal, like every subsystem health probe. The answer also names the registrar "+
-			"`env`, which is the fact that decides whether money moves: only `prod` reaches the "+
-			"live, billable registrar — anything else, including unset, is the sandbox.")
-
-	openapi.Describe("/v1/domain/search", http.MethodGet,
-		"Buyable names for a keyword, priced",
-		"Searches the registrar for names built from the keyword `q`, plus its alternate-TLD "+
-			"suggestions, and answers a quote for each: the name, whether it is purchasable, "+
-			"whether it is premium, the first-term and renewal price in cents, and the TLD. Prices "+
-			"are RETAIL — this deployment's markup is already applied and the wholesale cost is "+
-			"never on the wire. Narrow the TLDs with a comma-separated `tld`; `q` is required and "+
-			"its absence is 400.\n\n"+
-			"Requires a validated principal; 403 without one. Nothing is charged and nothing is "+
-			"held — a quote is not a reservation, and the price is re-quoted at purchase, so a name "+
-			"quoted here can be gone or dearer by the time you buy it. A deployment with no "+
-			"registrar credentials answers 503.")
-
-	openapi.Describe("/v1/domain/availability", http.MethodGet,
-		"Availability and price for names you already have in mind",
-		"Checks exact names rather than searching for them, and answers the same quote shape "+
-			"search does — purchasable, premium, first-term and renewal price in cents. Pass "+
-			"`domain` with one name or several comma-separated to check them in one call; names "+
-			"are lowercased. An empty `domain` is 400.\n\n"+
-			"Requires a validated principal; 403 without one. Nothing is charged and nothing is "+
-			"held. A deployment with no registrar credentials answers 503.")
-
-	openapi.Describe("/v1/domain/domains", http.MethodGet,
-		"The domains your org has bought here",
-		"Lists the caller org's domains, newest registration first, each carrying the name, when "+
-			"it was registered, when it expires, what the org paid, the registrar order id and the "+
-			"nameservers it points at. Scoped to the validated principal's org — 403 without one, "+
-			"and there is no parameter that reaches another org's holdings.\n\n"+
-			"This is the deployment's OWN ownership record, not a query to the registrar: it lists "+
-			"what was bought THROUGH this surface, so a domain the org holds elsewhere is not "+
-			"here. The default store is in-process, so a deployment that has not swapped in a "+
-			"durable store answers from what this process registered.")
-
-	openapi.Describe("/v1/domain/register", http.MethodPost,
-		"Buy a domain for your org — charged only once the registrar confirms",
-		"Buys `domain` for `years` (default 1) and answers the ownership record together with the "+
-			"quote it was bought at. The order of operations is the product guarantee: quote, "+
-			"refuse anything unpurchasable or unpriced, AUTHORIZE the org's prepaid balance, "+
-			"provision the authoritative zone in Hanzo DNS, register at the registrar already "+
-			"pointing at Hanzo's nameservers, and only then CAPTURE the charge and record "+
-			"ownership. A registrar failure therefore leaves the balance untouched — the org is "+
-			"never billed for a domain it did not get.\n\n"+
-			"Requires a validated principal; that principal's org owns the domain and is the ledger "+
-			"the charge lands on. Re-buying a name the org already holds is 409, not a second "+
-			"purchase. `contacts` is optional — omit it and the registrar uses the reseller "+
-			"account's default WHOIS contacts.\n\n"+
-			"Refusals are distinct on purpose: 402 when the prepaid balance cannot cover the "+
-			"quoted price, 409 when the name is not available, 503 when the deployment has no "+
-			"registrar credentials, and the registrar's own message with its own 4xx — or 502 for "+
-			"its 5xx — when it rejects the purchase. Zone provisioning is best-effort: if the zone "+
-			"service is down the domain is still registered against Hanzo's nameservers and the "+
-			"zone reconciles afterwards, rather than the purchase failing.")
-
-	openapi.Describe("/v1/domain/renew", http.MethodPost,
-		"Extend a domain your org already owns",
-		"Renews `domain` for `years` (default 1) and answers the updated record with its new "+
-			"expiry alongside what was paid. Ownership is the gate: a name the caller's org does "+
-			"not hold is 404, so a renewal can never reach another tenant's domain.\n\n"+
-			"The price is re-quoted at the CURRENT renewal rate rather than the one paid at "+
-			"purchase. If the registrar returns no renewal price the org's original price is "+
-			"charged instead, so a renewal is never accidentally free. Balance is authorized before "+
-			"the registrar is called and captured after it confirms — 402 when the prepaid balance "+
-			"cannot cover it, 503 when the deployment has no registrar credentials. Requires a "+
-			"validated principal.")
-
-	openapi.Describe("/v1/domain/transfer", http.MethodPost,
-		"Move a domain you own at another registrar onto your org here",
-		"Transfers `domain` in using its `authCode` — both required, 400 otherwise — for `years` "+
-			"(default 1), and answers the same record-plus-quote a purchase does. It is priced and "+
-			"charged exactly like a registration: authorize the org's prepaid balance, ask the "+
-			"registrar for the transfer, capture only after the registrar accepts. A name the "+
-			"registrar will not price is 409, an insufficient balance is 402, and a deployment with "+
-			"no registrar credentials is 503.\n\n"+
-			"Requires a validated principal; the ownership record is written under that org as soon "+
-			"as the registrar ACCEPTS the request, which is not the same instant the transfer "+
-			"completes at the losing registrar. Unlike a registration this does not provision a "+
-			"zone, so the record carries this deployment's configured nameservers.")
-}
+// ops binds the service to the typed ops. A TypedHandler takes no service
+// parameter, so the service arrives as a RECEIVER and every op is a method value
+// — also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
 
 // ── config ───────────────────────────────────────────────────────────────────────
 
@@ -317,7 +233,16 @@ func (z *hanzodnsZones) EnsureZone(ctx context.Context, org, domainName string) 
 
 // ── handlers ───────────────────────────────────────────────────────────────────────
 
-func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+// tenant resolves the org — the ownership and billing KEY — from the validated
+// principal cloud.Bridge parked. A typed op receives a context.Context and nothing
+// else, so it reads the org there rather than off the request. Fails closed.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("a validated principal is required")
+	}
+	return org, nil
+}
 
 // statusErr maps a core sentinel / registrar error to a zip HTTP status.
 func statusErr(err error) error {
@@ -348,58 +273,133 @@ func statusErr(err error) error {
 	return zip.Errorf(http.StatusInternalServerError, "%v", err)
 }
 
-// health probes registrar reachability. Public (like every subsystem health) and
-// honest: it reports whether credentials are present and, if so, whether name.com
-// accepts them (the current go-live blocker surfaces here as ok:false + the reason).
-func health(s *cloud.Service[state], c *zip.Ctx) error {
-	res := map[string]any{"service": "domain", "registrar": "name.com", "env": s.State.svc.Env()}
-	if !s.State.reg.Configured() {
-		res["status"], res["configured"] = "degraded", false
-		res["error"] = "registrar credentials not set (NAMECOM_USER/NAMECOM_TOKEN)"
-		return c.JSON(http.StatusServiceUnavailable, res)
-	}
-	res["configured"] = true
-	ctx, cancel := context.WithTimeout(c.Context(), 8*time.Second)
-	defer cancel()
-	if _, err := s.State.reg.Hello(ctx); err != nil {
-		res["status"], res["reachable"] = "degraded", false
-		res["error"] = err.Error()
-		return c.JSON(http.StatusServiceUnavailable, res)
-	}
-	res["status"], res["reachable"] = "ok", true
-	return c.JSON(http.StatusOK, res)
+// noIn is the input of an op that takes nothing: no body, no path parameter, no
+// query.
+type noIn struct{}
+
+// reachability is what this deployment can actually do about domains right now.
+type reachability struct {
+	// Service names the subsystem answering.
+	Service string `json:"service"`
+	// Registrar names the wholesale registrar behind it.
+	Registrar string `json:"registrar"`
+	// Env is the registrar environment. It is the fact that decides whether money
+	// moves: only "prod" reaches the live, billable registrar — anything else,
+	// including unset, is the sandbox.
+	Env string `json:"env"`
+	// Status is "ok" when a live call succeeded, else "degraded".
+	Status string `json:"status"`
+	// Configured is whether the wholesale credentials are present at all.
+	Configured bool `json:"configured"`
+	// Reachable is whether the registrar accepted those credentials on a live call
+	// made while the caller waited.
+	Reachable bool `json:"reachable"`
+	// Error is the blocker, so an operator reads it instead of guessing at it.
+	Error string `json:"error,omitempty"`
 }
 
-func searchHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := org(c); !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// StatusCode is 200 when this deployment can sell domains and 503 when it cannot.
+// The body is the answer either way — the reason IS the payload, so it rides the
+// refusal rather than being replaced by an error envelope.
+func (r *reachability) StatusCode() int {
+	if r.Status == "ok" {
+		return http.StatusOK
 	}
-	q := strings.TrimSpace(c.Query("q"))
+	return http.StatusServiceUnavailable
+}
+
+// health reports registrar reachability honestly: ok only when the wholesale
+// credentials are present AND name.com accepted them on a live call made while you
+// waited.
+//
+// Missing credentials or an unreachable registrar is 503 carrying configured,
+// reachable and the reason, so an operator reads the blocker instead of guessing at
+// it. It takes no principal, like every subsystem health probe.
+func (o ops) health(ctx context.Context, _ *noIn) (*reachability, error) {
+	s := o.s
+	res := &reachability{Service: "domain", Registrar: "name.com", Env: s.State.svc.Env(), Status: "degraded"}
+	if !s.State.reg.Configured() {
+		res.Error = "registrar credentials not set (NAMECOM_USER/NAMECOM_TOKEN)"
+		return res, nil
+	}
+	res.Configured = true
+	probeCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	if _, err := s.State.reg.Hello(probeCtx); err != nil {
+		res.Error = err.Error()
+		return res, nil
+	}
+	res.Status, res.Reachable = "ok", true
+	return res, nil
+}
+
+// quoteList is a set of priced availability results.
+type quoteList struct {
+	// Results is one quote per name, priced RETAIL — this deployment's markup is
+	// already applied and the wholesale cost is never on the wire.
+	Results []Offer `json:"results"`
+}
+
+// searchQuery asks for buyable names built from a keyword.
+type searchQuery struct {
+	// Q is the keyword to build names from. It is required.
+	Q string `json:"q" validate:"required"`
+	// TLD narrows the search to a comma-separated set of top-level domains.
+	TLD string `json:"tld"`
+}
+
+// search finds names built from the keyword q, plus the registrar's alternate-TLD
+// suggestions, and answers a quote for each: the name, whether it is purchasable,
+// whether it is premium, the first-term and renewal price in cents, and the TLD.
+//
+// Prices are RETAIL — this deployment's markup is already applied and the wholesale
+// cost is never on the wire.
+//
+// It requires a validated principal; 403 without one. Nothing is charged and
+// nothing is held — a quote is not a reservation, and the price is re-quoted at
+// purchase, so a name quoted here can be gone or dearer by the time you buy it. A
+// deployment with no registrar credentials answers 503.
+func (o ops) search(ctx context.Context, in *searchQuery) (*quoteList, error) {
+	if _, err := tenant(ctx); err != nil {
+		return nil, err
+	}
+	q := strings.TrimSpace(in.Q)
 	if q == "" {
-		return zip.ErrBadRequest("q (keyword) is required")
+		return nil, zip.ErrBadRequest("q (keyword) is required")
 	}
 	var tlds []string
-	if raw := strings.TrimSpace(c.Query("tld")); raw != "" {
-		for _, t := range strings.Split(raw, ",") {
-			if t = strings.TrimSpace(t); t != "" {
-				tlds = append(tlds, t)
-			}
+	for _, t := range strings.Split(strings.TrimSpace(in.TLD), ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			tlds = append(tlds, t)
 		}
 	}
-	quotes, err := s.State.svc.Search(c.Context(), q, tlds...)
+	quotes, err := o.s.State.svc.Search(ctx, q, tlds...)
 	if err != nil {
-		return statusErr(err)
+		return nil, statusErr(err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"results": quotes})
+	return &quoteList{Results: quotes}, nil
 }
 
-func availabilityHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := org(c); !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// availabilityQuery asks about names the caller already has in mind.
+type availabilityQuery struct {
+	// Domain is one name, or several comma-separated, to check in one call. Names
+	// are lowercased. It is required.
+	Domain string `json:"domain" validate:"required"`
+}
+
+// availability checks exact names rather than searching for them, and answers the
+// same quote shape search does — purchasable, premium, first-term and renewal price
+// in cents.
+//
+// It requires a validated principal; 403 without one. Nothing is charged and
+// nothing is held. A deployment with no registrar credentials answers 503.
+func (o ops) availability(ctx context.Context, in *availabilityQuery) (*quoteList, error) {
+	if _, err := tenant(ctx); err != nil {
+		return nil, err
 	}
-	raw := strings.TrimSpace(c.Query("domain"))
+	raw := strings.TrimSpace(in.Domain)
 	if raw == "" {
-		return zip.ErrBadRequest("domain is required (comma-separate for multiple)")
+		return nil, zip.ErrBadRequest("domain is required (comma-separate for multiple)")
 	}
 	var names []string
 	for _, n := range strings.Split(raw, ",") {
@@ -407,98 +407,160 @@ func availabilityHandler(s *cloud.Service[state], c *zip.Ctx) error {
 			names = append(names, n)
 		}
 	}
-	quotes, err := s.State.svc.Availability(c.Context(), names...)
+	quotes, err := o.s.State.svc.Availability(ctx, names...)
 	if err != nil {
-		return statusErr(err)
+		return nil, statusErr(err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"results": quotes})
+	return &quoteList{Results: quotes}, nil
 }
 
-func listHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	o, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	recs, err := s.State.svc.ListByOrg(o)
+// holdings is what an org bought through this surface.
+type holdings struct {
+	// Domains is the caller org's domains, newest registration first.
+	Domains []Holding `json:"domains"`
+}
+
+// list is the domains your org has bought here, newest registration first, each
+// carrying the name, when it was registered, when it expires, what the org paid,
+// the registrar order id and the nameservers it points at.
+//
+// Scoped to the validated principal's org — 403 without one, and there is no
+// parameter that reaches another org's holdings.
+//
+// This is the deployment's OWN ownership record, not a query to the registrar: it
+// lists what was bought THROUGH this surface, so a domain the org holds elsewhere
+// is not here. The default store is in-process, so a deployment that has not
+// swapped in a durable store answers from what this process registered.
+func (o ops) list(ctx context.Context, _ *noIn) (*holdings, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return statusErr(err)
+		return nil, err
+	}
+	recs, err := o.s.State.svc.ListByOrg(org)
+	if err != nil {
+		return nil, statusErr(err)
 	}
 	if recs == nil {
-		recs = []Record{}
+		recs = []Holding{}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"domains": recs})
+	return &holdings{Domains: recs}, nil
 }
 
-type registerReq struct {
-	Domain   string            `json:"domain"`
-	Years    int               `json:"years"`
+// order buys a domain for the caller's org.
+type order struct {
+	// Domain is the name to buy. It is required.
+	Domain string `json:"domain" validate:"required"`
+	// Years is the term to buy, defaulting to 1.
+	Years int `json:"years"`
+	// Contacts is the WHOIS contact set. Omit it and the registrar uses the
+	// reseller account's default contacts.
 	Contacts *namecom.Contacts `json:"contacts,omitempty"`
 }
 
-func registerHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	o, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	var body registerReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if strings.TrimSpace(body.Domain) == "" {
-		return zip.ErrBadRequest("domain is required")
-	}
-	res, err := s.State.svc.Register(c.Context(), o, body.Domain, body.Years, body.Contacts)
+// register buys a domain for your org and answers the ownership record together
+// with the quote it was bought at.
+//
+// The order of operations is the product guarantee: quote, refuse anything
+// unpurchasable or unpriced, AUTHORIZE the org's prepaid balance, provision the
+// authoritative zone in Hanzo DNS, register at the registrar already pointing at
+// Hanzo's nameservers, and only then CAPTURE the charge and record ownership. A
+// registrar failure therefore leaves the balance untouched — the org is never
+// billed for a domain it did not get.
+//
+// It requires a validated principal; that principal's org owns the domain and is
+// the ledger the charge lands on. Re-buying a name the org already holds is 409,
+// not a second purchase.
+//
+// Refusals are distinct on purpose: 402 when the prepaid balance cannot cover the
+// quoted price, 409 when the name is not available, 503 when the deployment has no
+// registrar credentials, and the registrar's own message with its own 4xx — or 502
+// for its 5xx — when it rejects the purchase. Zone provisioning is best-effort: if
+// the zone service is down the domain is still registered against Hanzo's
+// nameservers and the zone reconciles afterwards, rather than the purchase failing.
+func (o ops) register(ctx context.Context, in *order) (*RegisterResult, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return statusErr(err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, res)
+	if strings.TrimSpace(in.Domain) == "" {
+		return nil, zip.ErrBadRequest("domain is required")
+	}
+	res, err := o.s.State.svc.Register(ctx, org, in.Domain, in.Years, in.Contacts)
+	if err != nil {
+		return nil, statusErr(err)
+	}
+	return res, nil
 }
 
+// renewReq extends a domain the caller's org already owns.
 type renewReq struct {
-	Domain string `json:"domain"`
-	Years  int    `json:"years"`
+	// Domain is the name to extend. It is required, and the caller's org must hold it.
+	Domain string `json:"domain" validate:"required"`
+	// Years is how much longer to hold it, defaulting to 1.
+	Years int `json:"years"`
 }
 
-func renewHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	o, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	var body renewReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if strings.TrimSpace(body.Domain) == "" {
-		return zip.ErrBadRequest("domain is required")
-	}
-	res, err := s.State.svc.Renew(c.Context(), o, body.Domain, body.Years)
+// renew extends a domain your org already owns and answers the updated record with
+// its new expiry alongside what was paid.
+//
+// Ownership is the gate: a name the caller's org does not hold is 404, so a renewal
+// can never reach another tenant's domain.
+//
+// The price is re-quoted at the CURRENT renewal rate rather than the one paid at
+// purchase. If the registrar returns no renewal price the org's original price is
+// charged instead, so a renewal is never accidentally free. The balance is
+// authorized before the registrar is called and captured after it confirms — 402
+// when the prepaid balance cannot cover it, 503 when the deployment has no
+// registrar credentials. Requires a validated principal.
+func (o ops) renew(ctx context.Context, in *renewReq) (*RenewResult, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return statusErr(err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, res)
+	if strings.TrimSpace(in.Domain) == "" {
+		return nil, zip.ErrBadRequest("domain is required")
+	}
+	res, err := o.s.State.svc.Renew(ctx, org, in.Domain, in.Years)
+	if err != nil {
+		return nil, statusErr(err)
+	}
+	return res, nil
 }
 
+// transferReq moves a domain the caller owns elsewhere onto their org here.
 type transferReq struct {
-	Domain   string `json:"domain"`
-	AuthCode string `json:"authCode"`
-	Years    int    `json:"years"`
+	// Domain is the name to move in. It is required.
+	Domain string `json:"domain" validate:"required"`
+	// AuthCode is the transfer authorization the losing registrar issued. It is
+	// required.
+	AuthCode string `json:"authCode" validate:"required"`
+	// Years is the term to buy on transfer, defaulting to 1.
+	Years int `json:"years"`
 }
 
-func transferHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	o, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	var body transferReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if strings.TrimSpace(body.Domain) == "" || strings.TrimSpace(body.AuthCode) == "" {
-		return zip.ErrBadRequest("domain and authCode are required")
-	}
-	res, err := s.State.svc.Transfer(c.Context(), o, body.Domain, body.AuthCode, body.Years)
+// transfer moves a domain you own at another registrar onto your org here, using
+// its authCode, and answers the same record-plus-quote a purchase does.
+//
+// It is priced and charged exactly like a registration: authorize the org's prepaid
+// balance, ask the registrar for the transfer, capture only after the registrar
+// accepts. A name the registrar will not price is 409, an insufficient balance is
+// 402, and a deployment with no registrar credentials is 503.
+//
+// It requires a validated principal; the ownership record is written under that org
+// as soon as the registrar ACCEPTS the request, which is not the same instant the
+// transfer completes at the losing registrar. Unlike a registration this does not
+// provision a zone, so the record carries this deployment's configured nameservers.
+func (o ops) transfer(ctx context.Context, in *transferReq) (*RegisterResult, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return statusErr(err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, res)
+	if strings.TrimSpace(in.Domain) == "" || strings.TrimSpace(in.AuthCode) == "" {
+		return nil, zip.ErrBadRequest("domain and authCode are required")
+	}
+	res, err := o.s.State.svc.Transfer(ctx, org, in.Domain, in.AuthCode, in.Years)
+	if err != nil {
+		return nil, statusErr(err)
+	}
+	return res, nil
 }

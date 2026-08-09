@@ -61,8 +61,8 @@ CREATE TABLE IF NOT EXISTS experiment (
 // create inserts a new experiment. It fails if (project, id) already exists — an
 // experiment id is claimed once, never silently overwritten (a re-create would
 // stomp the assignment flag mid-run).
-func (s *store) create(ctx context.Context, e Experiment) error {
-	variants, err := json.Marshal(e.Variants)
+func (s *store) create(ctx context.Context, e Trial) error {
+	variants, err := json.Marshal(e.Arms)
 	if err != nil {
 		return err
 	}
@@ -77,21 +77,21 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 	return nil
 }
 
-func (s *store) get(ctx context.Context, project, id string) (Experiment, bool, error) {
+func (s *store) get(ctx context.Context, project, id string) (Trial, bool, error) {
 	row := s.db.QueryRowContext(ctx, `
 SELECT project, id, name, subject_kind, flag_key, exposure_event, metric_event, variants, status, winner, created_by, created_at, decided_by, decided_at
 FROM experiment WHERE project=? AND id=?`, project, id)
 	e, err := scanExperiment(row)
 	if err == sql.ErrNoRows {
-		return Experiment{}, false, nil
+		return Trial{}, false, nil
 	}
 	if err != nil {
-		return Experiment{}, false, err
+		return Trial{}, false, err
 	}
 	return e, true, nil
 }
 
-func (s *store) list(ctx context.Context, project string) ([]Experiment, error) {
+func (s *store) list(ctx context.Context, project string) ([]Trial, error) {
 	q := `
 SELECT project, id, name, subject_kind, flag_key, exposure_event, metric_event, variants, status, winner, created_by, created_at, decided_by, decided_at
 FROM experiment`
@@ -106,7 +106,7 @@ FROM experiment`
 		return nil, fmt.Errorf("experiments list: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := []Experiment{}
+	out := []Trial{}
 	for rows.Next() {
 		e, err := scanExperiment(rows)
 		if err != nil {
@@ -138,17 +138,17 @@ type scanner interface {
 	Scan(dest ...any) error
 }
 
-func scanExperiment(sc scanner) (Experiment, error) {
-	var e Experiment
+func scanExperiment(sc scanner) (Trial, error) {
+	var e Trial
 	var kind, status, variants string
 	if err := sc.Scan(&e.Project, &e.ID, &e.Name, &kind, &e.FlagKey, &e.ExposureEvent, &e.MetricEvent,
 		&variants, &status, &e.Winner, &e.CreatedBy, &e.CreatedAt, &e.DecidedBy, &e.DecidedAt); err != nil {
-		return Experiment{}, err
+		return Trial{}, err
 	}
 	e.SubjectKind = SubjectKind(kind)
 	e.Status = Status(status)
-	if err := json.Unmarshal([]byte(variants), &e.Variants); err != nil {
-		return Experiment{}, fmt.Errorf("experiments: variants decode: %w", err)
+	if err := json.Unmarshal([]byte(variants), &e.Arms); err != nil {
+		return Trial{}, fmt.Errorf("experiments: variants decode: %w", err)
 	}
 	return e, nil
 }

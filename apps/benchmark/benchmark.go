@@ -20,6 +20,7 @@ package benchmark
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"math"
 	"net/http"
@@ -29,19 +30,18 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
 // Benchmark is one canonical, versioned public test. `Native` marks harness support
 // today; the rest are adapter-pending on the same registry + provenance.
 type Benchmark struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Axis   string `json:"axis"`
-	Items  int    `json:"items,omitempty"`
-	Native bool   `json:"native"`
-	Source string `json:"source"`
+	ID     string `json:"id"`              // the id every other op on this surface takes
+	Title  string `json:"title"`           // the benchmark's published name
+	Axis   string `json:"axis"`            // what capability it measures
+	Items  int    `json:"items,omitempty"` // how many items it holds, when the set is fixed
+	Native bool   `json:"native"`          // whether the standardized harness runs it today
+	Source string `json:"source"`          // where the items come from
 }
 
 // catalog is the top-14: the set every major provider reports, run under one
@@ -144,119 +144,102 @@ func loadAttempts(dir string) []attempt {
 	return out
 }
 
-// The prose for this surface. Every route here is a raw handler — three of the six
-// answer a shape assembled per request (a leaderboard row layers two planes, a compare
-// is a statistic, a run is an admission receipt) and none of them is a typed op, so
-// zipdoc has no doc comment to lift and the published document would carry an
-// operationId and nothing else: an SDK method that cannot explain itself and a CLI
-// command with no help. The arena's whole value is knowing WHAT a number is, so an
-// operation that cannot say measured-versus-claimed is worse than useless here.
-// Declared through the same registry Register uses, so a description renders only
-// while the router actually serves the route; the two preset routes are folded into
-// the same group by presetRoutes and are declared with the rest.
-func init() {
-	openapi.Describe("/v1/benchmark/catalog", http.MethodGet,
-		"The canonical public benchmarks this arena runs",
-		"Lists the top-14 set every major provider reports — the id, title, axis, item count "+
-			"and upstream source of each — with `native` marking the ones the standardized "+
-			"harness runs today; the rest are registered and adapter-pending. These ids are the "+
-			"vocabulary the rest of the surface takes: a run names them, and the leaderboard and "+
-			"compare read them from `?benchmark=`. The catalog is deployment-wide and identical "+
-			"for every caller — there is no tenant in it.")
-	openapi.Describe("/v1/benchmark/leaderboard", http.MethodGet,
-		"Per-model scores for one benchmark: what we measured beside what the vendor claims",
-		"Answers one row per model for the benchmark named by `?benchmark=` (GPQA-Diamond when "+
-			"omitted), carrying `measured` — the accuracy our own harness got — beside "+
-			"`published`, the provider's own claim, and `gap`, the claim minus the measurement. "+
-			"The gap is the point of the arena; provider-reported claims have run materially hot "+
-			"against one standardized harness.\n\n"+
-			"The two planes are NEVER blended, and that is the rule to read the rows by: a model "+
-			"we have measured but no vendor has claimed for shows `published` null, a model with "+
-			"only a claim shows `measured` null, and `gap` exists only where both do. Each row "+
-			"also carries `n`, the number of items actually attempted — coverage differs between "+
-			"models, so two `measured` values at different `n` are not comparable and the compare "+
-			"endpoint is what settles that properly. Rows are ordered by measured accuracy, "+
-			"unmeasured last. Scores are deployment-wide evidence, not per-tenant.")
-	openapi.Describe("/v1/benchmark/compare", http.MethodGet,
-		"The only sound head-to-head: two models on the items they BOTH answered",
-		"Scores model `?a=` against model `?b=` on one benchmark, paired over the items both "+
-			"arms actually completed. It answers the common-item count, each arm's correct count, "+
-			"the rescues each way (items one got right and the other did not), the net, and a "+
-			"two-sided exact McNemar p over the discordant pairs.\n\n"+
-			"Pairing is what makes it valid. Reading two leaderboard rows against each other "+
-			"compares one model's coverage with another's, so an arm that only ran the easy "+
-			"subset looks better than it is; this endpoint refuses that by construction — items "+
-			"only one arm attempted are dropped before anything is counted. A p of 1 with zero "+
-			"discordant pairs means the arms never disagreed, not that they are identical. Both "+
-			"`a` and `b` are required (400 without them); the benchmark defaults to "+
-			"GPQA-Diamond.")
-	openapi.Describe("/v1/benchmark/runs", http.MethodPost,
-		"Queue a benchmark run against a catalog model or your own endpoint",
-		"Admits a request to run one or more catalog benchmarks against `model` — a catalog "+
-			"model id — or against `endpoint`, an endpoint of your own on the chat-completions "+
-			"wire, and answers "+
-			"202 with what was queued. It ADMITS AND QUEUES ONLY: nothing is executed on this "+
-			"call and no scores come back with it. Results land in the leaderboard as the worker "+
-			"completes them.\n\n"+
-			"Cost is bounded by the store rather than by a quota: attempts are append-only and "+
-			"keyed by (benchmark, item, model), so an (item, model) pair already attempted is "+
-			"skipped instead of re-spent, and re-queuing the same run is close to free. "+
-			"Validation is up front and total — a request with neither `model` nor `endpoint` is "+
-			"a 400, one with no benchmarks is a 400, and any benchmark id outside the catalog is "+
-			"a 422 naming exactly which ids were unknown, so a typo never silently queues a "+
-			"partial run.")
-	openapi.Describe("/v1/benchmark/presets", http.MethodGet,
-		"The router blends available to compose from",
-		"Lists preset router blends — a named set of model `arms`, the `rank` they escalate "+
-			"through and the `panel` width that bounds fan-out — each served by the model layer "+
-			"as `enso-<name>`. Today it answers exactly one row, the reference blend: a worked "+
-			"example written in models we name, published as an example of the FORM. It is "+
-			"deliberately not the composition of a Hanzo-served tier — the tier name exists to "+
-			"abstract that — so fork it and swap arms by what the leaderboard measures on your "+
-			"own tasks rather than reading it as a disclosure.")
-	openapi.Describe("/v1/benchmark/presets", http.MethodPost,
-		"Compose a router blend from the arms that win your tasks",
-		"Validates a blend — `name`, its `arms`, the `rank` they escalate through and the "+
-			"`panel` fan-out width — and answers 202 with the preset and the `enso-<name>` it "+
-			"would be served as. It VALIDATES AND ECHOES: the definition is not persisted yet, so "+
-			"a preset accepted here is not one the model layer will resolve. Treat the response "+
-			"as a check on the blend, not a promise to serve it.\n\n"+
-			"Defaults fill the shape rather than refusing it: an omitted `rank` becomes the arms "+
-			"in declared order and a `panel` below 1 becomes 1. The one real invariant is that "+
-			"rank may only name arms the blend declares — the same rule the model catalog "+
-			"enforces — and a rank naming anything else is a 422 listing exactly which entries "+
-			"were undeclared. A blend with no name or no arms is a 400.")
-}
-
+// routes registers the arena. Every op is TYPED — its input and its answer are Go
+// types — so the schema, the prose, the MCP tool, the CLI command and every
+// generated SDK method are projections of the handler itself. That matters more
+// here than almost anywhere: the arena's whole value is knowing WHAT a number is,
+// and an operation that cannot say measured-versus-claimed is worse than useless.
+//
+// zipdoc lifts the doc comments into zipdoc_gen.go, which is the only way prose
+// reaches the published registry: Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	o := ops{s: s}
 	g := app.Group("/v1/benchmark")
-	g.Get("/catalog", cloud.Handle(s, getCatalog))         // the top-14 canonical set
-	g.Get("/leaderboard", cloud.Handle(s, getLeaderboard)) // per-model measured ∥ published
-	g.Get("/compare", cloud.Handle(s, getCompare))         // paired common-set (rescue/damage/McNemar)
-	g.Post("/runs", cloud.Handle(s, postRun))              // run a benchmark against a model/endpoint
-	presetRoutes(g, s)                                     // design-your-own router blend (enso-<name>)
+
+	zip.Get(g, "/catalog", o.catalog)         // the top-14 canonical set
+	zip.Get(g, "/leaderboard", o.leaderboard) // per-model measured ∥ published
+	zip.Get(g, "/compare", o.compare)         // paired common-set (rescue/damage/McNemar)
+	zip.Post(g, "/runs", o.run, zip.WithStatus(http.StatusAccepted))
+
+	// Design-your-own router blend (enso-<name>). The handlers live in presets.go
+	// for cohesion; the ADDRESSES live here, because one surface has one route
+	// table and zipdoc files an op's prose under the group it can see.
+	zip.Get(g, "/presets", o.presets)
+	zip.Post(g, "/presets", o.compose, zip.WithStatus(http.StatusAccepted))
 }
 
-func getCatalog(s *cloud.Service[state], c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]any{"data": catalog, "total": len(catalog)})
+// ops binds the service to the typed ops. A TypedHandler takes no service
+// parameter, so the service arrives as a RECEIVER and every op is a method value
+// — also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// noIn is the input of an op that takes nothing: no body, no path parameter, no
+// query.
+type noIn struct{}
+
+// benchmarkCatalog is the set of canonical public tests this arena runs.
+type benchmarkCatalog struct {
+	// Data is one row per benchmark, in the catalog's own order.
+	Data []Benchmark `json:"data"`
+	// Total is how many rows Data holds.
+	Total int `json:"total"`
+}
+
+// catalog is the canonical public benchmarks this arena runs — the id, title, axis,
+// item count and upstream source of each, with native marking the ones the
+// standardized harness runs today; the rest are registered and adapter-pending.
+//
+// These ids are the vocabulary the rest of the surface takes: a run names them, and
+// the leaderboard and compare read them from ?benchmark=. The catalog is
+// deployment-wide and identical for every caller — there is no tenant in it.
+func (o ops) catalog(ctx context.Context, _ *noIn) (*benchmarkCatalog, error) {
+	return &benchmarkCatalog{Data: catalog, Total: len(catalog)}, nil
 }
 
 // LeaderRow layers the two planes for one model, coverage-aware, never blended.
 type LeaderRow struct {
-	Model     string   `json:"model"`
-	Measured  *float64 `json:"measured"`  // hanzo-measured accuracy % (nil if unrun)
-	N         int      `json:"n"`         // coverage — NEVER compare across different n
-	Published *float64 `json:"published"` // provider-claimed % (nil if none)
-	Gap       *float64 `json:"gap"`       // published − measured (the arena signal)
-	Protocol  string   `json:"protocol,omitempty"`
+	Model     string   `json:"model"`              // the model this row scores
+	Measured  *float64 `json:"measured"`           // hanzo-measured accuracy % (nil if unrun)
+	N         int      `json:"n"`                  // coverage — NEVER compare across different n
+	Published *float64 `json:"published"`          // provider-claimed % (nil if none)
+	Gap       *float64 `json:"gap"`                // published − measured (the arena signal)
+	Protocol  string   `json:"protocol,omitempty"` // how the vendor scored their claim: single-attempt, pass@k or agentic
 }
 
-func getLeaderboard(s *cloud.Service[state], c *zip.Ctx) error {
-	bench := strings.TrimSpace(c.Query("benchmark"))
+// benchmarkQuery names the benchmark a read is about.
+type benchmarkQuery struct {
+	// Benchmark is the catalog id to read, defaulting to gpqa_diamond.
+	Benchmark string `json:"benchmark"`
+}
+
+// leaderboard is the answer to a per-model score read.
+type leaderboard struct {
+	// Benchmark is the catalog id these rows are about.
+	Benchmark string `json:"benchmark"`
+	// Rows is one per model, ordered by measured accuracy descending.
+	Rows []LeaderRow `json:"rows"`
+}
+
+// leaderboard answers one row per model for the benchmark named — what our own
+// harness measured, beside what the vendor claims, and the gap between them.
+//
+// The gap is the point of the arena; provider-reported claims have run materially
+// hot against one standardized harness.
+//
+// The two planes are NEVER blended, and that is the rule to read the rows by: a
+// model we have measured but no vendor has claimed for shows published null, a
+// model with only a claim shows measured null, and gap exists only where both do.
+//
+// n is coverage and is not decoration: two measured numbers taken over different
+// item counts are not comparable, so read the row's n before reading its accuracy.
+func (o ops) leaderboard(ctx context.Context, in *benchmarkQuery) (*leaderboard, error) {
+	bench := strings.TrimSpace(in.Benchmark)
 	if bench == "" {
 		bench = "gpqa_diamond"
 	}
-	return c.JSON(http.StatusOK, map[string]any{"benchmark": bench, "rows": computeLeaderboard(s.State.store.Attempts(bench), bench)})
+	return &leaderboard{Benchmark: bench, Rows: computeLeaderboard(o.s.State.store.Attempts(bench), bench)}, nil
 }
 
 // computeLeaderboard is the pure aggregation (testable): per-model measured accuracy
@@ -320,24 +303,67 @@ func computeLeaderboard(attempts []attempt, bench string) []LeaderRow {
 	return rows
 }
 
-// getCompare: the ONLY valid arm-vs-arm test — paired on items BOTH completed, with
-// rescue/damage and an exact-McNemar p. Prevents the subset-artifact (comparing a
-// model's easy subset against another's full run).
-func getCompare(s *cloud.Service[state], c *zip.Ctx) error {
-	bench := strings.TrimSpace(c.Query("benchmark"))
+// compareQuery names the benchmark and the two arms to test against each other.
+type compareQuery struct {
+	// Benchmark is the catalog id to compare on, defaulting to gpqa_diamond.
+	Benchmark string `json:"benchmark"`
+	// A is the first model id. It is required.
+	A string `json:"a" validate:"required"`
+	// B is the second model id. It is required.
+	B string `json:"b" validate:"required"`
+}
+
+// pairing is the ONLY valid arm-vs-arm test: paired on the items BOTH arms
+// completed, with rescue and damage counts and an exact-McNemar p.
+type pairing struct {
+	// Benchmark is the catalog id the two arms were compared on.
+	Benchmark string `json:"benchmark"`
+	// A is the first model id.
+	A string `json:"a"`
+	// B is the second model id.
+	B string `json:"b"`
+	// NCommon is how many items BOTH arms completed. It is the denominator, and
+	// the reason this comparison is valid where a raw accuracy difference is not.
+	NCommon int `json:"n_common"`
+	// ACorrect is how many of those common items A got right.
+	ACorrect int `json:"a_correct"`
+	// BCorrect is how many of those common items B got right.
+	BCorrect int `json:"b_correct"`
+	// RescueAOverB is how many items A got right and B got wrong.
+	RescueAOverB int `json:"rescue_a_over_b"`
+	// RescueBOverA is how many items B got right and A got wrong.
+	RescueBOverA int `json:"rescue_b_over_a"`
+	// NetAMinusB is the two rescue counts subtracted — A's advantage in items.
+	NetAMinusB int `json:"net_a_minus_b"`
+	// McnemarP is the two-sided exact binomial p on the discordant pairs. It is 1
+	// when nothing is discordant, which is "no evidence of a difference", not an
+	// error.
+	McnemarP float64 `json:"mcnemar_p"`
+}
+
+// compare is the ONLY valid arm-vs-arm test: it pairs the two models on the items
+// BOTH completed, and answers rescue and damage counts with an exact-McNemar p.
+//
+// Pairing is what prevents the subset artifact — comparing one model's easy subset
+// against another's full run — so n_common, not either arm's own coverage, is the
+// number to read this by.
+//
+// Both a and b are required. The benchmark defaults to gpqa_diamond.
+func (o ops) compare(ctx context.Context, in *compareQuery) (*pairing, error) {
+	bench := strings.TrimSpace(in.Benchmark)
 	if bench == "" {
 		bench = "gpqa_diamond"
 	}
-	a, b := strings.TrimSpace(c.Query("a")), strings.TrimSpace(c.Query("b"))
+	a, b := strings.TrimSpace(in.A), strings.TrimSpace(in.B)
 	if a == "" || b == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "compare needs ?a= and ?b= model ids"})
+		return nil, zip.ErrBadRequest("compare needs ?a= and ?b= model ids")
 	}
-	return c.JSON(http.StatusOK, computeCompare(s.State.store.Attempts(bench), bench, a, b))
+	return computeCompare(o.s.State.store.Attempts(bench), bench, a, b), nil
 }
 
 // computeCompare is the pure paired common-set test (testable): rescue/damage on items
 // BOTH arms completed + exact McNemar. The only valid arm-vs-arm comparison.
-func computeCompare(attempts []attempt, bench, a, b string) map[string]any {
+func computeCompare(attempts []attempt, bench, a, b string) *pairing {
 	ao, bo := map[string]bool{}, map[string]bool{}
 	for _, at := range attempts {
 		if at.Benchmark != bench || at.Answer == "" {
@@ -370,11 +396,11 @@ func computeCompare(attempts []attempt, bench, a, b string) map[string]any {
 			bOnly++
 		}
 	}
-	return map[string]any{
-		"benchmark": bench, "a": a, "b": b, "n_common": nCommon,
-		"a_correct": aOK, "b_correct": bOK,
-		"rescue_a_over_b": aOnly, "rescue_b_over_a": bOnly, "net_a_minus_b": aOnly - bOnly,
-		"mcnemar_p": mcnemarExact(aOnly, bOnly),
+	return &pairing{
+		Benchmark: bench, A: a, B: b, NCommon: nCommon,
+		ACorrect: aOK, BCorrect: bOK,
+		RescueAOverB: aOnly, RescueBOverA: bOnly, NetAMinusB: aOnly - bOnly,
+		McnemarP: mcnemarExact(aOnly, bOnly),
 	}
 }
 
@@ -410,27 +436,57 @@ func binom(n, k int) float64 {
 	return res
 }
 
-// RunRequest: run a benchmark against a model/endpoint. target is a catalog model id
-// OR your own chat-completions endpoint+key (the cloud offering: benchmark YOUR model).
-// The runner caches before spend (skip any (item, model) already attempted) and
-// records provenance. Execution is the async worker (follow-on); this admits + queues.
-type RunRequest struct {
-	Benchmarks []string `json:"benchmarks"`
-	Model      string   `json:"model"`
-	Endpoint   string   `json:"endpoint,omitempty"`
-	Attempts   int      `json:"attempts,omitempty"`
+// suite runs a benchmark against a model or endpoint. The target is a catalog
+// model id OR your own chat-completions endpoint and key — the cloud offering:
+// benchmark YOUR model under the same standardized harness.
+type suite struct {
+	// Benchmarks are the catalog ids to run. At least one is required, and every id
+	// must be in the catalog.
+	Benchmarks []string `json:"benchmarks" validate:"required"`
+	// Model is the catalog model id to run. Either this or endpoint is required.
+	Model string `json:"model"`
+	// Endpoint is your own chat-completions URL, for benchmarking a model this arena
+	// does not host. Either this or model is required.
+	Endpoint string `json:"endpoint,omitempty"`
+	// Attempts is how many times to try each item; the harness's default applies
+	// when it is omitted.
+	Attempts int `json:"attempts,omitempty"`
 }
 
-func postRun(s *cloud.Service[state], c *zip.Ctx) error {
-	var req RunRequest
-	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid run request"})
+// admission is the receipt a queued run answers with.
+type admission struct {
+	// Status is "queued": the run is admitted, not finished.
+	Status string `json:"status"`
+	// Model is the catalog model the run targets.
+	Model string `json:"model,omitempty"`
+	// Endpoint is the caller's own endpoint the run targets.
+	Endpoint string `json:"endpoint,omitempty"`
+	// Benchmarks are the catalog ids admitted.
+	Benchmarks []string `json:"benchmarks"`
+	// Note explains what admission does and does not promise.
+	Note string `json:"note"`
+}
+
+// run admits and queues a benchmark run against a model or your own endpoint, and
+// answers 202 with the receipt.
+//
+// It is an ADMISSION, not a result: the work is done by the harness afterwards and
+// the numbers appear on the leaderboard as it completes them.
+//
+// Cost is bounded by the store rather than by a quota: attempts are append-only and
+// keyed by (benchmark, item, model), so an (item, model) pair already attempted is
+// skipped instead of re-spent, and re-queuing the same run is close to free.
+//
+// Validation is up front and total — a request with neither model nor endpoint is a
+// 400, one with no benchmarks is a 400, and any benchmark id outside the catalog is
+// a 422 naming exactly which ids were unknown, so a typo never silently queues a
+// partial run.
+func (o ops) run(ctx context.Context, in *suite) (*admission, error) {
+	if in.Model == "" && in.Endpoint == "" {
+		return nil, zip.ErrBadRequest("run needs a model id or a BYO endpoint")
 	}
-	if req.Model == "" && req.Endpoint == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "run needs a model id or a BYO endpoint"})
-	}
-	if len(req.Benchmarks) == 0 {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "run needs at least one benchmark id"})
+	if len(in.Benchmarks) == 0 {
+		return nil, zip.ErrBadRequest("run needs at least one benchmark id")
 	}
 	// Validate benchmark ids against the catalog.
 	valid := map[string]bool{}
@@ -438,17 +494,17 @@ func postRun(s *cloud.Service[state], c *zip.Ctx) error {
 		valid[b.ID] = true
 	}
 	var unknown []string
-	for _, b := range req.Benchmarks {
+	for _, b := range in.Benchmarks {
 		if !valid[b] {
 			unknown = append(unknown, b)
 		}
 	}
 	if len(unknown) > 0 {
-		return c.JSON(http.StatusUnprocessableEntity, map[string]any{"error": "unknown benchmarks", "unknown": unknown})
+		return nil, zip.Errorf(http.StatusUnprocessableEntity,
+			"unknown benchmarks: %s", strings.Join(unknown, ", "))
 	}
-	return c.JSON(http.StatusAccepted, map[string]any{
-		"status": "queued", "model": req.Model, "endpoint": req.Endpoint,
-		"benchmarks": req.Benchmarks,
-		"note":       "cache-before-spend: already-attempted (item,model) pairs are skipped; results land in the leaderboard.",
-	})
+	return &admission{
+		Status: "queued", Model: in.Model, Endpoint: in.Endpoint, Benchmarks: in.Benchmarks,
+		Note: "cache-before-spend: already-attempted (item,model) pairs are skipped; results land in the leaderboard.",
+	}, nil
 }
