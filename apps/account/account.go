@@ -698,6 +698,7 @@ func (o ops) onboard(ctx context.Context, in *onboardReq) (*onboardResp, error) 
 		if err := s.State.iam.createOrganization(rctx, org); err != nil {
 			return nil, zip.Errorf(http.StatusBadGateway, "could not create the organization: %v", err)
 		}
+		giveOrgAnAgent(rctx, s.State.iam, s.Log.Error, slug)
 		return &onboardResp{Org: slug, DisplayName: displayName, Additional: true}, nil
 	}
 
@@ -712,6 +713,7 @@ func (o ops) onboard(ctx context.Context, in *onboardReq) (*onboardResp, error) 
 		if err != nil {
 			return nil, err
 		}
+		giveOrgAnAgent(rctx, s.State.iam, s.Log.Error, slug)
 		return &resp, nil
 	}
 
@@ -720,6 +722,7 @@ func (o ops) onboard(ctx context.Context, in *onboardReq) (*onboardResp, error) 
 	if err := s.State.iam.createOrganization(rctx, org); err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "could not create the organization: %v", err)
 	}
+	giveOrgAnAgent(rctx, s.State.iam, s.Log.Error, slug)
 	if err := s.State.iam.moveUserToOrg(rctx, cr.id, slug); err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "org created but could not assign you to it: %v", err)
 	}
