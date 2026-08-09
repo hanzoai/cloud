@@ -304,12 +304,8 @@ func (k *k8sClient) launchArtifactBuild(ctx context.Context, repoURL, ref, tag, 
 	if err := k.ready(); err != nil {
 		return "", err
 	}
-	active, err := k.countActiveBuilds(ctx, platformBuildOrg)
-	if err != nil {
-		return "", fmt.Errorf("count active builds: %w", err)
-	}
-	if active >= k.limits.maxConcurrentBuilds() {
-		return "", errTooManyBuilds
+	if err := k.admitBuild(ctx, platformBuildOrg); err != nil {
+		return "", err
 	}
 	jobName := truncate("pf-artifact-"+jobIDSuffix(buildID), 63)
 	job := k.artifactJobSpec(jobName, repoURL, ref, tag, base, putBase, bins)

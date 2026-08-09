@@ -65,17 +65,6 @@ type noInput struct{}
 // "200 with a body" about a route that answers 204 with none.
 type noContent = struct{}
 
-// tenantOf is the validated org for a typed op — the one the gateway asserted
-// and cloud.Bridge parked on the context, never a field of In. The 403 text is
-// the one every untyped tools handler answered with, so the wire is unchanged.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	return org, nil
-}
-
 // projectOf is principal.Project for a typed op: the org's sub-scope, from the
 // server-minted X-Project-Id. It needs the REQUEST because principal.OrgFrom
 // carries the org alone. Off the HTTP path it answers the default project, which
@@ -91,7 +80,7 @@ func projectOf(ctx context.Context) string {
 // scopeOf is the (org, project) a listing resolves for — tenantOf AND-ed with
 // projectOf, so the project can only ever narrow the caller's OWN org.
 func scopeOf(ctx context.Context) (Scope, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return Scope{}, err
 	}

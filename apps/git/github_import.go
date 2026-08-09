@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // github_import.go implements the cloud.GitImporter seam (git_import.go in the
@@ -215,10 +216,7 @@ func ensureMirrorTarget(ctx context.Context, store *Store, org, project, repo, r
 	if err != nil {
 		return err
 	}
-	id, err := genID("mir")
-	if err != nil {
-		return err
-	}
+	id := mint.ID("mir")
 	err = store.CreateMirror(ctx, MirrorTarget{
 		ID: id, Org: org, Project: project, Repo: repo,
 		Host: host, URL: target, CreatedAt: time.Now().Unix(),
@@ -547,10 +545,5 @@ func (s *storage) revParse(ctx context.Context, bareDir, ref string) string {
 	if err := cmd.Run(); err != nil {
 		return ""
 	}
-	return trimHash(out.String())
-}
-
-// trimHash trims surrounding whitespace/newline from a git rev-parse hash.
-func trimHash(s string) string {
-	return string(bytes.TrimSpace([]byte(s)))
+	return strings.TrimSpace(out.String())
 }

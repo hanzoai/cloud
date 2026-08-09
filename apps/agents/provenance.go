@@ -38,6 +38,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/projects"
 	"github.com/hanzoai/cloud/apps/security/detect"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -361,10 +362,7 @@ func (w deployWriter) OnDeploy(ctx context.Context, org, slug, url, deploymentID
 	if err != nil {
 		return
 	}
-	id, err := genID("evt")
-	if err != nil {
-		return
-	}
+	id := mint.ID("evt")
 	e, err := sto.AppendEvent(ctx, Event{
 		ID: id, SessionID: rows[0].ID, Org: org, Kind: KindStatus, Actor: "deploy",
 		Payload: string(body), CreatedAt: time.Now().Unix(),

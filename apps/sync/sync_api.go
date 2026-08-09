@@ -2,8 +2,6 @@ package sync
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +11,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -194,10 +193,7 @@ func (o syncOps) create(ctx context.Context, in *syncReq) (*syncView, error) {
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	id, err := genID("sync")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("sync")
 	now := time.Now().Unix()
 	if err := store.Upsert(ctx, Sync{
 		ID: id, Org: org, Kind: kind, Source: src, Target: tgt,
@@ -498,15 +494,6 @@ func spawnReconcile(store *store, sy Sync) {
 		defer cancel()
 		runOne(ctx, store, sy, Event{Provider: sy.Source.Provider, Org: sy.Org, Manual: true})
 	}()
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // rfc3339 formats a unix time as RFC3339 UTC ("" for 0).

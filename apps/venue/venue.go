@@ -48,6 +48,7 @@
 package venue
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -239,9 +240,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // 403 (a ready-made *zip.HTTPError); off the HTTP path there is no principal, so
 // every op refuses.
 func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return "", err
 	}
 	if !validSegment(org) {
 		return "", zip.ErrBadRequest("org must be a DNS-1123 label")
@@ -725,7 +726,7 @@ func (o ops) linkAccount(ctx context.Context, in *venueLinkRequest) (*accountFol
 	acct := Account{
 		Provider: d.id(), Label: label, ExternalID: ident.ExternalID, Display: ident.Display,
 		Project: principal.Project(c), Clusters: prev.Clusters,
-		LinkedAt: firstNonEmpty(prev.LinkedAt, nowRFC3339()),
+		LinkedAt: cmp.Or(prev.LinkedAt, nowRFC3339()),
 	}
 	// Discover + fold. Per-cluster failures are DATA, not a link failure.
 	results, acct := discoverAndFold(o.s, c, org, cr, d, acct)
@@ -1000,13 +1001,4 @@ func nonNil(s []string) []string {
 		return []string{}
 	}
 	return s
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }

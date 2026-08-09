@@ -178,7 +178,7 @@ func TestResourceMeter_GateRefusesAtZero(t *testing.T) {
 // EVERY priced surface: the caller is resolved before the money plane is asked.
 //
 // An empty org reaches Gate from any handler whose tenant check and whose
-// principal.Ledger disagree — provisioning's tenant() admits an admin with no
+// principal.Ledger disagree — provisioning's tenantOf admits an admin with no
 // org and Ledger answers "" for that same request — and before this guard both
 // of Gate's branches answered a question about IDENTITY in the vocabulary of
 // MONEY: 503 "Billing temporarily unavailable" co-resident, and over the peer

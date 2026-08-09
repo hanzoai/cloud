@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // persona is one built-in agent definition. Name is the lowercase @-handle;
@@ -85,10 +86,7 @@ func SeedPersonalities(ctx context.Context, org string) (int, error) {
 	created := 0
 	now := time.Now().Unix()
 	for _, p := range personalities {
-		id, err := genID("agent")
-		if err != nil {
-			return created, err
-		}
+		id := mint.ID("agent")
 		a := Agent{
 			ID:           id,
 			Org:          org,
@@ -100,7 +98,7 @@ func SeedPersonalities(ctx context.Context, org string) (int, error) {
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		}
-		err = sto.Create(ctx, a)
+		err := sto.Create(ctx, a)
 		switch {
 		case err == nil:
 			created++

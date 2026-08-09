@@ -10,6 +10,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -99,7 +100,7 @@ func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub
 		a.Model = m
 	}
 	actor := billingActor(org, userSub)
-	reqID, _ := genID("obh")
+	reqID := mint.ID("obh")
 	return runAgent(s, ctx, a, input, history, actor, reqID, "")
 }
 

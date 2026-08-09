@@ -14,6 +14,7 @@
 package visor
 
 import (
+	"cmp"
 	"regexp"
 	"sort"
 	"strconv"
@@ -152,7 +153,7 @@ type clusterView struct {
 	AmdGPU    int    `json:"amdGpu,omitempty"`
 }
 
-// ---- mapping (PURE); firstNonEmpty lives in client.go (one helper, one place) ----
+// ---- mapping (PURE) ----
 
 // toMachineView maps a Visor machine to the console view. vcpu prefers a clean
 // integer CpuSize and otherwise recovers the count from a provider size slug
@@ -162,10 +163,10 @@ type clusterView struct {
 // filled only when the size slug parses as a GPU accelerator.
 func toMachineView(m visorMachine) machineView {
 	v := machineView{
-		ID:          firstNonEmpty(m.Name, m.Id),
-		Name:        firstNonEmpty(m.DisplayName, m.Name),
-		Region:      firstNonEmpty(m.Region, m.Zone),
-		Type:        firstNonEmpty(m.Size, m.Type),
+		ID:          cmp.Or(strings.TrimSpace(m.Name), m.Id),
+		Name:        cmp.Or(m.DisplayName, m.Name),
+		Region:      cmp.Or(m.Region, m.Zone),
+		Type:        cmp.Or(strings.TrimSpace(m.Size), m.Type),
 		Status:      m.State,
 		Provider:    m.Provider,
 		PublicIp:    m.PublicIp,
@@ -174,7 +175,7 @@ func toMachineView(m visorMachine) machineView {
 		Image:       m.Image,
 		Os:          m.Os,
 	}
-	slug := firstNonEmpty(m.Size, m.Type)
+	slug := cmp.Or(strings.TrimSpace(m.Size), m.Type)
 	slugVcpu, slugMemGB := parseSizeSlug(slug)
 	spec, isGpu := gpuSpecOf(slug)
 	if n, err := strconv.Atoi(strings.TrimSpace(m.CpuSize)); err == nil && n > 0 {
@@ -197,12 +198,12 @@ func toMachineView(m visorMachine) machineView {
 // accelerator (perNode from the size slug — a gpu-h100x8 node genuinely holds 8
 // H100s). A non-GPU machine yields nothing. No telemetry is invented.
 func gpusFromMachine(m visorMachine) []gpuView {
-	spec, ok := gpuSpecOf(firstNonEmpty(m.Size, m.Type))
+	spec, ok := gpuSpecOf(cmp.Or(strings.TrimSpace(m.Size), m.Type))
 	if !ok {
 		return nil
 	}
-	name := firstNonEmpty(m.DisplayName, m.Name)
-	region := firstNonEmpty(m.Region, m.Zone)
+	name := cmp.Or(m.DisplayName, m.Name)
+	region := cmp.Or(m.Region, m.Zone)
 	out := make([]gpuView, 0, spec.perNode)
 	for i := 0; i < spec.perNode; i++ {
 		out = append(out, gpuView{
@@ -221,7 +222,7 @@ func gpusFromMachine(m visorMachine) []gpuView {
 
 func toNodePoolView(p visorNodePool) nodePoolView {
 	return nodePoolView{
-		PoolID:    firstNonEmpty(p.PoolID, p.Name),
+		PoolID:    cmp.Or(strings.TrimSpace(p.PoolID), strings.TrimSpace(p.Name)),
 		Name:      p.Name,
 		Size:      p.Size,
 		Count:     p.Count,
@@ -240,7 +241,7 @@ func clustersFromPools(pools []visorNodePool) []clusterView {
 	byID := map[string]*clusterView{}
 	var order []string
 	for _, p := range pools {
-		key := firstNonEmpty(p.ClusterID, p.Name)
+		key := cmp.Or(strings.TrimSpace(p.ClusterID), strings.TrimSpace(p.Name))
 		if key == "" {
 			continue
 		}

@@ -56,6 +56,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -384,14 +385,8 @@ func (o ops) createFlow(ctx context.Context, in *createFlowReq) (*populatedFlow,
 		return nil, zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
 	now := time.Now().UnixMilli()
-	flowID, err := genID("flow")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	verID, err := genID("ver")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	flowID := mint.ID("flow")
+	verID := mint.ID("ver")
 	f := Flow{
 		ID: flowID, Org: org, ExternalID: clip(in.ExternalID), FolderID: clip(in.FolderID),
 		Status: FlowDisabled, Created: now, Updated: now,
@@ -586,10 +581,7 @@ func (o ops) createVersion(ctx context.Context, in *createVersionIn) (*FlowVersi
 	if err := validateTrigger(in.Trigger); err != nil {
 		return nil, zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
-	verID, err := genID("ver")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	verID := mint.ID("ver")
 	now := time.Now().UnixMilli()
 	v := FlowVersion{
 		ID: verID, Org: org, FlowID: clip(in.ID), DisplayName: clip(in.DisplayName),
@@ -862,10 +854,7 @@ func (o ops) runFlow(ctx context.Context, in *flowRef) (*FlowRun, error) {
 	if err != nil {
 		return nil, mapStoreErr(err, "flow has no runnable version")
 	}
-	runID, err := genID("run")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	runID := mint.ID("run")
 	// startRun applies the per-org bounds (concurrency + durable budget) uniformly for every
 	// run-start path. Manual run: depth 0, no trigger payload.
 	run, _, err := startRun(o.s, ctx, org, f, v, runID, 0, nil)
@@ -1362,8 +1351,11 @@ func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
 // caller asserted for itself. Same validOrg rule and same 403 as tenant, and it fails
 // closed off the HTTP path, where nothing parked an org.
 func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok || !validOrg(org) {
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !validOrg(org) {
 		return "", zip.ErrForbidden("a validated principal is required")
 	}
 	return org, nil

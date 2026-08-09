@@ -29,9 +29,8 @@
 package functions
 
 import (
+	"cmp"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -41,6 +40,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -280,18 +280,6 @@ type ops struct{ s *cloud.Service[state] }
 
 // ---- handlers ----
 
-// tenant resolves the org — the isolation KEY — from the validated principal
-// cloud.Bridge parked. It is the org EXACTLY as SanitizeIdentity minted it from
-// the validated IAM owner claim: never lowercased, stripped or truncated, because
-// normalizing collapses distinct owners into one bucket. Fails closed.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
-
 // noIn is the input of an op that takes nothing: no body, no path parameter, no
 // query.
 type noIn struct{}
@@ -395,7 +383,7 @@ type definition struct {
 // Requires a validated principal; the function is owned by that principal's org.
 func (o ops) create(ctx context.Context, in *definition) (*functionView, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +402,7 @@ func (o ops) create(ctx context.Context, in *definition) (*functionView, error) 
 		return nil, zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
 	// environment (functions.ts) and runtime are the same field; accept either.
-	runtime := strings.ToLower(strings.TrimSpace(firstNonEmpty(in.Runtime, in.Environment)))
+	runtime := strings.ToLower(cmp.Or(strings.TrimSpace(in.Runtime), strings.TrimSpace(in.Environment)))
 	if runtime == "" {
 		runtime = "node"
 	}
@@ -444,10 +432,7 @@ func (o ops) create(ctx context.Context, in *definition) (*functionView, error) 
 	if target == "fleet" && runtime != "python" {
 		return nil, zip.ErrBadRequest("target=fleet supports runtime=python only")
 	}
-	id, err := genID("fn")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("fn")
 	f := Function{
 		ID: id, Org: org, Name: name, Namespace: sanitizeNs(in.Namespace), Runtime: runtime,
 		Image: strings.TrimSpace(in.Image), Code: in.Code, Handler: strings.TrimSpace(in.Handler),
@@ -473,7 +458,7 @@ func (o ops) create(ctx context.Context, in *definition) (*functionView, error) 
 // Requires a validated principal; the listing is scoped to its org.
 func (o ops) list(ctx context.Context, _ *noIn) (*fnList, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +490,7 @@ func (o ops) list(ctx context.Context, _ *noIn) (*fnList, error) {
 // is 404, which is also what another tenant's function looks like from here.
 func (o ops) get(ctx context.Context, in *fnRef) (*functionDetail, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -541,7 +526,7 @@ func (o ops) get(ctx context.Context, in *fnRef) (*functionDetail, error) {
 // belonging to another tenant is the same 404, because the delete is predicated on
 // the validated org.
 func (o ops) del(ctx context.Context, in *fnRef) (*none, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -566,7 +551,7 @@ func (o ops) del(ctx context.Context, in *fnRef) (*none, error) {
 // once it actually ran. Requires a validated principal; the read is scoped to its
 // org.
 func (o ops) invocations(ctx context.Context, in *invocationPage) (*invocationList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -591,7 +576,7 @@ func (o ops) invocations(ctx context.Context, in *invocationPage) (*invocationLi
 // It is the LAST run only, and it is empty when the function has never run. There
 // is no log retention behind this beyond the recorded invocation itself.
 func (o ops) logs(ctx context.Context, in *fnRef) (*logLines, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -619,7 +604,7 @@ func (o ops) logs(ctx context.Context, in *fnRef) (*logLines, error) {
 // Every function has exactly one trigger today, its HTTP invoke endpoint, so this
 // is the function list read as "how is each of these reached".
 func (o ops) triggers(ctx context.Context, _ *noIn) (*triggerList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -646,7 +631,7 @@ func (o ops) triggers(ctx context.Context, _ *noIn) (*triggerList, error) {
 // this read is about what is deployed rather than about how it has performed.
 func (o ops) deployments(ctx context.Context, _ *noIn) (*fnList, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -681,7 +666,7 @@ type secretView struct {
 // asks for and nothing about what is behind them, which is what makes it safe to
 // list at all. One row per distinct (namespace, name).
 func (o ops) secrets(ctx context.Context, _ *noIn) (*secretList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -758,15 +743,6 @@ func sanitizeNs(s string) string {
 	return out
 }
 
-func firstNonEmpty(xs ...string) string {
-	for _, x := range xs {
-		if strings.TrimSpace(x) != "" {
-			return x
-		}
-	}
-	return ""
-}
-
 func cleanList(xs []string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -789,14 +765,6 @@ func nonNil(xs []string) []string {
 		return []string{}
 	}
 	return xs
-}
-
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // Shutdown closes every open per-org functions store. Idempotent.

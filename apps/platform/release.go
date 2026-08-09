@@ -37,6 +37,7 @@ package platform
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -211,7 +212,7 @@ func (p releasePlan) run(ctx context.Context) (releaseStep, error) {
 // buildFromPush). Because the tag is minted only after a proven image, a failure at
 // build or smoke leaves NO tag and universe is never told of a phantom version.
 func startRelease(s *cloud.Service[state], ctx context.Context, req runnerBuildReq) (*runnerBuildResp, error) {
-	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
+	ref := cmp.Or(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
 	// A repo is a CLONE URL, and an unparseable one is refused here rather than
 	// deep in the detached pipeline. Otherwise a bare name ("cloud" for
 	// "https://github.com/hanzoai/cloud") answers 202 with an image tag, launches
@@ -339,12 +340,9 @@ func launchRelease(s *cloud.Service[state], ctx context.Context, ref, repo, dock
 	}
 	tag := "v" + version
 	image := releaseImage + ":" + tag
-	bldID, err := genID("rel")
-	if err != nil {
-		return "", "", zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	repoURL := firstNonEmpty(repo, releaseRepoURL)
-	plan := releaseFor(s, repoURL, sha, image, tag, firstNonEmpty(dockerfile, "Dockerfile"), bldID)
+	bldID := genID("rel")
+	repoURL := cmp.Or(repo, releaseRepoURL)
+	plan := releaseFor(s, repoURL, sha, image, tag, cmp.Or(dockerfile, "Dockerfile"), bldID)
 
 	state := &ReleaseState{
 		ID: bldID, Image: image, Version: version, SHA: sha,

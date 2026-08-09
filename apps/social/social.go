@@ -53,8 +53,6 @@ package social
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -64,6 +62,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -301,15 +300,6 @@ func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
 
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}
-
 // clip trims and bounds a short text field to maxField.
 func clip(s string) string { return clipN(s, maxField) }
 
@@ -421,10 +411,7 @@ func createAccount(s *cloud.Service[state], c *zip.Ctx) error {
 	if !okSt {
 		return zip.ErrBadRequest("status must be one of connected, disconnected, error")
 	}
-	id, err := genID("acct")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("acct")
 	now := time.Now().Unix()
 	acct := Account{
 		ID: id, Org: org, Provider: provider, Handle: clip(body.Handle), Status: status,
@@ -528,10 +515,7 @@ func createPost(s *cloud.Service[state], c *zip.Ctx) error {
 	if !okSt {
 		return zip.ErrBadRequest("status must be one of draft, scheduled, published, failed")
 	}
-	id, err := genID("post")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("post")
 	now := time.Now().Unix()
 	post := Post{
 		ID: id, Org: org, Content: content, Channel: channel, Status: status,

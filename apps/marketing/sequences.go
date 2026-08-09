@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -552,7 +554,7 @@ type EnrollmentRef struct {
 //
 // Example: {"name": "Trial onboarding", "status": "draft"}
 func (o ops) createSequence(ctx context.Context, in *Sequence) (*Sequence, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -567,10 +569,7 @@ func (o ops) createSequence(ctx context.Context, in *Sequence) (*Sequence, error
 		}
 		status = in.Status
 	}
-	id, err := genID("seq")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("seq")
 	now := time.Now().Unix()
 	seq, err := o.s.State.store.CreateSequence(ctx, Sequence{ID: id, Org: org, Name: name, Status: status, CreatedAt: now, UpdatedAt: now})
 	if err != nil {
@@ -584,7 +583,7 @@ func (o ops) createSequence(ctx context.Context, in *Sequence) (*Sequence, error
 //
 // Example: {"limit": 50}
 func (o ops) listSequences(ctx context.Context, in *Page) (*SequenceList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -600,7 +599,7 @@ func (o ops) listSequences(ctx context.Context, in *Page) (*SequenceList, error)
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"}
 func (o ops) getSequence(ctx context.Context, in *SequenceRef) (*SequenceView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -621,7 +620,7 @@ func (o ops) getSequence(ctx context.Context, in *SequenceRef) (*SequenceView, e
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248", "status": "active"}
 func (o ops) setSequenceStatus(ctx context.Context, in *SequenceStatus) (*SequenceStatus, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -646,7 +645,7 @@ func (o ops) setSequenceStatus(ctx context.Context, in *SequenceStatus) (*Sequen
 //
 // Example: {"delaySeconds": 86400, "subject": "Day 1: your first model call", "body": "Here is how to make your first request…"}
 func (o ops) addStep(ctx context.Context, in *StepInput) (*Step, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -660,10 +659,7 @@ func (o ops) addStep(ctx context.Context, in *StepInput) (*Step, error) {
 	if in.DelaySeconds < 0 {
 		return nil, zip.ErrBadRequest("delaySeconds must be >= 0")
 	}
-	id, err := genID("step")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("step")
 	step, err := o.s.State.store.AddStep(ctx, Step{
 		ID: id, Org: org, SequenceID: seqID, DelaySeconds: in.DelaySeconds,
 		Subject: clip(in.Subject), Body: in.Body, CreatedAt: time.Now().Unix(),
@@ -679,7 +675,7 @@ func (o ops) addStep(ctx context.Context, in *StepInput) (*Step, error) {
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"}
 func (o ops) listSteps(ctx context.Context, in *SequenceRef) (*StepList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -771,7 +767,7 @@ func recipients(ctx context.Context, s *cloud.Service[state], org, channel strin
 // Example: {"audienceId": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a", "channel": "email"}
 // Response: {"resolved": 412, "enrolled": 409, "alreadyEnrolled": 3}
 func (o ops) enroll(ctx context.Context, in *EnrollInput) (*EnrollResult, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -805,10 +801,7 @@ func (o ops) enroll(ctx context.Context, in *EnrollInput) (*EnrollResult, error)
 
 	out := EnrollResult{Resolved: len(addrs)}
 	for _, addr := range addrs {
-		id, err := genID("enr")
-		if err != nil {
-			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-		}
+		id := mint.ID("enr")
 		e, err := o.s.State.store.Enroll(ctx, Enrollment{
 			ID: id, Org: org, SequenceID: seqID, Address: addr, Channel: channel,
 			CurrentStep: 0, Status: status, NextRunAt: nextRun, EnrolledAt: now, UpdatedAt: now,
@@ -835,7 +828,7 @@ func (o ops) enroll(ctx context.Context, in *EnrollInput) (*EnrollResult, error)
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248", "limit": 100}
 func (o ops) listEnrollments(ctx context.Context, in *EnrollmentQuery) (*EnrollmentList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -853,7 +846,7 @@ func (o ops) listEnrollments(ctx context.Context, in *EnrollmentQuery) (*Enrollm
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248", "eid": "enr_2a8d6f0b4c1e9375a0d2f6b8c4e19f73"}
 func (o ops) cancelEnrollment(ctx context.Context, in *EnrollmentRef) (*struct{}, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

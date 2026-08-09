@@ -62,13 +62,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -248,16 +248,6 @@ func normalizeProvider(p string) string {
 	return ProviderGitHub
 }
 
-// firstNonEmpty returns the first non-empty trimmed string, or "".
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 // resolveDeployAuthor returns the author a deployed repo earns for, trying the two
 // attribution arms in order: (1) a per-repo verified claim, then (2) an owner-wide
 // verified org claim covering the repo. Per-repo wins, so a specifically-claimed repo
@@ -286,10 +276,7 @@ func resolveDeployAuthor(s *cloud.Service[state], ctx context.Context, repoURL s
 // the only way value leaves. Errors are the raw store sentinels (errNotFound /
 // errInsufficientPending) or a ready zip error; the caller maps them.
 func issuePayout(s *cloud.Service[state], ctx context.Context, a Author, amountCents int64, method, reference string) (Payout, error) {
-	payoutID, err := genID("apo")
-	if err != nil {
-		return Payout{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	payoutID := mint.ID("apo")
 	// Reserve against pending FIRST (atomic guard) — a payout can never exceed owed.
 	payout, err := s.State.store.RecordPayout(ctx, payoutID, a.ID, amountCents, method, reference,
 		settlementOf(s, a, method), time.Now().Unix())
@@ -359,14 +346,8 @@ func accrueOne(s *cloud.Service[state], ctx context.Context, a Author, deploying
 	if earning <= 0 {
 		return false // no spend to accrue yet this period
 	}
-	accrualID, err := genID("aca")
-	if err != nil {
-		return false
-	}
-	ledgerID, err := genID("alg")
-	if err != nil {
-		return false
-	}
+	accrualID := mint.ID("aca")
+	ledgerID := mint.ID("alg")
 	won, lerr := s.State.store.LatchAccrual(ctx, accrualID, ledgerID, a.ID, deployingOrg, period, a.ShareBps, spend, earning, now)
 	if lerr != nil {
 		s.Log.Warn("authors: accrual latch failed", "author", a.ID, "deployingOrg", deployingOrg, "err", lerr)
@@ -478,19 +459,13 @@ func isMaintainedRepo(repoURL, maintainerOrg string) bool {
 // is left theirs (first-verify wins → errRepoOwned, respected). Best-effort: a failure
 // logs and the deploy simply records no attribution this time.
 func ensureMaintainedRepo(s *cloud.Service[state], ctx context.Context, repoURL string, now int64) {
-	sysID, err := genID("aut")
-	if err != nil {
-		return
-	}
+	sysID := mint.ID("aut")
 	sys, err := s.State.store.EnsureSystemAuthor(ctx, sysID, s.State.maintainerOrg, s.State.maintainerOrg+"-maintainers", defaultShareBps, now)
 	if err != nil {
 		s.Log.Warn("authors: ensure maintainer author failed", "org", s.State.maintainerOrg, "err", err)
 		return
 	}
-	repoID, err := genID("arp")
-	if err != nil {
-		return
-	}
+	repoID := mint.ID("arp")
 	if _, _, verr := s.State.store.UpsertVerifiedRepo(ctx, repoID, sys.ID, repoURL, MethodMaintainer, now); verr != nil {
 		if verr == errRepoOwned {
 			return // a real author already verified it — respect first-verify-wins

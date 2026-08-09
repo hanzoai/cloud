@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -346,10 +347,7 @@ func (o ops) reportUsage(ctx context.Context, body *ingestReq) (*ingestResp, err
 	// overview current without a second registration step.
 	links := make([]linkView, 0, 4)
 	for _, g := range groupByAccount(samples) {
-		id, err := genID("link")
-		if err != nil {
-			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-		}
+		id := mint.ID("link")
 		unix := now.Unix()
 		stored, err := o.s.State.store.Upsert(ctx, Link{
 			ID: id, Org: org, User: user, Machine: g.Machine, Provider: g.Provider,

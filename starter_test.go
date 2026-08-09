@@ -251,7 +251,7 @@ func TestStarterFundsANewOrgOnItsFirstBillableRequest(t *testing.T) {
 //
 // MUTATION PROOF: drop the ref-dedup by making the key unique per attempt —
 //
-//	func starterRef(subject string) string { return "starter:" + subject + ":" + genID() }
+//	func starterRef(subject string) string { return "starter:" + subject + ":" + mint.ID("x") }
 //
 // and the balance climbs by the grant on every request (1500 after three), which is a
 // wallet that refills itself forever.

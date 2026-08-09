@@ -2,8 +2,6 @@ package compliance
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,6 +13,7 @@ import (
 	"github.com/hanzoai/cloud/apps/idv"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -209,19 +208,6 @@ func Shutdown() error {
 // also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// tenant is the validated org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the caller
-// asserted for itself. The refusal is the exact one every route here has always
-// answered.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
-
 // noStore pins Cache-Control: no-store on the response a typed op is serving —
 // reached through the request cloud.Bridge parked, because a typed op returns its
 // Out and has no response value of its own. Set on SUCCESS paths only, exactly
@@ -294,7 +280,7 @@ type statusView struct {
 // tally of its verifications. It is deliberately NOT a boolean "compliant" — it
 // reports counts of provider-reported states and carries the boundary disclaimer.
 func (o ops) status(ctx context.Context, _ *noInput) (*statusView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +349,7 @@ type subjectReq struct {
 //
 // Example: {"kind": "individual", "email": "founder@example.com", "name": "Ada"}
 func (o ops) createSubject(ctx context.Context, in *subjectReq) (*Subject, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -387,10 +373,7 @@ func newSubject(s *cloud.Service[state], ctx context.Context, org string, kind S
 	if email == "" && ref == "" {
 		return Subject{}, zip.ErrBadRequest("subject needs an email or a ref")
 	}
-	id, err := genID("sub")
-	if err != nil {
-		return Subject{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("sub")
 	now := time.Now().Unix()
 	sub := Subject{ID: id, Org: org, Kind: kind, Ref: ref, Email: email, Name: name, CreatedAt: now, UpdatedAt: now}
 	if err := s.State.store.CreateSubject(ctx, sub); err != nil {
@@ -409,7 +392,7 @@ type subjectList struct {
 // email, only whether an email is on file. The full record is returned only by the
 // explicit single-subject read.
 func (o ops) listSubjects(ctx context.Context, in *listIn) (*subjectList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -438,7 +421,7 @@ type subjectRef struct {
 //
 // Example: {"id": "sub_1"}
 func (o ops) getSubject(ctx context.Context, in *subjectRef) (*Subject, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -524,7 +507,7 @@ type verificationReq struct {
 //
 // Example: {"subjectId": "sub_1"}
 func (o ops) startVerification(ctx context.Context, in *verificationReq) (*checkView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -562,10 +545,7 @@ func (o ops) startVerification(ctx context.Context, in *verificationReq) (*check
 	if initial.Terminal() {
 		initial = idv.StatusPending
 	}
-	id, err := genID("chk")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("chk")
 	now := time.Now().Unix()
 	chk := Check{
 		ID: id, Org: org, SubjectID: sub.ID, Kind: sub.Kind,
@@ -594,7 +574,7 @@ type checkList struct {
 // ListVerifications returns the org's KYC/KYB verifications, newest first — opaque
 // subject references and provider-reported statuses only, no subject PII.
 func (o ops) listVerifications(ctx context.Context, in *listIn) (*checkList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -621,7 +601,7 @@ type verificationRef struct {
 //
 // Example: {"id": "chk_1"}
 func (o ops) getVerification(ctx context.Context, in *verificationRef) (*checkView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -672,7 +652,7 @@ func reconcileCheck(s *cloud.Service[state], ctx context.Context, chk Check) (Ch
 //
 // Example: {"id": "chk_1"}
 func (o ops) refreshVerification(ctx context.Context, in *verificationRef) (*checkView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -765,7 +745,7 @@ type verificationDecision struct {
 //
 // Example: {"id": "chk_1", "status": "reviewer_confirmed"}
 func (o ops) decideVerification(ctx context.Context, in *verificationDecision) (*checkView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -880,7 +860,7 @@ type accreditationReq struct {
 //
 // Example: {"subjectId": "sub_1", "method": "self_attested", "basis": "income"}
 func (o ops) createAccreditation(ctx context.Context, in *accreditationReq) (*accView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -908,10 +888,7 @@ func (o ops) createAccreditation(ctx context.Context, in *accreditationReq) (*ac
 	} else if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "get subject: %v", err)
 	}
-	id, err := genID("acc")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("acc")
 	now := time.Now().Unix()
 	a := Accreditation{
 		ID: id, Org: org, SubjectID: in.SubjectID, Method: in.Method, Basis: in.Basis,
@@ -939,7 +916,7 @@ type accList struct {
 // ListAccreditation returns the org's tracked accreditation-state records, newest
 // first — evidence entries the org keeps, never a platform certification.
 func (o ops) listAccreditation(ctx context.Context, in *listIn) (*accList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -965,7 +942,7 @@ type accreditationRef struct {
 //
 // Example: {"id": "acc_1"}
 func (o ops) getAccreditation(ctx context.Context, in *accreditationRef) (*accView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -999,7 +976,7 @@ type accreditationDecision struct {
 //
 // Example: {"id": "acc_1", "status": "reviewer_confirmed"}
 func (o ops) decideAccreditation(ctx context.Context, in *accreditationDecision) (*accView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1049,7 +1026,7 @@ type recordList struct {
 // platform-asserted. PII stays in the subject store; records carry only opaque ids
 // and statuses.
 func (o ops) listRecords(ctx context.Context, in *listIn) (*recordList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1093,7 +1070,7 @@ type auditList struct {
 // compliance.* actions. Fail-closed: no principal is a 403, no configured audit
 // store a 501.
 func (o ops) auditRead(ctx context.Context, in *auditIn) (*auditList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1192,12 +1169,3 @@ func mustJSON(v any) json.RawMessage {
 // are values the client writes: an address chosen by the party being audited is
 // not evidence.
 func clientIP(c *zip.Ctx) string { return cloud.ClientIP(c) }
-
-// genID mints a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}

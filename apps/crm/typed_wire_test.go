@@ -44,7 +44,7 @@ var untypedByDesign = map[string]string{
 	//    typed.go:80/83/86/110; MCP.Disabled is app-wide, zip.go:131).
 	//    So typing this route publishes an UNMETERED alias of the one
 	//    deliberately metered public write in the surface. It is worse than
-	//    unmetered: apply() never calls tenant() — it writes into intakeOrg(s),
+	//    unmetered: apply() never calls principal.Acting — it writes into intakeOrg(s),
 	//    the deployment BRAND's pipeline — so the alias would let any caller
 	//    reaching /mcp inject unbounded rows into the brand's own CRM.
 	// 2. The 64 KiB cap (maxIntakeBody) is checked on the RAW body before any

@@ -1,8 +1,6 @@
 package legal
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -319,11 +317,3 @@ func decode(c *zip.Ctx, v any) error {
 func clientIP(c *zip.Ctx) string { return cloud.ClientIP(c) }
 
 func nowUnix() int64 { return time.Now().Unix() }
-
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}

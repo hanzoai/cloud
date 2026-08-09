@@ -21,8 +21,6 @@ package prompts
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -31,6 +29,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -307,7 +306,7 @@ type promptReq struct {
 // Example: {"name": "greeting", "prompt": "You are a helpful assistant.", "tags": ["support"]}
 func (o promptOps) create(ctx context.Context, in *promptReq) (*promptDetail, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -331,10 +330,7 @@ func (o promptOps) create(ctx context.Context, in *promptReq) (*promptDetail, er
 	if len(body.Prompt) > maxContent {
 		return nil, zip.ErrBadRequest("prompt content too large (max 64KiB)")
 	}
-	id, err := genID("prompt")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("prompt")
 	now := time.Now().Unix()
 	p := Prompt{
 		ID: id, Org: org, Name: name, Type: typ, Content: body.Prompt,
@@ -357,7 +353,7 @@ func (o promptOps) create(ctx context.Context, in *promptReq) (*promptDetail, er
 // template bodies are deliberately absent — fetch one prompt to read its text.
 func (o promptOps) list(ctx context.Context, _ *noInput) (*promptList, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +380,7 @@ func (o promptOps) list(ctx context.Context, _ *noInput) (*promptList, error) {
 // Example: {"name": "greeting"}
 func (o promptOps) get(ctx context.Context, in *promptRef) (*promptDetail, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +406,7 @@ func (o promptOps) get(ctx context.Context, in *promptRef) (*promptDetail, error
 //
 // Example: {"name": "greeting"}
 func (o promptOps) del(ctx context.Context, in *promptRef) (*noContent, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +448,7 @@ type metricRow struct {
 // Every number is counted from the store — nothing here is estimated or fabricated.
 func (o promptOps) metrics(ctx context.Context, _ *noInput) (*metricList, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -476,27 +472,6 @@ func (o promptOps) metrics(ctx context.Context, _ *noInput) (*metricList, error)
 
 // ---- helpers ----
 
-// tenantOf resolves the org — the tenant isolation KEY — for a typed op. It is the
-// value principal.Org decided at the identity boundary, which cloud.Bridge parked on
-// the context: EXACTLY as SanitizeIdentity minted it from the validated IAM owner
-// claim (HIP-0026), never lowercased, stripped, or truncated. Normalizing the key
-// would collapse DISTINCT owners into one storage bucket — a cross-tenant break (Red
-// HIGH-1: "acme"/"ACME"/"acme!"/32-char-prefix all shared data). Reject only empty or
-// pathologically long; never transform. There is NO magic "admin" bucket: a
-// SuperAdmin operating on per-org data carries an explicit org (SanitizeIdentity sets
-// X-Org-Id on the admin path), so an empty org is a true 403, never a bucket a real
-// org named "admin"/"Admin" could land in.
-//
-// It is never an In field: an In field is caller-supplied, so a tenant key read from
-// one is a cross-tenant read the caller asserted for itself.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
-
 // cleanList trims, drops empties, caps each element, and de-dups a taxonomy
 // slice so labels/tags stay tidy identifiers.
 func cleanList(xs []string) []string {
@@ -514,15 +489,6 @@ func cleanList(xs []string) []string {
 		}
 	}
 	return out
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // Shutdown closes the prompts store. Idempotent.
