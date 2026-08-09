@@ -30,28 +30,15 @@ func TestPrefixesCoverAuthCritical(t *testing.T) {
 	}
 }
 
-// TestDegradedMountAnswers503 proves the fail-soft path: when the identity store
-// cannot open, the identity addresses answer an honest JSON 503 rather than falling
-// through to the console SPA.
+// TestDegradedMountAnswers503: with no identity store, identity addresses answer
+// an honest 503 rather than falling through to the console SPA. In a plugin binary
+// the terminal handler is that SPA, so a missed address does not 404 — it answers
+// 200 with HTML, and a relying party parses a web page as its discovery document.
+// That is why /.well-known/openid-configuration is asserted here.
 //
-// It drives Mount itself. The property used to belong to a local helper
-// (mountFailClosed), which iam v1.34.41 made redundant by refusing on a nil store —
-// and the helper was deleted while these tests kept calling it, so this package
-// stopped compiling, `go vet` failed, and every gate behind it went unrun on main.
-//
-// The property is worth more than the helper was. The terminal handler in a plugin
-// binary is the console catch-all, so an address the degraded path misses does not
-// 404 in production — it answers 200 with HTML, and a relying party parses a web
-// page as its discovery document. /.well-known/openid-configuration is asserted
-// here for exactly that reason; it is the first call every relying party makes.
-//
-// Verified by probe, not assumed: with a nil store the full IAM route table is
-// still registered and its handlers refuse 503, so the published document does not
-// depend on whether a volume happened to mount — which is the property the helper's
-// removal was protecting, and it holds.
-//
-// The store is made unopenable by pointing DataDir at a FILE, so the join beneath it
-// cannot be a directory. Hermetic, and no permissions games.
+// Verified by probe: with a nil store the full route table is still registered and
+// its handlers refuse, so the published document does not depend on whether a
+// volume mounted. DataDir points at a FILE so the store beneath cannot open.
 func TestDegradedMountAnswers503(t *testing.T) {
 	notADir := filepath.Join(t.TempDir(), "occupied")
 	if err := os.WriteFile(notADir, []byte("not a directory"), 0o600); err != nil {
