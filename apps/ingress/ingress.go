@@ -268,7 +268,7 @@ type ingressRoutes struct {
 // ingressServices is every backend pool the caller's org has configured.
 type ingressServices struct {
 	// Services is the org's services, ordered by id.
-	Services []Service `json:"services"`
+	Services []Upstream `json:"services"`
 }
 
 // ingressMiddlewares is every edge transform the caller's org has configured.
@@ -475,7 +475,7 @@ func (o ops) deleteRoute(ctx context.Context, in *objRef) (*struct{}, error) {
 // ordered by id. A service is the weighted round-robin target a route dispatches
 // to.
 func (o ops) listServices(ctx context.Context, _ *noInput) (*ingressServices, error) {
-	items, err := listOf[Service](ctx, o.s, KindService)
+	items, err := listOf[Upstream](ctx, o.s, KindService)
 	if err != nil {
 		return nil, err
 	}
@@ -485,8 +485,8 @@ func (o ops) listServices(ctx context.Context, _ *noInput) (*ingressServices, er
 // GetService returns one of the caller org's backend pools by id.
 //
 // Example: {"id": "app-pool"}
-func (o ops) getService(ctx context.Context, in *objRef) (*Service, error) {
-	return getOf[Service](ctx, o.s, KindService, in.ID)
+func (o ops) getService(ctx context.Context, in *objRef) (*Upstream, error) {
+	return getOf[Upstream](ctx, o.s, KindService, in.ID)
 }
 
 // PutService creates or replaces one backend pool and hot-applies it. POST mints
@@ -495,7 +495,7 @@ func (o ops) getService(ctx context.Context, in *objRef) (*Service, error) {
 // must be http(s)://host[:port].
 //
 // Example: {"id": "app-pool", "backends": [{"url": "http://10.0.0.7:8000", "weight": 1}]}
-func (o ops) putService(ctx context.Context, in *Service) (*Service, error) {
+func (o ops) putService(ctx context.Context, in *Upstream) (*Upstream, error) {
 	svcObj := *in
 	// A service claims no host: the globally-unique DNS index is the route's.
 	if err := putOf(ctx, o.s, KindService, &svcObj, &svcObj.ID, ""); err != nil {
@@ -665,7 +665,7 @@ func reload(s *cloud.Service[state], ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	svcObjs, err := loadObjects[Service](ctx, s.State.store, KindService)
+	svcObjs, err := loadObjects[Upstream](ctx, s.State.store, KindService)
 	if err != nil {
 		return err
 	}
@@ -673,7 +673,7 @@ func reload(s *cloud.Service[state], ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	services := make(map[string]Service, len(svcObjs))
+	services := make(map[string]Upstream, len(svcObjs))
 	for _, o := range svcObjs {
 		services[o.ID] = o
 	}

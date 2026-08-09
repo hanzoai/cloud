@@ -224,7 +224,7 @@ func TestAuthoringFallbackClonesFixture(t *testing.T) {
 		Sections:   []Section{{ID: "sec", Title: "Sec"}},
 		Steps:      []JourneyStep{{ID: "s1", Title: "S1"}},
 		Strategies: []Strategy{{ID: "a", Category: "c", Action: "x"}},
-		Templates:  []Template{{ID: "t1", Title: "T1", Body: "b"}},
+		Templates:  []Page{{ID: "t1", Title: "T1", Body: "b"}},
 		Principles: []Principle{{N: 1, Slug: "p1"}},
 	}
 	st := state{defBlueprint: fixture} // blueprints == nil → the fixture fallback branch
