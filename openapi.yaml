@@ -740,7 +740,7 @@ components:
           type: array
         templates:
           items:
-            $ref: '#/components/schemas/Template'
+            $ref: '#/components/schemas/Page'
           type: array
         title:
           type: string
@@ -2127,6 +2127,38 @@ components:
           type: string
         version:
           type: integer
+      type: object
+    Delivery:
+      properties:
+        data:
+          description: Data is the payload, base64-encoded.
+          type: string
+        headers:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          description: Headers are the message headers, when any were published.
+          type: object
+        num_delivered:
+          description: Delivered is how many times a consumer has been handed this
+            message (pulls only).
+          type: integer
+        num_pending:
+          description: Remaining is how many messages follow this one for the consumer
+            (pulls only).
+          type: integer
+        sequence:
+          description: Sequence is the message's stream sequence.
+          type: integer
+        subject:
+          description: Subject is the org-relative subject the message was stored
+            under.
+          type: string
+        timestamp:
+          description: Timestamp is when the broker stored the message.
+          format: date-time
+          type: string
       type: object
     DeliveryRow:
       properties:
@@ -4427,6 +4459,57 @@ components:
             registration boundary and the dialer both refuse anything else.
           type: string
       type: object
+    Machine:
+      properties:
+        blockedReason:
+          type: string
+        cluster:
+          type: string
+        clusterId:
+          type: string
+        createdAt:
+          type: string
+        id:
+          type: integer
+        localDiskGiB:
+          type: integer
+        memoryMiB:
+          type: integer
+        monthlyCents:
+          type: integer
+        mutable:
+          description: |-
+            Mutable reports whether this droplet may be changed DIRECTLY — deleted or resized.
+            One predicate covers both because one fact decides both: a DOKS node belongs to a
+            node pool, and the pool is the only thing allowed to change it.
+          type: boolean
+        name:
+          type: string
+        pods:
+          type: integer
+        privateIp:
+          type: string
+        publicIp:
+          type: string
+        ready:
+          type: boolean
+        region:
+          type: string
+        schedulable:
+          type: boolean
+        sizeSlug:
+          type: string
+        status:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+        vcpus:
+          type: integer
+        volumes:
+          type: integer
+      type: object
     MemoryEntry:
       properties:
         actor:
@@ -4475,38 +4558,6 @@ components:
           items:
             $ref: '#/components/schemas/MemoryEntry'
           type: array
-      type: object
-    Message:
-      properties:
-        data:
-          description: Data is the payload, base64-encoded.
-          type: string
-        headers:
-          additionalProperties:
-            items:
-              type: string
-            type: array
-          description: Headers are the message headers, when any were published.
-          type: object
-        num_delivered:
-          description: Delivered is how many times a consumer has been handed this
-            message (pulls only).
-          type: integer
-        num_pending:
-          description: Remaining is how many messages follow this one for the consumer
-            (pulls only).
-          type: integer
-        sequence:
-          description: Sequence is the message's stream sequence.
-          type: integer
-        subject:
-          description: Subject is the org-relative subject the message was stored
-            under.
-          type: string
-        timestamp:
-          description: Timestamp is when the broker stored the message.
-          format: date-time
-          type: string
       type: object
     MetricBody:
       properties:
@@ -4767,57 +4818,6 @@ components:
             items carry it.
           type: string
       type: object
-    Node:
-      properties:
-        blockedReason:
-          type: string
-        cluster:
-          type: string
-        clusterId:
-          type: string
-        createdAt:
-          type: string
-        id:
-          type: integer
-        localDiskGiB:
-          type: integer
-        memoryMiB:
-          type: integer
-        monthlyCents:
-          type: integer
-        mutable:
-          description: |-
-            Mutable reports whether this droplet may be changed DIRECTLY — deleted or resized.
-            One predicate covers both because one fact decides both: a DOKS node belongs to a
-            node pool, and the pool is the only thing allowed to change it.
-          type: boolean
-        name:
-          type: string
-        pods:
-          type: integer
-        privateIp:
-          type: string
-        publicIp:
-          type: string
-        ready:
-          type: boolean
-        region:
-          type: string
-        schedulable:
-          type: boolean
-        sizeSlug:
-          type: string
-        status:
-          type: string
-        tags:
-          items:
-            type: string
-          type: array
-        vcpus:
-          type: integer
-        volumes:
-          type: integer
-      type: object
     NodePool:
       properties:
         blockedReason:
@@ -4928,6 +4928,17 @@ components:
         web:
           $ref: '#/components/schemas/WebOverview'
           description: Web is the web-traffic lens over product events.
+      type: object
+    Page:
+      properties:
+        body:
+          type: string
+        enabled:
+          type: boolean
+        id:
+          type: string
+        title:
+          type: string
       type: object
     PagesBuildConfig:
       properties:
@@ -7285,25 +7296,6 @@ components:
         value:
           type: integer
       type: object
-    Service:
-      properties:
-        backends:
-          description: 'Backends are the upstream servers to balance across: 1..32
-            of them.'
-          items:
-            $ref: '#/components/schemas/Backend'
-          type: array
-        id:
-          description: |-
-            ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.
-            A create that omits it gets a generated one. Routes reference it by this id.
-          type: string
-        passHostHeader:
-          description: |-
-            PassHostHeader forwards the client's original Host header upstream instead
-            of rewriting it to the backend's.
-          type: boolean
-      type: object
     ServiceInput:
       properties:
         description:
@@ -7428,7 +7420,7 @@ components:
           type: array
         nodes:
           items:
-            $ref: '#/components/schemas/Node'
+            $ref: '#/components/schemas/Machine'
           type: array
         sources:
           items:
@@ -8087,17 +8079,6 @@ components:
             rate limits). Like ACMEEmail it applies only when the edge (re)starts.
           type: boolean
       type: object
-    Template:
-      properties:
-        body:
-          type: string
-        enabled:
-          type: boolean
-        id:
-          type: string
-        title:
-          type: string
-      type: object
     Timeseries:
       properties:
         end:
@@ -8560,6 +8541,25 @@ components:
         channel:
           type: string
         unsubscribed:
+          type: boolean
+      type: object
+    Upstream:
+      properties:
+        backends:
+          description: 'Backends are the upstream servers to balance across: 1..32
+            of them.'
+          items:
+            $ref: '#/components/schemas/Backend'
+          type: array
+        id:
+          description: |-
+            ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.
+            A create that omits it gets a generated one. Routes reference it by this id.
+          type: string
+        passHostHeader:
+          description: |-
+            PassHostHeader forwards the client's original Host header upstream instead
+            of rewriting it to the backend's.
           type: boolean
       type: object
     Usage:
@@ -21095,7 +21095,7 @@ components:
         services:
           description: Services is the org's services, ordered by id.
           items:
-            $ref: '#/components/schemas/Service'
+            $ref: '#/components/schemas/Upstream'
           type: array
       type: object
     ingressStatus:
@@ -37169,7 +37169,7 @@ components:
         messages:
           description: Messages is what was read, stream-ordered.
           items:
-            $ref: '#/components/schemas/Message'
+            $ref: '#/components/schemas/Delivery'
           type: array
       type: object
     readiness:
@@ -76860,14 +76860,14 @@ paths:
                 weight: 1
               id: app-pool
             schema:
-              $ref: '#/components/schemas/Service'
+              $ref: '#/components/schemas/Upstream'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Service'
+                $ref: '#/components/schemas/Upstream'
           description: ok
       summary: Creates or replaces one backend pool and hot-applies it.
       tags:
@@ -76912,7 +76912,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Service'
+                $ref: '#/components/schemas/Upstream'
           description: ok
       summary: Returns one of the caller org's backend pools by id.
       tags:
@@ -76944,14 +76944,14 @@ paths:
                 weight: 1
               id: app-pool
             schema:
-              $ref: '#/components/schemas/Service'
+              $ref: '#/components/schemas/Upstream'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Service'
+                $ref: '#/components/schemas/Upstream'
           description: ok
       summary: Creates or replaces one backend pool and hot-applies it.
       tags:
