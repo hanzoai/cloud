@@ -7,14 +7,14 @@
 //
 // CLEAN IAM (v2). This subsystem embeds github.com/hanzoai/iam —
 // the clean-room identity rewrite on the native Hanzo stack (zip + hanzoai/orm +
-// hanzoai/sqlite). The retired Beego fork (github.com/hanzoai/iam-v1) is
-// GONE from cloud's graph: there is no beego process-global to corrupt, no
-// InitEmbed, no session-manager hook, no shared-AppConfig co-residence hazard with
-// the sibling `ai` legacy fork. The whole IAM v2 surface (OIDC discovery/JWKS, oauth
+// hanzoai/sqlite). The retired fork (github.com/hanzoai/iam-v1) is GONE from
+// cloud's graph: there is no process-global to corrupt, no InitEmbed, no
+// session-manager hook, no shared-AppConfig co-residence hazard with the sibling
+// `ai` fork. The whole IAM v2 surface (OIDC discovery/JWKS, oauth
 // authorize/token/userinfo/introspect/revoke, get-app-login, signin, the v2 entity
-// CRUD, and the legacy verb-alias compat layer) is GRAFTED in process (safeMount):
-// zip.Graft composes iamserver.NewApp(db) so cloud's router learns IAM's route
-// patterns AND its op registry, while IAM's own router keeps IAM's behaviour.
+// CRUD, and the legacy verb-alias compat layer) is COMPOSED in process by one line:
+// `host.Use(iamserver.NewApp(db))`, so cloud's router learns IAM's route patterns AND
+// its op registry, while IAM's own router keeps IAM's behaviour.
 //
 // IT IS THEREFORE NOT OPAQUE ANY MORE, and that is the whole point of the change.
 // It used to be: the surface was hung on five `app.All` wildcards through
@@ -50,11 +50,18 @@
 // Mount runs (the same lifecycle the retired iam-v1 object-store global ormer had),
 // so those callers guard a nil DB and degrade to a clean 503 until IAM is mounted.
 //
-// FAIL-CLOSED, NOT FAIL-LOUD. A broken/misconfigured IAM does NOT crash the
-// consolidated binary: an open/seed/mount failure degrades THIS subsystem to a 503
-// fail-closed on every IAM prefix (mountFailClosed) while every co-resident
-// subsystem (KMS, o11y, …) stays up — the blast-radius isolation the whole
-// consolidation exists for, mirroring the KMS "no master key → health-only" pattern.
+// FAIL-CLOSED, NOT FAIL-LOUD. A broken or misconfigured IAM does NOT crash the
+// consolidated binary. A store that will not open is handed to IAM as nil, and IAM's
+// own App then refuses every identity request 503 — while every co-resident subsystem
+// (KMS, o11y, …) stays up. That is the blast-radius isolation the consolidation exists
+// for, mirroring the KMS "no master key → health-only" pattern.
+//
+// The DEGRADE DOES NOT MOVE THE ROUTE TABLE, and that is the part worth stating. It
+// used to: an absent volume registered five `app.All` wildcards instead of the App, so
+// the document, the MCP tool list, the SDKs and the CLI carried 15 undescribed
+// catch-alls where 94 typed operations belong — one program with two route tables,
+// chosen at boot by a stat() call. Now there is one registration and the addresses are
+// whatever IAM declares; only the answer changes.
 //
 // Grafted in process (the whole IAM v2 surface, at its canonical paths — every
 // pattern IAM's own router declares, and nothing else):
@@ -86,22 +93,20 @@ package iam
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/openapi"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	iamserver "github.com/hanzoai/iam/server"
 	"github.com/hanzoai/orm"
-	"github.com/zap-proto/zip"
 )
 
 // Prefixes are the canonical absolute prefixes the IAM identity surface owns — this
-// subsystem's own list, from which patterns() derives every address it registers, both
-// the real routes (safeMount) and the fail-closed 503 (mountFailClosed). Everything
-// outside them belongs to cloud, so the console catch-all keeps serving the SPA.
+// subsystem's own list, and what the light host's router is told to hand over.
+// Everything outside them belongs to cloud, so the console catch-all keeps serving the
+// SPA. The registration itself does not read this list: composing IAM's App registers
+// exactly the patterns IAM declares, which is narrower and cannot drift from them.
 //
 // The host has a SECOND list and that is deliberate, the same split apps/commerce
 // documents: manifest.Apps' iam row states what the light host's ROUTER may hand this
@@ -160,14 +165,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	dir, initDataPath := paths(deps)
 
+	// A store that will not open is LOUD and does not change the route table. IAM's
+	// own App refuses every request 503 when it is handed no store (iamserver.NewApp),
+	// so the addresses this process serves are the ones IAM declares either way —
+	// which is what keeps the published document, the MCP tool list, the SDKs and the
+	// CLI from depending on whether a volume happened to be mounted.
 	db, err := openStore(dir)
 	if err != nil {
-		log.Error("iam store open failed — serving fail-closed 503 (cloud stays up)", "err", err, "dir", dir)
-		mountFailClosed(app)
-		return nil
+		log.Error("iam store absent — every identity op answers 503 (cloud stays up)", "err", err, "dir", dir)
 	}
-	// Publish the opened store for in-process readers (DB()) — set only after a clean
-	// open so DB() is nil whenever the subsystem is fail-closed.
+	// Published for in-process readers (DB()) — nil while there is no store, so a
+	// reader can tell.
 	embeddedDB = db
 
 	// Bind the transport that carries a verification code to a person (sender.go).
@@ -194,24 +202,24 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// certs) from the SAME init_data.json the standalone iam seeds from. A missing or
 	// partial file leaves iam mounted-but-unseeded (honest degrade) rather than blocking
 	// the identity plane; an already-seeded store simply skips everything.
-	if sum, serr := iamserver.Seed(context.Background(), db, initDataPath); serr != nil {
-		log.Warn("iam seed skipped (non-fatal)", "err", serr, "init_data", initDataPath)
-	} else if sum != nil {
-		log.Info("iam seed applied", "created", sum.Created, "skipped", sum.Skipped, "init_data", initDataPath)
+	// Seeding reaches the database, so it is the one step here a nil store cannot
+	// take — and skipping it is not a degrade: there is nothing to write to.
+	if db != nil {
+		if sum, serr := iamserver.Seed(context.Background(), db, initDataPath); serr != nil {
+			log.Warn("iam seed skipped (non-fatal)", "err", serr, "init_data", initDataPath)
+		} else if sum != nil {
+			log.Info("iam seed applied", "created", sum.Created, "skipped", sum.Skipped, "init_data", initDataPath)
+		}
 	}
 
-	// iamserver.Route registers the whole surface at the canonical absolute paths. It
-	// PANICS only if a registered enterprise feature fails to mount (none today);
-	// recover so a future boot-misconfig degrades to fail-closed 503 instead of crashing
-	// the shared binary — the same blast-radius isolation the whole fold gives.
-	if err := safeMount(app, db); err != nil {
-		log.Error("iam mount failed — serving fail-closed 503 (cloud stays up)", "err", err)
-		// Fail-closed: no half-mounted store leaks to in-process readers, and the
-		// handle this package opened is released rather than left dangling.
-		_ = Shutdown()
-		mountFailClosed(app)
-		return nil
+	// ONE registration. An App is a Component, so composing IAM is the same verb as
+	// adding middleware, and cloud's router learns IAM's route patterns and its op
+	// registry — every one of the typed operations a wildcard used to swallow.
+	host := cloud.ZipApp(app)
+	if host == nil {
+		return fmt.Errorf("iam: the router is not a zip App, so IAM cannot be composed")
 	}
+	host.Use(iamserver.NewApp(db))
 
 	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — iam-v1 retired)", "store", StorePath(dir), "prefixes", Prefixes)
 	return nil
@@ -278,10 +286,10 @@ func openStore(dir string) (orm.DB, error) {
 	// fails to verify — and nothing would have failed to say so, because from the
 	// code's point of view opening an empty database is a success.
 	//
-	// An absent store is therefore a MOUNTING FAULT, and the honest answer to a
-	// mounting fault is to say so. Mount's caller already knows what to do with
-	// that: it serves an honest 503 on every identity address (mountFailClosed)
-	// rather than falling through to a catch-all that would answer HTML on an auth
+	// An absent store is therefore a FAULT, and the honest answer to a fault is to
+	// say so. Mount's caller already knows what to do with that: it hands IAM no
+	// store, and IAM answers 503 on every identity address it declares rather than
+	// letting one fall through to a catch-all that would answer HTML on an auth
 	// path. A loud 503 is recoverable in a minute; a silently empty identity
 	// service is not recoverable at all, because by then clients have been told
 	// their accounts do not exist.
@@ -313,138 +321,4 @@ func paths(deps cloud.Deps) (dir, initDataPath string) {
 		initDataPath = "init_data.json"
 	}
 	return dir, initDataPath
-}
-
-// patterns is the ONE list of route patterns the identity surface occupies — every
-// address IAM answers, spelled once. Both registrations read it: safeMount hangs the
-// real handler on them and mountFailClosed hangs the 503 on the SAME set, so the
-// degraded surface is exactly the mounted surface and neither can drift from the
-// other.
-//
-// It is derived from Prefixes rather than restating them, plus the one address that is
-// not under any of them: OIDC discovery + JWKS live at the ROOT by spec (RFC 8414 /
-// OIDC Discovery 1.0), because a relying party reads
-// /.well-known/openid-configuration off the ISSUER host, not off an API subtree. That
-// wildcard is part of the identity contract, not a catch-all, and it is narrow by
-// construction — it cannot shadow the console, and the deeper static routes under it
-// (skills' /.well-known/agent-skills/*, cloud's own /.well-known/openapi.json)
-// still win, because zip's matcher takes the most specific pattern regardless of
-// registration order.
-//
-// The bare prefix is NOT listed separately: fiber's greedy `/*` matches the empty
-// remainder, so `/v1/iam/*` already answers `/v1/iam`. safeMount registers the bare
-// form too — the document then publishes /v1/iam as its own path rather than only
-// /v1/iam/{wildcard1} — but the FAIL-CLOSED half needs no such entry, and adding one
-// would be a second way to say the same thing.
-func patterns() []string {
-	out := make([]string, 0, len(Prefixes)+1)
-	for _, p := range Prefixes {
-		out = append(out, p+"/*")
-	}
-	return append(out, "/.well-known/*")
-}
-
-// The device-approval lookup states itself HERE because the graft leaves it nowhere
-// else to. It is an untyped route in another module, so neither seam that normally
-// carries prose reaches it: zipdoc lifts doc comments off TYPED ops, and the doc
-// comment on its handler therefore never enters zip's extraction for a host to read.
-// openapi.Describe is the seam for exactly that route, and it is additive metadata on
-// a route the router already carries — it cannot add, move or rename an operation.
-//
-// This is the host speaking for a route it mounts, so it is second-best by
-// construction: the sentence belongs upstream, on the operation, where the handler
-// lives. When github.com/hanzoai/iam gives the op its own prose, delete this.
-func init() {
-	openapi.Describe("/v1/iam/oauth/device/info", http.MethodPost,
-		"Name the application a pending device code is asking to sign in.",
-		"Answers \"what am I approving?\" for a pending user_code, so the approval page can "+
-			"name the application a human is about to authorize. Both fields come off the "+
-			"pending code's OWN application — never off the portal the browser happens to be "+
-			"on — so the screen cannot name one application while the code belongs to "+
-			"another.\n\n"+
-			"Requires a signed-in session, resolved from the browser's session cookie exactly "+
-			"as the approval itself resolves it. Not signed in is not a refusal to explain: it "+
-			"carries the stable login-required code the approval page branches on to sign the "+
-			"human in first.\n\n"+
-			"POST for a read, deliberately, for the same reason RFC 7662 introspection beside "+
-			"it is POST: the argument is a SECRET. A user_code in a request line is copied into "+
-			"ingress and proxy access logs, which a POST body is not.\n\n"+
-			"Unknown, expired, already used and already approved all get ONE opaque refusal — "+
-			"the same one the approval attempt would get. The user_code carries only 40 bits, "+
-			"so an answer that distinguished those states would be an oracle for hunting live "+
-			"codes; gated and opaque, this reveals strictly less than the approval the same "+
-			"caller could already attempt.")
-}
-
-// safeMount GRAFTS the IAM app into cloud, under a recover so its only panic path —
-// a registered enterprise feature failing to mount — becomes an error the caller
-// fail-closes on, never a crash of the shared cloud binary.
-//
-// zip.Graft composes the App itself: cloud's router learns every route pattern IAM
-// declares AND every op in IAM's registry, while IAM's own router keeps IAM's
-// behaviour — its Use(authz.Guard) seam, its error handler, its config. Serving is
-// unchanged and strictly cheaper than what it replaces (no net/http round trip, so
-// the adapter's ~5% and its dropped fasthttp user-context both go).
-//
-// It replaces `app.All(pattern, zip.AdaptNetHTTP(iamserver.Handler(db)))`, and that
-// line is where IAM's knowledge died. AdaptNetHTTP takes an http.Handler and returns
-// a closure, so the App went in and a bare function came out — with IAM's 94 typed
-// ops inside it. cloud published FIVE wildcard path keys and 35 placeholder
-// operations where 78 real paths and 94 typed operations were: no schema, no MCP
-// tool, no CLI command and no SDK method for a single one of them. That is what
-// apps/iam/typed_wire_test.go used to hold as a permanent refusal; the refusal was
-// a property of the SEAM, not of IAM, and the seam is gone.
-//
-// It also NARROWS the surface. A wildcard swallows every unknown path under its
-// prefix; a graft registers only the patterns IAM declares, so a path IAM does not
-// serve falls through to cloud instead of reaching IAM's 404.
-//
-// iamserver.Route is still the wrong call here, for the reason it always was: Route
-// CO-MINGLES IAM's routes onto the host app, and IAM is a whole server. A graft is
-// what confines it — IAM's routes run on IAM's router, and only the patterns IAM
-// declares are reachable through cloud's.
-func safeMount(app cloud.Router, db orm.DB) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("iam mount panicked: %v", r)
-		}
-	}()
-	// A graft composes an App, so it needs the App and not the Router facade.
-	// A subsystem that cannot reach it must fail its mount rather than serve
-	// routes no projection knows (cloud.ZipApp's own rule).
-	host := cloud.ZipApp(app)
-	if host == nil {
-		return fmt.Errorf("iam: the router is not a zip App, so IAM cannot be grafted")
-	}
-	// zip v1.23: Use is the ONE composition verb, and an *App IS a Component, so
-	// the child is included by reference. Graft refused an address conflict at the
-	// call; Use defers that verdict to Build, where the whole program is known.
-	host.Use(iamserver.NewApp(db))
-	return nil
-}
-
-// mountFailClosed serves an honest JSON 503 on every address IAM answers when IAM
-// cannot boot, so an identity path says "iam unavailable" instead of falling through to
-// the console SPA catch-all (webui.Mount's `/*`, registered last in every plugin
-// binary), which would 200 HTML on an auth path. cloud and every other subsystem stay
-// up — the fold's blast-radius isolation. During staged rollout hanzo.id is still
-// served by the standalone iam pod via ingress, so clients never see this path until
-// cutover.
-//
-// It covers patterns(), the same set safeMount hangs the real handler on, because a
-// degraded surface SMALLER than the mounted one is the exact hole this function exists
-// to close. It used to iterate Prefixes alone, which left /.well-known/* uncovered:
-// with IAM down, `GET /.well-known/openid-configuration` — the FIRST call every relying
-// party makes, and the one path here that is not under /v1 — reached the console and
-// answered 200 with the SPA's HTML, so an OIDC client parsed a web page as its
-// discovery document instead of seeing an outage.
-func mountFailClosed(app cloud.Router) {
-	failed := zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"error":"iam unavailable","code":503}`))
-	}))
-	for _, p := range patterns() {
-		app.All(p, failed)
-	}
 }

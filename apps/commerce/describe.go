@@ -44,48 +44,6 @@ func init() {
 // so its prose is the doc comment zipdoc lifts, and a Describe beside it would
 // be a second prose source for one route.
 func describeAdmin() {
-	openapi.Describe("/_/commerce/providers", http.MethodGet,
-		"List the payment providers configured for your own tenant",
-		"Returns the caller's own tenant row projected to a public view with the KMS paths "+
-			"stripped, so a provider's name and enabled flag are visible and its credential "+
-			"location never is. The tenant is derived from the IAM owner claim and from nothing "+
-			"else — there is no tenant parameter to supply, so a cross-tenant read is not "+
-			"expressible. A tenant admin or a platform admin may call it; a plain authenticated "+
-			"user is refused 403 and an anonymous one 401. A caller whose owner claim has no "+
-			"tenant row gets a 404 byte-identical to the one a cross-tenant probe would get.")
-
-	openapi.Describe("/_/commerce/providers/:name", http.MethodPut,
-		"Turn one payment rail on or off for your own tenant",
-		"Sets the enabled flag on ONE named rail — square, stripe, braintree, plaid, wire or crypto "+
-			"— for the tenant the caller's IAM owner claim resolves to, and answers the tenant name "+
-			"with the same name-and-enabled projection the provider list serves, so a console can "+
-			"render the result without a second read. One rail per call is a correctness requirement "+
-			"rather than a taste: a provider record also carries the KMS path naming where its "+
-			"credentials live, the list read deliberately strips that path, and a PUT that replaced "+
-			"the whole list from what a UI can see would write every rail back with an EMPTY path and "+
-			"silently disconnect each one from its credentials. Naming a single rail copies every "+
-			"other record forward byte for byte. The body must be an explicit enabled true or false — "+
-			"an absent field is 400, never a disable — and a name outside the known set is 400 that "+
-			"lists the names that mean something downstream, because a typo which reports success is "+
-			"worse than one that does not. A tenant admin or a platform admin may call it; anonymous "+
-			"is 401 and a signed-in non-admin 403. No tenant id is accepted from the client, so a "+
-			"cross-tenant write is not expressible, and a caller with no tenant row gets a 404 "+
-			"byte-identical to the one a probe for someone else's tenant would get. Setting a rail to "+
-			"the state it already holds succeeds and changes nothing; a rail the tenant has never "+
-			"carried is appended, which is how one is turned on for the first time — and it is "+
-			"appended with no credential path, so enabling a rail here does not by itself connect it "+
-			"to any credentials.")
-
-	openapi.Describe("/_/commerce/tenants", http.MethodPost,
-		"Create a checkout tenant: hostnames, brand, IAM, IDV, providers and backend",
-		"Registers a new hosted-checkout tenant so its hostnames resolve to their own branding, "+
-			"identity config, payment providers and broker backend. PLATFORM admin only — the "+
-			"reserved admin org's owner claim; an org owner with the org-level admin bit is "+
-			"refused 403 and an anonymous caller 401, so a tenant can never be minted from inside "+
-			"a tenant. A duplicate name is 409 and a malformed hostname 400. The response echoes "+
-			"only the identity and timestamps, never the provider records the caller just sent, "+
-			"and the mutation is audited by hash rather than by content so a credential that slips "+
-			"into the body is not replayable from the log.")
 
 	openapi.Describe("/_/commerce/deposits", http.MethodGet,
 		"Read the crypto deposit watcher's runtime state, asset by asset",
@@ -624,24 +582,6 @@ func describePublic() {
 			"product price picker binds real rows instead of a hardcoded array. It is a "+
 			"default-namespace read shared by every tenant rather than per-org data, and it is "+
 			"public and cacheable.")
-
-	// The deposit-proxy trio and the webhook relay are deliberately absent
-	// here: the module removed those routes — deposits are commerce's own rails
-	// now (topup/token, wire, crypto) and the real webhook receiver is POST
-	// /v1/billing/webhooks/:provider — and prose for a route that does not
-	// exist never renders, so keeping it would only preserve a dead claim.
-	openapi.Describe("/v1/commerce/tenant", http.MethodGet,
-		"The public tenant configuration a checkout page boots from",
-		"Answers the branding, identity issuer and client id, identity-verification config, "+
-			"enabled payment providers, return-URL allowlist and public payment application "+
-			"config for the tenant the request HOST resolves to. It is genuinely public and "+
-			"unauthenticated — a checkout page calls it before anyone has signed in — and it "+
-			"carries the same public payment config the authenticated config read does, so the "+
-			"card iframe can never initialize against a different application than the one that "+
-			"will be charged. Only ENABLED providers are listed and no credential path is ever "+
-			"projected. An unresolvable host answers a constant 404 that does not echo the host, "+
-			"so the endpoint cannot be used to enumerate tenants; a successful answer is cacheable "+
-			"for a minute.")
 }
 
 // ---- /v1/plans — the platform-admin subscription plan authority ----
