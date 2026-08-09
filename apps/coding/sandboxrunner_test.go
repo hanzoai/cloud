@@ -19,6 +19,7 @@ package coding
 import (
 	"context"
 	"encoding/base64"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -168,7 +169,7 @@ func steps(out *[]string) func(Step) {
 // emptyDir already has exactly the lifetime a run wants.
 func TestSandboxRun_LeasesNoDiskBecauseARunIsNotAProject(t *testing.T) {
 	p := &pod{answer: func(argv []string) plane.Ran {
-		if has(argv, "rev-parse") {
+		if slices.Contains(argv, "rev-parse") {
 			return plane.Ran{Stdout: theSHA + "\n"}
 		}
 		return plane.Ran{}
@@ -196,9 +197,9 @@ func TestSandboxRun_LeasesNoDiskBecauseARunIsNotAProject(t *testing.T) {
 func TestSandboxRun_NoEditsReportNoChangesAndWriteNoRef(t *testing.T) {
 	p := &pod{answer: func(argv []string) plane.Ran {
 		switch {
-		case has(argv, "rev-parse"):
+		case slices.Contains(argv, "rev-parse"):
 			return plane.Ran{Stdout: theSHA + "\n"} // the tip never moves
-		case has(argv, "commit"):
+		case slices.Contains(argv, "commit"):
 			return plane.Ran{ExitCode: 1, Stdout: "nothing to commit, working tree clean\n"}
 		}
 		return plane.Ran{}
@@ -228,12 +229,12 @@ func TestSandboxRun_EditsAreCommittedPushedAndReportedHonestly(t *testing.T) {
 	p := &pod{}
 	p.answer = func(argv []string) plane.Ran {
 		switch {
-		case has(argv, "commit"):
+		case slices.Contains(argv, "commit"):
 			tip = newSHA // the commit is what moves it
 			return plane.Ran{}
-		case has(argv, "rev-parse"):
+		case slices.Contains(argv, "rev-parse"):
 			return plane.Ran{Stdout: tip + "\n"}
-		case has(argv, "diff"):
+		case slices.Contains(argv, "diff"):
 			return plane.Ran{Stdout: " 2 files changed, 9 insertions(+), 1 deletion(-)\n"}
 		}
 		return plane.Ran{}
@@ -298,10 +299,10 @@ func TestSandboxRun_RefusesToWriteOutsideTheAgentNamespace(t *testing.T) {
 // stays in the sandbox and dies there.
 func TestSandboxRun_AFailedToolWritesNoRef(t *testing.T) {
 	p := &pod{answer: func(argv []string) plane.Ran {
-		if has(argv, "rev-parse") {
+		if slices.Contains(argv, "rev-parse") {
 			return plane.Ran{Stdout: theSHA + "\n"}
 		}
-		if has(argv, "dev") {
+		if slices.Contains(argv, "dev") {
 			return plane.Ran{ExitCode: 3, Stderr: "the model gave up\n"}
 		}
 		return plane.Ran{}
@@ -328,7 +329,7 @@ func TestSandboxRun_AFailedToolWritesNoRef(t *testing.T) {
 // a run hands back for a person to read.
 func TestSandboxRun_TheGrantStaysOffDiskAndOutOfWhatIsSaid(t *testing.T) {
 	p := &pod{answer: func(argv []string) plane.Ran {
-		if has(argv, "rev-parse") {
+		if slices.Contains(argv, "rev-parse") {
 			return plane.Ran{Stdout: theSHA + "\n"}
 		}
 		return plane.Ran{Stdout: "done\n"}
@@ -400,10 +401,10 @@ func TestSandboxRun_TheGrantStaysOffDiskAndOutOfWhatIsSaid(t *testing.T) {
 func TestSandboxRun_AnEchoedCredentialIsScrubbedOnTheWayOut(t *testing.T) {
 	basic := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + theGrant))
 	p := &pod{answer: func(argv []string) plane.Ran {
-		if has(argv, "rev-parse") {
+		if slices.Contains(argv, "rev-parse") {
 			return plane.Ran{Stdout: theSHA + "\n"}
 		}
-		if has(argv, "dev") {
+		if slices.Contains(argv, "dev") {
 			return plane.Ran{Stdout: "used " + theGrant + " and header " + basic + "\n"}
 		}
 		return plane.Ran{}
@@ -420,15 +421,6 @@ func TestSandboxRun_AnEchoedCredentialIsScrubbedOnTheWayOut(t *testing.T) {
 	if !strings.Contains(res.LogTail, "[redacted]") {
 		t.Fatalf("nothing was scrubbed: %q", res.LogTail)
 	}
-}
-
-func has(argv []string, want string) bool {
-	for _, a := range argv {
-		if a == want {
-			return true
-		}
-	}
-	return false
 }
 
 // The three properties of argvFor that a run actually dies of, each pinned

@@ -3,6 +3,7 @@ package pricing
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -285,15 +286,6 @@ func TestCatalogStore_RoundTrip(t *testing.T) {
 	}
 }
 
-func containsStr(list []any, s string) bool {
-	for _, e := range list {
-		if e == s {
-			return true
-		}
-	}
-	return false
-}
-
 // asModels reads a model array that may be []Model (after GateRootData) or []any
 // (raw decoded JSON).
 func asModels(v any) []Model {
@@ -352,16 +344,16 @@ func TestGateRootData(t *testing.T) {
 	if catHasID(tp, "anthropic/claude-opus-4.6") {
 		t.Errorf("root.thirdPartyModels leaked provider-disabled model")
 	}
-	if fm := d["freeModels"].([]any); containsStr(fm, "anthropic/claude-opus-4.6") {
+	if fm := d["freeModels"].([]any); slices.Contains(fm, "anthropic/claude-opus-4.6") {
 		t.Errorf("root.freeModels leaked provider-disabled id")
-	} else if !containsStr(fm, "openrouter/free-thing") {
+	} else if !slices.Contains(fm, "openrouter/free-thing") {
 		t.Errorf("root.freeModels dropped a visible id")
 	}
 	famModels := d["families"].([]any)[0].(map[string]any)["models"].([]any)
-	if containsStr(famModels, "zen4") {
+	if slices.Contains(famModels, "zen4") {
 		t.Errorf("root.families leaked disabled zen4 ref")
 	}
-	if !containsStr(famModels, "zen5") {
+	if !slices.Contains(famModels, "zen5") {
 		t.Errorf("root.families dropped enabled zen5 ref")
 	}
 	provs := d["providers"].(map[string]any)

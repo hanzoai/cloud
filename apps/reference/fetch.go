@@ -22,8 +22,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 )
@@ -170,7 +172,7 @@ func digest(entries []Entry) string {
 	h := sha256.New()
 	for _, e := range order(entries) {
 		fmt.Fprintf(h, "%s\x00", e.Key)
-		for _, k := range keys(e.Value) {
+		for _, k := range slices.Sorted(maps.Keys(e.Value)) {
 			fmt.Fprintf(h, "%s\x01%s\x02", k, e.Value[k])
 		}
 		fmt.Fprintf(h, "%g\x03%d\x04%d\x1e", e.Score, e.Orgs, e.N)

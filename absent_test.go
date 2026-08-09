@@ -22,6 +22,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -196,7 +197,7 @@ func TestAllListed(t *testing.T) {
 
 	// The list may not outlive the code: a stale entry is a claim nobody checks.
 	for name := range kinds {
-		if !has(found, name) {
+		if !slices.Contains(found, name) {
 			t.Errorf("kinds names %s, which this package no longer declares", name)
 		}
 	}
@@ -249,15 +250,6 @@ func registers(t *testing.T) []string {
 		t.Fatal("found no Register* declarations; the parse is not reading this package")
 	}
 	return out
-}
-
-func has(all []string, name string) bool {
-	for _, s := range all {
-		if s == name {
-			return true
-		}
-	}
-	return false
 }
 
 // unregister clears every remote registration so the tests see a process with no

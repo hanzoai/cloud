@@ -4,9 +4,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -267,7 +269,7 @@ func TestArgvDoesNotDecideScope(t *testing.T) {
 	if v, ok := b.Env["STRIPE_KEY"]; ok {
 		t.Fatalf("argv still decides the scope: a process named `billing` got billing's key %q", v)
 	}
-	t.Logf("argv=billing token=ai → %v (argv ignored)", keysOf(b.Env))
+	t.Logf("argv=billing token=ai → %v (argv ignored)", slices.Sorted(maps.Keys(b.Env)))
 }
 
 // TestForgedIdentityIsRefused is the other half: with argv no longer consulted,
@@ -298,7 +300,7 @@ func TestForgedIdentityIsRefused(t *testing.T) {
 			b, err := forgeAs(t, tc.argv, tc.tok, sock)
 			if err == nil {
 				t.Fatalf("FORGERY SUCCEEDED: argv=%q token=%q was served %v (key=%q)",
-					tc.argv, tc.tok, keysOf(b.Env), b.Key)
+					tc.argv, tc.tok, slices.Sorted(maps.Keys(b.Env)), b.Key)
 			}
 			t.Logf("refused: argv=%q token=%q", tc.argv, tc.tok)
 		})
@@ -367,22 +369,13 @@ func TestMalformedKeyIsNotAKey(t *testing.T) {
 func want(t *testing.T, app string, got, exp map[string]string) {
 	t.Helper()
 	if len(got) != len(exp) {
-		t.Fatalf("%s got %d secrets %v, want %d %v", app, len(got), keysOf(got), len(exp), keysOf(exp))
+		t.Fatalf("%s got %d secrets %v, want %d %v", app, len(got), slices.Sorted(maps.Keys(got)), len(exp), slices.Sorted(maps.Keys(exp)))
 	}
 	for k, v := range exp {
 		if got[k] != v {
 			t.Fatalf("%s[%s] = %q, want %q", app, k, got[k], v)
 		}
 	}
-}
-
-func keysOf(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // A random master is honest over an EMPTY data directory and catastrophic over a
