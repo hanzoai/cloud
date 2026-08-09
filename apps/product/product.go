@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/environ"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -51,18 +52,11 @@ type config struct {
 
 func loadConfig() config {
 	return config{
-		searchURL: getenv("searchEndpoint", "http://search.hanzo.svc.cluster.local:7700"),
+		searchURL: environ.Or("searchEndpoint", "http://search.hanzo.svc.cluster.local:7700"),
 		searchKey: os.Getenv("searchApiKey"),
-		vectorURL: getenv("vectorEndpoint", "http://vector.hanzo.svc.cluster.local:6333"),
+		vectorURL: environ.Or("vectorEndpoint", "http://vector.hanzo.svc.cluster.local:6333"),
 		vectorKey: os.Getenv("vectorApiKey"),
 	}
-}
-
-func getenv(key, dflt string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return dflt
 }
 
 var httpClient = &http.Client{Timeout: 15 * time.Second}

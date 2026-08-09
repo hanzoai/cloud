@@ -64,6 +64,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
 	"github.com/hanzoai/cloud/apps/fleet"
+	"github.com/hanzoai/cloud/internal/environ"
 
 	luxlog "github.com/luxfi/log"
 )
@@ -135,7 +136,7 @@ func credFor(ctx context.Context, log luxlog.Logger) (cred, error) {
 	// where the store path IS the variable name, /orgs/{adminOrg}/svc/_shared/
 	// DO_API_TOKEN. Asking KMS for it directly here would be a SECOND way to the
 	// same secret in the same process, which is the thing we do not do.
-	token := strings.TrimSpace(envOr("DO_API_TOKEN", ""))
+	token := strings.TrimSpace(environ.Or("DO_API_TOKEN", ""))
 	do := digitalocean.New(token)
 	if !do.Ready() {
 		return cred{}, fmt.Errorf("DO_API_TOKEN not configured")

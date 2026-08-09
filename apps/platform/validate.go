@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hanzoai/cloud/internal/environ"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -56,7 +57,7 @@ var gitProviderHosts = resolveGitHosts()
 var selfGitHost string
 
 func resolveGitHosts() []string {
-	raw := strings.TrimSpace(getenv("CLOUD_PLATFORM_GIT_HOSTS", ""))
+	raw := strings.TrimSpace(environ.Or("CLOUD_PLATFORM_GIT_HOSTS", ""))
 	if raw == "" {
 		return defaultGitProviderHosts
 	}
@@ -384,19 +385,19 @@ type resourceLimits struct {
 // raises them per cluster; nothing here needs to change per environment.
 func newResourceLimits() resourceLimits {
 	return resourceLimits{
-		maxReplicas:     atoiDefault(getenv("CLOUD_PLATFORM_MAX_REPLICAS", ""), defaultMaxReplicas),
-		maxStorageGB:    atoiDefault(getenv("CLOUD_PLATFORM_MAX_STORAGE_GB", ""), defaultMaxStorageGB),
-		maxBuilds:       atoiDefault(getenv("CLOUD_PLATFORM_MAX_CONCURRENT_BUILDS", ""), defaultMaxBuilds),
-		maxDeploys:      atoiDefault(getenv("CLOUD_PLATFORM_MAX_CONCURRENT_DEPLOYS", ""), defaultMaxDeploys),
-		quotaCPU:        getenv("CLOUD_PLATFORM_QUOTA_CPU", "20"),
-		quotaMemory:     getenv("CLOUD_PLATFORM_QUOTA_MEMORY", "40Gi"),
-		quotaPods:       getenv("CLOUD_PLATFORM_QUOTA_PODS", "50"),
-		limitDefaultCPU: getenv("CLOUD_PLATFORM_LIMIT_DEFAULT_CPU", "500m"),
-		limitDefaultMem: getenv("CLOUD_PLATFORM_LIMIT_DEFAULT_MEM", "512Mi"),
-		limitReqCPU:     getenv("CLOUD_PLATFORM_LIMIT_REQ_CPU", "100m"),
-		limitReqMem:     getenv("CLOUD_PLATFORM_LIMIT_REQ_MEM", "128Mi"),
-		limitMaxCPU:     getenv("CLOUD_PLATFORM_LIMIT_MAX_CPU", "4"),
-		limitMaxMem:     getenv("CLOUD_PLATFORM_LIMIT_MAX_MEM", "8Gi"),
+		maxReplicas:     atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_REPLICAS", ""), defaultMaxReplicas),
+		maxStorageGB:    atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_STORAGE_GB", ""), defaultMaxStorageGB),
+		maxBuilds:       atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_CONCURRENT_BUILDS", ""), defaultMaxBuilds),
+		maxDeploys:      atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_CONCURRENT_DEPLOYS", ""), defaultMaxDeploys),
+		quotaCPU:        environ.Or("CLOUD_PLATFORM_QUOTA_CPU", "20"),
+		quotaMemory:     environ.Or("CLOUD_PLATFORM_QUOTA_MEMORY", "40Gi"),
+		quotaPods:       environ.Or("CLOUD_PLATFORM_QUOTA_PODS", "50"),
+		limitDefaultCPU: environ.Or("CLOUD_PLATFORM_LIMIT_DEFAULT_CPU", "500m"),
+		limitDefaultMem: environ.Or("CLOUD_PLATFORM_LIMIT_DEFAULT_MEM", "512Mi"),
+		limitReqCPU:     environ.Or("CLOUD_PLATFORM_LIMIT_REQ_CPU", "100m"),
+		limitReqMem:     environ.Or("CLOUD_PLATFORM_LIMIT_REQ_MEM", "128Mi"),
+		limitMaxCPU:     environ.Or("CLOUD_PLATFORM_LIMIT_MAX_CPU", "4"),
+		limitMaxMem:     environ.Or("CLOUD_PLATFORM_LIMIT_MAX_MEM", "8Gi"),
 	}
 }
 

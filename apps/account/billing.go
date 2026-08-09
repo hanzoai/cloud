@@ -35,6 +35,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
@@ -97,7 +98,7 @@ func scopedBillingBody(raw []byte, subject string) []byte {
 // forwarded anywhere from this package; it is only ever COMPARED against, to recognise a
 // trusted in-process caller. topup.go resolves its own base+token for the one remaining
 // outbound S2S call (the HUSD credit).
-func commerceServiceToken() string { return getenv("COMMERCE_SERVICE_TOKEN", "") }
+func commerceServiceToken() string { return environ.Or("COMMERCE_SERVICE_TOKEN", "") }
 
 // s2sBillingCall reports whether the request carries the verified COMMERCE_SERVICE_TOKEN
 // as its Bearer — a trusted IN-PROC service-to-service caller (the metering cap-gate's

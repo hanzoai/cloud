@@ -38,6 +38,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // braveKey is the subscription token. KMS-sourced, synced onto the cloud env as
@@ -46,7 +48,7 @@ import (
 func braveKey() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_BRAVE_KEY")) }
 
 func braveURL() string {
-	return envOr("WEBSEARCH_BRAVE_URL", "https://api.search.brave.com/res/v1/web/search")
+	return environ.Or("WEBSEARCH_BRAVE_URL", "https://api.search.brave.com/res/v1/web/search")
 }
 
 // bravePriceMillicents is what ONE search costs the CALLER, in thousandths of a

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/authz"
+	"github.com/hanzoai/cloud/internal/environ"
 	model "github.com/hanzoai/iam/pkg/model"
 )
 
@@ -168,7 +169,7 @@ func (v VerifiedIdentity) Home() string {
 // that verify the same tokens, which is a fleet validating one set of signing
 // keys at the front door and a different set behind it.
 func JWKSURLFor(issuer string) string {
-	if override := strings.TrimSpace(getenv("CLOUD_JWKS_URL", "")); override != "" {
+	if override := strings.TrimSpace(environ.Or("CLOUD_JWKS_URL", "")); override != "" {
 		return override
 	}
 	return strings.TrimRight(issuer, "/") + "/v1/iam/.well-known/jwks"

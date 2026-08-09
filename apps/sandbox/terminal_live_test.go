@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/environ"
 	"k8s.io/client-go/tools/remotecommand"
 )
 
@@ -58,7 +59,7 @@ func TestLiveTerminalIsARealShell(t *testing.T) {
 		Status: "running",
 		Class:  "exec",
 		Pod:    fmt.Sprintf("sandbox-live-terminal-%d", time.Now().Unix()),
-		Image:  envOr("SANDBOX_LIVE_IMAGE", "node:22"),
+		Image:  environ.Or("SANDBOX_LIVE_IMAGE", "node:22"),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
@@ -169,7 +170,7 @@ func TestLiveTerminalNamedSession(t *testing.T) {
 		Status: "running",
 		Class:  "exec",
 		Pod:    fmt.Sprintf("sandbox-live-session-%d", time.Now().Unix()),
-		Image:  envOr("SANDBOX_LIVE_IMAGE", "node:22"),
+		Image:  environ.Or("SANDBOX_LIVE_IMAGE", "node:22"),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
