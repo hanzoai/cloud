@@ -243,6 +243,28 @@ func OrgFrom(ctx context.Context) (string, bool) {
 	return OrgOf(c.User, c.Org)
 }
 
+// Acting is the org this call acts for, or the refusal that it named none.
+//
+// The doc at the top of this package promises the trust decision "lives once and
+// can never drift between six hand-rolled copies". It had drifted into
+// thirty-three: every org-scoped op wrapped OrgFrom in the same five lines, under
+// two names, and the copies disagreed about what to TELL the caller — nine
+// different refusals for one condition, so the explanation a client got depended
+// on which app it happened to reach.
+//
+// The refusal names both halves of what OrgFrom decides, because either can be
+// what failed: a validated caller, and an org for it. "X-Org-Id required" was the
+// most common wording and the most misleading one — an off-gateway caller that
+// sends the header with no credential is refused by OrgOf's blank-user rule and
+// would read that as an instruction to send what it already sent.
+func Acting(ctx context.Context) (string, error) {
+	org, ok := OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("a validated org is required")
+	}
+	return org, nil
+}
+
 // validatedKey names the slot the WEAKER fact crosses the same seam in.
 // Unexported zero-size type, exactly like orgKey.
 type validatedKey struct{}

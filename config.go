@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -422,20 +423,16 @@ func (c *Config) Enabled(name string) bool {
 	if len(c.Enable) == 0 {
 		return true
 	}
-	return contains(c.Enable, name)
+	return slices.Contains(c.Enable, name)
 }
 
-func contains(list []string, name string) bool {
-	for _, s := range list {
-		if s == name {
-			return true
-		}
-	}
-	return false
-}
-
+// getenv reads a string setting, falling back to dflt when the variable is unset
+// or blank. Blank means BLANK: a variable holding only spaces is not a value, and
+// reading it as one sent " " downstream as a brand name and a chain name. Every
+// other reader in this family already trimmed (getenvBool, getenvInt,
+// getenvDuration); this one did not, which is the whole of the difference.
 func getenv(key, dflt string) string {
-	if v := os.Getenv(key); v != "" {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		return v
 	}
 	return dflt
