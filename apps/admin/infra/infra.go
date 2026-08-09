@@ -415,11 +415,11 @@ func (b *board) deleteDroplet(ctx context.Context, in *DropletIn) (*MutationOut,
 	if err != nil {
 		return &MutationOut{Status: core.Err, Msg: "droplet id must be numeric"}, nil
 	}
-	return run(ctx, b, mutation[Node]{
+	return run(ctx, b, mutation[Machine]{
 		action: "infra.droplet.delete", resType: "do_droplet", resID: in.ID,
-		find:    func(snap Snapshot) (Node, bool) { return findNode(snap, id) },
-		verdict: func(n Node) (bool, string) { return n.Mutable, n.BlockedReason },
-		apply: func(ctx context.Context, do *digitalocean.Client, n Node) (map[string]any, error) {
+		find:    func(snap Snapshot) (Machine, bool) { return findNode(snap, id) },
+		verdict: func(n Machine) (bool, string) { return n.Mutable, n.BlockedReason },
+		apply: func(ctx context.Context, do *digitalocean.Client, n Machine) (map[string]any, error) {
 			if err := do.DeleteDroplet(ctx, n.ID); err != nil {
 				return nil, err
 			}
@@ -447,11 +447,11 @@ func (b *board) resizeDroplet(ctx context.Context, in *DropletIn) (*MutationOut,
 	if strings.TrimSpace(in.Size) == "" {
 		return &MutationOut{Status: core.Err, Msg: "size is required (a DigitalOcean size slug, e.g. s-4vcpu-8gb)"}, nil
 	}
-	return run(ctx, b, mutation[Node]{
+	return run(ctx, b, mutation[Machine]{
 		action: "infra.droplet.resize", resType: "do_droplet", resID: in.ID,
-		find:    func(snap Snapshot) (Node, bool) { return findNode(snap, id) },
-		verdict: func(n Node) (bool, string) { return n.Mutable, n.BlockedReason },
-		apply: func(ctx context.Context, do *digitalocean.Client, n Node) (map[string]any, error) {
+		find:    func(snap Snapshot) (Machine, bool) { return findNode(snap, id) },
+		verdict: func(n Machine) (bool, string) { return n.Mutable, n.BlockedReason },
+		apply: func(ctx context.Context, do *digitalocean.Client, n Machine) (map[string]any, error) {
 			act, err := do.ResizeDroplet(ctx, n.ID, in.Size, in.Disk)
 			if err != nil {
 				return nil, err
@@ -581,13 +581,13 @@ func findVolume(s Snapshot, id string) (Volume, bool) {
 	return Volume{}, false
 }
 
-func findNode(s Snapshot, id int) (Node, bool) {
+func findNode(s Snapshot, id int) (Machine, bool) {
 	for _, n := range s.Nodes {
 		if n.ID == id {
 			return n, true
 		}
 	}
-	return Node{}, false
+	return Machine{}, false
 }
 
 func findLoadBalancer(s Snapshot, id string) (LoadBalancer, bool) {
