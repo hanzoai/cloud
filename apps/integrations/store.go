@@ -38,6 +38,10 @@ type Connection struct {
 	ExternalID   string
 	AccountLabel string
 	BotUserID    string
+	// Installer is the provider-side user who completed the install. Whoever
+	// finished the OAuth was already an admin of this org, which is why they need
+	// no second proof to talk to the bot they installed.
+	Installer string
 	Scopes       []string
 	ExpiresAt    int64 // access-token expiry, unix seconds; 0 = non-expiring
 	ConnectedAt  int64
@@ -98,6 +102,7 @@ CREATE TABLE IF NOT EXISTS connections (
   external_id   TEXT NOT NULL DEFAULT '',
   account_label TEXT NOT NULL DEFAULT '',
   bot_user_id   TEXT NOT NULL DEFAULT '',
+  installer     TEXT NOT NULL DEFAULT '',
   scopes_csv    TEXT NOT NULL DEFAULT '',
   expires_at    INTEGER NOT NULL DEFAULT 0,
   connected_at  INTEGER NOT NULL,
@@ -258,6 +263,7 @@ CREATE TABLE connections_declared (
   external_id   TEXT NOT NULL DEFAULT '',
   account_label TEXT NOT NULL DEFAULT '',
   bot_user_id   TEXT NOT NULL DEFAULT '',
+  installer     TEXT NOT NULL DEFAULT '',
   scopes_csv    TEXT NOT NULL DEFAULT '',
   expires_at    INTEGER NOT NULL DEFAULT 0,
   connected_at  INTEGER NOT NULL,
@@ -297,13 +303,13 @@ func sameColumns(a, b []string) bool {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-const connCols = `org,user,provider,label,external_id,account_label,bot_user_id,scopes_csv,expires_at,connected_at,updated_at`
+const connCols = `org,user,provider,label,external_id,account_label,bot_user_id,installer,scopes_csv,expires_at,connected_at,updated_at`
 
 func scanConnection(sc interface{ Scan(...any) error }) (Connection, error) {
 	var c Connection
 	var scopes string
 	err := sc.Scan(&c.Org, &c.User, &c.Provider, &c.Label, &c.ExternalID, &c.AccountLabel,
-		&c.BotUserID, &scopes, &c.ExpiresAt, &c.ConnectedAt, &c.UpdatedAt)
+		&c.BotUserID, &c.Installer, &scopes, &c.ExpiresAt, &c.ConnectedAt, &c.UpdatedAt)
 	c.Scopes = decodeScopes(scopes)
 	return c, err
 }
@@ -371,15 +377,18 @@ func (s *Store) write(ctx context.Context, c Connection, shared bool) error {
 	}
 	now := time.Now().Unix()
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO connections (`+connCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+		`INSERT INTO connections (`+connCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(org,user,provider,label) DO UPDATE SET
 		   external_id=excluded.external_id,
 		   account_label=excluded.account_label,
 		   bot_user_id=excluded.bot_user_id,
+		   -- Kept when a re-connect does not carry one, so re-authorising with a
+		   -- narrower grant cannot erase who installed this.
+		   installer=CASE WHEN excluded.installer='' THEN connections.installer ELSE excluded.installer END,
 		   scopes_csv=excluded.scopes_csv,
 		   expires_at=excluded.expires_at,
 		   updated_at=excluded.updated_at`,
-		c.Org, c.User, c.Provider, c.Label, c.ExternalID, c.AccountLabel, c.BotUserID,
+		c.Org, c.User, c.Provider, c.Label, c.ExternalID, c.AccountLabel, c.BotUserID, c.Installer,
 		encodeScopes(c.Scopes), c.ExpiresAt, now, now)
 	if err != nil {
 		return fmt.Errorf("upsert connection: %w", err)

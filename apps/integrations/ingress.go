@@ -165,11 +165,21 @@ func SendDiscord(ctx context.Context, channelID, replyTo, text string) (string, 
 // function because the mapping is the part that can silently be wrong, and the
 // hop it feeds cannot be observed from this process.
 func ingestIn(org string, in Inbound, replyRoot string) *plane.ChannelsIngestIn {
-	return &plane.ChannelsIngestIn{
+	out := &plane.ChannelsIngestIn{
 		Org: org, Provider: in.Provider, ExternalID: in.ExternalID, User: in.User,
 		Channel: in.Channel, ThreadID: in.ThreadID, Text: in.Text,
 		DedupeKey: in.DedupeKey, ReplyRoot: replyRoot,
 	}
+	// Who installed this workspace, from the connection the org was resolved
+	// through. Best-effort: an install that predates this field carries "", and
+	// the gate then behaves exactly as it did before.
+	for _, c := range Connections(org, in.Provider) {
+		if c.ExternalID == in.ExternalID {
+			out.Installer = c.Installer
+			break
+		}
+	}
+	return out
 }
 
 // serveIdentity publishes the linked-account lookup on the plane.
