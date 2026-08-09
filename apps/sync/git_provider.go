@@ -4,18 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/integrations"
 )
-
-// gitMirrorTokenEnv is the git plane's shared mirror credential (git.mirrorEnvToken):
-// the KMS-injected token mirror.go fetches a private source with, sent ONLY to the
-// allowlisted source host. The sync provider falls back to it when the per-org GitHub
-// App is not connected, so native mirroring uses ONE credential path, not two.
-const gitMirrorTokenEnv = "GIT_MIRROR_TOKEN"
 
 // git_provider.go is the FIRST sync provider: GitHub/GitLab ⇆ Hanzo Git (the NATIVE
 // /v1/git plane in this same binary). It carries no git logic of its own — Reconcile
@@ -139,10 +132,10 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 //   - for GitHub, the per-org GitHub App installation token (short-lived, scoped to
 //     the org's OWN installation) when the App is connected AND its creds are present,
 //     else
-//   - the git plane's shared mirror credential (GIT_MIRROR_TOKEN), the SAME token
-//     mirror.go fetches a private source with — so native mirroring has ONE credential
-//     path — else
-//   - anonymous ("").
+//   - nothing, which is not the same as anonymous: an empty token leaves a zero
+//     gitCred, and the git plane then resolves the credential for the SOURCE'S OWN
+//     HOST. That is the one credential path, and naming a second env var here to
+//     "share" it was what made it two.
 //
 // It NEVER hard-fails: a PUBLIC repo needs no credential, so failing the whole
 // reconcile because the App is not connected would wrongly freeze the public mirrors
@@ -158,7 +151,15 @@ func gitToken(ctx context.Context, provider, org, source, eventToken string) (st
 		if tok, err := integrations.InstallationToken(ctx, org, githubOwnerOf(source)); err == nil && strings.TrimSpace(tok) != "" {
 			return tok, nil
 		}
-		return strings.TrimSpace(os.Getenv(gitMirrorTokenEnv)), nil
+		// NO FALLBACK TOKEN HERE, deliberately. Returning "" leaves the import with a
+		// zero gitCred, and the git plane then resolves the credential for the source's
+		// OWN HOST (credAuthHeader → mirrorAuthHeader → mirrorCredential). This
+		// package used to name a second env var for the same secret and read it whole,
+		// which stopped being the same secret the moment that credential became
+		// per-host: a deployment setting only the per-host name left this returning ""
+		// and a private repo fetching anonymously, while its comment claimed "ONE
+		// credential path, not two".
+		return "", nil
 	}
 	return "", nil
 }
