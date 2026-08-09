@@ -48,11 +48,22 @@ name: CI/CD
 on:
   push:
     branches: [main]
-    # v* is what publishes the plugin binary (hanzo.yml `binaries:` → bucket:).
-    # ci builds it on every push and publishes only on a tag, and the tag here is
-    # the receipt for an image that already built and smoked — so the artifact a
-    # host installs unattended can only come from a proven commit.
-    tags: ["v*"]
+    # NO TAG TRIGGER, and it is not an omission. A tag was listened for so the
+    # `binaries:` lane could publish the plugin artifact on a proven commit —
+    # but that lane DOES NOT EXIST: hanzo.yml declares no `binaries:` because
+    # `bucket:` uploads with S3_ADMIN_* keys that are in KMS for no org.
+    #
+    # So a tag started a run with no work in it. `image` refuses tag refs (it
+    # mints the tag itself; building on one would take the next number and
+    # publish a second image for a commit that already has one), and every
+    # other car declares needs: on image — so all of them skipped while gate
+    # and containment spent a runner. A run of skipped jobs reports SUCCESS,
+    # and a green run whose gate passed reads as a release that shipped.
+    # Nothing shipped; there was nothing to ship.
+    #
+    # The tag stays what it is — the receipt for an image that already built
+    # and smoked. Listen for it again in the same change that declares the
+    # lane consuming it, once the credential exists.
   pull_request:
   # On-demand rebuild, and the RESUME entry point. A release that failed at
   # fanout is resumed by dispatching this workflow at the same sha: image and
