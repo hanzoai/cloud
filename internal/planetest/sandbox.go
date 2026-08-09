@@ -17,6 +17,8 @@ package planetest
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -185,7 +187,7 @@ func (s *Sandboxes) read(ctx context.Context, in *plane.PathIn) (*plane.Blob, er
 	defer s.mu.Unlock()
 	r := rel(in.Path)
 	if r == "" {
-		return &plane.Blob{Path: Workdir, Dir: true, Entries: sorted(p.Files)}, nil
+		return &plane.Blob{Path: Workdir, Dir: true, Entries: slices.Sorted(maps.Keys(p.Files))}, nil
 	}
 	b, ok := p.Files[r]
 	if !ok {
@@ -257,7 +259,7 @@ func (s *Sandboxes) run(ctx context.Context, in *plane.RunIn) (*plane.Ran, error
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		var rows []string
-		for _, n := range sorted(p.Files) {
+		for _, n := range slices.Sorted(maps.Keys(p.Files)) {
 			// `-maxdepth 1` means top level only, which is what the fake must honour
 			// for a test of nested artifacts to be able to fail.
 			if strings.Contains(line, "-maxdepth 1") && strings.Contains(n, "/") {
@@ -282,13 +284,4 @@ func (s *Sandboxes) end(ctx context.Context, in *plane.EndIn) (*struct{}, error)
 // fake has to mean the same file either way.
 func rel(p string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(p), Workdir), "/")
-}
-
-func sorted(m map[string][]byte) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }

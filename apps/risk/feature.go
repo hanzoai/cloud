@@ -49,6 +49,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -448,12 +449,7 @@ func sumOf(cols []string) string {
 }
 
 func known(kind string) bool {
-	for _, k := range kinds {
-		if k == kind {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(kinds, kind)
 }
 
 // ── the rollup: source planes → the feature surface ──────────────────────────
