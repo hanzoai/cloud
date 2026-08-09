@@ -481,9 +481,10 @@ type lobby struct {
 // It answers OUTSIDE ready(), deliberately, and for the same reason the bundle is
 // served outside it: an unconfigured deployment should render a client that states
 // the problem, not a 404 and a blank page. So a deploy whose key file is bad —
-// which drops the whole state, teamSecret included — still answers a lobby read on
-// the IAM lane (that lane never needed teamSecret) while every mint is 503. That
-// pair is honest rather than contradictory: the workspaces someone belongs to do
+// which drops the whole state, leaving only a reason — still answers a lobby read
+// while every mint is 503. The lobby never needed the signing key: it names
+// workspaces, and only the mint signs. That pair is honest rather than
+// contradictory: the workspaces someone belongs to do
 // not stop being true because this binary cannot sign, and the refusal they get on
 // joining names the real fault instead of hiding it behind an empty list.
 func session(s *cloud.Service[state], c *zip.Ctx) error {
