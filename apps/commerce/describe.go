@@ -630,17 +630,22 @@ func describePublic() {
 	// now (topup/token, wire, crypto) and the real webhook receiver is POST
 	// /v1/billing/webhooks/:provider — and prose for a route that does not
 	// exist never renders, so keeping it would only preserve a dead claim.
-	openapi.Describe("/v1/commerce/tenant", http.MethodGet,
-		"The public tenant configuration a checkout page boots from",
+	// The name is /org, not /tenant. commerce deleted its own tenant registry —
+	// "the IAM org is the org; commerce keeps no registry of its own" — and the
+	// route moved with the concept, to host → brand → IAM org. Prose for an
+	// address that no longer answers is a dead claim, and this one outlived the
+	// route long enough that the SPA went on asking for it.
+	openapi.Describe("/v1/commerce/org", http.MethodGet,
+		"The public org configuration a checkout page boots from",
 		"Answers the branding, identity issuer and client id, identity-verification config, "+
 			"enabled payment providers, return-URL allowlist and public payment application "+
-			"config for the tenant the request HOST resolves to. It is genuinely public and "+
+			"config for the org the request HOST resolves to. It is genuinely public and "+
 			"unauthenticated — a checkout page calls it before anyone has signed in — and it "+
 			"carries the same public payment config the authenticated config read does, so the "+
 			"card iframe can never initialize against a different application than the one that "+
 			"will be charged. Only ENABLED providers are listed and no credential path is ever "+
 			"projected. An unresolvable host answers a constant 404 that does not echo the host, "+
-			"so the endpoint cannot be used to enumerate tenants; a successful answer is cacheable "+
+			"so the endpoint cannot be used to enumerate orgs; a successful answer is cacheable "+
 			"for a minute.")
 }
 
