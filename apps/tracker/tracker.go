@@ -259,6 +259,14 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// upstream, so the org view is a server-side fan-out (forge.Client.Milestones).
 	zip.Get(g, "/milestones", o.forgeMilestones)
 
+	// FIND WORK, AND TAKE IT. These read the local store rather than the forge:
+	// the forge answers per repository, and the question people ask is "is anyone
+	// tracking X" — where X may be a mirrored GitHub issue under the default
+	// project, or something filed from the helpdesk. Every source lands in the
+	// store (github_sink.go), so it is the only place that can answer.
+	zip.Get(g, "/issues", o.searchIssues)
+	zip.Post(g, "/projects/:key/issues/:num/claim", o.claimIssue)
+
 	// The UI is a static asset bundle embedded in THIS binary (ui/) — the board
 	// and timeline over the surface above. Serving it here is what lets cloud
 	// front tracker.hanzo.ai and retire the Huly tracker that answered that host.
