@@ -20,6 +20,7 @@ import (
 	"unicode"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -368,10 +369,7 @@ func (o ops) mintLink(ctx context.Context, in *createLinkRequest) (*linkMint, er
 }
 
 func newLink(s *cloud.Service[state], ctx context.Context, affiliateID, code, label string) (Link, error) {
-	id, err := genID("aln")
-	if err != nil {
-		return Link{}, err
-	}
+	id := mint.ID("aln")
 	return s.State.store.CreateLink(ctx, id, affiliateID, code, label, time.Now().Unix())
 }
 

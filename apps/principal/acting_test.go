@@ -58,7 +58,7 @@ func TestActingAnswersForAValidatedOrg(t *testing.T) {
 	}
 }
 
-// TestActingRefusesTheForgery is the property the thirty-three copies existed to
+// TestActingRefusesTheForgery is the property the thirty-seven copies existed to
 // enforce and the reason this cannot be a bare header read: an off-gateway caller
 // naming a victim org with NO credential resolves nothing.
 func TestActingRefusesTheForgery(t *testing.T) {
@@ -66,17 +66,22 @@ func TestActingRefusesTheForgery(t *testing.T) {
 	if org != "" {
 		t.Fatalf("Acting resolved %q for an unvalidated caller — that is the forge", org)
 	}
-	if !strings.Contains(refusal, "validated org") {
-		t.Fatalf("refusal was %q; it must name what is missing", refusal)
+	if !strings.Contains(refusal, "validated principal") {
+		t.Fatalf("refusal was %q; an unattested caller must be told THAT", refusal)
 	}
 }
 
 // TestActingRefusesAValidatedCallerWithNoOrg: validated is not enough. A machine
 // token, or one minted before IAM's orgs claim, names no home org — and a plane
-// with per-org rows has nothing to scope by.
+// with per-org rows has nothing to scope by. This is the half that is 403 rather
+// than 401: the caller IS attested, and the org is what is missing.
 func TestActingRefusesAValidatedCallerWithNoOrg(t *testing.T) {
-	if org, refusal := acting(t, map[string]string{"X-User-Id": "u_1"}); org != "" || refusal == "" {
+	org, refusal := acting(t, map[string]string{"X-User-Id": "u_1"})
+	if org != "" || refusal == "" {
 		t.Fatalf("Acting = %q, refusal %q — want a refusal", org, refusal)
+	}
+	if !strings.Contains(refusal, "org scope") {
+		t.Fatalf("refusal was %q; an attested caller must be told the ORG is missing", refusal)
 	}
 }
 

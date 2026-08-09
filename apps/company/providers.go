@@ -7,6 +7,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // providers.go declares the provider SEAMS the formation machine drives, plus the
@@ -165,10 +166,7 @@ func (rc resourceCharger) Charge(ctx context.Context, org string, amountCents in
 	if err := rc.bill.Gate(ctx, org, "", false, "company-formation", amountCents); err != nil {
 		return "", err
 	}
-	ref, err := genID("pay")
-	if err != nil {
-		return "", err
-	}
+	ref := mint.ID("pay")
 	// Record the debit on the org's own ledger (fire-and-forget; the formation
 	// already advanced, mirroring every ResourceMeter caller). ref names the ACT — it
 	// is minted here and handed back to the caller, so the formation and its debit are
@@ -197,10 +195,7 @@ func (manualKYC) Start(_ context.Context, org string, f Founder) (ref, verifyURL
 	if strings.TrimSpace(f.Email) == "" {
 		return "", "", "", fmt.Errorf("founder email required for KYC")
 	}
-	ref, err = genID("kyc")
-	if err != nil {
-		return "", "", "", err
-	}
+	ref = mint.ID("kyc")
 	// No hosted URL for the manual provider; a real provider returns its own.
 	return ref, "", KYCPending, nil
 }
@@ -232,7 +227,7 @@ func (stubEsign) Request(_ context.Context, org string, docIDs []string, signers
 	if len(signers) == 0 {
 		return "", fmt.Errorf("no signers")
 	}
-	return genID("esign")
+	return mint.ID("esign"), nil
 }
 
 func (stubEsign) Status(_ context.Context, org, ref string) (bool, error) {

@@ -28,6 +28,7 @@ package sandbox
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -1040,7 +1041,7 @@ func (r *runtime) exec(ctx context.Context, m Sandbox, argv []string, stdin io.R
 		return ExecResult{}, err
 	}
 	if m.Status != "running" || m.Pod == "" {
-		return ExecResult{}, fmt.Errorf("sandbox is %s", firstNonEmpty(m.Status, "unknown"))
+		return ExecResult{}, fmt.Errorf("sandbox is %s", cmp.Or(m.Status, "unknown"))
 	}
 	d := r.execTimeout
 	if timeoutSec > 0 && time.Duration(timeoutSec)*time.Second < d {
@@ -1090,7 +1091,7 @@ func (r *runtime) tty(ctx context.Context, m Sandbox, argv []string, stdin io.Re
 		return err
 	}
 	if m.Status != "running" || m.Pod == "" {
-		return fmt.Errorf("sandbox is %s", firstNonEmpty(m.Status, "unknown"))
+		return fmt.Errorf("sandbox is %s", cmp.Or(m.Status, "unknown"))
 	}
 	return r.str.tty(ctx, r.ns, m.Pod, argv, stdin, stdout, size)
 }

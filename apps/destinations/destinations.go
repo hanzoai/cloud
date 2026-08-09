@@ -1,6 +1,7 @@
 package destinations
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -207,9 +208,9 @@ type ops struct{ s *cloud.Service[state] }
 // caller asserted for itself. It applies the same validOrg custody check the
 // untyped handlers do, because the org is folded into the KMS secret path.
 func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return "", err
 	}
 	if !validOrg(org) {
 		return "", zip.ErrBadRequest("org must be a DNS-1123 label")
@@ -624,7 +625,7 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	secrets := map[string]string{}
 	for _, name := range spec.Secrets {
-		v := strings.TrimSpace(firstNonEmpty(toStr(body[camelOf(name)]), toStr(body[name])))
+		v := cmp.Or(toStr(body[camelOf(name)]), toStr(body[name]))
 		if v == "" {
 			continue
 		}

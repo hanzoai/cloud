@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/captable"
 	"github.com/hanzoai/cloud/apps/dataroom"
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // adapters.go wires the company provider interfaces to the REAL sibling subsystems
@@ -72,10 +73,7 @@ func (a captableAdapter) SeedFounders(ctx context.Context, org, companyName stri
 		if sid == "" || fo.EquityBps <= 0 {
 			continue // no stakeholder id or no equity → nothing to issue
 		}
-		cert, err := genID("CS")
-		if err != nil {
-			return err
-		}
+		cert := mint.ID("CS")
 		if err := captable.IssueShares(ctx, org, captable.ShareInput{
 			StakeholderID: sid, ShareClassID: classID, CertificateID: fmt.Sprintf("%s-%d", cert, i+1),
 			Quantity: int64(fo.EquityBps) * sharesPerBps, Status: "ACTIVE",

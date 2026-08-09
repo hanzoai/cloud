@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -181,7 +182,7 @@ type eventList struct {
 //
 // Example: {"limit": 100}
 func (o readOps) insightsEvents(ctx context.Context, in *limitQuery) (*eventList, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

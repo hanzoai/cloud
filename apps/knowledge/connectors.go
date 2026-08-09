@@ -39,6 +39,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
@@ -217,7 +218,7 @@ type kbAuthorizeOut struct {
 // over the caller's validated org, so the connection the callback completes can
 // only ever land in that org.
 func (o ops) connectStart(ctx context.Context, in *providerIn) (*kbAuthorizeOut, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +364,7 @@ type kbConnectorsOut struct {
 // connected appears as disconnected, so the console can offer a Connect button.
 // No secret is ever returned.
 func (o ops) listConnectors(ctx context.Context, _ *noInput) (*kbConnectorsOut, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +414,7 @@ type kbSyncOut struct {
 // sync its own connection. A provider failure is reported honestly (502) and
 // recorded on the connector rather than silently swallowed.
 func (o ops) syncConnector(ctx context.Context, in *providerIn) (*kbSyncOut, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -463,7 +464,7 @@ func (o ops) syncConnector(ctx context.Context, in *providerIn) (*kbSyncOut, err
 // ingested stay in the org's store — they are the org's own data — but stop being
 // retrievable by search; a caller deletes them through the document surface.
 func (o ops) disconnectConnector(ctx context.Context, in *providerIn) (*connectionOut, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

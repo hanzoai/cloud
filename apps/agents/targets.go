@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/samples"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -186,7 +186,7 @@ func scanTarget(sc interface{ Scan(...any) error }) (Target, error) {
 	return t, nil
 }
 
-// CreateTarget inserts one target. The id is caller-generated (genID("tgt")).
+// CreateTarget inserts one target. The id is caller-generated (mint.ID("tgt")).
 func (s *Store) CreateTarget(ctx context.Context, t Target) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO agent_targets (`+targetCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -550,18 +550,6 @@ func targetOwns(ctx context.Context, t Target) bool {
 	return false
 }
 
-// tenantOf is the validated org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
-
 // noInput is the In of an op addressed entirely by the caller's principal: it
 // takes nothing off the wire. ONE of these for the whole package.
 type noInput struct{}
@@ -736,10 +724,7 @@ func (o targetOps) registerTarget(ctx context.Context, in *targetReq) (*targetVi
 		}
 	}
 
-	id, err := genID("tgt")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("tgt")
 	t := Target{
 		ID: id, Org: org, Owner: owner, Label: label, Kind: kind, Status: status,
 		Capacity: capacity, Host: host, Spec: spec, Metrics: metrics, MetricsAt: metricsAt,

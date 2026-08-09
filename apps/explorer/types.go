@@ -13,6 +13,7 @@
 package explorer
 
 import (
+	"cmp"
 	"fmt"
 	"strconv"
 	"strings"
@@ -74,7 +75,7 @@ type oracleView struct {
 //     reachable indexer is "active". lag is omitted (not derivable — never faked).
 func toIndexerView(health, block map[string]any, brand, env string) indexerView {
 	chainName := str(health, "chain_name")
-	id := firstNonEmpty(chainName, str(health, "chain_id"), brand, "indexer")
+	id := cmp.Or(chainName, str(health, "chain_id"), brand, "indexer")
 
 	status := "active"
 	if health != nil {
@@ -85,7 +86,7 @@ func toIndexerView(health, block map[string]any, brand, env string) indexerView 
 
 	return indexerView{
 		ID:        id,
-		Chain:     firstNonEmpty(chainName, brand),
+		Chain:     cmp.Or(chainName, brand),
 		Network:   env,
 		Height:    str(block, "height"),
 		Status:    status,
@@ -98,14 +99,14 @@ func toIndexerView(health, block map[string]any, brand, env string) indexerView 
 // verbatim; source is the O-Chain oracle network these feeds originate from; a listed
 // feed carrying a price is "active"; updatedAt is the feed's timestamp.
 func toOracleView(f map[string]any) oracleView {
-	pair := firstNonEmpty(str(f, "pair"), str(f, "symbol"))
-	id := firstNonEmpty(str(f, "id"), pair)
+	pair := cmp.Or(str(f, "pair"), str(f, "symbol"))
+	id := cmp.Or(str(f, "id"), pair)
 	return oracleView{
 		ID:        id,
-		Name:      firstNonEmpty(pair, id),
+		Name:      cmp.Or(pair, id),
 		Feed:      pair,
 		Value:     str(f, "price"),
-		Source:    firstNonEmpty(str(f, "source"), "O-Chain"),
+		Source:    cmp.Or(str(f, "source"), "O-Chain"),
 		Status:    "active",
 		UpdatedAt: asTime(get(f, "timestamp")),
 	}

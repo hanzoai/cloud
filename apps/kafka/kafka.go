@@ -20,6 +20,7 @@
 package kafka
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -64,7 +65,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	cfg := &types.Configuration{
 		PubSubUrl:      pubsub.URL(),
 		PubSubCredFile: os.Getenv("CLOUD_KAFKA_PUBSUB_CREDS"),
-		BrokerHost:     firstNonEmpty(os.Getenv("CLOUD_KAFKA_HOST"), "cloud"),
+		BrokerHost:     cmp.Or(strings.TrimSpace(os.Getenv("CLOUD_KAFKA_HOST")), "cloud"),
 		BrokerPort:     port,
 		AdminPort:      adminPort,
 		NodeID:         1,
@@ -119,13 +120,4 @@ func envInt(k string, def int) (int, error) {
 		return 0, fmt.Errorf("kafka.Mount: bad %s %q: %w", k, v, err)
 	}
 	return n, nil
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }

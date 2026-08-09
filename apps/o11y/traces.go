@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -118,7 +119,7 @@ type tracesOut struct {
 //
 // Example: {"range": 3600, "limit": 50}
 func handleTraces(ctx context.Context, in *tracesIn) (*tracesOut, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

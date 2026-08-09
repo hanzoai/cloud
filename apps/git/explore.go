@@ -12,6 +12,7 @@
 package git
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"path/filepath"
@@ -81,7 +82,7 @@ func allPublicRepos(s *cloud.Service[state], ctx context.Context, query string) 
 			}
 			rows = append(rows, exploreRow{
 				Org: org, Name: r.Name, Description: r.Description,
-				DefaultBranch: firstNonEmptyStr(r.DefaultBranch, defaultBranchName),
+				DefaultBranch: cmp.Or(r.DefaultBranch, defaultBranchName),
 				Size:          humanBytes(r.SizeBytes), Updated: rfc3339(r.UpdatedAt),
 			})
 		}
