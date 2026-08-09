@@ -424,6 +424,77 @@ func (c *iamClient) createOrganization(ctx context.Context, o iamOrg) error {
 	return err
 }
 
+// iamApplication is the subset of IAM's Application this creates. IAM fills the
+// rest, including the client credentials — which is the point: nothing here
+// invents a secret, and nothing here reads one back.
+type iamApplication struct {
+	Owner        string   `json:"owner"`
+	Name         string   `json:"name"`
+	DisplayName  string   `json:"displayName"`
+	Organization string   `json:"organization"`
+	GrantTypes   []string `json:"grantTypes"`
+}
+
+// agentAppName is what an org's agent identity is called: <org>-agent, the
+// <org>-<app> convention every application here follows.
+func agentAppName(org string) string { return org + "-agent" }
+
+// ensureAgentApplication gives an org the identity its sandboxed agents run as.
+//
+// It is created HERE because this is where an org's IAM objects are created, by
+// the client that already holds the authority to create them. There is no
+// bootstrap problem to solve: the credential doing the provisioning is cloud's
+// own, it already exists, and creating IAM objects for an org is what it is for.
+//
+// PROVISIONED, NEVER PROMOTED. This makes a new application owned by the org.
+// Nothing is elevated, and an agent's identity is therefore bounded by the org
+// that owns it — which is what makes cross-tenant reach impossible rather than
+// merely unlikely.
+//
+// client_credentials ALONE. An agent is a machine: it has no user to redirect,
+// no code to exchange, no refresh to hold. Granting only that is what keeps the
+// application from being usable as a login.
+//
+// IDEMPOTENT BY CONFLICT. IAM refuses a duplicate name (409) rather than
+// overwriting it, so an org created twice — a retry, a re-run — finds the
+// application already there and that is success, not an error. Overwriting would
+// rotate a live agent's credentials as a side effect of a retry.
+//
+// It does NOT read the secret back, and no caller of this ever sees one. Issuing
+// a token for a run is a separate act, at a separate door, reviewed separately.
+func (c *iamClient) ensureAgentApplication(ctx context.Context, org string) error {
+	name := agentAppName(org)
+	body, err := json.Marshal(iamApplication{
+		Owner:        org,
+		Name:         name,
+		DisplayName:  name,
+		Organization: org,
+		GrantTypes:   []string{"client_credentials"},
+	})
+	if err != nil {
+		return err
+	}
+	// ASK FIRST. Idempotence comes from reading, not from parsing an error
+	// string: this client surfaces failures as plain messages with no status, so
+	// matching "already exists" would be a guess about IAM's prose.
+	if got, gerr := c.do(ctx, http.MethodGet,
+		"/v1/iam/applications/get", url.Values{"id": {org + "/" + name}}, nil); gerr == nil && len(got.Data) > 2 {
+		return nil // already provisioned; that is the desired state
+	}
+
+	if _, err = c.do(ctx, http.MethodPost, "/v1/iam/applications", nil, body); err != nil {
+		// The read above closes the ordinary case; this closes the race where two
+		// creations of one org overlap. IAM refuses the duplicate rather than
+		// overwriting it, which is the behaviour worth having — an overwrite would
+		// rotate a live agent's credentials as a side effect of a retry.
+		if strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 // getUser reads a full user row (for the move: update-user re-submits it whole).
 // It takes owner and name SEPARATELY because that is what the endpoint wants.
 // Sending the `<owner>/<name>` composite as `id` — which this did — answers
@@ -558,4 +629,24 @@ func (c *iamClient) moveUserToOrg(ctx context.Context, id, slug string) error {
 	// update-user is keyed by the ORIGINAL id (the row's current owner/name).
 	_, err = c.do(ctx, http.MethodPost, "/v1/iam/update-user", url.Values{"id": {id}}, body)
 	return err
+}
+
+// giveOrgAnAgent provisions an org's agent identity, best-effort and LOUD.
+//
+// Best-effort because the org itself is the thing being created and it is fine
+// without this: agents simply will not run for that org until it exists. Failing
+// the whole onboarding because one application could not be registered would
+// trade a working org for no org.
+//
+// LOUD because the consequence is invisible otherwise — an org silently missing
+// its agent identity looks exactly like an org whose agents nobody has used yet,
+// and the difference only surfaces months later as "why does the agent not work
+// here". This is the one line that tells you.
+func giveOrgAnAgent(ctx context.Context, c *iamClient, log func(string, ...any), org string) {
+	if c == nil || org == "" {
+		return
+	}
+	if err := c.ensureAgentApplication(ctx, org); err != nil && log != nil {
+		log("org has no agent identity; agents will not run for it", "org", org, "err", err)
+	}
 }
