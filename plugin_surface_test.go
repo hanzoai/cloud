@@ -26,6 +26,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -255,7 +256,7 @@ func TestHealthOwnershipMatchesWhatIsRegistered(t *testing.T) {
 			}
 		}
 		switch {
-		case !s.ownsHealth && contains(s.paths, generic):
+		case !s.ownsHealth && slices.Contains(s.paths, generic):
 			t.Errorf("%s registers %s in Mount and its main leaves OwnsHealth false — "+
 				"serve.go declares that same address for every subsystem without it, so the "+
 				"program has one address declared twice and zip refuses to compose it. "+
@@ -338,13 +339,4 @@ func TestDeclaredPrefixesCoverTheSurface(t *testing.T) {
 			}
 		}
 	}
-}
-
-func contains(hay []string, needle string) bool {
-	for _, h := range hay {
-		if h == needle {
-			return true
-		}
-	}
-	return false
 }
