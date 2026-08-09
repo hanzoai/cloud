@@ -16,6 +16,26 @@ LDFLAGS     ?= -s -w
 # mode so a developer builds EXACTLY what CI and Docker build.
 export GOWORK := off
 
+# THE MAC SDK, resolved here rather than in each developer's shell.
+#
+# Go links through clang whenever a package pulls cgo — the net resolver alone
+# is enough — and clang on this platform locates libSystem through an SDK it is
+# supposed to find on its own. When it does not, every link dies with
+#
+#     ld: library 'System' not found
+#
+# which names neither clang, nor the SDK, nor xcode-select, and reads as a
+# corrupt Go toolchain. Seen on a machine whose xcode-select was correct and
+# whose SDK was complete: `SDKROOT=$(xcrun --show-sdk-path) cc` linked fine and
+# a bare `cc` did not.
+#
+# So ask xcrun once, here, where every build in this repo already agrees on its
+# settings. An explicit SDKROOT in the environment still wins; on Linux this is
+# empty and nothing changes.
+ifeq ($(shell uname),Darwin)
+export SDKROOT ?= $(shell xcrun --show-sdk-path 2>/dev/null)
+endif
+
 # Linking a cloud binary is a multi-GiB act and the Go LINKER writes its
 # temporaries to TMPDIR (not GOTMPDIR). Where /tmp is a tmpfs that is RAM, and a
 # fleet-wide target is a hundred links back to back. Point it at disk.
