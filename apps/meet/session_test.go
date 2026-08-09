@@ -6,20 +6,15 @@
 package meet
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
-	"github.com/hanzoai/cloud/internal/iamtest"
 	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -69,7 +64,7 @@ func read(t *testing.T, app *zip.App, bearer string) (int, lobby, string) {
 // own workspaces, so an unauthenticated read of it would be a tenant enumeration
 // with no credential at all.
 func TestSessionRefusesACallerWithNothing(t *testing.T) {
-	app := mount(t, teamSecret, apiKey, apiSecret)
+	app := mount(t, apiKey, apiSecret)
 	for _, bearer := range []string{"", "not-a-token", "eyJhbGciOiJub25lIn0.e30."} {
 		if code, _, body := read(t, app, bearer); code != http.StatusUnauthorized {
 			t.Fatalf("bearer %q → %d, want 401\n%s", bearer, code, body)
@@ -77,26 +72,27 @@ func TestSessionRefusesACallerWithNothing(t *testing.T) {
 	}
 }
 
-// TestSessionAnswersFromTheSignedWorkspace is the HS256 lane: the token IS the
-// answer, so the workspace it names and the account it carries come straight back
-// and nothing is looked up.
-func TestSessionAnswersFromTheSignedWorkspace(t *testing.T) {
+// TestSessionAnswersFromTheRows: the lobby names the workspaces the MEMBERSHIP
+// ROWS put this caller in, and the account those rows seat them under. Nothing in
+// the answer is read off the caller's token beyond the subject it attests, because
+// a token that could name its own workspace would be naming a tenant.
+func TestSessionAnswersFromTheRows(t *testing.T) {
 	t.Setenv(wsEnv, "wss://live.hanzo.bot")
-	app := mount(t, teamSecret, apiKey, apiSecret)
-	tok := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	app := mount(t, apiKey, apiSecret)
+	tok := access(t, ada)
 
 	code, out, body := read(t, app, tok)
 	if code != http.StatusOK {
 		t.Fatalf("session = %d, want 200\n%s", code, body)
 	}
 	if out.Identity != account {
-		t.Errorf("identity = %q, want the token's account %q", out.Identity, account)
+		t.Errorf("identity = %q, want the account on the rows %q", out.Identity, account)
 	}
 	if out.WS != "wss://live.hanzo.bot" {
 		t.Errorf("ws = %q, want the configured media address", out.WS)
 	}
 	if len(out.Workspaces) != 1 || out.Workspaces[0].UUID != workspaceA {
-		t.Fatalf("workspaces = %+v, want exactly the signed workspace %s", out.Workspaces, workspaceA)
+		t.Fatalf("workspaces = %+v, want exactly the workspace the rows name (%s)", out.Workspaces, workspaceA)
 	}
 }
 
@@ -106,9 +102,6 @@ func TestSessionAnswersFromTheSignedWorkspace(t *testing.T) {
 // room, types a name, and is told no — and the two answers drift the first time
 // one of the role rules is edited alone.
 func TestTheOfferAndTheGrantAgree(t *testing.T) {
-	hour := time.Now().Add(time.Hour).Unix()
-	app := mount(t, teamSecret, apiKey, apiSecret)
-
 	for _, tc := range []struct {
 		role    string
 		offered bool
@@ -117,9 +110,11 @@ func TestTheOfferAndTheGrantAgree(t *testing.T) {
 		{token.RoleAdmin, true},
 		{token.RoleMember, true},
 		{token.RoleGuest, false},
-		{"", false}, // a session that never proved a role
+		{"", false}, // a row that names no role
 	} {
-		tok := workspaceToken(t, workspaceA, teamSecret, map[string]any{"role": tc.role}, hour)
+		app := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)),
+			holds(map[string]string{workspaceA: tc.role}))
+		tok := access(t, ada)
 
 		code, out, body := read(t, app, tok)
 		if code != http.StatusOK {
@@ -142,8 +137,8 @@ func TestTheOfferAndTheGrantAgree(t *testing.T) {
 // that handed back a workspace the caller did not prove would be handing back the
 // one string needed to name a room in it.
 func TestSessionOffersOnlyWhatTheCallerProved(t *testing.T) {
-	app := mount(t, teamSecret, apiKey, apiSecret)
-	tok := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	app := mount(t, apiKey, apiSecret)
+	tok := access(t, ada)
 	_, out, _ := read(t, app, tok)
 	for _, w := range out.Workspaces {
 		if w.UUID == workspaceB {
@@ -158,11 +153,17 @@ func TestSessionOffersOnlyWhatTheCallerProved(t *testing.T) {
 // renders "you have no workspaces", which is a lie when the truth is "team is
 // down" and would send a person to ask for an invite they already have.
 func TestSessionIAMLaneFailsClosedWithNoAuthority(t *testing.T) {
-	iss := iamIssuer(t)
-	app := mount(t, teamSecret, apiKey, apiSecret)
-	iamTok := iss.Sign(t, iamtest.Claims{Sub: "11111111-2222-4333-8444-555555555555", Owner: "acme"})
+	// No authority: rows() falls back to the real peer, and this process has none.
+	app := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)), nil)
+	iamTok := access(t, ada)
 	if code, _, body := read(t, app, iamTok); code != http.StatusUnauthorized {
 		t.Fatalf("session with no team peer = %d, want 401 (refusal, not an empty answer)\n%s", code, body)
+	}
+	// The SAME token against an authority that answers IS served, so the refusal
+	// above is the missing peer and not the credential.
+	answering := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)), anyone())
+	if code, _, body := read(t, answering, access(t, ada)); code != http.StatusOK {
+		t.Fatalf("session with an answering peer = %d, want 200\n%s", code, body)
 	}
 }
 
@@ -172,8 +173,8 @@ func TestSessionIAMLaneFailsClosedWithNoAuthority(t *testing.T) {
 // take out the published office client, which supplies its own address.
 func TestUnsetMediaAddressIsSaidPlainly(t *testing.T) {
 	t.Setenv(wsEnv, "")
-	app := mount(t, teamSecret, apiKey, apiSecret)
-	tok := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	app := mount(t, apiKey, apiSecret)
+	tok := access(t, ada)
 
 	code, out, body := read(t, app, tok)
 	if code != http.StatusOK {
@@ -193,10 +194,10 @@ func TestUnsetMediaAddressIsSaidPlainly(t *testing.T) {
 // Secret behind it, or the signing key's name leaks.
 func TestSessionNamesNoKeyMaterial(t *testing.T) {
 	t.Setenv(wsEnv, "wss://live.hanzo.bot")
-	app := mount(t, teamSecret, apiKey, apiSecret)
-	tok := workspaceToken(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	app := mount(t, apiKey, apiSecret)
+	tok := access(t, ada)
 	_, _, body := read(t, app, tok)
-	for _, secret := range []string{apiSecret, teamSecret, apiKey, "keys.yaml", "livekit-keys", "SERVER_SECRET"} {
+	for _, secret := range []string{apiSecret, apiKey, "keys.yaml", "livekit-keys"} {
 		if strings.Contains(body, secret) {
 			t.Errorf("the lobby body names %q:\n%s", secret, body)
 		}
@@ -208,7 +209,7 @@ func TestSessionNamesNoKeyMaterial(t *testing.T) {
 // gets to ask. Pinned separately because the lobby is a READ, and a read is where
 // a gate quietly gets relaxed.
 func TestSpacesIsRefusedForAMachine(t *testing.T) {
-	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
+	st := state{apiKey: apiKey, apiSecret: apiSecret}
 	iamIssuer(t)
 	for _, p := range machinePrincipals {
 		if _, ok := spacesWithPrincipal(t, st, p); ok {
@@ -221,7 +222,7 @@ func TestSpacesIsRefusedForAMachine(t *testing.T) {
 // the client on /meet and /meet/<deep link>, beside the API it reads. The ui
 // package's own test covers what those bytes are.
 func TestLobbyIsServedFromTheSameOrigin(t *testing.T) {
-	app := mount(t, teamSecret, apiKey, apiSecret)
+	app := mount(t, apiKey, apiSecret)
 	for _, path := range []string{"/meet", "/meet/", "/meet/" + workspaceA + "/standup"} {
 		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
 		if err != nil {
@@ -242,7 +243,7 @@ func TestLobbyIsServedFromTheSameOrigin(t *testing.T) {
 // the client, which then renders the refusal /v1/meet/session gives it. A 404 here
 // would say nothing at all about what is wrong.
 func TestTheClientIsServedEvenUnconfigured(t *testing.T) {
-	app := mount(t, "", "", "")
+	app := mount(t, "", "")
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/meet", nil))
 	if err != nil {
 		t.Fatalf("GET /meet: %v", err)
@@ -278,40 +279,31 @@ func truncate(s string) string {
 }
 
 // TestNoAccountIsNoOffer closes the last way the lobby and the mint could
-// disagree. mint refuses a token that carries no account — the account IS the
-// identity the seat is taken under — so a lobby that offered a workspace off one
-// would show a room, take the choice, and then decline it. token.Generate cannot
-// mint this shape (it validates the account as a uuid), which is exactly why the
-// invariant is written down at the offer instead of inferred from the grant.
+// disagree. A seat is taken under the account on the membership row, and mint
+// refuses a row that names none — so a lobby that offered a workspace off such a
+// row would show a room, take the choice, and then decline it.
+//
+// The rows are the only place this shape can come from now, which is why the
+// authority states it directly: a workspace with a role and no account.
 func TestNoAccountIsNoOffer(t *testing.T) {
-	app := mount(t, teamSecret, apiKey, apiSecret)
-	tok := rawToken(t, map[string]any{
-		"extra":     map[string]any{"role": token.RoleOwner},
-		"account":   "",
-		"workspace": workspaceA,
-		"exp":       time.Now().Add(time.Hour).Unix(),
-	})
-	if code, _, body := read(t, app, tok); code != http.StatusUnauthorized {
-		t.Fatalf("session with an account-less token = %d, want 401\n%s", code, body)
+	unseated := &answers{
+		row: func(string, string) plane.Member {
+			return plane.Member{Member: true, Role: token.RoleOwner} // no account
+		},
+		list: plane.Spaces{Items: []plane.Space{{UUID: workspaceA, Role: token.RoleOwner}}},
 	}
-	// And the mint refuses it too, which is the agreement being pinned.
-	if mintCode, _ := ask(t, app, roomIn(workspaceA), "", tok); mintCode != http.StatusUnauthorized {
-		t.Errorf("getToken with an account-less token = %d, want 401", mintCode)
-	}
-}
+	app := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)), unseated)
+	tok := access(t, ada)
 
-// rawToken signs an arbitrary payload with the team secret. token.Generate
-// validates its inputs, so a shape it refuses to mint can only be built here —
-// and a shape nothing mints is still a shape the server must decide about.
-func rawToken(t *testing.T, payload map[string]any) string {
-	t.Helper()
-	body, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatal(err)
+	code, out, body := read(t, app, tok)
+	if code != http.StatusOK {
+		t.Fatalf("session = %d, want 200 — no account is an empty lobby, not a fault\n%s", code, body)
 	}
-	head := base64.RawURLEncoding.EncodeToString([]byte(`{"typ":"JWT","alg":"HS256"}`))
-	signing := head + "." + base64.RawURLEncoding.EncodeToString(body)
-	mac := hmac.New(sha256.New, []byte(teamSecret))
-	mac.Write([]byte(signing))
-	return signing + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	if len(out.Workspaces) != 0 {
+		t.Errorf("the lobby offered %+v off a row with no account — the mint refuses it", out.Workspaces)
+	}
+	// And the mint does refuse it, which is the agreement being pinned.
+	if mintCode, mintBody := ask(t, app, roomIn(workspaceA), "", tok); mintCode != http.StatusUnauthorized {
+		t.Errorf("getToken on a row with no account = %d %q, want 401", mintCode, mintBody)
+	}
 }

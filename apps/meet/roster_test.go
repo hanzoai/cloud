@@ -26,27 +26,34 @@ import (
 // It records what it was asked, which is the other half of the proof: a rule that
 // refuses BEFORE the ask must leave this untouched. "Refused" and "refused for the
 // right reason" are different results, and only the second one survives a mutation.
+// It answers per WORKSPACE, because the rows do: a member of A is not a member of
+// B, and that difference IS the tenant boundary meet enforces. An authority that
+// said yes to any workspace would make the boundary untestable at the door.
 type answers struct {
-	row     plane.Member // what the rows say about one workspace
-	list    plane.Spaces // what they say about all of them
-	err     error        // or why they cannot be read
-	asked   int          // how many times the authority was consulted
-	subject string       // the subject it was consulted about
+	row     func(workspace, subject string) plane.Member // what the rows say about one workspace
+	list    plane.Spaces                                 // what they say about all of them
+	err     error                                        // or why they cannot be read
+	asked   int                                          // how many times the authority was consulted
+	subject string                                       // the subject it was consulted about
+	saw     string                                       // the workspace it was consulted about
 }
 
-func (a *answers) record(subject string) { a.asked++; a.subject = subject }
-
-func (a *answers) member(_ context.Context, _, subject string) (*plane.Member, error) {
-	a.record(subject)
+func (a *answers) member(_ context.Context, workspace, subject string) (*plane.Member, error) {
+	a.asked++
+	a.subject, a.saw = subject, workspace
 	if a.err != nil {
 		return nil, a.err
 	}
-	m := a.row
+	if a.row == nil {
+		return &plane.Member{}, nil
+	}
+	m := a.row(workspace, subject)
 	return &m, nil
 }
 
 func (a *answers) workspaces(_ context.Context, subject string) (*plane.Spaces, error) {
-	a.record(subject)
+	a.asked++
+	a.subject = subject
 	if a.err != nil {
 		return nil, a.err
 	}
@@ -54,9 +61,36 @@ func (a *answers) workspaces(_ context.Context, subject string) (*plane.Spaces, 
 	return &s, nil
 }
 
+// holds is the authority for a person who holds exactly these roles, keyed by
+// workspace. BOTH answers come off the one map, so the lobby's offer and the
+// mint's grant cannot be handed different rows and drift apart.
+func holds(roles map[string]string) *answers {
+	a := &answers{list: plane.Spaces{Account: account}}
+	a.row = func(workspace, _ string) plane.Member {
+		role, ok := roles[workspace]
+		return plane.Member{Member: ok, Role: role, Account: account}
+	}
+	for ws, role := range roles {
+		a.list.Items = append(a.list.Items, plane.Space{UUID: ws, Role: role})
+	}
+	return a
+}
+
+// anyone says yes to every question. It is what proves a refusal came from a RULE
+// rather than from an unanswerable ask: with it in place, whatever is still
+// refused was refused before the authority was ever reached.
+func anyone() *answers {
+	return &answers{
+		row: func(string, string) plane.Member {
+			return plane.Member{Member: true, Role: token.RoleOwner, Account: account}
+		},
+		list: plane.Spaces{Account: account, Items: []plane.Space{{UUID: workspaceA, Role: token.RoleOwner}}},
+	}
+}
+
 // human is the attestation the boundary mints for a real person: an org and a
 // verified `sub`.
-var human = principal.Principal{Org: "acme", User: "ada", Subject: "ada@acme.test"}
+var human = principal.Principal{Org: org, User: "ada", Subject: ada}
 
 // onLane runs fn inside a request carrying an attested principal — the ONE way to
 // model what the boundary produces, since principal.Mint is the boundary's own call.
@@ -89,8 +123,8 @@ func TestIAMLaneSeatsAHumanAndRefusesAMachine(t *testing.T) {
 	const seat = "550e8400-e29b-41d4-a716-446655440000"
 
 	t.Run("a human is seated", func(t *testing.T) {
-		a := &answers{row: plane.Member{Member: true, Role: token.RoleOwner, Account: seat}}
-		st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret, authority: a}
+		a := anyone()
+		st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 		var j joiner
 		var ok bool
 		onLane(t, human, func(c *zip.Ctx) { j, ok = st.admits(c, roomIn(workspaceA)) })
@@ -107,8 +141,8 @@ func TestIAMLaneSeatsAHumanAndRefusesAMachine(t *testing.T) {
 
 	t.Run("a machine is refused before anything is asked", func(t *testing.T) {
 		for _, p := range machinePrincipals {
-			a := &answers{row: plane.Member{Member: true, Role: token.RoleOwner, Account: seat}}
-			st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret, authority: a}
+			a := anyone()
+			st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 			var ok bool
 			onLane(t, p, func(c *zip.Ctx) { _, ok = st.admits(c, roomIn(workspaceA)) })
 			if ok {
@@ -135,7 +169,7 @@ func TestLobbyOffersToAHumanAndRefusesAMachine(t *testing.T) {
 
 	t.Run("a human is offered their workspaces", func(t *testing.T) {
 		a := &answers{list: rows}
-		st := state{teamSecret: teamSecret, authority: a}
+		st := state{authority: a}
 		var sp plane.Spaces
 		var ok bool
 		onLane(t, human, func(c *zip.Ctx) { sp, ok = st.spaces(c) })
@@ -153,7 +187,7 @@ func TestLobbyOffersToAHumanAndRefusesAMachine(t *testing.T) {
 	t.Run("a machine is refused before anything is asked", func(t *testing.T) {
 		for _, p := range machinePrincipals {
 			a := &answers{list: rows}
-			st := state{teamSecret: teamSecret, authority: a}
+			st := state{authority: a}
 			var ok bool
 			onLane(t, p, func(c *zip.Ctx) { _, ok = st.spaces(c) })
 			if ok {
@@ -183,12 +217,8 @@ func TestTheAuthoritysRoleDecides(t *testing.T) {
 		{"", false, false},
 		{"auditor", false, false}, // a role invented tomorrow starts without a seat
 	} {
-		seat := "550e8400-e29b-41d4-a716-446655440000"
-		a := &answers{
-			row:  plane.Member{Member: true, Role: tc.role, Account: seat},
-			list: plane.Spaces{Account: seat, Items: []plane.Space{{UUID: workspaceA, Role: tc.role}}},
-		}
-		st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret, authority: a}
+		a := holds(map[string]string{workspaceA: tc.role})
+		st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 
 		var admitted, read bool
 		var sp plane.Spaces
@@ -224,8 +254,8 @@ func TestTheAuthoritysRoleDecides(t *testing.T) {
 // refusal, and it is one the AUTHORITY made — distinct from an authority that
 // could not be reached, which is the next test.
 func TestNotAMemberIsRefusedOnBothDoors(t *testing.T) {
-	a := &answers{row: plane.Member{}, list: plane.Spaces{}}
-	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret, authority: a}
+	a := &answers{}
+	st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 	onLane(t, human, func(c *zip.Ctx) {
 		if _, ok := st.admits(c, roomIn(workspaceA)); ok {
 			t.Error("a caller with no member row was seated")
@@ -246,7 +276,7 @@ func TestNotAMemberIsRefusedOnBothDoors(t *testing.T) {
 // down", and it sends someone to ask for an invite they already have.
 func TestAnUnreachableAuthorityIsARefusal(t *testing.T) {
 	a := &answers{err: context.DeadlineExceeded}
-	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret, authority: a}
+	st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 	onLane(t, human, func(c *zip.Ctx) {
 		if _, ok := st.admits(c, roomIn(workspaceA)); ok {
 			t.Error("SECURITY: an unreachable authority admitted a caller")
@@ -276,26 +306,16 @@ func TestAnUnreachableAuthorityIsARefusal(t *testing.T) {
 // meet makes on its own. Saying so is the difference between a test that documents
 // the program and one that flatters it.
 func TestTheIAMLaneNeverWidensTheRoom(t *testing.T) {
-	seat := "550e8400-e29b-41d4-a716-446655440000"
-	var asked string
-	yes := func() *recorder {
-		return &recorder{
-			answers: answers{row: plane.Member{Member: true, Role: token.RoleOwner, Account: seat}},
-			saw:     &asked,
-		}
-	}
-
 	// A room in ANOTHER workspace asks about THAT workspace, never the caller's.
-	a := yes()
-	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret, authority: a}
+	a := anyone()
+	st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 	onLane(t, human, func(c *zip.Ctx) { _, _ = st.admits(c, roomIn(workspaceB)) })
-	if asked != workspaceB {
-		t.Errorf("the authority was asked about %q for a room in %q", asked, workspaceB)
+	if a.saw != workspaceB {
+		t.Errorf("the authority was asked about %q for a room in %q", a.saw, workspaceB)
 	}
 
 	// An EMPTY leading segment is refused by meet itself.
-	asked = ""
-	a = yes()
+	a = anyone()
 	st.authority = a
 	var ok bool
 	onLane(t, human, func(c *zip.Ctx) { _, ok = st.admits(c, "_standup") })
@@ -303,33 +323,20 @@ func TestTheIAMLaneNeverWidensTheRoom(t *testing.T) {
 		t.Error("SECURITY: a room with an empty workspace segment was admitted")
 	}
 	if a.asked != 0 {
-		t.Errorf("the authority was consulted about a room with no workspace segment (asked about %q)", asked)
+		t.Errorf("the authority was consulted about a room with no workspace segment (asked about %q)", a.saw)
 	}
 
 	// A name with no separator at all IS asked about — as itself — and no tenant
 	// holds a workspace by that name, so the rows refuse it.
-	asked = ""
-	a = yes()
-	a.row = plane.Member{} // the honest answer for a workspace nobody has
+	a = holds(nil) // the honest answer for a workspace nobody has
 	st.authority = a
 	onLane(t, human, func(c *zip.Ctx) { _, ok = st.admits(c, "no-separator") })
 	if ok {
 		t.Error("a room naming a workspace nobody has was admitted")
 	}
-	if asked != "no-separator" {
-		t.Errorf("the authority was asked about %q, want the room name itself", asked)
+	if a.saw != "no-separator" {
+		t.Errorf("the authority was asked about %q, want the room name itself", a.saw)
 	}
-}
-
-// recorder is answers plus the workspace it was asked about.
-type recorder struct {
-	answers
-	saw *string
-}
-
-func (r *recorder) member(ctx context.Context, workspace, subject string) (*plane.Member, error) {
-	*r.saw = workspace
-	return r.answers.member(ctx, workspace, subject)
 }
 
 // TestAStateWithNoAuthorityAsksTheRealPeer proves rows() is nil-safe by
