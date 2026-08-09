@@ -47,7 +47,7 @@ func ingest(ctx context.Context, ev plane.ChannelsIngestIn) {
 	var v verdict
 	var err error
 	if m.Room.Kind == RoomDM {
-		v, err = dmGate(ctx, st, ev.Org, m.Channel, m.Sender.ExternalID, true)
+		v, err = dmGate(ctx, st, ev.Org, m.Channel, m.Sender.ExternalID, ev.Installer, true)
 	} else {
 		// A thread is a group surface: RoomThread deliberately gates under the
 		// group policy.
