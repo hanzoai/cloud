@@ -10,6 +10,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/nats-io/nats.go"
 )
 
@@ -61,7 +62,7 @@ type infoOut struct {
 
 // info returns the broker's identity and the org's stream count.
 func (st status) info(ctx context.Context, _ *nothing) (*infoOut, error) {
-	if _, err := callerOf(ctx); err != nil {
+	if _, err := principal.RequireOrg(ctx); err != nil {
 		return nil, err
 	}
 	ctx, cancel, err := st.b.live(ctx)
