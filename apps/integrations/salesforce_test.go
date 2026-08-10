@@ -47,7 +47,7 @@ func TestSalesforceAuthorizeScope(t *testing.T) {
 	}
 	// Least privilege: never the broad grants.
 	for _, forbidden := range []string{"full", "web", "chatter_api"} {
-		for _, s := range strings.Fields(scope) {
+		for s := range strings.FieldsSeq(scope) {
 			if s == forbidden {
 				t.Errorf("scope must not include %q: %q", forbidden, scope)
 			}

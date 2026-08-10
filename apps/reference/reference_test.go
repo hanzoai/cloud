@@ -177,7 +177,7 @@ func TestFetchSourcesParseAndLocalSourcesProduce(t *testing.T) {
 func TestBaselineHasNowhereToPutATenant(t *testing.T) {
 	forbidden := []string{"org", "owner", "tenant", "scope", "project", "account", "brand", "user", "subject", "person", "distinct"}
 	for _, ddl := range []string{createSource, createEntry} {
-		for _, line := range strings.Split(ddl, "\n") {
+		for line := range strings.SplitSeq(ddl, "\n") {
 			col, _, ok := strings.Cut(strings.TrimSpace(line), " ")
 			if !ok || col == "" {
 				continue

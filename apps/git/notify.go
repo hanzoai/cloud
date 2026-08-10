@@ -201,7 +201,7 @@ func subscribedTo(csv string, kind cloud.LifecycleKind) bool {
 	if csv == "" {
 		return true
 	}
-	for _, e := range strings.Split(csv, ",") {
+	for e := range strings.SplitSeq(csv, ",") {
 		if strings.TrimSpace(e) == string(kind) {
 			return true
 		}

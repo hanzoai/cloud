@@ -646,7 +646,7 @@ func wlTenantsFromEnv() map[string]bool {
 		return nil
 	}
 	set := map[string]bool{}
-	for _, part := range strings.Split(raw, ",") {
+	for part := range strings.SplitSeq(raw, ",") {
 		if org := strings.TrimSpace(part); org != "" {
 			set[org] = true
 		}

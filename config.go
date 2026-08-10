@@ -412,7 +412,7 @@ func LoadConfig() *Config {
 	// the console can connect cross-origin; override with CLOUD_ZAP_WEB_ORIGINS.
 	zapOrigins := getenv("CLOUD_ZAP_WEB_ORIGINS",
 		"console.hanzo.ai,cloud.hanzo.ai,localhost:4000")
-	for _, o := range strings.Split(zapOrigins, ",") {
+	for o := range strings.SplitSeq(zapOrigins, ",") {
 		if s := strings.TrimSpace(o); s != "" {
 			cfg.ZAPWebOrigins = append(cfg.ZAPWebOrigins, s)
 		}

@@ -99,7 +99,7 @@ func TestSlugIsASingleCleanName(t *testing.T) {
 		if !slugRE.MatchString(tpl.Slug) {
 			t.Errorf("template slug %q is not a DNS label", tpl.Slug)
 		}
-		for _, w := range strings.Split(tpl.Slug, "-") {
+		for w := range strings.SplitSeq(tpl.Slug, "-") {
 			if strings.Count(tpl.Slug, w) > 1 {
 				t.Errorf("template slug %q repeats %q", tpl.Slug, w)
 			}

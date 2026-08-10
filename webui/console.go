@@ -371,7 +371,7 @@ func acceptsEncoding(acceptEncoding, token string) bool {
 	if !strings.Contains(acceptEncoding, token) {
 		return false
 	}
-	for _, part := range strings.Split(acceptEncoding, ",") {
+	for part := range strings.SplitSeq(acceptEncoding, ",") {
 		part = strings.TrimSpace(part)
 		if part == token || strings.HasPrefix(part, token+";") {
 			// q=0 (exactly) disqualifies; q=0.x still counts.

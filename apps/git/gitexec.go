@@ -464,7 +464,7 @@ func branchTips(ctx context.Context, bareDir string) map[string]string {
 		return nil
 	}
 	tips := map[string]string{}
-	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(out.String()), "\n") {
 		if line == "" {
 			continue
 		}

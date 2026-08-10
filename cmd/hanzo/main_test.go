@@ -68,7 +68,7 @@ func TestBinaryNamesItsCommit(t *testing.T) {
 		t.Fatalf("go version -m: %v", err)
 	}
 	rev := ""
-	for _, l := range strings.Split(string(meta), "\n") {
+	for l := range strings.SplitSeq(string(meta), "\n") {
 		if _, v, ok := strings.Cut(l, "vcs.revision="); ok {
 			rev = strings.TrimSpace(v)
 		}

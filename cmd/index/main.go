@@ -190,7 +190,7 @@ func tree(host, token, full string) ([]file, error) {
 }
 
 func skip(name string) bool {
-	for _, seg := range strings.Split(path.Dir(name), "/") {
+	for seg := range strings.SplitSeq(path.Dir(name), "/") {
 		if skipDir[seg] {
 			return true
 		}

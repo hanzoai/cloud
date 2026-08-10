@@ -768,7 +768,7 @@ func parseStack(stack string) []frame {
 		return nil
 	}
 	var out []frame
-	for _, line := range strings.Split(stack, "\n") {
+	for line := range strings.SplitSeq(stack, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || len(out) >= maxFrames {
 			continue

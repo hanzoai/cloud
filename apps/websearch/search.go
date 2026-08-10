@@ -252,7 +252,7 @@ func enabledEngines() []engine {
 		return defaultEngines
 	}
 	var out []engine
-	for _, name := range strings.Split(spec, ",") {
+	for name := range strings.SplitSeq(spec, ",") {
 		if e, ok := engineByName[strings.ToLower(strings.TrimSpace(name))]; ok {
 			out = append(out, e)
 		}
@@ -658,7 +658,7 @@ func hasClass(n *html.Node, class string) bool {
 }
 
 func hasClassPrefix(n *html.Node, prefix string) bool {
-	for _, c := range strings.Fields(attr(n, "class")) {
+	for c := range strings.FieldsSeq(attr(n, "class")) {
 		if strings.HasPrefix(c, prefix) {
 			return true
 		}

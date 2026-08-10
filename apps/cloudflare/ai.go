@@ -60,7 +60,7 @@ func aiModel(raw string) (string, error) {
 	if !aiModelRE.MatchString(m) {
 		return "", zip.ErrBadRequest("model is invalid")
 	}
-	for _, seg := range strings.Split(m, "/") {
+	for seg := range strings.SplitSeq(m, "/") {
 		if seg == "" || seg == "." || seg == ".." {
 			return "", zip.ErrBadRequest("model is invalid")
 		}

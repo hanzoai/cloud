@@ -328,10 +328,10 @@ func TestWatchTypeMapsArgoVocab(t *testing.T) {
 // comment lines (`: …`).
 func parseSSE(s string) []string {
 	var out []string
-	for _, block := range strings.Split(s, "\n\n") {
+	for block := range strings.SplitSeq(s, "\n\n") {
 		line := strings.TrimSpace(block)
-		if strings.HasPrefix(line, "data: ") {
-			out = append(out, strings.TrimPrefix(line, "data: "))
+		if after, ok := strings.CutPrefix(line, "data: "); ok {
+			out = append(out, after)
 		}
 	}
 	return out

@@ -358,7 +358,7 @@ func produced(ctx context.Context, id string) []CodeFile {
 		return nil
 	}
 	var out []CodeFile
-	for _, p := range strings.Split(ran.Stdout, "\n") {
+	for p := range strings.SplitSeq(ran.Stdout, "\n") {
 		p = strings.TrimPrefix(strings.TrimSpace(p), "./")
 		if p == "" {
 			continue

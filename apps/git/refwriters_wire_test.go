@@ -395,7 +395,7 @@ func TestARunPushesWithItsGrantAndNothingMore(t *testing.T) {
 // firstRejectLine pulls git's own rejection line out of its output, for a log
 // line that shows what the pusher actually read.
 func firstRejectLine(out string) string {
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		if strings.Contains(l, "remote rejected") || strings.Contains(l, "[rejected]") {
 			return strings.TrimSpace(l)
 		}

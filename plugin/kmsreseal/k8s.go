@@ -35,7 +35,7 @@ func loadCRsFromKubectl() ([]cr, error) {
 		return nil, fmt.Errorf("list CR namespaces: %w", err)
 	}
 	nsSet := map[string]struct{}{}
-	for _, line := range strings.Split(strings.TrimSpace(string(nsOut)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(nsOut)), "\n") {
 		if ns := strings.TrimSpace(line); ns != "" {
 			nsSet[ns] = struct{}{}
 		}
