@@ -396,9 +396,9 @@ type nodesQuery struct{}
 // may actually be asked to do is decided at the socket against the deployment's
 // allowlist.
 func (o ops) listNodes(ctx context.Context, _ *nodesQuery) (*nodesView, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("X-Org-Id required")
+	org, err := principal.RequireOrg(ctx)
+	if err != nil {
+		return nil, err
 	}
 	sessions := o.s.State.reg.List(org)
 	out := make([]nodeView, 0, len(sessions))

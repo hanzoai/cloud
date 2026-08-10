@@ -268,6 +268,14 @@ func OrgFrom(ctx context.Context) (string, bool) {
 // Ask [OrgFrom] instead where the absence is a BRANCH rather than a refusal, and
 // [Validated] where the plane has no org to scope by and the gate is only whether
 // the caller is signed in at all.
+//
+// There is NO request-shaped twin, unlike every other fact here ([Org]/[OrgFrom],
+// [Validated]/[ValidatedFrom], [Brand]/[BrandFrom]). A raw handler holds a
+// *zip.Ctx and asks [Org], which cannot be reached from a bare c.Context() —
+// zip's caller finds no request behind one — so a twin would be a second function
+// for the shape the fleet is migrating AWAY from. Investing an API in the raw
+// handler is investing in the thing being deleted; a raw handler asks [Org] and
+// writes its own refusal until it becomes a typed op.
 func RequireOrg(ctx context.Context) (string, error) {
 	org, ok := OrgFrom(ctx)
 	if !ok {

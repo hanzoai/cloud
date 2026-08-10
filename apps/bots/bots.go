@@ -283,9 +283,9 @@ func (o ops) list(ctx context.Context, _ *noArgs) (*BotRuns, error) {
 	// principal.OrgFrom parks nothing unless the request carried a VALIDATED
 	// principal, so this single check is both gates the raw handler spelled out: a
 	// bare, forgeable X-Org-Id (the direct-to-pod path) never reaches here.
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("X-Org-Id required")
+	org, err := principal.RequireOrg(ctx)
+	if err != nil {
+		return nil, err
 	}
 	runs, err := o.s.State.runtime.List(ctx, org)
 	if err != nil {
@@ -325,9 +325,9 @@ func toBotRun(s *cloud.Service[state], r Run) BotRun {
 // serve stop reports nothing about the run, and reporting "stopped" on that basis
 // would be a stop that cannot fail — so it is a 502.
 func (o ops) stop(ctx context.Context, in *stopBotIn) (*BotStopped, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("X-Org-Id required")
+	org, err := principal.RequireOrg(ctx)
+	if err != nil {
+		return nil, err
 	}
 	runID := strings.TrimSpace(in.RunID)
 	if runID == "" {
