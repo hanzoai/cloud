@@ -26,6 +26,7 @@ package books
 import (
 	"context"
 	"net/http"
+	"slices"
 	"sort"
 
 	"github.com/zap-proto/zip"
@@ -247,7 +248,7 @@ func median(xs []int64) int64 {
 		return 0
 	}
 	s := append([]int64(nil), xs...)
-	sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
+	slices.Sort(s)
 	n := len(s)
 	if n%2 == 1 {
 		return s[n/2]

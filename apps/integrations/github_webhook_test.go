@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -294,12 +295,7 @@ func TestImportHandlerGrantScopedBackground(t *testing.T) {
 	}
 	// The background worker imports alpha (and only alpha).
 	waitFor(t, 5*time.Second, func() bool {
-		for _, n := range fake.importedNames() {
-			if n == "alpha" {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(fake.importedNames(), "alpha")
 	})
 	for _, n := range fake.importedNames() {
 		if n == "beta" {

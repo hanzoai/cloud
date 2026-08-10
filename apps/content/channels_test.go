@@ -3,6 +3,7 @@ package content
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -110,9 +111,7 @@ func useStub(t *testing.T, stub *socialStub) {
 func createSocialPost(t *testing.T, app *zip.App, org string, fields map[string]any) string {
 	t.Helper()
 	body := map[string]any{"title": "Post"}
-	for k, v := range fields {
-		body[k] = v
-	}
+	maps.Copy(body, fields)
 	code, b := req(t, app, http.MethodPost, "/v1/framework/SocialPost", org, body)
 	if code != http.StatusCreated {
 		t.Fatalf("create SocialPost: %d %s", code, b)

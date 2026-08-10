@@ -25,6 +25,7 @@ package cloud
 import (
 	"encoding/base64"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -337,12 +338,7 @@ func isKMSMachinePrincipal(claims *idClaims) bool {
 	if mach == "" {
 		return false
 	}
-	for _, a := range claims.Audience {
-		if a == mach {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(claims.Audience, mach)
 }
 
 // platformSudo and orgAdmin are cloud's reading of the two admin scopes. Each is
@@ -508,10 +504,8 @@ func trustedIssuers(primary string) []string {
 		if v == "" {
 			return
 		}
-		for _, e := range out {
-			if e == v {
-				return
-			}
+		if slices.Contains(out, v) {
+			return
 		}
 		out = append(out, v)
 	}
@@ -530,10 +524,5 @@ func trustedIssuers(primary string) []string {
 // a misconfiguration that empties the issuer allowlist rejects every token instead
 // of silently disabling the check (I2); a non-empty set rejects any iss not in it.
 func issuerAllowed(iss string, trusted []string) bool {
-	for _, t := range trusted {
-		if iss == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(trusted, iss)
 }

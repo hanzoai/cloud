@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -189,9 +190,7 @@ func (f *fakeAuto) handler() http.Handler {
 			case http.MethodPatch:
 				var patch map[string]any
 				_ = json.Unmarshal(body, &patch)
-				for k, v := range patch {
-					rec[k] = v
-				}
+				maps.Copy(rec, patch)
 				js(200, flowDTO(rec))
 			case http.MethodDelete:
 				delete(f.flows, id)

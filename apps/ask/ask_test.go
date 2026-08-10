@@ -30,6 +30,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -176,12 +177,7 @@ func figure(r askAnswer, label string) (string, bool) {
 }
 
 func hasSource(r askAnswer, src string) bool {
-	for _, s := range r.Sources {
-		if s == src {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(r.Sources, src)
 }
 
 // TestGroundedFinancialAnswer: a financial question returns the REAL figure the books peer

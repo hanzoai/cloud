@@ -57,6 +57,7 @@ package analytics
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -128,27 +129,6 @@ const kindInternal = "internal"
 type route struct {
 	signal signal
 	kind   string
-}
-
-// spell is the route's CANONICAL wire spelling — the one value routeOf maps back to
-// this exact route. It is what lets the anonymous projection (public.go) restate an
-// admitted event in the closed vocabulary the allowlist just approved: rebuild with
-// spell() and the event routes identically, carrying no other caller spelling along.
-// routeSpellRoundTrips pins that inverse.
-func (r route) spell() string {
-	if r.signal != signalAct {
-		return string(r.signal)
-	}
-	switch r.kind {
-	case kindPage:
-		return "page"
-	case kindIdentify:
-		return kindIdentify
-	case kindGroup:
-		return kindGroup
-	default:
-		return "event"
-	}
 }
 
 // routeOf maps the wire's ONE `type` field onto a route. `type` selects the ROUTE and
@@ -585,12 +565,7 @@ func attributesOf(props map[string]any, e CaptureEvent) map[string]string {
 }
 
 func isAnnotationKey(k string) bool {
-	for _, a := range annotationKeys {
-		if k == a {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(annotationKeys, k)
 }
 
 // applyFault fills the error columns and computes the grouping fingerprint.

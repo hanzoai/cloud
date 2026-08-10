@@ -74,6 +74,7 @@ package edge
 // changing the decision.
 
 import (
+	"maps"
 	"sort"
 	"sync"
 	"time"
@@ -1122,9 +1123,7 @@ func (t *Traffic) View(org, mode string, now time.Time) TrafficView {
 		v.Denied, _ = tn.lane.denied.sum(now)
 		v.Screens, _ = tn.lane.screened.sum(now)
 		v.Unscored, _ = tn.lane.unscored.sum(now)
-		for a, n := range tn.lane.byLane {
-			v.Lanes[a] = n
-		}
+		maps.Copy(v.Lanes, tn.lane.byLane)
 	}
 
 	v.Callers = make([]TrafficCaller, 0, len(tn.callers.m))

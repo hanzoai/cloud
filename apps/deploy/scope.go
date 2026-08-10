@@ -28,6 +28,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/hanzoai/orm"
 	"github.com/zap-proto/zip"
@@ -227,12 +228,7 @@ func (sc scope) watches(obj *unstructured.Unstructured) bool {
 }
 
 func (sc scope) watchesNamespace(ns string) bool {
-	for _, n := range sc.namespaces() {
-		if n == ns {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(sc.namespaces(), ns)
 }
 
 // runningByNamespace collects running image tags per namespace this scope watches

@@ -47,6 +47,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -287,9 +288,7 @@ func spanRowsOf(b *zapreceiver.SpanBatch) [][]any {
 	rows := make([][]any, 0, len(b.Spans))
 	for _, s := range b.Spans {
 		attrs := make(map[string]string, len(b.Resource)+len(s.Attributes)+2)
-		for k, v := range b.Resource {
-			attrs[k] = v
-		}
+		maps.Copy(attrs, b.Resource)
 		if b.Version != "" {
 			attrs["service.version"] = b.Version
 		}
@@ -330,9 +329,7 @@ func logRowsOf(b *zaplogreceiver.LogBatch) [][]any {
 	rows := make([][]any, 0, len(b.Records))
 	for i, r := range b.Records {
 		attrs := make(map[string]string, len(b.Resource)+len(r.Attributes))
-		for k, v := range b.Resource {
-			attrs[k] = v
-		}
+		maps.Copy(attrs, b.Resource)
 		for k, v := range r.Attributes {
 			attrs[k] = attrString(v)
 		}

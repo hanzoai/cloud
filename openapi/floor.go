@@ -3,6 +3,7 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"sort"
 	"strings"
@@ -104,9 +105,7 @@ func (f Floor) Raise(now Floor) (Floor, error) {
 		Operations: max(f.Operations, now.Operations),
 		Products:   map[string]int{},
 	}
-	for p, n := range f.Products {
-		out.Products[p] = n
-	}
+	maps.Copy(out.Products, f.Products)
 	for p, n := range now.Products {
 		out.Products[p] = max(out.Products[p], n)
 	}

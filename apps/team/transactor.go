@@ -14,6 +14,7 @@ package team
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -587,12 +588,8 @@ func mixinView(doc map[string]any, mixin string) map[string]any {
 		return doc
 	}
 	merged := make(map[string]any, len(doc)+len(sub))
-	for k, v := range doc {
-		merged[k] = v
-	}
-	for k, v := range sub {
-		merged[k] = v
-	}
+	maps.Copy(merged, doc)
+	maps.Copy(merged, sub)
 	return merged
 }
 

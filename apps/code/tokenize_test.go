@@ -1,17 +1,13 @@
 package code
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
 
 func has(xs []string, want string) bool {
-	for _, x := range xs {
-		if x == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(xs, want)
 }
 
 func TestCodeTokensCamelAndSnake(t *testing.T) {

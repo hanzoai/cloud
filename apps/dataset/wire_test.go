@@ -12,6 +12,7 @@ package dataset
 // it stays empty.
 
 import (
+	"maps"
 	"sort"
 	"strings"
 	"testing"
@@ -47,9 +48,7 @@ func projections(t *testing.T) (served map[string]bool, typed map[string]*openap
 			served[strings.ToUpper(method)+" "+path] = true
 		}
 	}
-	for key, op := range reg.Ops {
-		typed[key] = op
-	}
+	maps.Copy(typed, reg.Ops)
 	return served, typed
 }
 

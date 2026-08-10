@@ -25,6 +25,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -457,10 +458,8 @@ func seedDefaultDomain(s *cloud.Service[state], org, slug string, domains []stri
 }
 
 func addHost(hosts []string, h string) []string {
-	for _, x := range hosts {
-		if x == h {
-			return hosts
-		}
+	if slices.Contains(hosts, h) {
+		return hosts
 	}
 	return append(hosts, h)
 }

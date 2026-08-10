@@ -3,6 +3,7 @@ package guide
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"strings"
 	"time"
@@ -271,9 +272,7 @@ func mergeItemPatch[T any](item T, patch []byte) (T, error) {
 		return zero, err
 	}
 	delete(p, "id") // id is the immutable key; a patch can never rekey an item
-	for k, v := range p {
-		m[k] = v
-	}
+	maps.Copy(m, p)
 	merged, err := json.Marshal(m)
 	if err != nil {
 		return zero, err

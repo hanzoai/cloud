@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -134,12 +135,7 @@ func (f *fakeUpstream) Call(_ context.Context, cred Credential, a Account, _ Req
 func (f *fakeUpstream) sawToken(tok string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	for _, t := range f.gotToken {
-		if t == tok {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(f.gotToken, tok)
 }
 
 // spyMeter records the metering calls so a test can assert what was metered.

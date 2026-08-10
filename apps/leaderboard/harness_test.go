@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -95,9 +96,7 @@ func principalHeaders(org, name string) map[string]string {
 
 func withHeader(h map[string]string, k, v string) map[string]string {
 	out := map[string]string{}
-	for kk, vv := range h {
-		out[kk] = vv
-	}
+	maps.Copy(out, h)
 	out[k] = v
 	return out
 }

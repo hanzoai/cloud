@@ -33,6 +33,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -156,10 +157,8 @@ func (c *plaidConn) addItem(ctx context.Context, k cloud.KMSClient, org, item st
 	if err != nil {
 		return err
 	}
-	for _, existing := range items {
-		if existing == item {
-			return nil
-		}
+	if slices.Contains(items, item) {
+		return nil
 	}
 	items = append(items, item)
 	blob, err := json.Marshal(items)

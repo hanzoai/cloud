@@ -23,6 +23,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -253,12 +254,7 @@ func registers(t *testing.T) []string {
 }
 
 func has(all []string, name string) bool {
-	for _, s := range all {
-		if s == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(all, name)
 }
 
 // unregister clears every remote registration so the tests see a process with no

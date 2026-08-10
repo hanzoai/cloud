@@ -6,6 +6,7 @@ package team
 
 import (
 	"encoding/json"
+	"maps"
 	"time"
 )
 
@@ -26,9 +27,7 @@ func systemSpaces() []map[string]any {
 			"modifiedBy": acctSystem, "modifiedOn": now,
 			"createdBy": acctSystem, "createdOn": now,
 		}
-		for k, v := range extra {
-			d[k] = v
-		}
+		maps.Copy(d, extra)
 		return d
 	}
 	return []map[string]any{
@@ -164,9 +163,7 @@ func (s *session) pushDerivedTx(txClass, objectID, objectClass, objectSpace stri
 		"objectId": objectID, "objectClass": objectClass, "objectSpace": objectSpace,
 		"modifiedBy": acctSystem, "modifiedOn": now, "createdBy": acctSystem, "createdOn": now,
 	}
-	for k, v := range extra {
-		tx[k] = v
-	}
+	maps.Copy(tx, extra)
 	b, err := json.Marshal(tx)
 	if err != nil {
 		return
