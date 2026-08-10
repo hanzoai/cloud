@@ -53,11 +53,9 @@ func TestRollout_WritesEveryModelDownEvenWithBackgroundWorkStuck(t *testing.T) {
 	// waitgroup that has not returned. Held open until after close() returns, so
 	// the wait CANNOT be satisfied within the window.
 	stuck := make(chan struct{})
-	first.wg.Add(1)
-	go func() {
-		defer first.wg.Done()
+	first.wg.Go(func() {
 		<-stuck
-	}()
+	})
 
 	// The window the composition root actually hands a teardown hook.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -118,11 +116,9 @@ func TestRollout_HonoursTheCallersWindow(t *testing.T) {
 	probe.reset(true)
 	p := planeAt(t, t.TempDir())
 	stuck := make(chan struct{})
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.wg.Go(func() {
 		<-stuck
-	}()
+	})
 
 	// A window that is already over. close must return about immediately — the
 	// drain budget is a CEILING, not a floor to sit out.

@@ -36,9 +36,7 @@ func TestUsageIsExactlyOnceUnderConcurrency(t *testing.T) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for range racers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			id, ok, err := f.RecordUsageOnce(ctx, types.UsageInput{
 				Org: "acme", Subject: "acme", Amount: money.FromCents(100), Ref: "act_one",
 			})
@@ -54,7 +52,7 @@ func TestUsageIsExactlyOnceUnderConcurrency(t *testing.T) {
 				posted++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if posted != 1 {
@@ -64,15 +62,13 @@ func TestUsageIsExactlyOnceUnderConcurrency(t *testing.T) {
 
 	// Sixteen DIFFERENT acts, raced: every one bills, none is lost to the other's key.
 	for i := range racers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if err := f.RecordUsage(ctx, types.UsageInput{
 				Org: "acme", Subject: "acme", Amount: money.FromCents(10), Ref: refOf(i),
 			}); err != nil {
 				t.Errorf("distinct act %d: %v", i, err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	mustBalance(t, f, "acme", "acme", 10_000-100-racers*10)
@@ -81,9 +77,7 @@ func TestUsageIsExactlyOnceUnderConcurrency(t *testing.T) {
 	// each of them is its own act. This is the property the program column carries and the
 	// one the backfill restores for rows written before it existed.
 	for i := range racers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			subject := "acme/" + refOf(i)
 			if _, derr := f.Deposit(ctx, types.DepositInput{
 				Org: "acme", Subject: subject, Amount: money.FromCents(100),
@@ -96,7 +90,7 @@ func TestUsageIsExactlyOnceUnderConcurrency(t *testing.T) {
 			}); err != nil {
 				t.Errorf("per-wallet act %d: %v", i, err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	for i := range racers {

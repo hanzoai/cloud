@@ -262,9 +262,7 @@ func main() {
 	var ok, failed int
 
 	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for full := range jobs {
 				files, err := tree(host, token, full)
 				if err == nil && len(files) > 0 {
@@ -285,7 +283,7 @@ func main() {
 				}
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 	for _, r := range list {
 		jobs <- r

@@ -138,12 +138,10 @@ func startScheduler(s *cloud.Service[state]) func() {
 			if !running.CompareAndSwap(false, true) {
 				s.Log.Warn("sync reconcile: previous sweep still running — skipping tick")
 			} else {
-				inflight.Add(1)
-				go func() {
-					defer inflight.Done()
+				inflight.Go(func() {
 					defer running.Store(false)
 					sweep(s, ctx)
-				}()
+				})
 			}
 			select {
 			case <-ctx.Done():

@@ -116,9 +116,7 @@ func TestConcurrentOnceExactlyOnce(t *testing.T) {
 	start := make(chan struct{})
 	for i := range racers {
 		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start
 			res, applied, err := Once(context.Background(), db, "req-hot", 3, applyDebit("charge-hot", "1usd", &calls))
 			if err != nil && !errors.Is(err, ErrAlreadyApplied) {
@@ -129,7 +127,7 @@ func TestConcurrentOnceExactlyOnce(t *testing.T) {
 				atomic.AddInt64(&wins, 1)
 			}
 			results[i] = res
-		}()
+		})
 	}
 	close(start)
 	wg.Wait()

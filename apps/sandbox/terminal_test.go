@@ -140,13 +140,11 @@ func TestConcurrentRedeemHasExactlyOneWinner(t *testing.T) {
 	var wg sync.WaitGroup
 	won := make(chan struct{}, 8)
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if _, ok := ks.redeem(now, tok, "m_1"); ok {
 				won <- struct{}{}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(won)
