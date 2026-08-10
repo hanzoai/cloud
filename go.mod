@@ -16,7 +16,7 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.3.1
 	github.com/hanzoai/cek v0.2.3
-	github.com/hanzoai/commerce v1.50.40
+	github.com/hanzoai/commerce v1.50.41
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
@@ -85,8 +85,10 @@ require (
 	github.com/hanzoai/sqlcipher v0.1.1 // indirect
 	github.com/hanzokv/go/extra/kvcmd/v9 v9.22.0 // indirect
 	github.com/hanzokv/go/extra/kvotel/v9 v9.22.0 // indirect
-	github.com/hanzos3/go v1.0.0 // indirect
+	github.com/hanzos3/crc64nvme v1.1.2 // indirect
+	github.com/hanzos3/go v1.0.1 // indirect
 	github.com/hanzos3/go-sdk v1.0.2 // indirect
+	github.com/hanzos3/md5-simd v1.1.3 // indirect
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/linode/linodego v1.67.0 // indirect
@@ -691,8 +693,8 @@ require (
 	github.com/hanzoai/agent v1.0.5
 	github.com/hanzoai/ai v1.833.14
 	github.com/hanzoai/authz v1.10.29
-	github.com/hanzoai/base v1.5.17
-	github.com/hanzoai/licensing v0.1.14
+	github.com/hanzoai/base v1.5.18
+	github.com/hanzoai/licensing v0.1.15
 	github.com/hanzoai/metrics v1.110.6
 	github.com/hanzoai/o11y v1.5.63
 	github.com/hanzoai/thinking v0.1.1 // indirect
