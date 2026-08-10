@@ -17,7 +17,7 @@
 // or a default footprint per service type), and the compute cost model (a
 // documented rate card → cost per hour). Everything here is I/O-free and
 // deterministic, so estimate_test.go drives it with inline compose documents — no
-// registry, no network — exactly as clients/sbom/parse.go proves out its assemblers.
+// registry, no network — exactly as apps/sbom/parse.go proves out its assemblers.
 // blueprint.go is the thin orchestration that resolves a template id to a compose
 // and serves these values.
 

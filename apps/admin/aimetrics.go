@@ -38,7 +38,7 @@ package admin
 //                                                training/eval progress signal
 //
 // The eval_traces / eval_scores tables are OWNED and written by the eval telemetry
-// store (clients/eval/telemetry.go) — the SAME warehouse, same db ("hanzo"), same
+// store (apps/eval/telemetry.go) — the SAME warehouse, same db ("hanzo"), same
 // shared aiobject client. admin only READS them here. There is deliberately no
 // "training_progress" table: the router's per-request training events live in the ai
 // OLTP Postgres (object.RoutingEvent), NOT the OLAP warehouse, so the honest

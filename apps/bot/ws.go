@@ -50,7 +50,7 @@ package bot
 // # The socket library
 //
 // zip/wsx, because cloud already serves every other WebSocket route through it
-// (clients/team/collabws.go, zapface/server.go). zip runs on fasthttp, whose
+// (apps/team/collabws.go, zapface/server.go). zip runs on fasthttp, whose
 // hijack is what wsx wraps; a net/http-based library such as coder/websocket
 // cannot upgrade a fasthttp connection at all, so this is not a preference
 // between two working options. It is only used as the test CLIENT, where being

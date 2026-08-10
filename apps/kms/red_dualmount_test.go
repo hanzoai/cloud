@@ -73,7 +73,7 @@ func TestDualMount_AdminConfigDoesNotShadowGate(t *testing.T) {
 
 	// 2b. ORG-SCOPED cockpit routes (s.guardScoped, the two-scope model): the gate
 	//     admits a VALIDATED org principal (hard-scoped to its OWN org server-side —
-	//     clients/admin/scope_test.go proves the cross-tenant isolation) but MUST
+	//     apps/admin/scope_test.go proves the cross-tenant isolation) but MUST
 	//     still reject an ANONYMOUS request. The gate keys on identity, not route:
 	//     no-principal → 403; validated principal → 200 (scoped), never a 404 that
 	//     would mean kms shadowed the route.
@@ -87,7 +87,7 @@ func TestDualMount_AdminConfigDoesNotShadowGate(t *testing.T) {
 		// configured white-label tenant, and IsWhiteLabelTenant is fail-closed on the
 		// empty WLTenants this cross-package app carries — so a 403 is the admin gate
 		// correctly firing, which itself proves admin (not kms) owns the path. Who
-		// gets admitted is proven in clients/admin/scope_test.go, keeping this test
+		// gets admitted is proven in apps/admin/scope_test.go, keeping this test
 		// independent of IAM/datastore availability.
 		if r := do(t, app, "GET", path, "hanzo", "", false, nil); r.StatusCode == 404 {
 			t.Fatalf("%s = 404: route shadowed or unmounted; the admin cockpit must own it", path)

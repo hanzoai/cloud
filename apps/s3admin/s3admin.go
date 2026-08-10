@@ -52,7 +52,7 @@ type Admin struct {
 }
 
 // New reads the shared S3 admin configuration from the environment. It mirrors
-// the exact variables clients/projects/blob.go already consumes, so the two
+// the exact variables apps/projects/blob.go already consumes, so the two
 // subsystems resolve identical credentials and endpoint with no drift.
 //
 //	S3_ADMIN_ENDPOINT      internal admin host:port (default s3.hanzo.svc:9000)

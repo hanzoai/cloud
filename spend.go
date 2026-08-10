@@ -34,7 +34,7 @@ package cloud
 //
 // THE ADDRESS IS LOAD-BEARING. A money gate that reads a different wallet than the
 // debit writes is the bug this codebase has already shipped three times, every time
-// by keying the ORG POOL — see clients/principal/wallet.go, which lists them. Read on
+// by keying the ORG POOL — see apps/principal/wallet.go, which lists them. Read on
 // the pool, this predicate would admit every member of the shared signup org for as
 // long as the platform's own pool is funded, which is a total bypass and is precisely
 // the live free-inference hole (apps/zen.go still gates the pool). So the credit leg

@@ -1,6 +1,6 @@
 // Command anchorctl bootstraps the Hanzo L1 (chain 36963) treasury anchor: it
 // provisions the KMS-held signer key, funds it, and deploys contracts/TreasuryAnchor.sol
-// — the on-chain witness that clients/treasury/anchor_evm.go later writes ledger roots to.
+// — the on-chain witness that apps/treasury/anchor_evm.go later writes ledger roots to.
 //
 // It is a one-shot operator tool, run IN-CLUSTER (the 36963 RPC — hanzod-rpc-internal
 // in ns hanzo-mainnet — is not reachable from outside). The canonical invocation is the
@@ -77,7 +77,7 @@ func cmd() string {
 
 // anchorRoot sends TreasuryAnchor.anchor(bytes32) from the signer (the contract
 // owner) with ANCHOR_ROOT, then reads count()+latestRoot() back to confirm the
-// commit. This is the exact on-chain path clients/treasury/anchor_evm.go uses when
+// commit. This is the exact on-chain path apps/treasury/anchor_evm.go uses when
 // TREASURY_ANCHOR_CONTRACT is set (same selector, same DynamicFeeTx fee strategy).
 func anchorRoot(ctx context.Context) error {
 	rpc := env("RPC_URL", "")
@@ -315,7 +315,7 @@ func sendTx(ctx context.Context, cl *ethclient.Client, chainID *big.Int, priv *e
 	return signed.Hash(), nil, nil
 }
 
-// dynamicFees — identical to clients/treasury/anchor_evm.go's dynamicFees. See its doc.
+// dynamicFees — identical to apps/treasury/anchor_evm.go's dynamicFees. See its doc.
 func dynamicFees(ctx context.Context, cl *ethclient.Client) (tipCap, feeCap *big.Int, err error) {
 	head, err := cl.HeaderByNumber(ctx, nil)
 	if err != nil {
