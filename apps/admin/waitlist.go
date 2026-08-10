@@ -5,7 +5,7 @@ package admin
 // granting points to move a user up toward the capacity cutoff. It is a server-authed
 // passthrough to the Hanzo waitlist engine (the Base waitlist plugin — WAITLIST_URL +
 // WAITLIST_AWARD_SECRET from KMS, the SAME engine + secret
-// clients/automations/connector_waitlist.go bridges), so there is ONE waitlist system,
+// apps/automations/connector_waitlist.go bridges), so there is ONE waitlist system,
 // not two: the cockpit reads its list and issues a grant AGAINST it.
 //
 // SECURITY. Both routes are SuperAdmin only (gated by core.Admit). A grant is a

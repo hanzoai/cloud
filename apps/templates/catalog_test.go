@@ -13,7 +13,7 @@ import (
 // anti-regression, not an aspiration.
 
 // TestEveryTemplateDescribesItself: 43 of 66 rows shipped `"description": ""`.
-// The description is not decoration — clients/projects/fork.go copies it onto the
+// The description is not decoration — apps/projects/fork.go copies it onto the
 // forked project, so an empty one propagates into every customer's project list.
 func TestEveryTemplateDescribesItself(t *testing.T) {
 	cat, err := catalog()
@@ -59,7 +59,7 @@ func TestSourceIsARepository(t *testing.T) {
 // <slug>.hanzo.app or it is absent.
 //
 // The one derived exception is the one fork.go already derives: a slug that is a
-// reserved subdomain (clients/sites/reserved.go — `metrics`) cannot BE a host, so
+// reserved subdomain (apps/sites/reserved.go — `metrics`) cannot BE a host, so
 // its deploy carries the same `-template` suffix fork.go appends. Reading the
 // predicate instead of listing the labels keeps the two in lock-step.
 func TestDemoIsTheTemplatesOwnHost(t *testing.T) {

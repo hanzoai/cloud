@@ -64,7 +64,7 @@ import (
 const (
 	// providerCloudflare is the integrations provider slug the token is custodied
 	// under, and secretAPIToken the secret name — the SAME coordinate the connector
-	// (clients/integrations/cloudflare.go) seals BOTH the apikey and OAuth paths to,
+	// (apps/integrations/cloudflare.go) seals BOTH the apikey and OAuth paths to,
 	// and hanzodns reads for DNS. One coordinate, auth-method-agnostic.
 	providerCloudflare = "cloudflare"
 	secretAPIToken     = "api_token"

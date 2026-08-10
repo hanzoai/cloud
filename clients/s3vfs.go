@@ -10,7 +10,7 @@ package clients
 // S3_ADMIN_* credentials clients/s3 and clients/projects use; no second client
 // setup, DRY). Everything lands in ONE bucket keyed by the caller-opaque key the
 // consumer supplies; tenant isolation is UPSTREAM in that key
-// (clients/team/files.go builds team/blobs/<verified-org>/<ws>/<blobId> via
+// (apps/team/files.go builds team/blobs/<verified-org>/<ws>/<blobId> via
 // seg()). S3 object keys are flat opaque strings (no "/" directory traversal), and
 // every key component is seg()-sanitized with a server-verified org, so a caller
 // can only ever address keys under its own team/blobs/<its-org>/ prefix — the key
@@ -157,7 +157,7 @@ func (v *s3vfs) Delete(ctx context.Context, key string) error {
 // types.ErrBlobNotFound sentinel (a genuine miss on a WORKING backend → 404 /
 // idempotent-204), while nil stays nil and every OTHER error (connection refused,
 // NoSuchBucket, auth, throttle, …) passes through unchanged so the consumer fails
-// CLOSED with 502. This keeps clients/team/files.go's honest
+// CLOSED with 502. This keeps apps/team/files.go's honest
 // 404-vs-idempotent-204-vs-502 split intact — a missing blob never masquerades as
 // an outage and an outage never masquerades as 404.
 func mapS3Err(err error) error {

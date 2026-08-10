@@ -6,7 +6,7 @@ package validators
 // against the canonical ERC-721). Only then is a slot entitlement admitted.
 //
 // Read logic mirrors ~/work/lux/state/pkg/bridge/nft_scanner.go (luxfi/geth
-// ethclient + ERC-721 ABI); signature recovery mirrors clients/wallets/anchor.go
+// ethclient + ERC-721 ABI); signature recovery mirrors apps/wallets/anchor.go
 // (luxfi/crypto SigToPub/PubkeyToAddress). One dependency set, reused.
 
 import (
@@ -131,7 +131,7 @@ func challengeMessage(org string, tokenID uint64, nonce string) string {
 // recoverSigner recovers the Ethereum address that produced an EIP-191
 // personal_sign signature over `message`. sigHex is the 65-byte r‖s‖v signature
 // (v as 27/28 or 0/1) as returned by window.ethereum personal_sign. Mirrors the
-// recovery in clients/wallets/anchor.go.
+// recovery in apps/wallets/anchor.go.
 func recoverSigner(message, sigHex string) (common.Address, error) {
 	sig, err := hex.DecodeString(strings.TrimPrefix(strings.TrimSpace(sigHex), "0x"))
 	if err != nil {
