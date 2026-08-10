@@ -361,7 +361,7 @@ func (s *Store) instrumentUsed(ctx context.Context, code, instrument string) (bo
 // coversPlan reports whether the promo applies to plan.
 func (p Promo) coversPlan(plan string) bool {
 	plan = strings.ToLower(strings.TrimSpace(plan))
-	for _, c := range strings.Split(p.Plans, ",") {
+	for c := range strings.SplitSeq(p.Plans, ",") {
 		if strings.TrimSpace(c) == plan {
 			return true
 		}

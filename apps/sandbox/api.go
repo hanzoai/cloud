@@ -455,7 +455,7 @@ func touched(ctx context.Context, store *Store, m Sandbox) {
 
 func lines(s string) []string {
 	out := []string{}
-	for _, l := range strings.Split(s, "\n") {
+	for l := range strings.SplitSeq(s, "\n") {
 		if l = strings.TrimRight(l, "\r"); l != "" {
 			out = append(out, l)
 		}

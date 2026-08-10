@@ -70,7 +70,7 @@ func frames(t *testing.T, e Engine, p Params) ([]map[string]any, string) {
 	wire := buf.String()
 
 	var out []map[string]any
-	for _, line := range strings.Split(wire, "\n") {
+	for line := range strings.SplitSeq(wire, "\n") {
 		payload, ok := strings.CutPrefix(line, "data: ")
 		if !ok || payload == "[DONE]" {
 			continue

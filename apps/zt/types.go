@@ -189,8 +189,8 @@ func routerStatus(r ztEdgeRouter) string {
 // when it carries none (the view then omits region and the UI shows "—").
 func regionOf(r ztEdgeRouter) string {
 	for _, a := range r.RoleAttributes {
-		if strings.HasPrefix(a, regionRolePrefix) {
-			if slug := strings.TrimPrefix(a, regionRolePrefix); slug != "" {
+		if after, ok := strings.CutPrefix(a, regionRolePrefix); ok {
+			if slug := after; slug != "" {
 				return slug
 			}
 		}

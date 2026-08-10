@@ -108,7 +108,7 @@ func acceptPreference(accept string) acceptPref {
 		return prefUnset
 	}
 	qMD, qJSON := -1.0, -1.0
-	for _, part := range strings.Split(accept, ",") {
+	for part := range strings.SplitSeq(accept, ",") {
 		mt, q := parseMediaRange(part)
 		switch mt {
 		case "text/markdown", "text/x-markdown":
@@ -166,7 +166,7 @@ func addVary(resp *fasthttp.Response, field string) {
 		resp.Header.Set("Vary", field)
 		return
 	}
-	for _, f := range strings.Split(cur, ",") {
+	for f := range strings.SplitSeq(cur, ",") {
 		if strings.EqualFold(strings.TrimSpace(f), field) {
 			return
 		}

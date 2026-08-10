@@ -60,7 +60,7 @@ func TestGeneratedDeclarationRendersThroughTheRealChart(t *testing.T) {
 		if strings.TrimSpace(body) == "" || !strings.HasSuffix(name, ".yaml") {
 			continue
 		}
-		for _, doc := range strings.Split(body, "\n---") {
+		for doc := range strings.SplitSeq(body, "\n---") {
 			var head struct {
 				Kind     string `json:"kind"`
 				Metadata struct {

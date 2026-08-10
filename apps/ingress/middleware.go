@@ -58,8 +58,8 @@ func stripPrefixMW(cfg map[string]string) (func(http.Handler) http.Handler, erro
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			for _, p := range prefixes {
-				if strings.HasPrefix(r.URL.Path, p) {
-					rewritePath(r, ensureLeadingSlash(strings.TrimPrefix(r.URL.Path, p)))
+				if after, ok := strings.CutPrefix(r.URL.Path, p); ok {
+					rewritePath(r, ensureLeadingSlash(after))
 					break
 				}
 			}
@@ -140,7 +140,7 @@ func ensureLeadingSlash(p string) string {
 
 func splitCSV(s string) []string {
 	var out []string
-	for _, p := range strings.Split(s, ",") {
+	for p := range strings.SplitSeq(s, ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}

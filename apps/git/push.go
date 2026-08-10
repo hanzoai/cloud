@@ -308,7 +308,7 @@ func cleanRepoPath(p string) string {
 		return ""
 	}
 	// Reject any traversal or empty segments.
-	for _, seg := range strings.Split(p, "/") {
+	for seg := range strings.SplitSeq(p, "/") {
 		if seg == "" || seg == "." || seg == ".." {
 			return ""
 		}

@@ -1193,7 +1193,7 @@ func sessionAudience(cfg config) map[string]bool {
 	if id := strings.TrimSpace(cfg.iamClientID); id != "" {
 		out[id] = true
 	}
-	for _, a := range strings.Split(os.Getenv("TEAM_IAM_AUDIENCES"), ",") {
+	for a := range strings.SplitSeq(os.Getenv("TEAM_IAM_AUDIENCES"), ",") {
 		if a = strings.TrimSpace(a); a != "" {
 			out[a] = true
 		}
