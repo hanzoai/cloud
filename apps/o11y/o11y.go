@@ -563,7 +563,12 @@ func eventToRuntimePath(method, path string) (string, bool) {
 }
 
 // Mount composes the whole observability surface into its host as ONE app,
-// through [zip.App.Graft] — the same seam apps/iam composes identity through.
+// through [zip.Router.Use] — the same seam apps/iam composes identity through.
+//
+// The verb used to be Graft, and the prose here went on naming it after zip
+// removed it: [zip.App.Graft] does not resolve, so the one link a reader would
+// follow to learn how this composes has been dead. Use is the ONE composition
+// verb now, and an *App IS a Component, so the child below is passed to it whole.
 //
 // # Why the surface is an app and not a pile of routes on the host's router
 //
@@ -592,7 +597,7 @@ func eventToRuntimePath(method, path string) (string, bool) {
 //
 // # What the child changes, and what it must not
 //
-// Nothing on the wire. Graft registers the child's own absolute patterns on the
+// Nothing on the wire. Use registers the child's own absolute patterns on the
 // host's router, in the order the child declares them, pointing at one delegate
 // that re-runs the child's router on the SAME fasthttp request. So the host's
 // chain — EdgeCORS, the identity boundary, the abuse gate — still runs first and
