@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -112,19 +113,5 @@ var metadataIPs = []net.IP{
 }
 
 func isMetadata(ip net.IP) bool {
-	for _, m := range metadataIPs {
-		if ip.Equal(m) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(metadataIPs, ip.Equal)
 }
-
-// dialTimeGuardTODO documents the control that MUST land with the first code path that
-// DIALS a recorded endpoint (the durable-execution increment): a net.Dialer.Control /
-// custom Resolver that (1) resolves through a controlled egress resolver, (2) re-checks
-// every candidate address with blockedIP AT CONNECT time and PINS the connection to that
-// exact validated IP so a rebind between resolve and dial cannot swap it, and (3) bounds
-// redirects, response size, and connection lifetime. ssrfSafe above is ingest hygiene, not
-// this. Named as a symbol so it is greppable and cannot be silently forgotten.
-const dialTimeGuardTODO = "dial-time IP-pin DialContext — required before any endpoint dialer ships (HIP-0512 §5)"

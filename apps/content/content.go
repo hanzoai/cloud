@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"sort"
@@ -574,9 +575,7 @@ func distributionState(err error) string {
 // timestamps without touching the value read from the store.
 func cloneData(in map[string]any) map[string]any {
 	out := make(map[string]any, len(in)+2)
-	for k, v := range in {
-		out[k] = v
-	}
+	maps.Copy(out, in)
 	return out
 }
 

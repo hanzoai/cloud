@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -111,9 +112,7 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		if row, present := f.user[id]; present {
 			// A configured user row wins (used by the onboarding move).
 			out := map[string]any{}
-			for k, v := range row {
-				out[k] = v
-			}
+			maps.Copy(out, row)
 			ok(w, out)
 			return
 		}

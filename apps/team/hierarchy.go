@@ -5,6 +5,8 @@ package team
 // _class to the set of concrete descendant classes whose docs match findAll, and
 // answers isDerived/isMixin. Built once from the embedded model.
 
+import "slices"
+
 import "encoding/json"
 
 // Core classifier ids (colon-serialized refs, the platform model's identity scheme).
@@ -127,12 +129,7 @@ func (h *hierarchy) isDerived(class, target string) bool {
 	if class == target {
 		return true
 	}
-	for _, a := range h.ancestors[class] {
-		if a == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(h.ancestors[class], target)
 }
 
 // getBaseClass walks up extends until a real CLASS (mixins/interfaces resolve to

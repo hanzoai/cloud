@@ -17,6 +17,7 @@ package planetest
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -128,9 +129,9 @@ func (s *Sandboxes) Lines() []string {
 func (s *Sandboxes) Args() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := len(s.runs) - 1; i >= 0; i-- {
-		if len(s.runs[i]) >= 4 && isProgram(s.runs[i][2]) {
-			return s.runs[i][4:]
+	for _, v := range slices.Backward(s.runs) {
+		if len(v) >= 4 && isProgram(v[2]) {
+			return v[4:]
 		}
 	}
 	return nil

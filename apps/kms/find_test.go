@@ -2,6 +2,7 @@ package kms
 
 import (
 	"encoding/base64"
+	"slices"
 	"testing"
 
 	luxlog "github.com/luxfi/log"
@@ -38,10 +39,8 @@ func TestFindEnumeratesTheWholeStore(t *testing.T) {
 	t.Run("an omitted env means EVERY env, not a default", func(t *testing.T) {
 		// The one that only exists in staging must appear. Defaulting the env is
 		// what made a populated store read as empty.
-		for _, n := range names(t, c, org, "") {
-			if n == "STAGING_ONLY" {
-				return
-			}
+		if slices.Contains(names(t, c, org, ""), "STAGING_ONLY") {
+			return
 		}
 		t.Fatal("a secret in a non-default env was invisible to an unfiltered listing")
 	})

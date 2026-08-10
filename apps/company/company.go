@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -334,10 +335,8 @@ func save(ctx context.Context, s *cloud.Service[state], f *Formation) error {
 // requireStage returns a 409 if the formation is not at one of the allowed stages —
 // so an action can only run at the step it belongs to.
 func requireStage(f *Formation, allowed ...Stage) error {
-	for _, s := range allowed {
-		if f.Stage == s {
-			return nil
-		}
+	if slices.Contains(allowed, f.Stage) {
+		return nil
 	}
 	return zip.Errorf(http.StatusConflict, "action not available at stage %q", f.Stage)
 }

@@ -45,6 +45,7 @@ import (
 	"container/list"
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 	"time"
 
@@ -594,8 +595,7 @@ func (p *plane) rebuild(t tenant) (*rings, time.Time, int, error) {
 		return vel, time.Time{}, 0, fmt.Errorf("risk: replay observations: %w", err)
 	}
 	var edge time.Time
-	for i := len(held) - 1; i >= 0; i-- {
-		o := held[i]
+	for _, o := range slices.Backward(held) {
 		vel.record(o.tx(t))
 		if o.at.After(edge) {
 			edge = o.at

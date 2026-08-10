@@ -37,6 +37,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
@@ -254,12 +255,7 @@ func drift(hosts []Host) []Drift {
 }
 
 func contains(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, v)
 }
 
 // --- mutations -----------------------------------------------------------

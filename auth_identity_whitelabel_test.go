@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"github.com/hanzoai/authz/edge"
 	"os"
+	"slices"
 	"testing"
 	"time"
 )
@@ -97,13 +98,7 @@ func TestIssuerAllowed(t *testing.T) {
 func TestBrandIssuers(t *testing.T) {
 	got := BrandIssuers()
 	for _, want := range []string{"https://hanzo.id", "https://lux.id", "https://zoolabs.id", "https://pars.id", "https://id.bootno.de"} {
-		found := false
-		for _, g := range got {
-			if g == want {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(got, want)
 		if !found {
 			t.Errorf("BrandIssuers()=%v missing %q", got, want)
 		}

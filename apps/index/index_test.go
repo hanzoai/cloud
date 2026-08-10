@@ -3,6 +3,7 @@ package index
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -49,12 +50,7 @@ func titles(t *testing.T, hits []json.RawMessage) []string {
 }
 
 func has(ss []string, want string) bool {
-	for _, s := range ss {
-		if s == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ss, want)
 }
 
 // TestTenantIsolation is the security-critical property: two orgs may hold an

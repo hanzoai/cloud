@@ -45,6 +45,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"maps"
 	"regexp"
 	"strings"
 	"time"
@@ -629,9 +630,7 @@ func withSource(p map[string]any, source string) map[string]any {
 		return p
 	}
 	out := make(map[string]any, len(p)+1)
-	for k, v := range p {
-		out[k] = v
-	}
+	maps.Copy(out, p)
 	out["$source"] = source
 	return out
 }

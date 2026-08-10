@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -64,12 +65,7 @@ func TestGitLabAuthorizeURL(t *testing.T) {
 // containsField reports whether space-separated field list s contains exactly x
 // (so "read_api" does not match a request for "api").
 func containsField(s, x string) bool {
-	for _, f := range strings.Fields(s) {
-		if f == x {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(s), x)
 }
 
 // TestGitLabExchange drives the real exchange against a mock token + /api/v4/user

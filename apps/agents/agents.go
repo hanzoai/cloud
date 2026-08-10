@@ -43,6 +43,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1558,10 +1559,8 @@ func validateModel(s *cloud.Service[state], ctx context.Context, model string) e
 	if err != nil || len(ids) == 0 {
 		return nil // catalog unreachable/empty — fail-open, never block on infra
 	}
-	for _, id := range ids {
-		if id == model {
-			return nil
-		}
+	if slices.Contains(ids, model) {
+		return nil
 	}
 	return zip.ErrBadRequest(fmt.Sprintf("model %q is not in this gateway's catalog", model))
 }

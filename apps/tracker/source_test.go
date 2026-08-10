@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -97,12 +98,7 @@ func newForge(t *testing.T) *stubForge {
 			return
 		}
 		sees := func(org string) bool {
-			for _, o := range orgs {
-				if o == org {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(orgs, org)
 		}
 		path := strings.TrimPrefix(r.URL.Path, "/v1")
 
