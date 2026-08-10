@@ -127,7 +127,7 @@ func init() {
 		},
 	})
 	zip.Describe("PATCH /v1/guide/blueprint/:collection/:id", zip.Doc{
-		Description: "Wraps an UNTYPED handler so it runs ONLY for a platform SuperAdmin.\nThe typed ops on this plane apply the same predicate at the top of the op\n(superAdminOK), because a typed op receives only a context; both read the same\nvalidated header, so the gate is one fact in one predicate either way.",
+		Description: "Edits ONE item in a collection (sections|steps|strategies|\ntemplates) by id — the \"edit an item\" AND the headline \"enable/disable an item\"\nlever (disable is PATCH {\"enabled\": false}). It applies a JSON merge-patch onto the\nitem, re-validates the WHOLE blueprint (fail-closed — a patch that would dangle a dep\nor break the DAG is rejected), and saves a new version. SuperAdmin only.",
 	})
 	zip.Describe("POST /v1/guide/chat", zip.Doc{
 		Description: "Chat answers a founder's question about their launch journey as the Business AI\ncoach: it grounds the reply in the org's REAL progress, its ranked available\nquests and its analytics funnel, and returns those candidate quests alongside so\nthe caller can act on one. READ-ONLY — it advises and never runs a step, so it\ncannot be talked into performing an action; the only executing path is POST\n/v1/guide/steps/{id}/do. One AI completion per call, billed to the caller's own\npayer.",
@@ -141,10 +141,7 @@ func init() {
 		Example: json.RawMessage(`{"message":"what should I do next to get my first customers?"}`),
 	})
 	zip.Describe("POST /v1/guide/steps/:id/do", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("POST /v1/guide/steps/:id/done", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Is \"do it for me\": the Business AI executes the step through the\nper-principal MCP plane. Dependency-gated (a blocked step is 409). Streams the\nagent's actions as SSE when the caller asks (Accept: text/event-stream or\n?stream=1); otherwise returns the full action log as JSON.",
 	})
 	zip.Describe("POST /v1/guide/steps/:id/reset", zip.Doc{
 		Description: "Returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey. Reset is never\ndependency-gated. Auto-detect runs on the next read, so a step the org has in\nfact completed elsewhere goes straight back to done.",
@@ -182,13 +179,7 @@ func init() {
 			"stepView.tool":        "Tool is the MCP tool the Business AI runs for \"do it for me\"; Args are its\ndefault arguments, Draft an optional AI prompt whose output fills the\nDraftInto arg (default \"brief\").",
 		},
 	})
-	zip.Describe("POST /v1/guide/steps/:id/start", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
 	zip.Describe("PUT /v1/guide/blueprint", zip.Doc{
-		Description: "Wraps an UNTYPED handler so it runs ONLY for a platform SuperAdmin.\nThe typed ops on this plane apply the same predicate at the top of the op\n(superAdminOK), because a typed op receives only a context; both read the same\nvalidated header, so the gate is one fact in one predicate either way.",
-	})
-	zip.Describe("PUT /v1/guide/curriculum", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Replaces the whole brand blueprint (a new version). The body must parse\nAND validate as a blueprint; a bad body is 422 and never becomes active (fail-closed,\nso a redeploy's re-seed or the previous version stays authoritative).",
 	})
 }
