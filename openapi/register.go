@@ -411,7 +411,6 @@ func structSchema(t reflect.Type, c *components) (*Schema, error) {
 
 func structFields(t reflect.Type, c *components, props map[string]*Schema) error {
 	for f := range t.Fields() {
-		f := f
 		tag, _, _ := strings.Cut(f.Tag.Get("json"), ",")
 		if tag == "-" {
 			continue

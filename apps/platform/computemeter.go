@@ -114,10 +114,7 @@ func runningImage(a Application) string {
 // effReplicas is the guaranteed-running replica count the meter prices: the app's
 // fixed replicas, floored by the autoscaling minimum, never below 1.
 func effReplicas(a Application) int {
-	r := max(a.MinScale, a.Replicas)
-	if r < 1 {
-		r = 1
-	}
+	r := max(a.MinScale, a.Replicas, 1)
 	return r
 }
 

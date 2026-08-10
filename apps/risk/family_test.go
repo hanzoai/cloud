@@ -270,9 +270,7 @@ func TestDetector_AsksNothingAboutAnotherOrganisation(t *testing.T) {
 		reflect.TypeFor[anomaly.Snapshot]():  true,
 	}
 	for m := range d.Methods() {
-		m := m
 		for in := range m.Type.Ins() {
-			in := in
 			if !allowed[in] {
 				t.Errorf("detector.%s takes a %s — a detector is ONE organisation's model, so a "+
 					"parameter that can name another organisation is a boundary the type used to hold "+
