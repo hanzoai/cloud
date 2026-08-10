@@ -91,7 +91,7 @@ var (
 // type because a served asset has one.
 type Binary struct{}
 
-var binaryReq = reflect.TypeOf(Binary{})
+var binaryReq = reflect.TypeFor[Binary]()
 
 // Bytes is the RESPONSE declaration for a body that is not JSON: an asset the
 // caller loads rather than decodes. Type is the media type the handler actually
@@ -124,7 +124,7 @@ type Bytes struct{ Type string }
 // seam becomes two.
 type OneOf []any
 
-var oneOfReq = reflect.TypeOf(OneOf{})
+var oneOfReq = reflect.TypeFor[OneOf]()
 
 // Register declares the request and response body types for one route, keyed by
 // the fiber pattern exactly as the route is registered. Pass the zero value of
@@ -329,7 +329,7 @@ func (r *registration) apply(op *Operation, c *components) error {
 	return nil
 }
 
-var jsonMarshaler = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
+var jsonMarshaler = reflect.TypeFor[json.Marshaler]()
 
 // schemaOf derives JSON Schema from a Go type by reflection, following
 // encoding/json's rules (tags name fields, "-" and unexported fields are

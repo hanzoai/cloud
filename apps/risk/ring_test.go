@@ -51,9 +51,9 @@ func TestPlane_HoldsNoSharedTenantState(t *testing.T) {
 	// Types that carry one organisation's data. On the plane they would be shared;
 	// on a resident they are that resident's own.
 	tenantState := map[reflect.Type]string{
-		reflect.TypeOf(&velocity.Store{}): "sliding aggregates",
-		reflect.TypeOf(&rings{}):          "sliding aggregates",
-		reflect.TypeOf(&anomaly.Store{}):  "a model",
+		reflect.TypeFor[*velocity.Store](): "sliding aggregates",
+		reflect.TypeFor[*rings]():          "sliding aggregates",
+		reflect.TypeFor[*anomaly.Store]():  "a model",
 	}
 	// The resident must hold the WRAPPER, because the wrapper is where the bound
 	// is counted; holding the bare store back would put the eviction out of sight
@@ -65,13 +65,13 @@ func TestPlane_HoldsNoSharedTenantState(t *testing.T) {
 	// shared as a plane field of the store type was, which is why the type above still
 	// names the store — that is the field a regression would reintroduce.
 	onResident := map[reflect.Type]bool{
-		reflect.TypeOf(&rings{}):                true,
-		reflect.TypeOf((*detector)(nil)).Elem(): true,
+		reflect.TypeFor[*rings]():   true,
+		reflect.TypeFor[detector](): true,
 	}
-	pt := reflect.TypeOf(plane{})
+	pt := reflect.TypeFor[plane]()
 	for i := 0; i < pt.NumField(); i++ {
 		f := pt.Field(i)
-		if f.Type == reflect.TypeOf((*detector)(nil)).Elem() {
+		if f.Type == reflect.TypeFor[detector]() {
 			t.Errorf("plane.%s holds a model for the whole process — one organisation's volume then "+
 				"evicts another's, silently. Per-tenant state belongs on the resident.", f.Name)
 		}
@@ -79,14 +79,14 @@ func TestPlane_HoldsNoSharedTenantState(t *testing.T) {
 			t.Errorf("plane.%s holds %s for the whole process — one organisation's volume then evicts another's, "+
 				"silently. Per-tenant state belongs on the resident.", f.Name, what)
 		}
-		if f.Type.Kind() == reflect.Map && f.Type.Key() != reflect.TypeOf(tenant("")) {
+		if f.Type.Kind() == reflect.Map && f.Type.Key() != reflect.TypeFor[tenant]() {
 			t.Errorf("plane.%s is a map keyed by %s — every map on the plane must be keyed BY TENANT, "+
 				"or it is a place two organisations share.", f.Name, f.Type.Key())
 		}
 	}
 	// And the resident does hold them, so the test above is about PLACEMENT and not
 	// about the fields having been deleted.
-	rt := reflect.TypeOf(resident{})
+	rt := reflect.TypeFor[resident]()
 	for want := range onResident {
 		var found bool
 		for i := 0; i < rt.NumField(); i++ {

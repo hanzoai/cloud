@@ -264,10 +264,10 @@ func TestFamily_EveryGeometryIsComparable(t *testing.T) {
 // Mutation proof: put the org back on any method (`snapshot(orgID string)`) and this
 // fails.
 func TestDetector_AsksNothingAboutAnotherOrganisation(t *testing.T) {
-	d := reflect.TypeOf((*detector)(nil)).Elem()
+	d := reflect.TypeFor[detector]()
 	allowed := map[reflect.Type]bool{
-		reflect.TypeOf(types.Transaction{}): true,
-		reflect.TypeOf(anomaly.Snapshot{}):  true,
+		reflect.TypeFor[types.Transaction](): true,
+		reflect.TypeFor[anomaly.Snapshot]():  true,
 	}
 	for i := 0; i < d.NumMethod(); i++ {
 		m := d.Method(i)

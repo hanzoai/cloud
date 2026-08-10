@@ -43,7 +43,7 @@ var forbidden = []string{
 // Mutation proof: add `org String` to baselineDDL, or an Org field to band, and
 // this fails.
 func TestBaseline_HasNoTenantColumn(t *testing.T) {
-	rt := reflect.TypeOf(band{})
+	rt := reflect.TypeFor[band]()
 	for i := 0; i < rt.NumField(); i++ {
 		check(t, "band."+rt.Field(i).Name, rt.Field(i).Name)
 	}
@@ -446,13 +446,13 @@ func TestBaseline_ExcludesTheAnonymousLane(t *testing.T) {
 func TestBaseline_TakesNoTenant(t *testing.T) {
 	rt := reflect.TypeOf(baseline)
 	for i := 0; i < rt.NumIn(); i++ {
-		if rt.In(i) == reflect.TypeOf(tenant("")) {
+		if rt.In(i) == reflect.TypeFor[tenant]() {
 			t.Fatal("baseline() takes a tenant — the aggregate must not be narrowable to one organisation")
 		}
 	}
 	rt = reflect.TypeOf(recompute)
 	for i := 0; i < rt.NumIn(); i++ {
-		if rt.In(i) == reflect.TypeOf(tenant("")) {
+		if rt.In(i) == reflect.TypeFor[tenant]() {
 			t.Fatal("recompute() takes a tenant — the aggregate must not be computed over one organisation")
 		}
 	}
