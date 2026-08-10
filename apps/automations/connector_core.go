@@ -253,10 +253,7 @@ func runDelay(ctx context.Context, rc RunContext) (any, error) {
 	if secs < 0 {
 		secs = 0
 	}
-	d := time.Duration(secs * float64(time.Second))
-	if d > maxDelay {
-		d = maxDelay
-	}
+	d := min(time.Duration(secs*float64(time.Second)), maxDelay)
 	select {
 	case <-time.After(d):
 		return map[string]any{"delayed": d.Seconds()}, nil

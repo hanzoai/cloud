@@ -235,10 +235,7 @@ func Compute(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds) Fi
 		} else {
 			// creditRemaining = -account_balance clamped at 0 (negative account balance =
 			// credit we hold; a positive balance means we owe DO → 0 credit).
-			credit := -int64(bal.Account)
-			if credit < 0 {
-				credit = 0
-			}
+			credit := max(-int64(bal.Account), 0)
 			do.CreditRemainingCents = credit
 			do.MonthToDateSpendCents = int64(bal.Usage)
 			do.AccountBalanceCents = int64(bal.Account)
@@ -334,9 +331,6 @@ func doHistory(s *cloud.Service[core.State], ctx context.Context) []DoHistoryPoi
 // month-to-date spend divided by the number of elapsed days in the current month (at
 // least 1, so day 1 doesn't divide by zero).
 func AvgDailyBurnCents(monthToDateSpendCents int64, now time.Time) int64 {
-	day := now.Day()
-	if day < 1 {
-		day = 1
-	}
+	day := max(now.Day(), 1)
 	return monthToDateSpendCents / int64(day)
 }

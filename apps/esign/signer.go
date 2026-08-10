@@ -264,10 +264,7 @@ func stampPDF(in []byte, specs []stampSpec) ([]byte, error) {
 			if strings.TrimSpace(sp.Text) == "" {
 				continue
 			}
-			pts := int(boxH * 0.6)
-			if pts < 8 {
-				pts = 8
-			}
+			pts := max(int(boxH*0.6), 8)
 			if pts > 24 {
 				pts = 24
 			}

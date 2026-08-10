@@ -340,10 +340,7 @@ func (o ops) users(ctx context.Context, in *usersIn) (*usersOut, error) {
 			Forbidden:    u.IsForbidden,
 		})
 	}
-	total := res.Total
-	if total < len(rows) {
-		total = len(rows)
-	}
+	total := max(res.Total, len(rows))
 	return &usersOut{Status: core.OK, Data: rows, Total: core.Total(total)}, nil
 }
 

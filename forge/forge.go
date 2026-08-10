@@ -484,10 +484,7 @@ func (c *Client) listRepos(ctx context.Context, org string) ([]Repo, error) {
 		return c.walkRepos(ctx, path, first)
 	}
 
-	pages := (total + repoPage - 1) / repoPage
-	if pages > maxRepoPages {
-		pages = maxRepoPages
-	}
+	pages := min((total+repoPage-1)/repoPage, maxRepoPages)
 	// Page 1 is already in hand; the rest go out together.
 	out := make([][]Repo, pages)
 	out[0] = first
