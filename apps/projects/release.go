@@ -294,8 +294,7 @@ func copyRelease(ctx context.Context, cli *s3.Client, bucket, src, dst, htmlOver
 // rejection (HTTP 412 / PreconditionFailed), i.e. the source object no longer
 // carries the ETag the manifest was built from.
 func isPreconditionFailed(err error) bool {
-	var resp s3.ErrorResponse
-	if errors.As(err, &resp) {
+	if resp, ok := errors.AsType[s3.ErrorResponse](err); ok {
 		return resp.StatusCode == http.StatusPreconditionFailed || resp.Code == "PreconditionFailed"
 	}
 	return false
@@ -421,8 +420,7 @@ func releaseServable(s *cloud.Service[state], ctx context.Context, r Release) er
 
 // isNoSuchKey reports whether a store error is "that object is not there".
 func isNoSuchKey(err error) bool {
-	var resp s3.ErrorResponse
-	if errors.As(err, &resp) {
+	if resp, ok := errors.AsType[s3.ErrorResponse](err); ok {
 		return resp.StatusCode == http.StatusNotFound || resp.Code == s3.NoSuchKey
 	}
 	return false

@@ -233,8 +233,7 @@ func errHTTP(err error) error {
 	if err == nil {
 		return nil
 	}
-	var httpErr *zip.HTTPError
-	if errors.As(err, &httpErr) {
+	if _, ok := errors.AsType[*zip.HTTPError](err); ok {
 		return err
 	}
 	if errors.Is(err, jetstream.ErrStreamNameAlreadyInUse) ||
@@ -242,8 +241,7 @@ func errHTTP(err error) error {
 		errors.Is(err, jetstream.ErrConsumerNameAlreadyInUse) {
 		return zip.ErrConflict(err.Error())
 	}
-	var api *jetstream.APIError
-	if errors.As(err, &api) {
+	if api, ok := errors.AsType[*jetstream.APIError](err); ok {
 		switch api.Code {
 		case http.StatusNotFound:
 			return zip.ErrNotFound(api.Description)
