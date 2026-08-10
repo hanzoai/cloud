@@ -15,6 +15,7 @@ package cloud_test
 // One file, three days, and nothing in any log said why.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"errors"
 	"net"
@@ -28,19 +29,9 @@ import (
 )
 
 // runDir points the plane at a SHORT directory. A unix socket path is capped at ~104
-// bytes and t.TempDir() spends most of that on the test's own name, so the run dir is
+// bytes and planetest.Dir(t) spends most of that on the test's own name, so the run dir is
 // where a long test name turns into "bind: invalid argument" — a failure about
 // something the test is not about.
-func runDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.MkdirTemp("", "pl")
-	if err != nil {
-		t.Fatalf("run dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	return dir
-}
-
 // leftover writes the socket file a killed process leaves: bound once, never unlinked,
 // with nobody behind it. SetUnlinkOnClose(false) is what makes it a leftover rather
 // than a tidy shutdown — it is the pod that was killed, not the one that stopped.
@@ -74,7 +65,7 @@ func leftover(t *testing.T, app string) string {
 // apart from a peer that answered badly. That is the misread the whole ErrNoPeer
 // distinction exists to prevent, and it arrived through the one door that skipped it.
 func TestStaleSocketIsNotAPeer(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", runDir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	cloud.ResetPlane()
 
 	// The control: no file at all is unambiguously ErrNoPeer.
@@ -108,7 +99,7 @@ func TestStaleSocketIsNotAPeer(t *testing.T) {
 // with no router involved at all. That is the steady state of every plane call in the
 // fleet.
 func TestALiveSocketIsAPeer(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", runDir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	cloud.ResetPlane()
 
 	// A leftover file at the SAME path first: the listener binds over it, exactly as
@@ -139,7 +130,7 @@ func TestALiveSocketIsAPeer(t *testing.T) {
 // and its callers share. If that ever stops resolving under the run dir, the tests
 // would be exercising a path nothing in prod uses.
 func TestSocketPathIsUnderTheRunDir(t *testing.T) {
-	dir := runDir(t)
+	dir := planetest.Dir(t)
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
 	cloud.ResetPlane()
 

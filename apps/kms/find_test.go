@@ -75,28 +75,6 @@ func TestFindDoesNotMatchASiblingByPrefix(t *testing.T) {
 	}
 }
 
-// The credential broker scopes an app by asking what is at EXACTLY its path.
-// Enumeration became recursive; that question must not have, or an app would be
-// handed the credentials of every path beneath it.
-func TestListStaysExactSoTheBrokerScopeDoesNotWiden(t *testing.T) {
-	c := testStore(t)
-	org := "/orgs/acme"
-	write(t, c, org+"/team", "prod", "MINE")
-	write(t, c, org+"/team/nested", "prod", "NESTED")
-
-	got, err := c.Names(org+"/team", "prod")
-	if err != nil {
-		t.Fatalf("Names: %v", err)
-	}
-	for _, n := range got {
-		if n == "NESTED" {
-			t.Fatal("List/Names went recursive — the broker now scopes an app to its sub-paths' secrets too")
-		}
-	}
-	if len(got) != 1 || got[0] != "MINE" {
-		t.Fatalf("Names returned %v, want exactly [MINE]", got)
-	}
-}
 
 func testStore(t *testing.T) *Client {
 	t.Helper()

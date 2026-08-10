@@ -36,6 +36,7 @@ package cloud
 // same defect as one that never fires, and only a control catches it.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
 	"io"
@@ -106,7 +107,7 @@ func tollApp(t *testing.T) *tollRig { return tollRigWith(t, true) }
 // "nobody does".
 func tollRigWith(t *testing.T, edge bool) *tollRig {
 	t.Helper()
-	t.Setenv(zip.RuntimeDirEnv, t.TempDir())
+	t.Setenv(zip.RuntimeDirEnv, planetest.Dir(t))
 
 	led := e2eLedger(t)
 	index(t, &Config{},

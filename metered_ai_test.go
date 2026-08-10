@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"net"
 	"strings"
@@ -342,7 +343,7 @@ func TestMicrosToGateCents(t *testing.T) {
 // true, and is TestResourceMeter_UnconfiguredIsNoop's job, not theirs.
 func serveCommerceOK(t *testing.T) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	app := zip.New(zip.Config{AppName: peerCommerce})
 	zip.Post[plane.AuthorizeIn, plane.Verdict](app, "/finance/authorize",
 		func(context.Context, *plane.AuthorizeIn) (*plane.Verdict, error) {
