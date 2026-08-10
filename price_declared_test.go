@@ -103,7 +103,7 @@ func TestPriceDeclared(t *testing.T) {
 // what the binary DOES, checked by a human once, rather than a hole the walk cannot
 // see. A root that grows a customer-facing surface leaves this list.
 var unpricedRoot = map[string]bool{
-	// Telemetry ingest, mounted by hand (MountO11y) because it owns a trace-sink
+	// Telemetry ingest, mounted by hand (Mount) because it owns a trace-sink
 	// lifetime cloud.Listen's lean stub does not model. It charges nothing —
 	// billing a customer to send us their own logs is not a product — and spend.go
 	// already names it as one of the two Metered-prefix exceptions.

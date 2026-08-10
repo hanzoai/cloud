@@ -178,7 +178,7 @@ func init() {
 			"hand-listed route because the receiver set is config, not code.")
 }
 
-// mountAlerts registers the receiver. Called from MountO11y BEFORE the
+// mountAlerts registers the receiver. Called from Mount BEFORE the
 // hanzoai/o11y wildcard so these specific routes win the in-order match.
 //
 // One route per method, and the receiver name is a path PARAMETER rather than
