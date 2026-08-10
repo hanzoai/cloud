@@ -95565,6 +95565,17 @@ paths:
       tags:
       - o11y
       x-app: o11y
+  /v1/o11y/login:
+    get:
+      description: |-
+        Where a failed sign-in callback lands. The module builds that redirect with a path and no host, so it can only be same-origin, and its assumption is that the console lives beside the API. Here the console is a separate host, so this answers as the API it belongs to rather than redirecting onward — a hostname baked into a shared surface is how one brand's identity ends up in front of another brand's customer.
+
+        401 with the provider's own reason, carried from the query the module already populated. Unauthenticated by necessity: it exists precisely for the case where no principal was established.
+      operationId: get_v1_o11y_login
+      summary: Report why an observability sign-in did not complete
+      tags:
+      - o11y
+      x-app: o11y
   /v1/o11y/logs:
     get:
       description: |-
