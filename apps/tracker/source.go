@@ -255,9 +255,9 @@ func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
 		// unauthenticated request.
 		return nil, "", zip.ErrForbidden("X-Org-Id required")
 	}
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+	org, err := principal.RequireOrg(ctx)
+	if err != nil {
+		return nil, "", err
 	}
 	// THE BRAND GATE. One cloud binary serves every brand's API host and its
 	// validator trusts EVERY white-label issuer (auth_identity.go, trustedIssuers
