@@ -316,7 +316,7 @@ func TestIntakeRateLimitScope(t *testing.T) {
 	// state keyed by client IP, which the test transport holds constant.
 	limited := func(method, path string, body any) bool {
 		app := mountApp(t)
-		for i := 0; i < intakeRateLimit+2; i++ {
+		for range intakeRateLimit + 2 {
 			if code, _ := do(t, app, method, path, "hanzo", body); code == http.StatusTooManyRequests {
 				return true
 			}

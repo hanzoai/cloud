@@ -28,7 +28,6 @@ func TestWorkItemInputsCarryNoTenancy(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for f := range tc.typ.Fields() {
-				f := f
 				if isTenancy(f.Name) {
 					t.Fatalf("%s has a %s field: the org is the CALLER's plane identity "+
 						"(cloud.Who), never an argument — a caller able to state the tenant "+

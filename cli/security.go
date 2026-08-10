@@ -231,7 +231,7 @@ func scanOneFile(path string) ([]detect.Finding, bool) {
 // false positives and wasted work on assets.
 func isBinary(b []byte) bool {
 	n := min(len(b), 8192)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if b[i] == 0 {
 			return true
 		}
