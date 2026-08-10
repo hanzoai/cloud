@@ -397,21 +397,6 @@ func (c *Client) Find(path, env string) ([]SecretMeta, error) {
 	return out, nil
 }
 
-// Names is List reduced to the one field the credential broker needs, and is the
-// half of credz.Source that Get does not already satisfy. It exists so credz can
-// enumerate an app's scope without importing this package's SecretMeta — the
-// broker deliberately knows nothing about a secret beyond its name.
-func (c *Client) Names(path, env string) ([]string, error) {
-	metas, err := c.List(path, env)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(metas))
-	for _, m := range metas {
-		out = append(out, m.Name)
-	}
-	return out, nil
-}
 
 // Delete removes a secret. Returns ErrSecretNotFound verbatim for a 404 mapping.
 func (c *Client) Delete(path, name, env string) error {

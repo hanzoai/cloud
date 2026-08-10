@@ -22,6 +22,7 @@ package cloud_test
 // list of types, and it outlives any individual op.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"go/parser"
 	"go/token"
@@ -40,7 +41,7 @@ import (
 // The BEHAVIOURAL half: the Sentry envelope's input must survive a real crossing.
 // This fails on the map — zip.Call refuses to encode it — and passes on the list.
 func TestObsErrorInCrossesThePlane(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 
 	app := zip.New(zip.Config{AppName: "obsecho"})
 	zip.Post[plane.ObsErrorIn, plane.ObsErrorOut](app, "/obs/error/post",

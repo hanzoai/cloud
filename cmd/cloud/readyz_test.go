@@ -39,10 +39,10 @@ func TestVitalAbsenceIsNotReadyButStaysAlive(t *testing.T) {
 	// The product API, dead exactly as it died: a child that exits before it
 	// binds. Mounting it must still succeed — degrading to absent is the fix
 	// mount_test.go pins, and this test depends on it.
-	if err := mount(app, dead(t, "ai", "/v1"), true, "s", "", absent); err != nil {
+	if err := mount(app, dead(t, "ai", "/v1"), true, absent); err != nil {
 		t.Fatalf("a dead `ai` aborted the host: %v — it must degrade to absent", err)
 	}
-	if err := mount(app, good(t, "flags", "/v1/flags", `{"flag":"on"}`), false, "s", "", absent); err != nil {
+	if err := mount(app, good(t, "flags", "/v1/flags", `{"flag":"on"}`), false, absent); err != nil {
 		t.Fatal(err)
 	}
 	health(app, absent)
@@ -92,7 +92,7 @@ func TestNonVitalAbsenceStaysReady(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
 	absent := map[string]string{}
 
-	if err := mount(app, dead(t, "pubsub", "/v1/pubsub"), true, "s", "", absent); err != nil {
+	if err := mount(app, dead(t, "pubsub", "/v1/pubsub"), true, absent); err != nil {
 		t.Fatal(err)
 	}
 	health(app, absent)
@@ -114,7 +114,7 @@ func TestNonVitalAbsenceStaysReady(t *testing.T) {
 func TestAHealthyHostIsReadyAndSaysNothingElse(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
 	absent := map[string]string{}
-	if err := mount(app, good(t, "flags", "/v1/flags", `{}`), false, "s", "", absent); err != nil {
+	if err := mount(app, good(t, "flags", "/v1/flags", `{}`), false, absent); err != nil {
 		t.Fatal(err)
 	}
 	health(app, absent)

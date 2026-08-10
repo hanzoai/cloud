@@ -106,11 +106,11 @@ func TestADeadSubsystemDoesNotTakeTheHostDown(t *testing.T) {
 	absent := map[string]string{}
 
 	// The dead one goes FIRST, exactly as it does in manifest order.
-	if err := mount(app, dead(t, "pubsub", "/v1/pubsub"), true, "s", "", absent); err != nil {
+	if err := mount(app, dead(t, "pubsub", "/v1/pubsub"), true, absent); err != nil {
 		t.Fatalf("a dead OPTIONAL subsystem aborted the host: %v\n"+
 			"this is the 25-minute outage: one child that cannot boot must degrade to absent", err)
 	}
-	if err := mount(app, good(t, "flags", "/v1/flags", `{"flag":"on"}`), false, "s", "", absent); err != nil {
+	if err := mount(app, good(t, "flags", "/v1/flags", `{"flag":"on"}`), false, absent); err != nil {
 		t.Fatalf("mounting a healthy subsystem after a dead one failed: %v", err)
 	}
 	health(app, absent)
@@ -169,7 +169,7 @@ func TestAnAbsentPrefixBeatsTheConsoleCatchAll(t *testing.T) {
 		t.Run(tc.app, func(t *testing.T) {
 			app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
 			absent := map[string]string{}
-			if err := mount(app, dead(t, tc.app, tc.prefix), true, "s", "", absent); err != nil {
+			if err := mount(app, dead(t, tc.app, tc.prefix), true, absent); err != nil {
 				t.Fatal(err)
 			}
 			health(app, absent)
@@ -202,7 +202,7 @@ func TestAnAbsentPrefixBeatsTheConsoleCatchAll(t *testing.T) {
 func TestAbsenceIsObservable(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
 	absent := map[string]string{}
-	if err := mount(app, dead(t, "pubsub", "/v1/pubsub"), true, "s", "", absent); err != nil {
+	if err := mount(app, dead(t, "pubsub", "/v1/pubsub"), true, absent); err != nil {
 		t.Fatal(err)
 	}
 	health(app, absent)
@@ -247,7 +247,7 @@ func TestAbsenceIsObservable(t *testing.T) {
 func TestAHealthyHostReportsNoAbsence(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
 	absent := map[string]string{}
-	if err := mount(app, good(t, "flags", "/v1/flags", `{}`), false, "s", "", absent); err != nil {
+	if err := mount(app, good(t, "flags", "/v1/flags", `{}`), false, absent); err != nil {
 		t.Fatal(err)
 	}
 	health(app, absent)
@@ -266,7 +266,7 @@ func TestRequiredAbortsByName(t *testing.T) {
 	a := dead(t, "pubsub", "/v1/pubsub")
 	a.Required = true
 
-	err := mount(app, a, true, "s", "", map[string]string{})
+	err := mount(app, a, true, map[string]string{})
 	if err == nil {
 		t.Fatal("a REQUIRED subsystem that would not start was tolerated — required must abort the host")
 	}

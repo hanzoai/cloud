@@ -74,6 +74,60 @@ func TestDegradedMountAnswers503(t *testing.T) {
 	}
 }
 
+// AN EMPTY IDENTITY STORE MUST REFUSE, NOT SERVE AN EMPTY KEYSET.
+//
+// This is the case openStore cannot see. It refuses a store that is ABSENT; a store
+// that exists and holds nothing passes that stat, opens cleanly, and IAM then answers
+// /v1/iam/.well-known/jwks with {"keys":[]} at 200. That is worse than the 503 above,
+// because an empty keyset is a WELL-FORMED answer — a relying party reads it as "this
+// token does not verify" rather than "identity is down", so every token in the fleet
+// fails while nothing reports a fault.
+//
+// It is not hypothetical. The live cloud deployment carries a 4 KB iam.db beside the
+// standalone iam's 16 MB one and serves 0 signing certificates against its 9, so
+// routing identity at it would have taken the fleet down silently.
+//
+// The store here is REAL and empty (opened through IAM's own opener, exactly as the
+// serving path does), which is what distinguishes this from the degraded case: the
+// only reason to refuse is that it carries no signing certificate.
+func TestAnEmptyStoreRefusesRatherThanServingAnEmptyKeyset(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(StorePath(dir)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open("sqlite", StorePath(dir))
+	if err != nil {
+		t.Fatalf("stand up an empty identity store: %v", err)
+	}
+	_ = db.Close()
+
+	// No init_data, so Seed adds nothing and the store stays empty through Mount.
+	t.Setenv("initDataFile", filepath.Join(dir, "absent.json"))
+
+	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: dir}); err != nil {
+		t.Fatalf("Mount must stay up, cloud depends on it: %v", err)
+	}
+	if DB() != nil {
+		t.Error("DB() must be nil for a store that cannot serve, so in-process readers can tell")
+	}
+
+	for _, c := range []struct{ method, path string }{
+		{http.MethodGet, "/v1/iam/.well-known/jwks"},
+		{http.MethodGet, "/.well-known/openid-configuration"},
+	} {
+		resp, err := app.Test(httptest.NewRequest(c.method, c.path, nil))
+		if err != nil {
+			t.Fatalf("Test(%s %s): %v", c.method, c.path, err)
+		}
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("empty store %s %s = %d, want 503 — a 200 here hands out an empty keyset and every token in the fleet stops verifying",
+				c.method, c.path, resp.StatusCode)
+		}
+		_ = resp.Body.Close()
+	}
+}
+
 // TestPaths covers the store-location derivation: the store opens under DataDir (its
 // place within that is namespace's, not this package's), and init_data.json resolves
 // the standalone-iam default unless `initDataFile` overrides.

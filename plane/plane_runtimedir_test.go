@@ -1,6 +1,7 @@
 package plane
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"os"
 	"testing"
@@ -52,7 +53,7 @@ func TestBindRuntimeDirIsIdempotentAndHonoursAnOverride(t *testing.T) {
 // (Peer, Ask) have always bound; this asserts all three resolve one path.
 func TestReachResolvesTheSharedPathWithoutAPriorBind(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", "")
-	t.Setenv("CLOUD_RUN_DIR", t.TempDir())
+	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t))
 	t.Setenv("CLOUD_DATA_DIR", "")
 	t.Setenv("ZIP_ADDR", "") // no router: "no socket, no router" is a fast, real answer
 	Unbind()

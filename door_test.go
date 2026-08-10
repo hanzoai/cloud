@@ -22,6 +22,7 @@ package cloud
 // that must never move.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
 	"net"
@@ -68,7 +69,7 @@ func subsystem(t *testing.T) (edge, plane string) {
 
 	Door(app)
 
-	dir := t.TempDir()
+	dir := planetest.Dir(t)
 	edge, plane = filepath.Join(dir, "edge.sock"), filepath.Join(dir, "plane.sock")
 	go func() { _ = app.Listen(edge) }()
 	go func() { _ = Plane().Listen(plane) }()
