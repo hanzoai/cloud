@@ -83,11 +83,11 @@ func TestMountAll_ShutdownHooksLIFOAfterDrain(t *testing.T) {
 	// handler returns — i.e. the moment this request finishes draining.
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	var drainTick int64
+	var drainTick atomic.Int64
 	app.Get("/hold", func(c *zip.Ctx) error {
 		close(entered)
 		<-release
-		atomic.StoreInt64(&drainTick, tick.Add(1))
+		drainTick.Store(tick.Add(1))
 		return c.JSON(http.StatusOK, map[string]bool{"ok": true})
 	})
 
@@ -145,7 +145,7 @@ func TestMountAll_ShutdownHooksLIFOAfterDrain(t *testing.T) {
 
 	// (1) AFTER THE DRAIN: the in-flight request finished (drainTick) strictly
 	// before ANY teardown hook ran — no hook raced a request still using it.
-	dt := atomic.LoadInt64(&drainTick)
+	dt := drainTick.Load()
 	if dt == 0 {
 		t.Fatal("in-flight request never drained")
 	}
