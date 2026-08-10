@@ -4859,6 +4859,47 @@ join plus a policy about who may pull which rung.
 
 ### Provenance — which tree each claim was verified against
 
+**THE FORGE LINE SHIPS NOTHING, AND THE ROUTE TO PRODUCTION IS NOT CI.** Measured
+2026-08-10, and it is the fact every "I fixed it" claim about this repo depends on:
+
+- Three heads, all moving the same day: `forge/main` (git.hanzo.ai/hanzoai/cloud),
+  `inc/main` (github.com/hanzo-inc/cloud) and `origin/main`
+  (github.com/hanzoai/cloud) were three DIFFERENT commits. `forge` and `inc` had
+  diverged 68 / 16 either side of their merge base.
+- **Production builds from `inc`.** The universe pin
+  (`charts/app/values/hanzo/cloud.yaml`) names an inc-line sha, and the CD app
+  `hanzo-cloud` (`syncPolicy.automated`, `selfHeal: true`) reconciles it from
+  `git.hanzo.ai/hanzo/universe` — so that pin IS production, and it lands within
+  minutes without anybody applying it.
+- **No CI builds the image.** GitHub Actions on `hanzo-inc/cloud` runs only the
+  Dependabot graph job. The image is built by a HAND-CREATED buildkit Job in the
+  `hanzo-build` namespace, one per sha, whose context is
+  `https://github.com/hanzo-inc/cloud.git#<full sha>` — read one and copy it:
+
+      kubectl -n hanzo-build get job build-cloud-sha-<id> -o json
+
+  It takes ~20 minutes. It refuses a sha it cannot resolve, which is the one
+  guard rail here: a full sha guessed from a short one fails at
+  `git cat-file: could not get object info` rather than building the wrong tree.
+- **The forge release train has produced no image for any forge-only commit.**
+  `.hanzo/workflows/cicd.yml` is one `needs:` graph and `gate` is RED on every
+  commit on that line, so `image`/`rollout`/`reach`/`fanout` all skip. The gate
+  fails at `closure-check` — documents left behind by dependency bumps
+  (`hanzoai/commerce`, `hanzoai/licensing`, `hanzos3/*`), 22 of them. Regenerating
+  is mechanical and the error prints the exact command; measured, only ONE document
+  actually moves (`plugin/licensing/openapi.json`) and the rest is
+  `openapi/closure.json`.
+
+  **Think before clearing it.** A green gate ARMS the train, and `rollout` writes
+  the universe pin and re-points production — at a forge-line build that differs
+  from anything production has run by those 68 commits. Clearing the gate and
+  pushing are the same act. That is a decision, not maintenance.
+
+So: a fix pushed to the forge alone is CANONICAL AND NOT DEPLOYED. Landing it in
+production today means the commit on `inc/main`, a build Job for that sha, and the
+pin. Say which of the three you did.
+
+
 **This repo has two divergent lines and production builds the one this file is
 not on.** Both checkouts carry the same two remotes (`forge` =
 git.hanzo.ai/hanzoai/cloud, `inc` = github.com/hanzo-inc/cloud), so they look
