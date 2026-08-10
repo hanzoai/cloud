@@ -110,7 +110,7 @@ func (c channel) Pause(ctx context.Context, org string, ref Ref) error {
 }
 
 // NewChannel builds a Channel from a kind and its injected executor funcs. The
-// composition root calls it once per channel (apps/wire_seams.go) with the
+// composition root calls it once per channel (plugin/campaign/seams.go) with the
 // concrete ads/publish/marketing execution funcs, then RegisterChannel-s it.
 func NewChannel(kind string, launch LaunchFunc, spend SpendFunc, pause PauseFunc) Channel {
 	return channel{kind: kind, launch: launch, spend: spend, pause: pause}

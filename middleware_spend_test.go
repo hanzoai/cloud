@@ -352,7 +352,7 @@ func TestSpendGate(t *testing.T) {
 // this bug violated: the gate read the ORG POOL while the debit spent the PERSON's
 // wallet. In the shared signup org those are different addresses and the pool is
 // funded, so a brand-new $0 account read a six-figure balance and sailed through —
-// which is the live free-inference hole (apps/zen.go still gates the pool today).
+// which is the live free-inference hole (apps/zen/zen.go still gates the pool today).
 //
 // The address must be principal.WalletOf's: ledger "hanzo", account "hanzo/stranger"
 // — NOT the bare org slug, which finance resolves to the pool.
