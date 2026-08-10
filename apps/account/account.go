@@ -238,6 +238,14 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// multipart in, raw image bytes out — which is why they are the only two names
 	// in typed_wire_test.go's refusal list.
 	registerAvatar(o, open, limit, csrf)
+
+	// The caller's own appearance preference — text size, density, accent — stored
+	// on their IAM account so it follows them across devices and every Hanzo surface
+	// (appearance.go). The read is open (a surface applies it on load); the write is
+	// CSRF-guarded like the other account writes, and not rate-limited because a
+	// person dragging the size/density steps writes faster than a money cap allows.
+	zip.Get(open, "/appearance", o.getAppearance)
+	zip.Post(guard, "/appearance", o.setAppearance)
 	return nil
 }
 
