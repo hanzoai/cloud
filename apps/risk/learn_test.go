@@ -12,7 +12,7 @@ package risk
 //   - by sharing counters, so that learning for one moves the other — refuted by
 //     [TestModel_LearningIsNotShared];
 //   - by restoring one organisation's snapshot into another — refuted by
-//     [TestRestore_RefusesAnotherOrganisationsState].
+//     [TestRestore_AdoptsOnlyTheOrganisationsOwnValue].
 
 import (
 	"context"

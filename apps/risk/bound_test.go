@@ -358,8 +358,11 @@ type ledger struct {
 	posted    []debit
 	// asked counts EVERY call the real metering client makes, whatever it was for.
 	// A balance read and a debit are both the money plane being told a ledger key,
-	// so a surface that must not name one must make neither — see
-	// [TestPricedOps_NeverAskTheMoneyPlaneForANamelessSubject].
+	// so counting one and not the other would read as silence.
+	// [TestPricedOps_StillReachTheMoneyPlaneForARealPrincipal] is its one reader,
+	// and it is the POSITIVE half. The negative companion — a nameless subject
+	// reaching the plane not at all — does not exist; gate_order_test.go's "A NOTE
+	// ON A TEST THAT IS NOT HERE" is why.
 	asked int
 }
 
