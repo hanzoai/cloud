@@ -297,17 +297,6 @@ func toFindingView(f StoredFinding) findingView {
 	}
 }
 
-// tenant resolves the org — the isolation KEY — from the validated principal
-// cloud.Bridge parked. A typed op receives a context.Context and nothing else, so
-// it reads the org there rather than off the request. Fails closed.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
-
 // ---- handlers ----
 
 // health reports that the scanning subsystem is serving and how many
@@ -347,7 +336,7 @@ func (o ops) listRules(ctx context.Context, _ *noIn) (*ruleList, error) {
 // with its findings.
 func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +434,7 @@ func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 // Strictly org-scoped: a caller only ever sees its own scans, and one with no
 // validated org is refused.
 func (o ops) listScans(ctx context.Context, in *scanPage) (*scanList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -468,7 +457,7 @@ func (o ops) listScans(ctx context.Context, in *scanPage) (*scanList, error) {
 // as an id that never existed, so a ruleset learns nothing about what exists
 // elsewhere. No validated org is refused.
 func (o ops) getScan(ctx context.Context, in *scanRef) (*scanDetail, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -497,7 +486,7 @@ func (o ops) getScan(ctx context.Context, in *scanRef) (*scanDetail, error) {
 // ignored, so a filter typo cannot read as "no findings". Strictly org-scoped, and
 // a caller with no validated org is refused.
 func (o ops) listFindings(ctx context.Context, in *findingFilter) (*findingList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +512,7 @@ func (o ops) listFindings(ctx context.Context, in *findingFilter) (*findingList,
 // Scoped to the caller's org, and a finding belonging to another org is the same
 // 404 as one that never existed.
 func (o ops) getFinding(ctx context.Context, in *findingRef) (*findingView, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}

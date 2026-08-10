@@ -72,19 +72,6 @@ import (
 // method value — also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// tenantOf is the validated org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. It is the same principal.Org answer the untyped
-// dispatch reads off the request, so both planes gate identically.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
-
 // noInput is the In of an op addressed entirely by the caller's principal: it
 // takes nothing off the wire. The cap-table reads are org-scoped collections, so
 // the org IS the address and there is no parameter to bind.
@@ -120,7 +107,7 @@ func bundleMessage(status int, body []byte) string {
 // something that is not the out shape — becomes cloud's own 500, which is the
 // answer the untyped dispatch already gives in exactly that case.
 func (o ops) call(ctx context.Context, route string, params map[string]string, out any) error {
-	org, err := tenantOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return err
 	}
