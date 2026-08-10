@@ -387,10 +387,7 @@ func (p Promo) quote(plan string, seats int) (chargeCents, discountCents int64, 
 		if seats <= 0 {
 			seats = 1
 		}
-		promoSeats := seats
-		if promoSeats > p.TeamSeatCap {
-			promoSeats = p.TeamSeatCap
-		}
+		promoSeats := min(seats, p.TeamSeatCap)
 		listSeats := seats - promoSeats
 		return int64(promoSeats)*perCharge + int64(listSeats)*list, int64(promoSeats) * perDiscount, true, ""
 	}

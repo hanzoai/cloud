@@ -315,10 +315,3 @@ func (o toolOps) deleteAuthoredPlugin(ctx context.Context, in *pluginRef) (*plug
 	}
 	return &pluginDeleted{Deleted: id}, nil
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

@@ -230,10 +230,7 @@ func scanOneFile(path string) ([]detect.Finding, bool) {
 // first 8 KiB is the same heuristic git uses. Skipping binaries avoids both
 // false positives and wasted work on assets.
 func isBinary(b []byte) bool {
-	n := len(b)
-	if n > 8192 {
-		n = 8192
-	}
+	n := min(len(b), 8192)
 	for i := 0; i < n; i++ {
 		if b[i] == 0 {
 			return true

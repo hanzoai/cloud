@@ -164,10 +164,7 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Registration, error) {
 	if limit <= 0 {
 		limit = defaultRegisterLimit
 	}
-	offset := f.Offset
-	if offset < 0 {
-		offset = 0
-	}
+	offset := max(f.Offset, 0)
 	// Both predicates are bound parameters; the empty string means "any" via the
 	// (?='' OR col=?) form, so the SQL text is fixed regardless of the filter.
 	rows, err := s.db.QueryContext(ctx,
