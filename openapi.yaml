@@ -12582,6 +12582,22 @@ components:
         updatedAt:
           type: integer
       type: object
+    appearance:
+      properties:
+        accent:
+          description: |-
+            Accent is the one hue — a CSS colour token (a hex, or a bounded functional
+            colour like rgb()/oklch()). Anything else is dropped rather than stored.
+          type: string
+        density:
+          description: 'Density is the spacing step: "compact", "default" or "comfortable".'
+          type: string
+        type:
+          description: |-
+            Type is the text-size multiplier, clamped to the ramp window [0.85, 1.4].
+            Absent (0) leaves the published default.
+          type: number
+      type: object
     application:
       properties:
         code:
@@ -59886,6 +59902,59 @@ paths:
       tags:
       - analytics
       x-app: analytics
+  /v1/appearance:
+    get:
+      description: |-
+        Returns the signed-in caller's own appearance preference — text
+        size, density and accent — read from their IAM account so it is the same on
+        every device and every Hanzo surface. An unset preference is an empty object.
+
+        A transient IAM read failure reports the empty preference rather than a 5xx, so
+        a surface applies its published default and never error-toasts on load — the
+        same fail-soft the key read uses.
+      operationId: get_v1_appearance
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/appearance'
+          description: ok
+      summary: Returns the signed-in caller's own appearance preference — text size,
+        density and accent — read from their IAM account so it is the same on every
+        device and every Hanzo surface.
+      tags:
+      - appearance
+      x-app: account
+    post:
+      description: |-
+        Stores the caller's appearance preference on their IAM account,
+        preserving every other field of the row. The accent is validated as a real
+        colour token before it is stored; an unset or invalid axis is dropped rather
+        than stored.
+      operationId: post_v1_appearance
+      requestBody:
+        content:
+          application/json:
+            example:
+              accent: '#8b5cf6'
+              density: compact
+              type: 1.15
+            schema:
+              $ref: '#/components/schemas/appearance'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/appearance'
+          description: ok
+      summary: Stores the caller's appearance preference on their IAM account, preserving
+        every other field of the row.
+      tags:
+      - appearance
+      x-app: account
   /v1/ask:
     post:
       description: |-
@@ -116195,6 +116264,9 @@ tags:
 - description: 'Package analytics is product analytics: send an event, read back who
     did what.'
   name: analytics
+- description: 'Package account is your own account: API keys you mint and revoke,
+    and org onboarding.'
+  name: appearance
 - description: Package ask is a plain-language question about your business, answered
     with real numbers.
   name: ask

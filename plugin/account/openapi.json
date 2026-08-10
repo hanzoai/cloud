@@ -12,6 +12,9 @@
   ],
   "tags": [
     {
+      "name": "appearance"
+    },
+    {
       "name": "avatar"
     },
     {
@@ -28,6 +31,63 @@
     }
   ],
   "paths": {
+    "/v1/appearance": {
+      "get": {
+        "operationId": "get_v1_appearance",
+        "summary": "Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface.",
+        "description": "Returns the signed-in caller's own appearance preference — text\nsize, density and accent — read from their IAM account so it is the same on\nevery device and every Hanzo surface. An unset preference is an empty object.\n\nA transient IAM read failure reports the empty preference rather than a 5xx, so\na surface applies its published default and never error-toasts on load — the\nsame fail-soft the key read uses.",
+        "tags": [
+          "appearance"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/appearance"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_appearance",
+        "summary": "Stores the caller's appearance preference on their IAM account, preserving every other field of the row.",
+        "description": "Stores the caller's appearance preference on their IAM account,\npreserving every other field of the row. The accent is validated as a real\ncolour token before it is stored; an unset or invalid axis is dropped rather\nthan stored.",
+        "tags": [
+          "appearance"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "accent": "#8b5cf6",
+                "density": "compact",
+                "type": 1.15
+              },
+              "schema": {
+                "$ref": "#/components/schemas/appearance"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/appearance"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/avatar": {
       "post": {
         "operationId": "post_v1_avatar",
@@ -284,6 +344,23 @@
               "$ref": "#/components/schemas/apiKey"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "appearance": {
+        "properties": {
+          "accent": {
+            "description": "Accent is the one hue — a CSS colour token (a hex, or a bounded functional\ncolour like rgb()/oklch()). Anything else is dropped rather than stored.",
+            "type": "string"
+          },
+          "density": {
+            "description": "Density is the spacing step: \"compact\", \"default\" or \"comfortable\".",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the text-size multiplier, clamped to the ramp window [0.85, 1.4].\nAbsent (0) leaves the published default.",
+            "type": "number"
           }
         },
         "type": "object"
