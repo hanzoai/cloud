@@ -260,8 +260,7 @@ func statusErr(err error) error {
 	case errors.Is(err, ErrNotOwned):
 		return zip.ErrNotFound("your org does not own that domain")
 	}
-	var apiErr *namecom.APIError
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*namecom.APIError](err); ok {
 		// Surface the registrar's own message; a 4xx from the registrar is a client
 		// problem, a 5xx a bad-gateway.
 		status := http.StatusBadGateway

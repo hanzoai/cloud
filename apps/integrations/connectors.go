@@ -191,8 +191,7 @@ func room(ctx context.Context, s *cloud.Service[state], org, user, provider, lab
 // errors: 400/503/500) so engine failures propagate with their true status
 // instead of being flattened into the caller's 502 transport error.
 func httpErr(err error) (*zip.HTTPError, bool) {
-	var he *zip.HTTPError
-	if errors.As(err, &he) {
+	if he, ok := errors.AsType[*zip.HTTPError](err); ok {
 		return he, true
 	}
 	return nil, false

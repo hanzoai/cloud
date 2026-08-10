@@ -145,8 +145,7 @@ func cursorOf(t *testing.T, s *cloud.Service[*state], org string) cursor {
 // status reads the HTTP status an op refused with, so a test can assert the
 // DIFFERENCE between "you asked for too much" and "we are broken".
 func status(err error) int {
-	var e *zip.HTTPError
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[*zip.HTTPError](err); ok {
 		return e.Status
 	}
 	return 0

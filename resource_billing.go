@@ -400,8 +400,7 @@ func Denied(err error) error {
 func DenyEnvelope() zip.Handler {
 	return func(c *zip.Ctx) error {
 		err := c.Continue()
-		var d *deniedErr
-		if errors.As(err, &d) {
+		if d, ok := errors.AsType[*deniedErr](err); ok {
 			return c.JSON(d.status, denyBody(d.code, d.msg))
 		}
 		return err

@@ -770,16 +770,14 @@ func modTime(t time.Time) int64 {
 // isNoSuchBucket / isBucketNotEmpty classify the S3 error codes we map to a
 // clean 404/409 instead of a generic 502.
 func isNoSuchBucket(err error) bool {
-	var resp s3.ErrorResponse
-	if errors.As(err, &resp) {
+	if resp, ok := errors.AsType[s3.ErrorResponse](err); ok {
 		return resp.Code == "NoSuchBucket"
 	}
 	return false
 }
 
 func isBucketNotEmpty(err error) bool {
-	var resp s3.ErrorResponse
-	if errors.As(err, &resp) {
+	if resp, ok := errors.AsType[s3.ErrorResponse](err); ok {
 		return resp.Code == "BucketNotEmpty"
 	}
 	return false

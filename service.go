@@ -117,8 +117,7 @@ func Handle[S any](s *Service[S], h func(*Service[S], *zip.Ctx) error) func(*zip
 func Terminal(h func(*zip.Ctx) error) func(*zip.Ctx) error {
 	return func(c *zip.Ctx) error {
 		err := h(c)
-		var he *zip.HTTPError
-		if errors.As(err, &he) {
+		if he, ok := errors.AsType[*zip.HTTPError](err); ok {
 			if he.Status == 0 {
 				he.Status = http.StatusInternalServerError
 			}

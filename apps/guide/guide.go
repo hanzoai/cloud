@@ -832,8 +832,7 @@ func transition(s *cloud.Service[state], c *zip.Ctx, target State) error {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	ov, err := applyStep(s, c.Context(), org, idParam(c), target, true)
-	var blocked blockedErr
-	if errors.As(err, &blocked) {
+	if blocked, ok := errors.AsType[blockedErr](err); ok {
 		return c.JSON(http.StatusConflict, map[string]any{
 			"error":     blocked.Error(),
 			"step":      blocked.step,

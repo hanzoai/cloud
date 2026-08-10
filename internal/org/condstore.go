@@ -96,16 +96,14 @@ func (s *S3ConditionalStore) PutIfVersion(ctx context.Context, key string, data 
 }
 
 func isNoSuchKey(err error) bool {
-	var resp s3.ErrorResponse
-	if errors.As(err, &resp) {
+	if resp, ok := errors.AsType[s3.ErrorResponse](err); ok {
 		return resp.Code == "NoSuchKey"
 	}
 	return false
 }
 
 func isPreconditionFailed(err error) bool {
-	var resp s3.ErrorResponse
-	if errors.As(err, &resp) {
+	if resp, ok := errors.AsType[s3.ErrorResponse](err); ok {
 		return resp.Code == "PreconditionFailed" || resp.StatusCode == 412
 	}
 	return false

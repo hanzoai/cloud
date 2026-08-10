@@ -685,8 +685,7 @@ func pathSeg(c *zip.Ctx, name string, re *regexp.Regexp) (string, error) {
 // mis-reported as a 502, and defaulting to 502 Bad Gateway otherwise. The message is
 // Cloudflare's own (token-free by construction), never this process's token.
 func cfErr(err error) error {
-	var ce *cfError
-	if errors.As(err, &ce) {
+	if ce, ok := errors.AsType[*cfError](err); ok {
 		switch ce.upstream {
 		case http.StatusNotFound, http.StatusBadRequest, http.StatusForbidden, http.StatusConflict:
 			return zip.Errorf(ce.upstream, "%s", ce.msg)
