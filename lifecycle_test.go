@@ -21,7 +21,6 @@ func TestEmitLifecycleFanOut(t *testing.T) {
 	done := make(chan string, 8)
 
 	for _, name := range []string{"a", "b"} {
-		name := name
 		RegisterLifecycleSubscriber(func(ctx context.Context, ev LifecycleEvent) {
 			mu.Lock()
 			got[name] = ev

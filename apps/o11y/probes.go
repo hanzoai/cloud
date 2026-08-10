@@ -167,8 +167,8 @@ func answered(code int) bool { return code >= 200 && code < 400 }
 // instead of taking the whole Logger is what lets a test read what was written
 // without standing up a logging stack.
 type journal interface {
-	Info(msg string, ctx ...interface{})
-	Warn(msg string, ctx ...interface{})
+	Info(msg string, ctx ...any)
+	Warn(msg string, ctx ...any)
 }
 
 // reporter is the probe client's transport, and it exists because the prober

@@ -227,8 +227,8 @@ type firecrawlResponse struct {
 }
 
 type firecrawlData struct {
-	Markdown string                 `json:"markdown"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Markdown string         `json:"markdown"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 func scrapeHandler(w http.ResponseWriter, r *http.Request) {

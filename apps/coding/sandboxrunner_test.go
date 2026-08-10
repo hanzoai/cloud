@@ -130,7 +130,6 @@ func servePod(t *testing.T, p *pod) {
 		}, zip.WithOperationID(plane.FinanceAuthorize))
 
 	for name, app := range map[string]*zip.App{"sandboxes": sandboxes, "commerce": commerce} {
-		app := app
 		plane.Bind()
 		go func(path string) { _ = app.Listen(path) }(zip.SocketPath(name))
 		t.Cleanup(func() { _ = app.Shutdown() })
