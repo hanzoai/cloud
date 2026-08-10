@@ -33,7 +33,7 @@ import (
 // zero, and zero-cost is how five of them got here.
 var depsFieldRationale = map[string]string{
 	// --- process identity: true at exec, unchanged for the process lifetime ---
-	"Brand":  "WHOSE deployment this process is — one brand per binary, fixed at exec, and half of every tenant-scoped key; a per-request brand is resolved from the Host separately (brand.ForHostOK) and is a different fact",
+	"Brand": "WHOSE deployment this process is — one brand per binary, fixed at exec, and half of every tenant-scoped key; a per-request brand is resolved from the Host separately (brand.ForHostOK) and is a different fact",
 	"Version": "the build this binary IS, stamped as X-Api-Version so a rollout can be verified from outside; " +
 		"a link-time fact the process cannot look up",
 	"Env":       "which of the 3 envs this process runs in (mainnet|testnet|devnet), an attribution label stamped on metered usage; never a gate — every env bills against its own ledger",
@@ -70,7 +70,7 @@ var depsFieldRationale = map[string]string{
 // justification. It is a speed bump on purpose: the check a reviewer cannot
 // perform by eye once the struct passes ~20 fields.
 func TestDepsCarriesNoPolicy(t *testing.T) {
-	tp := reflect.TypeOf(Deps{})
+	tp := reflect.TypeFor[Deps]()
 	var undocumented []string
 	seen := map[string]bool{}
 	for i := 0; i < tp.NumField(); i++ {
@@ -115,7 +115,7 @@ func TestPolicyFieldsStayOutOfDeps(t *testing.T) {
 		"AIFallbackModel": "same, and worse — `best` is a SKU in the GATEWAY's catalog with its own server-side route. Home: the cloud.FallbackModel constant (model.go).",
 		"Self":            "had ZERO readers for its whole life. The id is real and lives in selfID(cfg); the copy on Deps was dead.",
 	}
-	tp := reflect.TypeOf(Deps{})
+	tp := reflect.TypeFor[Deps]()
 	for name, why := range evicted {
 		if _, ok := tp.FieldByName(name); ok {
 			t.Errorf("Deps.%s is back. It was removed because: %s", name, why)
@@ -123,7 +123,7 @@ func TestPolicyFieldsStayOutOfDeps(t *testing.T) {
 	}
 	// Config is the other half: an evicted value must not keep its env knob, or
 	// the field is gone and the second home is not.
-	tc := reflect.TypeOf(Config{})
+	tc := reflect.TypeFor[Config]()
 	for _, name := range []string{"AIDefaultModel", "AIFallbackModel"} {
 		if _, ok := tc.FieldByName(name); ok {
 			t.Errorf("Config.%s is back — the struct field was the second home, and this is it", name)

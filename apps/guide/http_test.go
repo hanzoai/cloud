@@ -19,8 +19,8 @@ import (
 // carries — and this is what keeps the spelled-out copy from silently missing a
 // field JourneyStep gains later.
 func TestStepViewCarriesJourneyStep(t *testing.T) {
-	js := reflect.TypeOf(JourneyStep{})
-	sv := reflect.TypeOf(stepView{})
+	js := reflect.TypeFor[JourneyStep]()
+	sv := reflect.TypeFor[stepView]()
 	for i := 0; i < js.NumField(); i++ {
 		f := js.Field(i)
 		g, ok := sv.FieldByName(f.Name)

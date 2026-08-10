@@ -233,7 +233,7 @@ func TestSeamIsReadOnly(t *testing.T) {
 // CLOUD_COMMERCE_HTTP_URL and a service token — were what let a deployment
 // believe it had configured a wire while every read 404'd or answered zero.
 func TestClientCarriesNoAddress(t *testing.T) {
-	if n := reflect.TypeOf(payout.Client{}).NumField(); n != 0 {
+	if n := reflect.TypeFor[payout.Client]().NumField(); n != 0 {
 		t.Fatalf("payout.Client carries %d field(s); reaching a peer by name takes none", n)
 	}
 }
