@@ -52,7 +52,7 @@ type Debit struct {
 type Commerce struct {
 	mu    sync.Mutex
 	calls []Debit
-	n     int32
+	n     atomic.Int32
 }
 
 // Serve binds the peer's socket and returns the recorder. Every test that expects a
@@ -85,7 +85,7 @@ func ServeWith(t *testing.T, observe func(org string, in plane.RecordIn)) *Comme
 			if observe != nil {
 				observe(org, *in)
 			}
-			atomic.AddInt32(&c.n, 1)
+			c.n.Add(1)
 			return &plane.Recorded{Amount: in.Amount}, nil
 		}, zip.WithOperationID(plane.FinanceRecord))
 
@@ -169,7 +169,7 @@ func listen(t *testing.T, app *zip.App, name string) {
 
 // Count is how many debits have landed. Debits are fire-and-forget, so callers poll
 // it — see [Wait].
-func (c *Commerce) Count() int32 { return atomic.LoadInt32(&c.n) }
+func (c *Commerce) Count() int32 { return c.n.Load() }
 
 // All is every debit that crossed, oldest first.
 func (c *Commerce) All() []Debit {

@@ -19,14 +19,14 @@ import (
 // scheduler tests can assert on run count + drive backoff deterministically.
 type countingAI struct {
 	mu    sync.Mutex
-	calls int32
+	calls atomic.Int32
 	fail  bool
 	err   error
 	block chan struct{} // when non-nil, ChatCompletion blocks until closed.
 }
 
 func (c *countingAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*types.ChatResponse, error) {
-	atomic.AddInt32(&c.calls, 1)
+	c.calls.Add(1)
 	if c.block != nil {
 		<-c.block
 	}
@@ -42,7 +42,7 @@ func (c *countingAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*t
 	return &types.ChatResponse{Content: "done"}, nil
 }
 
-func (c *countingAI) count() int32 { return atomic.LoadInt32(&c.calls) }
+func (c *countingAI) count() int32 { return c.calls.Load() }
 
 func (c *countingAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, error) {
 	return nil, nil

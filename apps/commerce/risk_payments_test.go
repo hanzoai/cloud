@@ -515,8 +515,8 @@ func isolate(t *testing.T) {
 // processor does and what the accrual depends on: distinct money must carry distinct
 // keys or the record deduplicates real payments away.
 func refs(prefix string) func() string {
-	var n int64
-	return func() string { return prefix + strconv.FormatInt(atomic.AddInt64(&n, 1), 10) }
+	var n atomic.Int64
+	return func() string { return prefix + strconv.FormatInt(n.Add(1), 10) }
 }
 
 // settledPayment answers the way the typed op answers a charge that cleared: the REAL

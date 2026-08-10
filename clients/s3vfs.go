@@ -42,7 +42,7 @@ type s3vfs struct {
 	client  *s3.Client
 	bucket  string
 	region  string
-	ensured int32 // atomic: 1 once the bucket is confirmed present (create-if-absent)
+	ensured atomic.Int32 // atomic: 1 once the bucket is confirmed present (create-if-absent)
 }
 
 // Compile-time proof s3vfs satisfies the seam.
@@ -91,7 +91,7 @@ const ensureBootTimeout = 5 * time.Second
 // op until it succeeds). A concurrent creator (another replica) is tolerated: a
 // MakeBucket race is resolved by re-checking existence.
 func (v *s3vfs) ensure(ctx context.Context) error {
-	if atomic.LoadInt32(&v.ensured) == 1 {
+	if v.ensured.Load() == 1 {
 		return nil
 	}
 	exists, err := v.client.BucketExists(ctx, v.bucket)
@@ -106,7 +106,7 @@ func (v *s3vfs) ensure(ctx context.Context) error {
 			}
 		}
 	}
-	atomic.StoreInt32(&v.ensured, 1)
+	v.ensured.Store(1)
 	return nil
 }
 

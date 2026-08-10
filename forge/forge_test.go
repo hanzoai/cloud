@@ -543,9 +543,9 @@ func TestIssues_LimitIsHonoured(t *testing.T) {
 // forever.
 func TestIssues_StopsAtMaxPagesAgainstAnEndlessForge(t *testing.T) {
 	s := newStub(t)
-	var hits int64
+	var hits atomic.Int64
 	s.Server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt64(&hits, 1)
+		hits.Add(1)
 		full := make([]Issue, page)
 		writeJSON(w, full)
 	})
@@ -553,7 +553,7 @@ func TestIssues_StopsAtMaxPagesAgainstAnEndlessForge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Issues: %v", err)
 	}
-	if n := atomic.LoadInt64(&hits); n > maxPages {
+	if n := hits.Load(); n > maxPages {
 		t.Fatalf("made %d requests against an endless forge, want <= %d", n, maxPages)
 	}
 	if len(got) != page*maxPages {
