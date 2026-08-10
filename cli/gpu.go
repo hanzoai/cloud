@@ -169,7 +169,7 @@ type gpuInfo struct {
 }
 
 // registration is the fleet presence activity's Input — the shape cloud's
-// clients/visor/fleet.go fleetRegistration decodes. Capabilities + Engine are
+// apps/visor/fleet.go fleetRegistration decodes. Capabilities + Engine are
 // additive (omitempty): an older cloud that does not read them still renders the
 // GPU; a newer one advertises the engine endpoint on GET /v1/fleet/workers.
 type registration struct {

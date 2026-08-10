@@ -146,7 +146,7 @@ func entry(reverse bool, dr, cr string, amount int64) []Leg {
 // transaction it reports the matching cloud/GPU cost in cents and whether a REAL figure
 // exists (ok). The production projection reads the ai-owned cloud_usage ledger — the same
 // hanzo.cloud_usage cost_cents column the admin compute/o11y surfaces aggregate
-// (clients/admin/compute.go, clients/admin/o11y.go) — per org, per usage window. Until that
+// (apps/admin/compute.go, apps/admin/o11y.go) — per org, per usage window. Until that
 // projection is wired the default noCost returns ok=false, so the LIVE path books
 // revenue-only and never invents a cost number. Tests inject a fake with real figures.
 type costSource interface {

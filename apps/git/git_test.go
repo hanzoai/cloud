@@ -78,7 +78,7 @@ func mountApp(t *testing.T) *zip.App {
 }
 
 // do runs a control-plane JSON request through the Fiber test harness (mirrors
-// clients/prompts/http_test.go).
+// apps/prompts/http_test.go).
 func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
 	t.Helper()
 	var r io.Reader

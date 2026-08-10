@@ -1,5 +1,5 @@
 // release.go — the first-party release seam. build.go's RegisterServiceReleaser is
-// the inversion that lets a build-completion path (clients/platform/release.go, or
+// the inversion that lets a build-completion path (apps/platform/release.go, or
 // any package-cloud caller) request a rollout with no cloud⇄platform import cycle.
 //
 // The App CRs in the platform namespaces are declared in universe git

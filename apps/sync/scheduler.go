@@ -22,7 +22,7 @@ import (
 // timer, and THIS loop is its driver — the third and final leg of the trigger enum
 // (webhook→events, manual→/run, poll→scheduler), so the enum is complete.
 //
-// It is modelled on clients/social/scheduler.go (env-gated ticker + idempotent stop)
+// It is modelled on apps/social/scheduler.go (env-gated ticker + idempotent stop)
 // and the operator's GITOPS_RECONCILE_ENABLED reconcile loop: one periodic sweep that
 // folds over every registered intent and drives it toward agreement. A sweep is a full
 // pass over every org's poll syncs, each reconciled through the SAME runOne core the

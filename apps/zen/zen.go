@@ -112,7 +112,7 @@ func Mount(a cloud.Router, deps cloud.Deps) error {
 // where members are strangers to each other and each holds their own account:
 // zen then gated a pool a member cannot spend from while the ai path debited the
 // member's own wallet — the third recurrence of one bug, catalogued in
-// clients/principal/wallet.go. A brand-new $0 signup read the signup org's funded
+// apps/principal/wallet.go. A brand-new $0 signup read the signup org's funded
 // pool and served for free; a member who had bought credit was refused because the
 // purchase had landed in that same pool.
 //
