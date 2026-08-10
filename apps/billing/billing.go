@@ -65,7 +65,7 @@ import (
 // KMS-sourced secret already on the cloud env — never hard-coded) and scopes every
 // read to ONE org via the trusted X-Org-Id S2S selector, which commerce's EdgeAuth
 // honors only after it verifies the bearer is the service token. It is deliberately
-// separate from the admin commerceClient (clients/admin/commerce.go): admin decodes
+// separate from the admin commerceClient (apps/admin/commerce/commerce.go): admin decodes
 // typed god-view rollups (MRR/COGS/credits), whereas this forwards the customer's
 // OWN raw ledger + status verbatim.
 type commerceProxy struct {
