@@ -28,11 +28,11 @@ require (
 	github.com/hanzoai/plans v1.4.14
 	github.com/hanzoai/pricing v1.4.10
 	github.com/hanzoai/pubsub v1.4.5
-	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.5.2
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
+	github.com/hanzos3/go v1.0.1
 	github.com/luxfi/log v1.6.0
 	github.com/luxfi/node v1.36.15
 	github.com/luxfi/trace v1.4.0
@@ -85,8 +85,9 @@ require (
 	github.com/hanzoai/sqlcipher v0.1.1 // indirect
 	github.com/hanzokv/go/extra/kvcmd/v9 v9.22.0 // indirect
 	github.com/hanzokv/go/extra/kvotel/v9 v9.22.0 // indirect
-	github.com/hanzos3/go v1.0.0 // indirect
+	github.com/hanzos3/crc64nvme v1.1.2 // indirect
 	github.com/hanzos3/go-sdk v1.0.2 // indirect
+	github.com/hanzos3/md5-simd v1.1.3 // indirect
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/linode/linodego v1.67.0 // indirect
