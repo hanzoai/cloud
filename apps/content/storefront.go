@@ -236,7 +236,7 @@ func (s commerceStorefront) currentStore(ctx context.Context, org, token string)
 
 // do performs one S2S commerce request: admin bearer + X-Org-Id (commerce trusts the
 // org header ONLY behind the service token), over the self-routing commerce transport.
-// Mirrors clients/account/topup.go commerceDo — the ONE way cloud reaches commerce.
+// apps/account/topup.go carried the same commerceDo until 0b0f2599a deleted it.
 func (s commerceStorefront) do(ctx context.Context, method, path, org, token string, body []byte) (int, []byte, error) {
 	var rdr io.Reader
 	if body != nil {

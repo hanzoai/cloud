@@ -3,7 +3,7 @@
 // through the auto engine) into normalized {title, body, external_id, url, timestamp}
 // documents for KB ingestion. It has NO cloud dependency, so the Notion parsing —
 // where the real per-provider complexity lives — is unit-testable in isolation.
-// clients/kb/sync_piece.go wires this into the framework.Ingest path.
+// apps/knowledge/sync_piece.go wires this into the framework.Ingest path.
 package notion
 
 import (
