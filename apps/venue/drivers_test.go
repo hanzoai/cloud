@@ -93,8 +93,8 @@ func TestAWS_KeylessRoleAssumptionDiscoversAndFolds(t *testing.T) {
 		t.Fatalf("response leaked the external id: %s", res.Body)
 	}
 	var out struct {
-		Account  cloudAccountView     `json:"account"`
-		Clusters []clusterResult `json:"clusters"`
+		Account  cloudAccountView `json:"account"`
+		Clusters []clusterResult  `json:"clusters"`
 	}
 	_ = json.Unmarshal(res.Body, &out)
 	if out.Account.ExternalID != "123456789012" {
@@ -193,8 +193,8 @@ func TestGCP_KeylessDiscoversAndFolds(t *testing.T) {
 		t.Fatalf("gcp link want 201, got %d (%s)", res.Code, res.Body)
 	}
 	var out struct {
-		Account  cloudAccountView     `json:"account"`
-		Clusters []clusterResult `json:"clusters"`
+		Account  cloudAccountView `json:"account"`
+		Clusters []clusterResult  `json:"clusters"`
 	}
 	_ = json.Unmarshal(res.Body, &out)
 	if out.Account.ExternalID != "my-project" {
@@ -285,8 +285,8 @@ func TestAzure_ServicePrincipalDiscoversAndFolds(t *testing.T) {
 		t.Fatalf("response leaked the client secret: %s", res.Body)
 	}
 	var out struct {
-		Account  cloudAccountView     `json:"account"`
-		Clusters []clusterResult `json:"clusters"`
+		Account  cloudAccountView `json:"account"`
+		Clusters []clusterResult  `json:"clusters"`
 	}
 	_ = json.Unmarshal(res.Body, &out)
 	if out.Account.ExternalID != "tenant-1" {

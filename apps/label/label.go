@@ -140,8 +140,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // state without either — the same split apps/risk and apps/ml make for the same
 // reason.
 func build(deps cloud.Deps) (*cloud.Service[*state], error) {
-	if deps.Logger == nil {
-		return nil, fmt.Errorf("label.Mount: nil deps.Logger")
+	if luxlog.Default() == nil {
+		return nil, fmt.Errorf("label.Mount: nil luxlog.Default()")
 	}
 	if deps.DataDir == "" {
 		return nil, fmt.Errorf("label.Mount: empty deps.DataDir, so no record could be kept")

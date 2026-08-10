@@ -81,7 +81,7 @@ func mountFleet(t *testing.T, rt *stubRuntime) *zip.App {
 	rt.start(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	compose(app)
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
+	deps := cloud.Deps{DataDir: t.TempDir()}
 	if err := visor.Mount(app, deps); err != nil { // Wire order: visor first — the shadowing mount
 		t.Fatalf("visor.Mount: %v", err)
 	}

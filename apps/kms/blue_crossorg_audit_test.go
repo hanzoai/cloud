@@ -31,6 +31,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	luxlog "github.com/luxfi/log"
 	"strings"
 	"testing"
 
@@ -64,7 +65,7 @@ func auditedWorld(t *testing.T) (*zip.App, *audit.Recorder, *rsa.PrivateKey, str
 	t.Cleanup(func() { _ = rec.Close() })
 
 	deps := cloud.BuildDeps(cfg)
-	app := zip.New(zip.Config{Logger: deps.Logger})
+	app := zip.New(zip.Config{Logger: luxlog.Default()})
 	app.Use(middleware.Recover())
 	app.Use(cloud.IdentityMiddleware(cfg))
 	app.Use(cloud.AuditTrail(rec))

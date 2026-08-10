@@ -17,10 +17,10 @@ import (
 // `domain openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "domain",
+		Name:       "domain",
 		OwnsHealth: true,
-		Price: cloud.Free,
-		Mount: domain.Mount,
+		Price:      cloud.Free,
+		Mount:      domain.Mount,
 	}}, []string{"domain"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

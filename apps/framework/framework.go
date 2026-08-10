@@ -39,6 +39,8 @@ import (
 	"strings"
 	"time"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -61,13 +63,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("framework.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("framework.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("framework.Mount: empty DataDir")
 	}
-	log := deps.Logger.New("subsystem", "framework")
+	log := luxlog.Default().New("subsystem", "framework")
 
 	// Encryption at rest is CLOUD's storage policy, under a KMS-held master key. The
 	// engine takes an opener rather than importing it, so the same engine runs

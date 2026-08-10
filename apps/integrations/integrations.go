@@ -108,8 +108,8 @@ type ExchangeResult struct {
 	// was already an admin of this org, so they need no second proof to talk to
 	// the bot they just installed.
 	Installer string
-	Scopes       []string          // granted scopes
-	ExpiresAt    int64             // access-token expiry, unix seconds; 0 = non-expiring/unknown. Set by user-plane device/refresh providers; the org plane ignores it.
+	Scopes    []string // granted scopes
+	ExpiresAt int64    // access-token expiry, unix seconds; 0 = non-expiring/unknown. Set by user-plane device/refresh providers; the org plane ignores it.
 }
 
 // apiKeyKind marks a Provider whose credential is supplied by the customer and
@@ -429,9 +429,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
 		return fmt.Errorf("integrations.Mount: router does not expose the typed-op registry")
-	}
-	if deps.Logger == nil {
-		return fmt.Errorf("integrations.Mount: nil deps.Logger")
 	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("integrations.Mount: empty DataDir")

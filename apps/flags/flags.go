@@ -458,9 +458,6 @@ type state struct {
 // degrades every switch to env/default and the HTTP surface reports it — never an
 // error at boot.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if deps.Logger == nil {
-		return fmt.Errorf("flags.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("flags.Mount: empty deps.DataDir")
 	}

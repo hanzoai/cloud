@@ -70,7 +70,7 @@ func NewResourceMeter(deps Deps, provider string) *ResourceMeter {
 		m:        deps.Metering,
 		provider: provider,
 		env:      deps.Env,
-		log:      deps.Logger,
+		log:      luxlog.Default(),
 	}
 }
 

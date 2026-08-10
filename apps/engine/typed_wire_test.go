@@ -168,7 +168,7 @@ func harness(t *testing.T) (*zip.App, *fakeEngine) {
 
 	app := zip.New(zip.Config{Logger: luxlog.New("enginetest"), DisableStartupMessage: true})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("enginetest"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app, f
@@ -445,7 +445,7 @@ func TestStatusIsAnHonestLens(t *testing.T) {
 	down := zip.New(zip.Config{Logger: luxlog.New("enginetest"), DisableStartupMessage: true})
 	compose(down)
 	t.Setenv("ENGINE_UPSTREAM", "http://127.0.0.1:1") // nothing listens
-	if err := Mount(down, cloud.Deps{Logger: luxlog.New("enginetest"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(down, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	status, body = do(t, down, http.MethodGet, "/v1/engine/status", "u1", "acme", "")

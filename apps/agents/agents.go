@@ -48,6 +48,8 @@ import (
 	"strings"
 	"time"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -302,9 +304,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("agents.Mount: nil app")
 	}
-	log := deps.Logger
+	log := luxlog.Default()
 	if log == nil {
-		return fmt.Errorf("agents.Mount: nil deps.Logger")
+		return fmt.Errorf("agents.Mount: nil luxlog.Default()")
 	}
 	log = log.New("subsystem", "agents")
 

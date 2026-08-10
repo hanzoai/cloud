@@ -1,4 +1,5 @@
 package cloud
+
 import (
 	"os"
 	"path/filepath"
@@ -6,6 +7,7 @@ import (
 	"strings"
 	"testing"
 )
+
 // ONE ADDRESS, ONE POLICY, ONE ENV READ.
 //
 // IAMBaseURL's own doc has claimed "there is exactly one now" since it was
@@ -51,6 +53,7 @@ func TestIAMAddressHasOneReader(t *testing.T) {
 			"reader is a second policy, and the last three grew three different fallbacks", offenders)
 	}
 }
+
 // The two questions are DIFFERENT, and conflating them is the bug: a deployment
 // with only a public issuer resolves a real address while naming no external IAM.
 func TestIAMExternalIsNotTheSameQuestionAsTheAddress(t *testing.T) {

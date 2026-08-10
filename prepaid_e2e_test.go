@@ -48,7 +48,6 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
-	luxlog "github.com/luxfi/log"
 	"github.com/valyala/fasthttp"
 	"github.com/zap-proto/zip"
 )
@@ -426,7 +425,6 @@ func resourceMeterOverTheWire(t *testing.T, p payer) {
 
 	bill := NewResourceMeter(Deps{
 		Metering: mustClient(t, forbiddenCommerce(t), false),
-		Logger:   luxlog.New("test"),
 	}, "e2e")
 	if !bill.Enabled() {
 		t.Fatal("the meter reports no ledger in this process — it would ask a peer, and " +
@@ -598,7 +596,6 @@ func TestMigratedSurfaceDebitsThePerson(t *testing.T) {
 	fee := ResourceFeeCents("CLOUD_E2E_FEE_CENTS", kind)
 	bill := NewResourceMeter(Deps{
 		Metering: mustClient(t, forbiddenCommerce(t), false),
-		Logger:   luxlog.New("test"),
 	}, "e2e")
 
 	var served atomic.Int64

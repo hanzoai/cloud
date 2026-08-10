@@ -64,9 +64,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("auditlog.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("auditlog.Mount: nil deps.Logger")
-	}
 	// The typed-op registry lives on the App: it is what makes the read a document
 	// operation, an MCP tool, a CLI command and an SDK method rather than only a
 	// route. A Router that cannot reach it must fail the mount rather than serve a

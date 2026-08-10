@@ -32,6 +32,8 @@ import (
 	"os"
 	"path/filepath"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
@@ -167,7 +169,7 @@ func describe(specs []Plugin, dir string) error {
 	defer done()
 
 	deps := BuildDeps(cfg)
-	app := zip.New(zip.Config{Logger: deps.Logger, DisableStartupMessage: true})
+	app := zip.New(zip.Config{Logger: luxlog.Default(), DisableStartupMessage: true})
 	if err := MountAll(app, specs, cfg, deps); err != nil {
 		return err
 	}

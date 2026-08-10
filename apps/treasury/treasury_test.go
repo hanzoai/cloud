@@ -32,7 +32,7 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state]) {
 	t.Cleanup(func() { _ = store.Close() })
 	log := luxlog.New("test")
 	s := &cloud.Service[state]{
-		Base: cloud.NewBase(cloud.Deps{Logger: log}, "treasury"),
+		Base: cloud.NewBase(cloud.Deps{}, "treasury"),
 		State: state{
 			store:  store,
 			record: ledger.New(store),

@@ -319,9 +319,6 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	if app == nil {
 		return fmt.Errorf("meet.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("meet.Mount: nil deps.Logger")
-	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "meet"), State: st}
 
 	// The path suffix is the CALLER's, not ours. The office client POSTs

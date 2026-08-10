@@ -12,7 +12,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -33,7 +32,7 @@ func mountApp(t *testing.T) (*zip.App, *edge.Store) {
 	}
 	app := zip.New(zip.Config{})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), GatewayPolicy: st}); err != nil {
+	if err := Mount(app, cloud.Deps{GatewayPolicy: st}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
@@ -322,7 +321,7 @@ func TestSuperAdmin_ReadsTheLaneWithNoTenant(t *testing.T) {
 	tr := edge.NewTraffic()
 	app := zip.New(zip.Config{})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), GatewayPolicy: st, Traffic: tr}); err != nil {
+	if err := Mount(app, cloud.Deps{GatewayPolicy: st, Traffic: tr}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 
@@ -372,7 +371,7 @@ func TestOrgAdmin_CannotReadTheLaneWithNoTenant(t *testing.T) {
 	tr := edge.NewTraffic()
 	app := zip.New(zip.Config{})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), GatewayPolicy: st, Traffic: tr}); err != nil {
+	if err := Mount(app, cloud.Deps{GatewayPolicy: st, Traffic: tr}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	tr.Observe(edge.Signal{Org: "", Presented: "junk", IP: "203.0.113.9", Path: "/v1/models", Class: edge.CredAnonymous}, time.Now())

@@ -61,9 +61,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("content.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("content.Mount: nil deps.Logger")
-	}
 	b := cloud.NewBase(deps, "content")
 
 	// This is the ONE place the edges are selected. The generator is REAL (newGenerator:

@@ -328,7 +328,7 @@ func TestClaimingTheReservedOrgWithoutAPrincipalIsRefused(t *testing.T) {
 // org's store to be resumed at all.
 func TestResumeCannotCrossTheTrustBoundary(t *testing.T) {
 	away(t)
-	s, err := New(cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()})
+	s, err := New(cloud.Deps{DataDir: t.TempDir()})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -510,7 +510,7 @@ func door(t *testing.T) *zip.App {
 	away(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app

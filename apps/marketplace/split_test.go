@@ -32,6 +32,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net"
 	"net/http"
@@ -91,7 +92,7 @@ func runChild(role string) int {
 	dir := os.Getenv("CLOUD_SPLIT_DIR")
 	app := zip.New(zip.Config{Logger: log})
 	app.Use(cloud.Bridge())
-	deps := cloud.Deps{Logger: log, DataDir: dir}
+	deps := cloud.Deps{DataDir: dir}
 	extra := ""
 
 	switch role {
@@ -123,7 +124,7 @@ func runChild(role string) int {
 		// dependencies, which is stated at its definition — so this process serves
 		// the real finance_record / finance_credit handlers against the real ledger
 		// without also standing up a payments provider it will never be asked for.
-		_ = commerce.Mount(app, cloud.Deps{Logger: log, DataDir: dir, Metering: meter})
+		_ = commerce.Mount(app, cloud.Deps{DataDir: dir, Metering: meter})
 
 	case "marketplace":
 		if err := Mount(app, deps); err != nil {
@@ -254,7 +255,7 @@ func splitFleet(t *testing.T) *fleet {
 	if testing.Short() {
 		t.Skip("spawns real child processes")
 	}
-	run := t.TempDir()
+	run := planetest.Dir(t)
 	t.Setenv("ZIP_RUNTIME_DIR", run)
 
 	master := make([]byte, 32)
@@ -286,7 +287,7 @@ func splitFleet(t *testing.T) *fleet {
 	log := luxlog.New("tools")
 	f.app = zip.New(zip.Config{Logger: log})
 	f.app.Use(cloud.Bridge())
-	if err := tools.Mount(f.app, cloud.Deps{Logger: log, DataDir: t.TempDir()}); err != nil {
+	if err := tools.Mount(f.app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("tools.Mount: %v", err)
 	}
 	tools.Default().Register(&fakeProvider{tools: []tools.Tool{
@@ -312,7 +313,7 @@ func splitFleet(t *testing.T) *fleet {
 // reported. A child that dies before READY fails the test with its own stderr.
 func (f *fleet) start(role string, env ...string) string {
 	f.t.Helper()
-	dir := f.t.TempDir()
+	dir := planetest.Dir(f.t)
 	cmd := exec.Command(os.Args[0], "-test.run=TestMain")
 	cmd.Env = append(os.Environ(), append([]string{roleEnv + "=" + role, "CLOUD_SPLIT_DIR=" + dir}, env...)...)
 	stdout, err := cmd.StdoutPipe()

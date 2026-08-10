@@ -173,9 +173,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("translate.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("translate.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("translate.Mount: empty deps.DataDir")
 	}

@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	luxlog "github.com/luxfi/log"
 )
 
 // plant builds the service the way Mount does, minus the routes and minus the
@@ -25,7 +24,7 @@ import (
 // driven without a network and without an HTTP surface.
 func plant(t *testing.T, get download) *cloud.Service[state] {
 	t.Helper()
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Brand: "hanzo"}
+	deps := cloud.Deps{DataDir: t.TempDir(), Brand: "hanzo"}
 	base := cloud.NewBase(deps, subsystem)
 	own := cloud.NewOrgStore[*overrides](base, subsystem, openOverrides)
 	s := &cloud.Service[state]{

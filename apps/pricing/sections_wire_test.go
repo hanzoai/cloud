@@ -66,7 +66,7 @@ var sectionRoutes = map[string]string{
 func TestSectionsAreByteIdenticalToTheBundle(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
@@ -130,7 +130,7 @@ func TestSectionsAreByteIdenticalToTheBundle(t *testing.T) {
 func TestSectionsDegradeWithTheBundlesStatus(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })

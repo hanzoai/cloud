@@ -109,7 +109,7 @@ func mountEnablement(t *testing.T) func(method, path, body string, hdr map[strin
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	deps := cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo", DataDir: t.TempDir()}
+	deps := cloud.Deps{Brand: "hanzo", DataDir: t.TempDir()}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

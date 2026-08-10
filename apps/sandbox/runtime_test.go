@@ -152,7 +152,7 @@ func TestRuntimeForNeverPutsAVolumeOnARuntimeThatCannotHoldIt(t *testing.T) {
 // to prove it, which is the point: the refusal happens before the first call to
 // one.
 func TestLeaseRefusesAForcedRuntimeBeforeItBuildsAnything(t *testing.T) {
-	s, err := New(cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()})
+	s, err := New(cloud.Deps{DataDir: t.TempDir()})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestLeaseRefusesAForcedRuntimeBeforeItBuildsAnything(t *testing.T) {
 func TestTheDoorRefusesARuntimeAClientCraftedForItself(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	s, err := New(cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()})
+	s, err := New(cloud.Deps{DataDir: t.TempDir()})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestTheDoorRefusesARuntimeAClientCraftedForItself(t *testing.T) {
 // cluster, so the row it leaves behind on a 503 carries exactly the value the
 // pod spec would have been built from.
 func TestASandboxReportsTheRuntimeItGotNotTheOneItAskedFor(t *testing.T) {
-	s, err := New(cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()})
+	s, err := New(cloud.Deps{DataDir: t.TempDir()})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

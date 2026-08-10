@@ -9,7 +9,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-func testDeps() cloud.Deps { return cloud.Deps{Logger: luxlog.New("test")} }
+func testDeps() cloud.Deps { return cloud.Deps{} }
 
 // compose gives the test app what every real composer gives its program: the
 // fused host installs cloud.Bridge at its root and a plugin program's

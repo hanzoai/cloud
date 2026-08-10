@@ -180,8 +180,8 @@ func TestFanOutErrorsIsThePlanesRoute(t *testing.T) {
 	defer done()
 
 	fanOut("acme", []CaptureEvent{
-		{Type: "ERROR", Event: "case-folded"},                          // routed error: type folds lower
-		{Error: &Exception{Message: "typeless"}},                       // routed error: typeless + exception
+		{Type: "ERROR", Event: "case-folded"},    // routed error: type folds lower
+		{Error: &Exception{Message: "typeless"}}, // routed error: typeless + exception
 		{Type: "event", Event: "decorated", Properties: map[string]any{ // routed act: the plane's word wins
 			"$exception": map[string]any{"message": "not an error fact"},
 		}},

@@ -126,8 +126,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return errors.New("bot.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return errors.New("bot.Mount: nil deps.Logger")
+	if luxlog.Default() == nil {
+		return errors.New("bot.Mount: nil luxlog.Default()")
 	}
 	base := cloud.NewBase(deps, "bot")
 

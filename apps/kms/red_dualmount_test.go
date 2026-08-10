@@ -11,6 +11,7 @@ package kms_test
 
 import (
 	"encoding/json"
+	luxlog "github.com/luxfi/log"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -32,7 +33,7 @@ func newDualApp(t *testing.T, mk string) *zip.App {
 		KMSMasterKeyRef: mk,
 	}
 	deps := cloud.BuildDeps(cfg)
-	app := zip.New(zip.Config{Logger: deps.Logger})
+	app := zip.New(zip.Config{Logger: luxlog.Default()})
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	specs := []cloud.Plugin{

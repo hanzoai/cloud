@@ -37,7 +37,7 @@ func testStore(t *testing.T) *Store {
 func testService(t *testing.T) *cloud.Service[state] {
 	t.Helper()
 	return &cloud.Service[state]{
-		Base:  cloud.NewBase(cloud.Deps{Logger: luxlog.NewNoOpLogger()}, "ingress"),
+		Base:  cloud.NewBase(cloud.Deps{}, "ingress"),
 		State: state{store: testStore(t), engine: newEngine(luxlog.NewNoOpLogger())},
 	}
 }

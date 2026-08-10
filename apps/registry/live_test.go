@@ -39,7 +39,7 @@ func liveApp(t *testing.T) *zip.App {
 	t.Setenv("REGISTRY_CLIENT_SECRET", os.Getenv("REGISTRY_E2E_SECRET"))
 	app := zip.New(zip.Config{Logger: luxlog.New("registrylive"), DisableStartupMessage: true})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("registrylive"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app
