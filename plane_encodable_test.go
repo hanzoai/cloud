@@ -150,7 +150,7 @@ func TestThePlaneCannotNameTheMetersUsage(t *testing.T) {
 }
 
 // meterUsage is the type no plane value may reach. See walkEncodable.
-var meterUsage = reflect.TypeOf(metering.Usage{})
+var meterUsage = reflect.TypeFor[metering.Usage]()
 
 // walkEncodable asserts every field a plane type reaches is a kind zapenc carries, and
 // that none of them reaches the METER's usage value.

@@ -210,7 +210,7 @@ func TestAnAbsentCurrencyStillBills(t *testing.T) {
 // no longer exists. There is no channel to police, no site to review, and no way to
 // re-open one without deleting this test.
 func TestTheHostUsageEventCarriesNoRef(t *testing.T) {
-	typ := reflect.TypeOf(cloud.UsageEvent{})
+	typ := reflect.TypeFor[cloud.UsageEvent]()
 	if _, found := typ.FieldByName("Ref"); found {
 		t.Error("cloud.UsageEvent has a Ref again — the ai module's only candidate for it is " +
 			"the message row's id, which is two fields of the client's own request body")

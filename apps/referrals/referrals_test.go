@@ -401,7 +401,7 @@ func TestLedgerReceivesZeroDeposits(t *testing.T) {
 // reviving the mint cannot be a one-line call — it has to start by re-declaring the
 // capability here, in front of a test that says no.
 func TestCommerceSeamIsReadOnly(t *testing.T) {
-	typ := reflect.TypeOf((*commerce)(nil)).Elem()
+	typ := reflect.TypeFor[commerce]()
 	banned := []string{"deposit", "credit", "grant", "mint", "transfer", "refund", "charge", "payout"}
 	for i := 0; i < typ.NumMethod(); i++ {
 		name := strings.ToLower(typ.Method(i).Name)
