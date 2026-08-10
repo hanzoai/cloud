@@ -587,10 +587,7 @@ func gbDayCents(gb int) int64 {
 		return 0
 	}
 	monthly := int64(gb) * int64(atoiEnv(storagePriceEnv, defaultStoragePriceCents))
-	d := (monthly + 29) / 30
-	if d < 1 {
-		d = 1
-	}
+	d := max((monthly+29)/30, 1)
 	return d
 }
 
@@ -888,10 +885,7 @@ func (o *k8sOrchestrator) waitCanCreateDatastores(ctx context.Context, ns string
 			}
 			return fmt.Errorf("%w: %s not ready", errTenantProvisioning, ns)
 		}
-		sleep := backoff
-		if sleep > tenantRBACPollMax {
-			sleep = tenantRBACPollMax
-		}
+		sleep := min(backoff, tenantRBACPollMax)
 		if sleep > remaining {
 			sleep = remaining
 		}

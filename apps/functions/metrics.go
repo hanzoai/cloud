@@ -85,10 +85,7 @@ func buildMetrics(invs []Invocation, spec metricsRange, now time.Time) usage {
 		default:
 			st.Error++
 		}
-		idx := int(t.Sub(start) / bucketDur)
-		if idx < 0 {
-			idx = 0
-		}
+		idx := max(int(t.Sub(start)/bucketDur), 0)
 		if idx >= spec.buckets {
 			idx = spec.buckets - 1
 		}

@@ -340,10 +340,7 @@ func computeRetention(acts []core.CustActivity, now time.Time, maxCohorts int) r
 	maxPeriods := 0
 	for _, cohort := range cohorts {
 		members := byCohort[cohort]
-		periods := monthsBetween(cohort, nowMonth) + 1
-		if periods < 1 {
-			periods = 1
-		}
+		periods := max(monthsBetween(cohort, nowMonth)+1, 1)
 		row := retentionCohort{Cohort: cohort, Size: len(members), Values: make([]float64, periods)}
 		for k := 0; k < periods; k++ {
 			month := addMonths(cohort, k)

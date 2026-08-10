@@ -330,10 +330,3 @@ func TestClonePushRoundTrip(t *testing.T) {
 	fmt.Printf("round-trip ok: pushed %s, re-cloned HEAD %s, metered %d bytes\n",
 		commitHash, head.Hash(), usage.TotalBytes)
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

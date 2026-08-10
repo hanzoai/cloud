@@ -145,10 +145,7 @@ func (o ops) run(ctx context.Context, body *runReq) (*runView, error) {
 	minScale := s.State.k8s.limits.clampReplicas(body.MinScale)
 	maxScale := 0
 	if body.MaxScale > 0 {
-		maxScale = s.State.k8s.limits.clampReplicas(body.MaxScale)
-		if maxScale < minScale {
-			maxScale = minScale
-		}
+		maxScale = max(s.State.k8s.limits.clampReplicas(body.MaxScale), minScale)
 	}
 
 	// Per-org prepaid gate BEFORE any cluster write: the run's OWN org pays (the org

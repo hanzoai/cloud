@@ -477,10 +477,7 @@ func windowChunks(p, content, lang string) []Chunk {
 	const win = 50
 	var out []Chunk
 	for start := 0; start < len(lines); start += win {
-		end := start + win
-		if end > len(lines) {
-			end = len(lines)
-		}
+		end := min(start+win, len(lines))
 		text := strings.TrimSpace(strings.Join(lines[start:end], "\n"))
 		if text == "" {
 			continue
