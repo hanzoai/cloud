@@ -245,7 +245,7 @@ func TestPolicy_ArmingIsAnAdminActAndTuningIsNot(t *testing.T) {
 //
 // It calls as an org ADMIN because the regimes stated through it arm the model, and
 // arming is an admin act ([admitArming]). Tuning alone needs no admin, and
-// [TestPolicy_TuningTheAppetiteIsSelfService] is what holds that half open.
+// [TestPolicy_ArmingIsAnAdminActAndTuningIsNot] is what holds that half open.
 func putRegime(t *testing.T, app *zip.App, body string) riskPolicyOut {
 	t.Helper()
 	code, raw := reqAdmin(t, app, http.MethodPut, "/v1/risk/policy", orgA, "u_"+orgA, body)
