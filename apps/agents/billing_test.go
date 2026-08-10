@@ -33,7 +33,7 @@ type billServer struct {
 	available int64
 
 	peer     *planetest.Commerce
-	balances int32
+	balances atomic.Int32
 }
 
 func (b *billServer) start(t *testing.T) string {
@@ -41,7 +41,7 @@ func (b *billServer) start(t *testing.T) string {
 	b.peer = planetest.Serve(t)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&b.balances, 1)
+		b.balances.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{"available": b.available})
 	})
 	srv := httptest.NewServer(mux)

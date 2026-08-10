@@ -287,8 +287,7 @@ func TestStreamHonorsContextCancel(t *testing.T) {
 // event must still forward. A watch event is a system boundary and the read
 // plane installs no panic recovery — a crash here would take down the process.
 func TestForwardWatchSkipsTypedNilObjectNotFatal(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	fw := watch.NewFake()
 	events := make(chan streamEvent, 4)
 	go forwardWatch(ctx, superScope(), "hanzo", fw, events)

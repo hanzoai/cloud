@@ -53,7 +53,7 @@ type Sandboxes struct {
 	mu   sync.Mutex
 	pods map[string]*Pod
 	runs [][]string
-	n    int32
+	n    atomic.Int32
 
 	// Run is the program every leased sandbox executes. Assign it before the call
 	// under test; it is read under the peer's own lock.
@@ -107,7 +107,7 @@ func (s *Sandboxes) Live() int {
 // Ran counts PROGRAMS, not calls. Every test that asks "did compute happen" means
 // this: a lease nothing ran in is not compute, and the artifact sweep that follows a
 // run is bookkeeping — counting either would double the answer.
-func (s *Sandboxes) Ran() int32 { return atomic.LoadInt32(&s.n) }
+func (s *Sandboxes) Ran() int32 { return s.n.Load() }
 
 // Lines is every shell line the peer was asked to run, in order, for a test that
 // asserts on what was SENT rather than only on what came back.
@@ -215,7 +215,7 @@ func (s *Sandboxes) run(ctx context.Context, in *plane.RunIn) (*plane.Ran, error
 	}
 	switch {
 	case isProgram(line):
-		atomic.AddInt32(&s.n, 1)
+		s.n.Add(1)
 		mark := time.Now()
 		s.mu.Lock()
 		p.marks["run"] = mark

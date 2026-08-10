@@ -74,9 +74,9 @@ func TestDeliverLoopBounded(t *testing.T) {
 	newApp(t)
 	origStarter, origReady := runStarter, engineReady
 	engineReady = func() bool { return true }
-	var starts int32
+	var starts atomic.Int32
 	runStarter = func(ctx context.Context, in FlowRunInput) (tasksclient.WorkflowRun, error) {
-		atomic.AddInt32(&starts, 1)
+		starts.Add(1)
 		// The run's action re-enters Deliver at depth+1 (the loop, propagating causation).
 		_, _ = Deliver(ctx, in.Owner, TriggerEvent{Source: "loop", Name: "tick", DedupeKey: strconv.Itoa(in.Depth + 1), Depth: in.Depth + 1})
 		return nil, nil
@@ -92,7 +92,7 @@ func TestDeliverLoopBounded(t *testing.T) {
 		t.Fatalf("first hop want 1 start, got %d", n)
 	}
 	// Starts happen at depths 0..maxCausationDepth-1, then the guard stops the cycle.
-	if got := atomic.LoadInt32(&starts); got == 0 || int(got) > maxCausationDepth {
+	if got := starts.Load(); got == 0 || int(got) > maxCausationDepth {
 		t.Fatalf("in-platform loop not bounded by causation depth: %d starts (max %d)", got, maxCausationDepth)
 	}
 }

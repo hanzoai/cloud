@@ -129,9 +129,9 @@ func TestDeliverHeadersAndSignature(t *testing.T) {
 // TestDeliverRetryOn500 proves a 500 then 200 delivers after exactly 2 attempts.
 func TestDeliverRetryOn500(t *testing.T) {
 	d := newTestDispatcher(t)
-	var calls int32
+	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if atomic.AddInt32(&calls, 1) == 1 {
+		if calls.Add(1) == 1 {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -140,7 +140,7 @@ func TestDeliverRetryOn500(t *testing.T) {
 	defer srv.Close()
 
 	d.deliver(context.Background(), deliveryJob{url: srv.URL, secret: "s", subject: "commerce.order.created", delivery: newUUID(), body: []byte("{}")})
-	if got := atomic.LoadInt32(&calls); got != 2 {
+	if got := calls.Load(); got != 2 {
 		t.Fatalf("want 2 attempts (500 then 200), got %d", got)
 	}
 }
@@ -148,15 +148,15 @@ func TestDeliverRetryOn500(t *testing.T) {
 // TestDeliverPermanentOn4xx proves a 4xx (not 429) is permanent — NO retry.
 func TestDeliverPermanentOn4xx(t *testing.T) {
 	d := newTestDispatcher(t)
-	var calls int32
+	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 		w.WriteHeader(http.StatusBadRequest)
 	}))
 	defer srv.Close()
 
 	d.deliver(context.Background(), deliveryJob{url: srv.URL, secret: "s", subject: "commerce.order.created", delivery: newUUID(), body: []byte("{}")})
-	if got := atomic.LoadInt32(&calls); got != 1 {
+	if got := calls.Load(); got != 1 {
 		t.Fatalf("4xx must be permanent (1 attempt), got %d", got)
 	}
 }
@@ -164,15 +164,15 @@ func TestDeliverPermanentOn4xx(t *testing.T) {
 // TestDeliverExhaustsRetries proves a persistent 500 stops after maxAttempts.
 func TestDeliverExhaustsRetries(t *testing.T) {
 	d := newTestDispatcher(t)
-	var calls int32
+	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&calls, 1)
+		calls.Add(1)
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer srv.Close()
 
 	d.deliver(context.Background(), deliveryJob{url: srv.URL, secret: "s", subject: "commerce.order.created", delivery: newUUID(), body: []byte("{}")})
-	if got := atomic.LoadInt32(&calls); got != maxAttempts {
+	if got := calls.Load(); got != maxAttempts {
 		t.Fatalf("want %d attempts on persistent 5xx, got %d", maxAttempts, got)
 	}
 }
@@ -343,9 +343,9 @@ func TestBusEndToEnd(t *testing.T) {
 // 200), newest first, both sharing the group's delivery id.
 func TestDeliverRecordsPerAttempt(t *testing.T) {
 	d := newTestDispatcher(t)
-	var calls int32
+	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if atomic.AddInt32(&calls, 1) == 1 {
+		if calls.Add(1) == 1 {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

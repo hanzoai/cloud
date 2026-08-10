@@ -29,13 +29,13 @@ import (
 func TestSetAppSelfDispatch(t *testing.T) {
 	t.Cleanup(func() { SetHandler(nil) })
 
-	var depth int32
+	var depth atomic.Int32
 	app := zip.New(zip.Config{})
 
 	// A cloud-style handler at /v1/billing/balance that proxies to commerce at the SAME
 	// path — exactly clients/billing.balance → proxy(s, c, "/v1/billing/balance").
 	app.Get("/v1/billing/balance", func(c *zip.Ctx) error {
-		d := atomic.AddInt32(&depth, 1)
+		d := depth.Add(1)
 		// The sign-in gate: no validated principal ⇒ refuse. On the re-entrant hop
 		// there is none, which is what terminates the recursion.
 		if d > 1 {
@@ -73,7 +73,7 @@ func TestSetAppSelfDispatch(t *testing.T) {
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
-	got := atomic.LoadInt32(&depth)
+	got := depth.Load()
 	t.Logf("handler entered %d times; outer status=%d body=%s", got, resp.StatusCode, body)
 
 	if got != 2 {
