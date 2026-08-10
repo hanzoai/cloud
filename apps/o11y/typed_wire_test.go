@@ -107,6 +107,8 @@ var untypedByDesign = map[string]string{
 	"POST /v1/o11y/export_raw_data": upstreamStreamReason + " — a chunked CSV/JSONL attachment with an " +
 		"X-Response-Complete trailer.",
 
+	"GET /v1/o11y/login": signinOutcomeReason,
+
 	"GET /v1/o11y/complete/google": upstreamRedirectReason,
 	"GET /v1/o11y/complete/oidc":   upstreamRedirectReason,
 	"POST /v1/o11y/complete/saml":  upstreamRedirectReason,
@@ -127,6 +129,10 @@ const (
 	upstreamRedirectReason = "an upstream hanzoai/o11y sign-in callback that answers 303 with a Location " +
 		"header and no payload. A typed op declares a 2xx JSON contract, which would publish a schema for " +
 		"a response that does not exist and hide the header that is the entire point of the call."
+	signinOutcomeReason = "where the module's own failed sign-in callback redirects a BROWSER, " +
+		"same-origin and with the reason in the query. Nothing calls it: an SDK, a CLI or an MCP tool " +
+		"reaching this address would mean a sign-in it never started had failed. Typing it would publish " +
+		"a method for that."
 	upstreamIngestReason = "Sentry-compatible ingest received by upstream hanzoai/o11y: the body is an " +
 		"application/x-sentry-envelope frame, not JSON, and the caller authenticates with a DSN public key " +
 		"rather than a Hanzo principal. We RECEIVE this shape; we do not publish it."
