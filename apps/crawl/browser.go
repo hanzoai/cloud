@@ -111,10 +111,10 @@ func (m *markdown) UnmarshalJSON(b []byte) error {
 }
 
 type browserResult struct {
-	URL      string                 `json:"url"`
-	Success  bool                   `json:"success"`
-	Markdown markdown               `json:"markdown"`
-	Metadata map[string]interface{} `json:"metadata"`
+	URL      string         `json:"url"`
+	Success  bool           `json:"success"`
+	Markdown markdown       `json:"markdown"`
+	Metadata map[string]any `json:"metadata"`
 }
 
 // browserResponse carries results inline; the deployed service answers /crawl
@@ -226,7 +226,7 @@ func browse(ctx context.Context, raw string) (*Page, error) {
 		return nil, fmt.Errorf("crawl: browser rendered %s to nothing", raw)
 	}
 
-	meta := map[string]interface{}{}
+	meta := map[string]any{}
 	for k, v := range r.Metadata {
 		meta[k] = v
 	}

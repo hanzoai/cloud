@@ -290,7 +290,6 @@ func (d *dispatcher) consume(ctx context.Context, cl *infra.PubSubClient) error 
 
 	errc := make(chan error, len(streams))
 	for _, s := range streams {
-		s := s
 		// Contained: d.handle runs over bus payloads and delivers to customer-
 		// controlled endpoints, so it is fed by input we do not author on both
 		// sides. A panic here would kill the process rather than this consumer,

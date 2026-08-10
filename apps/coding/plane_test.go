@@ -106,7 +106,6 @@ func servePeers(t *testing.T, p *peers) {
 		}, zip.WithOperationID(plane.TrackerAgentPR))
 
 	for name, app := range map[string]*zip.App{"agents": agentsApp, "git": gitApp, "tracker": trackerApp} {
-		app := app
 		plane.Bind()
 		go func(path string) { _ = app.Listen(path) }(zip.SocketPath(name))
 		t.Cleanup(func() { _ = app.Shutdown() })
