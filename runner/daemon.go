@@ -111,7 +111,6 @@ func (d *JITDaemon) tick(ctx context.Context) {
 	sem := semaphore.NewWeighted(int64(d.cfg.Parallelism))
 	var wg sync.WaitGroup
 	for _, org := range d.cfg.Orgs {
-		org := org
 		if err := sem.Acquire(ctx, 1); err != nil {
 			return
 		}

@@ -237,7 +237,6 @@ func fanOutEvents(org string, evs []CaptureEvent) {
 		PublishEvents(org, out)
 	}()
 	for _, fn := range live {
-		fn := fn
 		go func() {
 			defer func() { _ = recover() }()
 			fn(org, out)
@@ -295,7 +294,6 @@ func fanOutErrors(org string, evs []CaptureEvent) {
 		return
 	}
 	for _, fn := range live {
-		fn := fn
 		go func() {
 			defer func() { _ = recover() }()
 			fn(org, out)
@@ -368,7 +366,6 @@ func fanOutSpans(org string, evs []CaptureEvent) {
 		return
 	}
 	for _, fn := range live {
-		fn := fn
 		go func() {
 			defer func() { _ = recover() }()
 			fn(org, out)
