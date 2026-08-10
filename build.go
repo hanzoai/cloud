@@ -67,10 +67,11 @@ func BuildDeps(cfg *Config) Deps {
 	//
 	// luxfi/log publishes a process default — Root, Default, and the bare Info/Warn/
 	// Error functions — and nothing ever set it, so every package that wanted to log
-	// had to be HANDED one. That is what Deps.Logger is: 224 reads threading a value
-	// the library was already prepared to hold. Cloud's own core did not even use
-	// that field consistently; it built `luxlog.New("cloud")` again in five separate
+	// had to be HANDED one. That is what Deps.Logger WAS: reads threading a value the
+	// library was already prepared to hold. Cloud's own core did not even use that
+	// field consistently; it built `luxlog.New("cloud")` again in five separate
 	// places, so there were two ways to obtain a logger and neither was the library's.
+	// The field is gone; this line is what replaced it.
 	//
 	// Installed HERE because this is where the process's logger is constructed, and
 	// installed FIRST because a default set late is a default that silently did not
