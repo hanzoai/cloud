@@ -72,6 +72,31 @@
 //	/login/oauth/… browser authorize surface (the /v1/iam/oauth/authorize 302 target)
 //	/.well-known/… OIDC discovery + JWKS at the issuer root (RFC 8414)
 //
+// PER-HOST BEHAVIOUR DOES NOT SURVIVE THE PLUGIN HOP, and identity is the
+// subsystem that most needs it. iam serves every brand from one instance and
+// emits each brand's OWN issuer, resolved from the request Host through
+// IAM_ISSUER_MAP — `iss` is the boundary a relying party pins, so lux.id must
+// mint https://lux.id or every Lux RP rejects the token.
+//
+// As a plugin CHILD it cannot: zip's prefix proxy forwards with
+// forward(req, resp, client, host, …) where host is the CHILD'S SOCKET ADDRESS,
+// and forward calls req.SetHost(host) (zip transport.go). So the child is asked
+// as its socket, matches no brand in the map, and falls back to IAM_ISSUER —
+// one issuer for every brand. Ctx.Host() deliberately ignores X-Forwarded-Host,
+// which is right (a client header must not steer the issuer) and is also why
+// there is no header for the host to smuggle the brand in.
+//
+// Measured, by repointing ingress at cloud and asking per Host:
+//
+//	iam    Host: lux.id -> "issuer":"https://lux.id"
+//	cloud  Host: lux.id -> "issuer":"https://hanzo.id"
+//
+// The map was present in the child's own environment; the Host was not. So this
+// is not a config gap and adding config cannot close it — the fix is zip
+// carrying the original Host across the hop, and until it does, the standalone
+// iam owns the brand hosts. Do not re-attempt the cutover on a green key set
+// alone: the key set matched exactly while this was broken.
+//
 // STAGING (security-critical): activation is the standard enable-list gate — the
 // operator adds "iam" to the cloud deployment's --enable only AFTER the v2 config
 // (init_data + KMS signing keys) is present and the fold is verified
