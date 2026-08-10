@@ -157,6 +157,17 @@ func init() {
 			"a response.\n\n"+
 			"A validated, org-scoped principal is required and the export carries that "+
 			"principal's own tenant only.")
+	openapi.Describe("/v1/o11y/login", http.MethodGet,
+		"Report why an observability sign-in did not complete",
+		"Where a failed sign-in callback lands. The module builds that redirect with a "+
+			"path and no host, so it can only be same-origin, and its assumption is that "+
+			"the console lives beside the API. Here the console is a separate host, so "+
+			"this answers as the API it belongs to rather than redirecting onward — a "+
+			"hostname baked into a shared surface is how one brand's identity ends up in "+
+			"front of another brand's customer.\n\n"+
+			"401 with the provider's own reason, carried from the query the module "+
+			"already populated. Unauthenticated by necessity: it exists precisely for the "+
+			"case where no principal was established.")
 	openapi.Describe("/v1/o11y/complete/google", http.MethodGet,
 		"Complete a Google sign-in",
 		"The callback Google redirects a user back to after they approve the sign-in. It "+
@@ -626,6 +637,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// READ/SERVE plane — specific routes before the wildcard.
 	mountScope(a)  // GET logs/metrics/status + vm/{query,query_range} + flat builder query + sessions
 	mountAlerts(a) // POST /v1/o11y/alerts/:receiver + GET /v1/o11y/alerts/last
+	// The sign-in failure door, before the wildcard like every other specific
+	// route: the module redirects a failed callback to a SAME-ORIGIN /v1/o11y/login
+	// and this deployment serves its console elsewhere, so without this the redirect
+	// lands on a 404.
+	mountSigninOutcome(a)
 	// Native human-review surface (SQLite metastore) — /v1/o11y/reviews*.
 	if err := mountAnnotationQueues(a, deps); err != nil {
 		return err
