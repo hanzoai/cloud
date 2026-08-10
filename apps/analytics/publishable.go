@@ -59,6 +59,7 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"strings"
 
@@ -164,9 +165,7 @@ func foldException(e CaptureEvent) CaptureEvent {
 		e.Type = "error"
 	}
 	props := make(map[string]any, len(e.Properties)+1)
-	for k, v := range e.Properties {
-		props[k] = v
-	}
+	maps.Copy(props, e.Properties)
 	clean := scrubException(e.Error)
 	props["$exception"] = clean
 	e.Properties = props

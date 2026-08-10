@@ -1,5 +1,7 @@
 package team
 
+import "maps"
+
 // This file is the `lookup` join support for findAll — ported VERBATIM from
 // github.com/hanzoai/team/pkg/transactor/lookup.go. The employees query is the
 // load-bearing case that makes bots-as-members render:
@@ -24,9 +26,7 @@ func (s *session) applyLookups(docs []map[string]any, lookup map[string]any) []m
 	out := make([]map[string]any, len(docs))
 	for i, d := range docs {
 		cp := make(map[string]any, len(d)+1)
-		for k, v := range d {
-			cp[k] = v
-		}
+		maps.Copy(cp, d)
 		joined := map[string]any{}
 		for field, spec := range lookup {
 			if field == "_id" {

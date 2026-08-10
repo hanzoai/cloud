@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"strings"
@@ -692,9 +693,7 @@ func Connect(ctx context.Context, org, platform string, in map[string]any) (Dest
 	}
 	cfg := Config{}
 	if found {
-		for k, v := range existing.Config {
-			cfg[k] = v
-		}
+		maps.Copy(cfg, existing.Config)
 	}
 	for _, f := range spec.Fields {
 		if v := clip(toStr(in[f.Key])); v != "" {

@@ -11,6 +11,7 @@ package content
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"runtime"
 	"sync"
@@ -106,9 +107,7 @@ func TestRedFinal_ExternalIDs_OmitPreserves_NoWipe_NoForge(t *testing.T) {
 	base := map[string]any{"title": "Post", "caption": "launch", "channels": "x", "status": StatusPublished}
 	withField := func(k string, v any) map[string]any {
 		m := map[string]any{}
-		for k, v := range base {
-			m[k] = v
-		}
+		maps.Copy(m, base)
 		m[k] = v
 		return m
 	}
@@ -188,9 +187,7 @@ func TestRedFinal_PublishedAt_ForgeAndFormat(t *testing.T) {
 	base := map[string]any{"title": "Post", "caption": "launch", "channels": "x", "status": StatusPublished}
 	put := func(pa any) (int, []byte) {
 		m := map[string]any{}
-		for k, v := range base {
-			m[k] = v
-		}
+		maps.Copy(m, base)
 		if pa != nil {
 			m["published_at"] = pa
 		}

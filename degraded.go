@@ -1,5 +1,7 @@
 package cloud
 
+import "maps"
+
 import "sync"
 
 // degraded.go — a subsystem that mounted FAIL-CLOSED says so out loud, in state
@@ -52,9 +54,7 @@ func Degradations() map[string]string {
 	degradations.mu.RLock()
 	defer degradations.mu.RUnlock()
 	out := make(map[string]string, len(degradations.m))
-	for k, v := range degradations.m {
-		out[k] = v
-	}
+	maps.Copy(out, degradations.m)
 	return out
 }
 

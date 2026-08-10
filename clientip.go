@@ -37,6 +37,7 @@ package cloud
 import (
 	"net/netip"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 
@@ -159,13 +160,13 @@ func clientAddr(peerAddr string, forwarded [][]byte, tp proxySet) string {
 		return peer.String()
 	}
 	seen := 0
-	for i := len(forwarded) - 1; i >= 0; i-- {
-		hops := strings.Split(string(forwarded[i]), ",")
-		for j := len(hops) - 1; j >= 0; j-- {
+	for _, f := range slices.Backward(forwarded) {
+		hops := strings.Split(string(f), ",")
+		for _, hop := range slices.Backward(hops) {
 			if seen++; seen > maxForwardedHops {
 				return ""
 			}
-			a, ok := parseClientAddr(hops[j])
+			a, ok := parseClientAddr(hop)
 			if !ok {
 				// Not an address at all. It cannot be a hop and it must never become
 				// a key, so it is skipped rather than passed through — an unparseable

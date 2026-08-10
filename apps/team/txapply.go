@@ -7,6 +7,7 @@ package team
 
 import (
 	"encoding/json"
+	"maps"
 	"strings"
 )
 
@@ -64,9 +65,7 @@ func (s *session) applyTx(raw json.RawMessage) (any, []json.RawMessage) {
 func (s *session) txCreate(t map[string]any) {
 	doc := map[string]any{}
 	if a, ok := t["attributes"].(map[string]any); ok {
-		for k, v := range a {
-			doc[k] = v
-		}
+		maps.Copy(doc, a)
 	}
 	if at := str(t["attachedTo"]); at != "" {
 		doc["attachedTo"] = t["attachedTo"]

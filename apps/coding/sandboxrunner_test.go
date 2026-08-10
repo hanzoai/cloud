@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"github.com/hanzoai/cloud/internal/planetest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -423,12 +424,7 @@ func TestSandboxRun_AnEchoedCredentialIsScrubbedOnTheWayOut(t *testing.T) {
 }
 
 func has(argv []string, want string) bool {
-	for _, a := range argv {
-		if a == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(argv, want)
 }
 
 // The three properties of argvFor that a run actually dies of, each pinned

@@ -2,6 +2,7 @@ package books
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -308,12 +309,7 @@ func figureValue(r AskResponse, label string) string {
 }
 
 func hasSource(r AskResponse, src string) bool {
-	for _, s := range r.Sources {
-		if s == src {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(r.Sources, src)
 }
 
 func hasQuestion(qs []Question, kind, id string) bool {

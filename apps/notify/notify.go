@@ -60,6 +60,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"strings"
 	"text/template"
@@ -559,9 +560,7 @@ func render(req *ntypes.SendRequest) (subject, body string, err error) {
 // template never renders an empty {{.app}}.
 func normalizeVars(in map[string]any) map[string]any {
 	out := make(map[string]any, len(in)+1)
-	for k, v := range in {
-		out[k] = v
-	}
+	maps.Copy(out, in)
 	if s, _ := out["app"].(string); strings.TrimSpace(s) == "" {
 		out["app"] = "Hanzo"
 	}

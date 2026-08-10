@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -117,22 +119,12 @@ func (o Overlay) visibleTo(org string) bool {
 	if org == "" {
 		return false
 	}
-	for _, b := range o.BetaOrgs {
-		if b == org {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(o.BetaOrgs, org)
 }
 
 // optedIn reports whether org is on this overlay's beta list.
 func (o Overlay) optedIn(org string) bool {
-	for _, b := range o.BetaOrgs {
-		if b == org {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(o.BetaOrgs, org)
 }
 
 // VisibleCatalog applies the enablement overlay to the bundle's full model list
@@ -267,9 +259,7 @@ func modelArray(v any) ([]Model, bool) {
 // withProvider returns a copy of m with provider set when absent/empty.
 func withProvider(m Model, provider string) Model {
 	t := make(Model, len(m)+1)
-	for k, v := range m {
-		t[k] = v
-	}
+	maps.Copy(t, m)
 	if p, _ := t["provider"].(string); p == "" {
 		t["provider"] = provider
 	}
@@ -347,9 +337,7 @@ func overridePatch(raw json.RawMessage) map[string]any {
 
 func applyMergePatch(target, patch map[string]any) map[string]any {
 	out := make(map[string]any, len(target)+len(patch))
-	for k, v := range target {
-		out[k] = v
-	}
+	maps.Copy(out, target)
 	for k, pv := range patch {
 		if pv == nil {
 			delete(out, k)

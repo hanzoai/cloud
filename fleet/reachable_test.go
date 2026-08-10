@@ -30,6 +30,7 @@ package fleet_test
 // inside it is.
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -127,10 +128,5 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 // note spends a page avoiding.
 
 func contains(xs []string, want string) bool {
-	for _, x := range xs {
-		if x == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(xs, want)
 }

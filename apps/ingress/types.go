@@ -3,6 +3,7 @@ package ingress
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -165,12 +166,7 @@ func validHost(h string) bool {
 	if strings.ContainsAny(h, "/:\\ \t") || strings.Contains(h, "..") {
 		return false
 	}
-	for _, label := range strings.Split(h, ".") {
-		if label == "" {
-			return false
-		}
-	}
-	return true
+	return !slices.Contains(strings.Split(h, "."), "")
 }
 
 func (r *Route) validate() error {

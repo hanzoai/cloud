@@ -30,6 +30,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -339,10 +340,8 @@ func guardHost(rawHost string) error {
 		}
 		ips = r
 	}
-	for _, ip := range ips {
-		if blockedIP(ip) {
-			return fmt.Errorf("cluster apiserver resolves to a non-routable address")
-		}
+	if slices.ContainsFunc(ips, blockedIP) {
+		return fmt.Errorf("cluster apiserver resolves to a non-routable address")
 	}
 	return nil
 }

@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -653,12 +654,7 @@ func attr(n *html.Node, key string) string {
 }
 
 func hasClass(n *html.Node, class string) bool {
-	for _, c := range strings.Fields(attr(n, "class")) {
-		if c == class {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(attr(n, "class")), class)
 }
 
 func hasClassPrefix(n *html.Node, prefix string) bool {

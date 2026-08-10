@@ -21,6 +21,7 @@ package captable
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/zap-proto/zip"
@@ -360,10 +361,8 @@ func TestBodylessOpsAreOrgScoped(t *testing.T) {
 	if code, body := req(t, app, http.MethodDelete, "/v1/captable/shares/"+shares[0], "globex", nil); code != http.StatusNotFound {
 		t.Fatalf("globex deleting acme's share want 404, got %d (%s)", code, body)
 	}
-	for _, id := range ids(t, app, "acme", "/v1/captable/shares", true) {
-		if id == shares[0] {
-			return
-		}
+	if slices.Contains(ids(t, app, "acme", "/v1/captable/shares", true), shares[0]) {
+		return
 	}
 	t.Fatal("globex's cross-tenant DELETE removed acme's share")
 }
