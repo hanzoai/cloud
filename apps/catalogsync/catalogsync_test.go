@@ -17,7 +17,7 @@ import (
 
 func eventJSON(t *testing.T, typ, org, slug string) []byte {
 	t.Helper()
-	ev := events.CommerceEvent{Type: typ, OrganizationID: org, Data: map[string]interface{}{}}
+	ev := events.CommerceEvent{Type: typ, OrganizationID: org, Data: map[string]any{}}
 	if slug != "" {
 		ev.Data["slug"] = slug
 	}

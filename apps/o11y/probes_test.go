@@ -228,7 +228,7 @@ func TestRetiredWorkloadDoesNotResolve(t *testing.T) {
 type line struct {
 	level string
 	msg   string
-	ctx   []interface{}
+	ctx   []any
 }
 
 type recorder struct {
@@ -236,10 +236,10 @@ type recorder struct {
 	lines []line
 }
 
-func (r *recorder) Info(msg string, ctx ...interface{}) { r.add("info", msg, ctx) }
-func (r *recorder) Warn(msg string, ctx ...interface{}) { r.add("warn", msg, ctx) }
+func (r *recorder) Info(msg string, ctx ...any) { r.add("info", msg, ctx) }
+func (r *recorder) Warn(msg string, ctx ...any) { r.add("warn", msg, ctx) }
 
-func (r *recorder) add(level, msg string, ctx []interface{}) {
+func (r *recorder) add(level, msg string, ctx []any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.lines = append(r.lines, line{level: level, msg: msg, ctx: ctx})
