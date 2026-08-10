@@ -747,10 +747,7 @@ func parseStatusFilter(raw string) (string, error) {
 // unparseable query value arrives as 0 and takes the default — the same branch
 // a malformed string took when this parsed the query itself.
 func pageLimit(rawPage, rawLimit int) (page, limit int) {
-	page = 1
-	if rawPage > 1 {
-		page = rawPage
-	}
+	page = max(rawPage, 1)
 	limit = annDefaultLimit
 	if rawLimit > 0 {
 		limit = rawLimit

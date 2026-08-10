@@ -1263,10 +1263,7 @@ func noteRetry(ctx context.Context, model string, attempts int, failover bool, e
 // sleepBackoff waits an exponential, equal-jittered delay before the next
 // attempt, or returns the context error if the caller's deadline fires first.
 func sleepBackoff(ctx context.Context, attempt int) error {
-	d := retryBaseDelay << attempt
-	if d > retryMaxDelay {
-		d = retryMaxDelay
-	}
+	d := min(retryBaseDelay<<attempt, retryMaxDelay)
 	// Equal jitter: half fixed, half random in [0, d/2) — spreads retries without
 	// ever collapsing the delay to ~0 (guarantees forward progress under load).
 	wait := d/2 + time.Duration(mrand.Int64N(int64(d/2)+1))
@@ -1389,10 +1386,7 @@ func (o agentOps) metrics(ctx context.Context, in *metricsQuery) (*metricsView, 
 	counts := map[string][]int{}
 	var order []string
 	for _, r := range runs {
-		idx := int(time.Unix(r.CreatedAt, 0).Sub(start) / step)
-		if idx < 0 {
-			idx = 0
-		}
+		idx := max(int(time.Unix(r.CreatedAt, 0).Sub(start)/step), 0)
 		if idx >= buckets {
 			idx = buckets - 1
 		}

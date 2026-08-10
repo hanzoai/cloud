@@ -267,10 +267,9 @@ func (st *agentState) failstreakReset() { st.failstreak, st.skipRemain = 0, 0 }
 // 2^(streak-1) ticks, capped — 1,2,4,8,… minutes between retries.
 func (st *agentState) failstreakBump() {
 	st.failstreak++
-	skip := 1 << uint(min(st.failstreak-1, 30)) // guard the shift; 2^30 >> cap.
-	if skip > maxBackoffTicks {
-		skip = maxBackoffTicks
-	}
+	skip := min(
+		// guard the shift; 2^30 >> cap.
+		1<<uint(min(st.failstreak-1, 30)), maxBackoffTicks)
 	st.skipRemain = skip
 }
 

@@ -615,10 +615,7 @@ var amdSoftware = sync.OnceValue(func() amdSoft {
 // wired-down remainder) — snapped to hardware capacity. Unified when GTT wins.
 func pickAmdMem(vramMiB, gttMiB, hostMiB int64) (miB int64, unified bool) {
 	if gttMiB > vramMiB*4 {
-		m := gttMiB
-		if hostMiB > m {
-			m = hostMiB
-		}
+		m := max(hostMiB, gttMiB)
 		return snapUnified(m), true
 	}
 	return vramMiB, false
