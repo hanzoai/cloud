@@ -550,6 +550,11 @@ func (o ops) resourceTree(ctx context.Context, in *appRef) (*argoTree, error) {
 	return &tree, nil
 }
 
+// syncAnnotation is the App CR annotation a sync request stamps. The operator's
+// watch observes the change and reconciles; the VALUE is only a timestamp, so two
+// requests a second apart are two reconciles and two in the same second are one.
+const syncAnnotation = "gitops.hanzo.ai/sync-requested-at"
+
 // dashSync requests an operator reconcile of the App CR (the sync + rollback UI
 // actions both map to "reconcile this App now" — the App CR is the source of
 // truth; rollback-by-revision is the image-pin follow-on). Returns the projected
