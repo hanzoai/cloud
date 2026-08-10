@@ -138,7 +138,7 @@ var tracerProviderInstalled atomic.Bool
 // TracerProviderInstalled reports whether InstallTelemetry installed the OTel
 // tracer provider in THIS process. It is the one fact the composition root needs
 // in order to adopt the host provider into subsystems that emit their own spans
-// (apps/install.go -> aiobject.AdoptHostTracerProvider). A value, not a callback:
+// (apps/ai/ai.go -> aiobject.AdoptHostTracerProvider). A value, not a callback:
 // the same shape as TierReader/BalanceReader in ai.go, and for the same reason —
 // importing github.com/hanzoai/ai/object here would put 1270 packages under every
 // subsystem that imports cloud for Deps.

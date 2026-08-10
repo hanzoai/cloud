@@ -412,7 +412,7 @@ type PathItem map[string]*Operation
 //	    commercemid.PlatformOnly(), commercebilling.RunAutoRechargeAllOrgs)
 //
 // is ONE registration with FOUR handlers — three middleware and a terminal
-// handler (apps/commerce.go:151). The whole /v1/store/* surface is the same
+// handler (apps/commerce/mount.go). The whole /v1/store/* surface is the same
 // shape. 34 live routes carry chained handlers and every one is legitimate. A
 // merged duplicate and a middleware chain are INDISTINGUISHABLE through the
 // public API, so "handlers > 1" cannot mean "collision" fleet-wide; treating it

@@ -148,9 +148,9 @@ func Listen(plugins []Plugin, enable []string) error {
 	// installs the tracer and meter providers itself rather than borrowing them from
 	// a subsystem that may now be a separate binary. Runs BEFORE MountAll — so the
 	// providers exist before ai mounts and the composition root can adopt them into
-	// it (apps/install.go), and so every per-app plugin entrypoint, which shares
+	// it (apps/ai/ai.go), and so every per-app plugin entrypoint, which shares
 	// this body, installs identically. Spans leave through ONE Send: Cost-0
-	// to a co-resident sink when clients/o11y is linked in, the ZAP wire when it is a
+	// to a co-resident sink when apps/o11y is linked in, the ZAP wire when it is a
 	// plugin. No-op (non-nil shutdown) when no sink/endpoint is configured. See
 	// telemetry.go.
 	telemetryShutdown := InstallTelemetry(context.Background(), luxlog.Default(), "hanzo-cloud")

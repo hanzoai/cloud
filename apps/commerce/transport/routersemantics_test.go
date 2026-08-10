@@ -11,7 +11,8 @@ import (
 // TestRouterSemantics establishes, by PROBE rather than by reading the router, the three
 // behaviours that decide what happens if commerce's real /v1/billing/* routes are mounted
 // alongside cloud's existing ones. Registration order here mirrors production: commerce
-// mounts BEFORE billing (apps/apps.go — commerce at slice position 214, billing at 225),
+// mounts BEFORE billing (manifest/apps.go orders the fleet, and commerce's row precedes
+// billing's),
 // and fiber/zip walks its own stack, so "first" below means "commerce".
 func TestRouterSemantics(t *testing.T) {
 	probe := func(t *testing.T, register func(app *zip.App), path string) (status int, body string, panicked any) {

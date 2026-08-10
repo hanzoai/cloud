@@ -6,7 +6,7 @@ package ads
 // integrations.TokenFor custody seam, never held in this process, never in a
 // manifest. This closes the gap the ads store left open: a stored AdCampaign is now
 // LAUNCHABLE against the real provider, and it is what the /v1/campaign paid
-// channel fans out to (apps/wire_seams.go adapts LaunchPaid/PaidSpend/PausePaid
+// channel fans out to (plugin/campaign/seams.go adapts LaunchPaid/PaidSpend/PausePaid
 // onto campaign.Channel).
 //
 // FAIL-CLOSED CUSTODY. Every operation resolves the org's token FIRST; any reason
@@ -84,7 +84,7 @@ var metaAdsBase = "https://graph.facebook.com/v21.0"
 var adHTTP = &http.Client{Timeout: launchTimeout}
 
 // PaidPlan is the standalone contract for launching one ad campaign — the campaign
-// paid channel adapts campaign.Plan onto it (apps/wire_seams.go). BudgetCents is
+// paid channel adapts campaign.Plan onto it (plugin/campaign/seams.go). BudgetCents is
 // the org's own (connector-paid) budget; ScheduleAt an optional start time.
 type PaidPlan struct {
 	Platform    string
