@@ -175,7 +175,7 @@ func TestExperiment_FeatureFlagProof(t *testing.T) {
 	const N = 2000
 	variant := map[string]string{}
 	counts := map[string]int{}
-	for i := 0; i < N; i++ {
+	for i := range N {
 		subj := fmt.Sprintf("user-%d", i)
 		v := assignVariant(t, org, project, flagKey, subj)
 		if v != "control" && v != "treatment" {
@@ -185,7 +185,7 @@ func TestExperiment_FeatureFlagProof(t *testing.T) {
 		counts[v]++
 	}
 	// Stickiness: re-evaluating the same subjects yields the identical variant.
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		subj := fmt.Sprintf("user-%d", i)
 		if got := assignVariant(t, org, project, flagKey, subj); got != variant[subj] {
 			t.Fatalf("assignment NOT deterministic for %s: %q != %q", subj, got, variant[subj])
@@ -262,7 +262,7 @@ func TestExperiment_FeatureFlagProof(t *testing.T) {
 		t.Fatalf("decide: %d %v", code, dec)
 	}
 	// EVERY subject now resolves to the winner (the flag rollout is 100% treatment).
-	for i := 0; i < 300; i++ {
+	for i := range 300 {
 		subj := fmt.Sprintf("user-%d", i)
 		if v := assignVariant(t, org, project, flagKey, subj); v != "treatment" {
 			t.Fatalf("after decide, %s = %q, want treatment (flag not flipped)", subj, v)

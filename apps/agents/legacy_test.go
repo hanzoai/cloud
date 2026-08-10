@@ -33,7 +33,7 @@ func seedLegacy(t *testing.T, dir string, orgs ...string) {
 		}); err != nil {
 			t.Fatalf("%s session: %v", org, err)
 		}
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if _, err := st.AppendEvent(ctx, Event{
 				ID: "evt_" + org + string(rune('a'+i)), SessionID: "sess_" + org, Org: org,
 				Kind: KindLog, Actor: org + "/u1", Payload: `{"n":1}`, CreatedAt: int64(4 + i),

@@ -224,7 +224,7 @@ func TestBackfillNeverRotatesAServingKey(t *testing.T) {
 	if err := st.CreateProject(context.Background(), p); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := st.backfillKeys(); err != nil {
 			t.Fatalf("backfill %d: %v", i, err)
 		}

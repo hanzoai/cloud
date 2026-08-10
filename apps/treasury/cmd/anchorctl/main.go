@@ -302,7 +302,7 @@ func sendTx(ctx context.Context, cl *ethclient.Client, chainID *big.Int, priv *e
 	if err := cl.SendTransaction(ctx, signed); err != nil {
 		return signed.Hash(), nil, fmt.Errorf("send: %w", err)
 	}
-	for i := 0; i < 45; i++ {
+	for range 45 {
 		if r, rerr := cl.TransactionReceipt(ctx, signed.Hash()); rerr == nil && r != nil {
 			return signed.Hash(), r, nil
 		}

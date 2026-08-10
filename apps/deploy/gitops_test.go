@@ -94,7 +94,7 @@ func TestGitOpsPlane(t *testing.T) {
 // TestGitOpsHistoryCap bounds the response even if CD's history grows.
 func TestGitOpsHistoryCap(t *testing.T) {
 	var h []any
-	for i := 0; i < gitOpsHistoryMax+5; i++ {
+	for i := range gitOpsHistoryMax + 5 {
 		h = append(h, cdHistory(int64(i), "rev", "2026-07-25T21:44:10Z"))
 	}
 	s := fakeService(cdApp("universe-crs", "https://github.com/hanzoai/universe", "rev", "Synced", "Healthy", h))

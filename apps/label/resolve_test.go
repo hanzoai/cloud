@@ -354,7 +354,7 @@ func TestTiesBreakDeterministically(t *testing.T) {
 		t.Fatal(err)
 	}
 	want, _ := Resolve([]Fact{a, b}, epoch)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		got, _ := Resolve([]Fact{b, a}, epoch)
 		if got.Winner.ID != want.Winner.ID {
 			t.Fatalf("run %d picked %q, first run picked %q", i, got.Winner.ID, want.Winner.ID)

@@ -363,7 +363,7 @@ func TestNoReplyToBacklogAtBoot(t *testing.T) {
 	// A backlog of 500 messages, each created an hour before boot (a replay/backfill).
 	old := srv.startedAt - int64(60*60*1000)
 	backlog := make([]json.RawMessage, 0, 500)
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		backlog = append(backlog, chatCreateRawAt(t, dmID, clDirectMessage, "hanzo:"+human, "<p>old</p>", old))
 	}
 	srv.maybeAgentReply(org, ws, backlog)
@@ -395,7 +395,7 @@ func TestConcurrencyCapBounded(t *testing.T) {
 	srv.sem = make(chan struct{}, 2) // cap = 2
 
 	// 8 distinct DMs (distinct single-flight keys) all with the bot.
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		dm := "dm-" + string(rune('a'+i))
 		putDoc(t, srv, org, ws, map[string]any{
 			"_id": dm, "_class": clDirectMessage, "space": dm, "members": []any{human, botUID},
@@ -431,7 +431,7 @@ func TestSingleFlightPerConversation(t *testing.T) {
 	putDoc(t, srv, org, ws, map[string]any{
 		"_id": dm, "_class": clDirectMessage, "space": dm, "members": []any{human, botUID},
 	})
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		srv.maybeAgentReply(org, ws, []json.RawMessage{chatCreateRaw(t, dm, clDirectMessage, "hanzo:"+human, "<p>spam</p>")})
 	}
 	waitFor(t, 2*time.Second, func() bool { return cr.calls() == 1 }, "no turn started")
@@ -457,7 +457,7 @@ func TestCircuitBreakerBacksOff(t *testing.T) {
 	// Each call to a DISTINCT conversation (so single-flight never collapses them),
 	// same bot. After breakerThreshold failures the circuit opens and the runner is
 	// no longer called.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		dm := "dm-" + string(rune('a'+i))
 		putDoc(t, srv, org, ws, map[string]any{
 			"_id": dm, "_class": clDirectMessage, "space": dm, "members": []any{human, botUID},

@@ -151,11 +151,11 @@ func TestDurableForDedupsConcurrentOpens(t *testing.T) {
 	errs := make([]error, n)
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		go func(i int) { defer wg.Done(); got[i], errs[i] = stores.For(cloud.MustOrgNamespace("acme", "")) }(i)
 	}
 	wg.Wait()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if errs[i] != nil {
 			t.Fatalf("concurrent For[%d]: %v", i, errs[i])
 		}

@@ -274,7 +274,7 @@ func TestBaseline_NoOrganisationCanDominate(t *testing.T) {
 	for i := range contributions["whale"] {
 		contributions["whale"][i] = dominant
 	}
-	for i := 0; i < kAnonOrgs-1; i++ {
+	for i := range kAnonOrgs - 1 {
 		contributions["small_"+itoa(i)] = []float64{quiet}
 	}
 

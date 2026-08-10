@@ -109,7 +109,7 @@ func TestASlowButLiveStreamIsNotCut(t *testing.T) {
 	const chunks = 12
 	srv := tr.Serve(sock, func(ctx *fasthttp.RequestCtx) {
 		ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
-			for i := 0; i < chunks; i++ {
+			for i := range chunks {
 				fmt.Fprintf(w, "chunk-%d\n", i)
 				_ = w.Flush()
 				time.Sleep(150 * time.Millisecond)
@@ -136,7 +136,7 @@ func TestASlowButLiveStreamIsNotCut(t *testing.T) {
 	}
 	// Every chunk, in order, and the last one present — a truncated stream is
 	// exactly what this must catch.
-	for i := 0; i < chunks; i++ {
+	for i := range chunks {
 		if !strings.Contains(body, fmt.Sprintf("chunk-%d\n", i)) {
 			t.Fatalf("chunk %d missing — the stream was cut after %d bytes", i, len(body))
 		}

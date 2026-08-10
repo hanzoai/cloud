@@ -61,8 +61,8 @@ func (v *memVFS) Delete(_ context.Context, key string) error {
 func signaturePNG(t *testing.T) string {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 200, 60))
-	for x := 0; x < 200; x++ {
-		for y := 0; y < 60; y++ {
+	for x := range 200 {
+		for y := range 60 {
 			if (x+y)%11 < 4 && y > 12 && y < 48 {
 				img.Set(x, y, color.NRGBA{R: 20, G: 40, B: 120, A: 255})
 			} else {

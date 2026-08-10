@@ -219,7 +219,7 @@ func TestAbuseGate_HoldsAVerdictSoTheScorerIsAskedOnce(t *testing.T) {
 		return RiskVerdict{ID: "d-1", Action: ActionBlock}, nil
 	})
 	app, _ := abuseApp(t, edge.ModeLive)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if got := abuseHit(app, "GET", "/v1/models", "acme", "sk-live-1", "203.0.113.9").StatusCode; got != 403 {
 			t.Fatalf("request %d → %d, want 403", i, got)
 		}
@@ -384,7 +384,7 @@ func TestAbuseGate_AnonymousTrafficMovesNoTenant(t *testing.T) {
 	resetScorer(t)
 	SetRiskScorer(abuseVerdict(ActionAllow))
 	app, tr := abuseApp(t, edge.ModeLive)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		abuseHit(app, "GET", "/v1/models", "", "", "198.51.100.77")
 	}
 	if v := tr.View("acme", edge.ModeLive, abuseNow()); v.Requests != 0 || len(v.Callers) != 0 {
@@ -436,7 +436,7 @@ func TestAbuseGate_CountsAuthFailuresAfterTheHandler(t *testing.T) {
 	resetScorer(t)
 	SetRiskScorer(abuseVerdict(ActionAllow))
 	app, tr := abuseApp(t, edge.ModeShadow)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		abuseHit(app, "GET", "/v1/denied", "acme", "sk-live-1", "203.0.113.5")
 	}
 	v := tr.View("acme", edge.ModeShadow, abuseNow())

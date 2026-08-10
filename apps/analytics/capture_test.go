@@ -454,7 +454,7 @@ func TestCapture_TooLarge400(t *testing.T) {
 	app := mountApp(t)
 	var sb strings.Builder
 	sb.WriteString(`{"batch":[`)
-	for i := 0; i < maxBatch+1; i++ {
+	for i := range maxBatch + 1 {
 		if i > 0 {
 			sb.WriteByte(',')
 		}

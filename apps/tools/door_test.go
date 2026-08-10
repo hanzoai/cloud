@@ -290,7 +290,7 @@ func TestTheListingCacheIsPerServerAndPerTenant(t *testing.T) {
 	p := newMCPProvider(store, nil)
 	p.http = ts.Client()
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		if tools, err := p.List(ctx, Scope{Org: "acme"}); err != nil || len(tools) != 1 {
 			t.Fatalf("List: %v %v", tools, err)
 		}

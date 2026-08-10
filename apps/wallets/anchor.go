@@ -138,7 +138,7 @@ func recoverableSig(hash, sig []byte, addr string) ([]byte, error) {
 	r.FillBytes(norm[:32])
 	s.FillBytes(norm[32:64])
 	want := strings.ToLower(strings.TrimPrefix(addr, "0x"))
-	for v := byte(0); v < 2; v++ {
+	for v := range byte(2) {
 		full := make([]byte, 65)
 		copy(full, norm)
 		full[64] = v

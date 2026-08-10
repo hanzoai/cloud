@@ -214,7 +214,7 @@ func TestEmit_CannotReachThePayment(t *testing.T) {
 // queued: a queue defers the loss instead of bounding it, and the memory this process
 // holds must not be a function of how fast money is arriving.
 func TestEmit_DropsAtTheCeiling(t *testing.T) {
-	for i := 0; i < maxEmits; i++ {
+	for range maxEmits {
 		emitting <- struct{}{}
 	}
 	t.Cleanup(func() {

@@ -56,7 +56,7 @@ func TestSearch_OneTenantsConcurrencyDoesNotMultiplyTheExpensiveRead(t *testing.
 	k := key(t, brandA, orgA)
 
 	// A history worth reading, so the read is a real one.
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + itoa(i%4),
 			"bucket": surfaceAt(i + 1),
@@ -73,7 +73,7 @@ func TestSearch_OneTenantsConcurrencyDoesNotMultiplyTheExpensiveRead(t *testing.
 	const callers = 16
 	var wg sync.WaitGroup
 	accepted := make([]bool, callers)
-	for i := 0; i < callers; i++ {
+	for i := range callers {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -122,7 +122,7 @@ func TestSearch_ARefusedRunReleasesTheSlot(t *testing.T) {
 	}
 
 	// And a real one now works.
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + itoa(i%2),
 			"bucket": surfaceAt(i + 1),
@@ -143,7 +143,7 @@ func TestSearch_TheSlotIsPerTenant(t *testing.T) {
 	holdFolds(t, p)
 	a, b := key(t, brandA, orgA), key(t, brandA, orgB)
 	for _, k := range []tenant{a, b} {
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			probe.hold(string(k), map[string]any{
 				"subject_kind": kindAccount, "subject": "u_" + itoa(i%2),
 				"bucket": surfaceAt(i + 1),
@@ -209,7 +209,7 @@ func TestSearch_ARefusedCallerNeverReachesTheWarehouse(t *testing.T) {
 	holdFolds(t, p)
 	k := key(t, brandA, orgA)
 	// A history worth reading, so the read this test counts is a real one.
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + itoa(i%4),
 			"bucket": surfaceAt(i + 1),
@@ -252,7 +252,7 @@ func TestSearch_BothHalvesArePricedForWhatTheyAre(t *testing.T) {
 	holdFolds(t, p)
 	k := key(t, brandA, orgA)
 	const events = 12
-	for i := 0; i < events; i++ {
+	for i := range events {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + itoa(i%3),
 			"bucket": surfaceAt(i + 1),

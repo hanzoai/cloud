@@ -70,7 +70,7 @@ func TestSessionEventSeqAndCounts(t *testing.T) {
 	ctx := context.Background()
 	_ = s.CreateSession(ctx, mkSession("acme", "root", "", "root"))
 	_ = s.CreateSession(ctx, mkSession("acme", "child", "root", "root"))
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		e, err := s.AppendEvent(ctx, Event{ID: genIDMust(t), SessionID: "root", Org: "acme", Kind: KindLog, CreatedAt: time.Now().Unix()})
 		if err != nil {
 			t.Fatalf("append: %v", err)
@@ -115,7 +115,7 @@ func TestSessionEventSeqConcurrent(t *testing.T) {
 	seqs := make([]int64, n)
 	errs := make([]error, n)
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		go func(i int) {
 			defer wg.Done()
 			id, err := genID("evt")
@@ -136,7 +136,7 @@ func TestSessionEventSeqConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	seen := map[int64]bool{}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if errs[i] != nil {
 			t.Fatalf("append %d: %v", i, errs[i])
 		}
@@ -519,12 +519,12 @@ func TestBusFanoutOrgFilterAndOverrun(t *testing.T) {
 	}
 
 	// Overrun: fill acme's buffer past capacity — the laggard is dropped (closed).
-	for i := 0; i < subBuffer+10; i++ {
+	for range subBuffer + 10 {
 		b.publish(streamUpdate{Org: "acme", RootID: "r", Type: "event"})
 	}
 	// Drain until closed.
 	dropped := false
-	for i := 0; i < subBuffer+20; i++ {
+	for range subBuffer + 20 {
 		if _, open := <-chA; !open {
 			dropped = true
 			break

@@ -28,7 +28,7 @@ func TestCollabHubConcurrentJoinLeaveNoPanicNoLeak(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -101,7 +101,7 @@ func TestCollabSeedRaceKeepsLiveEdit(t *testing.T) {
 	ctx := context.Background()
 	live := []byte{0xAA, 0xBB, 0xCC}
 	seed := []byte{0x11, 0x22}
-	for iter := 0; iter < 60; iter++ {
+	for iter := range 60 {
 		vfs := newMemVFS()
 		hub := newCollabHub(vfs)
 		const org, ws, docName = "acme", "ws-1", "ws-1|document:class:Document|doc-1|content"

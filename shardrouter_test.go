@@ -48,7 +48,7 @@ func threePeers(addr0, addr1, addr2 string) []ha.Member {
 // With 3 peers ~1/3 of orgs map to each, so this returns within a few iterations.
 func findOrgOwnedBy(t *testing.T, peers []ha.Member, id string) string {
 	t.Helper()
-	for i := 0; i < 100000; i++ {
+	for i := range 100000 {
 		org := fmt.Sprintf("org-%d", i)
 		if o, ok := ha.Owner(namespace.Sanitize(org), peers); ok && o.ID == id {
 			return org
@@ -64,7 +64,7 @@ func findOrgOwnedBy(t *testing.T, peers []ha.Member, id string) string {
 func TestShardOwnership_ExactlyOneOwnerPerOrg(t *testing.T) {
 	peers := threePeers("a:8000", "b:8000", "c:8000")
 	dist := map[string]int{}
-	for i := 0; i < 20000; i++ {
+	for i := range 20000 {
 		org := fmt.Sprintf("tenant-%d", i)
 		slug := namespace.Sanitize(org)
 		if slug == "" {
@@ -108,7 +108,7 @@ func TestShardOwnership_ExactlyOneOwnerPerOrg(t *testing.T) {
 // admit themselves as its writer. This is the anti-dual-writer property.
 func TestShardOwnership_AllPodsAgree(t *testing.T) {
 	peers := threePeers("a:8000", "b:8000", "c:8000")
-	for i := 0; i < 5000; i++ {
+	for i := range 5000 {
 		org := fmt.Sprintf("acct-%d", i)
 		slug := namespace.Sanitize(org)
 		want, _ := ha.Owner(slug, peers)

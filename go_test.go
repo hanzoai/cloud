@@ -74,7 +74,7 @@ func TestGo_RunsWorkToCompletion(t *testing.T) {
 	var mu sync.Mutex
 	got := 0
 	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		wg.Add(1)
 		Go(nil, "test.count", nil, func() {
 			defer wg.Done()

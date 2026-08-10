@@ -256,7 +256,7 @@ func TestGetIsPureReadAndAdvancesNothing(t *testing.T) {
 	}
 
 	// Load the page repeatedly — the old code granted on every load.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		code, body := req(t, app, http.MethodGet, "/v1/referrals", "orgA", false, nil)
 		if code != http.StatusOK {
 			t.Fatalf("GET /v1/referrals want 200, got %d (%s)", code, body)
@@ -355,7 +355,7 @@ func TestLedgerReceivesZeroDeposits(t *testing.T) {
 	sock := zip.SocketPath("commerce")
 	go func() { _ = p.Listen(sock) }()
 	t.Cleanup(func() { _ = p.Shutdown() })
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		if c, derr := net.Dial("unix", sock); derr == nil {
 			_ = c.Close()
 			break
