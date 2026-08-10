@@ -241,18 +241,18 @@ type pred struct {
 // conjunct it does not recognise rather than skipping it — a skipped predicate is
 // a predicate that was never tested.
 func where(s string, args []any) (pred, error) {
-	i := strings.Index(s, " WHERE ")
-	if i < 0 {
+	before, after, ok := strings.Cut(s, " WHERE ")
+	if !ok {
 		return pred{args: args, shared: shareDenominator}, nil
 	}
 	// Every placeholder BEFORE the WHERE belongs to the SELECT list, and consumed
 	// its argument there.
-	lead := strings.Count(s[:i], "?")
+	lead := strings.Count(before, "?")
 	if lead > len(args) {
 		return pred{}, fmt.Errorf("fake store: %d placeholders precede the WHERE but only %d arguments were bound", lead, len(args))
 	}
 	p := pred{args: args[lead:], shared: shareDenominator}
-	rest := s[i+len(" WHERE "):]
+	rest := after
 	for _, stop := range []string{" GROUP BY ", " ORDER BY ", " LIMIT "} {
 		if j := strings.Index(rest, stop); j >= 0 {
 			rest = rest[:j]

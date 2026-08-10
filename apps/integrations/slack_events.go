@@ -470,8 +470,8 @@ func routeSlackEvent(raw []byte) slackRoute {
 func stripLeadingMention(text string) string {
 	t := strings.TrimSpace(text)
 	if strings.HasPrefix(t, "<@") {
-		if end := strings.IndexByte(t, '>'); end >= 0 {
-			return strings.TrimSpace(t[end+1:])
+		if _, after, ok := strings.Cut(t, ">"); ok {
+			return strings.TrimSpace(after)
 		}
 	}
 	return t

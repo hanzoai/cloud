@@ -104,8 +104,8 @@ func productFromPath(path string) string {
 	if rest == path { // no /v1/ prefix
 		return ""
 	}
-	if i := strings.IndexByte(rest, '/'); i >= 0 {
-		return rest[:i]
+	if before, _, ok := strings.Cut(rest, "/"); ok {
+		return before
 	}
 	return rest
 }

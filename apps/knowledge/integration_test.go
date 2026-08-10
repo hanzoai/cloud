@@ -81,8 +81,8 @@ func newFakeVector(t *testing.T) *fakeVector {
 		path := strings.TrimPrefix(r.URL.Path, "/collections/")
 		// e.g. "kb_A", "kb_A/points", "kb_A/points/search", "kb_A/index"
 		col := path
-		if i := strings.IndexByte(path, '/'); i >= 0 {
-			col = path[:i]
+		if before, _, ok := strings.Cut(path, "/"); ok {
+			col = before
 		}
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/points/search"):

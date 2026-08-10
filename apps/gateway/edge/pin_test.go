@@ -181,8 +181,8 @@ func function(src, head string) (string, bool) {
 		return "", false
 	}
 	rest := src[i:]
-	if j := strings.Index(rest, "\n}\n"); j >= 0 {
-		return rest[:j], true
+	if before, _, ok := strings.Cut(rest, "\n}\n"); ok {
+		return before, true
 	}
 	return rest, true
 }
