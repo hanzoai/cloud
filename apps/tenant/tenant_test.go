@@ -81,7 +81,7 @@ func TestTwoBrandsOneOrgAreTwoTenants(t *testing.T) {
 // tricked into producing a non-zero one. If someone adds an exported field this
 // test fails, which is the point.
 func TestKeyCannotArriveOffTheWire(t *testing.T) {
-	rt := reflect.TypeOf(Key{})
+	rt := reflect.TypeFor[Key]()
 	for i := range rt.NumField() {
 		if rt.Field(i).IsExported() {
 			t.Fatalf("Key.%s is exported — a Key can now be decoded from a request body", rt.Field(i).Name)

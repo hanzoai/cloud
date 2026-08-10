@@ -302,7 +302,7 @@ func TestScopeBindsTenantThenSignal(t *testing.T) {
 // field a caller can set may reach it. The wire type is checked by NAME, because the
 // failure is a future field called `org` that quietly starts winning.
 func TestTenantIsNeverOnTheWire(t *testing.T) {
-	rt := reflect.TypeOf(CaptureEvent{})
+	rt := reflect.TypeFor[CaptureEvent]()
 	for i := 0; i < rt.NumField(); i++ {
 		name := strings.ToLower(rt.Field(i).Name)
 		tag := strings.ToLower(rt.Field(i).Tag.Get("json"))
