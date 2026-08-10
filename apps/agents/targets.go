@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/samples"
 	"github.com/zap-proto/zip"
 )
@@ -548,18 +547,6 @@ func targetOwns(ctx context.Context, t Target) bool {
 		return ownsTarget(c, t)
 	}
 	return false
-}
-
-// tenantOf is the validated org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
 }
 
 // noInput is the In of an op addressed entirely by the caller's principal: it

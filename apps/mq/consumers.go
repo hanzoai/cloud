@@ -13,6 +13,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/zap-proto/zip"
 )
@@ -180,7 +181,7 @@ type pickOut struct {
 
 // list returns a stream's consumers, name-ordered, with delivery state.
 func (co consumers) list(ctx context.Context, in *pickIn) (*pickOut, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +223,7 @@ type makeIn struct {
 
 // create creates a durable pull consumer on a stream and returns it.
 func (co consumers) create(ctx context.Context, in *makeIn) (*Consumer, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +274,7 @@ func (co consumers) pick(ctx context.Context, org string, in *twoIn) (jetstream.
 
 // get returns one consumer's configuration and delivery state.
 func (co consumers) get(ctx context.Context, in *twoIn) (*Consumer, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +298,7 @@ func (co consumers) get(ctx context.Context, in *twoIn) (*Consumer, error) {
 // delete removes a consumer and its delivery state; unacknowledged messages
 // stay in the stream.
 func (co consumers) delete(ctx context.Context, in *twoIn) (*struct{}, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +338,7 @@ type nextIn struct {
 // delivery — the broker will not redeliver what this call returns; an empty
 // wait answers 408.
 func (co consumers) next(ctx context.Context, in *nextIn) (*readOut, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}

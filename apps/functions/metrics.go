@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -121,7 +122,7 @@ func buildMetrics(invs []Invocation, spec metricsRange, now time.Time) usage {
 // and reporting a number computed some other way would be a guess presented as a
 // measurement. Requires a validated principal; the read is scoped to its org.
 func (o ops) metrics(ctx context.Context, in *metricsQuery) (*usage, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
