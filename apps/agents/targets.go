@@ -19,7 +19,7 @@ import (
 // SAME agents.db (one store, one tenancy column) as sessions/events — NOT a rival
 // device registry. It composes with the compute fleet rather than duplicating it: a
 // session records the target id it runs on (agent_sessions.target), and the org's
-// unified board (GET /v1/fleet, clients/visor/board.go) unions these registered
+// unified board (GET /v1/fleet, apps/visor/board.go) unions these registered
 // targets with its BYO workers (GET /v1/fleet/workers), BYO clusters and Visor
 // machines — reading this registry through the in-process seam below rather than
 // copying it.
