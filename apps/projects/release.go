@@ -49,7 +49,7 @@ import (
 	"strings"
 	"time"
 
-	s3 "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzos3/go"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/sites"
