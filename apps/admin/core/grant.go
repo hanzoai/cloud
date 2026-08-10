@@ -7,6 +7,8 @@ package core
 // row. One path, one way to grant.
 
 import (
+	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,10 +17,12 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/admin/money"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/money"
+	"github.com/hanzoai/cloud/plane"
+	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/hanzoai/commerce/billing/creditledger"
 	"github.com/zap-proto/zip"
 )
@@ -85,30 +89,39 @@ func grantNote(c *zip.Ctx, reason string) string {
 	return "Admin grant: " + r
 }
 
-// grantIdempotencyKey derives the DETERMINISTIC commerce idempotency key for a grant from
-// its (subject, amount, currency, source) BOUND to the operator-supplied Idempotency-Key nonce
-// — so a retried grant (a commit-then-timeout re-submit carrying the SAME nonce) dedupes at
-// commerce (X-Idempotency-Key, at-most-once), while two DISTINCT grants — even same org +
-// amount — never collide. Binding the amount/currency/source into the hash means a nonce
-// accidentally reused for a DIFFERENT grant still lands (a different key), so dedup can
-// never silently DROP a legitimate distinct grant.
+// grantRef derives the commerce idempotency ref for ONE grant attempt from its
+// (subject, amount, currency, source) BOUND to a nonce — so a retried grant (a
+// commit-then-timeout re-submit carrying the SAME operator nonce) dedupes at commerce
+// (at-most-once), while two DISTINCT grants — even same org + amount — never collide.
+// Binding the amount/currency/source into the hash means a nonce accidentally reused
+// for a DIFFERENT grant still lands (a different key), so dedup can never silently DROP
+// a legitimate distinct grant.
 //
-// Empty when the operator supplied no nonce: without a stable per-attempt id there is no
-// value that is both retry-stable AND grant-unique, so we do NOT fabricate one (a content
-// -only hash would wrongly dedupe two legitimate identical comps). The deposit is then
-// additive — the pre-existing behavior. Effective end-to-end once the operator console
-// sends an Idempotency-Key per grant attempt (reused verbatim on retry); commerce already
-// enforces the dedup (api/billing/deposit.go).
 // The SUBJECT is hashed, not the org: two grants of the same amount to two members
 // of one org are DIFFERENT grants, and hashing the org alone would make the second
 // dedupe away against the first — a silently dropped credit.
-func grantIdempotencyKey(c *zip.Ctx, subject, currency, source string, amountCents int64) string {
+//
+// WITH NO OPERATOR NONCE THE NONCE IS FRESH, and that is the same additive deposit this
+// returned an EMPTY key for before — stated as a value instead of as an absence. A fresh
+// nonce cannot match anything, so dedup never fires and each attempt lands, which is
+// exactly what an empty key bought. What it does NOT do is fabricate retry-stability: a
+// content-only hash would wrongly dedupe two legitimate identical comps, and this is not
+// that. The distinction the old comment drew — retry-stable versus grant-unique — is real
+// and is preserved; only the spelling of "grant-unique" changed.
+//
+// It changed because a grant's ref must not depend on WHICH PROCESS holds the books. The
+// co-resident ledger accepts an empty ref (no dedup); the plane REFUSES one, because
+// plane.CreditIn.Ref is the exactly-once key an op that CREATES money cannot do without.
+// Answering that question two ways, one per transport, is how the same grant comes to
+// have two identities. One rule, both paths — and every grant row now carries a citable
+// ref rather than an empty one.
+func grantRef(c *zip.Ctx, subject, currency, source string, amountCents int64) string {
 	nonce := strings.TrimSpace(c.Header("Idempotency-Key"))
 	if nonce == "" {
 		nonce = strings.TrimSpace(c.Header("X-Idempotency-Key"))
 	}
 	if nonce == "" {
-		return ""
+		nonce = rand.Text()
 	}
 	sum := sha256.Sum256([]byte(strings.Join([]string{
 		subject, strconv.FormatInt(amountCents, 10), currency, source, nonce,
@@ -213,7 +226,7 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 	// w.Ledger, not the raw path/body org: both halves of the address come from ONE
 	// resolved Account, so the ledger a deposit opens can never disagree in case with
 	// the subject written into it.
-	before, txID, after, afterExact, derr := grantDeposit(s, c, w.Ledger, subject, currency, notes, tag, source, req.AmountCents)
+	before, txID, after, afterExact, derr := grantDeposit(c, w.Ledger, subject, currency, notes, tag, source, req.AmountCents)
 	if derr != nil {
 		// The grant did not land — record the FAILED attempt (accountability), then
 		// surface the error. Never report a grant that failed as success.
@@ -254,9 +267,12 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 // read here uses it too — reading the pool around a member's credit would report a
 // before/after that never moved and audit a lie.
 //
-// The split-deploy fallback can only address the org: commerce's HTTP deposit is org-keyed.
-// It therefore refuses a member-addressed grant rather than silently crediting the pool.
-func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, subject, currency, notes, tag, source string, amountCents int64) (before int64, txID string, after int64, afterExact string, err error) {
+// BOTH PATHS ADDRESS THE SUBJECT. The split-deploy leg used to refuse a member-addressed
+// grant, because commerce's HTTP deposit is org-keyed and crediting the pool instead would
+// have put the money where that member cannot spend it. plane.CreditIn carries the subject,
+// so that refusal became a false negative and is gone: a member of a per-member org is
+// credited at their own account whichever process holds the books.
+func grantDeposit(c *zip.Ctx, org, subject, currency, notes, tag, source string, amountCents int64) (before int64, txID string, after int64, afterExact string, err error) {
 	ctx := c.Context()
 	// ONE credit path: prefer the in-proc commerce credit ledger (creditledger) — the
 	// SAME injected ledger adapter commerce's POST /v1/billing/credit mints through
@@ -277,7 +293,7 @@ func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, subject, currency, n
 			Currency:       currency,
 			Reason:         notes,
 			Tag:            tag,
-			IdempotencyKey: grantIdempotencyKey(c, subject, currency, source, amountCents),
+			IdempotencyKey: grantRef(c, subject, currency, source, amountCents),
 			AmountCents:    amountCents,
 		})
 		if cerr != nil {
@@ -291,21 +307,88 @@ func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, subject, currency, n
 		}
 		return before, id, after, afterExact, nil
 	}
-	// Split deploy: no co-resident credit ledger → the commerce billing HTTP deposit, with
-	// its operator-nonce idempotency key so a retried grant dedupes at commerce. It is
-	// org-keyed, so a member-addressed grant has no destination here and is REFUSED —
-	// crediting the pool instead would put the money where that member cannot spend it.
-	if subject != org {
-		return 0, "", 0, "", fmt.Errorf("this deployment has no co-resident ledger; only the org itself can be credited over the commerce HTTP path (asked for %q)", subject)
-	}
-	beforeC, _ := s.State.Commerce.Credits(ctx, org)
-	idem := grantIdempotencyKey(c, subject, currency, source, amountCents)
-	res, derr := s.State.Commerce.Deposit(ctx, org, money.Cents(amountCents), currency, notes, tag, idem)
+	// Split deploy: the credit ledger is not in THIS process, which is the ORDINARY case
+	// and not a gap. Apps are their own binaries, so commerce.Mount — and with it the
+	// injected credit ledger and finance.Current — runs in the commerce process alone;
+	// creditledger.Get() above is permanently nil in admin's. So ASK the process that
+	// owns the books, by name, over the internal plane.
+	//
+	// THIS IS THE WHOLE DEFECT THIS LEG USED TO BE. It called the admin commerce HTTP
+	// client, whose base URL comes from CLOUD_COMMERCE_HTTP_URL or from an in-process
+	// handler this binary does not publish — neither exists in the admin process — so
+	// Client.Ready() was false and every grant answered "commerce not configured" for a
+	// ledger one socket away. Pointing that env var at svc/commerce would not have fixed
+	// it either: that Service is an alias back to this same pod's public edge, so the
+	// deposit would re-enter the binary it left, which is the self-re-entry that killed
+	// the billing gate (plane/commerce/commerce.go). A call BY NAME cannot express it.
+	//
+	// As(c, org) delegates the SuperAdmin the gate already validated and points it at the
+	// tenant being credited. The principal travels WHOLE and commerce re-checks it; only
+	// the tenant is re-pointed. plane.CreditIn has no org field at all, so the credited
+	// org rides the caller and there is no argument a caller could name another tenant's
+	// books with — the isolation is structural, not a check anyone has to remember.
+	cctx := cloud.As(c, org)
+	before, _ = planeBalance(cctx, c, subject, currency)
+	cred, derr := commercepeer.FinanceCredit(cctx, &plane.CreditIn{
+		Subject: subject,
+		// The EXACT decimal, not the minor unit. commerce deposits what it parses,
+		// so a grant crosses at full precision and cannot be rounded in transit.
+		Amount: plane.Amount(money.FromCents(amountCents).Unwrap()),
+		Ref:    grantRef(c, subject, currency, source, amountCents),
+		Notes:  notes,
+		Tags:   tag,
+	})
 	if derr != nil {
-		return int64(beforeC), "", int64(beforeC), "", derr
+		// Every error surfaces, including ErrNoPeer. Ask names ErrNoPeer as the only
+		// error a caller may read as "fall back", and a grant has nowhere to fall back
+		// TO: a deployment that runs no commerce cannot credit anybody, and reporting
+		// that as anything other than a failed grant would be the silent success this
+		// whole path exists to stop.
+		return before, "", before, "", fmt.Errorf("credit %s over the commerce plane: %w", subject, derr)
 	}
-	afterC, _ := s.State.Commerce.Credits(ctx, org)
-	return int64(beforeC), res.TxID, int64(afterC), "", nil
+	if cred == nil {
+		// A void reply is not a completed credit. Nothing was written that we know of.
+		return before, "", before, "", fmt.Errorf("credit %s: commerce answered nothing", subject)
+	}
+	// The money HAS moved. The balances below are the receipt's, not the grant's, so a
+	// failed read here is reported and never turned into a failed grant — auditing a
+	// landed credit as an error would be worse than an unknown balance.
+	after, afterExact = planeBalance(cctx, c, subject, currency)
+	return before, cred.ID, after, afterExact, nil
+}
+
+// planeBalance reads one subject's balance from the process that owns the books, in the
+// two renderings the grant receipt carries: whole cents, and the exact 18-decimal value.
+//
+// BEST-EFFORT, like the co-resident leg's own balance reads, because these figures are the
+// RECEIPT — they do not decide anything and nothing is spent against them. A failure is
+// logged rather than swallowed, so a zero on a successful grant is diagnosable instead of
+// silent.
+//
+// RoundMinor, not FloorMinor: this is a figure someone READS, and the co-resident leg
+// renders the same balance with money.Amount.Cents(), which rounds half-away-from-zero. One
+// grant must report one number regardless of which process holds the books, so the two legs
+// round the same way. (A balance a gate SPENDS against floors instead — see
+// plane.Money.FloorMinor.)
+func planeBalance(cctx context.Context, c *zip.Ctx, subject, currency string) (cents int64, exact string) {
+	bal, err := commercepeer.FinanceBalance(cctx, &plane.BalanceIn{Subject: subject, Currency: currency})
+	if err != nil || bal == nil {
+		c.Log().Warn("admin: grant receipt balance unread (the credit itself is unaffected)",
+			"subject", subject, "currency", currency, "err", err)
+		return 0, ""
+	}
+	if cents, err = bal.Amount.RoundMinor(); err != nil {
+		c.Log().Warn("admin: grant receipt balance unreadable", "subject", subject, "err", err)
+		return 0, ""
+	}
+	amt, err := bal.Amount.Parse()
+	if err != nil {
+		return cents, ""
+	}
+	// Take the DECIMAL, never Minor(): the wire's currency declares 2 decimals, so
+	// Minor() would answer cents and the exact rendering would understate by 10^16.
+	// money.FromDecimal is the one carry into the 18-decimal credit unit.
+	return cents, money.FromDecimal(amt.Decimal()).AttoString()
 }
 
 // EmitAudit writes ONE compliance record for a management action to cloud's
