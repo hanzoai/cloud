@@ -75,7 +75,7 @@ func TestRemote_EagerAppIsNotLazy(t *testing.T) {
 	}
 }
 
-// 108 apps must not become 108 requests.
+// Every app in the manifest resolves through the index; that must not be a request each.
 func TestIndex_FetchedOncePerProcess(t *testing.T) {
 	reset()
 	var hits int64

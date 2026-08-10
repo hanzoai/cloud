@@ -637,11 +637,11 @@ func EmitLifecycle(ctx context.Context, ev LifecycleEvent) {
 // pickCommerceClient resolves deps.Commerce — the typed inter-subsystem client the
 // entitlements/licensing tier calls (GetOrgConfig, CheckEntitlement). When the
 // commerce subsystem is co-resident (Enabled("commerce")) it returns the IN-PROCESS
-// client via the factory apps/commerce.go registers in init() — a direct Go
+// client via the factory apps/commerce/mount.go registers in init() — a direct Go
 // call that reads the embedded commerce datastore (hanzoai/commerce MODULE, since
 // the un-fork) + the @hanzo/plans vocabulary, no network hop (the HIP-0106
 // co-resident default). The factory inversion stays because the concrete client
-// (clients/commerce) imports clients/plan, which imports cloud — a direct
+// (apps/commerce) imports apps/plan, which imports cloud — a direct
 // call here would be a package cycle. Absent the registration it fails closed
 // rather than pretending.
 //
@@ -669,14 +669,14 @@ func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
 }
 
 // commerceClientFactory constructs the embedded in-process Commerce client.
-// apps/commerce.go registers it in init(); pickCommerceClient calls it so
+// apps/commerce/mount.go registers it in init(); pickCommerceClient calls it so
 // package cloud depends on the CommerceClient interface + this hook, never the
-// concrete clients/commerce package (whose entitlement client pulls clients/plan,
+// concrete apps/commerce package (whose entitlement client pulls apps/plan,
 // which imports cloud — the hook is what keeps the package graph acyclic).
 var commerceClientFactory func(cfg *Config, log luxlog.Logger) CommerceClient
 
 // RegisterCommerceClientFactory installs the embedded-Commerce client constructor.
-// apps/commerce.go calls this from its init(); exactly one registration.
+// apps/commerce/mount.go calls this from its init(); exactly one registration.
 func RegisterCommerceClientFactory(f func(cfg *Config, log luxlog.Logger) CommerceClient) {
 	commerceClientFactory = f
 }
