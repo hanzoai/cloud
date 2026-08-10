@@ -3,16 +3,16 @@ package cloud
 import (
 	"flag"
 	"fmt"
-	"github.com/hanzoai/cloud/brand"
-	"github.com/hanzoai/cloud/credz"
-	"github.com/hanzoai/cloud/internal/datadir"
-	"github.com/hanzoai/cloud/internal/edge"
-	"github.com/hanzoai/cloud/role"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hanzoai/cloud/brand"
+	"github.com/hanzoai/cloud/internal/datadir"
+	"github.com/hanzoai/cloud/internal/edge"
+	"github.com/hanzoai/cloud/role"
 )
 
 // Config is the cloud binary's startup configuration. Drives which
@@ -73,9 +73,7 @@ type Config struct {
 	// hosts (the bootstrap chicken-and-egg) and never logged. Empty ⇒ the KMS
 	// subsystem runs fail-closed (health-only).
 	//
-	// It is sourced from credz, not from the environment: credz.Boot takes it out
-	// of the environment at process start so no spawned child inherits it, and
-	// holds it in memory. See rootKeyRef.
+	// BootMaster resolves it at process start and holds it; see rootKeyRef.
 	KMSMasterKeyRef string
 
 	// KMSMPCAddr / KMSMPCVaultID configure the MPC threshold-signing backend for
@@ -459,7 +457,7 @@ func getenv(key, dflt string) string {
 const DefaultDataDir = datadir.Default
 
 // DataDir resolves the data root from the environment. It is exported and split
-// out of LoadConfig because credz.Boot must find the same directory BEFORE
+// out of LoadConfig because BootMaster must find the same directory BEFORE
 // LoadConfig runs — the credential broker's socket lives there, and the
 // credentials have to be installed before anything reads config or opens a store.
 //
@@ -469,16 +467,15 @@ const DefaultDataDir = datadir.Default
 // the two must resolve the same directory or the lock guards nothing.
 func DataDir() string { return datadir.Resolve() }
 
-// rootKeyRef resolves the root key credz holds. credz.Boot moves it out of the
-// environment (so no spawned child inherits it) and into memory, which makes
-// credz the single source; the raw variable is the fallback for a process that
-// never Booted — a test building a Config directly — and is the same value one
-// step earlier.
+// rootKeyRef resolves the data-plane master. BootMaster holds it in memory once
+// resolved, which covers the dev-key case where the environment carries nothing;
+// the raw variable is the fallback for a process that never Booted — a test
+// building a Config directly — and is the same value one step earlier.
 func rootKeyRef() string {
-	if b64 := credz.KeyB64(); b64 != "" {
+	if b64 := MasterB64(); b64 != "" {
 		return b64
 	}
-	return getenv(credz.RootEnv, "")
+	return getenv(MasterEnv, "")
 }
 
 // resolveVersion is the single source of Config.Version, so the test and the

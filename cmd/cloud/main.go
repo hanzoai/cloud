@@ -23,9 +23,9 @@
 // The host is the FRONT DOOR, so it owns three things no plugin can: it serves
 // the white-labelled console at "/" (webui, mounted last so every app prefix
 // wins); it threads the deployment's operator flags to the children as CLOUD_*
-// env (run→forward); and it SCOPES CREDENTIALS — it scrubs the KMS root key from
-// its own environment so no child inherits it, and hands it to the kms broker
-// child alone (run→childEnv), the boundary credz was built for.
+// env (run→forward). The data-plane key is NOT one of those: it arrives in the
+// environment from KMS and every child inherits it, which is how each one opens
+// the encrypted files they all share.
 //
 // Deployment is one directory: the host plus its plugins, which is what the image
 // already ships. Point CLOUD_<NAME>_ADDR at an instance running elsewhere, or
@@ -43,7 +43,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hanzoai/cloud/credz/launch"
 	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/internal/datadir"
 	"github.com/hanzoai/cloud/internal/edge"
@@ -156,7 +155,7 @@ func run(addr, zapAddr string) error {
 	// its own liveness probe and restarted into the same deadlock (2026-08-04,
 	// api.hanzo.ai, four minutes of 503).
 	//
-	// HERE, before stampAndScrub and before the mount loops, because the very next
+	// HERE, before the mount loops, because the very next
 	// thing this function does is spawn children — and the whole point is that they
 	// are born into a pod whose volume is already claimed. Hold stamps the
 	// environment they inherit, so each one knows the answer instead of racing for
@@ -171,10 +170,6 @@ func run(addr, zapAddr string) error {
 		return err
 	}
 	defer func() { _ = releaseLease() }()
-
-	// Mint this host's child-signing secret and take the KMS root key OUT of the
-	// host's own environment — both BEFORE the first Load spawns an eager child.
-	secret, rootKey := stampAndScrub()
 
 	// absent is what this host tried to mount and could not: name → why. Written
 	// only by the loops below, read only by the health route registered after
@@ -214,19 +209,7 @@ func run(addr, zapAddr string) error {
 	// a mount MEANS is one function (mount), so the failure policy cannot drift
 	// between them.
 	for _, a := range manifest.Apps {
-		if a.Name != launch.Broker {
-			continue
-		}
-		if err := mount(app, a, true, secret, rootKey, absent); err != nil {
-			return err
-		}
-	}
-
-	for _, a := range manifest.Apps {
-		if a.Name == launch.Broker {
-			continue
-		}
-		if err := mount(app, a, a.Eager, secret, rootKey, absent); err != nil {
+		if err := mount(app, a, a.Eager, absent); err != nil {
 			return err
 		}
 	}
@@ -391,7 +374,7 @@ func run(addr, zapAddr string) error {
 // Absence is LOUD in three places, because a silently missing subsystem is the
 // failure mode this fleet keeps getting bitten by: an error log here, the reason
 // on the host's health route, and Running=false in zip's own plugin table.
-func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, absent map[string]string) error {
+func mount(app *zip.App, a manifest.App, eager bool, absent map[string]string) error {
 	// A co-resident app routes no prefix of its own: it is middleware on another
 	// app's router and decides per request whether to serve or Next. There is
 	// nothing for the host to claim or spawn, so there is nothing to mount. This
@@ -409,13 +392,6 @@ func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, abs
 	// source for a fact the child already knows, and it was wrong: o11y's held 12
 	// tools while the o11y binary at the same commit served 365. The door asks the
 	// child now (fleet.Mount), so there is nothing to hand over here.
-	//
-	// Per-plugin, on the plugin's OWN Env, which zip appends to that ONE child's
-	// environment: a scoped token for every child, and — for the broker alone —
-	// the launch secret and the root key. A token or key placed in the host's
-	// os.Environ() would reach every child alike and prove nothing about any of
-	// them (#51).
-	p.Env = append(p.Env, childEnv(a.Name, secret, rootKey)...)
 	p.Start = startTimeout()
 
 	// zip v1.23 removed (*App).Add: Use is the ONE composition verb, and zip.Load
@@ -710,24 +686,6 @@ func stillAbsent(app *zip.App, absent map[string]string) map[string]string {
 	return out
 }
 
-// stampAndScrub mints this launcher's child-signing secret and takes the KMS root
-// key OUT of the host's OWN environment, returning it for re-injection into the
-// broker child alone (childEnv). It is one function so the boot order is one
-// fact: zip builds every child's environment as append(os.Environ(), Plugin.Env
-// …), and Go keeps the FIRST occurrence of a duplicated key — so a root key left
-// in the host's environment reaches EVERY child and CANNOT be scrubbed by a later
-// Env entry. Unset here, it reaches only the child whose Plugin.Env carries it.
-// The host needs the key for nothing of its own: it opens no store and decrypts
-// nothing. Split out from run so a test can prove the host's environment no
-// longer carries the key after it runs.
-func stampAndScrub() (secret, rootKey string) {
-	secret = launch.Secret()
-	rootKey = os.Getenv(launch.RootEnv)
-	_ = os.Unsetenv(launch.RootEnv)
-	return secret, rootKey
-}
-
-// childEnv is the environment the host stamps onto ONE plugin child's
 // startTimeout bounds how long a plugin may take to listen. zip's default is 10s,
 // which an app that opens stores, runs migrations and seeds a catalog does not
 // meet on a cold volume — commerce misses it, the host reports "did not listen
@@ -743,24 +701,6 @@ func startTimeout() time.Duration {
 		}
 	}
 	return 90 * time.Second
-}
-
-// zip.Plugin.Env: a scoped launch token (credz/launch.Env) for EVERY child,
-// naming the app it was started as; and — for the broker child ALONE — the launch
-// secret it verifies those tokens with and the KMS root key it needs to be Root
-// and unseal the store. Every OTHER child therefore comes up with a per-app token
-// and NO root key, and must ask the broker for its scoped bundle: the credz
-// boundary, now the default entrypoint. rootKey is "" in a keyless dev run, and a
-// broker handed no key stays unkeyed rather than being handed an empty one.
-func childEnv(app, secret, rootKey string) []string {
-	env := []string{launch.Env(secret, app)}
-	if app == launch.Broker {
-		env = append(env, launch.SecretEnv+"="+secret)
-		if rootKey != "" {
-			env = append(env, launch.RootEnv+"="+rootKey)
-		}
-	}
-	return env
 }
 
 // enabled parses the subsystem allowlist. nil means every app, which is the

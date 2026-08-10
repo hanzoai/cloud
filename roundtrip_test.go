@@ -16,6 +16,7 @@ package cloud_test
 // green and production broken.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"net"
 	"testing"
@@ -53,7 +54,7 @@ func serve(t *testing.T, name string, declare func(*zip.App)) {
 // nothing here can reach a real app or be reached by one.
 func alone(t *testing.T) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	t.Setenv("ZIP_ADDR", "")
 	t.Setenv("CLOUD_RUN_DIR", "")
 }

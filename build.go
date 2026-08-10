@@ -13,7 +13,6 @@ import (
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
@@ -64,12 +63,28 @@ import (
 func BuildDeps(cfg *Config) Deps {
 	logger := luxlog.New("cloud")
 
+	// ONE logger, and this is where it becomes reachable without being carried.
+	//
+	// luxfi/log publishes a process default — Root, Default, and the bare Info/Warn/
+	// Error functions — and nothing ever set it, so every package that wanted to log
+	// had to be HANDED one. That is what Deps.Logger is: 224 reads threading a value
+	// the library was already prepared to hold. Cloud's own core did not even use
+	// that field consistently; it built `luxlog.New("cloud")` again in five separate
+	// places, so there were two ways to obtain a logger and neither was the library's.
+	//
+	// Installed HERE because this is where the process's logger is constructed, and
+	// installed FIRST because a default set late is a default that silently did not
+	// apply to whatever logged before it. Everything downstream — every subsystem
+	// mount, every request — runs after this line.
+	luxlog.SetDefault(logger)
+
 	// Credentials, before anything opens a store. The first open is edge.New at the
 	// bottom of this function, and an open with no master installed fails — so a key
 	// installed any later is installed after the store that needed it. Boot is
 	// sync.Once-guarded and Serve calls it earlier still; this call is what covers
 	// every caller that builds deps directly.
-	logCredz(logger, credz.Boot(DataDir()))
+	BootMaster(DataDir())
+	logMaster(logger)
 
 	logger.Info(
 		"building deps",
@@ -81,7 +96,6 @@ func BuildDeps(cfg *Config) Deps {
 	)
 
 	deps := Deps{
-		Logger:    logger,
 		Brand:     cfg.Brand,
 		Version:   cfg.Version,
 		Env:       cfg.Env,
@@ -1120,7 +1134,7 @@ func MountMetrics(app Router, deps Deps) error {
 		return fmt.Errorf("metrics: router is not a zip app")
 	}
 	return metrics.Mount(a, metrics.Deps{
-		Logger: deps.Logger, DataDir: deps.DataDir, Brand: deps.Brand,
+		Logger: luxlog.Default(), DataDir: deps.DataDir, Brand: deps.Brand,
 		Org: principal.Org,
 	})
 }
@@ -1397,7 +1411,7 @@ func door(plugins []Plugin) (zip.Source, error) {
 // request still uses it. Only ENABLED specs mount, so only they register a hook;
 // teardown needs no separate enablement gate.
 func MountAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
-	logger := deps.Logger
+	logger := luxlog.Default()
 	// Declare the composition root BEFORE anything mounts: TracingMiddleware resolves
 	// hanzo.subsystem off this, DefaultPrice resolves each surface's declared price off
 	// it, and the inventory (including what is switched OFF) is what
@@ -1439,21 +1453,18 @@ func MountAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
 	return nil
 }
 
-// logCredz surfaces how this process resolved its credentials. It is a log line
-// and nothing branches on it — but it is the log line whose absence let a boot
-// announce a dev key it had not installed, so the posture is now stated as the
-// resolved value plus, when a broker pull failed, the reason it failed.
-func logCredz(log luxlog.Logger, p credz.Posture) {
-	_, n, from := credz.Resolved()
-	switch p {
-	case credz.Root:
-		log.Info("credentials: ROOT (key from my own environment; scrubbed so children do not inherit it)", "from", from)
-	case credz.Leaf:
-		log.Info("credentials: LEAF (pulled from the credz broker)", "from", from, "secrets", n)
-	case credz.Dev:
-		log.Warn("credentials: DEV key (no key configured and no broker — dev/CI only)", "broker", credz.Err())
+// logMaster states how this process resolved its data-plane key. Nothing
+// branches on it — but it is the line whose absence once let a boot announce a
+// dev key it had not installed, so it reports the resolved source, or the reason
+// there is none.
+func logMaster(log luxlog.Logger) {
+	switch {
+	case MasterErr() != nil:
+		log.Warn("data-plane key: NONE — store opens fail closed", "err", MasterErr())
+	case MasterFrom() == MasterEnv:
+		log.Info("data-plane key: from the environment", "from", MasterFrom())
 	default:
-		log.Warn("credentials: NONE on a production build — store opens fail closed", "broker", credz.Err())
+		log.Warn("data-plane key: DEV (nothing configured, and the data directory was empty — dev/CI only)")
 	}
 }
 

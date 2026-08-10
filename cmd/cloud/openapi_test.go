@@ -63,7 +63,7 @@ func host(t *testing.T) *zip.App {
 	absent := map[string]string{}
 	for _, a := range manifest.Apps {
 		t.Setenv("CLOUD_"+strings.ToUpper(strings.NewReplacer("-", "_").Replace(a.Name))+"_ADDR", "oracle://"+a.Name)
-		if err := mount(app, a, false, "s", "", absent); err != nil {
+		if err := mount(app, a, false, absent); err != nil {
 			t.Fatalf("mount %s: %v", a.Name, err)
 		}
 	}

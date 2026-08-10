@@ -108,7 +108,7 @@ type App struct {
 	// The bar is NOT "serving without it is unsafe" — that is Required's bar. It
 	// is "serving without it is pointless": traffic that arrives will not be
 	// answered, so routing it here helps nobody. That is a strictly narrower claim
-	// and it is why `ai` qualifies where the credz broker does not.
+	// than Required's, and `ai` is the app that meets it.
 	//
 	// Written against 2026-08-01, ~30 minutes of api.hanzo.ai/v1/models and
 	// /v1/chat/completions answering 503 {"error":"mount /v1: no instance

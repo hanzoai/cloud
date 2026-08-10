@@ -10,6 +10,7 @@ package cloud
 // org.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
 	"errors"
@@ -528,7 +529,7 @@ func TestResourceMeter_MeterUsageBillsAnExactAmount(t *testing.T) {
 // plane socket, receiving the same RecordIn — what it sees is what commerce
 // would have debited.
 func TestMeterPeer_CarriesTheExactDebit(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	ResetPlane()
 
 	got := make(chan plane.RecordIn, 1)

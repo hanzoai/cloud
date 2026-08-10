@@ -3,6 +3,7 @@
 package cloud
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"reflect"
 	"testing"
 
@@ -15,7 +16,7 @@ import (
 // plugins lazily, the host does not fail at boot but 502s the first real
 // request to the prefix. RED before Serve honoured zip.Addr.
 func TestListenOn_PluginServesTheSocketItWasGiven(t *testing.T) {
-	sock := t.TempDir() + "/wallets.sock"
+	sock := planetest.Dir(t) + "/wallets.sock"
 	t.Setenv(zip.AddrEnv, sock)
 
 	addrs, ops := listenOn(testListenCfg())
