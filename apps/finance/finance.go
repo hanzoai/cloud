@@ -365,7 +365,7 @@ func creditedUnder(ctx context.Context, store *sqlstore.Store, in types.DepositI
 
 // usageHook, when set, is called (async, best-effort) after a successful usage debit.
 // It is the dependency-inverted seam the usage-cap ALERT fires through WITHOUT finance
-// importing commerce: the host (apps/commerce.go) registers a hook that reads the org's
+// importing commerce: the host (apps/commerce/mount.go) registers a hook that reads the org's
 // finance period spend and fires/debounces the alerts. Set once at boot.
 var usageHook atomic.Pointer[func(org string, test bool, project, service string)]
 

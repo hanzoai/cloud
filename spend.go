@@ -37,7 +37,7 @@ package cloud
 // by keying the ORG POOL — see apps/principal/wallet.go, which lists them. Read on
 // the pool, this predicate would admit every member of the shared signup org for as
 // long as the platform's own pool is funded, which is a total bypass and is precisely
-// the live free-inference hole (apps/zen.go still gates the pool). So the credit leg
+// the live free-inference hole (apps/zen/zen.go still gates the pool). So the credit leg
 // reads principal.WalletOf's address and nothing else.
 //
 // CREDIT IS EXACT. finance.Balance returns money.Amount — 18-decimal atto-USD over

@@ -25,7 +25,7 @@ import (
 // real framework DocType store; the company machine runs its real transition guards; the
 // blueprint admin plane runs the real SuperAdmin predicate. The only fakes are the AI
 // completion (a deterministic draft) and the growth-observe seams, which are bound to
-// provably org-scoped reads exactly as the composition root (apps/wire_seams.go) binds
+// provably org-scoped reads exactly as the composition root (plugin/guide/seams.go) binds
 // framework.ModuleInstalled / integrations.Connected in prod.
 
 // mountAgenticStack wires the five real subsystems a fresh org traverses on the

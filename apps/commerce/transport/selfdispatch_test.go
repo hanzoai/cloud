@@ -92,7 +92,7 @@ func TestSetAppSelfDispatch(t *testing.T) {
 // COMMERCE_URL — the public edge = this binary — BY PATH through this same transport), re-entering
 // the wildcard until the depth-8 guard refused → 502 → the cap gate fails OPEN.
 //
-// The fix (apps/commerce.go) registers commerce's own AuthorizeSpendCap co-resident, so the
+// The fix (apps/commerce/mount.go) registers commerce's own AuthorizeSpendCap co-resident, so the
 // specific route shadows the wildcard and the gate's dispatch hits the real handler at depth 1
 // — no loop. This test models both arrangements on the transport this seam owns and pins the
 // invariant.
@@ -292,7 +292,7 @@ func assertPostShadowsBridge(t *testing.T, specificPattern, requestPath string) 
 
 // TestTopupTokenShadowsBridge — the reported P0: POST /v1/billing/topup/token (inline Square
 // card top-up) self-dispatched to the depth-8 502 until commerce's TopupWithToken was
-// registered co-resident (apps/commerce.go mountCommerce).
+// registered co-resident (apps/commerce/mount.go Mount).
 func TestTopupTokenShadowsBridge(t *testing.T) {
 	assertPostShadowsBridge(t, "/v1/billing/topup/token", "/v1/billing/topup/token")
 }
