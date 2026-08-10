@@ -201,14 +201,12 @@ func collect(ctx context.Context, do *digitalocean.Client) (Snapshot, error) {
 		wg      sync.WaitGroup
 	)
 	run := func(name string, fn func() (int, error)) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			n, err := fn()
 			mu.Lock()
 			sources = append(sources, core.SrcOf(name, err, n, stamp))
 			mu.Unlock()
-		}()
+		})
 	}
 	run("do.clusters", func() (int, error) {
 		v, err := do.Clusters(ctx)

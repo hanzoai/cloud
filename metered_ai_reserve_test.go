@@ -233,16 +233,14 @@ func TestConcurrentCallsCannotEachSpendTheWholeBalance(t *testing.T) {
 	var wg sync.WaitGroup
 	var served int
 	for range callers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, err := m.ChatCompletion(context.Background(), &types.ChatRequest{Model: "x", Prompt: string(prompt), Org: "acme", MaxTokens: 1_000})
 			if err == nil {
 				mu.Lock()
 				served++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	w.settled(t, served)

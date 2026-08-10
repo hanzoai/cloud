@@ -237,12 +237,10 @@ func TestReposCache_ConcurrentMissesCollapseIntoOneCall(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, 20)
 	for range 20 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, err := c.Repos(t.Context(), "acme")
 			errs <- err
-		}()
+		})
 	}
 	// Let them all arrive and queue behind the one in flight.
 	time.Sleep(100 * time.Millisecond)

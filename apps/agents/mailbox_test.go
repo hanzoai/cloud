@@ -79,9 +79,7 @@ func TestMailbox_NoDoubleClaim(t *testing.T) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cancel()
 			if _, ok := m.Claim(ctx, "acme", "tgt_1"); ok {
@@ -89,7 +87,7 @@ func TestMailbox_NoDoubleClaim(t *testing.T) {
 				wins++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if wins != 1 {

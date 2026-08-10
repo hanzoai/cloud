@@ -415,15 +415,13 @@ func TestChain_ConcurrentAppendsStayGapless(t *testing.T) {
 	errCh := make(chan error, total)
 	var wg sync.WaitGroup
 	for range goroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range per {
 				if _, err := rec.Append(ctx, sampleRecord("POST /v1/admin/sync")); err != nil {
 					errCh <- err
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errCh)
