@@ -1,6 +1,7 @@
 package cloud_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"sort"
@@ -151,12 +152,6 @@ var allowedRequestUses = map[string]string{
 		"without the request could not name an actor — and an actorless forge call would fall back to the " +
 		"deployment's machine credential, reading every repository that token can see. Fails closed off the " +
 		"HTTP path with the same 403.",
-	"apps/tracker/typed.go": "scope / requireBody. scope needs the IAM PROJECT (X-Project-Id), which " +
-		"picks the physical per-(org,project) store a tracker read opens — principal.OrgFrom carries the org " +
-		"and nothing else, so an op without it would open a different file than the create wrote. requireBody " +
-		"replays the c.Bind refusal the raw PATCH handlers answered on a bodyless request, at the point in " +
-		"the sequence they reached it; zip's typed decode is tolerant and would have turned that 400 into a " +
-		"200-with-nothing-changed. Both fail closed off the HTTP path.",
 	"apps/campaign/typed.go": "requireBody — the three writes that bind a body (create, update, addChannel) " +
 		"have always refused a request with none, or with a content type this service does not parse, with " +
 		"c.Bind's own 400. zip's typed decode is TOLERANT by construction (it skips an empty body and leaves " +
@@ -569,6 +564,16 @@ func TestRequestEscapeHatchIsPinned(t *testing.T) {
 		b, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return readErr
+		}
+		// A GENERATED file is a projection of source this walk already reads, so
+		// counting it counts the same fact twice — and zipdoc's projection is PROSE:
+		// apps/automations names cloud.Request(ctx) in the doc comments explaining
+		// why four routes stay untyped, and those sentences are lifted verbatim into
+		// zipdoc_gen.go's Description strings. A sentence about the escape hatch is
+		// not a use of it. The handler file that carries both the prose and the real
+		// call sites is pinned on its own line above.
+		if bytes.HasPrefix(b, []byte("// Code generated ")) {
+			return nil
 		}
 		if n := strings.Count(string(b), "cloud.Request("); n > 0 {
 			found[filepath.ToSlash(path)] = n
