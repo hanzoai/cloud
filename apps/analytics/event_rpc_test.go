@@ -118,12 +118,12 @@ func TestPlaneCapture_RefusesAnUnnamedAct(t *testing.T) {
 // Mutation proof: add an Org field to plane.EventIn and this names it.
 func TestEventIn_CannotNameAnOrg(t *testing.T) {
 	rt := reflect.TypeFor[planeops.EventIn]()
-	for i := 0; i < rt.NumField(); i++ {
-		name := strings.ToLower(rt.Field(i).Name)
+	for field := range rt.Fields() {
+		name := strings.ToLower(field.Name)
 		for _, banned := range []string{"org", "tenant", "brand", "owner"} {
 			if strings.Contains(name, banned) {
 				t.Errorf("plane.EventIn.%s names the tenant — the organisation a row lands under "+
-					"rides the caller, never the argument", rt.Field(i).Name)
+					"rides the caller, never the argument", field.Name)
 			}
 		}
 	}

@@ -303,13 +303,13 @@ func TestScopeBindsTenantThenSignal(t *testing.T) {
 // failure is a future field called `org` that quietly starts winning.
 func TestTenantIsNeverOnTheWire(t *testing.T) {
 	rt := reflect.TypeFor[CaptureEvent]()
-	for i := 0; i < rt.NumField(); i++ {
-		name := strings.ToLower(rt.Field(i).Name)
-		tag := strings.ToLower(rt.Field(i).Tag.Get("json"))
+	for field := range rt.Fields() {
+		name := strings.ToLower(field.Name)
+		tag := strings.ToLower(field.Tag.Get("json"))
 		for _, banned := range []string{"org", "tenant", "team", "orgid", "tenantid", "teamid"} {
 			if name == banned || strings.HasPrefix(tag, banned+",") || tag == banned {
 				t.Errorf("CaptureEvent.%s is a caller-settable tenant — the tenant is the "+
-					"server's answer, never the caller's claim", rt.Field(i).Name)
+					"server's answer, never the caller's claim", field.Name)
 			}
 		}
 	}
