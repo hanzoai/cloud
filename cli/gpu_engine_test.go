@@ -186,7 +186,7 @@ func TestConnectServeEngineRoundTrip(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/fleet/workers":
 			// Fold the stored registration into the fleet worker shape, exactly as
-			// clients/visor/fleet.go byoWorkers does.
+			// apps/visor/fleet.go byoWorkers does.
 			_ = json.NewEncoder(w).Encode(map[string]any{"workers": []fleetWorker{{
 				ID: "gb10", Hostname: storedInput.Hostname, Provider: "byo", Status: "online",
 				GPUs: storedInput.GPUs, Capabilities: storedInput.Capabilities, Engine: storedInput.Engine,
