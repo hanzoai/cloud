@@ -430,8 +430,7 @@ func TestStreamBurst_OrgScoped(t *testing.T) {
 // TestForwardWatch_DropsCrossTenantObject: an org's watch forwarder drops a watched object
 // that belongs to another tenant (wrong org label) and one outside its namespace.
 func TestForwardWatch_DropsCrossTenantObject(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	fw := watch.NewFake()
 	events := make(chan streamEvent, 4)
 	go forwardWatch(ctx, scope{org: "acme"}, "tenant-acme", fw, events)

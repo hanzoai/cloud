@@ -16,9 +16,9 @@ import (
 )
 
 func TestLoginBrokerRateLimited(t *testing.T) {
-	var iamHits int64
+	var iamHits atomic.Int64
 	iam := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt64(&iamHits, 1)
+		iamHits.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "iam-token", "expires_in": 3600, "token_type": "Bearer",
 		})
@@ -57,7 +57,7 @@ func TestLoginBrokerRateLimited(t *testing.T) {
 	// The load-bearing assertion: every 429 short-circuited BEFORE the outbound IAM
 	// exchange, so IAM was hit exactly once per ALLOWED login and never for a denied
 	// one. If a rate-limited request reached IAM, iamHits would exceed got200.
-	if hits := atomic.LoadInt64(&iamHits); hits != int64(got200) {
+	if hits := iamHits.Load(); hits != int64(got200) {
 		t.Fatalf("IAM hit %d times but only %d logins were allowed — a rate-limited request reached IAM (broker is still a fan-out amplifier)", hits, got200)
 	}
 }

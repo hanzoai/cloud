@@ -44,7 +44,7 @@ type recCommerce struct {
 
 	mu           sync.Mutex
 	balanceOrg   string // last X-Org-Id on a balance call
-	balanceCalls int32
+	balanceCalls atomic.Int32
 }
 
 func (f *recCommerce) server(t *testing.T) *httptest.Server {
@@ -52,7 +52,7 @@ func (f *recCommerce) server(t *testing.T) *httptest.Server {
 	f.debits.serve(t)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&f.balanceCalls, 1)
+		f.balanceCalls.Add(1)
 		f.mu.Lock()
 		f.balanceOrg = r.Header.Get("X-Org-Id")
 		f.mu.Unlock()
@@ -71,7 +71,7 @@ func (f *recCommerce) server(t *testing.T) *httptest.Server {
 }
 
 func (f *recCommerce) usages() int32   { return f.debits.count() }
-func (f *recCommerce) balances() int32 { return atomic.LoadInt32(&f.balanceCalls) }
+func (f *recCommerce) balances() int32 { return f.balanceCalls.Load() }
 func (f *recCommerce) lastBalanceOrg() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()

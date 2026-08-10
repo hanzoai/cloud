@@ -257,9 +257,9 @@ func TestEscapedPathIsRefusedAndNeverReachesUpstream(t *testing.T) {
 // An upstream 3xx is NOT followed: the head relays it verbatim (status + Location)
 // so a redirect can never silently re-target the request onto another host or path.
 func TestUpstreamRedirectIsNotFollowedAndPassesThrough(t *testing.T) {
-	var hits int32
+	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&hits, 1)
+		hits.Add(1)
 		// If the head followed this, the client would re-request /v1/dns/elsewhere
 		// on this same host and bump hits to 2.
 		w.Header().Set("Location", "/v1/dns/elsewhere")
@@ -275,7 +275,7 @@ func TestUpstreamRedirectIsNotFollowedAndPassesThrough(t *testing.T) {
 	if loc := res.Header.Get("Location"); loc != "/v1/dns/elsewhere" {
 		t.Fatalf("Location = %q, want /v1/dns/elsewhere relayed verbatim", loc)
 	}
-	if n := atomic.LoadInt32(&hits); n != 1 {
+	if n := hits.Load(); n != 1 {
 		t.Fatalf("upstream reached %d time(s), want 1 -- a 3xx must NOT be followed", n)
 	}
 }
