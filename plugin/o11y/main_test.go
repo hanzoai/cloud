@@ -20,7 +20,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// probeApp is newApp with a stand-in for the mounted routes. MountO11y opens the
+// probeApp is newApp with a stand-in for the mounted routes. Mount opens the
 // event store and starts the fleet probes, none of which this asks about: the
 // question here is what the CHAIN does to a response, so any leaf answers it.
 func probeApp(t *testing.T, origins []string) *zip.App {

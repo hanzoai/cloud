@@ -47,7 +47,7 @@ func surfaceApp(t *testing.T) *zip.App {
 	// harness that stopped composing the way the real process does. scopeApp
 	// (scope_test.go) already states this; surfaceApp is where it was missed.
 	app.Use(cloud.Bridge())
-	if err := MountO11y(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("MountO11y: %v", err)
 	}
 	t.Cleanup(func() { _ = shutdownAnnotationQueues() })

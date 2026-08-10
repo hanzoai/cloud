@@ -12,7 +12,7 @@
 //	  - event ingest         POST /v1/event/ingestion          (event_ingest.go)
 //	  - Sentry-wire ingest   POST /v1/event/{project}/envelope|store (via cloud.ObsErrorIngest)
 //	RUNTIME handler the hanzoai/o11y wildcard (order 70) delegates to via
-//	  o11y.SetHandler — the in-process runtime (embed.go) or a reverse-proxy
+//	  module.SetHandler — the in-process runtime (embed.go) or a reverse-proxy
 //	  fallback (this file).
 //	WRITE plane (order-independent):
 //	  - ZAP span+log receivers + opt-in in-process trace sink, all writing
@@ -49,6 +49,7 @@ package o11y
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -57,7 +58,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/hanzoai/o11y"
+	module "github.com/hanzoai/o11y"
 	"github.com/zap-proto/zip"
 )
 
@@ -347,7 +348,7 @@ func newHandler(rawURL string) (http.Handler, error) {
 // unscoped, and a member's cross-org query keys are stripped before the runtime
 // can honour them.
 //
-// WHICH OPS ARE EXEMPT IS THE MODULE'S ANSWER, NOT OURS (o11y.Anonymous). This
+// WHICH OPS ARE EXEMPT IS THE MODULE'S ANSWER, NOT OURS (module.Anonymous). This
 // file used to keep its own list, and the list named /v1/o11y/api/v1/health and
 // three /api/v2 siblings — the INTERNAL namespace hanzoai/o11y used to rewrite
 // onto before it stopped rewriting paths at all. Four names, zero routes: the
@@ -369,7 +370,7 @@ func newHandler(rawURL string) (http.Handler, error) {
 // admission test, applied one layer in.
 func gate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if o11y.Anonymous(r.Method, r.URL.Path) {
+		if module.Anonymous(r.Method, r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -449,7 +450,7 @@ func orgOf(r *http.Request) string { return strings.TrimSpace(r.Header.Get("X-Or
 // and isSentryIngestPath — are gone. They were this repo's copy of hanzoai/o11y's
 // route table, and isHealthPath had already drifted into naming four paths that
 // no longer existed, which is what closed the unified door. The answer comes from
-// the module now: o11y.Anonymous covers all three families, and o11y.IngestWire
+// the module now: module.Anonymous covers all three families, and module.IngestWire
 // is the DSN-wire term the edge needs to match byte-for-byte.
 //
 // That agreement is still load-bearing. The gateway waives its JWT check on the
@@ -463,7 +464,7 @@ func orgOf(r *http.Request) string { return strings.TrimSpace(r.Header.Get("X-Or
 
 // runtimeHandler is the gated o11y runtime handler (the in-process runtime, or the
 // reverse-proxy fallback) — the SAME handler the hanzoai/o11y wildcard delegates to
-// via o11y.SetHandler. It is pinned here so the flat builder-query routes (query.go)
+// via module.SetHandler. It is pinned here so the flat builder-query routes (query.go)
 // can delegate to it directly. Set by mountRuntime; read PER-REQUEST (never at
 // registration), so it is always in place by the time the first request lands.
 var runtimeHandler http.Handler
@@ -484,9 +485,9 @@ func mountRuntime(deps cloud.Deps) error {
 		gh := gate(h)
 		runtimeHandler = gh
 		// The embedded runtime is one router that matches the request's own path,
-		// so every declared address reaches the same door: o11y.Whole, which is
+		// so every declared address reaches the same door: module.Whole, which is
 		// what SetHandler meant before a runtime could resolve per address.
-		o11y.SetRuntime(o11y.Whole(gh))
+		module.SetRuntime(module.Whole(gh))
 		// Runtime (and its ONE datastore connection) is live; start native
 		// metrics ingest — opt-in, fail-soft (metrics.go).
 		startNativeMetricsIngest(embeddedRuntime.TelemetryStore, log)
@@ -513,7 +514,7 @@ func mountRuntime(deps cloud.Deps) error {
 	runtimeHandler = gh
 	// A reverse proxy has one door and the far side selects the route, so there
 	// is nothing here to resolve per address.
-	o11y.SetRuntime(o11y.Whole(gh))
+	module.SetRuntime(module.Whole(gh))
 	log.Info("o11y runtime handler installed (reverse proxy fallback)", "upstream", upstream())
 	return nil
 }
@@ -522,7 +523,7 @@ func mountRuntime(deps cloud.Deps) error {
 // gated runtime handler (resolved PER-REQUEST, so it is in place by first request —
 // same discipline as the o11y wildcard). No path rewrite: the Sentry routes are
 // literal /v1/sentry/… in the runtime. The DSN-ingest routes are principal-gate-exempt
-// (o11y.IngestWire); the reads stay gated.
+// (module.IngestWire); the reads stay gated.
 //
 // Raw: it carries Sentry's own protocol — DSN-keyed envelope frames, a third
 // party's shape — through a wildcard that has no single operation to type.
@@ -547,10 +548,10 @@ func eventToRuntimePath(method, path string) (string, bool) {
 		return "", false
 	}
 	mapped := "/v1/sentry/" + rest
-	return mapped, o11y.IngestWire(method, mapped)
+	return mapped, module.IngestWire(method, mapped)
 }
 
-// MountO11y composes the whole observability surface into its host as ONE app,
+// Mount composes the whole observability surface into its host as ONE app,
 // through [zip.App.Graft] — the same seam apps/iam composes identity through.
 //
 // # Why the surface is an app and not a pile of routes on the host's router
@@ -612,43 +613,16 @@ func eventToRuntimePath(method, path string) (string, bool) {
 // in the same order it always was, and it costs nothing here because a wildcard
 // proxy declares no typed op and contributes no schema. Everything with a shape
 // to name is in the child.
-func MountO11y(host *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
+	if deps.Logger == nil {
+		return fmt.Errorf("o11y: nil deps.Logger")
+	}
 	a := zip.New(zip.Config{
 		AppName:      "o11y",
-		Logger:       host.Logger(),
+		Logger:       deps.Logger,
 		ErrorHandler: cloud.ErrorHandler,
 	})
-	if err := mount(a, host, deps); err != nil {
-		return err
-	}
-	// zip v1.23: Use is the ONE composition verb, and an *App IS a Component. The
-	// address-conflict check Graft ran here now runs at Build over the whole program.
-	host.Use(a)
-	return nil
-}
 
-// mount performs the ordered sub-mounts that make up the one observability
-// concept, onto the app that IS that concept. Every cloud-native /v1/o11y/* route
-// is registered here, BEFORE hanzoai/o11y's own table, so Fiber's in-order match
-// gives the specific routes precedence over the runtime relay.
-//
-// host is the router the graft lands on, and takes only what cannot cross one —
-// see [MountO11y]. It is registered in its own order here rather than before or
-// after the whole mount, because the /v1/sentry wildcard has to precede the
-// module's own /v1/sentry ingest routes exactly as it always did.
-//
-// cloud.Bridge is NOT installed here, and no subsystem installs it. The typed ops
-// below do need it — a zip.Get[In, Out] handler receives a context and its decoded
-// In and nothing else, so the validated org reaches it only by being parked on
-// that context — but the middleware belongs to whoever COMPOSES this app. Only a
-// composer knows that the identity boundary has already run (the org is
-// trustworthy only once SanitizeIdentity has minted it) and that no route is
-// registered ahead of it; see the install in cloud.Serve. Installing a second copy
-// here is what took the surface down: each Group call makes a fresh node, so the
-// install went on a node of its own at the same prefix while the routes below live
-// beneath the different node mountScope creates — and zip judges the node, not the
-// path, so it refused to compose middleware that could never run.
-func mount(a *zip.App, host cloud.Router, deps cloud.Deps) error {
 	// READ/SERVE plane — specific routes before the wildcard.
 	mountScope(a)  // GET logs/metrics/status + vm/{query,query_range} + flat builder query + sessions
 	mountAlerts(a) // POST /v1/o11y/alerts/:receiver + GET /v1/o11y/alerts/last
@@ -662,7 +636,7 @@ func mount(a *zip.App, host cloud.Router, deps cloud.Deps) error {
 	}
 	// Hanzo Sentry product face /v1/sentry/* — the SIBLING of the /v1/o11y wildcard,
 	// delegating to the SAME gated runtime handler (which carries the clean /v1/sentry
-	// routes; the DSN-ingest routes are gate-exempt via o11y.IngestWire). One
+	// routes; the DSN-ingest routes are gate-exempt via module.IngestWire). One
 	// runtime, two path families.
 	//
 	// Registering it here is necessary but NOT sufficient — the subtree has to be
@@ -673,9 +647,9 @@ func mount(a *zip.App, host cloud.Router, deps cloud.Deps) error {
 	// reaches this process — see cloud.PluginSpec in apps.Wire().
 	//
 	// On the HOST, because All opens OPTIONS and a graft cannot carry one; see
-	// [MountO11y]. Here in its order, so it still precedes the module's own
+	// [Mount]. Here in its order, so it still precedes the module's own
 	// /v1/sentry ingest routes and still swallows them exactly as before.
-	mountSentry(host)
+	mountSentry(app)
 	// The Sentry wire on the ONE /v1/event door: POST /v1/event/{project}/envelope|store.
 	// The door's owner (analytics) carries the route — the project segment is
 	// variable, so no static prefix could route it here — and forwards through
@@ -708,7 +682,7 @@ func mount(a *zip.App, host cloud.Router, deps cloud.Deps) error {
 	mountSummary(a, deps)
 	// TERMINAL sub-mount: the hanzoai/o11y module wildcard /v1/o11y/* — the runtime
 	// route surface, delegating to the SAME gated handler mountRuntime installed via
-	// o11y.SetHandler. Registered LAST (after every specific /v1/o11y/* route above) so
+	// module.SetHandler. Registered LAST (after every specific /v1/o11y/* route above) so
 	// Fiber's in-order match gives those routes precedence over this catch-all. Folded
 	// in HERE — it was a second, co-named Wire entry (o11ymod.Mount) — so
 	// the observability plane is ONE `o11y` subsystem. /v1/o11y/health is unaffected:
@@ -732,8 +706,40 @@ func mount(a *zip.App, host cloud.Router, deps cloud.Deps) error {
 	// assigned: the per-product RED read moved to /v1/o11y/product/metrics, the
 	// caller-less log read was deleted, and the v3 query pin died with the v3 route
 	// it named. See scope.go for the three decisions.
-	return o11y.Mount(a)
+	// The module's own table LAST, and its ERROR returned rather than its call.
+	// Folding the two functions into one made this the difference between a mounted
+	// surface and a 404: a bare `return module.Mount(a)` short-circuits the compose
+	// below, which the outer function used to perform after this one returned.
+	if err := module.Mount(a); err != nil {
+		return err
+	}
+	// zip v1.23: Use is the ONE composition verb, and an *App IS a Component. The
+	// address-conflict check Graft ran here now runs at Build over the whole program.
+	app.Use(a)
+	return nil
 }
+
+// mount performs the ordered sub-mounts that make up the one observability
+// concept, onto the app that IS that concept. Every cloud-native /v1/o11y/* route
+// is registered here, BEFORE hanzoai/o11y's own table, so Fiber's in-order match
+// gives the specific routes precedence over the runtime relay.
+//
+// host is the router the graft lands on, and takes only what cannot cross one —
+// see [Mount]. It is registered in its own order here rather than before or
+// after the whole mount, because the /v1/sentry wildcard has to precede the
+// module's own /v1/sentry ingest routes exactly as it always did.
+//
+// cloud.Bridge is NOT installed here, and no subsystem installs it. The typed ops
+// below do need it — a zip.Get[In, Out] handler receives a context and its decoded
+// In and nothing else, so the validated org reaches it only by being parked on
+// that context — but the middleware belongs to whoever COMPOSES this app. Only a
+// composer knows that the identity boundary has already run (the org is
+// trustworthy only once SanitizeIdentity has minted it) and that no route is
+// registered ahead of it; see the install in cloud.Serve. Installing a second copy
+// here is what took the surface down: each Group call makes a fresh node, so the
+// install went on a node of its own at the same prefix while the routes below live
+// beneath the different node mountScope creates — and zip judges the node, not the
+// path, so it refused to compose middleware that could never run.
 
 // shutdownO11y tears down the write-plane resources that hold process-lifetime
 // connections, in REVERSE mount order — plane ingest (trace sink + receivers),
