@@ -360,9 +360,7 @@ func (r *Recorder) StartCheckpoints(every time.Duration, logFn CheckpointFunc) {
 	}
 	r.stopCh = make(chan struct{})
 	stop := r.stopCh
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
+	r.wg.Go(func() {
 		t := time.NewTicker(every)
 		defer t.Stop()
 		for {
@@ -373,7 +371,7 @@ func (r *Recorder) StartCheckpoints(every time.Duration, logFn CheckpointFunc) {
 				r.emitCheckpoint(false)
 			}
 		}
-	}()
+	})
 }
 
 // emitCheckpoint snapshots the head and emits it to the log and (if the mirror is

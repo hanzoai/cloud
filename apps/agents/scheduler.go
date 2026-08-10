@@ -199,9 +199,7 @@ func (sc *scheduler) due(a Agent, key string, now time.Time) bool {
 // scheduled agent acts on its own instructions) and attributed to its service
 // account when bound, else the synthetic scheduler actor.
 func (sc *scheduler) launch(ctx context.Context, a Agent, key string) {
-	sc.wg.Add(1)
-	go func() {
-		defer sc.wg.Done()
+	sc.wg.Go(func() {
 		runCtx, cancel := context.WithTimeout(ctx, runTimeout)
 		defer cancel()
 
@@ -231,7 +229,7 @@ func (sc *scheduler) launch(ctx context.Context, a Agent, key string) {
 		default:
 			sc.log.Info("scheduled run ok", "org", a.Org, "agent", a.Name, "durationMs", r.DurationMs)
 		}
-	}()
+	})
 }
 
 // stateForLocked returns (creating if needed) the runtime state for an agent

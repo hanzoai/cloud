@@ -169,11 +169,9 @@ func TestEnsureTableConcurrentSafe(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 16 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_ = ensureTable(context.Background())
-		}()
+		})
 	}
 	wg.Wait()
 }

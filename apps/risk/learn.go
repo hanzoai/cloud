@@ -522,16 +522,12 @@ func newPlane(base cloud.Base) (*plane, error) {
 	// The network baseline is the ONLY cross-organisation surface, and it is a
 	// scheduled job with no route: it lives here so it starts and stops with the
 	// plane, and dies with the process rather than outliving it.
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.wg.Go(func() {
 		schedule(ctx, base.Log)
-	}()
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	})
+	p.wg.Go(func() {
 		p.sweep(ctx, saveInterval)
-	}()
+	})
 	return p, nil
 }
 
@@ -708,9 +704,7 @@ func (p *plane) foldSoon(r *resident) {
 	}
 	replayed := r.replayed
 	p.folded[t] = fold{Window: warmWindow, Replayed: replayed, Gap: foldRunning}
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.wg.Go(func() {
 		defer func() { <-p.folds }()
 		ctx, cancel := context.WithTimeout(p.ctx, warmDeadline)
 		defer cancel()
@@ -730,7 +724,7 @@ func (p *plane) foldSoon(r *resident) {
 			p.folded[t] = f
 		}
 		p.mu.Unlock()
-	}()
+	})
 }
 
 // fold brings a tenant's feature surface up to date from its own source planes
@@ -1869,9 +1863,7 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, pri
 	p.settle(t, pending)
 	started = true
 
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.wg.Go(func() {
 		runCtx, cancel := context.WithTimeout(p.ctx, searchDeadline)
 		defer cancel()
 		// The slot is released whatever happens. A run that panicked and left the
@@ -1907,7 +1899,7 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, pri
 		if err := p.keep(t, rep); err != nil {
 			p.log.Warn("search finished but could not be saved", "tenant", string(t), "run", id, "err", err)
 		}
-	}()
+	})
 	return pending, nil
 }
 

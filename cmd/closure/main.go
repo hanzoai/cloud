@@ -350,14 +350,12 @@ func hashAll(pkgs []pkg) (map[string]string, error) {
 
 	var wg sync.WaitGroup
 	for i := 0; i < runtime.NumCPU(); i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for p := range work {
 				sum, err := hashPkg(p)
 				out <- result{p.ImportPath, sum, err}
 			}
-		}()
+		})
 	}
 	go func() {
 		for i := range pkgs {
