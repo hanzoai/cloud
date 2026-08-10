@@ -50,35 +50,61 @@ func TestGrantAddressIsTheSpendAddress(t *testing.T) {
 	}
 }
 
-// TestGrantIdempotencyKeyBindsTheSubject: two members of one org, same operator
-// nonce, same amount, are DIFFERENT grants. Hashing the org alone made the second
-// dedupe away against the first — a credit silently dropped, which on a money path
-// is indistinguishable from theft.
-func TestGrantIdempotencyKeyBindsTheSubject(t *testing.T) {
-	key := func(subject string) string {
-		app := zip.New(zip.Config{DisableStartupMessage: true})
-		var out string
-		app.Get("/k", func(c *zip.Ctx) error {
-			out = grantIdempotencyKey(c, subject, "usd", "trial", 500)
-			return c.JSON(200, map[string]string{"key": out})
-		})
-		req := httptest.NewRequest("GET", "/k", nil)
-		req.Header.Set("Idempotency-Key", "one-nonce")
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("key probe: %v", err)
-		}
-		_ = resp.Body.Close()
-		return out
+// refProbe runs grantRef inside a real request, with the operator nonce set to
+// nonce ("" sends no header at all).
+func refProbe(t *testing.T, subject, nonce string) string {
+	t.Helper()
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	var out string
+	app.Get("/k", func(c *zip.Ctx) error {
+		out = grantRef(c, subject, "usd", "trial", 500)
+		return c.JSON(200, map[string]string{"ref": out})
+	})
+	req := httptest.NewRequest("GET", "/k", nil)
+	if nonce != "" {
+		req.Header.Set("Idempotency-Key", nonce)
 	}
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("ref probe: %v", err)
+	}
+	_ = resp.Body.Close()
+	return out
+}
+
+// TestGrantRefBindsTheSubject: two members of one org, same operator nonce, same
+// amount, are DIFFERENT grants. Hashing the org alone made the second dedupe away
+// against the first — a credit silently dropped, which on a money path is
+// indistinguishable from theft.
+func TestGrantRefBindsTheSubject(t *testing.T) {
+	key := func(subject string) string { return refProbe(t, subject, "one-nonce") }
 	alice, bob, pool := key("hanzo/alice"), key("hanzo/bob"), key("hanzo")
 	if alice == "" {
-		t.Fatal("an operator nonce must produce a key")
+		t.Fatal("an operator nonce must produce a ref")
 	}
 	if alice == bob || alice == pool || bob == pool {
 		t.Fatalf("distinct addresses collided: alice=%s bob=%s pool=%s — the second grant dedupes away", alice, bob, pool)
 	}
 	if again := key("hanzo/alice"); again != alice {
-		t.Fatalf("the same grant retried produced a different key (%s != %s) — a retry double-credits", again, alice)
+		t.Fatalf("the same grant retried produced a different ref (%s != %s) — a retry double-credits", again, alice)
+	}
+}
+
+// TestGrantRefIsAlwaysPresentAndAdditiveWithoutANonce pins the property the plane
+// leg depends on and the co-resident leg is indifferent to.
+//
+// plane.CreditIn.Ref is REQUIRED — commerce refuses an empty one, because an op that
+// CREATES money and can be replayed is a money printer — so a grant that answered ""
+// here could not be credited over the plane at all. It must therefore always produce
+// a ref. And with no operator nonce it must produce a DIFFERENT one every attempt:
+// that is what "additive" means, and a ref that were stable across attempts would
+// silently drop the second of two legitimate identical comps.
+func TestGrantRefIsAlwaysPresentAndAdditiveWithoutANonce(t *testing.T) {
+	first, second := refProbe(t, "hanzo/alice", ""), refProbe(t, "hanzo/alice", "")
+	if first == "" || second == "" {
+		t.Fatal("a grant with no operator nonce produced no ref — commerce refuses an empty ref, so it could not be credited over the plane")
+	}
+	if first == second {
+		t.Fatalf("two attempts with no operator nonce produced ONE ref (%s) — the second grant would dedupe away", first)
 	}
 }
