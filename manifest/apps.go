@@ -390,6 +390,7 @@ var Apps = []App{
 	{Name: "admin", Prefixes: []string{"/v1/admin"}},
 	{Name: "admission", Prefixes: []string{"/v1/flags/waitlist"}},
 	{Name: "tasks", Prefixes: []string{"/tasks", "/v1/tasks"}},
+	{Name: "tel", Prefixes: []string{"/v1/tel"}},
 	{Name: "automations", Prefixes: []string{"/v1/automations"}},
 	{Name: "flow", Prefixes: []string{"/v1/flow"}},
 	{Name: "engine", Prefixes: []string{"/v1/engine"}},
