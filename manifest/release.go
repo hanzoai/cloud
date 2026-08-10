@@ -42,16 +42,16 @@ var index struct {
 // key is name+os+arch: one index serves a mixed-arch fleet.
 func key(name, goos, goarch string) string { return name + "/" + goos + "/" + goarch }
 
-// fetch reads the release index, caching only SUCCESS. 108 apps resolving
-// through here must not become 108 requests, but a lazy plugin can first
-// resolve minutes after boot: caching a failure would let one blip while the
+// fetch reads the release index, caching only SUCCESS. Every app in [Apps]
+// resolves through here and must not become a request each, but a lazy plugin
+// can first resolve minutes after boot: caching a failure would let one blip while the
 // network was still coming up disable every plugin for the life of the process.
 //
 // Success, though, is cached FOREVER, and that is a cache-invalidation contract
 // rather than a mere optimisation: rewriting the index a live host has already
 // read changes nothing for that host. New bits reach a running process by
-// restarting it, or by zip.App.ReloadTo(name, Plugin{URL, Sum}) — which
-// clients/plugin already exposes, audited and SuperAdmin-gated. An on-demand or
+// restarting it, or by [zip.App.Reload](name, Plugin{URL, Sum}) — which
+// apps/plugin already exposes, audited and SuperAdmin-gated. An on-demand or
 // per-org upgrade path must drive one of those two; publishing cannot push.
 func fetch() (map[string]struct{ url, sum string }, error) {
 	index.mu.Lock()
