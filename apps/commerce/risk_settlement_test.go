@@ -20,6 +20,7 @@ package commerce
 //	retry converges, and can never fail the payment it describes.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"errors"
 	"io"
@@ -81,7 +82,7 @@ func watchTeaching(t *testing.T) <-chan caught {
 // doorApp is the credit door with a handler that answers like the real one.
 func doorApp(t *testing.T, status int, body string) *zip.App {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	plane.Unbind()
 	t.Cleanup(plane.Unbind)
 	t.Cleanup(func() { cloud.SetRiskScorer(nil) })

@@ -14,6 +14,7 @@ package platform
 // socket, real ZAP frames, the real generated client, the real Ask.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"errors"
 	"io"
@@ -86,7 +87,7 @@ func TestNewProjectStoreSelector(t *testing.T) {
 // frame, the real generated client, and IAM's model rebuilt from the contract on
 // the far side.
 func TestCanonicalProjectsRoundTrip(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	plane.Unbind()
 	stop := servePeer(t, []plane.Project{
 		{Owner: "acme", Name: "web", DisplayName: "Web", Description: "the site", CreatedTime: "2026-08-01T00:00:00Z"},
@@ -130,7 +131,7 @@ func TestCanonicalProjectsRoundTrip(t *testing.T) {
 // about another tenant even by mistake. The HTTP client this replaced put the org
 // in the QUERY STRING and had to mint a credential to stop it mattering.
 func TestCanonicalProjectsCarriesNoScope(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	plane.Unbind()
 	var sawOrg string
 	cloud.ResetPlane()
@@ -166,7 +167,7 @@ func TestCanonicalProjectsCarriesNoScope(t *testing.T) {
 // different facts, and the PaaS acts on the first by offering to create one that
 // already exists.
 func TestCanonicalProjectsNoPeerIsAnError(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	plane.Unbind()
 	cloud.ResetPlane() // nothing listening
 
@@ -192,7 +193,7 @@ func TestCanonicalProjectsNoPeerIsAnError(t *testing.T) {
 // asserting the wrong thing: unlinking it changes nothing because nothing was
 // going to touch it.
 func TestCanonicalProjectsCoresidentSkipsTheWire(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	plane.Unbind()
 	stop := servePeer(t, []plane.Project{{Owner: "acme", Name: "web"}})
 	t.Cleanup(func() { _ = stop() })
@@ -231,7 +232,7 @@ func TestCanonicalProjectsCoresidentSkipsTheWire(t *testing.T) {
 // transport that never carries a byte looks exactly like one that does from every
 // angle except this one.
 func TestCanonicalProjectsSocketIsLoadBearing(t *testing.T) {
-	front, back := t.TempDir(), t.TempDir()
+	front, back := planetest.Dir(t), planetest.Dir(t)
 
 	t.Setenv("ZIP_RUNTIME_DIR", back)
 	plane.Unbind()

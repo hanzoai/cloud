@@ -3,6 +3,7 @@
 package sandbox
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
 	"path/filepath"
@@ -22,7 +23,7 @@ import (
 // test would prove only that the derivation reads a field.
 func serveFleet(t *testing.T, runtime string) {
 	t.Helper()
-	dir := t.TempDir()
+	dir := planetest.Dir(t)
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
 	plane.Unbind()
 	cloud.ResetPlane()
@@ -110,7 +111,7 @@ func TestAMistypedSettingFallsToTheBoundaryThatServes(t *testing.T) {
 // unconfigured isolates — so an outage in the settings app cannot move a tenant's
 // sandbox onto the node's kernel.
 func TestNoSettingsPeerStillIsolates(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	plane.Unbind()
 	cloud.ResetPlane()
 	t.Cleanup(func() { cloud.ResetPlane(); plane.Unbind() })

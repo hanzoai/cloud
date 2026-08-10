@@ -1,6 +1,7 @@
 package metering_test
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"net"
 	"sync"
@@ -30,7 +31,7 @@ type planeCall struct {
 
 func (p *planeCommerce) serve(t *testing.T) *planeCommerce {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	plane.Unbind()
 	t.Cleanup(plane.Unbind)
 
