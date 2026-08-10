@@ -12,7 +12,7 @@ import (
 // bare r‖s ring signature so the 65-byte result recovers to the signer address —
 // the exact fix the treasury anchor needs (the ring returns 64 bytes; EVM needs 65).
 func TestRecoverableSig(t *testing.T) {
-	for i := 0; i < 8; i++ { // exercise both parities
+	for i := range 8 { // exercise both parities
 		priv, err := crypto.GenerateKey()
 		if err != nil {
 			t.Fatal(err)
@@ -56,7 +56,7 @@ func TestRecoverableSig_NoMatch(t *testing.T) {
 // canonicalized to EIP-2 low-S AND still recovers to the signer (the fix for the
 // anchor's "invalid sender" — geth rejects s > N/2).
 func TestRecoverableSig_LowSNormalization(t *testing.T) {
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		priv, _ := crypto.GenerateKey()
 		addr := crypto.PubkeyToAddress(priv.PublicKey).Hex()
 		digest := crypto.Keccak256([]byte{byte(i), 'l', 'o', 'w', 's'})

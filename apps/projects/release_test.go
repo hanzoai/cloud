@@ -295,7 +295,7 @@ func TestRelease_UnsafeObjectKeyRejected(t *testing.T) {
 func TestRelease_PartialCopyNeverActivates(t *testing.T) {
 	f, app := releaseHarness(t)
 	// A build big enough that "fail after 1" leaves a genuinely partial prefix.
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		f.seed(testBucket, fmt.Sprintf("acme/builds/big/a%d.js", i), fmt.Sprintf("payload-%d", i))
 	}
 	f.seed(testBucket, "acme/builds/big/index.html", "<!doctype html>")
@@ -516,7 +516,7 @@ func TestRelease_ReservedSlugRejected(t *testing.T) {
 func TestRelease_ObjectCountCapEnforced(t *testing.T) {
 	f, app := releaseHarness(t)
 	f.seed(testBucket, "acme/builds/many/index.html", "<!doctype html>")
-	for i := 0; i < maxFiles+10; i++ {
+	for i := range maxFiles + 10 {
 		f.seed(testBucket, fmt.Sprintf("acme/builds/many/f%05d.js", i), "x")
 	}
 	code, body := publish(t, app, "acme", "shop", "builds/many")
@@ -535,7 +535,7 @@ func TestRelease_ByteCapEnforced(t *testing.T) {
 	f.seed(testBucket, "acme/builds/heavy/index.html", "<!doctype html>")
 	// Sparse: the cap is enforced on the SIZE the listing reports (bodies are never
 	// read by the release plane), so this asserts on >512 MiB without allocating it.
-	for i := 0; i < (maxTotalBytes>>20)+2; i++ {
+	for i := range (maxTotalBytes >> 20) + 2 {
 		f.seedSparse(testBucket, fmt.Sprintf("acme/builds/heavy/blob%03d.bin", i), 1<<20)
 	}
 	code, body := publish(t, app, "acme", "shop", "builds/heavy")
@@ -583,7 +583,7 @@ func TestRelease_ConcurrentActivateIsSerialized(t *testing.T) {
 	first, second := decodeRelease(t, b1).ReleaseID, decodeRelease(t, b2).ReleaseID
 
 	var wg sync.WaitGroup
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		id := first
 		if i%2 == 0 {
 			id = second
@@ -611,7 +611,7 @@ func TestRelease_DoubleActivateIsIdempotent(t *testing.T) {
 	_, b := publish(t, app, "acme", "shop", "builds/v1")
 	id := decodeRelease(t, b).ReleaseID
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		code, body := doSite(t, app, http.MethodPost, "/v1/sites/shop/releases/"+id+"/activate", "acme", nil)
 		if code != http.StatusOK {
 			t.Fatalf("activate #%d want 200, got %d (%s)", i, code, body)
@@ -835,7 +835,7 @@ func TestRelease_RetentionReclaimsBeyondTheDepth(t *testing.T) {
 	f, app := releaseHarness(t)
 	const extra = 3
 	ids := make([]string, 0, keepReleases+extra)
-	for i := 0; i < keepReleases+extra; i++ {
+	for i := range keepReleases + extra {
 		src := fmt.Sprintf("builds/v%d", i)
 		seedBuild(f, "acme", src, fmt.Sprintf("build-%d", i))
 		code, body := publish(t, app, "acme", "shop", src)
@@ -890,7 +890,7 @@ func TestRelease_RetentionNeverPrunesTheLiveRelease(t *testing.T) {
 
 	// Stage far past the depth WITHOUT activating: the pointer stays on the
 	// oldest release of all while newer ones pile up and prune runs on each.
-	for i := 0; i < keepReleases+2; i++ {
+	for i := range keepReleases + 2 {
 		src := fmt.Sprintf("builds/staged%d", i)
 		seedBuild(f, "acme", src, fmt.Sprintf("staged-%d", i))
 		stagedRelease(t, app, "acme", "shop", src)
@@ -956,13 +956,13 @@ func TestRelease_ActivateRefusesAReleaseWhoseBytesAreGone(t *testing.T) {
 func TestRelease_PruneNeverDeletesTheRowUnderAnActivation(t *testing.T) {
 	f, app := releaseHarness(t)
 	var ids []string
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		src := fmt.Sprintf("builds/r%d", i)
 		seedBuild(f, "acme", src, fmt.Sprintf("r-%d", i))
 		ids = append(ids, stagedRelease(t, app, "acme", "shop", src))
 	}
 	store := mounted.State.store
-	for round := 0; round < 200; round++ {
+	for round := range 200 {
 		// Re-seat the rows each round (PutRelease is an idempotent insert), so every
 		// round races the same fully-populated menu.
 		for _, id := range ids {

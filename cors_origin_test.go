@@ -178,7 +178,7 @@ func TestProvenAnswersAreCachedBothWays(t *testing.T) {
 	o := &corsOrigins{proven: p.fn}
 	ctx := context.Background()
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		if !o.allowed(ctx, "https://console.acme.com") {
 			t.Fatal("verified host must stay allowed")
 		}
@@ -199,7 +199,7 @@ func TestProvenCacheIsBounded(t *testing.T) {
 	p := &provenSet{}
 	o := &corsOrigins{proven: p.fn}
 	ctx := context.Background()
-	for i := 0; i < maxProvenCache*3; i++ {
+	for i := range maxProvenCache * 3 {
 		o.allowed(ctx, fmt.Sprintf("https://h%d.attacker.example", i))
 	}
 	o.mu.Lock()
@@ -220,11 +220,11 @@ func TestPredicateIsRaceFreeAcrossItsTwoReaders(t *testing.T) {
 	ctx := context.Background()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			for n := 0; n < 200; n++ {
+			for n := range 200 {
 				switch i % 3 {
 				case 0: // the edge middleware recompiling a retuned allowlist
 					o.setDeclared(newOriginMatcher([]string{fmt.Sprintf("*.h%d.example", n%4)}))

@@ -304,7 +304,7 @@ func (l locked) Write(p []byte) (int, error) {
 // waitAccept blocks until path accepts.
 func waitAccept(t *testing.T, path string) {
 	t.Helper()
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, err := net.Dial("unix", path); err == nil {
 			_ = c.Close()
 			return
@@ -330,7 +330,7 @@ func servePeerApproval(t *testing.T, status string) func() error {
 	if err != nil {
 		t.Fatalf("ServePlane(iam): %v", err)
 	}
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, derr := net.Dial("unix", zip.SocketPath("iam")); derr == nil {
 			_ = c.Close()
 			break

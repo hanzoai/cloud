@@ -232,7 +232,7 @@ func TestConcurrentCallsCannotEachSpendTheWholeBalance(t *testing.T) {
 
 	var wg sync.WaitGroup
 	var served int
-	for i := 0; i < callers; i++ {
+	for range callers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

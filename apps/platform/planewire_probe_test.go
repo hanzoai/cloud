@@ -193,7 +193,7 @@ func (r *relay) pump(c net.Conn, peer string) {
 // waitSock blocks until path accepts.
 func waitSock(t *testing.T, path string) {
 	t.Helper()
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, err := net.Dial("unix", path); err == nil {
 			_ = c.Close()
 			return

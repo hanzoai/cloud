@@ -55,7 +55,7 @@ func TestAbuseGate_AHoldSurvivesCredentialRotation(t *testing.T) {
 func TestAbuseGate_RotatingACredentialDoesNotMintCallers(t *testing.T) {
 	resetScorer(t)
 	app, tr := abuseApp(t, edge.ModeShadow)
-	for i := 0; i < 500; i++ {
+	for i := range 500 {
 		abuseHit(app, "GET", "/v1/models", "", fmt.Sprintf("junk-%06d", i), "203.0.113.201")
 	}
 	v := tr.View("", edge.ModeShadow, abuseNow())
@@ -134,12 +134,12 @@ func TestAbuseGate_AnUnmeasuredCallerIsNotScreenedAsNew(t *testing.T) {
 	// Fill the anonymous lane's ceiling with live callers. The ceiling is read off
 	// the report rather than hard-coded: the report is where an operator reads it.
 	ceiling := tr.View("", edge.ModeLive, time.Now()).Ceiling
-	for i := 0; i < ceiling; i++ {
+	for i := range ceiling {
 		tr.Observe(edge.Signal{Org: "", IP: fmt.Sprintf("10.%d.%d.%d", i/65536, i/256%256, i%256),
 			Path: "/v1/models", Class: edge.CredAnonymous}, time.Now())
 	}
 	before := asked
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		abuseHit(app, "GET", "/v1/models", "", "", fmt.Sprintf("198.51.%d.%d", i/256, i%256))
 	}
 	if asked != before {
@@ -192,7 +192,7 @@ func TestAbuseGate_UnansweredScreensAreOnTheOrgsReport(t *testing.T) {
 		return RiskVerdict{}, nil // installed, answers with nothing
 	})
 	app, tr := abuseApp(t, edge.ModeLive)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		abuseHit(app, "GET", "/v1/models", "acme", fmt.Sprintf("sk-live-%d", i), "203.0.113.5")
 	}
 	v := tr.View("acme", edge.ModeLive, abuseNow())
@@ -240,7 +240,7 @@ func TestAbuseGate_NoClientAddressIsNotOneGiantCaller(t *testing.T) {
 
 	// No X-Forwarded-For at all, which in this deployment is every internet
 	// request: 40 different callers, none of whom can be told apart.
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		if got := abuseHit(app, "GET", "/v1/models", "", fmt.Sprintf("junk-%03d", i), "").StatusCode; got != 200 {
 			t.Fatalf("request %d → %d: one verdict was enforced against unidentifiable traffic", i, got)
 		}

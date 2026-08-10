@@ -156,7 +156,7 @@ func TestInsideTheFleetAnOrgAloneIsStillRefused(t *testing.T) {
 // before it reports a plane bound.
 func accepts(t *testing.T, sock string) {
 	t.Helper()
-	for i := 0; i < 400; i++ {
+	for range 400 {
 		if c, err := net.Dial("unix", sock); err == nil {
 			_ = c.Close()
 			return

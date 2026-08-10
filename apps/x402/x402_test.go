@@ -442,7 +442,7 @@ func TestSettleOnceOnRetry(t *testing.T) {
 	payment := h.pay(req, randNonce(), now-60, now+300)
 
 	var firstID string
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		code, b, hdr := h.req(http.MethodGet, "/paid/tool", h.payerOrg, payment, "")
 		if code != 200 {
 			t.Fatalf("retry %d = %d (%s), want 200", i, code, b)

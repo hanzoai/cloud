@@ -131,7 +131,7 @@ func TestSweepIdempotent(t *testing.T) {
 	const now int64 = 2_000_000
 	h.seedLiveApp(t, "acme", "db", "postgres:16", 1, now-3600)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if _, err := sweepComputeMeter(context.Background(), h.store, now, blueprintRate, h.emit); err != nil {
 			t.Fatalf("sweep %d: %v", i, err)
 		}

@@ -1112,7 +1112,7 @@ func TestForSubjectsSpansChunks(t *testing.T) {
 
 	const n = subjectChunk*2 + 7
 	want := make([]Fact, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		f, err := admit(Fact{Kind: KindTransaction, Subject: fmt.Sprintf("tx-%03d", i),
 			At: at, Seen: at, Disposition: Productive, Source: Dispute,
 			Evidence: fmt.Sprintf("dp-%03d", i), By: "svc", Confidence: 1}, time.Now().UTC())

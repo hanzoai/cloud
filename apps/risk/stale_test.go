@@ -46,7 +46,7 @@ func TestPace_AStaleWindowStopsFreezingTheSubject(t *testing.T) {
 	// accruing past the freeze, so only the conjunction can fire.
 	at := clock.Add(-10 * time.Minute)
 	batch := make([]observation, 0, burstEvents)
-	for i := 0; i < burstEvents; i++ {
+	for i := range burstEvents {
 		batch = append(batch, ob(t, "stale_"+itoa(i), kindPayer, "u_burst", 200,
 			at.Add(time.Duration(i)*time.Second)))
 	}

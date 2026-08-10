@@ -282,7 +282,7 @@ func TestLiveLatestPicksTheNewestPerUnit(t *testing.T) {
 func TestLiveSchemaIsIdempotent(t *testing.T) {
 	liveDatastore(t)
 	ctx := context.Background()
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		for _, ddl := range schema {
 			if err := datastore.Exec(ctx, ddl); err != nil {
 				t.Fatalf("pass %d: DDL is not idempotent: %v", i, err)

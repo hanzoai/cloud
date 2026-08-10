@@ -56,7 +56,7 @@ func (r *writeRecorder) snapshot() (int, []int) {
 func TestBufferCoalescesIntoOneWrite(t *testing.T) {
 	r := &writeRecorder{}
 	b := newMetricBuffer(r.write, time.Hour, 1000, bufQuietLog()) // ticker must not fire
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		if err := b.add(context.Background(), bufBatch("m")); err != nil {
 			t.Fatalf("add: %v", err)
 		}
@@ -77,7 +77,7 @@ func TestBufferFlushesWhenFull(t *testing.T) {
 	r := &writeRecorder{}
 	b := newMetricBuffer(r.write, time.Hour, 10, bufQuietLog())
 	defer b.Close()
-	for i := 0; i < 25; i++ {
+	for range 25 {
 		_ = b.add(context.Background(), bufBatch("m"))
 	}
 	calls, counts := r.snapshot()

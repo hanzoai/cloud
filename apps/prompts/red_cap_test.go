@@ -23,7 +23,7 @@ func TestRed_PromptContentCapped(t *testing.T) {
 	// A valid prompt POSTed many times appends versions, but the detail response
 	// stays small — history is metadata-only, content is not re-emitted per version.
 	small := strings.Repeat("A", 4096)
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		if code, _ := do(t, app, http.MethodPost, "/v1/prompts", "acme",
 			map[string]any{"name": "ok", "prompt": small}); code != http.StatusCreated {
 			t.Fatalf("version %d create want 201, got %d", i, code)

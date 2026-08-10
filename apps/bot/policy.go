@@ -1560,7 +1560,7 @@ func unwrapTimeoutInvocation(argv []string) []string {
 func resolveDispatchChain(argv []string) []string {
 	current := argv
 	wrappers := 0
-	for depth := 0; depth < maxDispatchWrapperDepth; depth++ {
+	for range maxDispatchWrapperDepth {
 		u := unwrapDispatchWrapper(current)
 		if u.kind == unwrapBlocked {
 			return current

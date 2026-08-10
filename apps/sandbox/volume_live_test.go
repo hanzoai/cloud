@@ -289,7 +289,7 @@ func TestLiveLeaseCost(t *testing.T) {
 		`echo "git_status_ms=$(( (e-s)/1000000 ))"`
 
 	t.Logf("runtime=%q  rounds=%d", rt.preference(context.Background()), rounds)
-	for i := 0; i < rounds; i++ {
+	for i := range rounds {
 		m, dLease := post[plane.Leased](t, app, "/v1/sandboxes/lease", org,
 			plane.LeaseIn{Class: "exec", TTLSec: 600})
 		ran, dRun := post[plane.Ran](t, app, "/v1/sandboxes/run", org,

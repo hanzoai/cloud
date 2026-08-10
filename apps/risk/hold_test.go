@@ -131,7 +131,7 @@ func TestStrain_CountsTheSubjectsItForgot(t *testing.T) {
 	over := ringKeyCeiling + ringKeyCeiling/4
 	at := time.Now().UTC().Add(-time.Hour)
 	obs := make([]observation, 0, over)
-	for i := 0; i < over; i++ {
+	for i := range over {
 		o, err := observe("e_"+itoa(i), actor{Kind: kindAccount, Subject: "u_" + itoa(i)}, 100, at.Add(time.Duration(i)*time.Second))
 		if err != nil {
 			t.Fatalf("observe %d: %v", i, err)
@@ -165,7 +165,7 @@ func TestStrain_CountsTheSubjectsItForgot(t *testing.T) {
 func fill(t *testing.T, p *plane, n int) []tenant {
 	t.Helper()
 	out := make([]tenant, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		k := key(t, brandA, "org"+itoa(i))
 		if _, err := p.resident(k); err != nil {
 			t.Fatalf("resident %d: %v", i, err)

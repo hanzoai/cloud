@@ -95,7 +95,7 @@ func countWinners(t *testing.T, n int, op func(i int) error) int {
 	var wg sync.WaitGroup
 	errs := make([]error, n)
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		go func(i int) { defer wg.Done(); errs[i] = op(i) }(i)
 	}
 	wg.Wait()

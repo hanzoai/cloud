@@ -54,7 +54,7 @@ func TestFan_ThePeerAxisIsReachableFromTheCreditDoor(t *testing.T) {
 	const address = "203.0.113.7"
 	at := time.Now().UTC().Add(-30 * time.Minute)
 	batch := make([]observation, 0, fanSubjects)
-	for i := 0; i < fanSubjects; i++ {
+	for i := range fanSubjects {
 		batch = append(batch, ob(t, "farm_"+itoa(i), kindPayer, "u_farm_"+itoa(i), 5,
 			at.Add(time.Duration(i)*time.Second), address))
 	}
@@ -110,7 +110,7 @@ func TestObserve_ASettledPaymentTeachesTheModel(t *testing.T) {
 	// point-in-time test can see any of them — which is the typology the accrual
 	// exists for.
 	const each = "11000000000000" // $11,000 in nano-USD
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		out, err := planeObserve(asPeer(orgA), &contract.RiskObserveIn{
 			Stage: cloud.StagePayment, Kind: contract.KindPayer, Subject: "u_split",
 			Settlement: "sq_pay_" + itoa(i),
@@ -195,7 +195,7 @@ func TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject(t *testing.T) {
 	const each = "11000000000000"
 	const payer = "acme"
 	doors := []string{"sq_pay_browser_", "sq_pay_typed_"}
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		out, err := planeObserve(asPeer(orgA), &contract.RiskObserveIn{
 			Stage: cloud.StagePayment, Kind: contract.KindPayer, Subject: payer,
 			Settlement: doors[i%2] + itoa(i),

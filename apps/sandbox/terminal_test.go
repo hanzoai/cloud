@@ -91,7 +91,7 @@ func TestTicketsAreUnguessableAndDistinct(t *testing.T) {
 	ks := newTickets()
 	now := time.Now()
 	seen := map[string]bool{}
-	for i := 0; i < 256; i++ {
+	for range 256 {
 		tok, err := ks.mint(now, "acme", "m_1")
 		if err != nil {
 			t.Fatalf("mint: %v", err)
@@ -111,7 +111,7 @@ func TestTicketsAreUnguessableAndDistinct(t *testing.T) {
 func TestExpiredTicketsDoNotAccumulate(t *testing.T) {
 	ks := newTickets()
 	now := time.Now()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if _, err := ks.mint(now, "acme", "m_1"); err != nil {
 			t.Fatalf("mint: %v", err)
 		}
@@ -139,7 +139,7 @@ func TestConcurrentRedeemHasExactlyOneWinner(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	won := make(chan struct{}, 8)
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

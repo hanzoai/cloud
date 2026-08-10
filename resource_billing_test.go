@@ -546,7 +546,7 @@ func TestMeterPeer_CarriesTheExactDebit(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = stop() })
 	up := false
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		if c, derr := net.Dial("unix", zip.SocketPath("commerce")); derr == nil {
 			_ = c.Close()
 			up = true

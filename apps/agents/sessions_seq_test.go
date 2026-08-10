@@ -40,11 +40,11 @@ func TestAppendEventSequenceIsDenseAndUniqueUnderConcurrency(t *testing.T) {
 	const writers, each = 8, 25
 	var wg sync.WaitGroup
 	errs := make(chan error, writers*each)
-	for w := 0; w < writers; w++ {
+	for w := range writers {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
-			for i := 0; i < each; i++ {
+			for i := range each {
 				_, err := sto.AppendEvent(ctx, Event{
 					ID: fmt.Sprintf("evt_%d_%d", w, i), SessionID: "sess_c", Org: "acme",
 					Kind: KindLog, Actor: "acme/u1", Payload: `{"n":1}`, CreatedAt: int64(i),

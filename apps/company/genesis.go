@@ -196,7 +196,7 @@ func (a *evmAnchor) submit(ctx context.Context, root [32]byte, g *Genesis) error
 	}
 	g.TxHash = signed.Hash().Hex()
 	g.Status = "anchored"
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		if r, rerr := cl.TransactionReceipt(ctx, signed.Hash()); rerr == nil && r != nil {
 			g.Block = r.BlockNumber.Uint64()
 			break

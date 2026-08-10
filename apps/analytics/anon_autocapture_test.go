@@ -493,7 +493,7 @@ const ownerOrg = "hanzo"
 // admitted, normalize stamps the tenant and the name.
 func TestAnonError_RealOrgNeverTakesACallerChosenName(t *testing.T) {
 	evs := make([]CaptureEvent, 0, maxPublicBatch)
-	for i := 0; i < maxPublicBatch; i++ {
+	for i := range maxPublicBatch {
 		// Each one distinct, and long enough that a survivor is unmistakable.
 		evs = append(evs, CaptureEvent{
 			Type: "error", Path: "/pricing",

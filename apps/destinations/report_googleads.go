@@ -96,7 +96,7 @@ func (d googleadsReport) Report(ctx context.Context, cfg Config, secret string, 
 
 	out := make([]Metric, 0, 256)
 	pageToken := ""
-	for page := 0; page < maxPages; page++ {
+	for range maxPages {
 		body := map[string]any{"query": query, "pageSize": googlePageSize}
 		if pageToken != "" {
 			body["pageToken"] = pageToken

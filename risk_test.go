@@ -382,7 +382,7 @@ func TestDecide_ReleasesItsSlotWhenTheScorerAnswers(t *testing.T) {
 	SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
 		return RiskVerdict{Action: ActionAllow}, nil
 	})
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		if v := decide(sem, context.Background(), "acme", RiskQuery{Stage: StageUsage}); v.Refusal != "" {
 			t.Fatalf("call %d was refused %q — a returned scorer must give its slot back", i, v.Refusal)
 		}

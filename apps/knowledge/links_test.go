@@ -43,7 +43,7 @@ func TestExtractWikilinks(t *testing.T) {
 // TestExtractWikilinks_Cap proves the per-page cap bounds a pathological body.
 func TestExtractWikilinks_Cap(t *testing.T) {
 	var b []byte
-	for i := 0; i < maxLinksPerPage+50; i++ {
+	for i := range maxLinksPerPage + 50 {
 		b = append(b, []byte("[[p")...)
 		b = append(b, []byte{byte('a' + i%26), byte('a' + i/26)}...)
 		b = append(b, []byte("]] ")...)

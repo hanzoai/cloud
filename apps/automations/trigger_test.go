@@ -107,7 +107,7 @@ func TestDeliverRateCapped(t *testing.T) {
 	seedWebhookFlow(t, mounted.State.store, "acme", "stripe", "charge")
 
 	started := 0
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		n, err := Deliver(context.Background(), "acme", TriggerEvent{Source: "stripe", Name: "charge", DedupeKey: strconv.Itoa(i)})
 		if err != nil && err != ErrRateLimited {
 			t.Fatalf("Deliver %d: %v", i, err)

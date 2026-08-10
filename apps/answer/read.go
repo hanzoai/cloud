@@ -165,7 +165,7 @@ func crawlPages(ctx context.Context, log luxlog.Logger, scope crawlpkg.Scope, ur
 	// The collector is the ONLY writer of slots, so ranked order survives without a
 	// mutex over shared state.
 	slots := make([]Page, len(urls))
-	for n := 0; n < len(urls); n++ {
+	for range urls {
 		select {
 		case s := <-ch:
 			slots[s.i] = s.page

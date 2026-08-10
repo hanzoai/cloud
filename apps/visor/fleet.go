@@ -395,7 +395,7 @@ const (
 func allActivitiesForOrg(ctx context.Context, org, ns string) []tasks.StandaloneActivity {
 	var out []tasks.StandaloneActivity
 	cursor := ""
-	for i := 0; i < maxActivityPages; i++ {
+	for range maxActivityPages {
 		page, err := cloud.Ask[plane.ActivitiesIn, plane.Activities](
 			cloud.For(ctx, org), "tasks", plane.TasksActivities,
 			&plane.ActivitiesIn{Namespace: ns, Cursor: cursor, Size: activityPageSize})

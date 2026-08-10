@@ -457,7 +457,7 @@ func TestHealth_ReportsATenantForgettingItsOwnSubjects(t *testing.T) {
 	}
 
 	// One organisation past its OWN ceiling, which is where it starts forgetting.
-	for i := 0; i < ringKeyCeiling*2; i++ {
+	for i := range ringKeyCeiling * 2 {
 		body := `{"events":[{"kind":"account","subject":"u_` + itoa(i) + `","nano":1000000}]}`
 		if code, out := req(t, app, http.MethodPost, "/v1/risk/learn", orgA, "u_"+orgA, body); code != http.StatusOK {
 			t.Fatalf("learn %d = %d %s", i, code, out)

@@ -369,7 +369,7 @@ func serveCommerceOK(t *testing.T) {
 
 	// Dial the SOCKET, not Peer: zip dials lazily, so Peer answers without a listener
 	// behind it and this loop would return before the stand-in was up.
-	for i := 0; i < 400; i++ {
+	for range 400 {
 		if c, err := net.Dial("unix", addr); err == nil {
 			_ = c.Close()
 			return

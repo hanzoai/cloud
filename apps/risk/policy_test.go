@@ -186,7 +186,7 @@ func TestPolicy_ARestatementOfTheSameRegimeMintsNoVersion(t *testing.T) {
 	if !minted || first.Version != 1 {
 		t.Fatalf("first enact: minted=%v version=%d, want true 1", minted, first.Version)
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		again, minted, err := p.enact(k, r, "u_1", time.Now())
 		if err != nil {
 			t.Fatalf("restatement %d: %v", i, err)
@@ -301,7 +301,7 @@ func TestPolicy_TheRateBoundBindsAndIsNamed(t *testing.T) {
 	k, other := key(t, brandA, orgA), key(t, brandA, orgB)
 	now := time.Now().UTC()
 
-	for i := 0; i < maxPolicyPerWindow; i++ {
+	for i := range maxPolicyPerWindow {
 		// Distinct regimes, all inside ONE window.
 		if _, minted, err := p.enact(k, regime{Review: 0.02, Sample: float64(i) / 1000, Live: true}, "u_1", now); err != nil || !minted {
 			t.Fatalf("enact %d: minted=%v err=%v", i, minted, err)
@@ -363,7 +363,7 @@ func TestPolicy_BoundsArePublishedInTheDimensionThatBinds(t *testing.T) {
 	const sample = 300
 	before := shelfBytes(t, sh)
 	at := time.Now().UTC()
-	for i := 0; i < sample; i++ {
+	for i := range sample {
 		if _, minted, err := p.enact(k, regime{Review: 0.5, Sample: float64(i) / 1000, Live: true},
 			by, at.Add(time.Duration(i)*2*time.Hour)); err != nil || !minted {
 			t.Fatalf("enact %d: minted=%v err=%v", i, minted, err)
@@ -409,7 +409,7 @@ func TestPolicy_RetentionIsCountedAndNotSilent(t *testing.T) {
 	at := time.Now().UTC()
 
 	const over = 3
-	for i := 0; i < policyVersions+over; i++ {
+	for i := range policyVersions + over {
 		if _, minted, err := p.enact(k, regime{Review: 0.5, Sample: float64(i) / 10000, Live: true},
 			"u_1", at.Add(time.Duration(i)*2*time.Hour)); err != nil || !minted {
 			t.Fatalf("enact %d: minted=%v err=%v", i, minted, err)

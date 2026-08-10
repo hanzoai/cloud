@@ -99,7 +99,7 @@ func TestChallengeAndRecords(t *testing.T) {
 
 func TestTokenIsFreshAndURLSafe(t *testing.T) {
 	seen := map[string]bool{}
-	for i := 0; i < 64; i++ {
+	for range 64 {
 		tok, err := Token()
 		if err != nil {
 			t.Fatalf("Token: %v", err)

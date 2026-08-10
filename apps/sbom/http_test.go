@@ -153,7 +153,7 @@ func TestEnsureTableRetriesOnDisconnectedDatastore(t *testing.T) {
 
 	// Retryable and safe to call repeatedly: each call re-attempts, again errors,
 	// never panics.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := ensureTable(context.Background()); err == nil {
 			t.Fatalf("ensureTable retry %d want error (retryable), got nil", i)
 		}
@@ -168,7 +168,7 @@ func TestEnsureTableConcurrentSafe(t *testing.T) {
 	tableMu.Unlock()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 16; i++ {
+	for range 16 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
