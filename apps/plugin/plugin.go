@@ -288,8 +288,7 @@ func (o *ops) reload(ctx context.Context, in *ReloadIn) (*ActionOut, error) {
 		// What the CALLER got wrong is an HTTP status; what the DEPLOYMENT got
 		// wrong (no origin, unreachable index) is an outcome, so it stays in the
 		// envelope beside the rollout results.
-		var bad *zip.HTTPError
-		if errors.As(err, &bad) {
+		if bad, ok := errors.AsType[*zip.HTTPError](err); ok {
 			return nil, bad
 		}
 		return &ActionOut{Status: core.Err, Msg: err.Error()}, nil
