@@ -538,13 +538,11 @@ func TestConcurrentRoutesAreRaceFree(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 64 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if _, _, err := r.Route(context.Background(), "acme", "alice", auto(), Request{}); err != nil {
 				t.Errorf("concurrent Route failed: %v", err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

@@ -29,16 +29,14 @@ func TestCollabHubConcurrentJoinLeaveNoPanicNoLeak(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 500 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			peer := &collabPeer{sink: &bufSink{}}
 			room, _, err := hub.join(ctx, org, ws, docName, d, peer)
 			if err != nil {
 				return
 			}
 			hub.leave(ctx, org, ws, docName, room, peer)
-		}()
+		})
 	}
 	wg.Wait()
 

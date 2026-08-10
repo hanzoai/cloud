@@ -137,9 +137,7 @@ func TestStoreConsumeNonceConcurrentSingleWinner(t *testing.T) {
 	wins := make(chan bool, racers)
 	start := make(chan struct{})
 	for range racers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start // release all goroutines together to maximize contention
 			ok, err := s.ConsumeNonce(ctx, "hot", "acme", "slack")
 			if err != nil {
@@ -147,7 +145,7 @@ func TestStoreConsumeNonceConcurrentSingleWinner(t *testing.T) {
 				return
 			}
 			wins <- ok
-		}()
+		})
 	}
 	close(start)
 	wg.Wait()

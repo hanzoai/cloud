@@ -210,11 +210,9 @@ func (srv *sshServer) acceptLoop(ln net.Listener) {
 			srv.svc.Log.Warn("git ssh accept failed", "err", err)
 			continue
 		}
-		srv.wg.Add(1)
-		go func() {
-			defer srv.wg.Done()
+		srv.wg.Go(func() {
 			srv.handleConn(conn)
-		}()
+		})
 	}
 }
 

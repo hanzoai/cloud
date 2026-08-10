@@ -41,9 +41,7 @@ func TestShareability_ReaderSharesLiveWriterStore(t *testing.T) {
 
 	const total = 200
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for i := range total {
 			if _, err := w.Append(context.Background(), Record{Action: "POST /v1/probe"}); err != nil {
 				t.Errorf("append %d: %v", i, err)
@@ -51,7 +49,7 @@ func TestShareability_ReaderSharesLiveWriterStore(t *testing.T) {
 			}
 			time.Sleep(200 * time.Microsecond)
 		}
-	}()
+	})
 
 	// Reader: a SECOND, independent connection opened READ-ONLY against the SAME
 	// files while the writer appends. This is what a reader-role pod does.

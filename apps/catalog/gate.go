@@ -136,9 +136,7 @@ func bodies(ctx context.Context, rows []Entry) map[string][]byte {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for range readers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for e := range work {
 				b, err := fetchBody(ctx, e.URL)
 				if err != nil {
@@ -148,7 +146,7 @@ func bodies(ctx context.Context, rows []Entry) map[string][]byte {
 				out[e.ID] = b
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 	for _, e := range rows {
 		if e.URL != "" {

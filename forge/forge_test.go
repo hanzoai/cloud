@@ -585,13 +585,11 @@ func TestAs_DoesNotMutateTheSharedClient(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 50 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if got := shared.As("alice").Actor(); got != "alice" {
 				t.Errorf("concurrent As returned actor %q", got)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

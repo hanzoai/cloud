@@ -67,13 +67,11 @@ func TestSeedIsConcurrencySafe(t *testing.T) {
 	unseed(t)
 	var wg sync.WaitGroup
 	for range 64 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if !Ours("api.hanzo.ai") || !Ours("api") || Ours("www.example.com") {
 				t.Error("the policy answered wrong under a concurrent first touch")
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
