@@ -231,7 +231,7 @@ func (r *doorRec) call(t *testing.T, i int) doorCall {
 
 // The four spy installers swap the package door vars for recorders and
 // restore them on cleanup. ALL FOUR doors are spies in this package —
-// Discord's real HTTP path is proven in clients/integrations/ingress_test.go
+// Discord's real HTTP path is proven in apps/integrations/ingress_test.go
 // (C2-4), symmetric with the other transports' existing send-path tests.
 
 func spyTelegram(t *testing.T) *doorRec {

@@ -13,7 +13,7 @@ import (
 	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (see the same
-	// blank import in clients/projects/store.go for why it must not be modernc).
+	// blank import in apps/projects/store.go for why it must not be modernc).
 	_ "github.com/hanzoai/sqlite"
 )
 

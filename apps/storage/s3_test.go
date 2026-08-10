@@ -2,7 +2,7 @@ package storage_test
 
 // Integration tests for the /v1/s3 file-manager subsystem, driven through the
 // REAL orchestrator path (BuildDeps → the init()-registered App → the
-// zip/Fiber stack), exactly like clients/kms/kms_test.go. Requests run in-process
+// zip/Fiber stack), exactly like apps/kms/kms_test.go. Requests run in-process
 // via app.Fiber().Test — no listener, no live SeaweedFS.
 //
 // SanitizeIdentity does not run in this harness (it is wired in serve.go, not

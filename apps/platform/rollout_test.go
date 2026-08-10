@@ -167,7 +167,7 @@ func TestReleaseServiceFailClosed(t *testing.T) {
 
 // TestRegisterReleaserRoundTrip proves the build.go inversion seam: after
 // registerReleaser, cloud.OnServiceRelease dispatches to the paas primitive — the
-// path clients/platform/release.go drives on a self-release. The App is
+// path apps/platform/release.go drives on a self-release. The App is
 // git-declared, so the dispatch surfaces the refusal and the CR is untouched.
 func TestRegisterReleaserRoundTrip(t *testing.T) {
 	s := fakeService(appCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.799.16"))

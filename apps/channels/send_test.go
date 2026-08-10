@@ -15,7 +15,7 @@ import (
 
 // send_test.go proves the egress fan-out through the real HTTP surface using
 // the ingest_test.go harness. Zero live network: all four doors are spies —
-// Discord's real HTTP path is proven in clients/integrations/ingress_test.go
+// Discord's real HTTP path is proven in apps/integrations/ingress_test.go
 // (C2-4) — so what is under test here is the route surface, the C1-F1 target
 // bindings, and the idempotency ledger.
 

@@ -577,7 +577,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body project
 	}
 	// A reserved label (api, admin, login, a brand term, …) may never become a
 	// project slug — so it can never be published to <slug>.hanzo.app and shadow a
-	// real app/api host. ONE reserved-list source (clients/sites/reserved.go),
+	// real app/api host. ONE reserved-list source (apps/sites/reserved.go),
 	// enforced here at create AND at BindHost.
 	if sites.IsReserved(slug) {
 		return nil, zip.ErrBadRequest("slug is a reserved subdomain and cannot be used")
