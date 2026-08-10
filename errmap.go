@@ -122,16 +122,14 @@ func mapError(err error) *zip.HTTPError {
 	if he, ok := refused(err); ok {
 		return he
 	}
-	var he *zip.HTTPError
-	if errors.As(err, &he) {
+	if he, ok := errors.AsType[*zip.HTTPError](err); ok {
 		out := *he // a copy: the error may be a sentinel its owner still holds
 		if out.Status == 0 {
 			out.Status = http.StatusInternalServerError
 		}
 		return &out
 	}
-	var fe *fiber.Error
-	if errors.As(err, &fe) {
+	if fe, ok := errors.AsType[*fiber.Error](err); ok {
 		return &zip.HTTPError{Status: fe.Code, Code: codeFor("", fe.Code), Msg: fe.Message}
 	}
 	// UNDECIDED: nobody chose a status, so nobody chose a sentence either. The

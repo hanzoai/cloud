@@ -454,13 +454,11 @@ func run(s *cloud.Service[state], ctx context.Context, payer, paymentHdr, resour
 	// SETTLE once (replay-safe).
 	receipt, err := settle(s, ctx, req, *pay, terms, target, payer, resource)
 	if err != nil {
-		var replay *replayed
-		if errors.As(err, &replay) {
+		if _, ok := errors.AsType[*replayed](err); ok {
 			g.code, g.msg = reasonReplay, err.Error()
 			return g
 		}
-		var inv *Invalid
-		if errors.As(err, &inv) { // an expired authorization with nothing to resume
+		if inv, ok := errors.AsType[*Invalid](err); ok { // an expired authorization with nothing to resume
 			g.code, g.msg = inv.Reason, inv.Detail
 			return g
 		}

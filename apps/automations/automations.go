@@ -1456,8 +1456,7 @@ func engineErr(err error) error {
 	// balance gate's 402 insufficient_balance has to reach the caller as itself; folded
 	// into the 500 below it tells a customer their automation is broken when what
 	// happened is that they ran out of credit, and no retry ever fixes that.
-	var he *zip.HTTPError
-	if errors.As(err, &he) {
+	if _, ok := errors.AsType[*zip.HTTPError](err); ok {
 		return err
 	}
 	return zip.Errorf(http.StatusInternalServerError, "engine: %v", err)

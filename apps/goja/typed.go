@@ -223,8 +223,7 @@ func (e *BundleErr) Unwrap() error { return &zip.HTTPError{Status: e.Status, Msg
 func Envelope() zip.Handler {
 	return func(c *zip.Ctx) error {
 		err := c.Continue()
-		var be *BundleErr
-		if errors.As(err, &be) {
+		if be, ok := errors.AsType[*BundleErr](err); ok {
 			c.SetHeader("Content-Type", "application/json")
 			return c.Bytes(be.Status, be.Body)
 		}

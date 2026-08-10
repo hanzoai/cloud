@@ -242,8 +242,7 @@ func (h *Host) DispatchWith(ctx context.Context, req Request, hostGlobals map[st
 		})
 		out, callErr := fn(goja.Undefined(), arg)
 		if callErr != nil {
-			var iex *goja.InterruptedError
-			if errors.As(callErr, &iex) {
+			if _, ok := errors.AsType[*goja.InterruptedError](callErr); ok {
 				if ce := ctx.Err(); ce != nil {
 					return ce
 				}
@@ -323,8 +322,7 @@ func (h *Host) Eval(ctx context.Context, fnName string, jsonArg []byte) ([]byte,
 		}()
 		res, callErr := fn(goja.Undefined(), s.vm.ToValue(arg))
 		if callErr != nil {
-			var iex *goja.InterruptedError
-			if errors.As(callErr, &iex) {
+			if _, ok := errors.AsType[*goja.InterruptedError](callErr); ok {
 				if ce := ctx.Err(); ce != nil {
 					return ce
 				}

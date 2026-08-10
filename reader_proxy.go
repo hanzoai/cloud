@@ -212,8 +212,7 @@ func isDialError(err error) bool {
 	if errors.Is(err, syscall.ECONNREFUSED) {
 		return true
 	}
-	var opErr *net.OpError
-	if errors.As(err, &opErr) {
+	if opErr, ok := errors.AsType[*net.OpError](err); ok {
 		// "dial" is the phase before any byte is written to the writer.
 		return opErr.Op == "dial"
 	}

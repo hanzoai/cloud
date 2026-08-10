@@ -390,8 +390,7 @@ func invalid(reason, format string, args ...any) *Invalid {
 // reasonOf reports the spec error reason an error carries, defaulting to the
 // unexpected-settle reason for anything that is not a verification failure.
 func reasonOf(err error) string {
-	var inv *Invalid
-	if errors.As(err, &inv) {
+	if inv, ok := errors.AsType[*Invalid](err); ok {
 		return inv.Reason
 	}
 	return reasonSettle
