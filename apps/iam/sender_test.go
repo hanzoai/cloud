@@ -19,9 +19,19 @@ import (
 // runIn points this process's plane runtime directory at a fresh one and drops
 // whatever the previous test resolved, so each case decides for itself what is and
 // is not listening.
+//
+// The directory is SHORT on purpose, and t.TempDir is why it cannot be used: a unix
+// socket address is 104 bytes on Darwin and t.TempDir spends most of them on the
+// test's own name, so binding failed here with "invalid argument" — a test that
+// breaks when a test is RENAMED, and only on a Mac. A deployment's run directory is
+// /var/lib/cloud/run; this matches that shape rather than the harness's.
 func runIn(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("/tmp", "plane")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	t.Setenv("ZIP_RUNTIME_DIR", dir)
 	plane.Unbind()
 	t.Cleanup(plane.Unbind)
