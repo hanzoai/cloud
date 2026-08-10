@@ -71,9 +71,9 @@ func gate(s *cloud.Service[state], ctx context.Context) (string, error) {
 	if !s.State.cl.configured() {
 		return "", zip.Errorf(http.StatusServiceUnavailable, "share is not configured on this deployment")
 	}
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
+	org, err := principal.RequireOrg(ctx)
+	if err != nil {
+		return "", err
 	}
 	return org, nil
 }

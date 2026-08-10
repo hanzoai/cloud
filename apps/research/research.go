@@ -303,9 +303,9 @@ var shutdownStores = func() error { return nil }
 // principal, never a client field: the org is parked on the context by cloud.Bridge
 // and an In field could only ever be a tenant key the caller asserted for itself.
 func (o ops) orgStore(ctx context.Context) (*store, string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+	org, err := principal.RequireOrg(ctx)
+	if err != nil {
+		return nil, "", err
 	}
 	st, err := storeFor(o.s.State.stores, org)
 	if err != nil {
