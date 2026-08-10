@@ -12,6 +12,7 @@ package fleet_test
 // server did not have when it projected 1,323 tools with no auth at all.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
 	"io"
@@ -30,7 +31,7 @@ import (
 // for the subsystem that serves them.
 func startNamed(t *testing.T, name string, ops ...string) *child {
 	t.Helper()
-	sock := filepath.Join(t.TempDir(), name+".sock")
+	sock := filepath.Join(planetest.Dir(t), name+".sock")
 	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
 	for i, id := range ops {
 		route := "/v1/" + name + "/op" + string(rune('a'+i))

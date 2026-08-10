@@ -17,6 +17,7 @@ package coding
 // no-changes case is first.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/base64"
 	"strings"
@@ -102,7 +103,7 @@ func (p *pod) gitVerb(verb string) bool {
 // production one with a production transport.
 func servePod(t *testing.T, p *pod) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 
 	sandboxes := zip.New(zip.Config{AppName: "sandboxes", DisableStartupMessage: true})
 	zip.Post[plane.LeaseIn, plane.Leased](sandboxes, "/sandbox/lease",

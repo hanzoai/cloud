@@ -1,6 +1,7 @@
 package coding
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"strings"
 	"testing"
@@ -42,7 +43,7 @@ type peers struct {
 
 func servePeers(t *testing.T, p *peers) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 
 	agentsApp := zip.New(zip.Config{AppName: "agents", DisableStartupMessage: true})
 	zip.Post[plane.SessionOpenIn, plane.SessionOpened](agentsApp, "/agents/session/open",
@@ -231,7 +232,7 @@ func TestRun_OverThePlane_UnverifiedRefFilesNoPR(t *testing.T) {
 // A peer that is not part of the deployment is an honest error, not a run that
 // proceeds without it. This is the shape the whole path had in production.
 func TestRun_OverThePlane_MissingPeerFailsHonestly(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir()) // nothing listening at all
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // nothing listening at all
 	res := planeDispatcher(&fakeRunner{}).Run(context.Background(), Req{
 		Org: "acme", UserID: "u_1", Repo: "api", Prompt: "fix", CredToken: "sk-secret",
 	})

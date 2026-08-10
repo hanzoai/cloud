@@ -1,7 +1,6 @@
 package plane
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"os"
 	"testing"
@@ -53,7 +52,7 @@ func TestBindRuntimeDirIsIdempotentAndHonoursAnOverride(t *testing.T) {
 // (Peer, Ask) have always bound; this asserts all three resolve one path.
 func TestReachResolvesTheSharedPathWithoutAPriorBind(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", "")
-	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t))
+	t.Setenv("CLOUD_RUN_DIR", shortDir(t))
 	t.Setenv("CLOUD_DATA_DIR", "")
 	t.Setenv("ZIP_ADDR", "") // no router: "no socket, no router" is a fast, real answer
 	Unbind()
@@ -66,4 +65,18 @@ func TestReachResolvesTheSharedPathWithoutAPriorBind(t *testing.T) {
 	if got := os.Getenv("ZIP_RUNTIME_DIR"); got != os.Getenv("CLOUD_RUN_DIR") {
 		t.Fatalf("Reach looked in %q, want the cloud run dir %q — a mount-time caller would be told an app that IS deployed is not", got, os.Getenv("CLOUD_RUN_DIR"))
 	}
+}
+
+// shortDir is a directory a unix socket can bind in. t.TempDir cannot be used:
+// a socket address is 104 bytes on Darwin and t.TempDir spends most of them on
+// the test's own name. internal/planetest holds the fleet's copy of this and
+// cannot be imported here — planetest imports this package.
+func shortDir(t *testing.T) string {
+	t.Helper()
+	d, err := os.MkdirTemp("", "pl")
+	if err != nil {
+		t.Fatalf("run dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(d) })
+	return d
 }

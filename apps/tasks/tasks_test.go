@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -21,7 +22,7 @@ import (
 // cloud.EmbeddedTasks (which durable.go/Serve wires in the real binary).
 func testEngine(t *testing.T) *tasks.Embedded {
 	t.Helper()
-	dir := t.TempDir()
+	dir := planetest.Dir(t)
 	srv, err := tasks.Embed(t.Context(), tasks.EmbedConfig{
 		Address: filepath.Join(dir, "tasks.sock"),
 		DataDir: dir,

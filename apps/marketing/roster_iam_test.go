@@ -40,10 +40,20 @@ func TestRosterReadsTheRealEmbeddedIAM(t *testing.T) {
 	// identity database would serve a fleet in which every account is absent — so
 	// a test that wants the real store has to stand it up with IAM's own opener,
 	// at the path IAM names.
+	// It also has to be able to SERVE: iam refuses a store carrying no signing
+	// certificate rather than answering an empty keyset, so an empty file is not a
+	// store this seam can publish.
 	dir := t.TempDir()
 	seed, err := iamstore.Open("sqlite", iamclient.StorePath(dir))
 	if err != nil {
 		t.Fatalf("stand up the identity store: %v", err)
+	}
+	cert := orm.New[model.Cert](seed)
+	cert.Owner, cert.Name = "hanzo", "cert-hanzo"
+	cert.Type, cert.CryptoAlgorithm, cert.BitSize = "x509", "RS256", 2048
+	cert.SetId("hanzo/cert-hanzo")
+	if err := cert.CreateCtx(context.Background()); err != nil {
+		t.Fatalf("seed signing cert: %v", err)
 	}
 	if err := seed.Close(); err != nil {
 		t.Fatalf("close the seeded store: %v", err)
