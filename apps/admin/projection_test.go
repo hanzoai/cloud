@@ -60,7 +60,7 @@ func TestEveryRouteIsATypedOp(t *testing.T) {
 		for method := range item.(map[string]any) {
 			// The document writes {name} where fiber writes :name.
 			fiberPath := path
-			for _, seg := range strings.Split(path, "/") {
+			for seg := range strings.SplitSeq(path, "/") {
 				if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
 					fiberPath = strings.Replace(fiberPath, seg, ":"+strings.Trim(seg, "{}"), 1)
 				}

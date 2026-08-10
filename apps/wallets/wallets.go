@@ -771,8 +771,6 @@ func ResolvePaymentTarget(ctx context.Context, org, walletID string) (PaymentTar
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
-
 // custodyHTTPError maps a custody error to the right HTTP status: fail-closed MPC
 // ⇒ 503, unknown custody ⇒ 400, delegation failures ⇒ 502, else 500.
 func custodyHTTPError(err error) error {
@@ -809,7 +807,7 @@ func resolveDigest(digestHex, message string) ([]byte, error) {
 // splitNodes parses comma-separated node URLs, trimming and dropping empties.
 func splitNodes(s string) []string {
 	var out []string
-	for _, p := range strings.Split(s, ",") {
+	for p := range strings.SplitSeq(s, ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}

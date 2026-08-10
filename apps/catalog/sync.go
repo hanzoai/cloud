@@ -512,7 +512,7 @@ func sourceOrgs() map[string]source {
 		return defaultOrgs
 	}
 	out := map[string]source{}
-	for _, part := range strings.Split(raw, ",") {
+	for part := range strings.SplitSeq(raw, ",") {
 		f := strings.Split(strings.TrimSpace(part), ":")
 		gh := strings.TrimSpace(f[0])
 		if gh == "" {

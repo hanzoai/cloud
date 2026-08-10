@@ -89,8 +89,8 @@ func prose(s string) string {
 	s = mdHead.ReplaceAllString(s, "*$1*")
 	s = mdLink.ReplaceAllString(s, "<$2|$1>")
 	s = mdBold.ReplaceAllStringFunc(s, func(m string) string {
-		if strings.HasPrefix(m, "**") {
-			return "*" + strings.TrimSuffix(strings.TrimPrefix(m, "**"), "**") + "*"
+		if after, ok := strings.CutPrefix(m, "**"); ok {
+			return "*" + strings.TrimSuffix(after, "**") + "*"
 		}
 		return "*" + strings.TrimSuffix(strings.TrimPrefix(m, "__"), "__") + "*"
 	})

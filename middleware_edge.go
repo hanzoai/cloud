@@ -84,7 +84,7 @@ const (
 // grant.
 func corsAllowHeaders(ask string) string {
 	names := make([]string, 0, 8)
-	for _, name := range strings.Split(ask, ",") {
+	for name := range strings.SplitSeq(ask, ",") {
 		if name = strings.TrimSpace(name); headerToken(name) {
 			names = append(names, name)
 		}

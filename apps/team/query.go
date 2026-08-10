@@ -235,7 +235,7 @@ func likeMatch(s, pattern string) bool {
 // which is enough for the membership queries the workbench issues.
 func getObjectValue(doc map[string]any, path string) any {
 	var cur any = doc
-	for _, seg := range strings.Split(path, ".") {
+	for seg := range strings.SplitSeq(path, ".") {
 		m, ok := cur.(map[string]any)
 		if !ok {
 			return nil

@@ -378,7 +378,7 @@ func downstreamRefs(t *testing.T, bare string) map[string]string {
 	t.Helper()
 	out := gitOut(t, bare, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads/")
 	refs := map[string]string{}
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
 		if sp := strings.IndexByte(line, ' '); sp > 0 {
 			refs[line[:sp]] = line[sp+1:]
 		}

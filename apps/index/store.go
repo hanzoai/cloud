@@ -622,7 +622,7 @@ func ParseUserFilter(f any) []string {
 func userFilter(s string) []string {
 	if m := userInRe.FindStringSubmatch(s); m != nil {
 		var out []string
-		for _, p := range strings.Split(m[1], ",") {
+		for p := range strings.SplitSeq(m[1], ",") {
 			if p = strings.Trim(strings.TrimSpace(p), `"'`); p != "" {
 				out = append(out, p)
 			}

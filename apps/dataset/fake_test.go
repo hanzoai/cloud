@@ -258,7 +258,7 @@ func where(s string, args []any) (pred, error) {
 			rest = rest[:j]
 		}
 	}
-	for _, part := range strings.Split(rest, " AND ") {
+	for part := range strings.SplitSeq(rest, " AND ") {
 		part = strings.TrimSpace(part)
 		if m := termRe.FindStringSubmatch(part); m != nil {
 			p.terms = append(p.terms, term{col: m[1], op: m[2]})

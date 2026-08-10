@@ -194,7 +194,7 @@ func main() {
 
 	ratchet := map[string]bool{}
 	if rb, err := os.ReadFile(ratchetPath); err == nil {
-		for _, line := range strings.Split(string(rb), "\n") {
+		for line := range strings.SplitSeq(string(rb), "\n") {
 			line = strings.TrimSpace(line)
 			if line != "" && !strings.HasPrefix(line, "#") {
 				ratchet[line] = true

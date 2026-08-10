@@ -533,8 +533,7 @@ func (s *Server) siteSlug(host string) (slug string, firstParty bool, ok bool) {
 	// (`x.y.hanzo.ai`) can't match a map entry.
 	if s.firstPartyApex != "" {
 		fpSuffix := "." + s.firstPartyApex
-		if strings.HasSuffix(host, fpSuffix) {
-			label := strings.TrimSuffix(host, fpSuffix)
+		if label, under := strings.CutSuffix(host, fpSuffix); under {
 			if s.firstPartySites[label] && !strings.Contains(label, ".") && slugRE.MatchString(label) {
 				return label, true, true
 			}

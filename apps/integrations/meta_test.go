@@ -75,7 +75,7 @@ func TestMetaAuthorizeURL(t *testing.T) {
 	// Read-only means read-only: no WRITE-capable Meta scope may ever appear —
 	// ads_management (spend), business_management (BM asset write), or any
 	// *_management / rw_* variant. Meta comma-delimits the scope list.
-	for _, s := range strings.Split(scope, ",") {
+	for s := range strings.SplitSeq(scope, ",") {
 		if strings.Contains(s, "_management") || strings.HasPrefix(s, "rw_") {
 			t.Fatalf("scope %q includes a write-capable grant %q; the connector is documented read-only", scope, s)
 		}

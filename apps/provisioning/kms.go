@@ -45,7 +45,7 @@ func openSecrets(brand string, log luxlog.Logger) *secrets {
 	}
 
 	var nodes []string
-	for _, n := range strings.Split(nodesCSV, ",") {
+	for n := range strings.SplitSeq(nodesCSV, ",") {
 		if t := strings.TrimSpace(n); t != "" {
 			nodes = append(nodes, t)
 		}

@@ -240,7 +240,7 @@ func openKMS(brand string) *kms.Client {
 		return nil
 	}
 	var nodes []string
-	for _, n := range strings.Split(nodesCSV, ",") {
+	for n := range strings.SplitSeq(nodesCSV, ",") {
 		if t := strings.TrimSpace(n); t != "" {
 			nodes = append(nodes, t)
 		}
