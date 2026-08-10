@@ -649,28 +649,6 @@ func k8sErr(s *cloud.Service[state], k resourceKind, op string, err error) error
 // cloud-ml ServiceAccount its ML cluster role).
 const mlTokenFileEnv = "HANZO_ML_TOKEN_FILE"
 
-// dynForOrg returns the client ML operations should target for an org+project: its
-// registered BYO cluster (federated via the shared fleet registry, read-only from
-// ml's side) or the home in-cluster client when the shard has no attached cluster.
-//
-// DEFECT, NOT A DESIGN: this is documented as "the ONE federation seam — handlers
-// resolve their client through here" and NO handler calls it. Every route above
-// reaches s.State.dyn directly, so an org that registers a BYO cluster at
-// /v1/clusters gets its models and jobs on the HOME cluster and is told nothing.
-// Go does not complain about an unused function, which is why it went unnoticed.
-//
-// Left UNWIRED on purpose here: routing an op through this changes WHICH CLUSTER a
-// resource lands on, which is a behaviour change and not the description task the
-// typed migration is. Whoever fixes it owns the migration question too — resources
-// already created on the home cluster do not move — so it needs its own change with
-// its own tests, not a line slipped into a typing commit.
-func dynForOrg(s *cloud.Service[state], org, project string) dynamic.Interface {
-	if d := s.State.fleet.DynForOrg(org, project); d != nil {
-		return d
-	}
-	return s.State.dyn
-}
-
 // newDynamic builds the dynamic client. In-cluster it authenticates as the
 // dedicated cloud-ml identity when HANZO_ML_TOKEN_FILE points at a mounted
 // cloud-ml token, otherwise as the pod's own in-cluster SA. Falls back to

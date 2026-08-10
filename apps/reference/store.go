@@ -50,9 +50,6 @@ const (
 	// chunk is how many entries land per statement. Big enough that a 65,000-entry
 	// list is a handful of round trips, small enough that a failure costs one.
 	chunk = 5000
-	// maxRead bounds a version read, so a source that grew past its own cap
-	// cannot make the snapshot build unbounded.
-	maxRead = maxEntries
 	// ddlTimeout bounds the idempotent table bootstrap.
 	ddlTimeout = 10 * time.Second
 )

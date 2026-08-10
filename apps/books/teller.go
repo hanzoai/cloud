@@ -30,7 +30,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -303,21 +302,6 @@ func (tc *tellerConn) exchange(ctx context.Context, org, accessToken string) err
 type TellerLink struct {
 	ApplicationID string `json:"applicationId"`
 	Environment   string `json:"environment"`
-}
-
-// linkConfig returns the public Teller Connect config from env — the bank-token handler's
-// payload. It reads no secret: the application id is public and the token only ever arrives
-// afterward, via exchange, straight into KMS.
-func (tc *tellerConn) linkConfig() (TellerLink, error) {
-	app := strings.TrimSpace(os.Getenv("TELLER_APPLICATION_ID"))
-	if app == "" {
-		return TellerLink{}, fmt.Errorf("teller: TELLER_APPLICATION_ID not configured")
-	}
-	env := strings.TrimSpace(os.Getenv("TELLER_ENVIRONMENT"))
-	if env == "" {
-		env = "production"
-	}
-	return TellerLink{ApplicationID: app, Environment: env}, nil
 }
 
 // tellerAccount is the subset of a Teller account we consume: its id (for the transactions

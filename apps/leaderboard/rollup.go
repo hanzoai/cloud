@@ -28,7 +28,6 @@ import (
 )
 
 const (
-	rollupMV = "hanzo.usage_rollup_daily_mv"
 
 	// rollupTableDDL is the ONE definition of the derived rollup. PARTITION BY month
 	// keeps SummingMergeTree merges (which collapse same-key rows) within a partition;

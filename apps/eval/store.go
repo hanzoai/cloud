@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	// cek is the ONE opener: the database is born encrypted under the key cek
 	// derives from the process master and this namespace.
@@ -684,10 +683,4 @@ func (s *Store) ListRuns(ctx context.Context, org, dataset string, limit int) ([
 		out = append(out, r)
 	}
 	return out, rows.Err()
-}
-
-// errIsUniqueViolation reports whether err is a SQLite UNIQUE constraint failure
-// (used to map a racing create to errConflict).
-func errIsUniqueViolation(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }

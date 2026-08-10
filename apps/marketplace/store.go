@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"time"
 
@@ -17,9 +16,6 @@ import (
 	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
-
-// errNotFound is returned when a listing is absent.
-var errNotFound = errors.New("marketplace: listing not found")
 
 // Listing is one marketplace offer: a tool/agent surfaced for discovery and
 // install, optionally monetized (Price>0) with a seller payout Recipient wallet.

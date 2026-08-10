@@ -163,12 +163,6 @@ func (s *service) engineFor(org, billingOrg, project string) (*engine, error) {
 	return &engine{store: st, embed: s.embed, org: org, billingOrg: billingOrg, project: project}, nil
 }
 
-// org resolves the org for a request, but ONLY for a validated principal
-// (c.User() set by SanitizeIdentity from a verified credential). An unvalidated
-// or org-less request gets no org, so the caller returns 403 — never another
-// org's code. This is the SAME gate clients/eval + clients/knowledge use.
-func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
-
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
 // zipdoc_gen.go, which is the ONLY way that prose reaches the published document
 // and the MCP tool list — Go drops comments at compile time. Run by

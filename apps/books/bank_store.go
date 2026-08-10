@@ -123,17 +123,6 @@ type BankQuestion struct {
 	CreatedAt  string `json:"createdAt"`
 }
 
-// toQuestion maps a bank clarifying question onto the canonical founder-facing
-// Question shape so both anomaly and bank questions render through one contract.
-func (q BankQuestion) toQuestion() Question {
-	return Question{
-		ID:       q.Connector + ":" + q.ExternalID,
-		Kind:     "unmatched-deposit",
-		Text:     q.Prompt,
-		PostedAt: q.CreatedAt,
-	}
-}
-
 // raiseQuestion records a clarifying question for an unmatched inflow, idempotently under
 // (connector, external_id) — a re-sync of the same unmatched deposit never asks twice.
 func (s *store) raiseQuestion(ctx context.Context, connector, externalID, prompt, createdAt string) error {

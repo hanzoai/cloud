@@ -316,13 +316,6 @@ func emitDeployLifecycle(ctx context.Context, kind cloud.LifecycleKind, org stri
 	})
 }
 
-// failDeployment records the honest failure on the deployment + app and returns
-// the mapped HTTP error. No fabricated success ever reaches the caller.
-func failDeployment(s *cloud.Service[state], c *zip.Ctx, d *Deployment, a Application, status int, msg string) error {
-	failDeploymentCtx(s, c.Context(), d, a, status, msg)
-	return zip.Errorf(status, "deploy failed: %s", msg)
-}
-
 // failDeploymentCtx is the ctx-only store write behind failDeployment: it flips the
 // deployment + app to "error" with the reason. Shared so the push trigger records
 // the same honest failure state without an HTTP context.

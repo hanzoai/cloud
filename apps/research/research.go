@@ -175,15 +175,6 @@ type GrantRequest struct {
 // maxArtifactPage bounds a diary feed read.
 const maxArtifactPage = 500
 
-// runStatuses is the HIP-0512 §5 run-execution vocabulary. status is a STORED field a
-// producer sets and the board renders — the live leasing state machine
-// (queued→planning→running→scoring→…) is the durable-execution increment; no leasing
-// worker drives transitions yet.
-var runStatuses = map[string]bool{
-	"queued": true, "planning": true, "running": true, "scoring": true,
-	"complete": true, "partial": true, "failed": true, "faulted": true, "cancelled": true,
-}
-
 // runStatus normalizes a run's execution state: empty (backfilled-historic) is
 // `complete`; a recognized state passes through; an UNKNOWN non-empty state is preserved
 // verbatim so a producer's `faulted` is never silently shown as `complete` (masking a
