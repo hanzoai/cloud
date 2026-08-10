@@ -127,7 +127,7 @@ func TestZenAddressIsTheOneAddress(t *testing.T) {
 
 // TestZenDebitAddressesWhatTheGateAuthorized: the gate and the debit read the SAME
 // expression, so no header shape can make them disagree. This is the inversion the
-// codebase has shipped twice (clients/principal/wallet.go): gate on the person,
+// codebase has shipped twice (apps/principal/wallet.go): gate on the person,
 // spend from the pool.
 func TestZenDebitAddressesWhatTheGateAuthorized(t *testing.T) {
 	for _, tn := range []zen.Tenant{

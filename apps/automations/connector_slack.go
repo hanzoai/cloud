@@ -16,7 +16,7 @@ import (
 
 // slackBotTokenSecret is the KMS secret name Slack's bot token is custodied under.
 // It MUST equal the unexported const of the same name in
-// clients/integrations/slack.go ("bot_token"); duplicated here because Go cannot
+// apps/integrations/slack.go ("bot_token"); duplicated here because Go cannot
 // import an unexported identifier. The integrations OAuth exchange seals the
 // xoxb-… token under exactly this name.
 const slackBotTokenSecret = "bot_token"

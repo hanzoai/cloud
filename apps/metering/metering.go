@@ -220,7 +220,7 @@ func (c *Client) Enabled() bool { return c != nil && c.baseURL != "" }
 // why it was wrong: in the shared signup org, whose members are strangers to each
 // other, Payer answers "<org>/<name>" and the pool is a balance that member neither
 // owns nor can spend. A gate keyed on the org there checks a pool while the debit
-// spends a person, and clients/principal/wallet.go catalogues what that costs.
+// spends a person, and apps/principal/wallet.go catalogues what that costs.
 //
 // A caller that legitimately holds only an org — a resource meter billing an org's
 // build minutes, say — passes the org and gets the pool; that is the same rule,

@@ -1,7 +1,7 @@
 package platform
 
 // authz_test.go — the IAM authorization + tenant-confinement contract for the
-// /v1/platform/fleet board, the twin of clients/platform/runner_test.go. Every route
+// /v1/platform/fleet board, the twin of apps/platform/runner_test.go. Every route
 // is now authorized off ONE IAM identity (SuperAdmin or org-confined OrgAdmin);
 // these tests pin that a plain login is refused, an OrgAdmin sees ONLY its own
 // org's namespaces, a SuperAdmin sees the fleet, and the deploy path performs a

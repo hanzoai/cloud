@@ -22,7 +22,7 @@ import (
 // org.
 
 // googleProvider is the integrations provider id whose token these reads use. It
-// MUST match the provider registered in clients/integrations/google.go and the
+// MUST match the provider registered in apps/integrations/google.go and the
 // automations google connector name.
 const googleProvider = "google"
 

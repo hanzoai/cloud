@@ -117,7 +117,7 @@ CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org_channel ON marketing_campa
 }
 
 // addColumn adds a column to an existing table, treating an already-present column
-// as success (SQLite has no ADD COLUMN IF NOT EXISTS). Mirrors clients/social/store.go.
+// as success (SQLite has no ADD COLUMN IF NOT EXISTS). Mirrors apps/social/store.go.
 func (s *Store) addColumn(table, col, def string) error {
 	_, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, col, def))
 	if err == nil || strings.Contains(err.Error(), "duplicate column name") {

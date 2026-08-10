@@ -20,7 +20,7 @@ import (
 )
 
 // genesis.go records the cap-table equity genesis on-chain. It mirrors the treasury
-// L1 anchor (clients/treasury/anchor_evm.go): compute a deterministic keccak root of
+// L1 anchor (apps/treasury/anchor_evm.go): compute a deterministic keccak root of
 // the founding allocation, then commit that bytes32 to the Hanzo L1 via a KMS-signed
 // transaction — either an EquityGenesis contract call or a 0-value self-tx carrying
 // "HZEG"+root. The chain is the source of truth; the indexer (clients/graph) projects

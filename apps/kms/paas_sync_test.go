@@ -3,7 +3,7 @@ package kms_test
 // PaaS KMS→Secret sync proofs, against the REAL embedded KMS store + the REAL
 // org-scope guard + the REAL login broker (no mocks of the boundary under test).
 //
-// The platform control plane (clients/platform/secrets.go) seals each PaaS secret
+// The platform control plane (apps/platform/secrets.go) seals each PaaS secret
 // at the org-scoped coordinate  orgs/<org>/platform/<app>/<KEY>  (kmsSecretRef) and
 // authors a KMSSecret CR pointing the kms-operator at
 //   /v1/kms/secrets/platform/<app>/<KEY>   (org comes from the token)
