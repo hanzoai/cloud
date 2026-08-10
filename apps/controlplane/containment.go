@@ -44,5 +44,5 @@ func mustHarnessOnly(who string) {
 	}
 	panic("controlplane: " + who + " refused — increment-1 crypto is stub/forgeable " +
 		"(ProductionBCCSigningReady()==false) and this process is not a go-test harness; " +
-		"see clients/controlplane/doc.go")
+		"see apps/controlplane/doc.go")
 }
