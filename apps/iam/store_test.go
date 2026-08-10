@@ -41,6 +41,17 @@ func seedIdentity(t *testing.T, path, org, name string) {
 	if err := row.CreateCtx(context.Background()); err != nil {
 		t.Fatalf("seed user %s/%s: %v", org, name, err)
 	}
+	// A signing certificate, because a store without one cannot serve identity at
+	// all — nothing can be issued and nothing already issued can be checked — and
+	// Mount now refuses such a store rather than answering an empty keyset. A user
+	// alone was a store production never has.
+	cert := orm.New[model.Cert](db)
+	cert.Owner, cert.Name = org, "cert-"+org
+	cert.Type, cert.CryptoAlgorithm, cert.BitSize = "x509", "RS256", 2048
+	cert.SetId(org + "/cert-" + org)
+	if err := cert.CreateCtx(context.Background()); err != nil {
+		t.Fatalf("seed signing cert for %s: %v", org, err)
+	}
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}

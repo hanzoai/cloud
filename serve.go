@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cek"
-	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/internal/writerlease"
 	"github.com/hanzoai/cloud/openapi"
@@ -43,23 +42,18 @@ import (
 // SIGINT/SIGTERM.
 func Listen(plugins []Plugin, enable []string) error {
 	// `<binary> describe <dir>` projects instead of serving. Before LoadConfig
-	// AND before credz.Boot because the artifacts must be a function of the code
+	// AND before BootMaster because the artifacts must be a function of the code
 	// alone: both read the environment, and a route set that moved with a
 	// developer's shell is a spec that cannot be a golden — see describe.go.
 	if dir, ok := DescribeRequested(); ok {
 		return describe(plugins, dir)
 	}
 
-	// Credentials FIRST — before config is read, before any store opens. A child
-	// the host spawned has none of its own: it pulls its scoped bundle from the
-	// credz broker here and installs it into the environment, which is what
-	// LoadConfig and all 108 subsystems then read through os.Getenv. Resolving them
-	// after LoadConfig would read the AI gateway key, the IAM identity and the
-	// data-plane key out of an environment that is still empty — which is exactly
-	// how a lazily-spawned plugin came up with no provider credential and served
-	// 503. Idempotent (sync.Once); BuildDeps calls it too, for callers that skip
-	// Serve.
-	credential := credz.Boot(DataDir())
+	// THE KEY FIRST — before config is read, before any store opens, because cek
+	// refuses to open a database without it and the first open is the one that
+	// would have had to be keyed. Idempotent (sync.Once); BuildDeps calls it too,
+	// for callers that skip Serve.
+	BootMaster(DataDir())
 
 	cfg := LoadConfig()
 	if enable != nil {
@@ -129,7 +123,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// CLOUD_WRITER_LEASE + the downward API, and every incomplete configuration
 	// falls back and says so here rather than pretending to elect.
 	pin, pinReason := writerpin.ResolveWithReason()
-	deps.Logger.Info("HA role resolved",
+	luxlog.Default().Info("HA role resolved",
 		"role", cfg.Role.String(),
 		"writer_pin", pin.Kind(),
 		"writer_pin_reason", pinReason,
@@ -142,9 +136,9 @@ func Listen(plugins []Plugin, enable []string) error {
 	// This is what lifts the deployment off replicas:1 without any shared RWX volume —
 	// per-pod RWO PVC + org→owner routing = one writer per tenant file. See
 	// shardrouter.go.
-	shardRtr := newShardRouter(cfg, deps.Logger, deps.LiveMembers)
+	shardRtr := newShardRouter(cfg, luxlog.Default(), deps.LiveMembers)
 	if shardRtr != nil {
-		deps.Logger.Info("shard routing ENABLED (horizontal writer scale)",
+		luxlog.Default().Info("shard routing ENABLED (horizontal writer scale)",
 			"self", shardRtr.self, "peers", shardRtr.peerIDs(),
 			"writer_pin", "single-writer-per-shard")
 	}
@@ -159,36 +153,18 @@ func Listen(plugins []Plugin, enable []string) error {
 	// to a co-resident sink when clients/o11y is linked in, the ZAP wire when it is a
 	// plugin. No-op (non-nil shutdown) when no sink/endpoint is configured. See
 	// telemetry.go.
-	telemetryShutdown := InstallTelemetry(context.Background(), deps.Logger, "hanzo-cloud")
+	telemetryShutdown := InstallTelemetry(context.Background(), luxlog.Default(), "hanzo-cloud")
 
-	// Data-plane encryption posture. The KEY was installed by credz.Boot at the top
-	// of this function (BuildDeps logs which posture resolved it); this only READS
+	// Data-plane encryption posture. The KEY was installed by BootMaster at the top
+	// of this function (BuildDeps logs where it resolved from); this only READS
 	// the outcome. Installing a key here — which is what used to happen — is after
 	// BuildDeps has already opened a store, and the first open is the one that
 	// would have had to be keyed. Every database is derived from that master, so a
 	// process without one opens nothing rather than writing plaintext.
 	if cek.HasMaster() {
-		deps.Logger.Info("data-plane encryption ACTIVE (every database keyed from the master, at rest)")
+		luxlog.Default().Info("data-plane encryption ACTIVE (every database keyed from the master, at rest)")
 	} else {
-		deps.Logger.Warn("data-plane encryption posture: no usable key → store opens fail closed")
-	}
-
-	// The credential broker. A no-op in 107 of 108 processes: it starts only where
-	// this process both HOLDS the root key (credz.Root posture) and OWNS the sealed
-	// secret store (deps.KMS is the embedded client, not an RPC stub), which is true
-	// of exactly one process in a deployment. Every other cloud process is a client
-	// of it. Started after BuildDeps because the store it serves is built there.
-	if src, ok := deps.KMS.(credz.Source); ok {
-		broker, err := credz.Publish(credential, src, cfg.DataDir, cfg.AdminOrg, deps.Logger)
-		if err != nil {
-			// Not fatal: this process still serves its own traffic. But say so
-			// loudly — every child that pulls from here will fall back to no
-			// credentials at all, and a silent broker is how that becomes a 503
-			// somewhere else an hour later.
-			deps.Logger.Error("credz broker FAILED to start; children will boot without credentials", "err", err)
-		} else if broker != nil {
-			defer func() { _ = broker.Close() }()
-		}
+		luxlog.Default().Warn("data-plane encryption posture: no usable key → store opens fail closed")
 	}
 
 	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB fiber
@@ -249,7 +225,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// audit/). A write failure fails the request CLOSED (AU-5). Constructed here
 	// so the Recorder lives for the process and the /v1/admin/audit query + verify
 	// endpoints (clients/admin) read the SAME store via deps.Audit.
-	auditRec, err := buildAuditRecorder(cfg, deps.Logger, procName(plugins))
+	auditRec, err := buildAuditRecorder(cfg, luxlog.Default(), procName(plugins))
 	if err != nil {
 		return fmt.Errorf("audit: %w", err)
 	}
@@ -385,7 +361,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// route exists before the dispatcher captures the app.
 	app.Get("/zap", zapface.Handler(app.Fiber(), zapface.Options{
 		OriginPatterns: cfg.ZAPWebOrigins,
-		Logger:         deps.Logger,
+		Logger:         luxlog.Default(),
 	}))
 
 	// GET /v1/openapi.json — the THIRD projection of the same route table. ZAP
@@ -432,9 +408,9 @@ func Listen(plugins []Plugin, enable []string) error {
 	// receives is under one of its own /v1 prefixes, so a child's catch-all never
 	// serves the console to a browser; the front door (cmd/cloud) owns "/", and
 	// THERE the release is required.
-	consoleSrc, consoleErr := release.Load(context.Background(), release.ConfigFromEnv(), deps.Logger)
+	consoleSrc, consoleErr := release.Load(context.Background(), release.ConfigFromEnv(), luxlog.Default())
 	if consoleErr != nil {
-		deps.Logger.Warn("console: no release mounted — this process serves no console UI", "err", consoleErr)
+		luxlog.Default().Warn("console: no release mounted — this process serves no console UI", "err", consoleErr)
 	}
 	if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
 		return fmt.Errorf("console: %w", err)
@@ -455,8 +431,8 @@ func Listen(plugins []Plugin, enable []string) error {
 		if p.Name == "" {
 			continue
 		}
-		if stop, err := ServePlane(p.Name, deps.Logger); err != nil {
-			deps.Logger.Warn("plane: socket not served", "app", p.Name, "err", err)
+		if stop, err := ServePlane(p.Name, luxlog.Default()); err != nil {
+			luxlog.Default().Warn("plane: socket not served", "app", p.Name, "err", err)
 		} else {
 			defer func() { _ = stop() }()
 		}
@@ -496,9 +472,9 @@ func Listen(plugins []Plugin, enable []string) error {
 	if ops == "" {
 		// Plugin child (see listenOn): the ops port belongs to the host, which
 		// answers liveness for the whole fleet while its children are still cold.
-		deps.Logger.Info("listening as plugin", "addr", addrs[0], "enabled", cfg.Enable, "brand", cfg.Brand)
+		luxlog.Default().Info("listening as plugin", "addr", addrs[0], "enabled", cfg.Enable, "brand", cfg.Brand)
 	} else {
-		deps.Logger.Info("listening",
+		luxlog.Default().Info("listening",
 			"http", cfg.ListenAddr,
 			"zap", cfg.ZAPListenAddr,
 			"enabled", cfg.Enable,
@@ -506,7 +482,7 @@ func Listen(plugins []Plugin, enable []string) error {
 			"domain", cfg.Domain,
 		)
 		go func() {
-			deps.Logger.Info("health listening", "addr", ops)
+			luxlog.Default().Info("health listening", "addr", ops)
 			if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				listenErr <- fmt.Errorf("health listen: %w", err)
 			}
@@ -516,7 +492,7 @@ func Listen(plugins []Plugin, enable []string) error {
 
 	select {
 	case <-ctx.Done():
-		deps.Logger.Info("shutdown requested")
+		luxlog.Default().Info("shutdown requested")
 		// Graceful drain: go NotReady so peers re-elect this pod's orgs to live successors
 		// (each hydrates the latest fenced snapshot, M3) BEFORE we stop serving, then pause
 		// for that to propagate through the membership refresh. Only when sharding is active
@@ -524,7 +500,7 @@ func Listen(plugins []Plugin, enable []string) error {
 		// the final ship (CloseAll) below. In-flight requests drain in app.ShutdownWithContext.
 		SetDraining()
 		if shardRtr != nil {
-			deps.Logger.Info("draining: NotReady, waiting for peers to re-elect owned orgs", "grace", shardDrainGrace)
+			luxlog.Default().Info("draining: NotReady, waiting for peers to re-elect owned orgs", "grace", shardDrainGrace)
 			time.Sleep(shardDrainGrace)
 		}
 	case err := <-listenErr:
