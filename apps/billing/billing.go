@@ -113,35 +113,6 @@ func (p *commerceProxy) get(ctx context.Context, path, org string, q url.Values)
 	return body, resp.StatusCode, nil
 }
 
-// del performs one service-token commerce DELETE scoped to org, returning commerce's
-// raw body + status VERBATIM. Same S2S trust as get: the caller's OWN org rides
-// X-Org-Id and the admin service token authorizes the removal. It carries no body and
-// no idempotency key — DELETE of a named resource is idempotent by identity, so a retry
-// removes the same card or 404s, and there is nothing for a guard to add.
-func (p *commerceProxy) del(ctx context.Context, path, org string, q url.Values) ([]byte, int, error) {
-	u := p.base + path
-	if enc := q.Encode(); enc != "" {
-		u += "?" + enc
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.token)
-	req.Header.Set("X-Org-Id", org)
-	resp, err := p.http.Do(req)
-	if err != nil {
-		return nil, 0, fmt.Errorf("commerce unreachable: %w", err)
-	}
-	defer resp.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, resp.StatusCode, err
-	}
-	return b, resp.StatusCode, nil
-}
-
 // state is billing's own data; shared deps live in the embedded cloud.Base.
 type state struct {
 	commerce *commerceProxy

@@ -17,9 +17,6 @@ import (
 	_ "github.com/hanzoai/sqlite"
 )
 
-// errNotFound is mapped to 404 by handlers.
-var errNotFound = errors.New("destinations: not found")
-
 // Store is the destinations database. ONE SQLite file — the system namespace's
 // "destinations" — holds every org's connected destinations; tenant isolation is
 // the `org` column, enforced on EVERY query (the ads/integrations pattern). The

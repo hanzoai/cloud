@@ -84,12 +84,6 @@ type family string
 // learn.go's header for why that is the cheap half of the moat.
 const halfSpace family = "halfspace"
 
-// maxFamily bounds a family name, so the shape a value records is a BOUNDED string
-// and the row that holds it stays under a stated ceiling ([maxModelRowBytes]). Family
-// names are package constants, so this is a ceiling on a closed set rather than on
-// anything a caller supplies.
-const maxFamily = 32
-
 // qualify names a model space: this family, and the family's own digest over its
 // geometry and the inventory it reads.
 //

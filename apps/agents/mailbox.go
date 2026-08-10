@@ -122,24 +122,6 @@ func newMailbox() *mailbox {
 	}
 }
 
-func (m *mailbox) inflightAddLocked(org, sess string) {
-	s := m.inflight[org]
-	if s == nil {
-		s = map[string]struct{}{}
-		m.inflight[org] = s
-	}
-	s[sess] = struct{}{}
-}
-
-func (m *mailbox) inflightRemoveLocked(org, sess string) {
-	if s := m.inflight[org]; s != nil {
-		delete(s, sess)
-		if len(s) == 0 {
-			delete(m.inflight, org)
-		}
-	}
-}
-
 // InFlight returns how many routed runs an org has live (offered, not yet finished).
 func (m *mailbox) InFlight(org string) int {
 	m.mu.Lock()

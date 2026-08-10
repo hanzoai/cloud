@@ -1,14 +1,10 @@
 package integrations
 
 import (
-	"context"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
-	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -138,31 +134,6 @@ func discordDeferredEphemeral(c *zip.Ctx) error {
 		"type": discordRespDeferred,
 		"data": map[string]any{"flags": discordFlagEphemeral},
 	})
-}
-
-// discordEditOriginal edits the original (deferred) interaction response with the
-// answer. Content is capped at Discord's 2000-char limit.
-func discordEditOriginal(ctx context.Context, appID, token, text string) error {
-	if len(text) > discordMaxContent {
-		text = text[:discordMaxContent]
-	}
-	body, _ := json.Marshal(map[string]string{"content": text})
-	endpoint := discordAPIBase + "/webhooks/" + appID + "/" + token + "/messages/@original"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, endpoint, strings.NewReader(string(body)))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := channelHTTP.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
-	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("discord edit @original http %d", resp.StatusCode)
-	}
-	return nil
 }
 
 // ── inbound auth (Ed25519 — Discord's trust boundary) ───────────────────────

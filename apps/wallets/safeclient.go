@@ -218,18 +218,6 @@ func (c *safeClient) deploySafe(ctx context.Context, org, walletID, chain string
 	return &sw, nil
 }
 
-// getSafe reads a deployed Safe record (org-scoped by the ring).
-func (c *safeClient) getSafe(ctx context.Context, org, swID string) (*safeWallet, error) {
-	if swID == "" {
-		return nil, fmt.Errorf("safe: get requires a smart wallet id")
-	}
-	var sw safeWallet
-	if err := c.do(ctx, http.MethodGet, fmt.Sprintf(pathGetSmartWallet, swID), org, nil, &sw); err != nil {
-		return nil, err
-	}
-	return &sw, nil
-}
-
 // proposeSafeTx proposes a Safe transaction: the ring computes the EIP-712 Safe-tx
 // hash (bound to the Safe contract + chain_id) and MPC-signs it, returning the
 // hash + the threshold signature (r,s). operation is always 0 (Call); a Safe

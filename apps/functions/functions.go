@@ -706,15 +706,6 @@ func toInvViews(invs []Invocation) []invocationView {
 	return out
 }
 
-func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
-
-// org resolves the org — the org isolation KEY. It uses c.Org() EXACTLY
-// as SanitizeIdentity minted it from the validated IAM owner claim (HIP-0026):
-// never lowercased/stripped/truncated. Normalizing would collapse distinct
-// owners into one bucket — a cross-org break (Red HIGH-1). Reject only empty
-// or pathologically long. No magic "admin" bucket.
-func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
-
 // sanitizeNs normalizes the function NAMESPACE — a cosmetic grouping/display
 // field the caller supplies, NOT the org isolation key (that is the org).
 // Lossy normalization here is safe: the namespace never gates cross-org
