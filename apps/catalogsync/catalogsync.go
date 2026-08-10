@@ -204,7 +204,7 @@ func handleEvent(ctx context.Context, log luxlog.Logger, data []byte) error {
 }
 
 // eventString reads a trimmed string field from a commerce event's Data map.
-func eventString(m map[string]interface{}, key string) string {
+func eventString(m map[string]any, key string) string {
 	s, _ := m[key].(string)
 	return strings.TrimSpace(s)
 }

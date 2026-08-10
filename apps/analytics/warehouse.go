@@ -417,7 +417,6 @@ func (s *drain) consume(ctx context.Context, cl *infra.PubSubClient) error {
 		defer func() { _ = sub.Unsubscribe() }()
 	}
 	for _, w := range writers {
-		w := w
 		durable := plane + "-" + string(w.signal)
 		if _, err := cl.CreateConsumer(ctx, EventStream, &infra.ConsumerConfig{
 			Name:          durable,
