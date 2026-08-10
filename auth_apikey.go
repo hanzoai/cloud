@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/hanzoai/authz"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hanzoai/authz"
 )
 
 // The identity boundary (SanitizeIdentity) validates a JWT and mints the identity
@@ -145,15 +146,6 @@ func iamCred() string {
 		return ""
 	}
 	return "Basic " + base64.StdEncoding.EncodeToString([]byte(id+":"+secret))
-}
-
-func env(names ...string) string {
-	for _, n := range names {
-		if v := strings.TrimSpace(os.Getenv(n)); v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func (k *iamKeys) resolve(ctx context.Context, key string) *idClaims {
