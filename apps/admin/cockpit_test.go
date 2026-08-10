@@ -14,7 +14,12 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/money"
+	"github.com/hanzoai/cloud/plane"
+	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
+	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/apps/admin/commerce"
 	"github.com/hanzoai/cloud/apps/admin/core"
@@ -39,11 +44,14 @@ type cockpitFakes struct {
 	balances    map[string]int64 // org -> availableCents (mutated by deposit)
 }
 
+// depositCapture is one credit commerce was asked to make, over the internal
+// plane — which is the ONE wire a grant travels, because the process serving
+// /v1/admin/* never holds the books.
 type depositCapture struct {
 	org    string
-	user   string
+	user   string // the SUBJECT credited inside that org's ledger
 	amount int64
-	idem   string // X-Idempotency-Key commerce received (empty when none forwarded)
+	idem   string // plane.CreditIn.Ref — the idempotency key, never empty
 }
 
 // adminHdr is a validated SuperAdmin identity (what SanitizeIdentity mints for
@@ -202,6 +210,8 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 			io.WriteString(w, `{"status":"error","msg":"not found"}`)
 		}
 	}))
+
+	f.servePlaneBooks(t)
 
 	_, s, fa := mountService(t, f.iam.URL, f.commerce.URL, "")
 	f.service = s
@@ -419,12 +429,14 @@ func TestGrantCredit_NilAuditStoreFailsClosed(t *testing.T) {
 	}
 }
 
-// TestGrantCredit_IdempotencyKeyForwarded proves the double-credit guard: when the
-// operator supplies an Idempotency-Key, cloud forwards a DETERMINISTIC X-Idempotency-Key
-// to commerce (so a commit-then-timeout retry dedupes there), the SAME nonce yields the
-// SAME key (a retry lands nothing new), a DIFFERENT nonce yields a DIFFERENT key, and NO
-// nonce forwards no key (the additive default).
-func TestGrantCredit_IdempotencyKeyForwarded(t *testing.T) {
+// TestGrantCredit_RefIsAlwaysSentAndDedupesOnTheNonce proves the double-credit
+// guard end to end: every grant carries a ref (commerce refuses an empty one, so a
+// grant without it could not land at all), the SAME operator nonce yields the SAME
+// ref (a commit-then-timeout retry dedupes at commerce and lands nothing new), a
+// DIFFERENT nonce yields a DIFFERENT ref (a genuinely new grant is never dropped),
+// and NO nonce yields a FRESH ref per attempt — which is the additive default, now
+// stated as a value rather than as an absent key.
+func TestGrantCredit_RefIsAlwaysSentAndDedupesOnTheNonce(t *testing.T) {
 	f := newCockpitFakes(t)
 	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
@@ -452,22 +464,28 @@ func TestGrantCredit_IdempotencyKeyForwarded(t *testing.T) {
 		return h
 	}
 
-	// A supplied nonce is forwarded as a non-empty, deterministic X-Idempotency-Key.
+	// A supplied nonce yields a non-empty, deterministic ref.
 	k1 := grant(withKey("op-nonce-1"))
 	if k1 == "" {
-		t.Fatal("Idempotency-Key supplied but commerce received no X-Idempotency-Key")
+		t.Fatal("Idempotency-Key supplied but commerce received no ref")
 	}
-	// The SAME nonce (a retry) → the SAME key, so commerce dedupes and lands nothing new.
+	// The SAME nonce (a retry) → the SAME ref, so commerce dedupes and lands nothing new.
 	if k1b := grant(withKey("op-nonce-1")); k1b != k1 {
-		t.Errorf("same nonce must yield same key: %q vs %q", k1, k1b)
+		t.Errorf("same nonce must yield same ref: %q vs %q", k1, k1b)
 	}
-	// A DIFFERENT nonce → a DIFFERENT key (a genuinely new grant is never dropped).
+	// A DIFFERENT nonce → a DIFFERENT ref (a genuinely new grant is never dropped).
 	if k2 := grant(withKey("op-nonce-2")); k2 == k1 {
-		t.Errorf("distinct nonce must yield distinct key, both = %q", k1)
+		t.Errorf("distinct nonce must yield distinct ref, both = %q", k1)
 	}
-	// No nonce → no key forwarded (additive default preserved).
-	if k0 := grant(adminHdr()); k0 != "" {
-		t.Errorf("no nonce must forward no key, got %q", k0)
+	// No nonce → a ref all the same, and a FRESH one per attempt. Empty would be
+	// refused by commerce outright; stable would silently drop the second of two
+	// legitimate identical comps.
+	k0a, k0b := grant(adminHdr()), grant(adminHdr())
+	if k0a == "" || k0b == "" {
+		t.Fatal("a grant with no operator nonce sent no ref — commerce refuses an empty ref, so it could not land")
+	}
+	if k0a == k0b {
+		t.Errorf("two nonce-less attempts shared one ref (%q) — the second grant dedupes away", k0a)
 	}
 }
 
@@ -591,4 +609,71 @@ func TestAnalytics_HandlerRealWiring(t *testing.T) {
 	if len(d.TopCustomers) == 0 {
 		t.Error("top customers must be populated from real usage")
 	}
+}
+
+// servePlaneBooks serves the two finance ops a grant needs — credit and balance —
+// as app "commerce" on this process's plane, over the REAL op ids and the REAL
+// wire, with only the books a fixture.
+//
+// IT IS THE ARRANGEMENT PRODUCTION HAS, and the reason these tests exist in this
+// shape. The cockpit's read surfaces (balance, subscriptions, ledger) still fan out
+// over HTTP to a commerce that may be anywhere, so the httptest commerce server
+// stays. The grant does not: a credit is a WRITE to a per-org ledger with ONE
+// writer, and that writer is the commerce PROCESS. Giving the test a reachable
+// commerce URL is what once made this suite green while every production grant
+// answered "commerce not configured" — the fake supplied a base URL the admin
+// process has never had.
+func (f *cockpitFakes) servePlaneBooks(t *testing.T) {
+	t.Helper()
+	t.Setenv("ZIP_RUNTIME_DIR", "")
+	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t))
+	cloud.ResetPlane()
+	t.Cleanup(cloud.ResetPlane)
+
+	zip.Post[plane.CreditIn, plane.Credited](cloud.Plane(), "/finance/credit",
+		func(ctx context.Context, in *plane.CreditIn) (*plane.Credited, error) {
+			// The org rides the CALLER — plane.CreditIn cannot name one — and the
+			// ref is required, both exactly as the real op enforces them. A fixture
+			// that admitted either would let a test pass through a door production
+			// closes.
+			org := cloud.Who(ctx).Org
+			if org == "" {
+				return nil, zip.ErrForbidden("credit: no org on the call")
+			}
+			if in.Ref == "" {
+				return nil, zip.ErrBadRequest("credit: ref is required (the idempotency key)")
+			}
+			cents, err := in.Amount.RoundMinor()
+			if err != nil {
+				return nil, zip.ErrBadRequest("credit: " + err.Error())
+			}
+			f.mu.Lock()
+			if in.Subject == org { // wrong subject → a wallet nobody spends from, the live contract
+				f.balances[org] += cents
+			}
+			f.deposits = append(f.deposits, depositCapture{org: org, user: in.Subject, amount: cents, idem: in.Ref})
+			f.mu.Unlock()
+			return &plane.Credited{Amount: in.Amount, ID: fmt.Sprintf("fe-%s-%d", org, cents)}, nil
+		}, zip.WithOperationID(plane.FinanceCredit))
+
+	zip.Post[plane.BalanceIn, plane.Balance](cloud.Plane(), "/finance/balance",
+		func(ctx context.Context, in *plane.BalanceIn) (*plane.Balance, error) {
+			org := cloud.Who(ctx).Org
+			if org == "" {
+				return nil, zip.ErrForbidden("balance: no org on the call")
+			}
+			f.mu.Lock()
+			bal := f.balances[org]
+			f.mu.Unlock()
+			if in.Subject != org {
+				bal = 0
+			}
+			return &plane.Balance{Amount: plane.Amount(money.FromCents(bal).Unwrap())}, nil
+		}, zip.WithOperationID(plane.FinanceBalance))
+
+	stop, err := cloud.ServePlane("commerce", luxlog.NewNoOpLogger())
+	if err != nil {
+		t.Fatalf("serve commerce plane: %v", err)
+	}
+	t.Cleanup(func() { _ = stop() })
 }

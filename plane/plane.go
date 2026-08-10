@@ -1394,6 +1394,18 @@ type CreditIn struct {
 // Credited reports what the credit wrote.
 type Credited struct {
 	Amount Money `json:"amount"`
+	// ID is the ledger entry the credit created — the handle a reconciliation
+	// names, and the one fact about a completed credit that cannot be derived
+	// from the request that asked for it.
+	//
+	// The op always had it and threw it away, so a caller with no ledger of its
+	// own could move money and then had nothing to cite for it: the admin grant
+	// receipt's transactionId echoed the idempotency key it had just sent, which
+	// reads like an id and identifies nothing in commerce's books.
+	//
+	// APPENDED at the end, because the wire is field ORDER — a field inserted
+	// anywhere else changes what every existing peer reads.
+	ID string `json:"id,omitempty"`
 }
 
 // ---- risk.decide — the scorer, from the process that holds the model --------
