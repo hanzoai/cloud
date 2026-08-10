@@ -121,7 +121,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"doc_1f…","signers":[{"name":"Ada","email":"ada@acme.com"}]}`),
 	})
 	zip.Describe("POST /v1/legal/documents/:id/sign/complete", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Records signature completion — a provider webhook or a reviewer signal.\nThe stub never self-completes; this authenticated, audited endpoint is the signal.",
 	})
 	zip.Describe("POST /v1/legal/filings", zip.Doc{
 		Description: "Records a filing of one or more of the org's documents with a\nstate or agency, and returns the tracking record.\n\nIt is a TRACKING record, not an autonomous filing. With no filing partner wired\nthe honest status is \"manual\" and the note says so: the documents were generated\nfor signature, and the org files them through its registered agent. Nothing here\ninvents a filing id it does not have.\n\nEvery document id must belong to the caller's org; one that does not is a 404\nnaming it, so a filing can never reach across tenants.",

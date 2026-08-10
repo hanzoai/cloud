@@ -51,6 +51,9 @@ func init() {
 			"apiKeyList.keys":  "Keys is every key the caller holds, at most one per type.",
 		},
 	})
+	zip.Describe("POST /avatar", zip.Doc{
+		Description: "Stores the upload and records its URL on the caller's IAM user row.",
+	})
 	zip.Describe("POST /v1/keys", zip.Doc{
 		Description: "Creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
 		Fields: map[string]string{
