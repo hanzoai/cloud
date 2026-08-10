@@ -668,7 +668,7 @@ func TestOneOrgsOverridesCostWhatTheyArePublishedToCost(t *testing.T) {
 	const sample = 300
 	before := bytesOnDisk(t, own)
 	batch := make([]ReferenceOverride, 0, sample)
-	for i := 0; i < sample; i++ {
+	for i := range sample {
 		tail := fmt.Sprintf("%06d.ex", i)
 		batch = append(batch, ReferenceOverride{
 			Key:     strings.Repeat("k", maxKey-len(tail)) + tail,

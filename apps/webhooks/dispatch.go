@@ -202,7 +202,7 @@ func (d *dispatcher) start() {
 	d.cancel = cancel
 	d.mu.Unlock()
 
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		d.wg.Add(1)
 		go d.worker(ctx)
 	}

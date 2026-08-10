@@ -137,7 +137,7 @@ func stopStudio(cmd *exec.Cmd) {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 	}
 	_ = exec.Command("pkill", "-f", "main.py --listen").Run()
-	for i := 0; i < 15; i++ {
+	for range 15 {
 		conn, err := net.DialTimeout("tcp", studioAddr, time.Second)
 		if err != nil {
 			return

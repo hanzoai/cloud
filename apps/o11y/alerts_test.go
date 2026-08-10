@@ -179,7 +179,7 @@ func TestUnparseableBodyIsStillARecordedDelivery(t *testing.T) {
 
 func TestRingIsBoundedAndKeepsTheNewest(t *testing.T) {
 	a := alertsApp(t)
-	for i := 0; i < recentMax+50; i++ {
+	for i := range recentMax + 50 {
 		body := fmt.Sprintf(`{"receiver":"r%d","alerts":[{"labels":{"alertname":"A%d"}}]}`, i, i)
 		if code, _ := post(t, a, "/v1/o11y/alerts/page", body); code != 200 {
 			t.Fatalf("post %d: %d", i, code)

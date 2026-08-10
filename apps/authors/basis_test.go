@@ -224,7 +224,7 @@ func TestBasisIsPureRead(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if v, _ := getBasis(t, app, "orgA", ""); len(v.Ledger) != 0 || v.Reconciliation.AccruedCents != 0 {
 			t.Fatalf("read %d accrued something: %+v", i, v.Reconciliation)
 		}
@@ -242,7 +242,7 @@ func TestBasisIsPureRead(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
 	assertStill("after the admin sweep", want, 0, 1, want)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if v, _ := getBasis(t, app, "orgA", ""); v.Reconciliation.LedgerEarningCents != want {
 			t.Fatalf("read %d disturbed the ledger: %+v", i, v.Reconciliation)
 		}

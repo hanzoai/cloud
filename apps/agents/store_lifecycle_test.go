@@ -132,7 +132,7 @@ CREATE TABLE agents (
 
 	// Open through the real store TWICE — the first migrates, the second proves
 	// idempotency (no error re-adding existing columns).
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		st, err := openStoreAt(dir)
 		if err != nil {
 			t.Fatalf("open #%d migrate failed: %v", i, err)

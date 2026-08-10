@@ -103,7 +103,7 @@ func peer(t *testing.T) *standIn {
 		}, zip.WithOperationID(plane.IndexReconcile))
 	go func() { _ = app.Listen(zip.SocketPath("index")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, err := net.Dial("unix", zip.SocketPath("index")); err == nil {
 			_ = c.Close()
 			return s
@@ -207,7 +207,7 @@ func TestLiveSitesCrossToTheProjectsProcess(t *testing.T) {
 		}, zip.WithOperationID(plane.SitesLive))
 	go func() { _ = app.Listen(zip.SocketPath("projects")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, err := net.Dial("unix", zip.SocketPath("projects")); err == nil {
 			_ = c.Close()
 			break

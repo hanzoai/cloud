@@ -136,7 +136,7 @@ func TestStoreConsumeNonceConcurrentSingleWinner(t *testing.T) {
 	var wg sync.WaitGroup
 	wins := make(chan bool, racers)
 	start := make(chan struct{})
-	for i := 0; i < racers; i++ {
+	for range racers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

@@ -53,7 +53,7 @@ func TestDaemonStateJobLifecycle(t *testing.T) {
 
 func TestDaemonStateRecentRingBound(t *testing.T) {
 	s := newDaemonState()
-	for i := int64(0); i < 50; i++ {
+	for i := range int64(50) {
 		s.StartJob(JobRecord{JobID: i, Org: "x", Repo: "y"})
 		s.EndJob(i, false)
 	}

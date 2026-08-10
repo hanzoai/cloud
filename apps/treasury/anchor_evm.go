@@ -182,7 +182,7 @@ func (a *anchorer) submit(ctx context.Context, b ledger.Backend) (*anchorRecord,
 		Entries: count,
 	}
 	// Wait (bounded) for the receipt so the persisted record carries a real block.
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		if r, rerr := cl.TransactionReceipt(ctx, signed.Hash()); rerr == nil && r != nil {
 			rec.Block = r.BlockNumber.Uint64()
 			break

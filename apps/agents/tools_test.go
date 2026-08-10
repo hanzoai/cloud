@@ -273,7 +273,7 @@ func TestNestedAgentsAreBoundedByDepth(t *testing.T) {
 	ai := &scriptAI{replies: []types.ChatResponse{{Content: "at the bottom"}}}
 
 	ctx := context.Background()
-	for i := 0; i < maxAgentDepth; i++ {
+	for range maxAgentDepth {
 		ctx = deeper(ctx)
 	}
 	a := mk("maxpower", "greeter")

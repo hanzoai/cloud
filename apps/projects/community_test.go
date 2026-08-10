@@ -87,7 +87,7 @@ func record(t *testing.T) *recorder {
 		}, zip.WithOperationID(plane.GitPublish))
 	go func() { _ = app.Listen(zip.SocketPath("git")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, derr := net.Dial("unix", zip.SocketPath("git")); derr == nil {
 			_ = c.Close()
 			return r

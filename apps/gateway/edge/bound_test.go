@@ -44,7 +44,7 @@ func TestTraffic_AnUnvalidatedCredentialIsNotAnIdentity(t *testing.T) {
 	// One address is one caller however many credentials it invents, so the
 	// counts accumulate against it instead of resetting per request...
 	var p Pattern
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		p = tr.Observe(forged("", fmt.Sprintf("junk-%06d", i), addr, "/v1/models"), t0)
 	}
 	if p.Requests < 40 {
@@ -82,19 +82,19 @@ func TestTraffic_AFloodCannotEraseAnotherCaller(t *testing.T) {
 	tr := NewTraffic()
 
 	// 200 anonymous callers, each with a history worth erasing.
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		s := forged("", "", fmt.Sprintf("198.51.%d.%d", i/256, i%256), "/v1/models")
-		for n := 0; n < 10; n++ {
+		for range 10 {
 			tr.Observe(s, t0)
 		}
 	}
 	// A hundred thousand requests from one address, each inventing a credential.
-	for i := 0; i < 100_000; i++ {
+	for i := range 100_000 {
 		tr.Observe(forged("", fmt.Sprintf("forged-%06d", i), "203.0.113.9", "/v1/chat"), t0)
 	}
 
 	lost := 0
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		s := forged("", "", fmt.Sprintf("198.51.%d.%d", i/256, i%256), "/v1/models")
 		if p := tr.Observe(s, t0); p.Requests < 11 {
 			lost++
@@ -114,7 +114,7 @@ func TestTraffic_AFloodCannotEraseAnotherCaller(t *testing.T) {
 func TestTraffic_TheCeilingRefusesRatherThanOverrunning(t *testing.T) {
 	tr := NewTraffic()
 	held := make([]Signal, 0, maxCallers+5_000)
-	for i := 0; i < maxCallers+5_000; i++ {
+	for i := range maxCallers + 5_000 {
 		s := sig("acme", fmt.Sprintf("fp%06d", i), "203.0.113.1", "/v1/models")
 		tr.Observe(s, t0)
 		tr.Hold(s, Hold{Action: "block", Reason: "peers", Decision: "d"}, time.Minute, t0)
@@ -155,7 +155,7 @@ func TestTraffic_TheCeilingRefusesRatherThanOverrunning(t *testing.T) {
 // which is the one pattern that screens every single time.
 func TestTraffic_ARefusedCallerIsToldItIsUnmeasured(t *testing.T) {
 	tr := NewTraffic()
-	for i := 0; i < maxCallers; i++ {
+	for i := range maxCallers {
 		tr.Observe(sig("acme", fmt.Sprintf("fp%06d", i), "203.0.113.1", "/v1/models"), t0)
 	}
 	p := tr.Observe(sig("acme", "fpOverflow", "203.0.113.1", "/v1/models"), t0)
@@ -178,7 +178,7 @@ func TestTraffic_ARefusedCallerIsToldItIsUnmeasured(t *testing.T) {
 func TestTraffic_StrainRisesOnce(t *testing.T) {
 	tr := NewTraffic()
 	rises := map[string]int{}
-	for i := 0; i < maxCallers+100; i++ {
+	for i := range maxCallers + 100 {
 		if r := tr.Observe(sig("acme", fmt.Sprintf("fp%06d", i), "203.0.113.1", "/v1/models"), t0).Rise; r != "" {
 			rises[r]++
 		}
@@ -193,7 +193,7 @@ func TestTraffic_StrainRisesOnce(t *testing.T) {
 // has no name. It is the empty scope, and the empty scope is a value.
 func TestTraffic_TheAnonymousLaneIsReadable(t *testing.T) {
 	tr := NewTraffic()
-	for i := 0; i < maxCallers+50; i++ {
+	for i := range maxCallers + 50 {
 		tr.Observe(forged("", "x", fmt.Sprintf("198.51.%d.%d", i/256, i%256), "/v1/models"), t0)
 	}
 	v := tr.View("", ModeLive, t0)
@@ -226,7 +226,7 @@ func TestTraffic_TheLaneSplitNamesTheLane(t *testing.T) {
 	// pattern that produced it is the one this observation just counted.
 	tr2 := NewTraffic()
 	var last Pattern
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		last = tr2.Observe(forged("", fmt.Sprintf("junk-%03d", i), "203.0.113.9", "/v1/models"), t0)
 	}
 	if last.Lane != AgencyBot {
@@ -304,7 +304,7 @@ func TestTraffic_FootprintIsBoundedInBytes(t *testing.T) {
 
 	const n = maxCallers
 	callers := measure(func(tr *Traffic) {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			s := sig("acme", fmt.Sprintf("%012d", i), "203.0.113.1", "/v1/models")
 			tr.Observe(s, t0)
 			tr.Hold(s, Hold{Action: action, Reason: cause, Decision: decision}, time.Minute, t0)
@@ -315,7 +315,7 @@ func TestTraffic_FootprintIsBoundedInBytes(t *testing.T) {
 	}
 
 	hosts := measure(func(tr *Traffic) {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			tr.Observe(Signal{Org: "acme", Cred: "fp", Presented: "fp", Class: CredSecret,
 				IP: fmt.Sprintf("2001:db8:%x:%x::%x", i/256, i%256, i), Path: "/v1/models"}, t0)
 		}
@@ -327,7 +327,7 @@ func TestTraffic_FootprintIsBoundedInBytes(t *testing.T) {
 	}
 
 	scopes := measure(func(tr *Traffic) {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			tr.Observe(sig(fmt.Sprintf("org%09d", i), "fp", "203.0.113.1", "/v1/models"), t0)
 		}
 	})
@@ -345,7 +345,7 @@ func TestTraffic_TheBudgetIsTheProcessCeiling(t *testing.T) {
 
 	// Callers with no credential, so every byte charged is a caller entry and the
 	// arithmetic under test is not sharing the budget with the address table.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		tr.Observe(forged("acme", "", fmt.Sprintf("203.0.113.%d", i), "/v1/models"), t0)
 	}
 	tr.mu.Lock()
@@ -427,7 +427,7 @@ func TestTraffic_ARequestWithNoIdentityIsNotACaller(t *testing.T) {
 	blind := Signal{Org: "", Presented: "junk", IP: "", Path: "/v1/models", Class: CredAnonymous}
 
 	var p Pattern
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		p = tr.Observe(blind, t0)
 	}
 	if p.Strain != StrainBlind {
@@ -471,7 +471,7 @@ func TestTraffic_ARequestWithNoIdentityIsNotACaller(t *testing.T) {
 // it must not stall.
 func BenchmarkViewAtTheCeiling(b *testing.B) {
 	tr := NewTraffic()
-	for i := 0; i < maxCallers; i++ {
+	for i := range maxCallers {
 		tr.Observe(sig("acme", fmt.Sprintf("fp%06d", i), "203.0.113.1", "/v1/models"), t0)
 	}
 	b.ResetTimer()
@@ -482,7 +482,7 @@ func BenchmarkViewAtTheCeiling(b *testing.B) {
 
 func BenchmarkObserveAtTheCeiling(b *testing.B) {
 	tr := NewTraffic()
-	for i := 0; i < maxCallers; i++ {
+	for i := range maxCallers {
 		tr.Observe(sig("acme", fmt.Sprintf("fp%06d", i), "203.0.113.1", "/v1/models"), t0)
 	}
 	s := sig("acme", "fp000001", "203.0.113.1", "/v1/models")

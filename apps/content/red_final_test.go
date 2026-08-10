@@ -295,7 +295,7 @@ func TestRedFinal_SameItemFlood(t *testing.T) {
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 	errs := make([]error, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -330,7 +330,7 @@ func TestRedFinal_SameItemFlood(t *testing.T) {
 	var hg sync.WaitGroup
 	go5 := make(chan struct{})
 	codes := make([]int, 8)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		hg.Add(1)
 		go func(i int) {
 			defer hg.Done()
@@ -370,7 +370,7 @@ func TestRedFinal_TwoConcurrentTransitionsPublished_OneFanout(t *testing.T) {
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 	errs := make([]error, 2)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -483,7 +483,7 @@ func assertExternalID(t *testing.T, org, name, want, when string) {
 // settleGoroutines waits briefly for transient goroutines to exit so a leak assertion is
 // stable (not a hard sleep race: it polls a short, bounded window).
 func settleGoroutines() {
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		runtime.GC()
 		time.Sleep(5 * time.Millisecond)
 	}

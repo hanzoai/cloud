@@ -167,7 +167,7 @@ func (c *safeClient) createWallet(ctx context.Context, org, vaultID, name string
 // only on 2xx, so out is untouched across the retried 404s.
 func (c *safeClient) doRetryNotFound(ctx context.Context, method, path, org string, reqBody, out any, notFound string) error {
 	var lastErr error
-	for attempt := 0; attempt < 6; attempt++ {
+	for attempt := range 6 {
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():

@@ -55,7 +55,7 @@ func TestTruncatedSignaturesAreUnrecognizedNotAPanic(t *testing.T) {
 	}
 	for name, sig := range full {
 		t.Run(name, func(t *testing.T) {
-			for n := 0; n < len(sig); n++ {
+			for n := range sig {
 				if got := Type(sig[:n]); got != "" {
 					t.Fatalf("Type(%d of %d bytes) = %q, want \"\"", n, len(sig), got)
 				}

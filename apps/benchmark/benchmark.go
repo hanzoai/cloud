@@ -430,7 +430,7 @@ func binom(n, k int) float64 {
 		return 0
 	}
 	res := 1.0
-	for i := 0; i < k; i++ {
+	for i := range k {
 		res = res * float64(n-i) / float64(i+1)
 	}
 	return res

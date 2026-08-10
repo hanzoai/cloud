@@ -149,7 +149,7 @@ func TestRateLimit_PerPrincipalBurstThen429(t *testing.T) {
 	// alice floods, sending a FRESH X-Forwarded-For each request (the old XFF keying
 	// would have reset the bucket every time — it must NOT now).
 	var got429 bool
-	for i := 0; i < keysWriteRatePerMin+5; i++ {
+	for i := range keysWriteRatePerMin + 5 {
 		code, _ := req(t, app, http.MethodPost, "/v1/keys", map[string]string{
 			"X-User-Id": "alice", "X-Org-Id": "acme",
 			"Authorization":   "Bearer j.w.t",                     // skip CSRF, isolate the limiter

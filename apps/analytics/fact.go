@@ -829,7 +829,7 @@ func splitFrame(line string) (fn, loc string, ok bool) {
 // carries its own colons (https://host:443/a.js:12:3).
 func splitLocation(loc string) (file string, line, col uint32) {
 	file = loc
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		j := strings.LastIndex(file, ":")
 		if j < 0 {
 			break

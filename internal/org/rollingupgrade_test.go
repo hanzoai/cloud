@@ -150,7 +150,7 @@ func (h *rollHarness) ensureOwned(p *rollPod, org string) *rollOrg {
 // owner can serve within the budget (availability) or if two pods ack one round (split
 // brain).
 func (h *rollHarness) write(org string, seq int) {
-	for attempt := 0; attempt < rerouteAttempts; attempt++ {
+	for range rerouteAttempts {
 		owner, ok := Owner(org, h.shared.get())
 		if !ok {
 			h.t.Fatalf("org %s: empty membership — no owner (availability)", org)

@@ -730,7 +730,7 @@ func TestPace_OverTheWire(t *testing.T) {
 	// and nowhere near the examining threshold, so only the conjunction can fire.
 	at := time.Now().UTC().Add(-10 * time.Minute)
 	batch := make([]observation, 0, burstEvents)
-	for i := 0; i < burstEvents; i++ {
+	for i := range burstEvents {
 		batch = append(batch, ob(t, "burst_"+itoa(i), kindAccount, "u_fast", 200,
 			at.Add(time.Duration(i)*time.Second)))
 	}
@@ -783,7 +783,7 @@ func TestFan_OverTheWire(t *testing.T) {
 	// so nothing but the fan-out can fire.
 	at := time.Now().UTC().Add(-time.Hour)
 	batch := make([]observation, 0, fanSubjects)
-	for i := 0; i < fanSubjects; i++ {
+	for i := range fanSubjects {
 		batch = append(batch, ob(t, "farm_"+itoa(i), kindAccount, "u_farm_"+itoa(i), 5,
 			at.Add(time.Duration(i)*time.Second), "", "d_shared"))
 	}
@@ -831,7 +831,7 @@ func TestAggregates_OverTheWireAnOrdinaryEventIsAllowed(t *testing.T) {
 	// counterparty. Everything below every stated bound.
 	at := time.Now().UTC().Add(-30 * time.Minute)
 	batch := make([]observation, 0, 8)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		batch = append(batch, ob(t, "ok_"+itoa(i), kindAccount, "u_ordinary", 120,
 			at.Add(time.Duration(i)*time.Minute), "merchant", "d_own"))
 	}

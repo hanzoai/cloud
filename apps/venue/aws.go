@@ -233,7 +233,7 @@ func (awsDriver) discover(ctx context.Context, cr cred) ([]discovered, error) {
 func eksListClusters(ctx context.Context, creds awsCreds, region string) ([]string, error) {
 	var names []string
 	next := ""
-	for page := 0; page < awsMaxPages; page++ {
+	for range awsMaxPages {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, eksEndpoint(region)+"/clusters", nil)
 		if err != nil {
 			return nil, err

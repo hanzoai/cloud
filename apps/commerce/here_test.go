@@ -107,7 +107,7 @@ func serveNested(t *testing.T, org string, cents int64) string {
 	sock := zip.SocketPath("commerce")
 	go func() { _ = app.Listen(sock) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		if c, derr := net.Dial("unix", sock); derr == nil {
 			_ = c.Close()
 			return sock

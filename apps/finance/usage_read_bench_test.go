@@ -18,7 +18,7 @@ func BenchmarkListUsage(b *testing.B) {
 		b.Run(fmt.Sprintf("entries=%d", n), func(b *testing.B) {
 			f := New(b.TempDir())
 			ctx := context.Background()
-			for i := 0; i < n; i++ {
+			for i := range n {
 				if err := f.RecordUsage(ctx, types.UsageInput{
 					Org: "acme", Subject: "acme",
 					Amount: money.FromCents(int64(i + 1)), Model: "zen-1", Ref: fmt.Sprintf("r%d", i),

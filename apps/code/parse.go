@@ -319,7 +319,7 @@ func parseLexical(p, content, lang string) Parsed {
 	pats := declPatterns[lang]
 	out := Parsed{Lang: lang}
 
-	for i := 0; i < len(lines); i++ {
+	for i := range lines {
 		raw := lines[i]
 		for _, pat := range pats {
 			m := pat.re.FindStringSubmatch(raw)

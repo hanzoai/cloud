@@ -1111,7 +1111,7 @@ func (w *worker) register(ctx context.Context) error {
 	// token had expired — and buried the one line that said what was wrong under five
 	// that said "retrying". Fail fast, and say what to do about it.
 	var err error
-	for attempt := 0; attempt < registerAttempts; attempt++ {
+	for attempt := range registerAttempts {
 		var code int
 		if code, err = w.call(ctx, http.MethodPost, "/v1/tasks/namespaces/"+fleetNS+"/activities", map[string]any{
 			"activityId":       w.identity,

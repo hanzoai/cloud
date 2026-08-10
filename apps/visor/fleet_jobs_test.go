@@ -176,12 +176,12 @@ func TestFleetJobsFailSoftAndIngest(t *testing.T) {
 func TestOrderAndBoundJobsPast100(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	var all []gpuJob
-	for i := 0; i < 60; i++ { // 60 live: queued/running/stalled
+	for i := range 60 { // 60 live: queued/running/stalled
 		st := []string{"queued", "running", "stalled"}[i%3]
 		all = append(all, gpuJob{ID: fmt.Sprintf("live-%d", i), Status: st,
 			StartTime: base.Add(time.Duration(i) * time.Minute).Format(time.RFC3339)})
 	}
-	for i := 0; i < 120; i++ { // 120 terminal, all MORE recent than the live set
+	for i := range 120 { // 120 terminal, all MORE recent than the live set
 		all = append(all, gpuJob{ID: fmt.Sprintf("term-%d", i), Status: "completed",
 			CloseTime: base.Add(time.Duration(1000+i) * time.Minute).Format(time.RFC3339)})
 	}

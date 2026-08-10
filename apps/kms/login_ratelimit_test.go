@@ -37,7 +37,7 @@ func TestLoginBrokerRateLimited(t *testing.T) {
 	// exactly (only that BOTH outcomes occur) so the test can't flake on the window.
 	const attempts = 80
 	var got200, got429 int
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		resp := do(t, app, "POST", "/v1/kms/auth/login", "", body, false, nil)
 		switch resp.StatusCode {
 		case 200:

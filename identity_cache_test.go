@@ -85,7 +85,7 @@ func TestIdentityCache_MissIsTheDefault(t *testing.T) {
 // overflow costs re-verification, never admission.
 func TestIdentityCache_Bounded(t *testing.T) {
 	c := newIdentityCache()
-	for i := 0; i < maxIdentityCacheEntries+500; i++ {
+	for i := range maxIdentityCacheEntries + 500 {
 		c.put(string(rune(i%1114111))+"-"+time.Now().String()+string(rune(i)), claimsExpiring(time.Hour))
 	}
 	c.mu.RLock()
