@@ -85,9 +85,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("ads.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("ads.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("ads.Mount: empty DataDir")
 	}

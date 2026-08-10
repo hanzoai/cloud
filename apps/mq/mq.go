@@ -50,6 +50,8 @@ import (
 	"strings"
 	"time"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/pubsub"
@@ -87,10 +89,7 @@ var b *broker
 // Registered in manifest/apps.go; the connection retries forever in the
 // background, so mounting never depends on broker start order.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if deps.Logger == nil {
-		return fmt.Errorf("mq.Mount: nil deps.Logger")
-	}
-	log := deps.Logger.New("subsystem", "mq")
+	log := luxlog.Default().New("subsystem", "mq")
 
 	nc, err := nats.Connect(pubsub.URL(),
 		nats.Name("cloud-mq"),

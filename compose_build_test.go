@@ -33,7 +33,6 @@ import (
 	"github.com/hanzoai/cloud/apps/commerce"
 	"github.com/hanzoai/cloud/apps/zen"
 	"github.com/hanzoai/cloud/manifest"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -85,7 +84,7 @@ func TestSubsystemComposesThroughMountAll(t *testing.T) {
 			err := cloud.MountAll(app,
 				[]cloud.Plugin{{Name: c.name, Mount: c.mount, Prefixes: c.prefixes, Global: c.global}},
 				&cloud.Config{Enable: []string{c.name}},
-				cloud.Deps{Logger: luxlog.NewNoOpLogger(), DataDir: t.TempDir()})
+				cloud.Deps{DataDir: t.TempDir()})
 			if err != nil {
 				t.Fatalf("MountAll(%s): %v", c.name, err)
 			}
@@ -105,7 +104,7 @@ func TestSubsystemComposesOnABareApp(t *testing.T) {
 	for _, c := range composed {
 		t.Run(c.name, func(t *testing.T) {
 			app := newApp()
-			if err := c.mount(app, cloud.Deps{Logger: luxlog.NewNoOpLogger(), DataDir: t.TempDir()}); err != nil {
+			if err := c.mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 				t.Fatalf("Mount(%s): %v", c.name, err)
 			}
 			if err := app.Build(); err != nil {
@@ -186,7 +185,7 @@ func TestZenClaimGatesTheCoresidentHost(t *testing.T) {
 	if err := cloud.MountAll(app,
 		[]cloud.Plugin{{Name: "zen", Mount: zen.Mount, Prefixes: manifest.GrantFor("zen")}},
 		&cloud.Config{Enable: []string{"zen"}},
-		cloud.Deps{Logger: luxlog.NewNoOpLogger(), DataDir: t.TempDir()}); err != nil {
+		cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("MountAll(zen): %v", err)
 	}
 	// ai's position: the greedy catch-all, registered after zen as in plugin/ai.

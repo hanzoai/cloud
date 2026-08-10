@@ -84,7 +84,7 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 	t.Cleanup(func() { _ = store.Close() })
 	fc := newFakeCommerce()
 	s := &cloud.Service[state]{
-		Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}, "affiliates"),
+		Base: cloud.NewBase(cloud.Deps{Brand: "hanzo"}, "affiliates"),
 		State: state{
 			store:    store,
 			commerce: fc,
@@ -856,7 +856,7 @@ func TestAdminReferralsAnalytics(t *testing.T) {
 // against a temp DataDir, proving the package boots as the binary loads it.
 func TestMount(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

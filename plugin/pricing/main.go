@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/apps/pricing"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the pricing app.

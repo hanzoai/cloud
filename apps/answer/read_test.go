@@ -6,11 +6,12 @@ package answer
 
 import (
 	"context"
-	crawlpkg "github.com/hanzoai/cloud/apps/crawl"
-	luxlog "github.com/luxfi/log"
 	"strings"
 	"testing"
 	"time"
+
+	crawlpkg "github.com/hanzoai/cloud/apps/crawl"
+	luxlog "github.com/luxfi/log"
 )
 
 // fakeCrawl swaps the ONE crawl binding for the duration of a test and records

@@ -12,7 +12,6 @@ package cloud
 import (
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/ha"
-	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/hanzoai/cloud/audit"
@@ -28,9 +27,11 @@ import (
 // resolves to a ZAP-RPC implementation. Subsystem code does not branch
 // on which mode; the interface is the contract.
 type Deps struct {
-	// Logger is the canonical Hanzo logger (luxfi/log). Subsystems derive
-	// scoped child loggers from this.
-	Logger luxlog.Logger
+	// Logger is not here. The process default is (luxlog.Default, installed by
+	// BuildDeps before anything can log), so a subsystem derives its scoped child
+	// from the library rather than from a field it had to be handed. Carrying it
+	// meant every mount checked it for nil — a field can be nil, a package-level
+	// default cannot.
 
 	// Brand is the white-label brand identifier for this deployment.
 	// Values: exactly the ids in the brand registry (brand/brand.go) — "hanzo",

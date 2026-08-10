@@ -54,12 +54,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hanzoai/namespace"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	luxlog "github.com/luxfi/log"
+
+	"github.com/hanzoai/namespace"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -103,9 +106,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("treasury.Mount: nil app")
 	}
-	log := deps.Logger
+	log := luxlog.Default()
 	if log == nil {
-		return fmt.Errorf("treasury.Mount: nil deps.Logger")
+		return fmt.Errorf("treasury.Mount: nil luxlog.Default()")
 	}
 	log = log.New("subsystem", "treasury")
 	if deps.DataDir == "" {

@@ -41,7 +41,7 @@ func mountTeamVFS(t *testing.T, vfs types.VFSClient) *zip.App {
 	t.Setenv("SERVER_SECRET", testSecret)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: vfs}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: vfs}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -358,7 +358,7 @@ func TestDegradedWithoutSecret(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "") // unset
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount must SUCCEED in degraded mode (health-only), got: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -379,7 +379,7 @@ func TestDegradedWithoutSecret(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "secret")
 	app2 := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app2)
-	if err := Mount(app2, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := Mount(app2, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount (default secret) must succeed degraded: %v", err)
 	}
 	if code, _ := call(t, app2, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusServiceUnavailable {
@@ -395,7 +395,7 @@ func TestInsecureHatchRemoved(t *testing.T) {
 	t.Setenv("TEAM_DEV_INSECURE", "1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

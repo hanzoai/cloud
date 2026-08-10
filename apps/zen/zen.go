@@ -20,12 +20,14 @@ import (
 	"os"
 	"strings"
 
+	luxlog "github.com/luxfi/log"
+
 	aicontrollers "github.com/hanzoai/ai/controllers"
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
-	cloudmoney "github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/apps/principal"
+	cloudmoney "github.com/hanzoai/cloud/money"
 	hmoney "github.com/hanzoai/money"
 	"github.com/hanzoai/zen"
 	"github.com/zap-proto/zip"
@@ -71,7 +73,7 @@ import (
 // catch-all. zen's catalog reads its upstream keys from KMS via the Key resolver.
 func Mount(a cloud.Router, deps cloud.Deps) error {
 	z, err := zen.New(zen.Config{
-		Logger: deps.Logger,
+		Logger: luxlog.Default(),
 		Key:    zenKeyResolver(deps.KMS),
 		Tenant: cloudTenantResolver,
 		Gate:   commerceGate(deps.Metering),

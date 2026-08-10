@@ -88,9 +88,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("referrals.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("referrals.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("referrals.Mount: empty DataDir")
 	}

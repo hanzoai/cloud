@@ -129,9 +129,6 @@ func MountAccount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("account.MountAccount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("account.MountAccount: nil deps.Logger")
-	}
 	s := newService(deps)
 	if err := routesAccount(s, app); err != nil {
 		return err

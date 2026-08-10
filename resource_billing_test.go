@@ -10,11 +10,11 @@ package cloud
 // org.
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net"
 	"net/http"
@@ -30,7 +30,6 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -93,7 +92,7 @@ func meterFor(t *testing.T, baseURL, env string, failOpen bool) *ResourceMeter {
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	return NewResourceMeter(Deps{Logger: luxlog.New("test"), Metering: m, Env: env}, "provisioning")
+	return NewResourceMeter(Deps{Metering: m, Env: env}, "provisioning")
 }
 
 // Funded org (balance>0), priced kind → Gate allows, and the balance check
@@ -372,7 +371,7 @@ func TestResourceMeter_EnvNeverBypassesGate(t *testing.T) {
 // allows, Meter does nothing, Enabled() is false.
 func TestResourceMeter_UnconfiguredIsNoop(t *testing.T) {
 	m, _ := metering.New(metering.Config{}) // no BaseURL
-	rm := NewResourceMeter(Deps{Logger: luxlog.New("test"), Metering: m}, "provisioning")
+	rm := NewResourceMeter(Deps{Metering: m}, "provisioning")
 	if rm.Enabled() {
 		t.Fatal("ResourceMeter with empty commerce URL must not be Enabled()")
 	}
@@ -405,7 +404,7 @@ func TestResourceMeter_NilSafe(t *testing.T) {
 	}
 	rm.Meter("acme", "", "sql", 100, "r", "") // must not panic
 
-	rm2 := NewResourceMeter(Deps{Logger: luxlog.New("test")}, "provisioning") // nil metering
+	rm2 := NewResourceMeter(Deps{}, "provisioning") // nil metering
 	if rm2.Enabled() {
 		t.Fatal("ResourceMeter with nil client must report !Enabled()")
 	}
@@ -565,7 +564,7 @@ func TestMeterPeer_CarriesTheExactDebit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	rm := NewResourceMeter(Deps{Logger: luxlog.New("test"), Metering: m, Env: "mainnet"}, "provisioning")
+	rm := NewResourceMeter(Deps{Metering: m, Env: "mainnet"}, "provisioning")
 	if rm.Enabled() {
 		t.Fatal("fixture broken: metering must be disabled so the debit takes the peer path")
 	}
@@ -681,7 +680,7 @@ func TestMeterUsage_OneActIsChargedOnceInEitherTopology(t *testing.T) {
 		if err != nil {
 			t.Fatalf("metering.New: %v", err)
 		}
-		rm := NewResourceMeter(Deps{Logger: luxlog.New("test"), Metering: m, Env: "mainnet"}, "company")
+		rm := NewResourceMeter(Deps{Metering: m, Env: "mainnet"}, "company")
 		if rm.Enabled() {
 			t.Fatal("fixture broken: metering must be DISABLED so the debit takes the peer path")
 		}
@@ -714,7 +713,7 @@ func TestMeterUsage_OneActIsChargedOnceInEitherTopology(t *testing.T) {
 		if err != nil {
 			t.Fatalf("metering.New: %v", err)
 		}
-		rm := NewResourceMeter(Deps{Logger: luxlog.New("test"), Metering: m, Env: "mainnet"}, "company")
+		rm := NewResourceMeter(Deps{Metering: m, Env: "mainnet"}, "company")
 		if !rm.Enabled() {
 			t.Fatal("fixture broken: metering must be ENABLED so the debit takes the local path")
 		}
@@ -748,7 +747,7 @@ func TestMeterUsage_TwoUnnamedActsAreTwoCharges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	rm := NewResourceMeter(Deps{Logger: luxlog.New("test"), Metering: m, Env: "mainnet"}, "company")
+	rm := NewResourceMeter(Deps{Metering: m, Env: "mainnet"}, "company")
 	if rm.Enabled() {
 		t.Fatal("fixture broken: metering must be DISABLED so the debit takes the peer path")
 	}

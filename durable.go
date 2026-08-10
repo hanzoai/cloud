@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/zap-proto/zip"
 
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"
@@ -86,7 +88,7 @@ func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 	// same free port when neither wants a port at all.
 	dataDir := filepath.Join(firstNonEmptyStr(deps.DataDir, "/data"), "tasks", firstNonEmptyStr(app, "cloud"))
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
-		deps.Logger.Warn("durable ingest: data dir unavailable; ingest runs inline", "err", err)
+		luxlog.Default().Warn("durable ingest: data dir unavailable; ingest runs inline", "err", err)
 		return
 	}
 	sock := zip.SocketPath("tasks-" + firstNonEmptyStr(app, "cloud"))
@@ -103,7 +105,7 @@ func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 		// that doesn't exist and BLOCK, which silently forced ingest to fall back inline.
 	})
 	if err != nil {
-		deps.Logger.Warn("durable ingest: tasks embed failed; ingest runs inline", "err", err)
+		luxlog.Default().Warn("durable ingest: tasks embed failed; ingest runs inline", "err", err)
 		return
 	}
 	embeddedTasks = emb
@@ -111,7 +113,7 @@ func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 	ingestDialer = func(org string) (tasksclient.Client, error) {
 		return tasksclient.Dial(tasksclient.Options{Address: addr, Namespace: "default"})
 	}
-	deps.Logger.Info("durable ingest wired: in-process tasks engine", "app", app, "addr", addr, "dataDir", dataDir)
+	luxlog.Default().Info("durable ingest wired: in-process tasks engine", "app", app, "addr", addr, "dataDir", dataDir)
 
 	// Expose the SAME engine on a cluster-reachable, IDENTITY-GATED ZAP listener so the
 	// standalone tasksd's consumers (auto, hanzo-playground, platform) run their durable
@@ -129,7 +131,7 @@ func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 		return
 	}
 	if deps.IAMIssuer == "" {
-		deps.Logger.Warn("durable tasks: no IAM issuer; gated cluster ZAP listener NOT exposed", "addr", gatedAddr())
+		luxlog.Default().Warn("durable tasks: no IAM issuer; gated cluster ZAP listener NOT exposed", "addr", gatedAddr())
 		return
 	}
 	validator := tasksauth.NewValidator(tasksauth.JWTConfig{
@@ -137,10 +139,10 @@ func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 		JWKSURL: JWKSURLFor(deps.IAMIssuer),
 	})
 	if err := emb.ServeGated(ctx, gatedAddr(), validator); err != nil {
-		deps.Logger.Error("durable tasks: gated cluster ZAP listener failed to start", "err", err, "addr", gatedAddr())
+		luxlog.Default().Error("durable tasks: gated cluster ZAP listener failed to start", "err", err, "addr", gatedAddr())
 		return
 	}
-	deps.Logger.Info("durable tasks: gated cluster ZAP listener up", "addr", gatedAddr(), "issuer", deps.IAMIssuer)
+	luxlog.Default().Info("durable tasks: gated cluster ZAP listener up", "addr", gatedAddr(), "issuer", deps.IAMIssuer)
 }
 
 // firstNonEmptyStr returns the first non-empty string, else the last.

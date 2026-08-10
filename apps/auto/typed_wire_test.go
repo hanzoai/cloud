@@ -258,7 +258,7 @@ func harness(t *testing.T) (*zip.App, *fakeAuto) {
 
 	app := zip.New(zip.Config{Logger: luxlog.New("autotest"), DisableStartupMessage: true})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("autotest"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app, f
@@ -511,7 +511,7 @@ func TestEngineDown503Relays(t *testing.T) {
 	t.Setenv("AUTO_UPSTREAM", srv.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("autotest"), DisableStartupMessage: true})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("autotest"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	status, body := do(t, app, http.MethodPost, "/v1/auto/runs", "u1", "acme", `{"flow":"000000000000001","input":{}}`)
@@ -533,7 +533,7 @@ func TestStatusIsAnHonestLens(t *testing.T) {
 	down := zip.New(zip.Config{Logger: luxlog.New("autotest"), DisableStartupMessage: true})
 	compose(down)
 	t.Setenv("AUTO_UPSTREAM", "http://127.0.0.1:1") // nothing listens
-	if err := Mount(down, cloud.Deps{Logger: luxlog.New("autotest"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(down, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	status, body = do(t, down, http.MethodGet, "/v1/auto/status", "u1", "acme", "")

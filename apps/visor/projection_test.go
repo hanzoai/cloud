@@ -23,7 +23,7 @@ func projectionApp(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test"),
 		OpenAPI: zip.OpenAPIConfig{Title: "cloud", Version: "v1.0.0"}})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app

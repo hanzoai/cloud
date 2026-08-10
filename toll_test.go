@@ -36,9 +36,9 @@ package cloud
 // same defect as one that never fires, and only a control catches it.
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net"
 	"net/http"

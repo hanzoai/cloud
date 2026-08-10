@@ -1,8 +1,8 @@
 package metering_test
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"net"
 	"sync"
 	"testing"

@@ -36,7 +36,7 @@ func mountApp(t *testing.T) *zip.App {
 	t.Setenv("searchEndpoint", "http://127.0.0.1:1")
 	t.Setenv("vectorEndpoint", "http://127.0.0.1:1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app
@@ -96,7 +96,7 @@ func TestUnconfiguredSurfaceFailsClosed(t *testing.T) {
 	t.Setenv(searchKeyEnv, "")
 	t.Setenv(vectorKeyEnv, "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	for _, p := range []string{

@@ -66,7 +66,7 @@ const (
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("iamtest"), DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("iamtest"), DataDir: dataDirWithStore(t)}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: dataDirWithStore(t)}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app
@@ -255,7 +255,7 @@ func TestDegradedLeavesNoIdentityAddressToTheSPA(t *testing.T) {
 	}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("iamtest"), DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("iamtest"), DataDir: notADir}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: notADir}); err != nil {
 		t.Fatalf("Mount must stay up with no store: %v", err)
 	}
 

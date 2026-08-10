@@ -51,7 +51,7 @@ type Base struct {
 // State: st}` — then wire routes with Handle, still on the ONE generic type.
 func NewBase(deps Deps, name string) Base {
 	return Base{
-		Log:     deps.Logger.New("subsystem", name),
+		Log:     luxlog.Default().New("subsystem", name),
 		KMS:     deps.KMS,
 		Bill:    NewResourceMeter(deps, name),
 		Brand:   deps.Brand,
@@ -79,8 +79,8 @@ func Mount[S any](app Router, deps Deps, name string, build func(Base) (S, error
 	if app == nil {
 		return fmt.Errorf("%s.Mount: nil app", name)
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("%s.Mount: nil deps.Logger", name)
+	if luxlog.Default() == nil {
+		return fmt.Errorf("%s.Mount: nil luxlog.Default()", name)
 	}
 	b := NewBase(deps, name)
 	state, err := build(b)

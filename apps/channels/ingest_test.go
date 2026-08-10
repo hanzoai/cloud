@@ -66,11 +66,18 @@ func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 // every gate must survive.
 func newApp(t *testing.T) *testEnv {
 	t.Helper()
+	// The subsystem logs through the process default now, not an injected
+	// logger, so capturing its output means pointing the default at this buffer
+	// for the life of the test.
 	logs := &syncBuf{}
+	prev := luxlog.Default()
+	luxlog.SetDefault(luxlog.NewWriter(logs))
+	t.Cleanup(func() { luxlog.SetDefault(prev) })
+
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	dataDir := t.TempDir()
-	deps := cloud.Deps{Logger: luxlog.NewWriter(logs), DataDir: dataDir, Domain: "api.hanzo.ai"}
+	deps := cloud.Deps{DataDir: dataDir, Domain: "api.hanzo.ai"}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

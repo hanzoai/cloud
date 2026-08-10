@@ -64,7 +64,7 @@ func (c Case) Run(t *testing.T) {
 	}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("manifest-gate"), DisableStartupMessage: true})
-	if err := c.Mount(app, cloud.Deps{Logger: luxlog.New("manifest-gate"), DataDir: t.TempDir()}); err != nil {
+	if err := c.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("%s: Mount: %v", c.Name, err)
 	}
 

@@ -99,7 +99,7 @@ func mountWith(t *testing.T, path string, rows roster) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.IdentityMiddleware(&cloud.Config{IAMIssuer: iamtest.Issuer, JWKSURL: jwksURL}))
 	app.Use(cloud.Bridge())
-	if err := serve(app, cloud.Deps{Logger: luxlog.New("test")}, st); err != nil {
+	if err := serve(app, cloud.Deps{}, st); err != nil {
 		t.Fatalf("serve: %v", err)
 	}
 	return app

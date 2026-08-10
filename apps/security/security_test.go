@@ -29,7 +29,7 @@ func mountApp(t *testing.T) *zip.App {
 	// reads off its context. The composer installs it once at the root in
 	// production (serve.go); this test composes the same way.
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

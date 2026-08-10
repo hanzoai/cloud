@@ -38,7 +38,7 @@ func liveApp(t *testing.T) *zip.App {
 	t.Setenv("AUTO_UPSTREAM", up)
 	app := zip.New(zip.Config{Logger: luxlog.New("autolive"), DisableStartupMessage: true})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("autolive"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app

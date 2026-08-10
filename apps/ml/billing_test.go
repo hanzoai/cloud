@@ -18,7 +18,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/internal/planetest"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -49,12 +48,11 @@ func (b *billDouble) lastDebit() (string, []byte) { return b.peer.Org(), b.peer.
 
 func newBilledMLService(t *testing.T, commerceURL string) *cloud.Service[state] {
 	t.Helper()
-	log := luxlog.New("module", "mlbilltest")
 	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-token", Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	deps := cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}
+	deps := cloud.Deps{Metering: m, Env: "mainnet"}
 	return &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "ml"),
 		State: state{

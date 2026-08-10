@@ -69,9 +69,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("admin.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("admin.Mount: nil deps.Logger")
-	}
 	// Every route here is a typed op, and the op registry lives on the App. A Router
 	// that is not one cannot carry this surface, so the mount fails rather than
 	// registering routes no projection would know about.

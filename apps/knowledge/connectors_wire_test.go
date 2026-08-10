@@ -17,8 +17,6 @@ import (
 	"net/http"
 	"testing"
 
-	luxlog "github.com/luxfi/log"
-
 	"github.com/hanzoai/cloud"
 )
 
@@ -58,7 +56,7 @@ func TestConnectorRowOmitsUnsetFieldsOnly(t *testing.T) {
 
 	// Now record a connection with an EMPTY account, the case a plain
 	// `string,omitempty` would erase.
-	svc := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "knowledge")}
+	svc := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{}, "knowledge")}
 	if err := upsertConnector(svc, context.Background(), "acme", "github", map[string]any{
 		"provider": "github",
 		"status":   "connected",

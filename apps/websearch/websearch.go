@@ -94,6 +94,8 @@ import (
 	"os"
 	"strings"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -292,9 +294,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("websearch.Mount: nil app")
 	}
-	logger := deps.Logger
+	logger := luxlog.Default()
 	if logger == nil {
-		return fmt.Errorf("websearch.Mount: nil deps.Logger")
+		return fmt.Errorf("websearch.Mount: nil luxlog.Default()")
 	}
 	logger = logger.New("subsystem", "websearch")
 	// The package logs one thing and only one thing: an engine that went blind

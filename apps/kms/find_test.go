@@ -75,7 +75,6 @@ func TestFindDoesNotMatchASiblingByPrefix(t *testing.T) {
 	}
 }
 
-
 func testStore(t *testing.T) *Client {
 	t.Helper()
 	c, err := New(Config{

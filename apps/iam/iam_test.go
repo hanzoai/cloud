@@ -46,7 +46,7 @@ func TestDegradedMountAnswers503(t *testing.T) {
 	}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: notADir}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: notADir}); err != nil {
 		t.Fatalf("Mount must stay up with no store, cloud depends on it: %v", err)
 	}
 	if DB() != nil {
@@ -105,7 +105,7 @@ func TestAnEmptyStoreRefusesRatherThanServingAnEmptyKeyset(t *testing.T) {
 	t.Setenv("initDataFile", filepath.Join(dir, "absent.json"))
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: dir}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: dir}); err != nil {
 		t.Fatalf("Mount must stay up, cloud depends on it: %v", err)
 	}
 	if DB() != nil {
@@ -157,7 +157,7 @@ func TestDBLifecycleAndStore(t *testing.T) {
 	}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: dataDirWithStore(t)}
+	deps := cloud.Deps{DataDir: dataDirWithStore(t)}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

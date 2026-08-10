@@ -323,7 +323,7 @@ func meteredHarness(t *testing.T, tokens map[string]string, rec *capture, result
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Metering: m}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), Metering: m}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app

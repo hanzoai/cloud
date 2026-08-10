@@ -15,9 +15,9 @@ package cloud
 // Two tests: one checks the rule, one keeps it checked.
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"errors"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"go/ast"
 	"go/parser"
 	"go/token"

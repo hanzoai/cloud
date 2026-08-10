@@ -29,18 +29,17 @@ func mountFullPlane(t *testing.T, ai cloud.AIClient) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	log := luxlog.New("test")
-	if err := framework.Mount(app, cloud.Deps{Logger: log, DataDir: t.TempDir()}); err != nil {
+	if err := framework.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("framework.Mount: %v", err)
 	}
-	if err := content.Mount(app, cloud.Deps{Logger: log, AI: ai, Domain: "api.test", Env: "testnet"}); err != nil {
+	if err := content.Mount(app, cloud.Deps{AI: ai, Domain: "api.test", Env: "testnet"}); err != nil {
 		t.Fatalf("content.Mount: %v", err)
 	}
-	if err := automations.Mount(app, cloud.Deps{Logger: log, DataDir: t.TempDir()}); err != nil {
+	if err := automations.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("automations.Mount: %v", err)
 	}
 	// guide with the REAL invoke seam (automations.InvokeTool) — no fake.
-	if err := Mount(app, cloud.Deps{Logger: log, DataDir: t.TempDir(), AI: ai}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), AI: ai}); err != nil {
 		t.Fatalf("guide.Mount: %v", err)
 	}
 	// Keep only the store-backed "acted" detector so the read never hits a live warehouse.

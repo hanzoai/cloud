@@ -33,7 +33,6 @@ import (
 // zero, and zero-cost is how five of them got here.
 var depsFieldRationale = map[string]string{
 	// --- process identity: true at exec, unchanged for the process lifetime ---
-	"Logger": "the canonical logger every subsystem derives a scoped child from; nothing can log before it exists",
 	"Brand":  "WHOSE deployment this process is — one brand per binary, fixed at exec, and half of every tenant-scoped key; a per-request brand is resolved from the Host separately (brand.ForHostOK) and is a different fact",
 	"Version": "the build this binary IS, stamped as X-Api-Version so a rollout can be verified from outside; " +
 		"a link-time fact the process cannot look up",

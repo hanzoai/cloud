@@ -19,10 +19,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	fiber "github.com/zap-proto/fiber/v3"
 	"io"
 	"net/http"
 	"net/http/httptest"
+
+	fiber "github.com/zap-proto/fiber/v3"
 
 	hz "github.com/hanzoai/agent"
 	"github.com/hanzoai/cloud"
@@ -136,7 +137,6 @@ func mountConversation(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("agent.Mount: router is not a zip app — the typed op registry is unreachable")
 	}
 	_, err := hz.Mount(zapp, hz.Deps{
-		Logger:  deps.Logger,
 		DataDir: deps.DataDir,
 		Brand:   deps.Brand,
 		Model:   cloud.DefaultModel,

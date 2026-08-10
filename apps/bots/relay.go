@@ -81,12 +81,9 @@ func mountRelay(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("bots.mountRelay: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("bots.mountRelay: nil deps.Logger")
-	}
 	s := &relay{
 		target: executorURL(""),
-		log:    deps.Logger.New("subsystem", "bots"),
+		log:    luxlog.Default().New("subsystem", "bots"),
 		cc:     &http.Client{Timeout: 60 * time.Second},
 	}
 	// UNTYPED BY DESIGN — and it is the only route here, so this whole subsystem

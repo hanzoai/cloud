@@ -148,7 +148,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"sess_1"}`),
 	})
 	zip.Describe("GET /v1/agents/sessions/stream", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Is GET /v1/agents/sessions/stream — a Server-Sent Events feed of\nlive session + event updates for the caller's org. Optional ?root=<id> scopes\nthe feed to one subagent tree. Org-scoped (fail-closed): a subscriber only ever\nreceives its own tenant's updates because the bus filters on org.\n\nThis handler streams over BOTH the plain HTTP listener and the ZAP machine\ntransport with no transport-specific code (zip SendStreamWriter is transport-\nagnostic). Everything the stream loop needs is captured BEFORE SendStreamWriter\nso the loop never touches the request Ctx after the handler returns (fasthttp\nrecycles it) — client-gone is detected by a flush error, bounded by a 25s\nheartbeat.",
 	})
 	zip.Describe("GET /v1/agents/targets", zip.Doc{
 		Description: "Returns every machine registered to the caller's org, newest\nfirst, each with its live session load.",
@@ -259,7 +259,7 @@ func init() {
 		Example:     json.RawMessage(`{"name":"helper","model":"enso-flash","instructions":"be terse"}`),
 	})
 	zip.Describe("POST /v1/agents/:ref/run", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Executes the agent: it composes the agent's instructions with the caller\ninput and runs a real chat completion via the in-process AI client, then\nrecords the run. Every returned run reflects an execution that actually\nhappened — an inference failure is recorded and returned as an error run, not\nhidden and not fabricated.",
 	})
 	zip.Describe("POST /v1/agents/sessions", zip.Doc{
 		Description: "Opens a live agent session in the caller's org — the row every\nsurface (the CLI's outer agent, hanzo.bot, the console, chat) hangs its\nactivity off. A session with a parentSessionId becomes a subagent of that\nsession and inherits its root, so one flow is one tree; without one it is\nitself a root. Registering with a terminal status records a session that has\nalready finished.",
@@ -275,21 +275,6 @@ func init() {
 			"sessionView.terminal":  "Terminal is where this session can be WATCHED — the URL the machine\npublished for its live terminal. Omitted when it publishes none.",
 		},
 		Example: json.RawMessage(`{"agent":"hanzo-dev","title":"ship the landing page","host":"gpu-01"}`),
-	})
-	zip.Describe("POST /v1/agents/sessions/:id/events", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("POST /v1/agents/sessions/:id/message", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("POST /v1/agents/sessions/:id/pause", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("POST /v1/agents/sessions/:id/resume", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("POST /v1/agents/sessions/:id/stop", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 	zip.Describe("POST /v1/agents/targets", zip.Doc{
 		Description: "Registers a machine as an agent target, or re-links one that is\nalready registered. Re-linking is idempotent and keyed on org+host+owner, so a\nmachine that reconnects refreshes its own row rather than piling up duplicates;\nit answers 200, while a first registration answers 201.",

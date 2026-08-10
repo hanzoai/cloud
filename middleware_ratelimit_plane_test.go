@@ -16,8 +16,8 @@ package cloud
 // self-dispatch is available; the counters prove it never happens.
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"net/http"
 	"sync/atomic"
 	"testing"

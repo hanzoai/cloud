@@ -168,9 +168,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("kms.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("kms.Mount: nil deps.Logger")
-	}
 
 	// deps.KMS is the in-process Client (built by the factory this package
 	// registers, filled by build.go's BuildDeps) when kms is co-resident. Anything

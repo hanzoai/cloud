@@ -166,9 +166,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("dataset.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("dataset.Mount: nil deps.Logger")
-	}
 	if err := tenant.Vouches(deps.Brand); err != nil {
 		// The brand is half the tenant key, and the half that must be a brand the
 		// registry carries — the rollup that WRITES this plane's source refuses any

@@ -1,10 +1,10 @@
 package admin
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net"
 	"net/http"
@@ -729,13 +729,8 @@ func TestIAMError_SurfacedNotFabricated(t *testing.T) {
 
 // TestMount_NilGuards keeps the Mount contract honest (nil app / nil logger).
 func TestMount_NilGuards(t *testing.T) {
-	if err := Mount(nil, cloud.Deps{Logger: luxlog.New("test")}); err == nil {
+	if err := Mount(nil, cloud.Deps{}); err == nil {
 		t.Error("Mount(nil app) must error")
-	}
-	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	compose(app)
-	if err := Mount(app, cloud.Deps{}); err == nil {
-		t.Error("Mount(nil logger) must error")
 	}
 }
 

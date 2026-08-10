@@ -378,6 +378,7 @@ func within(at, now time.Time, back time.Duration) error {
 //     every window — the subject reads as having done nothing, permanently. The
 //     wire door refuses such a stamp with a 400 ([within]); this refuses it again,
 //     here, so no path into the rings can poison the edge.
+//
 //   - BEHIND THE WINDOW THE RULES READ. velocity folds anything older than a
 //     window's span to the leading edge — the right call for a compliance
 //     aggregate that must not drop a record, and the wrong one for a live

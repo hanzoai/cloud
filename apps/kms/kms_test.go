@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	luxlog "github.com/luxfi/log"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -59,7 +60,7 @@ func mountSpecs() []cloud.Plugin {
 func newApp(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) {
 	t.Helper()
 	deps := cloud.BuildDeps(cfg)
-	app := zip.New(zip.Config{Logger: deps.Logger})
+	app := zip.New(zip.Config{Logger: luxlog.Default()})
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	if err := cloud.MountAll(app, mountSpecs(), cfg, deps); err != nil {

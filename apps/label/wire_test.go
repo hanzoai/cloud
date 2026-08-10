@@ -77,7 +77,7 @@ func wireWith(t *testing.T, dir string, c columnar) (*zip.App, *cloud.Service[*s
 	if dir == "" {
 		dir = t.TempDir()
 	}
-	s, err := build(cloud.Deps{Logger: luxlog.New("labeltest"), DataDir: dir, Brand: "hanzo"})
+	s, err := build(cloud.Deps{DataDir: dir, Brand: "hanzo"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

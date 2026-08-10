@@ -61,7 +61,7 @@ func meteredAIClient(inner types.AIClient, deps Deps) types.AIClient {
 	m := &meteredAI{
 		inner: inner,
 		meter: NewResourceMeter(deps, AIMeterProvider),
-		log:   deps.Logger,
+		log:   luxlog.Default(),
 		rate:  aiPriceUUSDPer1kTokens(),
 	}
 	_, lists := inner.(types.ModelLister)
