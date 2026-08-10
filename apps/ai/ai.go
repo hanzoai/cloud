@@ -28,6 +28,7 @@ import (
 	airouters "github.com/hanzoai/ai/routers"
 	aiweb "github.com/hanzoai/ai/web"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/websearch"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
@@ -423,5 +424,29 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// projects routers.App's own table through it, so the published surface is ai's
 	// 192 paths rather than one wildcard. Typed request and response schemas for them
 	// are still work in github.com/hanzoai/ai, where those handlers live.
-	return aimod.Mount(zapp, deps)
+	// ai is an APP now, and composing one is Use — the same verb every component
+	// takes. It used to be handed THIS host's router to write into, which is what
+	// let a subsystem depend on its host: hanzoai/cloud has two editions declaring
+	// one module path, so cloud.Deps meant a different type in each and only one
+	// of them could ever mount ai. It builds its own app and this host adds it.
+	//
+	// The secret store crosses as AI'S OWN interface (GetSecret/PutSecret), never
+	// as this host's Deps — a subsystem states what it needs and the host supplies
+	// it. deps.KMS satisfies it structurally, so nothing is adapted here.
+	sub, err := aimod.App(deps.KMS)
+	if err != nil {
+		return err
+	}
+	// The web fetch ai relays is THIS host's crawl. ai declares the shape and the
+	// host binds the implementation, so the dependency points from host into
+	// subsystem — the direction that lets a second host compose the same ai.
+	aiobject.SetFetcher(func(ctx context.Context, url string) (*aiobject.Page, error) {
+		page, err := crawl.Fetch(ctx, url)
+		if err != nil {
+			return nil, err
+		}
+		return &aiobject.Page{Title: page.Title, Markdown: page.Markdown, Metadata: page.Metadata}, nil
+	})
+	zapp.Use(sub)
+	return nil
 }
