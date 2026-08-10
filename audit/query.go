@@ -51,10 +51,7 @@ func (r *Recorder) Query(ctx context.Context, f Filter) (rows []Record, total in
 	if limit > 1000 {
 		limit = 1000
 	}
-	offset := f.Offset
-	if offset < 0 {
-		offset = 0
-	}
+	offset := max(f.Offset, 0)
 
 	countQ := `SELECT COUNT(*) FROM audit_log` + where
 	if err = r.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {

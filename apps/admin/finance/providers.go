@@ -97,10 +97,7 @@ func computeProviderCredits(ctx context.Context, s *cloud.Service[core.State]) [
 		// mirroring finance.go). Consumed = grant - remaining; runway = remaining / burn.
 		if p == "do-ai" && s.State.DO.Ready() {
 			if bal, err := s.State.DO.Balance(ctx); err == nil {
-				credit := -int64(bal.Account)
-				if credit < 0 {
-					credit = 0
-				}
+				credit := max(-int64(bal.Account), 0)
 				row.RemainingCents = credit
 				// The grant is DO's own number, not ours (see providerGrantsCents).
 				// On failure leave it 0 rather than substituting a guess: a fabricated
@@ -111,10 +108,7 @@ func computeProviderCredits(ctx context.Context, s *cloud.Service[core.State]) [
 					grant = int64(issued)
 					row.GrantCents = grant
 				}
-				consumed := grant - credit
-				if consumed < 0 {
-					consumed = 0
-				}
+				consumed := max(grant-credit, 0)
 				row.BurnCents = consumed
 				row.HasCredit = credit > 0
 				row.IsPaidOnly = credit <= 0
@@ -129,10 +123,7 @@ func computeProviderCredits(ctx context.Context, s *cloud.Service[core.State]) [
 
 		// Others (or DO unconfigured): remaining = grant - warehouse burn (≥0). Per-
 		// provider runway needs a burn-rate we don't yet derive for non-DO providers.
-		rem := grant - row.BurnCents
-		if rem < 0 {
-			rem = 0
-		}
+		rem := max(grant-row.BurnCents, 0)
 		row.RemainingCents = rem
 		out = append(out, row)
 	}

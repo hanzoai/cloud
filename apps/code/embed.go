@@ -53,10 +53,7 @@ func (e *aiEmbedder) Embed(ctx context.Context, org, billingOrg, project string,
 	}
 	out := make([][]float32, 0, len(texts))
 	for start := 0; start < len(texts); start += embedBatch {
-		end := start + embedBatch
-		if end > len(texts) {
-			end = len(texts)
-		}
+		end := min(start+embedBatch, len(texts))
 		vecs, err := e.ai.Embed(ctx, &cloud.EmbedRequest{
 			Model:      e.model,
 			Inputs:     texts[start:end],

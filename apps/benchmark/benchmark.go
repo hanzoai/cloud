@@ -410,10 +410,7 @@ func mcnemarExact(b, cc int) float64 {
 	if n == 0 {
 		return 1.0
 	}
-	lo := b
-	if cc < lo {
-		lo = cc
-	}
+	lo := min(cc, b)
 	var tail float64
 	for k := 0; k <= lo; k++ {
 		tail += binom(n, k)

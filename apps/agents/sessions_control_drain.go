@@ -70,10 +70,7 @@ func (o sessionOps) drain(ctx context.Context, in *controlDrainIn) (*controlDrai
 
 	// A negative cursor is not a position: it reads as 0, the same answer an
 	// unparseable ?after= has always produced.
-	after := in.After
-	if after < 0 {
-		after = 0
-	}
+	after := max(in.After, 0)
 
 	evs, err := sto.ListControlAfter(ctx, org, id, after, 200)
 	if err != nil {

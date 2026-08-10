@@ -458,10 +458,7 @@ func (k *k8sClient) waitForTenantRBAC(ctx context.Context, ns string) error {
 			}
 			return fmt.Errorf("%w: tenant %s not ready after %s (retry deploy)", errTenantProvisioning, ns, timeout)
 		}
-		sleep := backoff
-		if sleep > tenantRBACPollMax {
-			sleep = tenantRBACPollMax
-		}
+		sleep := min(backoff, tenantRBACPollMax)
 		if sleep > remaining {
 			sleep = remaining
 		}

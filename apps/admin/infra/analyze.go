@@ -912,10 +912,7 @@ func rightSize(v Volume) (int, bool) {
 	if !v.HasUsage {
 		return 0, false
 	}
-	target := headroomMult * int((v.UsedBytes+gib-1)/gib)
-	if target < minTargetGiB {
-		target = minTargetGiB
-	}
+	target := max(headroomMult*int((v.UsedBytes+gib-1)/gib), minTargetGiB)
 	if v.WastedGiB*10000 < v.SizeGiB*wasteShareBP {
 		return target, false
 	}
