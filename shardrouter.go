@@ -258,8 +258,7 @@ func isPeerDialError(err error) bool {
 		errors.Is(err, fasthttp.ErrNoFreeConns) {
 		return true
 	}
-	var op *net.OpError
-	if errors.As(err, &op) {
+	if op, ok := errors.AsType[*net.OpError](err); ok {
 		return op.Op == "dial"
 	}
 	s := err.Error()

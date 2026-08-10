@@ -160,8 +160,7 @@ func IsQuota(err error) bool {
 	if err == nil {
 		return false
 	}
-	var qe *QuotaError
-	if errors.As(err, &qe) {
+	if _, ok := errors.AsType[*QuotaError](err); ok {
 		return true
 	}
 	// An error that reports an HTTP status of 429 (many provider clients do).

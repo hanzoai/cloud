@@ -1467,8 +1467,7 @@ func wrap(err error) error {
 	if err == nil {
 		return nil
 	}
-	var he *zip.HTTPError
-	if errors.As(err, &he) {
+	if _, ok := errors.AsType[*zip.HTTPError](err); ok {
 		return err
 	}
 	return zip.Errorf(500, "%v", err)

@@ -471,8 +471,7 @@ func (p *plane) gap(err error) error {
 // than restated — a register row is served to a caller, so the two must never
 // differ about what a caller may read.
 func (p *plane) reason(err error) string {
-	var he *zip.HTTPError
-	if errors.As(p.gap(err), &he) {
+	if he, ok := errors.AsType[*zip.HTTPError](p.gap(err)); ok {
 		return he.Msg
 	}
 	return internal

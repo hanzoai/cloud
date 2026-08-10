@@ -312,8 +312,7 @@ func run1(t *testing.T, mode, dir string, wait, hold time.Duration, extra []stri
 	if err == nil {
 		return 0, line
 	}
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
+	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 		return ee.ExitCode(), line
 	}
 	t.Fatalf("running %s subprocess: %v (%s)", mode, err, line)
