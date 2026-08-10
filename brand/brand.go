@@ -182,6 +182,43 @@ func Issuers() []string {
 	return out
 }
 
+// IssuerByHost maps every identity host this deployment serves to the issuer it
+// must mint under: the issuer's own host, plus each brand domain and alternate
+// that fronts it.
+//
+// It exists so nobody writes that map by hand again. It WAS written by hand —
+// a thirteen-entry JSON blob duplicated in two deployment files — which is two
+// copies of a cross-brand routing table that the registry above already holds,
+// and a new brand was three edits away from minting tokens under another brand's
+// issuer. `iss` is the boundary a relying party pins, so getting it wrong is not
+// cosmetic: the brand's own clients reject its tokens.
+//
+// Derived, so adding a brand to the registry adds its issuer everywhere at once.
+func IssuerByHost() map[string]string {
+	out := make(map[string]string, len(brands)*3)
+	for _, b := range brands {
+		if b.IAMIssuer == "" {
+			continue
+		}
+		// The issuer's own host is the first thing that must resolve to it: a
+		// relying party that discovered at lux.id asks lux.id.
+		if h := strings.TrimPrefix(strings.TrimPrefix(b.IAMIssuer, "https://"), "http://"); h != "" {
+			out[h] = b.IAMIssuer
+		}
+		for _, d := range append([]string{b.Domain}, b.AltDomains...) {
+			if d == "" {
+				continue
+			}
+			// A brand's identity is served at its domain and at id.<domain>; both
+			// are real today (zoolabs.id and id.zoo.network are one brand).
+			out[d] = b.IAMIssuer
+			out["id."+d] = b.IAMIssuer
+			out["iam."+d] = b.IAMIssuer
+		}
+	}
+	return out
+}
+
 // Domains returns every domain the registry knows — each brand's own and its
 // alternates — in no particular order.
 //
