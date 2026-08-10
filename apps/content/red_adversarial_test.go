@@ -37,8 +37,8 @@ import (
 // exactly as in production.
 type redMeter struct {
 	srv       *httptest.Server
-	available int64 // cents returned by the balance gate
-	gates     int64 // GET /v1/billing/balance count (atomic)
+	available int64        // cents returned by the balance gate
+	gates     atomic.Int64 // GET /v1/billing/balance count (atomic)
 	debits    chan redDebit
 	client    *metering.Client
 	closeOnce sync.Once
@@ -63,7 +63,7 @@ func newRedMeter(t *testing.T, availableCents int64) *redMeter {
 	m := &redMeter{available: availableCents, debits: make(chan redDebit, 32)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt64(&m.gates, 1)
+		m.gates.Add(1)
 		user := r.URL.Query().Get("user")
 		writeJSON(w, http.StatusOK, map[string]any{"user": user, "currency": "usd", "available": m.available})
 	})
@@ -90,7 +90,7 @@ func newRedMeter(t *testing.T, availableCents int64) *redMeter {
 	return m
 }
 
-func (m *redMeter) gateCount() int64 { return atomic.LoadInt64(&m.gates) }
+func (m *redMeter) gateCount() int64 { return m.gates.Load() }
 
 // expectDebit waits (bounded) for exactly one async debit to land.
 func (m *redMeter) expectDebit(t *testing.T) redDebit {
@@ -122,7 +122,7 @@ func (m *redMeter) expectNoDebit(t *testing.T) {
 // prove the render was (or was NOT) invoked. status controls what /prompt returns.
 type countingStudio struct {
 	srv     *httptest.Server
-	submits int64
+	submits atomic.Int64
 }
 
 func newCountingStudio(t *testing.T, submitStatus int) *countingStudio {
@@ -130,7 +130,7 @@ func newCountingStudio(t *testing.T, submitStatus int) *countingStudio {
 	s := &countingStudio{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/prompt", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt64(&s.submits, 1)
+		s.submits.Add(1)
 		if submitStatus != http.StatusOK {
 			http.Error(w, "studio boom", submitStatus)
 			return
@@ -150,7 +150,7 @@ func newCountingStudio(t *testing.T, submitStatus int) *countingStudio {
 	return s
 }
 
-func (s *countingStudio) submitCount() int64 { return atomic.LoadInt64(&s.submits) }
+func (s *countingStudio) submitCount() int64 { return s.submits.Load() }
 
 // graphImage pulls the LoadImage source (node "6") out of a captured graph.
 func graphImage(t *testing.T, g map[string]any) string {
