@@ -241,11 +241,11 @@ func TestRuntimeForNeverAnswersABoundaryTheClusterCannotPlace(t *testing.T) {
 func TestNoWireFieldCanNameAnOrg(t *testing.T) {
 	for _, in := range []any{plane.LeaseIn{}, createBody{}} {
 		ty := reflect.TypeOf(in)
-		for i := 0; i < ty.NumField(); i++ {
-			switch n := strings.ToLower(ty.Field(i).Name); {
+		for field := range ty.Fields() {
+			switch n := strings.ToLower(field.Name); {
 			case strings.Contains(n, "org"), strings.Contains(n, "owner"),
 				strings.Contains(n, "tenant"):
-				t.Fatalf("%s.%s would let a caller state its own %s", ty.Name(), ty.Field(i).Name, n)
+				t.Fatalf("%s.%s would let a caller state its own %s", ty.Name(), field.Name, n)
 			}
 		}
 	}

@@ -27,8 +27,8 @@ func TestWorkItemInputsCarryNoTenancy(t *testing.T) {
 		{"IssueIn", reflect.TypeFor[IssueIn]()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			for i := range tc.typ.NumField() {
-				f := tc.typ.Field(i)
+			for f := range tc.typ.Fields() {
+				f := f
 				if isTenancy(f.Name) {
 					t.Fatalf("%s has a %s field: the org is the CALLER's plane identity "+
 						"(cloud.Who), never an argument — a caller able to state the tenant "+
