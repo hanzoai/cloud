@@ -52,7 +52,7 @@ func ob(t *testing.T, id, kind, subject string, usd float64, at time.Time, axes 
 // rather than in the data.
 func stream(n int, at time.Time) []observation {
 	out := make([]observation, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		o, err := observe("e_"+itoa(i), actor{
 			Kind:    kindAccount,
 			Subject: "u_" + itoa(i%7),
@@ -365,7 +365,7 @@ func TestSearch_ReadsOnlyItsOwnHistory(t *testing.T) {
 	probe.reset(true)
 	p := newTestPlane(t)
 	k := key(t, brandA, orgA)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + itoa(i%5),
 			"bucket": surfaceAt(i + 1),
@@ -394,7 +394,7 @@ func TestWarm_FoldsOnlyThisOrganisationsSurface(t *testing.T) {
 	p := newTestPlane(t)
 	holdFolds(t, p) // this test drives the fold; the plane must not also be folding
 	a, b := key(t, brandA, orgA), key(t, brandA, orgB)
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		probe.hold(string(a), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_a",
 			"bucket": surfaceAt(i + 1),
@@ -493,7 +493,7 @@ func TestResident_IsBuiltOnceHoweverManyAskAtOnce(t *testing.T) {
 	const callers = 32
 	var wg sync.WaitGroup
 	seen := make([]*resident, callers)
-	for i := 0; i < callers; i++ {
+	for i := range callers {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -544,7 +544,7 @@ func TestFold_AGapIsRetried(t *testing.T) {
 
 	// The warehouse comes back and the tenant has history waiting.
 	probe.reset(true)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + itoa(i),
 			"bucket": surfaceAt(i + 1),
@@ -752,7 +752,7 @@ func TestFold_APartialFoldDoesNotReTeach(t *testing.T) {
 	// of magnitude of margin: the watcher reacts in tens of microseconds and the
 	// remaining buckets are milliseconds of work.
 	const buckets = 5_000
-	for i := 0; i < buckets; i++ {
+	for i := range buckets {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + itoa(i%4),
 			"bucket": surfaceAt(i + 1),
@@ -1028,7 +1028,7 @@ func TestLearn_IsAnIncrementWithNoJobAndNoQueue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("state: %v", err)
 	}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		again, _, err := p.state(k)
 		if err != nil {
 			t.Fatalf("state: %v", err)

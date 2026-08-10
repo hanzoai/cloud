@@ -81,7 +81,7 @@ func TestIndex_FetchedOncePerProcess(t *testing.T) {
 	var hits int64
 	t.Setenv(Plugins, serveIndex(t, indexFor("dns"), &hits))
 
-	for i := 0; i < 25; i++ {
+	for range 25 {
 		App{Name: "dns"}.remote()
 	}
 	if hits != 1 {

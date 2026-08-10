@@ -44,7 +44,7 @@ const benchStride = 1024
 func benchBatchOf(tb testing.TB, size, iter int, at time.Time) []observation {
 	tb.Helper()
 	out := make([]observation, 0, size)
-	for j := 0; j < size; j++ {
+	for j := range size {
 		n := iter*benchStride + j
 		o, err := observe("b_"+strconv.Itoa(n), actor{
 			Kind:    kindAccount,
@@ -71,7 +71,7 @@ func warmForBench(tb testing.TB) (*plane, tenant) {
 		tb.Fatalf("newPlane: %v", err)
 	}
 	tb.Cleanup(func() { _ = p.close(context.Background()) })
-	for i := 0; i < maxFolds; i++ {
+	for i := range maxFolds {
 		select {
 		case p.folds <- struct{}{}:
 		default:
@@ -86,7 +86,7 @@ func warmForBench(tb testing.TB) (*plane, tenant) {
 	// Past the engine's warm floor (8 windows of 256), so the threshold is in force
 	// and the attribution actually runs. Negative iterations, so no warm-up id can
 	// collide with a measured one.
-	for i := 0; i < 18; i++ {
+	for i := range 18 {
 		if _, err := p.learn(k, benchBatchOf(tb, 128, -i-1, at)...); err != nil {
 			tb.Fatalf("warm: %v", err)
 		}
@@ -174,7 +174,7 @@ func BenchmarkPrior(b *testing.B) {
 	// counterparty so both queries have rows to walk past.
 	for held := recorded(b, p, k); held < recordRows; held = recorded(b, p, k) {
 		batch := make([]observation, 0, 512)
-		for j := 0; j < 512; j++ {
+		for j := range 512 {
 			n := held + j
 			o, err := observe("fill_"+strconv.Itoa(n), actor{
 				Kind: kindAccount, Subject: "u_" + strconv.Itoa(n%1024),

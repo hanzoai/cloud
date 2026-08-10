@@ -535,7 +535,7 @@ func claimFrom(s *cloud.Service[state], ctx context.Context, repo, sha, start st
 	if !ok {
 		return "", fmt.Errorf("computed version %q is not semver", start)
 	}
-	for attempt := 0; attempt < 10; attempt++ {
+	for range 10 {
 		version := v.String()
 		tag := "v" + version
 		code, err := githubJSON(s, ctx, http.MethodPost, "/repos/"+repo+"/git/refs", tok,

@@ -322,7 +322,7 @@ func (c *plaidConn) Fetch(ctx context.Context, org, cursor string) ([]BankTxn, s
 			return nil, cursor, fmt.Errorf("plaid: access_token for item %q is empty", item)
 		}
 		cur := cursors[item]
-		for page := 0; page < plaidSyncPageCap; page++ {
+		for range plaidSyncPageCap {
 			var resp syncResp
 			err := c.post(ctx, "/transactions/sync", syncReq{
 				ClientID: clientID, Secret: secret, AccessToken: token, Cursor: cur, Count: plaidSyncCount,

@@ -89,7 +89,7 @@ func planeProbe(t *testing.T, objs ...runtime.Object) *zip.App {
 		t.Fatalf("ServePlane: %v", err)
 	}
 	t.Cleanup(func() { _ = stop() })
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, derr := net.Dial("unix", zip.SocketPath("platform")); derr == nil {
 			_ = c.Close()
 			break
@@ -282,7 +282,7 @@ func TestFleetPlane_UnreadyClusterIsAnErrorNotAnEmptyFleet(t *testing.T) {
 		t.Fatalf("ServePlane: %v", err)
 	}
 	t.Cleanup(func() { _ = stop() })
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, derr := net.Dial("unix", zip.SocketPath("platform")); derr == nil {
 			_ = c.Close()
 			break

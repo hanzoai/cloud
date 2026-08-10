@@ -74,7 +74,7 @@ func TestDefaultRPMBindsUnconfigured(t *testing.T) {
 	rpm := audioRPM(t)
 	app := floorApp(t)
 
-	for i := 0; i < rpm; i++ {
+	for i := range rpm {
 		if resp := floorReq(t, app, "acme", "/v1/audio/transcriptions"); resp.StatusCode == 429 {
 			t.Fatalf("request %d of %d was throttled early — the floor is tighter than it states", i+1, rpm)
 		}

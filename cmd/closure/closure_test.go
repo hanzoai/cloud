@@ -222,7 +222,7 @@ func TestReportCarriesTheScopedRepair(t *testing.T) {
 	// A realistic fleet: one app moved out of many, which is the scoped branch.
 	want := witness{Apps: map[string]string{"iam": "a"}}
 	have := witness{Apps: map[string]string{"iam": "A"}}
-	for i := 0; i < 120; i++ {
+	for i := range 120 {
 		name := "app" + string(rune('a'+i%26)) + string(rune('a'+i/26))
 		want.Apps[name], have.Apps[name] = "same", "same"
 	}
@@ -244,7 +244,7 @@ func TestReportCarriesTheScopedRepair(t *testing.T) {
 // common one for a head-module bump and it must name the sweep, not 122 targets.
 func TestFleetWideMovementNamesTheSweep(t *testing.T) {
 	stale := make([]string, 0, 122)
-	for i := 0; i < 122; i++ {
+	for i := range 122 {
 		stale = append(stale, string(rune('a'+i%26))+string(rune('a'+i/26)))
 	}
 	if got := repair(stale, 125); got != "make describe" {
@@ -261,7 +261,7 @@ func TestFleetWideMovementNamesTheSweep(t *testing.T) {
 func TestWitnessIsByteStable(t *testing.T) {
 	root, pkgs := world(t, "package server")
 	var first []byte
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		have, err := snapshot(root, pkgs, []string{"iam", "wallets"})
 		if err != nil {
 			t.Fatal(err)

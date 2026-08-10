@@ -326,7 +326,7 @@ func TestSuperAdmin_ReadsTheLaneWithNoTenant(t *testing.T) {
 	}
 
 	now := time.Now()
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		tr.Observe(edge.Signal{Org: "", Presented: "junk", IP: "203.0.113.9", Path: "/v1/models", Class: edge.CredAnonymous}, now)
 	}
 	tr.Observe(edge.Signal{Org: "acme", Cred: "fp", Presented: "fp", IP: "198.51.100.1", Path: "/v1/models", Class: edge.CredSecret}, now)

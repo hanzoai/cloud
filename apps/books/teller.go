@@ -166,7 +166,7 @@ func (tc *tellerConn) fetchAccount(ctx context.Context, doer tellerDoer, token s
 	base := tc.baseURL() + "/accounts/" + url.PathEscape(acct.ID) + "/transactions"
 	fromID, newest := "", ""
 	var out []BankTxn
-	for page := 0; page < tellerMaxPages; page++ {
+	for range tellerMaxPages {
 		u := base + "?count=" + strconv.Itoa(tellerPageCount)
 		if fromID != "" {
 			u += "&from_id=" + url.QueryEscape(fromID)

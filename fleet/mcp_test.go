@@ -55,7 +55,7 @@ func start(t *testing.T, name string, ops int) *child {
 	t.Helper()
 	sock := filepath.Join(planetest.Dir(t), name+".sock")
 	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
-	for i := 0; i < ops; i++ {
+	for i := range ops {
 		id := opID(name, i)
 		zip.Post(app, "/v1/"+name+"/"+id, func(_ context.Context, in *thingIn) (*thingOut, error) {
 			return &thingOut{App: name, Which: in.Which}, nil

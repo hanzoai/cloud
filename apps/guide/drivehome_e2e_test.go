@@ -535,7 +535,7 @@ func TestDrive_AutonomousLoop(t *testing.T) {
 	wantNext := []string{"go-live", "acquire", "monetize", ""}
 
 	ctx := context.Background()
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		// OBSERVE — the org's current growth stage (real-time, recomputed from state).
 		prof := profileOf(t, app, org)
 		// SUGGEST — the ranked next-best move for the reconciled state.

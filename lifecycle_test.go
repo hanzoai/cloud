@@ -38,7 +38,7 @@ func TestEmitLifecycleFanOut(t *testing.T) {
 	cancel()
 	EmitLifecycle(ctx, LifecycleEvent{Kind: LifecyclePushLanded, Org: "acme", Repo: "code", Branch: "main", After: "deadbeef"})
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):

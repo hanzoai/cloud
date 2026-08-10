@@ -91,7 +91,7 @@ func TestChain_AppendSealsAndLinks(t *testing.T) {
 func TestVerify_PassesOnUntamperedChain(t *testing.T) {
 	rec, _ := openTemp(t)
 	ctx := context.Background()
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		if _, err := rec.Append(ctx, sampleRecord("POST /v1/admin/sync")); err != nil {
 			t.Fatalf("append %d: %v", i, err)
 		}
@@ -125,7 +125,7 @@ func TestVerify_DetectsFieldTamper(t *testing.T) {
 	requireSharedStore(t) // tampers through a second handle while the Recorder holds the store open
 	rec, dir := openTemp(t)
 	ctx := context.Background()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if _, err := rec.Append(ctx, sampleRecord("DELETE /v1/admin/orgs")); err != nil {
 			t.Fatalf("append %d: %v", i, err)
 		}
@@ -161,7 +161,7 @@ func TestVerify_DetectsDeletion(t *testing.T) {
 	requireSharedStore(t) // tampers through a second handle while the Recorder holds the store open
 	rec, dir := openTemp(t)
 	ctx := context.Background()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if _, err := rec.Append(ctx, sampleRecord("POST /v1/admin/roles")); err != nil {
 			t.Fatalf("append %d: %v", i, err)
 		}
@@ -190,7 +190,7 @@ func TestVerify_DetectsReorder(t *testing.T) {
 	requireSharedStore(t) // tampers through a second handle while the Recorder holds the store open
 	rec, dir := openTemp(t)
 	ctx := context.Background()
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		if _, err := rec.Append(ctx, sampleRecord("POST /v1/kms/secrets")); err != nil {
 			t.Fatalf("append %d: %v", i, err)
 		}
@@ -221,7 +221,7 @@ func TestChain_RestartContinues(t *testing.T) {
 		t.Fatalf("open 1: %v", err)
 	}
 	var lastHash string
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		r, err := rec1.Append(ctx, sampleRecord("POST /v1/admin/sync"))
 		if err != nil {
 			t.Fatalf("append %d: %v", i, err)
@@ -382,7 +382,7 @@ func TestQuery_Filters(t *testing.T) {
 func TestQuery_SQLInjectionInFilterIsInert(t *testing.T) {
 	rec, _ := openTemp(t)
 	ctx := context.Background()
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, err := rec.Append(ctx, sampleRecord("POST /v1/admin/sync")); err != nil {
 			t.Fatalf("seed %d: %v", i, err)
 		}
@@ -414,11 +414,11 @@ func TestChain_ConcurrentAppendsStayGapless(t *testing.T) {
 	total := goroutines * per
 	errCh := make(chan error, total)
 	var wg sync.WaitGroup
-	for g := 0; g < goroutines; g++ {
+	for range goroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < per; i++ {
+			for range per {
 				if _, err := rec.Append(ctx, sampleRecord("POST /v1/admin/sync")); err != nil {
 					errCh <- err
 				}
@@ -490,7 +490,7 @@ func TestCheckpoint_EmitsHeadDigest(t *testing.T) {
 		lmu.Unlock()
 	})
 
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		if _, err := rec.Append(ctx, sampleRecord("POST /v1/admin/sync")); err != nil {
 			t.Fatalf("append %d: %v", i, err)
 		}
@@ -554,7 +554,7 @@ func TestCheckpoint_CloseSyncsToSink(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	rec.StartCheckpoints(0, func(Checkpoint) {}) // no ticker; only the on-close checkpoint.
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if _, err := rec.Append(context.Background(), sampleRecord("POST /v1/admin/sync")); err != nil {
 			t.Fatalf("append %d: %v", i, err)
 		}
@@ -581,7 +581,7 @@ func TestCheckpoint_CountMonotonicDetectsTruncation(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	ctx := context.Background()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if _, err := rec.Append(ctx, sampleRecord("POST /v1/admin/sync")); err != nil {
 			t.Fatalf("append %d: %v", i, err)
 		}

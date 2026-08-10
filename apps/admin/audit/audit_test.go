@@ -62,7 +62,7 @@ func mountWithStore(t *testing.T) (*auditstore.Recorder, func(method, path strin
 func seedAudit(t *testing.T, rec *auditstore.Recorder, n int) {
 	t.Helper()
 	ctx := context.Background()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		_, err := rec.Append(ctx, auditstore.Record{
 			Time:     time.Now().UTC(),
 			Actor:    auditstore.Actor{Org: "admin", Sub: "z@hanzo.ai"},

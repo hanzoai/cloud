@@ -98,7 +98,7 @@ func raceCAS(ctx context.Context, store replica.ConditionalStore, key, expectVer
 		mu sync.Mutex
 	)
 	wg.Add(probeRacers)
-	for i := 0; i < probeRacers; i++ {
+	for i := range probeRacers {
 		go func(i int) {
 			defer wg.Done()
 			_, err := store.PutIfVersion(ctx, key, probePayload(key, expectVersion, i), expectVersion)

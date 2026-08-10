@@ -165,10 +165,8 @@ type noInput struct{}
 // principal must be present. Without it this subsystem is an open RPC relay
 // anyone on the internet can point at the deployment's paid upstream.
 func gate(ctx context.Context) error {
-	if _, ok := principal.OrgFrom(ctx); !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	return nil
+	_, err := principal.RequireOrg(ctx)
+	return err
 }
 
 // resolve finds a declared chain, or refuses. An undeclared chain is 404 and

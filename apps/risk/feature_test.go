@@ -247,7 +247,7 @@ func TestRollup_ClosesTheLoop(t *testing.T) {
 	now := time.Now().UTC()
 	// The organisation emits into the SOURCE planes, under its bare slug, the way
 	// the one ingest door writes them.
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		probe.emit(orgA, emitted{
 			Plane: "account", Subject: "u_7",
 			At: now.Add(-time.Duration(i+1) * time.Hour), Spend: 250_000_000,
@@ -306,7 +306,7 @@ func TestRollup_RollsEachWindowOnce(t *testing.T) {
 	holdFolds(t, p)
 	k := key(t, brandA, orgA)
 	now := time.Now().UTC()
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		probe.emit(orgA, emitted{Plane: "account", Subject: "u_1", At: now.Add(-time.Duration(i+1) * time.Hour), Spend: 1_000})
 	}
 	if _, err := p.roll(context.Background(), k); err != nil {
@@ -516,7 +516,7 @@ func TestSearch_RollsBeforeItReadsItsHistory(t *testing.T) {
 	now := time.Now().UTC()
 	// Only the SOURCE plane has anything. Nothing has rolled, and nothing will
 	// unless begin does it.
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		probe.emit(orgA, emitted{
 			Plane: "account", Subject: "u_" + itoa(i%3),
 			At: now.Add(-time.Duration(i+1) * 20 * time.Minute), Spend: 100_000_000,

@@ -368,7 +368,7 @@ func TestRateLimiterLocksOutAfterTheBudgetIsSpent(t *testing.T) {
 	l := NewRateLimiter(RateLimitConfig{MaxAttempts: 3, Window: time.Minute, Lockout: 5 * time.Minute,
 		Now: func() time.Time { return clock }})
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		l.RecordFailure("1.2.3.4", RateLimitScopeSharedSecret)
 		res := l.Check("1.2.3.4", RateLimitScopeSharedSecret)
 		if !res.Allow {
@@ -753,7 +753,7 @@ func TestSanitizeAllowAlwaysIsNotConsumed(t *testing.T) {
 		Approved:         true,
 		ApprovalDecision: DecisionAllowAlways,
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		out, d := SanitizeSystemRun(thisNode, params, operator, s, now)
 		assertAllow(t, d)
 		if !out.Approved || out.ApprovalDecision != DecisionAllowAlways {

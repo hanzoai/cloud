@@ -311,7 +311,7 @@ func TestImageDeployOverCapReturns429(t *testing.T) {
 
 	// Saturate maxpower's in-flight deploy gate (simulate 2 deploys already parked in
 	// applyLive's RBAC wait).
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if !s.State.deployGate.acquire("maxpower", s.State.k8s.limits.maxConcurrentDeploys()) {
 			t.Fatalf("precondition: acquire maxpower slot %d must succeed", i)
 		}

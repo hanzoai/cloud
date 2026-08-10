@@ -30,7 +30,7 @@ func TestPagesGrantCache_CollapsesBurst(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	connectOrg(t, "acme", "777", "acme-gh")
 
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		if r := req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil); r.Code != http.StatusOK {
 			t.Fatalf("call %d want 200, got %d (%s)", i, r.Code, r.Body)
 		}
@@ -50,10 +50,10 @@ func TestPagesGrantCache_PerInstallationKeyed(t *testing.T) {
 	connectOrg(t, "acme", "777", "acme-gh")
 	connectOrg(t, "beta", "888", "beta-gh")
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "acme", nil)
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		req(t, app, http.MethodGet, "/v1/integrations/github/repos/widgets/pages", "beta", nil)
 	}
 	if n := m.grantFetches(); n != 2 {

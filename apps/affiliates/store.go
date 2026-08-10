@@ -483,7 +483,7 @@ func (s *Store) Approve(ctx context.Context, id, wantCode string, now int64) (Af
 		return s.getByID(ctx, id)
 	}
 	// No requested/explicit code → derive a stable slug, salt-retry on collision.
-	for n := 0; n < 8; n++ {
+	for n := range 8 {
 		cand := deriveCode(a.Org, n)
 		if err := s.setApproved(ctx, id, cand, now); err == nil {
 			return s.getByID(ctx, id)
@@ -628,7 +628,7 @@ func (s *Store) UplineOrgs(ctx context.Context, sourceOrg string, depth int) ([]
 func (s *Store) wouldCycleOrg(ctx context.Context, referred, referrer string) (bool, error) {
 	seen := map[string]bool{}
 	cur := referrer
-	for i := 0; i < walkCap; i++ {
+	for range walkCap {
 		if cur == referred {
 			return true, nil
 		}
@@ -779,7 +779,7 @@ func (s *Store) UplineUsers(ctx context.Context, user string, depth int) ([]stri
 func (s *Store) wouldCycleUser(ctx context.Context, referred, referrer string) (bool, error) {
 	seen := map[string]bool{}
 	cur := referrer
-	for i := 0; i < walkCap; i++ {
+	for range walkCap {
 		if cur == referred {
 			return true, nil
 		}

@@ -1097,7 +1097,7 @@ func TestPayments_ABurstSplitAcrossBothDoorsIsOneAccrual(t *testing.T) {
 	browserDoor(app, screen, refs("sq_pay_browser_"))
 	typedDoor(t, app, screen, refs("sq_pay_typed_"))
 
-	for i := 0; i < each; i++ {
+	for i := range each {
 		if code, body := pay(t, app, "/v1/billing/topup/token"); code != http.StatusOK {
 			t.Fatalf("browser payment %d: %d %s", i, code, body)
 		}
@@ -1109,7 +1109,7 @@ func TestPayments_ABurstSplitAcrossBothDoorsIsOneAccrual(t *testing.T) {
 	want := account.Payer(account.Credential{Owner: gateOrg, Name: gateUser}).Subject()
 	keys := map[string]bool{}
 	var total int64
-	for i := 0; i < 2*each; i++ {
+	for i := range 2 * each {
 		got := await(t, seen)
 
 		// ONE SUBJECT. This is the property the whole cross-door argument rests on: half

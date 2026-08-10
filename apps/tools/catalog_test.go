@@ -722,7 +722,7 @@ func TestABadHeaderNameIsRefusedAtRegistration(t *testing.T) {
 // ask for in a loop.
 func TestTheCatalogIsPaged(t *testing.T) {
 	many := make([]map[string]any, 0, 120)
-	for i := 0; i < 120; i++ {
+	for i := range 120 {
 		many = append(many, entry(fmt.Sprintf("com.v%03d/mcp", i), "x", remote("https://mcp.example.com"), nil))
 	}
 	app := shelf(t, many...)

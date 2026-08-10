@@ -66,7 +66,7 @@ func servePeerLedger(t *testing.T) finance.Client {
 	app := cloud.Plane()
 	go func() { _ = app.Listen(zip.SocketPath("commerce")) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, err := net.Dial("unix", zip.SocketPath("commerce")); err == nil {
 			_ = c.Close()
 			return fin

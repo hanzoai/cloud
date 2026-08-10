@@ -114,7 +114,7 @@ func TestConcurrentOnceExactlyOnce(t *testing.T) {
 	results := make([][]byte, racers)
 	var wg sync.WaitGroup
 	start := make(chan struct{})
-	for i := 0; i < racers; i++ {
+	for i := range racers {
 		i := i
 		wg.Add(1)
 		go func() {

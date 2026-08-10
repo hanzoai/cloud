@@ -191,7 +191,7 @@ func (g *gitRepository) Log(_ context.Context, rev Revision, path string, limit 
 	}
 	defer iter.Close()
 	out := []Change{}
-	for i := 0; i < limit; i++ {
+	for range limit {
 		cm, e := iter.Next()
 		if e != nil {
 			break
