@@ -72,9 +72,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("esign.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("esign.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("esign.Mount: empty DataDir")
 	}
@@ -82,7 +79,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// under the new name. Failing here aborts the boot on purpose: serving an
 	// empty document store while signed documents sit orphaned under the old
 	// name would look like data loss to every tenant.
-	if err := migrateDataDir(deps.DataDir, deps.Logger); err != nil {
+	if err := migrateDataDir(deps.DataDir, luxlog.Default()); err != nil {
 		return fmt.Errorf("esign.Mount: %w", err)
 	}
 
@@ -97,7 +94,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// tenant-scoped. Without VFS esign cannot store documents, so serve health-only
 	// (cloud stays up) rather than write PDFs into the tenant DB.
 	if deps.VFS == nil {
-		deps.Logger.Error("deps.VFS is nil — PDF byte storage unavailable; serving /v1/esign/health only")
+		luxlog.Default().Error("deps.VFS is nil — PDF byte storage unavailable; serving /v1/esign/health only")
 		return nil
 	}
 

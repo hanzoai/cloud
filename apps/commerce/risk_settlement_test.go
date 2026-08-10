@@ -20,9 +20,9 @@ package commerce
 //	retry converges, and can never fail the payment it describes.
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"errors"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net/http"
 	"net/http/httptest"

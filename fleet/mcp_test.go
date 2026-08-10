@@ -16,9 +16,9 @@ package fleet_test
 // a child from the door turns it red. See TestDoorListsExactlyWhatItsChildrenServe.
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net"
 	"net/http"

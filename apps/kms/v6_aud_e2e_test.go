@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	luxlog "github.com/luxfi/log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -111,7 +112,7 @@ func e2eCfg(t *testing.T, jwksURL string) *cloud.Config {
 func newAppWithIdentity(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) {
 	t.Helper()
 	deps := cloud.BuildDeps(cfg)
-	app := zip.New(zip.Config{Logger: deps.Logger})
+	app := zip.New(zip.Config{Logger: luxlog.Default()})
 	app.Use(middleware.Recover())
 	app.Use(cloud.IdentityMiddleware(cfg))
 	if err := cloud.MountAll(app, mountSpecs(), cfg, deps); err != nil {

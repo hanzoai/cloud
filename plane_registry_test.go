@@ -15,6 +15,7 @@ package cloud_test
 // be quietly wrong, which is the only real objection to reading source.
 
 import (
+	luxlog "github.com/luxfi/log"
 	"sort"
 	"testing"
 
@@ -41,7 +42,7 @@ func liveOps(t *testing.T, name string, mount cloud.MountFunc, global bool) []st
 	}
 	t.Cleanup(done)
 	deps := cloud.BuildDeps(cfg)
-	app := zip.New(zip.Config{Logger: deps.Logger, DisableStartupMessage: true})
+	app := zip.New(zip.Config{Logger: luxlog.Default(), DisableStartupMessage: true})
 	if err := cloud.MountAll(app, []cloud.Plugin{{
 		Name: name, Price: cloud.Free, Mount: mount, Global: global,
 	}}, cfg, deps); err != nil {

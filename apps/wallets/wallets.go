@@ -66,10 +66,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("wallets.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("wallets.Mount: nil deps.Logger")
-	}
-	log := deps.Logger.New("subsystem", "wallets")
+	log := luxlog.Default().New("subsystem", "wallets")
 	if deps.DataDir == "" {
 		return fmt.Errorf("wallets.Mount: empty DataDir")
 	}

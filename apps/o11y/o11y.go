@@ -49,12 +49,13 @@ package o11y
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
+
+	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
@@ -488,7 +489,7 @@ var runtimeHandler http.Handler
 // not strictly required (the handler is resolved per-request); it runs inside the one
 // order-69 mount, before Listen, so the handler is in place before the first request.
 func mountRuntime(deps cloud.Deps) error {
-	log := deps.Logger.New("subsystem", "o11y-runtime")
+	log := luxlog.Default().New("subsystem", "o11y-runtime")
 
 	if h, err := buildEmbeddedHandler(deps); err != nil {
 		log.Warn("embedded o11y init failed; falling back to reverse proxy", "err", err)
@@ -630,12 +631,9 @@ func eventToRuntimePath(method, path string) (string, bool) {
 // proxy declares no typed op and contributes no schema. Everything with a shape
 // to name is in the child.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if deps.Logger == nil {
-		return fmt.Errorf("o11y: nil deps.Logger")
-	}
 	a := zip.New(zip.Config{
 		AppName:      "o11y",
-		Logger:       deps.Logger,
+		Logger:       luxlog.Default(),
 		ErrorHandler: cloud.ErrorHandler,
 	})
 

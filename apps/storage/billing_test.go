@@ -26,7 +26,6 @@ import (
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/internal/planetest"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -64,12 +63,11 @@ func newBilledService(t *testing.T, commerceURL string) *cloud.Service[state] {
 	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIATEST")
 	t.Setenv("S3_ADMIN_SECRET_KEY", "secrettest")
 	t.Setenv("S3_ADMIN_ENDPOINT", "127.0.0.1:1")
-	log := luxlog.New("module", "s3billtest")
 	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-token", Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	deps := cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}
+	deps := cloud.Deps{Metering: m, Env: "mainnet"}
 	return &cloud.Service[state]{
 		Base:  cloud.NewBase(deps, "storage"),
 		State: state{admin: s3admin.New(), bill: cloud.NewResourceMeter(deps, "s3")},

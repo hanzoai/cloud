@@ -53,7 +53,7 @@ func pinApp(t *testing.T) *zip.App {
 	// the real subsystem keeps the probe on the same trust plane as the co-resident
 	// registration.
 	compose(app)
-	if err := MountAccount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
+	if err := MountAccount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
 		t.Fatalf("MountAccount: %v", err)
 	}
 	app.Get("/probe", PinBillingSubject(), echoQuery)

@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	luxlog "github.com/luxfi/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -40,7 +39,7 @@ func itClient(t *testing.T) *cloud.Service[fleetState] {
 		t.Fatalf("newDynamic (needs a live KUBECONFIG): %v", err)
 	}
 	return &cloud.Service[fleetState]{
-		Base:  cloud.NewBase(cloud.Deps{Logger: luxlog.New("paas-it")}, "paas"),
+		Base:  cloud.NewBase(cloud.Deps{}, "paas"),
 		State: fleetState{dyn: dyn},
 	}
 }

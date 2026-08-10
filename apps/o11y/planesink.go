@@ -160,7 +160,7 @@ var embeddedPlaneSink *planeSink
 // plane, and registers the in-process trace sink when its flag is on. Called
 // by mountO11y; order-independent (no Fiber route). Fail-soft at every branch.
 func mountPlaneIngest(deps cloud.Deps) error {
-	log := deps.Logger.New("subsystem", "o11y-plane-ingest")
+	log := luxlog.Default().New("subsystem", "o11y-plane-ingest")
 
 	dsn := embeddedDSN()
 	if dsn == "" {

@@ -93,7 +93,7 @@ func fieldOf(dt framework.DocType, name string) (framework.DocField, bool) {
 func TestInstallAndPublishRoundTrip(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := framework.Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := framework.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("mount framework: %v", err)
 	}
 	t.Cleanup(func() { _ = framework.Shutdown() })

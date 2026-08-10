@@ -35,7 +35,7 @@ func TestRed_BotProxyForwardsForgedOrgNoPrincipal(t *testing.T) {
 	t.Setenv("BOT_GATEWAY_URL", upstream.URL)
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 

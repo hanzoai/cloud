@@ -62,6 +62,8 @@ import (
 	"strings"
 	"time"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -128,9 +130,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("social.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("social.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("social.Mount: empty DataDir")
 	}
@@ -144,7 +143,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		_ = store.Close()
 		return fmt.Errorf("social.Mount: recover: %w", err)
 	} else if n > 0 {
-		deps.Logger.Warn("social: reset interrupted publishes to failed", "count", n)
+		luxlog.Default().Warn("social: reset interrupted publishes to failed", "count", n)
 	}
 	b := cloud.NewBase(deps, "social")
 	s := &cloud.Service[state]{Base: b, State: state{store: store, pub: newPublisher(deps)}}

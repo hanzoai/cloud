@@ -77,7 +77,7 @@ func mountBilled(t *testing.T, commerceURL string, ai types.AIClient) *zip.App {
 	// retry/failover tests exercise the real escalation path with no fixture to
 	// set; it never fires for a run whose model answers (or fails
 	// non-transiently), so the other billed tests are unaffected.
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: ai, Metering: m}
+	deps := cloud.Deps{DataDir: t.TempDir(), AI: ai, Metering: m}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestRunAgentGateFailClosedOnUnreachableCommerce(t *testing.T) {
 	// Point at a dead URL so Authorize errors (unknown balance -> fail-closed).
 	m, _ := metering.New(metering.Config{BaseURL: "http://127.0.0.1:1", Token: "t", Org: "hanzo", Timeout: 200 * time.Millisecond})
 	ai := &fakeAI{content: "must not run"}
-	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{stores: testStores(t), ai: ai, bill: cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind)}}
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{stores: testStores(t), ai: ai, bill: cloud.NewResourceMeter(cloud.Deps{Metering: m}, meterKind)}}
 	a := mk("acme", "x")
 	_, gateErr := runAgent(s, context.Background(), a, "hi", nil, "acme", "", "")
 	if gateErr == nil {

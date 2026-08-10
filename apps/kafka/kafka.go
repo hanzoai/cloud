@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/pubsub"
 	"github.com/hanzoai/kafka/protocol"
@@ -47,10 +49,7 @@ var broker *protocol.Broker
 
 // Mount starts the embedded Kafka adaptor over the embedded JetStream.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if deps.Logger == nil {
-		return fmt.Errorf("kafka.Mount: nil deps.Logger")
-	}
-	log := deps.Logger.New("subsystem", "kafka")
+	log := luxlog.Default().New("subsystem", "kafka")
 
 	port, err := envInt("CLOUD_KAFKA_PORT", 9092)
 	if err != nil {

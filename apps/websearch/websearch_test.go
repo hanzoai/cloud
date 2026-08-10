@@ -52,7 +52,7 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "k")
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	fa := app.Fiber()
@@ -150,7 +150,7 @@ func TestSearchValidatedPrincipalBypassesKey(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "") // unset: the key path would 503 — the principal must pass regardless
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	fa := app.Fiber()
@@ -177,7 +177,7 @@ func TestSearchNoPrincipalNoKeyRefused(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "")
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	fa := app.Fiber()
@@ -194,12 +194,8 @@ func TestSearchNoPrincipalNoKeyRefused(t *testing.T) {
 }
 
 func TestMountRejectsBadInputs(t *testing.T) {
-	if err := Mount(nil, cloud.Deps{Logger: luxlog.New("test")}); err == nil {
+	if err := Mount(nil, cloud.Deps{}); err == nil {
 		t.Fatal("Mount(nil app) should error")
-	}
-	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{}); err == nil {
-		t.Fatal("Mount(nil logger) should error")
 	}
 }
 

@@ -83,10 +83,7 @@ func org() string {
 // leaves the subsystem idle (ConfigMap-less environments simply have zero
 // entries), never blocks boot.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if deps.Logger == nil {
-		return fmt.Errorf("cron.Mount: nil deps.Logger")
-	}
-	log := deps.Logger.New("subsystem", "cron")
+	log := luxlog.Default().New("subsystem", "cron")
 	go start(context.Background(), log)
 	return nil
 }

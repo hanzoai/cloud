@@ -40,6 +40,8 @@ import (
 	"sort"
 	"strings"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/audit"
@@ -73,7 +75,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		members: liveMembers(deps),
 		self:    self(),
 		origin:  strings.TrimRight(os.Getenv(OriginEnv), "/"),
-		log:     deps.Logger.New("subsystem", "plugins"),
+		log:     luxlog.Default().New("subsystem", "plugins"),
 	}
 	Routes(z, o)
 	return nil

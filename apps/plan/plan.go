@@ -39,6 +39,8 @@ import (
 	"fmt"
 	"net/http"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
 	hplans "github.com/hanzoai/plans"
@@ -53,9 +55,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("plan.Mount: nil app")
 	}
-	logger := deps.Logger
+	logger := luxlog.Default()
 	if logger == nil {
-		return fmt.Errorf("plan.Mount: nil deps.Logger")
+		return fmt.Errorf("plan.Mount: nil luxlog.Default()")
 	}
 	logger = logger.New("subsystem", "plans")
 

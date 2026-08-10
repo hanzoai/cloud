@@ -41,11 +41,11 @@ type Connection struct {
 	// Installer is the provider-side user who completed the install. Whoever
 	// finished the OAuth was already an admin of this org, which is why they need
 	// no second proof to talk to the bot they installed.
-	Installer string
-	Scopes       []string
-	ExpiresAt    int64 // access-token expiry, unix seconds; 0 = non-expiring
-	ConnectedAt  int64
-	UpdatedAt    int64
+	Installer   string
+	Scopes      []string
+	ExpiresAt   int64 // access-token expiry, unix seconds; 0 = non-expiring
+	ConnectedAt int64
+	UpdatedAt   int64
 }
 
 // Connection is a user's non-secret link to a provider account — the per-user

@@ -106,7 +106,7 @@ func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("risktest"), DisableStartupMessage: true})
 	compose(app)
-	deps := cloud.Deps{Logger: luxlog.New("risktest"), Brand: brandA, DataDir: t.TempDir()}
+	deps := cloud.Deps{Brand: brandA, DataDir: t.TempDir()}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

@@ -265,7 +265,6 @@ func parseSlashCommand(raw []byte) (team, channel, user, text, responseURL, trig
 
 // ── Slack dispatch: chat via the channel, coding via its own flow ────────────
 
-
 // slackCodingEvent runs the @mention/DM CODING path for a PRE-RESOLVED org: it
 // fetches THIS org's bot token (the reply sink) and hands off to slack_coding.go,
 // which owns the parse, the link check, and the dispatch to the engine. Coding is

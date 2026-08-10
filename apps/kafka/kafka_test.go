@@ -8,7 +8,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-func testDeps() cloud.Deps { return cloud.Deps{Logger: luxlog.New("test")} }
+func testDeps() cloud.Deps { return cloud.Deps{} }
 func testApp() *zip.App    { return zip.New(zip.Config{Logger: luxlog.New("test")}) }
 
 // TestMountEnabledFailsClosedWhenPubSubUnreachable: enabled with an unreachable

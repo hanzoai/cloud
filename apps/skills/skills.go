@@ -36,6 +36,8 @@ import (
 	"path"
 	"regexp"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/openapi"
@@ -144,8 +146,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	tools.Register(skillToolProvider{fsys: sub, brand: skillBrand})
 
-	if deps.Logger != nil {
-		deps.Logger.New("subsystem", "skills").Info(
+	if luxlog.Default() != nil {
+		luxlog.Default().New("subsystem", "skills").Info(
 			"agent-skills discovery mounted", "brands", len(h.brands), "fallback", h.fallback)
 	}
 	return nil

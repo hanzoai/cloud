@@ -74,9 +74,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("gateway.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("gateway.Mount: nil deps.Logger")
-	}
 	if deps.GatewayPolicy == nil {
 		return fmt.Errorf("gateway.Mount: nil deps.GatewayPolicy")
 	}

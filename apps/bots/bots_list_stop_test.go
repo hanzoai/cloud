@@ -108,7 +108,7 @@ func mountWith(t *testing.T, rt Runtime) *zip.App {
 	t.Helper()
 	t.Setenv(gatewayURLEnv, "https://bot.example.test")
 	s := &cloud.Service[state]{
-		Base:  cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "bots"),
+		Base:  cloud.NewBase(cloud.Deps{}, "bots"),
 		State: state{gateway: gatewayBase(), runtime: rt},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
@@ -117,7 +117,7 @@ func mountWith(t *testing.T, rt Runtime) *zip.App {
 	// The relay is the same product's second face, so the surface every gate reads
 	// is the WHOLE product — otherwise the typed-or-named gate goes blind on half
 	// of it. /v1/bot/* cannot shadow /v1/bots: the wildcard needs the slash.
-	if err := mountRelay(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := mountRelay(app, cloud.Deps{}); err != nil {
 		t.Fatalf("mountRelay: %v", err)
 	}
 	return app

@@ -38,7 +38,7 @@ func mountApp(t *testing.T) *zip.App {
 		t.Fatalf("newNFTReader: %v", err)
 	}
 	s := &cloud.Service[state]{
-		Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test"), Brand: "lux"}, "validators"),
+		Base: cloud.NewBase(cloud.Deps{Brand: "lux"}, "validators"),
 		State: state{
 			store:   store,
 			nft:     nft,

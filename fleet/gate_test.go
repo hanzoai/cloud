@@ -12,9 +12,9 @@ package fleet_test
 // server did not have when it projected 1,323 tools with no auth at all.
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net/http"
 	"path/filepath"

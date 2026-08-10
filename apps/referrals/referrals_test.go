@@ -78,7 +78,7 @@ func mountWith(t *testing.T, c commerce) (*zip.App, *cloud.Service[state]) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	s := &cloud.Service[state]{
-		Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}, "referrals"),
+		Base: cloud.NewBase(cloud.Deps{Brand: "hanzo"}, "referrals"),
 		State: state{
 			store:    store,
 			commerce: c,
@@ -630,7 +630,7 @@ func lower(s string) string {
 func TestMount(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
