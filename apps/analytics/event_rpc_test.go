@@ -117,7 +117,7 @@ func TestPlaneCapture_RefusesAnUnnamedAct(t *testing.T) {
 //
 // Mutation proof: add an Org field to plane.EventIn and this names it.
 func TestEventIn_CannotNameAnOrg(t *testing.T) {
-	rt := reflect.TypeOf(planeops.EventIn{})
+	rt := reflect.TypeFor[planeops.EventIn]()
 	for i := 0; i < rt.NumField(); i++ {
 		name := strings.ToLower(rt.Field(i).Name)
 		for _, banned := range []string{"org", "tenant", "brand", "owner"} {
