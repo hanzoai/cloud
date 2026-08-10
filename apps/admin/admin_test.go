@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -747,7 +748,7 @@ func TestMount_NilGuards(t *testing.T) {
 // registry and never fabricate a row.
 func servePlatformEmpty(t *testing.T) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	app := zip.New(zip.Config{AppName: "platform"})
 	compose(app)
 	zip.Post[struct{}, plane.Fleet](app, "/platform/fleet",

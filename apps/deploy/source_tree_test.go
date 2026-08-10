@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"net"
 	"strings"
@@ -22,7 +23,7 @@ import (
 // where a silent mistake becomes a wrong desired set.
 func fakeGit(t *testing.T, rev string, files []plane.File, fault error) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 
 	app := zip.New(zip.Config{AppName: "git", Logger: luxlog.New("gittest")})
 	compose(app)
@@ -114,7 +115,7 @@ func TestTreeSourceNoRevisionIsError(t *testing.T) {
 // TestTreeSourceUnreachableGitIsError proves an absent git plane surfaces as an
 // error. "git is not running" and "the inventory is empty" must not look alike.
 func TestTreeSourceUnreachableGitIsError(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir()) // no git.sock, and there is no network fallback
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // no git.sock, and there is no network fallback
 	if _, _, err := (treeSource{org: "hanzo", repo: "universe"}).render(context.Background()); err == nil {
 		t.Fatal("render succeeded with no git plane reachable")
 	}
