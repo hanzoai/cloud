@@ -26,6 +26,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -341,10 +342,5 @@ func TestDeclaredPrefixesCoverTheSurface(t *testing.T) {
 }
 
 func contains(hay []string, needle string) bool {
-	for _, h := range hay {
-		if h == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(hay, needle)
 }

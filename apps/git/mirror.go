@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -309,10 +310,8 @@ func mirrorGuardHost(host string) error {
 	if len(ips) == 0 {
 		return fmt.Errorf("no address for host")
 	}
-	for _, ip := range ips {
-		if isInternalIP(ip) {
-			return fmt.Errorf("host resolves to a disallowed address")
-		}
+	if slices.ContainsFunc(ips, isInternalIP) {
+		return fmt.Errorf("host resolves to a disallowed address")
 	}
 	return nil
 }

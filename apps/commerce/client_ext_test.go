@@ -4,6 +4,7 @@ package commerce_test
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -94,12 +95,7 @@ func seedActiveGrant(t *testing.T, ctx context.Context, org, planSlug string) {
 }
 
 func hasFeature(features []string, want string) bool {
-	for _, f := range features {
-		if f == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(features, want)
 }
 
 // TestInProcessClient exercises the REAL in-process commerce.Client end-to-end:

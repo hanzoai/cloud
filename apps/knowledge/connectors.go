@@ -30,6 +30,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -505,12 +506,8 @@ func upsertConnector(s *cloud.Service[state], ctx context.Context, org, provider
 	}
 	merged := map[string]any{}
 	if len(docs) == 1 {
-		for k, v := range docs[0].Data {
-			merged[k] = v
-		}
+		maps.Copy(merged, docs[0].Data)
 	}
-	for k, v := range fields {
-		merged[k] = v
-	}
+	maps.Copy(merged, fields)
 	return framework.UpdateData(ctx, org, DTConnector, name, merged)
 }

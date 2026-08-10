@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -79,9 +80,7 @@ func runAgent(ctx context.Context, d agentDeps, org, payer string, step JourneyS
 	// 3. Build the tool args: the step defaults, plus the drafted text folded into
 	//    the DraftInto arg (default "brief").
 	args := make(map[string]any, len(step.Args)+1)
-	for k, v := range step.Args {
-		args[k] = v
-	}
+	maps.Copy(args, step.Args)
 	if drafted != "" {
 		into := strings.TrimSpace(step.DraftInto)
 		if into == "" {

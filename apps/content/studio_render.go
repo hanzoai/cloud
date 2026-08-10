@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -521,20 +522,16 @@ func validateLocalRef(s string) error {
 	if strings.HasPrefix(s, "/") || strings.HasPrefix(s, "\\") {
 		return fmt.Errorf("%w: absolute path not allowed", errInvalidSource)
 	}
-	for _, seg := range strings.FieldsFunc(s, func(r rune) bool { return r == '/' || r == '\\' }) {
-		if seg == ".." {
-			return fmt.Errorf("%w: path traversal not allowed", errInvalidSource)
-		}
+	if slices.Contains(strings.FieldsFunc(s, func(r rune) bool { return r == '/' || r == '\\' }), "..") {
+		return fmt.Errorf("%w: path traversal not allowed", errInvalidSource)
 	}
 	return nil
 }
 
 // sourceHostAllowed reports whether host exactly matches an allowed asset host.
 func sourceHostAllowed(host string) bool {
-	for _, h := range defaultSourceHosts {
-		if host == h {
-			return true
-		}
+	if slices.Contains(defaultSourceHosts, host) {
+		return true
 	}
 	if extra := strings.TrimSpace(os.Getenv(srcHostEnv)); extra != "" {
 		for _, h := range strings.Split(extra, ",") {

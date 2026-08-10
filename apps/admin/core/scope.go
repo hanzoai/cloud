@@ -19,6 +19,7 @@ package core
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -43,12 +44,7 @@ func (t TenantScope) ScopedToOrg(o string) bool {
 		return true
 	}
 	o = strings.TrimSpace(o)
-	for _, s := range t.Orgs {
-		if s == o {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(t.Orgs, o)
 }
 
 // ResolveScope derives the request's tenant window from the SANITIZED identity only —

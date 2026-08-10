@@ -58,6 +58,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 
 	"strings"
 	"sync"
@@ -1621,12 +1622,7 @@ func cleanCategories(xs []string) []string {
 }
 
 func containsStr(xs []string, target string) bool {
-	for _, x := range xs {
-		if x == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(xs, target)
 }
 
 // normalizeJudge fills a judge spec: the judge model defaults to the model under

@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -185,12 +186,7 @@ func imageInOrgRegistry(image, org string) bool {
 	if !ok {
 		return false
 	}
-	for _, owned := range ownedBy(org) {
-		if ns == owned {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ownedBy(org), ns)
 }
 
 // ownedBy is the ONE lookup of an org's registry namespaces, keyed by the VERBATIM

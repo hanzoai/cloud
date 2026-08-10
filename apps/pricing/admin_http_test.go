@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -249,12 +250,7 @@ func rootFreeContains(body []byte, id string) bool {
 	if json.Unmarshal(body, &p) != nil {
 		return false
 	}
-	for _, s := range p.FreeModels {
-		if s == id {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.FreeModels, id)
 }
 
 // TestMount_EmptyDataDir_FailsClosed proves FIX #3: the overlay is a security

@@ -32,6 +32,7 @@ package destinations
 
 import (
 	"context"
+	"maps"
 	"sort"
 	"strings"
 	"time"
@@ -188,9 +189,7 @@ func register(d Destination) {
 // a stable set without aliasing package state.
 func snapshot() map[string]Destination {
 	out := make(map[string]Destination, len(registry))
-	for id, d := range registry {
-		out[id] = d
-	}
+	maps.Copy(out, registry)
 	return out
 }
 

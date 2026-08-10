@@ -2,6 +2,7 @@ package content
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"time"
 
@@ -299,12 +300,8 @@ func boolSet(m map[string]string) map[string]bool {
 // never actually collide, but prior-wins keeps the guarantee explicit).
 func mergeExternalIDs(prior, fresh map[string]string) map[string]string {
 	out := make(map[string]string, len(prior)+len(fresh))
-	for k, v := range fresh {
-		out[k] = v
-	}
-	for k, v := range prior {
-		out[k] = v
-	}
+	maps.Copy(out, fresh)
+	maps.Copy(out, prior)
 	return out
 }
 

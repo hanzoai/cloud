@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -316,9 +317,7 @@ func teamToken(t *testing.T, org, secret string, extra map[string]any, exp int64
 	// extra{"role":"guest"} for a guest, extra{"role":""} for a token that never
 	// proved a role.
 	e := map[string]any{"org": org, "role": token.RoleMember}
-	for k, v := range extra {
-		e[k] = v
-	}
+	maps.Copy(e, extra)
 	tok, err := token.Generate(teamAccount, "", e, exp, secret)
 	if err != nil {
 		t.Fatalf("token.Generate: %v", err)

@@ -45,6 +45,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 )
 
@@ -172,9 +173,7 @@ func (h *BaseHost) Dispatch(ctx context.Context, tenant string, req BaseRequest)
 	}
 	// Extra Go-backed host capabilities (e.g. esign's __pdf). Injected after the
 	// reserved db/newId/now/blob globals; a subsystem must not shadow those.
-	for k, v := range h.hostFns {
-		globals[k] = v
-	}
+	maps.Copy(globals, h.hostFns)
 	resp, err := h.engine.DispatchWith(ctx, Request{
 		Route:  req.Route,
 		Params: req.Params,

@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -459,12 +460,7 @@ func mustJSON(t *testing.T, b []byte, v any) {
 }
 
 func contains(ss []string, want string) bool {
-	for _, s := range ss {
-		if s == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ss, want)
 }
 
 func bytesContains(hay, needle string) bool { return bytes.Contains([]byte(hay), []byte(needle)) }

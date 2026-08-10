@@ -3,6 +3,7 @@ package principal_test
 import (
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http/httptest"
 	"testing"
 
@@ -100,9 +101,7 @@ func TestWallet_AgreesWithTheGate(t *testing.T) {
 // `org:hanzo` pools; the inference alone would have split them per-person.
 func TestWallet_AccountClaimWins(t *testing.T) {
 	h := map[string]string{}
-	for k, v := range signupPerson {
-		h[k] = v
-	}
+	maps.Copy(h, signupPerson)
 	h["X-Billing-Account-Id"] = "org:" + account.SignupOrg
 	_, acct, ok := wallet(t, h)
 	if !ok {
