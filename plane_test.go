@@ -136,8 +136,8 @@ func TestNoPlaneInputCanNameAnOrg(t *testing.T) {
 	}
 	for _, in := range inputs {
 		typ := reflect.TypeOf(in)
-		for i := 0; i < typ.NumField(); i++ {
-			if name := typ.Field(i).Name; name == "Org" || name == "Owner" {
+		for field := range typ.Fields() {
+			if name := field.Name; name == "Org" || name == "Owner" {
 				t.Errorf("%s.%s: a plane input must not name a tenant — the org rides the caller",
 					typ.Name(), name)
 			}

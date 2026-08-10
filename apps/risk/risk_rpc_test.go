@@ -66,12 +66,12 @@ func TestPlaneTenant_IsMintedFromTheCallerAndNothingElse(t *testing.T) {
 // Mutation proof: add an Org field to plane.RiskDecideIn and this names it.
 func TestRiskDecideIn_CannotNameAnOrg(t *testing.T) {
 	rt := reflect.TypeFor[contract.RiskDecideIn]()
-	for i := 0; i < rt.NumField(); i++ {
-		name := strings.ToLower(rt.Field(i).Name)
+	for field := range rt.Fields() {
+		name := strings.ToLower(field.Name)
 		for _, banned := range []string{"org", "tenant", "brand", "owner"} {
 			if strings.Contains(name, banned) {
 				t.Errorf("plane.RiskDecideIn.%s names the tenant — the organisation whose model answers "+
-					"rides the caller, never the argument", rt.Field(i).Name)
+					"rides the caller, never the argument", field.Name)
 			}
 		}
 	}

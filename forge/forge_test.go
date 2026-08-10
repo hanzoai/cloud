@@ -359,8 +359,8 @@ func TestIssueFilter_CarriesNoTenancy(t *testing.T) {
 
 func fieldExists[T any](name string) bool {
 	rt := reflect.TypeFor[T]()
-	for i := range rt.NumField() {
-		if rt.Field(i).Name == name {
+	for field := range rt.Fields() {
+		if field.Name == name {
 			return true
 		}
 	}

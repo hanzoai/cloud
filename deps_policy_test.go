@@ -73,8 +73,8 @@ func TestDepsCarriesNoPolicy(t *testing.T) {
 	tp := reflect.TypeFor[Deps]()
 	var undocumented []string
 	seen := map[string]bool{}
-	for i := 0; i < tp.NumField(); i++ {
-		name := tp.Field(i).Name
+	for field := range tp.Fields() {
+		name := field.Name
 		seen[name] = true
 		if _, ok := depsFieldRationale[name]; !ok {
 			undocumented = append(undocumented, name)
