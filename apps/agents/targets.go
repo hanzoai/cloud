@@ -794,16 +794,6 @@ func (o targetOps) getTarget(ctx context.Context, in *targetRef) (*targetView, e
 
 // ---- patch ----
 
-type patchTargetReq struct {
-	Label    *string  `json:"label"`
-	Kind     *string  `json:"kind"`
-	Status   *string  `json:"status"`
-	Capacity *string  `json:"capacity"`
-	Host     *string  `json:"host"`
-	Spec     *Spec    `json:"spec"`
-	Metrics  *Metrics `json:"metrics"` // present => a heartbeat; the server stamps its time
-}
-
 // PatchTarget updates one machine in place. Every field is optional; a field the
 // request omits is left alone. A metrics patch IS a heartbeat — the server stamps
 // its own clock, so a client can neither forge nor backdate staleness.

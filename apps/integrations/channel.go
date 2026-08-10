@@ -14,7 +14,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/plane"
-	"go.opentelemetry.io/otel"
 )
 
 // channel.go is the ONE ChatBridge core: the platform-agnostic @hanzo front-door
@@ -39,10 +38,6 @@ import (
 
 // ── normalized inbound + reply seam ─────────────────────────────────────────
 
-// channelTracer emits the per-turn chat span — one tracer for every platform this
-// package channels, because a turn is the same event whichever one it arrived on.
-var channelTracer = otel.Tracer("hanzo.ai/cloud/integrations")
-
 // Inbound is the normalized inbound chat event — ONE shape for every platform. An
 // adapter produces it AFTER it has authenticated the request and parsed the
 // payload. The core never sees a raw platform payload.
@@ -55,13 +50,6 @@ type Inbound struct {
 	Text       string // the user's prompt, mention stripped
 	DedupeKey  string // event/update/interaction id ("" ⇒ non-dedupable)
 }
-
-// replyFunc delivers the agent's answer back to the platform in the same
-// thread/chat. ephemeral = visible ONLY to the invoking user (link prompts carry a
-// sensitive URL and MUST be ephemeral). The adapter constructs this closure per
-// request, capturing whatever the platform's reply sink needs (bot token,
-// response_url, interaction token, serviceURL) — so the core stays sink-blind.
-type replyFunc func(ctx context.Context, text string, ephemeral bool) error
 
 // ── bounded per-org agent-turn pool (shared across ALL platforms) ───────────
 
