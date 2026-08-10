@@ -21,6 +21,14 @@ func init() {
 	zip.Describe("GET /avatar/:org/:user/:digest", zip.Doc{
 		Description: "Streams a stored photo. No credentials — see the file header.",
 	})
+	zip.Describe("GET /v1/appearance", zip.Doc{
+		Description: "Returns the signed-in caller's own appearance preference — text\nsize, density and accent — read from their IAM account so it is the same on\nevery device and every Hanzo surface. An unset preference is an empty object.\n\nA transient IAM read failure reports the empty preference rather than a 5xx, so\na surface applies its published default and never error-toasts on load — the\nsame fail-soft the key read uses.",
+		Fields: map[string]string{
+			"appearance.accent":  "Accent is the one hue — a CSS colour token (a hex, or a bounded functional\ncolour like rgb()/oklch()). Anything else is dropped rather than stored.",
+			"appearance.density": "Density is the spacing step: \"compact\", \"default\" or \"comfortable\".",
+			"appearance.type":    "Type is the text-size multiplier, clamped to the ramp window [0.85, 1.4].\nAbsent (0) leaves the published default.",
+		},
+	})
 	zip.Describe("GET /v1/csrf", zip.Doc{
 		Description: "IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on\nevery money write (mint/revoke a key, top up, onboard, and the billing/commerce\nwrite verbs). The token is bound to the caller's validated identity and expires,\nso one minted for one identity cannot authorize a write as another.\n\nIt is answered no-store, so it is never cached by a shared proxy. This is the\nsame-origin endpoint the embedded console reads — the Same-Origin Policy is what\nstops a cross-site page from reading the response and forging a write.",
 		Fields: map[string]string{
@@ -53,6 +61,15 @@ func init() {
 	})
 	zip.Describe("POST /avatar", zip.Doc{
 		Description: "Stores the upload and records its URL on the caller's IAM user row.",
+	})
+	zip.Describe("POST /v1/appearance", zip.Doc{
+		Description: "Stores the caller's appearance preference on their IAM account,\npreserving every other field of the row. The accent is validated as a real\ncolour token before it is stored; an unset or invalid axis is dropped rather\nthan stored.",
+		Fields: map[string]string{
+			"appearance.accent":  "Accent is the one hue — a CSS colour token (a hex, or a bounded functional\ncolour like rgb()/oklch()). Anything else is dropped rather than stored.",
+			"appearance.density": "Density is the spacing step: \"compact\", \"default\" or \"comfortable\".",
+			"appearance.type":    "Type is the text-size multiplier, clamped to the ramp window [0.85, 1.4].\nAbsent (0) leaves the published default.",
+		},
+		Example: json.RawMessage(`{"type":1.15,"density":"compact","accent":"#8b5cf6"}`),
 	})
 	zip.Describe("POST /v1/keys", zip.Doc{
 		Description: "Creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
