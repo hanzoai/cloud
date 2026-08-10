@@ -14,7 +14,7 @@ import (
 )
 
 // scopeApp builds the scoped o11y read surface (the three typed reads) exactly as
-// MountO11y + mountScope register them, and stands in for the composer by
+// Mount + mountScope register them, and stands in for the composer by
 // installing cloud.Bridge at the root first — so the validated org reaches a typed
 // op the same way it does in the real process and the tests exercise the real
 // handlers.
@@ -67,7 +67,7 @@ func do(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 //
 // That was a total outage wherever the Bridge is not in front, and there are two
 // such places: o11y as its OWN binary (plugin/o11y/main.go builds a bare zip.App
-// and calls MountO11y — a context value does not cross the host↔plugin socket),
+// and calls Mount — a context value does not cross the host↔plugin socket),
 // and MCP's tools/call, which invokes an op DIRECTLY so no route middleware runs.
 // principal.ValidatedFrom now falls back to zip's own caller, which crosses every
 // door, so both are served.
@@ -92,7 +92,7 @@ func TestTypedOpsSeeTheirCallerThroughEveryDoor(t *testing.T) {
 		t.Fatalf("without cloud.Bridge: want 200 (the principal rides zip's caller), got %d %s", code, body)
 	}
 
-	// With it — the shape MountO11y installs — the SAME request is served.
+	// With it — the shape Mount installs — the SAME request is served.
 	if code, body := do(t, scopeApp(t), scopeReq("GET", path, "acme")); code != http.StatusOK {
 		t.Fatalf("with cloud.Bridge: want 200 for a validated caller, got %d %s", code, body)
 	}

@@ -28,7 +28,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// exposeObs publishes the claim. MountO11y calls it.
+// exposeObs publishes the claim. Mount calls it.
 func exposeObs() {
 	zip.Post[plane.ObsErrorIn, plane.ObsErrorOut](cloud.Plane(), "/obs/error/post", planeObsError,
 		zip.WithOperationID(plane.ObsErrorPost),
