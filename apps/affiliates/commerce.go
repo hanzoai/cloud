@@ -21,10 +21,6 @@ type commerce interface {
 	spendCents(ctx context.Context, org string) (int64, error)
 }
 
-// errUnconfigured is the shared sentinel a read against an unwired commerce returns,
-// so accrual stays honestly pending rather than silently earning.
-var errNoLedger = payout.ErrNoLedger
-
 // commerceSeam adapts the shared payout.Client onto this program's lowercase seam
 // (Go package-scoped interface methods cannot cross packages). Zero logic — pure
 // delegation, and it delegates exactly one read.

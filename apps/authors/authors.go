@@ -84,11 +84,6 @@ const (
 	defaultShareBps int64 = 2000
 	// bpsDenom converts basis points to a fraction (spend × shareBps / 10000).
 	bpsDenom int64 = 10000
-	// grantCurrency is the ledger currency for a credits payout.
-	grantCurrency = "usd"
-	// grantTag classifies a credits payout as a non-cash Credit in commerce's
-	// DepositKind (grant:* → Credit), distinct from the other loops' tags.
-	grantTag = "grant:author"
 	// methodCredits is the ONE payout method that issues a commerce grant; every other
 	// method (wire/paypal/check/…) is a record-only cash disbursement.
 	methodCredits = "credits"
@@ -829,11 +824,6 @@ func fileProvesCode(file []byte, code string) bool {
 // normalizeLogin trims + lowercases a GitHub login (GitHub logins are
 // case-insensitive; store one canonical form).
 func normalizeLogin(login string) string { return strings.ToLower(strings.TrimSpace(login)) }
-
-// orgSubject is the billing subject commerce keys an org's wallet on — the bare org
-// slug, exactly like clients/affiliates.orgSubject. Kept as a named function so the
-// "subject == org" contract lives in one place.
-func orgSubject(org string) string { return org }
 
 // periodKey is the accrual period bucket — the UTC year-month (YYYY-MM). Commerce's
 // usage rollup is month-to-date, so one accrual per deploying org per month is the

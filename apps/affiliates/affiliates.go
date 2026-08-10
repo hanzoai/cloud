@@ -88,15 +88,6 @@ const (
 	// literal is only the value before anyone has set one.
 	// 4000 = 40%. 10000 (100%) degrades to a gross-revenue share; 0 accrues nothing.
 	defaultMarginBps int64 = 4000
-	// grantCurrency is the ledger currency for a credits payout.
-	grantCurrency = "usd"
-	// grantTag classifies a credits payout as a non-cash Credit in commerce's
-	// DepositKind (grant:* → Credit), distinct from admin's grant:admin + referrals'
-	// grant:referral so the ledger/audit can tell an affiliate payout apart.
-	grantTag = "grant:affiliate"
-	// methodCredits is the ONE payout method that issues a commerce grant; every
-	// other method (wire/paypal/check/…) is a record-only cash disbursement.
-	methodCredits = "credits"
 )
 
 // The MULTI-LEVEL upline schedule — the ONE place the level economics live. A
@@ -1570,11 +1561,6 @@ func affiliateLink(s *cloud.Service[state], code string) string {
 // from, so an enrolled zero — a rate of 0, no commission yet — still reaches the
 // wire while a field the caller never received stays absent.
 func opt[T any](v T) *T { return &v }
-
-// orgSubject is the billing subject commerce keys an org's wallet on — the bare org
-// slug, exactly like clients/admin.orgSubject + clients/referrals.orgSubject. Kept
-// as a named function so the "subject == org" contract lives in one place.
-func orgSubject(org string) string { return org }
 
 // periodKey is the accrual period bucket — the UTC year-month (YYYY-MM). Commerce's
 // usage rollup is month-to-date, so one accrual per referred org per month is the

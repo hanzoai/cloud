@@ -37,16 +37,6 @@ import (
 // org's bot token to the originating thread.
 
 const (
-	// codingTaskTimeout bounds one detached coding run end to end. It is far longer
-	// than a chat turn (channelAgentTimeout) because a real coding run clones, runs a
-	// model-driven edit loop, and pushes. Overridable via SLACK_CODING_TIMEOUT_SEC.
-	codingTaskDefaultTimeout = 25 * time.Minute
-	// codingDefaultConcurrency / codingDefaultOrgConcurrency bound simultaneous
-	// coding runs (heavy: a sandbox each) across all orgs and per org, so a
-	// workspace insider cannot exhaust sandbox capacity. Overridable via
-	// SLACK_CODING_CONCURRENCY / SLACK_CODING_ORG_CONCURRENCY.
-	codingDefaultConcurrency    = 8
-	codingDefaultOrgConcurrency = 2
 	// codingDispatchTimeout bounds the ADMISSION call, not the run. Handing a run
 	// to the engine is a validate + credential read + session open; anything
 	// slower than this is a wedged peer, and the user gets an honest ack instead
@@ -321,14 +311,6 @@ func slackEscape(s string) string {
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	return s
-}
-
-func mrkdwnSection(text string) map[string]any {
-	return map[string]any{"type": "section", "text": map[string]any{"type": "mrkdwn", "text": text}}
-}
-
-func mrkdwnField(text string) map[string]any {
-	return map[string]any{"type": "mrkdwn", "text": text}
 }
 
 // shortSHA abbreviates a commit hash to git's 7-char convention.
