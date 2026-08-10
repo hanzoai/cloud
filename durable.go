@@ -7,7 +7,6 @@ package cloud
 
 import (
 	"context"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -153,17 +152,4 @@ func firstNonEmptyStr(vals ...string) string {
 		}
 	}
 	return ""
-}
-
-// freePort asks the kernel for an unused loopback port and hands back the number.
-// There is a window between closing this listener and the engine binding it, which
-// is acceptable for a per-process resource on loopback and disappears entirely once
-// the engine can take a unix path instead.
-func freePort() (int, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = l.Close() }()
-	return l.Addr().(*net.TCPAddr).Port, nil
 }
