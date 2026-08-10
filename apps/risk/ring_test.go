@@ -70,7 +70,6 @@ func TestPlane_HoldsNoSharedTenantState(t *testing.T) {
 	}
 	pt := reflect.TypeFor[plane]()
 	for f := range pt.Fields() {
-		f := f
 		if f.Type == reflect.TypeFor[detector]() {
 			t.Errorf("plane.%s holds a model for the whole process — one organisation's volume then "+
 				"evicts another's, silently. Per-tenant state belongs on the resident.", f.Name)

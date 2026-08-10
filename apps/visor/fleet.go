@@ -454,10 +454,7 @@ func toGPUJob(a tasks.StandaloneActivity, now time.Time) gpuJob {
 // sorts lexically = chronologically (the engine writes UTC Z), so the max string is
 // the latest moment the job did anything.
 func jobRecency(j gpuJob) string {
-	r := max(j.LastHeartbeat, j.StartTime)
-	if j.CloseTime > r {
-		r = j.CloseTime
-	}
+	r := max(j.CloseTime, max(j.LastHeartbeat, j.StartTime))
 	return r
 }
 
