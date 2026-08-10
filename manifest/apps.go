@@ -51,7 +51,7 @@ var Apps = []App{
 	// the bare "/v1" remainder, which serves none of them.
 	{Name: "metrics", Prefixes: []string{"/v1/logs", "/v1/metrics", "/v1/traces"}},
 	{Name: "ingress", Prefixes: []string{"/v1/ingress"}},
-	{Name: "account", Prefixes: []string{"/v1/avatar", "/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed", "/v1/keys", "/v1/orgs"}},
+	{Name: "account", Prefixes: []string{"/v1/appearance", "/v1/avatar", "/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed", "/v1/keys", "/v1/orgs"}},
 	// The three root /.well-known documents are named EXACTLY, one prefix each, and
 	// naming them at all is new: OIDC discovery and JWKS live at the ISSUER root by
 	// spec (RFC 8414 / OIDC Discovery 1.0), so before iam was grafted the only thing
