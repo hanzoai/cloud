@@ -115,7 +115,6 @@ func TestConcurrentOnceExactlyOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 	for i := range racers {
-		i := i
 		wg.Go(func() {
 			<-start
 			res, applied, err := Once(context.Background(), db, "req-hot", 3, applyDebit("charge-hot", "1usd", &calls))

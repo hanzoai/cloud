@@ -885,10 +885,7 @@ func (o *k8sOrchestrator) waitCanCreateDatastores(ctx context.Context, ns string
 			}
 			return fmt.Errorf("%w: %s not ready", errTenantProvisioning, ns)
 		}
-		sleep := min(backoff, tenantRBACPollMax)
-		if sleep > remaining {
-			sleep = remaining
-		}
+		sleep := min(backoff, tenantRBACPollMax, remaining)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

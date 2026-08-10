@@ -358,7 +358,7 @@ func TestRunConcurrencyCap(t *testing.T) {
 			releaseRunSlot(org)
 		}
 	}()
-	for i := 0; i < maxConcurrentRunsPerOrg; i++ {
+	for i := range maxConcurrentRunsPerOrg {
 		if !acquireRunSlot(org) {
 			t.Fatalf("slot %d within cap should acquire", i)
 		}

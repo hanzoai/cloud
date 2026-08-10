@@ -264,10 +264,7 @@ func stampPDF(in []byte, specs []stampSpec) ([]byte, error) {
 			if strings.TrimSpace(sp.Text) == "" {
 				continue
 			}
-			pts := max(int(boxH*0.6), 8)
-			if pts > 24 {
-				pts = 24
-			}
+			pts := min(max(int(boxH*0.6), 8), 24)
 			desc := fmt.Sprintf("pos:bl, off:%.1f %.1f, scale:1 abs, rot:0, fillc:#0A0A0A, points:%d", cx, cy, pts)
 			wm, err = api.TextWatermark(sanitizeText(sp.Text), desc, true, false, types.POINTS)
 		}
