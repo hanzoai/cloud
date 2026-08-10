@@ -274,16 +274,23 @@ var meteredByAIWrapper = map[string]bool{
 // charges nothing at all. They are not free by decision; nobody has priced them. The
 // list must only ever shrink.
 //
-// IT IS NOW EMPTY, and that is the assertion: every surface that promises a meter
-// keeps one. auto and flow were the last two — both are typed passthroughs whose RUN
-// op schedules real compute, so each grew the meter its declaration had been claiming
-// (apps/auto/billing.go, apps/flow/billing.go: gate before the upstream call, debit
-// after it succeeds, one ResourceFeeCents knob read by both).
+// It was EMPTY, and tracker is the one entry. auto and flow were the last two to
+// leave — both are typed passthroughs whose RUN op schedules real compute, so each
+// grew the meter its declaration had been claiming (apps/auto/billing.go,
+// apps/flow/billing.go: gate before the upstream call, debit after it succeeds, one
+// ResourceFeeCents knob read by both).
 //
-// An empty map still has to be DECLARED rather than deleted: the switch below needs
-// the branch, and a future surface that cannot be priced today must land here with
-// its reason instead of quietly failing the default case.
-var meteredWithoutAMeter = map[string]bool{}
+// tracker's board moved to the forge, and its meter did not move with it. The
+// Bill.Gate/Bill.Meter pair lived in the store-backed ops (updateProject, listIssues,
+// getIssue and their siblings), which lost their routes in that move and kept their
+// code — so the meter that satisfied this test sat behind addresses nobody served,
+// and the live surface (forgeCreateIssue, forgePatchIssue, claimIssue) has charged
+// nothing since. Deleting the unrouted half made the gap visible rather than causing
+// it. Pricing a write that lands in git.hanzo.ai rather than in a local store is the
+// open question, and it is a pricing decision, not a typing one.
+var meteredWithoutAMeter = map[string]bool{
+	"tracker": true,
+}
 
 // packageCharges reports whether dir's non-test sources call a meter, and whether
 // EVERY positional Meter call in them passes a literal zero amount (a wired seam that
