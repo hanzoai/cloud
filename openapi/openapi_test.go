@@ -89,7 +89,7 @@ func TestTranslate(t *testing.T) {
 // exists to force.
 func TestChainYieldsOneOperationAndDuplicateIsRefused(t *testing.T) {
 	// (a) a legitimate chain: ONE registration, middleware + terminal handler —
-	// the apps/commerce.go:151 shape. One route entry, two handlers.
+	// the apps/commerce/mount.go shape. One route entry, two handlers.
 	chain := newApp()
 	chain.Get("/v1/bots",
 		func(c *zip.Ctx) error { return c.Next() },
