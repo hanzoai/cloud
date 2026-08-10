@@ -47,9 +47,6 @@ import (
 // Cost: one invoice-list call plus one detail call per invoice. Callers should
 // cache — the value changes at most once a month.
 func (c *Client) CreditIssued(ctx context.Context) (money.Cents, error) {
-	if !c.Ready() {
-		return 0, fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	body, err := c.get(ctx, "/v2/customers/my/invoices?per_page=200")
 	if err != nil {
 		return 0, err

@@ -57,7 +57,12 @@ func NewWithBase(base, token string) *Client {
 	}
 }
 
-// Ready reports whether a DO token is present.
+// Ready reports whether a DO token is present. It is the CALLER's question — a
+// board asks it to render "not configured" instead of an error. The reads do not
+// ask it: an unconfigured client is refused by send, which is the one place a
+// request could otherwise leave the process. Each of the twelve reads used to
+// restate the refusal above its own first line, so the message was written twelve
+// times and the guarantee still rested on someone remembering to write it.
 func (c *Client) Ready() bool { return c != nil && c.token != "" }
 
 // Balance is the decoded /v2/customers/my/balance, in cents. Account carries DO's
@@ -80,9 +85,6 @@ type balanceWire struct {
 // Balance fetches the customer balance, converting every dollar string to cents.
 func (c *Client) Balance(ctx context.Context) (Balance, error) {
 	var out Balance
-	if !c.Ready() {
-		return out, fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	body, err := c.get(ctx, "/v2/customers/my/balance")
 	if err != nil {
 		return out, err
@@ -120,9 +122,6 @@ type entryWire struct {
 // History fetches recent billing history. Used only for the burn-down series; a
 // failure is non-fatal to the caller (it renders the balance tiles with no series).
 func (c *Client) History(ctx context.Context, perPage int) ([]Entry, error) {
-	if !c.Ready() {
-		return nil, fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	if perPage <= 0 {
 		perPage = 50
 	}
@@ -354,9 +353,6 @@ func (c *Client) Clusters(ctx context.Context) ([]Cluster, error) {
 // against the cluster's public https endpoint (never an exec plugin), which the
 // caller must still funnel through fleet.SafeRESTConfig before dialing.
 func (c *Client) Kubeconfig(ctx context.Context, clusterID string) ([]byte, error) {
-	if !c.Ready() {
-		return nil, fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	if strings.TrimSpace(clusterID) == "" {
 		return nil, fmt.Errorf("cluster id required")
 	}
@@ -426,9 +422,6 @@ type Snapshot struct {
 // makes a delete recoverable, so the delete path takes one FIRST by default.
 func (c *Client) SnapshotVolume(ctx context.Context, volumeID, name string) (Snapshot, error) {
 	var out Snapshot
-	if !c.Ready() {
-		return out, fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	if strings.TrimSpace(volumeID) == "" {
 		return out, fmt.Errorf("volume id required")
 	}
@@ -453,9 +446,6 @@ func (c *Client) SnapshotVolume(ctx context.Context, volumeID, name string) (Sna
 // DeleteVolume destroys a block-storage volume. Irreversible: callers MUST have
 // proven the volume is referenced by no PV in any cluster first.
 func (c *Client) DeleteVolume(ctx context.Context, volumeID string) error {
-	if !c.Ready() {
-		return fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	if strings.TrimSpace(volumeID) == "" {
 		return fmt.Errorf("volume id required")
 	}
@@ -467,9 +457,6 @@ func (c *Client) DeleteVolume(ctx context.Context, volumeID string) error {
 // for a droplet the way there is for a volume: callers MUST have proven the droplet is
 // not a DOKS node first (see clients/admin/infra).
 func (c *Client) DeleteDroplet(ctx context.Context, dropletID int) error {
-	if !c.Ready() {
-		return fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	_, err := c.send(ctx, http.MethodDelete, "/v2/droplets/"+strconv.Itoa(dropletID), nil)
 	return err
 }
@@ -490,9 +477,6 @@ type Action struct {
 // is surfaced verbatim rather than being retried or worked around.
 func (c *Client) ResizeDroplet(ctx context.Context, dropletID int, size string, disk bool) (Action, error) {
 	var out Action
-	if !c.Ready() {
-		return out, fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	if strings.TrimSpace(size) == "" {
 		return out, fmt.Errorf("size slug required")
 	}
@@ -522,9 +506,6 @@ func (c *Client) ResizeDroplet(ctx context.Context, dropletID int, size string, 
 // where the DigitalOcean API is the only thing that holds the size.
 func (c *Client) ResizeVolume(ctx context.Context, volumeID, region string, gib int) (Action, error) {
 	var out Action
-	if !c.Ready() {
-		return out, fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	if strings.TrimSpace(volumeID) == "" {
 		return out, fmt.Errorf("volume id required")
 	}
@@ -551,9 +532,6 @@ func (c *Client) ResizeVolume(ctx context.Context, volumeID, region string, gib 
 // DeleteLoadBalancer destroys a load balancer. Irreversible, and it takes the public IP
 // with it: callers MUST have proven no Kubernetes Service still targets it.
 func (c *Client) DeleteLoadBalancer(ctx context.Context, lbID string) error {
-	if !c.Ready() {
-		return fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	if strings.TrimSpace(lbID) == "" {
 		return fmt.Errorf("load balancer id required")
 	}
@@ -564,9 +542,6 @@ func (c *Client) DeleteLoadBalancer(ctx context.Context, lbID string) error {
 // ScaleNodePool sets a node pool's node count. DO's update endpoint requires the pool's
 // name alongside the count — omitting it clears the name, so it is always sent back.
 func (c *Client) ScaleNodePool(ctx context.Context, clusterID, poolID, name string, count int) error {
-	if !c.Ready() {
-		return fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	if strings.TrimSpace(clusterID) == "" || strings.TrimSpace(poolID) == "" {
 		return fmt.Errorf("cluster id and node pool id required")
 	}
@@ -595,9 +570,6 @@ const lbUnitCents = money.Cents(1200)
 // — every collection read goes through it, so "stop on the short page or the reported
 // total" is stated once and cannot drift between endpoints.
 func listAll[T any](ctx context.Context, c *Client, path, key string) ([]T, error) {
-	if !c.Ready() {
-		return nil, fmt.Errorf("DO_API_TOKEN not configured")
-	}
 	var out []T
 	for page := 1; page <= maxPages; page++ {
 		body, err := c.get(ctx, fmt.Sprintf("%s?per_page=%d&page=%d", path, perPage, page))
@@ -638,8 +610,13 @@ func (c *Client) get(ctx context.Context, path string) ([]byte, error) {
 
 // send performs one token-authenticated DO request and returns the raw body. It is
 // the single HTTP primitive of this client: every read and every mutation funnels
-// through it, so auth, timeouts, the body ceiling and status handling exist once.
+// through it, so auth, timeouts, the body ceiling, status handling and the
+// no-token refusal exist once. An unconfigured client cannot reach the network,
+// because this is the only code here that dials.
 func (c *Client) send(ctx context.Context, method, path string, payload any) ([]byte, error) {
+	if !c.Ready() {
+		return nil, fmt.Errorf("DO_API_TOKEN not configured")
+	}
 	var rdr io.Reader
 	if payload != nil {
 		enc, err := json.Marshal(payload)
