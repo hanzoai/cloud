@@ -94,7 +94,7 @@ func toBotView(m visorMachine, b *agentBinding) botView {
 // read-back of vm's launch-time hanzo-kind:bot stamp (SetKind). It is the same
 // signal vm's own ?kind=bot list filter uses, so a get is consistent with a list.
 func machineIsBot(m visorMachine) bool {
-	for _, t := range strings.Split(m.Tag, ",") {
+	for t := range strings.SplitSeq(m.Tag, ",") {
 		if strings.EqualFold(strings.TrimSpace(t), "hanzo-kind:bot") {
 			return true
 		}

@@ -233,8 +233,8 @@ func azureStub(t *testing.T, tenant, wantSecret, wantAssertion string, clusters 
 	// managedClusters list + per-cluster listClusterUserCredential.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if strings.HasSuffix(r.URL.Path, "/listClusterUserCredential") {
-			name := strings.TrimSuffix(r.URL.Path, "/listClusterUserCredential")
+		if before, ok := strings.CutSuffix(r.URL.Path, "/listClusterUserCredential"); ok {
+			name := before
 			name = name[strings.LastIndex(name, "/")+1:]
 			ep, ok := clusters[name]
 			if !ok {

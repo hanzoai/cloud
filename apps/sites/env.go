@@ -103,7 +103,7 @@ func env(k, def string) string {
 // otherwise reserve — or self-claim — the whole zone.
 func list(k string, def ...string) []string {
 	out := make([]string, 0, len(def))
-	for _, v := range strings.Split(os.Getenv(k), ",") {
+	for v := range strings.SplitSeq(os.Getenv(k), ",") {
 		if v = strings.TrimSpace(v); v != "" {
 			out = append(out, v)
 		}

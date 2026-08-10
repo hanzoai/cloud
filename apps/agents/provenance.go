@@ -79,7 +79,7 @@ type Link struct {
 // record cannot assert that. Pure: no exec, no I/O, safe to call concurrently.
 func ParseLinks(gitLog string) []Link {
 	var out []Link
-	for _, rec := range strings.Split(gitLog, "\x00") {
+	for rec := range strings.SplitSeq(gitLog, "\x00") {
 		rec = strings.TrimLeft(rec, "\r\n")
 		if rec == "" {
 			continue
@@ -108,7 +108,7 @@ func ParseLinks(gitLog string) []Link {
 // appends the corrected trailer rather than editing the earlier line.
 func scanTrailers(body string) (session string, turn int64, ok bool) {
 	haveTurn := false
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		k, v, found := strings.Cut(strings.TrimSpace(line), ":")
 		if !found {
 			continue

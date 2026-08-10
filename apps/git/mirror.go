@@ -228,7 +228,7 @@ func remoteHead(ctx context.Context, srcURL string, env []string) (string, error
 		return "", fmt.Errorf("ls-remote: %w: %s", err, sanitizeGitErr(stderr.String()))
 	}
 	// "ref: refs/heads/main\tHEAD"
-	for _, line := range strings.Split(out.String(), "\n") {
+	for line := range strings.SplitSeq(out.String(), "\n") {
 		if rest, ok := strings.CutPrefix(line, "ref: "); ok {
 			if tab := strings.IndexByte(rest, '\t'); tab > 0 {
 				return strings.TrimSpace(rest[:tab]), nil
@@ -464,7 +464,7 @@ func hostInList(host, envName string) bool {
 	if host == "" {
 		return false
 	}
-	for _, h := range strings.Split(os.Getenv(envName), ",") {
+	for h := range strings.SplitSeq(os.Getenv(envName), ",") {
 		if strings.ToLower(strings.TrimSpace(h)) == host {
 			return true
 		}

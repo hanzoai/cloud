@@ -609,8 +609,8 @@ func sizeToGB(size string) int {
 		{"T", 1000}, {"G", 1}, {"M", 1.0 / 1000}, {"K", 1.0 / 1e6},
 	}
 	for _, u := range units {
-		if strings.HasSuffix(s, u.suffix) {
-			f, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(s, u.suffix)), 64)
+		if before, ok := strings.CutSuffix(s, u.suffix); ok {
+			f, err := strconv.ParseFloat(strings.TrimSpace(before), 64)
 			if err != nil {
 				return 0
 			}

@@ -27,7 +27,7 @@ func TestGoogleDataAuthorizeScopes(t *testing.T) {
 			t.Errorf("%s scope %q missing %q", id, scope, wantScope)
 		}
 		// Least privilege: every googleapis grant must be a read-only variant.
-		for _, s := range strings.Fields(scope) {
+		for s := range strings.FieldsSeq(scope) {
 			if strings.HasPrefix(s, "https://www.googleapis.com/auth/") &&
 				!strings.HasSuffix(s, ".readonly") && !strings.HasSuffix(s, ".read-only") {
 				t.Errorf("%s scope %q includes a non-read grant %q", id, scope, s)

@@ -369,8 +369,8 @@ func titleGPUModel(token string) string {
 	if m, ok := doGPUModels[token]; ok {
 		return m
 	}
-	if strings.HasPrefix(token, "rtx") {
-		return "RTX " + strings.ToUpper(strings.TrimPrefix(token, "rtx"))
+	if after, ok := strings.CutPrefix(token, "rtx"); ok {
+		return "RTX " + strings.ToUpper(after)
 	}
 	return strings.ToUpper(token)
 }

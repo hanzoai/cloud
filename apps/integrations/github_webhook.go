@@ -211,8 +211,8 @@ func actorOf(ev githubPushEvent) string {
 // predate full refs; the sync itself always carries the whole ref.
 func refShort(ref string) string {
 	for _, p := range []string{"refs/heads/", "refs/tags/"} {
-		if strings.HasPrefix(ref, p) {
-			return strings.TrimPrefix(ref, p)
+		if after, ok := strings.CutPrefix(ref, p); ok {
+			return after
 		}
 	}
 	return ref

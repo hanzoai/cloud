@@ -79,7 +79,7 @@ func TestTheDriftGateSeesEveryApp(t *testing.T) {
 				"directory is in the gate's glob and cannot be built by it", f)
 			continue
 		}
-		for _, name := range strings.Fields(string(m[1])) {
+		for name := range strings.FieldsSeq(string(m[1])) {
 			if prev, dup := covered[name]; dup {
 				t.Errorf("app %q is claimed by both %s and %s — the gate would describe it twice, "+
 					"and the second run's artifact would silently win", name, prev, f)
@@ -98,7 +98,7 @@ func TestTheDriftGateSeesEveryApp(t *testing.T) {
 		t.Fatal("mk/fleet.mk has no EXTERNAL assignment — this test can no longer tell which apps " +
 			"the gate reaches by name, so it would pass by not looking")
 	}
-	for _, name := range strings.Fields(string(m[1])) {
+	for name := range strings.FieldsSeq(string(m[1])) {
 		covered[name] = "mk/fleet.mk EXTERNAL"
 	}
 

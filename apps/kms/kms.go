@@ -456,7 +456,7 @@ func ValidSubpath(p string) bool {
 	if p == "" {
 		return true
 	}
-	for _, seg := range strings.Split(p, "/") {
+	for seg := range strings.SplitSeq(p, "/") {
 		if seg == "" || seg == "." || seg == ".." {
 			return false
 		}

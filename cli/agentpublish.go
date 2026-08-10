@@ -407,7 +407,7 @@ func bindNotes(ctx context.Context, dir, session string, turns []transcriptTurn)
 		return 0, err
 	}
 	n := 0
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
 		sha, ts, ok := strings.Cut(strings.TrimSpace(line), " ")
 		if !ok || existing[sha] {
 			continue

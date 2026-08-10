@@ -158,7 +158,7 @@ func prose(parts []Part) map[string]string {
 // the bare product noun outranks one holding a resource inside it.
 func segments(path string) int {
 	n := 0
-	for _, s := range strings.Split(path, "/") {
+	for s := range strings.SplitSeq(path, "/") {
 		if s != "" {
 			n++
 		}

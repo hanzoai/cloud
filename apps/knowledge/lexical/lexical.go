@@ -134,7 +134,7 @@ func FromPlain(text string) string {
 func plainBlocks(text string) []Block {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	var blocks []Block
-	for _, para := range strings.Split(text, "\n\n") {
+	for para := range strings.SplitSeq(text, "\n\n") {
 		p := strings.Trim(para, "\n")
 		if strings.TrimSpace(p) == "" {
 			continue

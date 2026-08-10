@@ -179,20 +179,6 @@ func uiCloneURL(s *cloud.Service[state], org, project, name string) string {
 	return cloneURL(s, org, project, name)
 }
 
-// uiOrg resolves the caller's validated org and enforces the :org path segment
-// (when present) matches it — the same path-vs-identity guard the smart-HTTP
-// handlers apply, so the UI is not a cross-tenant read hole.
-func uiOrg(c *zip.Ctx) (string, error) {
-	o, ok := org(c)
-	if !ok || o == "" {
-		return "", zip.ErrForbidden("sign in to view Hanzo Git")
-	}
-	if seg := c.Param("org"); seg != "" && seg != o {
-		return "", zip.ErrForbidden("repository belongs to another organization")
-	}
-	return o, nil
-}
-
 // findRepo resolves a repo by name within the caller's org, returning its full
 // metadata (so we get the Project sub-scope needed to open storage). Org-scoped:
 // a name outside the caller's org is simply not found.
@@ -448,7 +434,7 @@ func crumbs(org, repo, ref, p, base string) []crumb {
 		return out
 	}
 	acc := ""
-	for _, seg := range strings.Split(p, "/") {
+	for seg := range strings.SplitSeq(p, "/") {
 		if acc == "" {
 			acc = seg
 		} else {

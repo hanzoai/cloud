@@ -428,7 +428,7 @@ func parseSig(t *testing.T, header string) (int64, string) {
 	t.Helper()
 	var ts int64
 	var v1 string
-	for _, part := range strings.Split(header, ",") {
+	for part := range strings.SplitSeq(header, ",") {
 		kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
 		if len(kv) != 2 {
 			continue

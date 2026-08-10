@@ -54,7 +54,7 @@ func NewTokenProvider(cfg *Config) (*TokenProvider, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read pat_file: %w", err)
 		}
-		for _, line := range strings.Split(string(b), "\n") {
+		for line := range strings.SplitSeq(string(b), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue

@@ -684,7 +684,7 @@ func registryGet(ctx context.Context, endpoint, token string, out any) (string, 
 // nextLink returns the rel="next" target of an RFC-8288 Link header, or "" when the
 // page is the last — the loop's terminating condition.
 func nextLink(header string) string {
-	for _, field := range strings.Split(header, ",") {
+	for field := range strings.SplitSeq(header, ",") {
 		parts := strings.Split(strings.TrimSpace(field), ";")
 		target := strings.TrimSpace(parts[0])
 		if !strings.HasPrefix(target, "<") || !strings.HasSuffix(target, ">") {

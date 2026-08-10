@@ -64,7 +64,7 @@ func MatchPaths(ctx context.Context, repo Repository, rev Revision, glob string)
 // and any empty segment are noise from however the caller spelled the path.
 func splitGlob(glob string) []string {
 	out := make([]string, 0, 8)
-	for _, s := range strings.Split(path.Clean("/"+glob), "/") {
+	for s := range strings.SplitSeq(path.Clean("/"+glob), "/") {
 		if s != "" && s != "." {
 			out = append(out, s)
 		}
