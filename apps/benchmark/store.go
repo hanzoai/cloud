@@ -15,8 +15,15 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
+
+// safeName renders a model id as one path segment: a model is `vendor/name:tag`
+// and each file here is one model's attempts.
+func safeName(s string) string {
+	return strings.NewReplacer("/", "_", ":", "_", " ", "_").Replace(s)
+}
 
 type AttemptStore interface {
 	// Attempts returns every stored attempt for a benchmark (the measured plane).
