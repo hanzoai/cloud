@@ -30,6 +30,7 @@ package fleet_test
 // from "could not be asked", and telling those apart is what package fleet is for.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -64,7 +65,7 @@ func darkChild(t *testing.T, name string, mount cloud.MountFunc) *child {
 		t.Fatalf("console %s: %v", name, err)
 	}
 
-	sock := filepath.Join(t.TempDir(), name+".sock")
+	sock := filepath.Join(planetest.Dir(t), name+".sock")
 	go func() { _ = app.Listen(sock) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	waitFor(t, sock)
