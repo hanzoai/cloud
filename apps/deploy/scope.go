@@ -17,7 +17,7 @@
 // Projects are owned by Hanzo IAM (hanzo.id), the ONE source of truth for the
 // org-scoped (Owner,Name) Project resource. This plane REFLECTS them read-only via
 // the clean iam's in-process project store (github.com/hanzoai/iam/pkg/store over
-// the embedded IAM's orm.DB, no HTTP hop) — mirroring clients/platform/projects.go —
+// the embedded IAM's orm.DB, no HTTP hop) — mirroring apps/platform/projects.go —
 // and never persists a CD-side project row. The retired iam-v1 object store
 // is GONE.
 
@@ -176,7 +176,7 @@ func (sc scope) namespaces() []string {
 // read twin of clients/platform.tenantNamespace (which is "tenant-"+namespace.Sanitize(org)).
 // sc.org is never empty here (resolveScope gates it to a non-empty injective slug), so no
 // "unknown" fallback is needed. The "tenant-" prefix is a frozen infra convention (renaming
-// it is a gated namespace migration — see clients/platform/k8s.go); sc.org is the SAME
+// it is a gated namespace migration — see apps/platform/k8s.go); sc.org is the SAME
 // namespace.Sanitize slug platform stamps, so the two derive the same namespace.
 func tenantNS(org string) string { return "tenant-" + org }
 
