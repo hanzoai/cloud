@@ -21,8 +21,8 @@ import (
 func TestStepViewCarriesJourneyStep(t *testing.T) {
 	js := reflect.TypeFor[JourneyStep]()
 	sv := reflect.TypeFor[stepView]()
-	for i := 0; i < js.NumField(); i++ {
-		f := js.Field(i)
+	for f := range js.Fields() {
+		f := f
 		g, ok := sv.FieldByName(f.Name)
 		if !ok {
 			t.Fatalf("stepView is missing JourneyStep field %s", f.Name)
