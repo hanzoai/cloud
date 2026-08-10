@@ -182,7 +182,7 @@ func requireCSRF(s *cloud.Service[state]) zip.Middleware {
 
 // RequireCSRF exposes the ambient-cookie anti-CSRF gate as a STANDALONE middleware for a
 // co-resident money-WRITE route registered OUTSIDE this package — specifically
-// apps/commerce.go's POST /v1/billing/topup/token. That write used to be wrapped in
+// apps/commerce/mount.go's POST /v1/billing/topup/token. That write used to be wrapped in
 // requireCSRF by the /v1/billing/* forwarder this package once mounted; moving it
 // co-resident (to break the commerce transport self-dispatch loop) must NOT silently
 // drop the gate, so the identical enforcement rides along as its own handler — and it

@@ -16,7 +16,7 @@ package cloud
 //
 //   - the edge BillingGate gates on price(path) > 0, and DefaultPrice returns 0
 //     everywhere, so it never evaluates;
-//   - zen's commerceGate (apps/zen.go) gates the caller's ORG POOL, and every
+//   - zen's commerceGate (apps/zen/zen.go) gates the caller's ORG POOL, and every
 //     self-serve signup lands in the shared "hanzo" org whose pool is funded — so a
 //     brand-new $0 account reads a six-figure balance and sails through;
 //   - zen's own Tenant.Valid() is `t.Org != ""` — auth, not balance.

@@ -1,7 +1,7 @@
 // billing_coresident.go — PinBillingSubject, the subject-pinning middleware that lets
 // commerce's OWN billing READ handlers serve co-resident in the unified cloud binary.
 //
-// WHY IT EXISTS. Co-resident, commerce is EMBEDDED (apps/commerce.go mountCommerce →
+// WHY IT EXISTS. Co-resident, commerce is EMBEDDED (apps/commerce/mount.go Mount →
 // commerce.Embed on the shared zip app), and in prod there is NO standalone commerce
 // backend — the in-cluster `commerce` Service selects the cloud pods themselves. So the
 // /v1/billing/* bridge (billing.go), which forwards to COMMERCE_URL, has nowhere to send

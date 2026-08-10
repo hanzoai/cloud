@@ -38,7 +38,7 @@ var (
 )
 
 // SetExperiment wires the experiments primitive into the campaign plane. Called
-// once at the composition root (apps/wire_seams.go) with the experiments.Assign +
+// once at the composition root (plugin/campaign/seams.go) with the experiments.Assign +
 // experiments.Analyze adapters. Passing nils clears the seam (single-creative mode).
 func SetExperiment(assign AssignFunc, analyze AnalyzeFunc) {
 	assignSeam = assign

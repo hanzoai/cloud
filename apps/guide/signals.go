@@ -14,9 +14,9 @@ import (
 //
 // DECOMPLECT: guide imports NONE of the sibling subsystems it observes. Each
 // cross-subsystem read is an injected func field on Signals, bound once at the
-// composition root (apps/wire_seams.go) to a provably org-scoped, nil-safe read
+// composition root (plugin/guide/seams.go) to a provably org-scoped, nil-safe read
 // (framework.ModuleInstalled, integrations.Connected, …) — exactly the seam
-// pattern clients/coding uses for git's CloneURL/VerifyRef. A nil field
+// pattern apps/coding uses for git's CloneURL/VerifyRef. A nil field
 // honest-degrades its signal to "not present": the vocabulary is the contract, a
 // read fills in the day its seam is bound, so a subsystem that is down or not yet
 // wired can NEVER spuriously satisfy a signal.
@@ -48,7 +48,7 @@ type Signals struct {
 var boundSignals Signals
 
 // BindSignals installs the cross-subsystem reads. The composition root
-// (apps/wire_seams.go) calls it once at init, before guide.Mount. Last write wins;
+// (plugin/guide/seams.go) calls it once at init, before guide.Mount. Last write wins;
 // guide never mutates it after mount.
 func BindSignals(s Signals) { boundSignals = s }
 
