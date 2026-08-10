@@ -105,7 +105,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("notify.Mount: nil app")
 	}
-	log := deps.Logger
+	log := luxlog.Default()
 	if log != nil {
 		log = log.New("subsystem", "notify")
 	}

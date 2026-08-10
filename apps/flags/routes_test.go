@@ -43,7 +43,7 @@ func mountHTTP(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	svc := &cloud.Service[state]{
-		Base:  cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "flags"),
+		Base:  cloud.NewBase(cloud.Deps{}, "flags"),
 		State: state{client: c},
 	}
 	routes(app, svc)

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud/apps/sites"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
@@ -41,7 +43,7 @@ import (
 func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	app := zip.New(zip.Config{
 		AppName:        name,
-		Logger:         deps.Logger,
+		Logger:         luxlog.Default(),
 		ReadBufferSize: cfg.ReadBufferSize,
 		BodyLimit:      cfg.BodyLimit,
 		MCP:            zip.MCPConfig{Source: callerTools(tools)},
@@ -127,7 +129,7 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	// the registry projects.Mount writes is nil here. Co-resident still wins with
 	// no hop — currentResolver prefers the in-process one.
 	sites.SetFallbackResolver(planeSites{})
-	app.Use(sites.New(sites.ConfigFromEnv(cfg.Domain), deps.Logger).Middleware())
+	app.Use(sites.New(sites.ConfigFromEnv(cfg.Domain), luxlog.Default()).Middleware())
 
 	// Edge policy — the role this program absorbs because nothing in front of it
 	// installs middleware. Runs BEFORE identity by design:

@@ -116,9 +116,6 @@ func mountedStore(org, project string) (*store, error) {
 // Mount opens the per-org registry stores, installs the process seam, and registers
 // the /v1/experiments surface.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if deps.Logger == nil {
-		return fmt.Errorf("experiments.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("experiments.Mount: empty deps.DataDir")
 	}

@@ -116,7 +116,7 @@ func harness(t *testing.T, tokens map[string]string, rec *capture, resultFor fun
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app

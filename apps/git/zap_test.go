@@ -72,7 +72,7 @@ func mountZapApp(t *testing.T) (base string, stop func()) {
 		return c.Continue()
 	}))
 
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	// The shared ZAP-over-WebSocket plane — the SAME one serve.go mounts. It

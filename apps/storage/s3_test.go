@@ -21,6 +21,7 @@ package storage_test
 
 import (
 	"encoding/json"
+	luxlog "github.com/luxfi/log"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -90,7 +91,7 @@ func newApp(t *testing.T, creds bool) *zip.App {
 		Enable: []string{"storage", "provisioning"},
 	}
 	deps := cloud.BuildDeps(cfg)
-	app := zip.New(zip.Config{Logger: deps.Logger})
+	app := zip.New(zip.Config{Logger: luxlog.Default()})
 	app.Use(middleware.Recover())
 	specs := []cloud.Plugin{
 		{Name: "storage", Mount: storage.Mount, OwnsHealth: true},

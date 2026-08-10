@@ -397,7 +397,6 @@ func (c *Client) Find(path, env string) ([]SecretMeta, error) {
 	return out, nil
 }
 
-
 // Delete removes a secret. Returns ErrSecretNotFound verbatim for a 404 mapping.
 func (c *Client) Delete(path, name, env string) error {
 	if err := validCoords(path, name, env); err != nil {

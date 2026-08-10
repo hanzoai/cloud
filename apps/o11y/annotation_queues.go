@@ -80,7 +80,7 @@ func mountAnnotationQueues(a *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("o11y.mountAnnotationQueues: open store: %w", err)
 	}
-	log := deps.Logger.New("subsystem", "o11y-reviews")
+	log := luxlog.Default().New("subsystem", "o11y-reviews")
 	s := &annService{store: store, log: log}
 	annQueues = s
 

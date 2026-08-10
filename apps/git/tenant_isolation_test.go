@@ -18,7 +18,7 @@ func mountAppDir(t *testing.T, dir string) *zip.App {
 	t.Helper()
 	t.Setenv("GIT_SSH_ADDR", "127.0.0.1:0") // ephemeral SSH port (no :2222 collisions)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: dir, Domain: "api.hanzo.test"}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: dir, Domain: "api.hanzo.test"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

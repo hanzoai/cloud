@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -17,7 +16,7 @@ import (
 // answered in production while /v1/search/health and /v1/search/version 404'd.
 func TestMountedRoutesAreReachable(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

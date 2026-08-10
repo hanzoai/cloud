@@ -38,6 +38,8 @@ import (
 	"net/http"
 	"sync"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/cron"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -156,9 +158,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("tasks.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("tasks.Mount: nil deps.Logger")
-	}
 
 	// NOT TYPED OPS, and the reason is the wire rather than the want of an edit.
 	// A typed op (zip.Get[In, Out]) is the ONE registry entry every projection
@@ -211,7 +210,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	app.All("/tasks", ui)
 	app.All("/tasks/*", ui)
 
-	deps.Logger.New("subsystem", "tasks").Info("tasks HTTP+UI surface mounted (shared in-process engine)", "brand", deps.Brand)
+	luxlog.Default().New("subsystem", "tasks").Info("tasks HTTP+UI surface mounted (shared in-process engine)", "brand", deps.Brand)
 
 	// Platform cron is a FACET of tasks, not its own subsystem: it mounts NO routes,
 	// only registers durable schedules on the SAME shared engine (cloud.EmbeddedTasks)

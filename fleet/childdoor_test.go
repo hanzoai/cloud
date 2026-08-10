@@ -30,8 +30,8 @@ package fleet_test
 // from "could not be asked", and telling those apart is what package fleet is for.
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"encoding/json"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net/http"
 	"path/filepath"

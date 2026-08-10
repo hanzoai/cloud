@@ -202,7 +202,7 @@ type Snapshot struct {
 	Totals           Totals              `json:"totals"`
 	Cost             Cost                `json:"cost"`
 	Clusters         []Cluster           `json:"clusters"`
-	Nodes            []Machine              `json:"nodes"`
+	Nodes            []Machine           `json:"nodes"`
 	Volumes          []Volume            `json:"volumes"`
 	LoadBalancers    []LoadBalancer      `json:"loadBalancers"`
 	Findings         []Finding           `json:"findings"`

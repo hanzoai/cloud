@@ -86,10 +86,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("entitlements.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("entitlements.Mount: nil deps.Logger")
-	}
-	log := deps.Logger.New("subsystem", "entitlements")
+	log := luxlog.Default().New("subsystem", "entitlements")
 	if deps.DataDir == "" {
 		return fmt.Errorf("entitlements.Mount: empty DataDir")
 	}

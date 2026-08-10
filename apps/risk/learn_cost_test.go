@@ -32,8 +32,6 @@ import (
 	"testing"
 	"time"
 
-	luxlog "github.com/luxfi/log"
-
 	"github.com/hanzoai/cloud"
 )
 
@@ -68,9 +66,7 @@ func benchBatchOf(tb testing.TB, size, iter int, at time.Time) []observation {
 func warmForBench(tb testing.TB) (*plane, tenant) {
 	tb.Helper()
 	probe.reset(true)
-	p, err := newPlane(cloud.NewBase(cloud.Deps{
-		Logger: luxlog.New("riskbench"), Brand: brandA, DataDir: tb.TempDir(),
-	}, "risk"))
+	p, err := newPlane(cloud.NewBase(cloud.Deps{Brand: brandA, DataDir: tb.TempDir()}, "risk"))
 	if err != nil {
 		tb.Fatalf("newPlane: %v", err)
 	}

@@ -165,9 +165,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("ml.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("ml.Mount: nil deps.Logger")
-	}
 
 	s := &cloud.Service[state]{
 		Base:  cloud.NewBase(deps, "ml"),

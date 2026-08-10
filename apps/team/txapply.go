@@ -81,7 +81,7 @@ func (s *session) txCreate(t map[string]any) {
 	doc["createdBy"] = firstNonNil(t["createdBy"], t["modifiedBy"])
 	doc["createdOn"] = firstNonNil(t["createdOn"], t["modifiedOn"])
 	_ = s.store.put(s.org, s.workspace, doc)
-	s.trigger(doc)                  // emulate server triggers (PersonSpace, notify contexts)
+	s.trigger(doc)                 // emulate server triggers (PersonSpace, notify contexts)
 	s.projectNotifications(t, doc) // fan mentions/comments/assignments into the Inbox feed
 }
 
@@ -97,7 +97,7 @@ func (s *session) txUpdate(t map[string]any) map[string]any {
 	doc["modifiedBy"] = t["modifiedBy"]
 	doc["modifiedOn"] = t["modifiedOn"]
 	_ = s.store.put(s.org, s.workspace, doc)
-	s.trigger(doc)                  // member joins/leaves reconcile the chat notify contexts
+	s.trigger(doc)                 // member joins/leaves reconcile the chat notify contexts
 	s.projectNotifications(t, doc) // an assignee change fans an "assigned you" notification
 	return doc
 }

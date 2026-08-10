@@ -67,7 +67,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	log "github.com/luxfi/log"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
@@ -85,7 +85,7 @@ import (
 // a scorer that cannot be reached, and installing conditionally would mean asking
 // at mount time a question whose answer changes every time the risk child starts
 // or stops.
-func installRiskScorer(lg log.Logger) {
+func installRiskScorer(lg luxlog.Logger) {
 	cloud.SetRiskScorer(func(ctx context.Context, org string, q cloud.RiskQuery) (cloud.RiskVerdict, error) {
 		return scoreOverPlane(ctx, lg, org, q)
 	})
@@ -149,7 +149,7 @@ var paymentUnarmed = []string{plane.SignalDevice}
 // THE BUDGET IS THE SEAM'S. cloud.Decide answers at RiskBudget whatever this
 // returns, so a hop bounded any longer would only hold one of the seam's 256
 // slots past the point where its answer could still be used.
-func scoreOverPlane(ctx context.Context, lg log.Logger, org string, q cloud.RiskQuery) (cloud.RiskVerdict, error) {
+func scoreOverPlane(ctx context.Context, lg luxlog.Logger, org string, q cloud.RiskQuery) (cloud.RiskVerdict, error) {
 	// NOT LISTENING IS NOT AN OUTAGE, and telling the two apart is the whole
 	// reason this is a probe and not just a call.
 	//
@@ -261,7 +261,7 @@ var waking atomic.Bool
 // wakeScorer brings the risk child up OFF the request path. The caller has
 // already been answered — absent, allowed, on the record — so this exists only to
 // make the NEXT decision a real one.
-func wakeScorer(lg log.Logger) {
+func wakeScorer(lg luxlog.Logger) {
 	if !waking.CompareAndSwap(false, true) {
 		return
 	}
@@ -382,14 +382,14 @@ func (p payment) diverged() bool { return p.org != p.ledger }
 // settlement without standing up a commerce datastore to hold one. It is set once, by
 // [riskGate], and production never varies it.
 type screen struct {
-	lg      log.Logger
+	lg      luxlog.Logger
 	receipt func(ctx context.Context, org, id string) (settlement, error)
 }
 
 // riskGate resolves the screen. It is called ONCE, at the composition root, and the
 // value is handed to each registration — a screen fetched independently at each door
 // is a screen that can be fetched at one of them, which is the state this closed.
-func riskGate(lg log.Logger) screen { return screen{lg: lg, receipt: receiptOf} }
+func riskGate(lg luxlog.Logger) screen { return screen{lg: lg, receipt: receiptOf} }
 
 // route composes the screen onto a RAW route's handler.
 //

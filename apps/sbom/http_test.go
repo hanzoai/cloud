@@ -35,7 +35,7 @@ func mountApp(t *testing.T) *zip.App {
 	compose(app)
 	// DatastoreEnabled() is false in the harness, so Mount skips the DDL and the
 	// data endpoints answer 503 — the honest, no-fabrication path.
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app

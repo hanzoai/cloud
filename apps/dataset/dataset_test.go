@@ -45,7 +45,7 @@ func newPlane(f *fake) *plane { return newPlaneBilled(f, nil) }
 // real one, which allows everything in a test process because no ledger is
 // configured — the shape every other test wants.
 func newPlaneBilled(f *fake, m meter) *plane {
-	base := cloud.NewBase(cloud.Deps{Logger: luxlog.New("test"), Brand: brand}, "dataset")
+	base := cloud.NewBase(cloud.Deps{Brand: brand}, "dataset")
 	var bill meter = base.Bill
 	if m != nil {
 		bill = m

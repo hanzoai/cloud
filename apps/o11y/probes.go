@@ -33,6 +33,8 @@ import (
 	"sync"
 	"time"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/o11y/pkg/prober"
 	"github.com/luxfi/metric"
 
@@ -289,7 +291,7 @@ var fleetProber *prober.Prober
 // that needed it. O11Y_PROBES=false disables it; O11Y_PROBE_INTERVAL tunes the
 // period.
 func mountProbes(deps cloud.Deps, instruments metric.Registerer) error {
-	log := deps.Logger.New("subsystem", "o11y-probes")
+	log := luxlog.Default().New("subsystem", "o11y-probes")
 
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("O11Y_PROBES")), "false") {
 		log.Info("fleet health probes disabled (O11Y_PROBES=false)")

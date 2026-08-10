@@ -16,7 +16,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -37,7 +36,7 @@ func probeApp(t *testing.T, origins []string) *zip.App {
 	// every client-supplied authority header, and validates nothing — the shape a
 	// deployment has before it is pointed at an issuer, and the one that must not
 	// leave the chain trusting the wire.
-	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol, Logger: luxlog.NewNoOpLogger()})
+	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol})
 	app.Get("/v1/summary", func(c *zip.Ctx) error {
 		return c.JSON(200, map[string]string{"page_title": "Hanzo status"})
 	})
@@ -142,7 +141,7 @@ func TestSummaryEmitsNothingWhenAllowlistEmpty(t *testing.T) {
 // gates verbatim. The chain must strip them whether or not a token validates.
 func TestChainStripsClientSuppliedAuthority(t *testing.T) {
 	pol, _ := edge.New("", "admin", edge.Policy{})
-	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol, Logger: luxlog.NewNoOpLogger()})
+	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol})
 
 	var seen struct{ org, user, admin string }
 	app.Get("/v1/summary", func(c *zip.Ctx) error {

@@ -21,7 +21,6 @@ import (
 	// resolve a key through, so it keys itself. Stated once for the fleet rather
 	// than as a posture each package decides for itself.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
-	luxlog "github.com/luxfi/log"
 )
 
 // stmt is one statement the plane sent to the warehouse, with the values it
@@ -313,7 +312,7 @@ func key(t *testing.T, brandID, org string) tenant {
 // build two planes over the SAME directory and prove a restart carries state.
 func baseAt(t *testing.T, dir string) cloud.Base {
 	t.Helper()
-	return cloud.NewBase(cloud.Deps{Logger: luxlog.New("risktest"), Brand: brandA, DataDir: dir}, "risk")
+	return cloud.NewBase(cloud.Deps{Brand: brandA, DataDir: dir}, "risk")
 }
 
 // free is the money seam as a PLANE test sees it: every bound is granted and

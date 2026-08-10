@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	luxlog "github.com/luxfi/log"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
@@ -59,7 +58,7 @@ func (h *held) tty(ctx context.Context, ns, pod string, argv []string, stdin io.
 // already running.
 func service(t *testing.T, str streamer) *Service {
 	t.Helper()
-	s, err := New(cloud.Deps{Logger: luxlog.NewNoOpLogger(), DataDir: t.TempDir()})
+	s, err := New(cloud.Deps{DataDir: t.TempDir()})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

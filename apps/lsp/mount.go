@@ -39,9 +39,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("lsp.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("lsp.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("lsp.Mount: empty DataDir")
 	}

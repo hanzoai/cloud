@@ -205,9 +205,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if cloud.ZipApp(app) == nil {
 		return fmt.Errorf("git.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("git.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("git.Mount: empty DataDir")
 	}

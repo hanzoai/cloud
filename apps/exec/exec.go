@@ -66,6 +66,8 @@ import (
 	"sort"
 	"strings"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -698,9 +700,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("exec.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("exec.Mount: nil deps.Logger")
-	}
 	if b := strings.TrimSpace(deps.Brand); b != "" {
 		brandOrg = b
 	}
@@ -750,7 +749,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	app.Get("/v1/download/*", download)
 	app.Get("/v1/files/:sid", files)
 
-	deps.Logger.New("subsystem", "exec").Info("code interpreter mounted over sandboxes",
+	luxlog.Default().New("subsystem", "exec").Info("code interpreter mounted over sandboxes",
 		"peer", peer, "brandOrg", brandOrg, "langs", len(langs))
 	return nil
 }

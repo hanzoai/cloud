@@ -36,6 +36,8 @@ import (
 	"sync"
 	"time"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/metering"
@@ -154,7 +156,7 @@ var mounted *cloud.Service[state]
 // Mount wires /v1/x402 and the settlement store. Direct construction (not
 // cloud.Mount) because it holds the package singleton the middleware reaches.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if app == nil || deps.Logger == nil {
+	if app == nil || luxlog.Default() == nil {
 		return errMount("nil app or logger")
 	}
 	if deps.DataDir == "" {

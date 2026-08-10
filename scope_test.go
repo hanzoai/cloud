@@ -44,7 +44,7 @@ func mountAll(t *testing.T, app *zip.App, specs []cloud.Plugin) error {
 	}
 	return cloud.MountAll(app, specs,
 		&cloud.Config{Enable: enable},
-		cloud.Deps{Logger: luxlog.NewNoOpLogger()})
+		cloud.Deps{})
 }
 
 func newApp() *zip.App {

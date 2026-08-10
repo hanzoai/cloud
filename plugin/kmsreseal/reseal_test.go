@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	luxlog "github.com/luxfi/log"
 	"io"
 	"net/http"
 	"os"
@@ -55,7 +56,7 @@ func newCloudApp(t *testing.T) (*zip.App, string, cloud.Deps) {
 		DataDir: dir, Enable: []string{"kms"}, KMSMasterKeyRef: key,
 	}
 	deps := cloud.BuildDeps(cfg)
-	app := zip.New(zip.Config{Logger: deps.Logger})
+	app := zip.New(zip.Config{Logger: luxlog.Default()})
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	if err := cloud.MountAll(app, []cloud.Plugin{{Name: "kms", Mount: kms.Mount, OwnsHealth: true}}, cfg, deps); err != nil {

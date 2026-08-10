@@ -42,6 +42,8 @@ import (
 	"fmt"
 	"net/http"
 
+	luxlog "github.com/luxfi/log"
+
 	"os"
 	"regexp"
 	"strings"
@@ -102,10 +104,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("platform.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("platform.Mount: nil deps.Logger")
-	}
-	log := deps.Logger.New("subsystem", "platform")
+	log := luxlog.Default().New("subsystem", "platform")
 	if deps.DataDir == "" {
 		return fmt.Errorf("platform.Mount: empty DataDir")
 	}

@@ -95,7 +95,7 @@ func mountReader(t *testing.T) *zip.App {
 	// The composer's install, once at the root, ahead of every route it serves:
 	// cloud.Bridge parks the validated org on the context for billing's typed ops.
 	app.Use(cloud.Bridge())
-	if err := billing.Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
+	if err := billing.Mount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
 		t.Fatalf("billing.Mount: %v", err)
 	}
 	return app

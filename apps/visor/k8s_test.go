@@ -105,7 +105,7 @@ func mountK8s(t *testing.T, f *k8sFake) *zip.App {
 	t.Setenv("VISOR_CLIENT_SECRET", "") //
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge()) // typed ops read tenant + request off the context (see mountApp)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app
@@ -244,7 +244,7 @@ func TestK8sNodesRefusesTheOldEnvelope(t *testing.T) {
 	t.Setenv("VISOR_CLIENT_SECRET", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 

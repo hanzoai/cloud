@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
@@ -34,7 +36,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("connectorruntime.Mount: nil app")
 	}
-	log := deps.Logger
+	log := luxlog.Default()
 	g := app.Group("/v1/automations/connectors")
 	// cloud.Bridge is not installed here. Whoever composes the program installs it
 	// once at the root — after the identity check that mints the validated org and

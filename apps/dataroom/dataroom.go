@@ -51,6 +51,8 @@ import (
 	"fmt"
 	"net/http"
 
+	luxlog "github.com/luxfi/log"
+
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/hanzoai/cloud"
@@ -92,13 +94,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("dataroom.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("dataroom.Mount: nil deps.Logger")
-	}
 	// A local child logger for the fallible pre-construction setup (the health-only
 	// degrade paths return before the Service value exists). NewBase derives the
 	// same "subsystem"=dataroom child for the mounted service below.
-	log := deps.Logger.New("subsystem", "dataroom")
+	log := luxlog.Default().New("subsystem", "dataroom")
 	if deps.DataDir == "" {
 		return fmt.Errorf("dataroom.Mount: empty DataDir")
 	}

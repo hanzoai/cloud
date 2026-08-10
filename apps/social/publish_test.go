@@ -42,7 +42,7 @@ func (f *fakePublisher) count() int { f.mu.Lock(); defer f.mu.Unlock(); return l
 func testService(t *testing.T, pub Publisher) *cloud.Service[state] {
 	t.Helper()
 	store := testStore(t)
-	b := cloud.NewBase(cloud.Deps{Logger: luxlog.NewNoOpLogger()}, "social")
+	b := cloud.NewBase(cloud.Deps{}, "social")
 	return &cloud.Service[state]{Base: b, State: state{store: store, pub: pub}}
 }
 

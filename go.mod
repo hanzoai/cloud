@@ -688,11 +688,11 @@ require (
 	github.com/google/uuid v1.6.1-0.20241114170450-2d3c2a9cc518
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
-	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.833.7
+	github.com/hanzoai/agent v1.0.5
+	github.com/hanzoai/ai v1.833.12
 	github.com/hanzoai/authz v1.10.29
 	github.com/hanzoai/base v1.5.17
-	github.com/hanzoai/licensing v0.1.10
+	github.com/hanzoai/licensing v0.1.13
 	github.com/hanzoai/metrics v1.110.6
 	github.com/hanzoai/o11y v1.5.63
 	github.com/hanzoai/thinking v0.1.1 // indirect

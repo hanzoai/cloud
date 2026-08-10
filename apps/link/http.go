@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
@@ -96,10 +98,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("link.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("link.Mount: nil deps.Logger")
-	}
-	log := deps.Logger.New("subsystem", "link")
+	log := luxlog.Default().New("subsystem", "link")
 	if deps.DataDir == "" {
 		return fmt.Errorf("link.Mount: empty DataDir")
 	}

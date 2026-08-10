@@ -67,9 +67,6 @@ var mounted *state
 // Mount opens the per-org book stores, wires the commerce posting source, and registers
 // the /v1/books surface.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if deps.Logger == nil {
-		return fmt.Errorf("books.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("books.Mount: empty deps.DataDir")
 	}

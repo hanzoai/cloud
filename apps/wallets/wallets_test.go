@@ -45,7 +45,7 @@ func newService(t *testing.T, custody map[Kind]Custody, def Kind) (*cloud.Servic
 	t.Cleanup(func() { _ = st.Close() })
 	log := luxlog.New("test")
 	s := &cloud.Service[state]{
-		Base:  cloud.NewBase(cloud.Deps{Logger: log}, "wallets"),
+		Base:  cloud.NewBase(cloud.Deps{}, "wallets"),
 		State: state{store: st, custody: custody, defaultCustody: def},
 	}
 	mounted = s

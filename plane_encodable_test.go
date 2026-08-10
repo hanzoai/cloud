@@ -22,8 +22,8 @@ package cloud_test
 // list of types, and it outlives any individual op.
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"go/parser"
 	"go/token"
 	"io/fs"

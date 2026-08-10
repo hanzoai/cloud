@@ -32,7 +32,7 @@ func mountShare(t *testing.T, cl controller) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "share"), State: state{cl: cl}}
+	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{}, "share"), State: state{cl: cl}}
 	routes(app, s)
 	return app
 }

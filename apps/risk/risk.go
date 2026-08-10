@@ -85,9 +85,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("risk.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("risk.Mount: nil deps.Logger")
-	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "risk")}
 	p, err := newPlane(s.Base)
 	if err != nil {

@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"os"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/o11y"
 	"github.com/zap-proto/zip"
@@ -71,7 +73,7 @@ func run() error {
 	// the trace sink this process registers below is already the destination its
 	// own spans route to. Without this the child served /v1/o11y/* with the global
 	// no-op provider and emitted nothing.
-	defer cloud.InstallTelemetry(context.Background(), deps.Logger, "hanzo-o11y")(context.Background())
+	defer cloud.InstallTelemetry(context.Background(), luxlog.Default(), "hanzo-o11y")(context.Background())
 
 	app := newApp(cfg, deps)
 
@@ -113,8 +115,8 @@ func run() error {
 	// identity boundary deletes that caller's principal and all 365 of them refuse
 	// it — see cloud.Door.
 	cloud.Door(app)
-	if stop, err := cloud.ServePlane("o11y", deps.Logger); err != nil {
-		deps.Logger.Warn("plane: socket not served", "app", "o11y", "err", err)
+	if stop, err := cloud.ServePlane("o11y", luxlog.Default()); err != nil {
+		luxlog.Default().Warn("plane: socket not served", "app", "o11y", "err", err)
 	} else {
 		defer func() { _ = stop() }()
 	}

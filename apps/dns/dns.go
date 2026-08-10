@@ -30,6 +30,8 @@ import (
 	"strings"
 	"time"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -149,8 +151,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Typing this means giving the DNS plane a typed control surface in the plane
 	// itself, not wrapping it here. See LLM.md, "the typed migration".
 	app.Group("/v1/dns").All("/*", e.forward)
-	if deps.Logger != nil {
-		deps.Logger.Info("dns forward head mounted", "upstream", e.base)
+	if luxlog.Default() != nil {
+		luxlog.Default().Info("dns forward head mounted", "upstream", e.base)
 	}
 	return nil
 }

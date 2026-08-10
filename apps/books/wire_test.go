@@ -50,7 +50,7 @@ func mountBooks(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
+	deps := cloud.Deps{DataDir: t.TempDir()}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("mount: %v", err)
 	}

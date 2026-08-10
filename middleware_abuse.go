@@ -49,6 +49,8 @@ import (
 	"strings"
 	"time"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/plane"
@@ -126,7 +128,7 @@ func AbuseGate(deps Deps, t *edge.Traffic) zip.Handler {
 		traffic: t,
 		policy:  deps.GatewayPolicy,
 		meter:   NewResourceMeter(deps, "risk"),
-		log:     deps.Logger,
+		log:     luxlog.Default(),
 		cents:   screenCents(),
 	}
 	return g.handle

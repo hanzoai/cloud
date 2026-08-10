@@ -62,6 +62,8 @@ import (
 	"strconv"
 	"strings"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	psembed "github.com/hanzoai/pubsub/embed"
 )
@@ -116,9 +118,6 @@ func clientPort() (int, error) {
 // Mount starts the embedded PubSub server, binding NATS + JetStream in-process,
 // and registers the tenant door (/v1/pubsub, typed.go) over it.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if deps.Logger == nil {
-		return fmt.Errorf("pubsub.Mount: nil deps.Logger")
-	}
 	// A typed op is a route PLUS a registry entry, and the registry lives on
 	// the App. A router that cannot reach it would serve every route with no
 	// schema, no prose, no MCP tool and no SDK method — so the mount FAILS
@@ -126,7 +125,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if cloud.ZipApp(app) == nil {
 		return fmt.Errorf("pubsub.Mount: router is not a zip app, so the typed ops have no registry")
 	}
-	log := deps.Logger.New("subsystem", "pubsub")
+	log := luxlog.Default().New("subsystem", "pubsub")
 
 	dataDir := firstNonEmpty(
 		os.Getenv("CLOUD_PUBSUB_STORE_DIR"),

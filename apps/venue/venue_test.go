@@ -155,7 +155,7 @@ func qint(v any) int {
 
 func newVenue(t *testing.T, f folder, kc *kms.Client) *zip.App {
 	t.Helper()
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Domain: "api.hanzo.ai", Brand: "hanzo", KMS: kc}
+	deps := cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.ai", Brand: "hanzo", KMS: kc}
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "venue"),
 		State: state{kms: kc, fleet: f, drivers: map[string]driver{

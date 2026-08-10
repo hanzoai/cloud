@@ -330,9 +330,6 @@ func requestHost(ctx context.Context) string {
 // injected) degrades to the in-memory seed switches — WaitlistModeForHost then
 // fail-opens. Mounts AFTER flags so the engine's platform-switch plane is installed first.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if deps.Logger == nil {
-		return fmt.Errorf("admission.Mount: nil deps.Logger")
-	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("admission.Mount: empty deps.DataDir")
 	}

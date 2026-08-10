@@ -66,6 +66,8 @@ import (
 	"strconv"
 	"strings"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -131,9 +133,6 @@ func storeFor(s *cloud.Service[state], org string) (*Store, error) {
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("sandbox.Mount: nil app")
-	}
-	if deps.Logger == nil {
-		return fmt.Errorf("sandbox.Mount: nil deps.Logger")
 	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("sandbox.Mount: empty DataDir")
@@ -249,8 +248,8 @@ type Service = cloud.Service[state]
 // New builds the subsystem without registering anything, for a host that wants
 // to dispatch the shared collection routes itself.
 func New(deps cloud.Deps) (*Service, error) {
-	if deps.Logger == nil {
-		return nil, fmt.Errorf("sandbox.New: nil deps.Logger")
+	if luxlog.Default() == nil {
+		return nil, fmt.Errorf("sandbox.New: nil luxlog.Default()")
 	}
 	if deps.DataDir == "" {
 		return nil, fmt.Errorf("sandbox.New: empty DataDir")

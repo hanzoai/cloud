@@ -76,7 +76,7 @@ func TestMountAll_ShutdownHooksLIFOAfterDrain(t *testing.T) {
 		{Name: "c", Mount: noopMount, Shutdown: record("c")},
 	}
 	cfg := &cloud.Config{Enable: []string{"a", "b", "c"}}
-	deps := cloud.Deps{Logger: luxlog.NewNoOpLogger()}
+	deps := cloud.Deps{}
 
 	// A request that parks inside its handler until released, so the shutdown drain
 	// has something real to wait on. Its drain tick is stamped the instant the
@@ -190,7 +190,7 @@ func TestMountAll_ShutdownRegistration_EnablementAndNil(t *testing.T) {
 	}
 	cfg := &cloud.Config{Enable: []string{"enabled", "nilsd"}} // "disabled" omitted
 
-	if err := cloud.MountAll(app, specs, cfg, cloud.Deps{Logger: luxlog.NewNoOpLogger()}); err != nil {
+	if err := cloud.MountAll(app, specs, cfg, cloud.Deps{}); err != nil {
 		t.Fatalf("MountAll: %v", err)
 	}
 	if err := app.Shutdown(); err != nil {
