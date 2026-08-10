@@ -12,10 +12,6 @@ package tracker
 // red rather than passing unnoticed.
 
 import (
-	"bytes"
-	"encoding/json"
-	"io"
-	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
@@ -46,33 +42,6 @@ func mountWire(t *testing.T) *zip.App {
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 	return app
-}
-
-// doWire issues one request as a VALIDATED principal of org and returns the
-// status and the raw body — raw, because half the assertions here are about
-// whether the body is a JSON array, an object, or nothing at all.
-func doWire(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
-	t.Helper()
-	var r io.Reader
-	if body != nil {
-		b, _ := json.Marshal(body)
-		r = bytes.NewReader(b)
-	}
-	rq := httptest.NewRequest(method, path, r)
-	if body != nil {
-		rq.Header.Set("Content-Type", "application/json")
-	}
-	if org != "" {
-		rq.Header.Set("X-Org-Id", org)
-		rq.Header.Set("X-User-Id", "u_"+org) // a validated principal (principal.Org gate)
-	}
-	resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
-	if err != nil {
-		t.Fatalf("Test %s %s: %v", method, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	raw, _ := io.ReadAll(resp.Body)
-	return resp.StatusCode, raw
 }
 
 var untypedByDesign = map[string]string{
