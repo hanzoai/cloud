@@ -84,11 +84,9 @@ func ParseLinks(gitLog string) []Link {
 		if rec == "" {
 			continue
 		}
-		nl := strings.IndexByte(rec, '\n')
-		sha := rec
-		body := ""
-		if nl >= 0 {
-			sha, body = rec[:nl], rec[nl+1:]
+		sha, body := rec, ""
+		if head, rest, split := strings.Cut(rec, "\n"); split {
+			sha, body = head, rest
 		}
 		sha = strings.TrimSpace(sha)
 		if !isHex(sha) {

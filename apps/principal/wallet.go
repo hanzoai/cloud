@@ -163,8 +163,8 @@ func Subject(c *zip.Ctx, ledger string) string {
 // name and anything without one is already the name. It is a parse, never a decision:
 // Payer alone decides who the resulting credential pays.
 func nameOf(id string) string {
-	if i := strings.IndexByte(id, '/'); i >= 0 {
-		return id[i+1:]
+	if _, after, ok := strings.Cut(id, "/"); ok {
+		return after
 	}
 	return id
 }

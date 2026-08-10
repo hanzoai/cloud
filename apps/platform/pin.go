@@ -190,8 +190,8 @@ func readPinFile(path string) (*pinFile, error) {
 // round-trip through a parser — which would reflow that away — is not an option.
 func (f *pinFile) setTag(tag string) {
 	ln := f.lines[f.tagLine]
-	at := strings.Index(ln, "tag:")
-	rest := ln[at+len("tag:"):]
+	before, after, _ := strings.Cut(ln, "tag:")
+	rest := after
 	i := 0
 	for i < len(rest) && (rest[i] == ' ' || rest[i] == '\t') {
 		i++
@@ -200,7 +200,7 @@ func (f *pinFile) setTag(tag string) {
 	for j < len(rest) && rest[j] != ' ' && rest[j] != '\t' && rest[j] != '#' {
 		j++
 	}
-	f.lines[f.tagLine] = ln[:at] + "tag: " + tag + rest[j:]
+	f.lines[f.tagLine] = before + "tag: " + tag + rest[j:]
 }
 
 // write persists the file and reads it back to prove the pin took — the one write

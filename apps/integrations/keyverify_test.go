@@ -395,7 +395,7 @@ func TestCatalogWiring(t *testing.T) {
 		if s.path != "/2010-04-01/Accounts/AC777.json" {
 			t.Errorf("twilio path = %q", s.path)
 		}
-		if user := strings.SplitN(decodeBasic(t, s.auth), ":", 2)[0]; user != "AC777" {
+		if user, _, _ := strings.Cut(decodeBasic(t, s.auth), ":"); user != "AC777" {
 			t.Errorf("twilio basic user = %q", user)
 		}
 		if res.Tokens["auth_token"] == "" || res.ExternalID != "AC777" {

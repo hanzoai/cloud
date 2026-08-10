@@ -470,8 +470,8 @@ type safeProposer interface {
 // two ring handles. A ref without the separator is treated as the MPC wallet id
 // with no Safe id (Sign still works; ProposeTx fails closed).
 func splitSafeRef(ref string) (mpcWalletID, smartWalletID string) {
-	if i := strings.IndexByte(ref, '|'); i >= 0 {
-		return ref[:i], ref[i+1:]
+	if before, after, ok := strings.Cut(ref, "|"); ok {
+		return before, after
 	}
 	return ref, ""
 }
