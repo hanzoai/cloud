@@ -81,12 +81,16 @@ func planeCredit(ctx context.Context, in *plane.CreditIn) (*plane.Credited, erro
 	if err != nil {
 		return nil, err
 	}
-	if _, derr := fin.Deposit(ctx, types.DepositInput{
+	entryID, derr := fin.Deposit(ctx, types.DepositInput{
 		Org: org, Subject: subject, Currency: amount.Currency().Code,
 		Amount: credit.FromDecimal(amount.Decimal()),
 		Ref:    in.Ref, Notes: in.Notes, Tags: in.Tags,
-	}); derr != nil {
+	})
+	if derr != nil {
 		return nil, zip.Errorf(500, "credit %s/%s: %v", org, subject, derr)
 	}
-	return &plane.Credited{Amount: in.Amount}, nil
+	// The entry id travels. Deposit has always returned it and this op used to
+	// discard it, which left every cross-process credit unciteable: the caller
+	// knew money had moved and could name nothing in the books that moved it.
+	return &plane.Credited{Amount: in.Amount, ID: entryID}, nil
 }
