@@ -4613,12 +4613,61 @@ it never reports "not configured" for something that is one socket away.
 See "Inter-app calls" above for the mechanism. The rule is the same whatever the
 transport: one owner, everyone else asks.
 
-**Five subsystems broke this way**, each silently, each fixed by publishing a method
+**Six subsystems broke this way**, each silently, each fixed by publishing a method
 from the owner: the prepaid gate (which ALLOWED — every priced act became free), the
 balance read (501 on funded accounts), the identity roster (campaigns mailed nobody),
-secrets (a stored provider read back as "not configured"), and the welcome grant (an
-org opened broke, and the paywall then refused it correctly for a reason nobody chose).
+secrets (a stored provider read back as "not configured"), the welcome grant (an
+org opened broke, and the paywall then refused it correctly for a reason nobody chose),
+and the ADMIN CREDIT GRANT — the last one, and the only WRITE among them.
 credits/usage/ledger are three projections of ONE entry list and went together.
+
+**The grant was the write side of a read that had already been fixed, and it outlived
+the fix by that whole time.** `apps/billing`'s balance read was converted with a comment
+naming this exact defect ("rather than reporting 'not configured' for a ledger that
+exists one socket away — which is what answered 501 on a funded account once apps became
+their own binaries"); the credit beside it was not. So an operator crediting an org got
+HTTP 200 carrying `{"status":"error","msg":"grant failed: commerce not configured"}` —
+measured live on api.hanzo.ai — for a ledger reachable at `/var/lib/cloud/run/commerce.sock`
+in the same pod. The 200 is by construction and correct: a failed grant is a typed
+`GrantOut`, not an HTTP error. Nothing was wrong with the money, the gate, the audit
+trail or the address; one leg of one function had never been converted.
+
+Four things are worth carrying off it:
+
+- **A read and its write are ONE conversion.** Converting the read alone leaves a
+  surface that can be looked at and not used, and it reads as working — nobody notices a
+  write nobody is making until an operator makes one. When you convert a plane read,
+  convert its write in the same change or write down why not.
+- **The env var was never the fix, and pointing it at the obvious Service is worse than
+  leaving it unset.** `CLOUD_COMMERCE_HTTP_URL` is unset on the `cloud` Deployment, which
+  looks like the whole bug. But `svc/commerce` is an ALIAS BACK TO THE SAME POD
+  (`8001 → targetPort 8000`, selector `app.kubernetes.io/name=cloud`), so setting it
+  would send the deposit to the public edge of the binary it left — the self-re-entry
+  `plane/commerce/commerce.go` records as what killed the billing gate. A call BY NAME
+  cannot express that mistake, which is the argument for the plane over any URL.
+- **A REQUIRED ref is a contract difference, not a policy one, and it must not become
+  two rules.** The co-resident ledger accepts an empty idempotency key (no dedup);
+  `plane.CreditIn.Ref` is REQUIRED, because an op that CREATES money and can be replayed
+  is a money printer. `grantIdempotencyKey` used to answer `""` when the operator supplied
+  no nonce — deliberately, since no value is both retry-stable and grant-unique — and that
+  answer could not cross the plane at all. It is `grantRef` now and always answers: the
+  deterministic hash when there is a nonce, a FRESH one when there is not, which is what
+  "additive" means stated as a value instead of as an absence. One rule, both transports;
+  a grant's identity must not depend on which process holds the books.
+- **The test fixture was the reason nobody saw it.** `newCockpitFakes` handed admin a
+  reachable `httptest` commerce URL, so `commerce.Client.Ready()` was TRUE in every test
+  and FALSE in every production process. The suite was green on an arrangement production
+  has never had. It serves the two finance ops on the REAL plane now
+  (`cockpitFakes.servePlaneBooks`), and `apps/admin/core/grant_plane_test.go` drives
+  `grantDeposit` with no co-resident ledger — which is production's arrangement, not a
+  degraded one.
+
+The member-addressed refusal went with it. The HTTP deposit was org-keyed, so a grant
+naming a member of a per-member org was REFUSED rather than silently credited to the pool
+— right, given that wire. `plane.CreditIn` carries the subject, so the refusal became a
+false negative and is deleted; `plane.Credited` gained an `ID` (appended, per the wire
+rule) so the receipt's `transactionId` cites commerce's entry instead of echoing back the
+idempotency key it just sent.
 
 Three rules fell out of doing it, and they are worth reusing:
 
@@ -4626,6 +4675,12 @@ Three rules fell out of doing it, and they are worth reusing:
   peer is the legitimate split-deploy (or no-money-plane) shape, and erroring there
   502s a deployment that is working as designed. A corrupt reply rendered as zero is a
   funded account shown as broke.
+  **Unless there is nowhere to fall back TO, and a WRITE usually has nowhere.** The rule
+  is about a caller with a second way to get the answer; the admin grant has none — a
+  deployment that runs no commerce cannot credit anybody — so `ErrNoPeer` FAILS the grant
+  rather than being read as absence. Read literally, the rule would have turned the one
+  honest error on that path into a silent success, which is worse than the defect it
+  replaced. Ask what the fall-back IS before taking it.
 - **The billed or read ORG rides the CALLER, never the argument.** A caller that could
   name the org in a body could bill or read another tenant. `TestNoPlaneInputCanNameAnOrg`
   pins it structurally: no input type on the plane may carry an Org or Owner field.
