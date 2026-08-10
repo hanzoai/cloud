@@ -2060,6 +2060,8 @@ github.com/zap-proto/zap2pb v0.2.0 h1:sos6HnayhGMGLRO54px1InzimDzTZ2o5TSMEatYBjz
 github.com/zap-proto/zap2pb v0.2.0/go.mod h1:wD97Z2VTPabDq/4AMNL++PWnQ0YwEtajiuNkLGg3/18=
 github.com/zap-proto/zip v1.27.0 h1:JoCSEmRYSLgYigD2P9A+7N0BzAGFmss5DXDyFolbDb4=
 github.com/zap-proto/zip v1.27.0/go.mod h1:lzvmUHIJG3cO9r6HJ4a3Cuk4FHb3LtzWa76ef2rJW84=
+github.com/zap-proto/zip v1.27.2 h1:TFFEZ+tqUX+ZNMtT7UUsctCSM/hnvDv/xLy2Opnzp4I=
+github.com/zap-proto/zip v1.27.2/go.mod h1:lzvmUHIJG3cO9r6HJ4a3Cuk4FHb3LtzWa76ef2rJW84=
 github.com/zeebo/assert v1.3.1 h1:vukIABvugfNMZMQO1ABsyQDJDTVQbn+LWSMy1ol1h6A=
 github.com/zeebo/assert v1.3.1/go.mod h1:Pq9JiuJQpG8JLJdtkwrJESF0Foym2/D9XMU5ciN/wJ0=
 github.com/zeebo/blake3 v0.2.4 h1:KYQPkhpRtcqh0ssGYcKLG1JYvddkEA8QwCM/yBqhaZI=

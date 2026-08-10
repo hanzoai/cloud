@@ -236,7 +236,7 @@ func Listening(path string) (bool, error) {
 		_ = c.Close()
 		return true, nil
 	}
-	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED) {
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ENOTSOCK) {
 		return false, nil
 	}
 	return false, err
