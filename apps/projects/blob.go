@@ -227,11 +227,11 @@ func stripSingleRoot(out *site) {
 	}
 	root := ""
 	for name := range out.files {
-		i := strings.IndexByte(name, '/')
-		if i < 0 {
+		before, _, ok := strings.Cut(name, "/")
+		if !ok {
 			return // a root-level file that isn't index.html — not a single wrapper
 		}
-		top := name[:i]
+		top := before
 		if root == "" {
 			root = top
 		} else if top != root {
