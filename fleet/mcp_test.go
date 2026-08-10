@@ -16,6 +16,7 @@ package fleet_test
 // a child from the door turns it red. See TestDoorListsExactlyWhatItsChildrenServe.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
 	"io"
@@ -52,7 +53,7 @@ type thingOut struct {
 // once its socket accepts.
 func start(t *testing.T, name string, ops int) *child {
 	t.Helper()
-	sock := filepath.Join(t.TempDir(), name+".sock")
+	sock := filepath.Join(planetest.Dir(t), name+".sock")
 	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
 	for i := 0; i < ops; i++ {
 		id := opID(name, i)

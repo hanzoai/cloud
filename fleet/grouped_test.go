@@ -21,6 +21,7 @@ package fleet_test
 // measure a fleet that does not exist.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
 	"path/filepath"
@@ -72,7 +73,7 @@ func corpus(t *testing.T) map[string][]fleet.Op {
 // measurement below a measurement — an enum's prose is a projection of it.
 func serving(t *testing.T, by map[string][]fleet.Op) *zip.App {
 	t.Helper()
-	dir := t.TempDir()
+	dir := planetest.Dir(t)
 	kids := map[string]*child{}
 	apps := make([]string, 0, len(by))
 	for app := range by {
@@ -315,7 +316,7 @@ func textOf(t *testing.T, res map[string]any) string {
 // nothing above exercises this at all.
 func routed(t *testing.T, name string, routes ...string) *child {
 	t.Helper()
-	sock := filepath.Join(t.TempDir(), name+".sock")
+	sock := filepath.Join(planetest.Dir(t), name+".sock")
 	a := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
 	for _, r := range routes {
 		zip.Post(a, r, func(_ context.Context, in *thingIn) (*thingOut, error) {

@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -74,7 +75,7 @@ type published struct {
 
 func record(t *testing.T) *recorder {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	r := &recorder{}
 	app := zip.New(zip.Config{AppName: "git"})
 	zip.Post[plane.Visibility, struct{}](app, "/git/publish",
@@ -205,7 +206,7 @@ func TestRetractionReachesTheCanonicalRepo(t *testing.T) {
 // create — the next update reconciles.
 func TestPublishSurvivesAnUnmountedGitPlane(t *testing.T) {
 	app := mountApp(t)
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir()) // no git socket here
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // no git socket here
 
 	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
 		map[string]any{"name": "Alone", "slug": "alone"}); code != http.StatusCreated {

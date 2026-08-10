@@ -3,6 +3,7 @@
 package ai
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"fmt"
 	"net"
@@ -34,7 +35,7 @@ import (
 // would show the ref arriving and say nothing about the money.
 func serveCommerce(t *testing.T, seedSubject string, seedCents int64) finance.Client {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 
