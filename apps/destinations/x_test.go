@@ -26,16 +26,15 @@ func xStubOAuth(nonce string, ts int64) func() {
 // xSigFromHeader extracts and percent-decodes the oauth_signature from an OAuth header.
 func xSigFromHeader(hdr string) string {
 	const mark = `oauth_signature="`
-	i := strings.Index(hdr, mark)
-	if i < 0 {
+	_, rest, ok := strings.Cut(hdr, mark)
+	if !ok {
 		return ""
 	}
-	rest := hdr[i+len(mark):]
-	j := strings.Index(rest, `"`)
-	if j < 0 {
+	raw, _, closed := strings.Cut(rest, `"`)
+	if !closed {
 		return ""
 	}
-	dec, err := url.PathUnescape(rest[:j])
+	dec, err := url.PathUnescape(raw)
 	if err != nil {
 		return ""
 	}

@@ -548,8 +548,8 @@ func (f *ledgerFinance) Close() error {
 // "wallet". Lowercased + trimmed so "Acme/Bob" and "acme/bob" are the one wallet.
 func walletAcct(subject string) string {
 	subject = strings.ToLower(strings.TrimSpace(subject))
-	if i := strings.IndexByte(subject, '/'); i >= 0 {
-		if suffix := strings.ReplaceAll(subject[i+1:], "/", ":"); suffix != "" {
+	if _, after, ok := strings.Cut(subject, "/"); ok {
+		if suffix := strings.ReplaceAll(after, "/", ":"); suffix != "" {
 			return acctWallet + ":" + suffix
 		}
 	}

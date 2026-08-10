@@ -59,8 +59,8 @@ func stripFrontmatter(md string) string {
 	}
 	rest := md[len("---\n"):]
 	// The closing fence is a line that is exactly "---".
-	if i := strings.Index(rest, "\n---"); i >= 0 {
-		after := rest[i+len("\n---"):]
+	if _, after, ok := strings.Cut(rest, "\n---"); ok {
+		after := after
 		return strings.TrimSpace(strings.TrimPrefix(after, "\n"))
 	}
 	// Unterminated frontmatter — treat the whole thing as body rather than dropping it.

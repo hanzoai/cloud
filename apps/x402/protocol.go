@@ -344,12 +344,12 @@ func ChainID(network string) (int64, error) {
 // per CAIP-2: namespace is [-a-z0-9]{3,8}, reference is [-_a-zA-Z0-9]{1,32}.
 func parseCAIP2(network string) (namespace, reference string, err error) {
 	s := strings.TrimSpace(network)
-	i := strings.IndexByte(s, ':')
-	if i < 0 {
+	before, after, ok := strings.Cut(s, ":")
+	if !ok {
 		return "", "", &Invalid{Reason: reasonNetwork, Detail: fmt.Sprintf(
 			"network %q is not CAIP-2 (namespace:reference, e.g. eip155:8453)", network)}
 	}
-	namespace, reference = s[:i], s[i+1:]
+	namespace, reference = before, after
 	if !caip2Token(namespace, 3, 8, false) || !caip2Token(reference, 1, 32, true) {
 		return "", "", &Invalid{Reason: reasonNetwork,
 			Detail: fmt.Sprintf("network %q is not a well-formed CAIP-2 identifier", network)}

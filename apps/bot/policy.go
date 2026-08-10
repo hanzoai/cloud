@@ -1383,8 +1383,8 @@ func isEnvAssignment(token string) bool {
 }
 
 func flagOf(lower string) string {
-	if i := strings.IndexByte(lower, '='); i >= 0 {
-		return lower[:i]
+	if before, _, ok := strings.Cut(lower, "="); ok {
+		return before
 	}
 	return lower
 }
