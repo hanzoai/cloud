@@ -117,6 +117,7 @@ package iam
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -124,6 +125,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/brand"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	iamserver "github.com/hanzoai/iam/server"
 	"github.com/hanzoai/orm"
@@ -189,6 +191,21 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	exposeApproval()
 
 	log := luxlog.Default().New("subsystem", "iam")
+
+	// THE BRAND MAP IS DERIVED, NOT WRITTEN DOWN. iam resolves each brand's OIDC
+	// issuer from the request Host through IAM_ISSUER_MAP, and that map was a
+	// thirteen-entry JSON blob duplicated in two deployment files — two copies of
+	// a cross-brand routing table the brand registry already holds. A new brand
+	// was three edits away from minting under another brand's issuer, and `iss`
+	// is the boundary a relying party pins, so its own clients would reject it.
+	//
+	// An operator who pins one still wins: this fills the variable only when it is
+	// empty, so a deployment can still say something the registry does not know.
+	if os.Getenv("IAM_ISSUER_MAP") == "" {
+		if b, err := json.Marshal(brand.IssuerByHost()); err == nil {
+			_ = os.Setenv("IAM_ISSUER_MAP", string(b))
+		}
+	}
 
 	dir, initDataPath := paths(deps)
 
