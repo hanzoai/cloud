@@ -668,7 +668,7 @@ func envList(name string) []string { return splitList(os.Getenv(name)) }
 
 func splitList(v string) []string {
 	var out []string
-	for _, part := range strings.Split(v, ",") {
+	for part := range strings.SplitSeq(v, ",") {
 		if part = strings.TrimSpace(part); part != "" {
 			out = append(out, part)
 		}

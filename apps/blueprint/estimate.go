@@ -330,8 +330,8 @@ func parseCPU(s string) (float64, bool) {
 	if s == "" {
 		return 0, false
 	}
-	if strings.HasSuffix(s, "m") {
-		if n, err := strconv.ParseFloat(strings.TrimSuffix(s, "m"), 64); err == nil && n > 0 {
+	if before, ok := strings.CutSuffix(s, "m"); ok {
+		if n, err := strconv.ParseFloat(before, 64); err == nil && n > 0 {
 			return n / 1000, true
 		}
 		return 0, false

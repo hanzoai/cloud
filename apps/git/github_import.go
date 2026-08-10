@@ -333,7 +333,7 @@ func (s *storage) lsRemoteHeads(ctx context.Context, srcURL string, env []string
 	if err := cmd.Run(); err != nil {
 		return nil, nil, "", fmt.Errorf("ls-remote: %w: %s", err, sanitizeGitErr(stderr.String()))
 	}
-	for _, line := range strings.Split(out.String(), "\n") {
+	for line := range strings.SplitSeq(out.String(), "\n") {
 		// "ref: refs/heads/main\tHEAD" — the default-branch symref.
 		if rest, ok := strings.CutPrefix(line, "ref: "); ok {
 			if tab := strings.IndexByte(rest, '\t'); tab > 0 {

@@ -164,7 +164,7 @@ func printG1Delta(srcCSV, cloudCSV string) {
 
 func splitCSV(s string) []string {
 	var out []string
-	for _, p := range strings.Split(s, ",") {
+	for p := range strings.SplitSeq(s, ",") {
 		if pp := strings.TrimSpace(p); pp != "" {
 			out = append(out, pp)
 		}

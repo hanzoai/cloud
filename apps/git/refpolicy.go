@@ -498,7 +498,7 @@ func clip(s string, max int) string {
 // a space-separated list, so "side-band-64k" is not matched by a longer name
 // that merely contains it.
 func hasCap(caps, want string) bool {
-	for _, f := range strings.Fields(caps) {
+	for f := range strings.FieldsSeq(caps) {
 		if f == want || strings.HasPrefix(f, want+"=") {
 			return true
 		}

@@ -534,7 +534,7 @@ func sourceHostAllowed(host string) bool {
 		return true
 	}
 	if extra := strings.TrimSpace(os.Getenv(srcHostEnv)); extra != "" {
-		for _, h := range strings.Split(extra, ",") {
+		for h := range strings.SplitSeq(extra, ",") {
 			if host == strings.ToLower(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(h), "."))) {
 				return true
 			}

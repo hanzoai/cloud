@@ -368,7 +368,7 @@ func (o ops) search(ctx context.Context, in *searchQuery) (*quoteList, error) {
 		return nil, zip.ErrBadRequest("q (keyword) is required")
 	}
 	var tlds []string
-	for _, t := range strings.Split(strings.TrimSpace(in.TLD), ",") {
+	for t := range strings.SplitSeq(strings.TrimSpace(in.TLD), ",") {
 		if t = strings.TrimSpace(t); t != "" {
 			tlds = append(tlds, t)
 		}
@@ -402,7 +402,7 @@ func (o ops) availability(ctx context.Context, in *availabilityQuery) (*quoteLis
 		return nil, zip.ErrBadRequest("domain is required (comma-separate for multiple)")
 	}
 	var names []string
-	for _, n := range strings.Split(raw, ",") {
+	for n := range strings.SplitSeq(raw, ",") {
 		if n = strings.ToLower(strings.TrimSpace(n)); n != "" {
 			names = append(names, n)
 		}

@@ -116,7 +116,7 @@ func repoOK(name string) bool {
 	if name == "" || len(name) > 255 {
 		return false
 	}
-	for _, seg := range strings.Split(name, "/") {
+	for seg := range strings.SplitSeq(name, "/") {
 		if !segRE.MatchString(seg) {
 			return false
 		}
@@ -690,7 +690,7 @@ func (o ops) catalog(ctx context.Context, org string) ([]string, bool, error) {
 // nextLink extracts the next-page path from an RFC 5988 Link header
 // (`</v2/_catalog?last=…&n=…>; rel="next"`), empty when there is none.
 func nextLink(h string) string {
-	for _, part := range strings.Split(h, ",") {
+	for part := range strings.SplitSeq(h, ",") {
 		if !strings.Contains(part, `rel="next"`) {
 			continue
 		}

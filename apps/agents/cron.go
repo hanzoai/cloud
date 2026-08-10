@@ -74,7 +74,7 @@ func parseField(f string, r fieldRange) (uint64, error) {
 		return 0, fmt.Errorf("empty field")
 	}
 	var bits uint64
-	for _, term := range strings.Split(f, ",") {
+	for term := range strings.SplitSeq(f, ",") {
 		tb, err := parseTerm(term, r)
 		if err != nil {
 			return 0, err

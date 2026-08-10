@@ -62,7 +62,7 @@ func resolveGitHosts() []string {
 		return defaultGitProviderHosts
 	}
 	var out []string
-	for _, h := range strings.Split(raw, ",") {
+	for h := range strings.SplitSeq(raw, ",") {
 		if h = strings.ToLower(strings.TrimSpace(h)); h != "" {
 			out = append(out, h)
 		}

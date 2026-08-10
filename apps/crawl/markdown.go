@@ -79,7 +79,7 @@ func (w *writer) element(n *html.Node) {
 		var inner writer
 		inner.base = w.base
 		inner.block(n)
-		for _, line := range strings.Split(strings.TrimSpace(inner.out.String()), "\n") {
+		for line := range strings.SplitSeq(strings.TrimSpace(inner.out.String()), "\n") {
 			w.para("> " + line)
 		}
 

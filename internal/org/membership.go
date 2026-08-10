@@ -142,7 +142,7 @@ func parseReplicasEnv(v string) []Member {
 		return nil
 	}
 	var out []Member
-	for _, part := range strings.Split(v, ",") {
+	for part := range strings.SplitSeq(v, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue

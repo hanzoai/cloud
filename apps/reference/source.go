@@ -39,7 +39,7 @@ func errEmpty(name string) error {
 func parseLines(source string, value map[string]string) func([]byte) ([]Entry, error) {
 	return func(body []byte) ([]Entry, error) {
 		out := make([]Entry, 0, 1024)
-		for _, line := range strings.Split(string(body), "\n") {
+		for line := range strings.SplitSeq(string(body), "\n") {
 			line = strings.ToLower(strings.TrimSpace(line))
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
@@ -133,7 +133,7 @@ func block(p netip.Prefix, class, operator, region string) Entry {
 func parseCIDRs(source, class, operator string) func([]byte) ([]Entry, error) {
 	return func(body []byte) ([]Entry, error) {
 		out := make([]Entry, 0, 256)
-		for _, line := range strings.Split(string(body), "\n") {
+		for line := range strings.SplitSeq(string(body), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
@@ -157,7 +157,7 @@ func parseCIDRs(source, class, operator string) func([]byte) ([]Entry, error) {
 // own class.
 func parseTor(body []byte) ([]Entry, error) {
 	out := make([]Entry, 0, 2048)
-	for _, line := range strings.Split(string(body), "\n") {
+	for line := range strings.SplitSeq(string(body), "\n") {
 		p, ok := prefix(line)
 		if !ok {
 			continue
@@ -289,7 +289,7 @@ func parseFastly(body []byte) ([]Entry, error) {
 func geofeed(source, operator string) func([]byte) ([]Entry, error) {
 	return func(body []byte) ([]Entry, error) {
 		var out []Entry
-		for _, line := range strings.Split(string(body), "\n") {
+		for line := range strings.SplitSeq(string(body), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
@@ -338,7 +338,7 @@ func parseSpecial(body []byte) ([]Entry, error) {
 			continue
 		}
 		name := strings.Trim(strings.TrimSpace(row[1]), `"`)
-		for _, part := range strings.Split(row[0], ",") {
+		for part := range strings.SplitSeq(row[0], ",") {
 			if cut := strings.IndexByte(part, '['); cut >= 0 {
 				part = part[:cut]
 			}

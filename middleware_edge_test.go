@@ -172,7 +172,7 @@ func TestEdgeCORS_PreflightAnswersAnyHeaderAsked(t *testing.T) {
 		// Header names match case-insensitively (Fetch), so compare the way a browser
 		// does — otherwise the assertion would flag names that are in fact answered.
 		allowed := res.Header.Get("Access-Control-Allow-Headers")
-		for _, name := range strings.Split(ask, ",") {
+		for name := range strings.SplitSeq(ask, ",") {
 			name = strings.TrimSpace(name)
 			if !strings.Contains(strings.ToLower(allowed), strings.ToLower(name)) {
 				t.Errorf("asked %q, allow-headers %q omits %q — the browser would block the call",
