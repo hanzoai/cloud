@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -29,24 +28,10 @@ type fakeCommerce struct {
 	balance  map[string]int64 // org → deposited cents (the wallet)
 	spend    map[string]int64 // org → metered spend cents (accrual base)
 	deposits int              // total deposit calls (one-grant proof)
-	failDep  bool             // when true, deposit errors (at-most-pending log path)
-	seq      int
 }
 
 func newFakeCommerce() *fakeCommerce {
 	return &fakeCommerce{balance: map[string]int64{}, spend: map[string]int64{}}
-}
-
-func (f *fakeCommerce) deposit(_ context.Context, org, _ string, amountCents int64, _, _, _, ref string) (string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.failDep {
-		return "", errNoLedger
-	}
-	f.balance[org] += amountCents
-	f.deposits++
-	f.seq++
-	return "txn_test_" + org + "_" + strconv.Itoa(f.seq), nil
 }
 
 func (f *fakeCommerce) spendCents(_ context.Context, org string) (int64, error) {

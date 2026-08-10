@@ -629,11 +629,6 @@ func (a *adminSummary) add(r Referral) {
 	}
 }
 
-// orgSubject is the billing subject commerce keys an org's wallet on — the bare
-// org slug, exactly like clients/admin.orgSubject. Kept as a named function so
-// the "subject == org" contract lives in one place.
-func orgSubject(org string) string { return org }
-
 // genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
 func genID(prefix string) (string, error) {
 	var b [16]byte

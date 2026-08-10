@@ -75,9 +75,6 @@ var ErrNoPeer = plane.ErrNoPeer
 // dials.
 func bindRuntimeDir() { plane.Bind() }
 
-// reach makes app's socket resolvable, or says why it cannot be.
-func reach(ctx context.Context, app string) error { return plane.Reach(ctx, app) }
-
 // listening reports whether path has a LISTENER behind it.
 func listening(path string) (bool, error) { return plane.Listening(path) }
 
