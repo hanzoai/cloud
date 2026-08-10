@@ -403,11 +403,11 @@ func TestLedgerReceivesZeroDeposits(t *testing.T) {
 func TestCommerceSeamIsReadOnly(t *testing.T) {
 	typ := reflect.TypeFor[commerce]()
 	banned := []string{"deposit", "credit", "grant", "mint", "transfer", "refund", "charge", "payout"}
-	for i := 0; i < typ.NumMethod(); i++ {
-		name := strings.ToLower(typ.Method(i).Name)
+	for method := range typ.Methods() {
+		name := strings.ToLower(method.Name)
 		for _, b := range banned {
 			if strings.Contains(name, b) {
-				t.Fatalf("commerce seam grew a money-moving method %q — referrals issues no credit; a referral reward is an affiliate payable in commerce, settled by wire or wallet", typ.Method(i).Name)
+				t.Fatalf("commerce seam grew a money-moving method %q — referrals issues no credit; a referral reward is an affiliate payable in commerce, settled by wire or wallet", method.Name)
 			}
 		}
 	}

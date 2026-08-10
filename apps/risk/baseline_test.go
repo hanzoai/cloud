@@ -44,8 +44,8 @@ var forbidden = []string{
 // this fails.
 func TestBaseline_HasNoTenantColumn(t *testing.T) {
 	rt := reflect.TypeFor[band]()
-	for i := 0; i < rt.NumField(); i++ {
-		check(t, "band."+rt.Field(i).Name, rt.Field(i).Name)
+	for field := range rt.Fields() {
+		check(t, "band."+field.Name, field.Name)
 	}
 	for _, col := range ddlColumns(t, baselineDDL) {
 		check(t, baselineTable+"."+col, col)
@@ -445,14 +445,14 @@ func TestBaseline_ExcludesTheAnonymousLane(t *testing.T) {
 // organisation and read that organisation back out of the aggregate.
 func TestBaseline_TakesNoTenant(t *testing.T) {
 	rt := reflect.TypeOf(baseline)
-	for i := 0; i < rt.NumIn(); i++ {
-		if rt.In(i) == reflect.TypeFor[tenant]() {
+	for in := range rt.Ins() {
+		if in == reflect.TypeFor[tenant]() {
 			t.Fatal("baseline() takes a tenant — the aggregate must not be narrowable to one organisation")
 		}
 	}
 	rt = reflect.TypeOf(recompute)
-	for i := 0; i < rt.NumIn(); i++ {
-		if rt.In(i) == reflect.TypeFor[tenant]() {
+	for in := range rt.Ins() {
+		if in == reflect.TypeFor[tenant]() {
 			t.Fatal("recompute() takes a tenant — the aggregate must not be computed over one organisation")
 		}
 	}

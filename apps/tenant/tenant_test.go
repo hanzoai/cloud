@@ -82,9 +82,9 @@ func TestTwoBrandsOneOrgAreTwoTenants(t *testing.T) {
 // test fails, which is the point.
 func TestKeyCannotArriveOffTheWire(t *testing.T) {
 	rt := reflect.TypeFor[Key]()
-	for i := range rt.NumField() {
-		if rt.Field(i).IsExported() {
-			t.Fatalf("Key.%s is exported — a Key can now be decoded from a request body", rt.Field(i).Name)
+	for field := range rt.Fields() {
+		if field.IsExported() {
+			t.Fatalf("Key.%s is exported — a Key can now be decoded from a request body", field.Name)
 		}
 	}
 	var k Key
