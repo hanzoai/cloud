@@ -108,7 +108,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/dataroom/documents/:id/file", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Streams a document's bytes to an authenticated owner.",
 	})
 	zip.Describe("GET /v1/dataroom/links", zip.Doc{
 		Description: "Returns every live share link in the caller org's own store,\nnewest first, with the controls a visitor will meet: whether an address is\nrequired, whether a password is set, the allow and deny lists, whether download\nis permitted, and when the link expires.\n\nArchived links are omitted entirely. A link reports only THAT a password is\nset — the stored form is a bcrypt hash and no route returns it.",
@@ -131,7 +131,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/dataroom/view/:linkId/document/:documentId/file", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Streams a document's bytes to an authorised viewer.",
 	})
 	zip.Describe("POST /v1/dataroom/datarooms", zip.Doc{
 		Description: "Opens a new data room for the caller org and answers with it,\nincluding the short public id it is addressed by.\n\n`name` is required; without it the call is refused and the tenant store is\nuntouched, because a dispatch answering 4xx rolls its transaction back. A new\nroom holds no documents and is reachable by NOBODY until a share link is\ncreated over it — opening a room and granting access are two separate acts, so\na room cannot leak by existing.",
@@ -159,7 +159,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/dataroom/documents", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Stores the request body (the file bytes) on the object-storage\nseam, then records the metadata row via the bundle. The file is the raw request\nbody; ?name= names it, Content-Type carries the mime type, ?numPages= is optional.",
 	})
 	zip.Describe("POST /v1/dataroom/links", zip.Doc{
 		Description: "Grants access: it mints a public share link over one data\nroom (`dataroomId`) or one document (`documentId`) — one of the two is\nrequired — and answers with the link, whose `id` is the token a visitor opens\nit with.\n\nThis is how a party is let in. The controls are declared HERE and enforced on\nthe viewer surface: `password` is hashed with bcrypt before storage and is\nnever readable back, `emailProtected` (on by default) makes a visitor state an\naddress, `allowList`/`denyList` narrow which addresses pass, `allowDownload`\n(off by default) governs downloads, and `expiresAt` closes the link. The target\nroom or document must exist in the caller's own store or it is not found.\n\nCreating a link also writes dataroom's ONE cross-tenant row: the link id to\nowning org mapping an anonymous visitor is routed through. That write is part\nof the operation — if it fails the call is 500 — so a link that no visitor\ncould open is never handed back as usable.\n\nThe address a visitor later states is recorded UNVERIFIED, so a link gated only\nby email is openable by anyone the link reaches. Use a password for a link that\nmust not travel.",
