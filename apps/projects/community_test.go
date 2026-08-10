@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -102,9 +103,9 @@ func record(t *testing.T) *recorder {
 func (r *recorder) last(slug string) (published, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for i := len(r.events) - 1; i >= 0; i-- {
-		if r.events[i].Slug == slug {
-			return r.events[i], true
+	for _, v := range slices.Backward(r.events) {
+		if v.Slug == slug {
+			return v, true
 		}
 	}
 	return published{}, false

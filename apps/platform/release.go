@@ -45,6 +45,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -296,8 +297,8 @@ func Releases() []ReleaseState {
 	releases.Lock()
 	defer releases.Unlock()
 	out := make([]ReleaseState, 0, len(releases.order))
-	for i := len(releases.order) - 1; i >= 0; i-- {
-		if st, ok := releases.byID[releases.order[i]]; ok {
+	for _, v := range slices.Backward(releases.order) {
+		if st, ok := releases.byID[v]; ok {
 			out = append(out, *st)
 		}
 	}

@@ -3,6 +3,7 @@ package pricing
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"strings"
 	"testing"
 
@@ -24,9 +25,7 @@ func catModel(id, name, provider string, extra map[string]any) Model {
 	if provider != "" {
 		m["provider"] = provider
 	}
-	for k, v := range extra {
-		m[k] = v
-	}
+	maps.Copy(m, extra)
 	return m
 }
 

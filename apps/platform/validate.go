@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -219,10 +220,8 @@ func validateDockerfile(raw string) (string, error) {
 	if !dockerfilePathRE.MatchString(s) {
 		return "", fmt.Errorf("dockerfile must be a relative path of [A-Za-z0-9._-] segments")
 	}
-	for _, seg := range strings.Split(s, "/") {
-		if seg == ".." {
-			return "", fmt.Errorf("dockerfile path must not contain '..'")
-		}
+	if slices.Contains(strings.Split(s, "/"), "..") {
+		return "", fmt.Errorf("dockerfile path must not contain '..'")
 	}
 	return s, nil
 }

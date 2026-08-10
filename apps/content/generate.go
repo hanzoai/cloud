@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -198,12 +199,7 @@ func Generate(ctx context.Context, org string, in GenerateInput) (GenerateResult
 
 // isPublishableDocType reports whether name is one of the marketing lifecycle DocTypes.
 func isPublishableDocType(name string) bool {
-	for _, dt := range publishableDocTypes {
-		if dt == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(publishableDocTypes, name)
 }
 
 // ---- copy generation: prompt engineering + per-DocType shaping ----

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -153,8 +154,8 @@ func buildService(svc Upstream) (http.Handler, error) {
 // fails to build, so the caller skips the whole route rather than serving it with
 // a partial chain.
 func buildChain(h http.Handler, ids []string, mws map[string]Middleware) (http.Handler, bool) {
-	for i := len(ids) - 1; i >= 0; i-- {
-		mw, ok := mws[ids[i]]
+	for _, id := range slices.Backward(ids) {
+		mw, ok := mws[id]
 		if !ok {
 			return nil, false
 		}

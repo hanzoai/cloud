@@ -3,6 +3,7 @@ package crawl
 import (
 	"io"
 	"net/url"
+	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -250,10 +251,8 @@ func count(n *html.Node, a atom.Atom) int {
 func firstOf(n *html.Node, want ...atom.Atom) *html.Node {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type == html.ElementNode {
-			for _, w := range want {
-				if c.DataAtom == w {
-					return c
-				}
+			if slices.Contains(want, c.DataAtom) {
+				return c
 			}
 		}
 		if got := firstOf(c, want...); got != nil {

@@ -44,6 +44,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -963,9 +964,7 @@ func Shutdown(_ context.Context) error {
 // without aliasing package state.
 func snapshotRegistry() map[string]*Provider {
 	out := make(map[string]*Provider, len(registry))
-	for id, p := range registry {
-		out[id] = p
-	}
+	maps.Copy(out, registry)
 	return out
 }
 

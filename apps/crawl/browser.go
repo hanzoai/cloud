@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -227,9 +228,7 @@ func browse(ctx context.Context, raw string) (*Page, error) {
 	}
 
 	meta := map[string]any{}
-	for k, v := range r.Metadata {
-		meta[k] = v
-	}
+	maps.Copy(meta, r.Metadata)
 	meta["renderer"] = "browser"
 	page := &Page{URL: raw, Markdown: md, Metadata: meta}
 	if r.URL != "" {

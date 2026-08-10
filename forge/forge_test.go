@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -82,12 +83,7 @@ func newStub(t *testing.T) *forgeStub {
 			return
 		}
 		canSee := func(org string) bool {
-			for _, o := range orgs {
-				if o == org {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(orgs, org)
 		}
 
 		path := strings.TrimPrefix(r.URL.Path, "/v1")

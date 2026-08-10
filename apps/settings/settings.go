@@ -38,6 +38,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -357,10 +358,8 @@ func decodeStrList(s string) []string {
 }
 
 func addStr(xs []string, x string) []string {
-	for _, v := range xs {
-		if v == x {
-			return xs
-		}
+	if slices.Contains(xs, x) {
+		return xs
 	}
 	return append(xs, x)
 }

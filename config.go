@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -438,12 +439,7 @@ func (c *Config) Enabled(name string) bool {
 }
 
 func contains(list []string, name string) bool {
-	for _, s := range list {
-		if s == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, name)
 }
 
 func getenv(key, dflt string) string {
