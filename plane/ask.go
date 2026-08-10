@@ -226,17 +226,22 @@ func underRouter() bool { return strings.TrimSpace(os.Getenv("ZIP_ADDR")) != "" 
 // (zaphttp.Server.ListenAndServe), so the wake this returns to repairs the run
 // directory as a side effect of doing its job and the directory keeps ONE writer.
 //
-// ENOENT (never bound here) and ECONNREFUSED (a file with nobody behind it) are the
-// same fact — there is no listener — and both are the wake path's business. Any
-// OTHER dial error is a socket that is present and unusable: an outage, returned as
-// one, never laundered into an absence a caller would be entitled to fall back on.
+// ENOENT (never bound here), ECONNREFUSED and ENOTSOCK (a file with nobody behind
+// it) are the same fact — there is no listener — and all are the wake path's
+// business. The last two are ONE condition spelled by two kernels: dialling a path
+// that is a regular file answers ECONNREFUSED on Linux and ENOTSOCK on Darwin. Only
+// ECONNREFUSED was mapped, so the identical stale socket was a clean "no" in CI and
+// a hard error on every Mac — and Reach returns that error before it can ask the
+// router anything, which is exactly the absence-vs-outage distinction it exists to
+// draw. Any OTHER dial error is a socket that is present and unusable: an outage,
+// returned as one, never laundered into an absence a caller would fall back on.
 func Listening(path string) (bool, error) {
 	c, err := net.DialTimeout("unix", path, probeWait)
 	if err == nil {
 		_ = c.Close()
 		return true, nil
 	}
-	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED) {
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ENOTSOCK) {
 		return false, nil
 	}
 	return false, err

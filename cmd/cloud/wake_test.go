@@ -16,6 +16,7 @@ package main
 // because what it serves is not what is under test — that it is RUNNING is.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"errors"
 	"fmt"
@@ -72,7 +73,7 @@ func TestMain(m *testing.M) {
 // door on it. Nothing is running when it returns; that is the point.
 func router(t *testing.T, name string) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", runDir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	cloud.ResetPlane()
 
 	app := zip.New(zip.Config{AppName: "cloud", Logger: luxlog.New("test")})
@@ -100,16 +101,6 @@ func router(t *testing.T, name string) {
 // unix socket path is capped near 104 bytes, and t.TempDir() spends most of that
 // budget on the test's own name — so a long test name binds nothing and fails with
 // "invalid argument" about something the test is not about.
-func runDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.MkdirTemp("", "wk")
-	if err != nil {
-		t.Fatalf("run dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	return dir
-}
-
 func waitFor(t *testing.T, path string) {
 	t.Helper()
 	for i := 0; i < 400; i++ {
@@ -188,7 +179,7 @@ func TestWakeRefusesAnAppThisFleetDoesNotRun(t *testing.T) {
 // that can start anything, so "not deployed here" is simply true — and it is answered
 // at once, from a connect that is refused, never a timeout.
 func TestWakeWithNoRouterIsNoPeer(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", runDir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	cloud.ResetPlane()
 
 	_, err := cloud.Ask[struct{}, plane.Started](context.Background(), "sleepy", "wake_alive", &struct{}{})
@@ -211,7 +202,7 @@ func TestWakeWithNoRouterIsNoPeer(t *testing.T) {
 // absence now travels as a FIELD on a 200, and a router that cannot answer this op
 // cannot claim anything about the fleet.
 func TestWakeAgainstAnOlderRouterIsAnOutage(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", runDir(t))
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	cloud.ResetPlane()
 
 	// A router of the previous generation: a plane socket at the host's name, with

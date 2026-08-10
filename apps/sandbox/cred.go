@@ -130,11 +130,10 @@ type cred struct {
 // that fails later and blames the wrong thing.
 func credFor(ctx context.Context, log luxlog.Logger) (cred, error) {
 	// DO_API_TOKEN is KMS-sourced and reaches this process the one way every other
-	// DigitalOcean reader in this binary gets it: credz materializes the KMSSecret
-	// into the deployment env under the name the app already reads — credz/scope.go,
-	// where the store path IS the variable name, /orgs/{adminOrg}/svc/_shared/
-	// DO_API_TOKEN. Asking KMS for it directly here would be a SECOND way to the
-	// same secret in the same process, which is the thing we do not do.
+	// DigitalOcean reader in this binary gets it: the deployment's KMSSecret syncs
+	// it into the environment under the name the app already reads. Asking KMS for
+	// it directly here would be a SECOND way to the same secret in the same
+	// process, which is the thing we do not do.
 	token := strings.TrimSpace(envOr("DO_API_TOKEN", ""))
 	do := digitalocean.New(token)
 	if !do.Ready() {

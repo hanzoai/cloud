@@ -16,6 +16,7 @@ package cloud
 // self-dispatch is available; the counters prove it never happens.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"net/http"
 	"sync/atomic"
@@ -33,7 +34,7 @@ import (
 func servePlaneRules(t *testing.T, rules map[string][]plane.ScopeRule, calls *atomic.Int32) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", "")
-	t.Setenv("CLOUD_RUN_DIR", t.TempDir())
+	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t))
 	ResetPlane()
 	t.Cleanup(ResetPlane)
 
@@ -109,7 +110,7 @@ func TestScopeRulesComeOverThePlaneNotThroughTheApp(t *testing.T) {
 // gates still apply, and a config outage must not take down paid traffic.
 func TestScopeRulesFailOpenWhenCommerceIsNotDeployed(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", "")
-	t.Setenv("CLOUD_RUN_DIR", t.TempDir()) // an empty run dir: no commerce socket.
+	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t)) // an empty run dir: no commerce socket.
 	ResetPlane()
 	t.Cleanup(ResetPlane)
 

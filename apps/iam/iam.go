@@ -96,6 +96,8 @@ import (
 	"os"
 	"path/filepath"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	iamserver "github.com/hanzoai/iam/server"
@@ -161,7 +163,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	exposeProjects()
 	exposeApproval()
 
-	log := deps.Logger.New("subsystem", "iam")
+	log := luxlog.Default().New("subsystem", "iam")
 
 	dir, initDataPath := paths(deps)
 
@@ -209,6 +211,33 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			log.Warn("iam seed skipped (non-fatal)", "err", serr, "init_data", initDataPath)
 		} else if sum != nil {
 			log.Info("iam seed applied", "created", sum.Created, "skipped", sum.Skipped, "init_data", initDataPath)
+		}
+	}
+
+	// A STORE THAT OPENED IS NOT YET A STORE THAT CAN SERVE, and this is the one
+	// path openStore's refusal does not cover. It refuses a file that is ABSENT;
+	// an EMPTY one passes that stat and opens perfectly, so IAM mounts, answers
+	// every address it declares, and hands out {"keys":[]} at 200 — precisely the
+	// outcome openStore exists to prevent, reached the one way it cannot see.
+	//
+	// That is worse than the 503 it replaces, because an empty keyset is a
+	// well-formed answer: a relying party reads it as "this token does not
+	// verify" rather than as "identity is down", so every token in the fleet
+	// fails and nothing anywhere reports a fault. Measured on this deployment —
+	// a 4 KB store beside the standalone iam's 16 MB one, serving 0 signing
+	// certificates against its 9.
+	//
+	// Checked AFTER Seed, which is what fills a newly provisioned store: refusing
+	// before it would make a first boot unable to seed itself and turn an empty
+	// store into a permanent one. A signing certificate is the load-bearing row —
+	// without one nothing can be issued and nothing already issued can be checked.
+	if db != nil {
+		certs, cerr := iamstore.ListCerts(context.Background(), db)
+		if cerr != nil || len(certs) == 0 {
+			log.Error("iam store carries no signing certificate — identity answers 503 rather than an empty keyset (cloud stays up)",
+				"err", cerr, "store", StorePath(dir))
+			db = nil
+			embeddedDB = nil
 		}
 	}
 

@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"errors"
 	"testing"
@@ -19,8 +20,8 @@ import (
 //
 // Absence is now an error, and the error says the app is not deployed here.
 func TestOnServiceReleaseAbsenceIsAnError(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir()) // no socket for platform
-	t.Setenv("ZIP_ADDR", "")                 // and no router that could start one
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // no socket for platform
+	t.Setenv("ZIP_ADDR", "")               // and no router that could start one
 	RegisterServiceReleaser(nil)
 
 	err := OnServiceRelease(context.Background(), ServiceReleaseEvent{
@@ -60,7 +61,7 @@ func TestOnServiceReleaseDispatch(t *testing.T) {
 // TestCoResidentReleaserIsPreferred proves the local leg WINS when it exists: a
 // co-resident releaser must never pay a socket round trip to reach itself.
 func TestCoResidentReleaserIsPreferred(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	t.Setenv("ZIP_ADDR", "")
 	called := false
 	RegisterServiceReleaser(func(context.Context, ServiceReleaseEvent) error {

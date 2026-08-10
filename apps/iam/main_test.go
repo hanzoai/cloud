@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hanzoai/cloud/credz"
+	"github.com/hanzoai/cloud"
 )
 
 // TestMain resolves this test process's data-plane key the way the binary does.
@@ -19,12 +19,13 @@ import (
 // 503, want 401". Those are the SAME sentence — no key — told nine different ways,
 // which is how a missing key reads as a lost registry.
 //
-// credz.Boot is the ONE path that resolves it (env → broker → a random dev master)
-// and the one build.go calls at startup, so booting it here is not test scaffolding
-// around the key: it is the production boot, run first. A deployment that supplies a
-// real key keeps it — Boot never overrides one — so this cannot mask a keyed CI run.
+// cloud.BootMaster is the ONE path that resolves it (the environment, else a random
+// dev master over an empty directory) and the one build.go calls at startup, so
+// booting it here is not test scaffolding around the key: it is the production boot,
+// run first. A deployment that supplies a real key keeps it — BootMaster never
+// overrides one — so this cannot mask a keyed CI run.
 func TestMain(m *testing.M) {
-	// credz.Boot alone is not enough on a codec-linked build: its last resort is
+	// BootMaster alone is not enough on a codec-linked build: its last resort is
 	// cek.EnsureDevKey, which DECLINES there by design (a build that can really
 	// encrypt must be handed a real key, not invent one). So supply a throwaway
 	// through the same door a deployment uses, and only when nothing else did —
@@ -32,7 +33,7 @@ func TestMain(m *testing.M) {
 	if os.Getenv(masterKeyEnv) == "" {
 		_ = os.Setenv(masterKeyEnv, devMasterKey)
 	}
-	credz.Boot(os.TempDir())
+	cloud.BootMaster(os.TempDir())
 	os.Exit(m.Run())
 }
 

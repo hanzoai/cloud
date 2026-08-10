@@ -15,6 +15,7 @@ package cloud
 // Two tests: one checks the rule, one keeps it checked.
 
 import (
+	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"errors"
 	"go/ast"
@@ -121,7 +122,7 @@ var probes = []struct {
 // is also what keeps this fast.
 func isolate(t *testing.T) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	t.Setenv("ZIP_ADDR", "")
 	t.Setenv("CLOUD_RUN_DIR", "")
 }

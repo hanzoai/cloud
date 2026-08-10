@@ -2,7 +2,7 @@
 //
 // cek needs a master key before the first database opens, and it does not go
 // looking for one — a process that could not resolve a key opens nothing rather
-// than writing plaintext. A production process resolves it through credz.Boot,
+// than writing plaintext. A production process resolves it through BootMaster,
 // from KMS. A test process has no KMS, so it mints its own.
 //
 // Importing this package for its side effect is how a test binary says that:
