@@ -98,7 +98,7 @@ func TestListRepos_DisabledCacheAlwaysFetches(t *testing.T) {
 	gh.repoTTL = 0
 
 	ctx := context.Background()
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, err := gh.ListRepos(ctx, "acme"); err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}

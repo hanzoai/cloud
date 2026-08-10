@@ -34,7 +34,7 @@ func forged(org, presented, ip, path string) Signal {
 func TestTraffic_CountsPerCredential(t *testing.T) {
 	tr := NewTraffic()
 	var p Pattern
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		p = tr.Observe(sig("acme", "fp1", "203.0.113.1", "/v1/models"), t0)
 	}
 	if p.Requests != 7 {
@@ -50,7 +50,7 @@ func TestTraffic_CountsPerCredential(t *testing.T) {
 func TestTraffic_CountsPathSpreadAndPeerSpread(t *testing.T) {
 	tr := NewTraffic()
 	var p Pattern
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		p = tr.Observe(sig("acme", "fp1", "203.0.113.1", fmt.Sprintf("/v1/thing/%d", i)), t0)
 	}
 	if p.Paths < 8 {
@@ -61,7 +61,7 @@ func TestTraffic_CountsPathSpreadAndPeerSpread(t *testing.T) {
 
 	tr2 := NewTraffic()
 	var q Pattern
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		q = tr2.Observe(sig("acme", fmt.Sprintf("fp%d", i), "198.51.100.9", "/v1/models"), t0)
 	}
 	if q.Peers < 6 {
@@ -75,7 +75,7 @@ func TestTraffic_CountsPathSpreadAndPeerSpread(t *testing.T) {
 func TestTraffic_AnonymousTrafficHasNoPeers(t *testing.T) {
 	tr := NewTraffic()
 	var p Pattern
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		p = tr.Observe(sig("", "", "198.51.100.9", "/v1/models"), t0)
 	}
 	if p.Peers != 0 {
@@ -88,7 +88,7 @@ func TestTraffic_AnonymousTrafficHasNoPeers(t *testing.T) {
 
 func TestTraffic_CountsRollOutOfTheWindow(t *testing.T) {
 	tr := NewTraffic()
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		tr.Observe(sig("acme", "fp1", "203.0.113.1", "/v1/models"), t0)
 	}
 	later := t0.Add(2 * window)
@@ -178,7 +178,7 @@ func TestTraffic_ViewDoesNotLeakToAPrefixNeighbour(t *testing.T) {
 
 func TestTraffic_ViewIsBounded(t *testing.T) {
 	tr := NewTraffic()
-	for i := 0; i < maxViewCallers*3; i++ {
+	for i := range maxViewCallers * 3 {
 		for n := 0; n <= i; n++ { // give each caller a distinct request count
 			tr.Observe(sig("acme", fmt.Sprintf("fp%04d", i), "203.0.113.1", "/v1/models"), t0)
 		}
@@ -200,7 +200,7 @@ func TestTraffic_ViewIsBounded(t *testing.T) {
 func TestTraffic_TableIsBounded(t *testing.T) {
 	tr := NewTraffic()
 	now := t0
-	for i := 0; i < maxCallers+5_000; i++ {
+	for i := range maxCallers + 5_000 {
 		if i%1000 == 0 {
 			now = now.Add(2 * window) // let dead keys age out
 		}
@@ -216,7 +216,7 @@ func TestTraffic_TableIsBounded(t *testing.T) {
 	// And the ceiling must actually BIND: a run this long has to have reached it,
 	// or the test is asserting a bound that was never tested.
 	tr2 := NewTraffic()
-	for i := 0; i < maxCallers+1_000; i++ {
+	for i := range maxCallers + 1_000 {
 		tr2.Observe(sig("acme", fmt.Sprintf("fp%06d", i), "203.0.113.1", "/v1/models"), t0)
 	}
 	tr2.mu.Lock()
@@ -248,7 +248,7 @@ func TestTraffic_OneTenantCannotEvictAnother(t *testing.T) {
 	// The noisy tenant mints far more credentials than its own table holds, and
 	// keeps doing it across windows so an LRU would have every chance to reach for
 	// somebody else's keys.
-	for i := 0; i < maxCallers*2; i++ {
+	for i := range maxCallers * 2 {
 		tr.Observe(sig("noisy", fmt.Sprintf("fp%07d", i), "203.0.113.9", "/v1/chat"), now)
 	}
 
@@ -276,7 +276,7 @@ func TestTraffic_OneTenantCannotEvictAnother(t *testing.T) {
 func TestTraffic_HostTableIsBoundedPerTenant(t *testing.T) {
 	tr := NewTraffic()
 	now := t0
-	for i := 0; i < maxHosts+2_000; i++ {
+	for i := range maxHosts + 2_000 {
 		// A distinct address AND a credential, which is what opens a host row.
 		tr.Observe(Signal{Org: "", Cred: "fp", Presented: "fp", Class: CredSecret,
 			IP: fmt.Sprintf("198.51.%d.%d", i/256%256, i%256), Path: "/v1/models"}, now)
@@ -301,7 +301,7 @@ func TestTraffic_ReclaimNeverDropsALiveHold(t *testing.T) {
 	held := sig("acme", "fpHeld", "203.0.113.1", "/v1/models")
 	tr.Hold(held, Hold{Action: "block"}, time.Minute, now)
 
-	for i := 0; i < maxCallers*2; i++ {
+	for i := range maxCallers * 2 {
 		tr.Observe(sig("acme", fmt.Sprintf("fp%07d", i), "203.0.113.1", "/v1/chat"), now)
 	}
 	if _, ok := tr.Held(held, now); !ok {
@@ -358,12 +358,12 @@ func TestTraffic_FailCountsOnlyAfterTheCallerIsKnown(t *testing.T) {
 func TestTraffic_IsRaceFree(t *testing.T) {
 	tr := NewTraffic()
 	var wg sync.WaitGroup
-	for g := 0; g < 8; g++ {
+	for g := range 8 {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
 			s := sig(fmt.Sprintf("org%d", g%3), fmt.Sprintf("fp%d", g), "203.0.113.1", "/v1/models")
-			for i := 0; i < 200; i++ {
+			for range 200 {
 				tr.Observe(s, time.Now())
 				tr.Fail(s, time.Now())
 				tr.Hold(s, Hold{Action: "block"}, time.Second, time.Now())

@@ -58,7 +58,7 @@ func servePeer(t *testing.T, rows []plane.Project) func() error {
 	// serves once, so that is right in production and wrong for a test binary,
 	// which mounts many times. Dropping it here is what ResetPlane is for.
 	t.Cleanup(cloud.ResetPlane)
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, derr := net.Dial("unix", zip.SocketPath("iam")); derr == nil {
 			_ = c.Close()
 			break
@@ -146,7 +146,7 @@ func TestCanonicalProjectsCarriesNoScope(t *testing.T) {
 		t.Fatalf("ServePlane(iam): %v", err)
 	}
 	t.Cleanup(func() { _ = stop(); cloud.ResetPlane() })
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, derr := net.Dial("unix", zip.SocketPath("iam")); derr == nil {
 			_ = c.Close()
 			break

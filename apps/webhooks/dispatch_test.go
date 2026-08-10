@@ -395,7 +395,7 @@ func TestDeliveryRetentionPrune(t *testing.T) {
 	}
 	ctx := context.Background()
 	total := maxDeliveryRowsPerEndpoint + 20
-	for i := 0; i < total; i++ {
+	for i := range total {
 		if err := st.recordDelivery(ctx, DeliveryRow{
 			EndpointID: "wh_ret", DeliveryID: newUUID(), Subject: "s", Attempt: i,
 			Status: "ok", HTTPStatus: 200, Created: time.Now().UTC().Format(time.RFC3339),

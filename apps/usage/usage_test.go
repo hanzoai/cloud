@@ -79,7 +79,7 @@ func (f *fakeCommerce) serve(t *testing.T) {
 	sock := zip.SocketPath("commerce")
 	go func() { _ = p.Listen(sock) }()
 	t.Cleanup(func() { _ = p.Shutdown() })
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		if c, derr := net.Dial("unix", sock); derr == nil {
 			_ = c.Close()
 			return

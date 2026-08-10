@@ -154,7 +154,7 @@ func TestGuardRefusesNonAdmin(t *testing.T) {
 // TestRandomTokenIsUnique guards against a constant/predictable state nonce.
 func TestRandomTokenIsUnique(t *testing.T) {
 	seen := map[string]bool{}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		tok, err := randomToken()
 		if err != nil {
 			t.Fatalf("randomToken: %v", err)

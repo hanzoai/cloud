@@ -1220,7 +1220,7 @@ func completeWithFailover(ctx context.Context, ai types.AIClient, req *types.Cha
 // known — from outside, three attempts and three unrelated calls look identical.
 func completeWithRetry(ctx context.Context, ai types.AIClient, req *types.ChatRequest) (*types.ChatResponse, int, error) {
 	var lastErr error
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		resp, err := ai.ChatCompletion(ctx, req)
 		if err == nil {
 			return resp, attempt + 1, nil
@@ -1405,7 +1405,7 @@ func (o agentOps) metrics(ctx context.Context, in *metricsQuery) (*metricsView, 
 	series := make([]seriesLine, 0, len(order))
 	for _, name := range order {
 		pts := make([]seriesPoint, buckets)
-		for i := 0; i < buckets; i++ {
+		for i := range buckets {
 			pts[i] = seriesPoint{
 				T: start.Add(time.Duration(i) * step).UTC().Format(time.RFC3339),
 				V: counts[name][i],

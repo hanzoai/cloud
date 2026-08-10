@@ -292,7 +292,7 @@ func TestSettle_ASettledTopUpCreditsExactlyOncePerSettlement(t *testing.T) {
 	app := creditDoor(t, stating(riskGate(luxlog.New("settletest")),
 		settlement{cents: gateCents, currency: "usd"}))
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if code, body := topup(t, app); code != http.StatusOK {
 			t.Fatalf("post %d answered %d %s, want 200", i, code, body)
 		}

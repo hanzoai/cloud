@@ -92,7 +92,7 @@ func serveLedger(t *testing.T) {
 	sock := zip.SocketPath("commerce")
 	go func() { _ = app.Listen(sock) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		if c, derr := net.Dial("unix", sock); derr == nil {
 			_ = c.Close()
 			return

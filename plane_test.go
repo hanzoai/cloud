@@ -67,7 +67,7 @@ func decimalOf(cents int64) string {
 
 func waitFor(t *testing.T, app string) {
 	t.Helper()
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if c, derr := net.Dial("unix", zip.SocketPath(app)); derr == nil {
 			_ = c.Close()
 			return

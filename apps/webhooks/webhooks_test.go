@@ -280,10 +280,10 @@ func TestDeliveriesListFilterAndLimit(t *testing.T) {
 	app := mountApp(t)
 	ep := createEP(t, app, "acme", map[string]any{"url": "https://hooks.acme.test/in"})
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		seedDelivery(t, "acme", ep.ID, "ok")
 	}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		seedDelivery(t, "acme", ep.ID, "failed")
 	}
 
@@ -445,7 +445,7 @@ func TestUsageCounters(t *testing.T) {
 	}
 
 	// 3 ok + 1 failed = 4 completed, 1 failure; the "retrying" row must NOT be counted.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		seedDelivery(t, "acme", ep.ID, "ok")
 	}
 	seedDelivery(t, "acme", ep.ID, "failed")

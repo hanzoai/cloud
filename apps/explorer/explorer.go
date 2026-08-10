@@ -107,10 +107,8 @@ type noInput struct{}
 // itself is not a filter key here (a ledger is public within a brand); it is the
 // proof-of-auth gate, checked in ONE place before any handler touches an upstream.
 func gate(ctx context.Context) error {
-	if _, ok := principal.OrgFrom(ctx); !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	return nil
+	_, err := principal.RequireOrg(ctx)
+	return err
 }
 
 // forwarded is the caller's own Authorization, which the upstream read passes

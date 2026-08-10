@@ -39,7 +39,7 @@ func TestRollup_ThisAppsOwnDecisionsAreNotFoldedBackIntoTheModel(t *testing.T) {
 	probe.emit(orgA, emitted{Plane: "person", Subject: "u_real", At: at})
 	// And THIS APP's own decisions about a subject, stated onto the same table under
 	// its own product, which must not.
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		probe.emit(orgA, emitted{
 			Plane:   "person",
 			Subject: digest(k, kindPayer, "u_screened"),

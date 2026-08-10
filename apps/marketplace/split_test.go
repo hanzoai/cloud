@@ -375,7 +375,7 @@ func (f *fleet) kill(role string) {
 	cmd := f.kids[role]
 	_ = cmd.Process.Kill()
 	_, _ = cmd.Process.Wait()
-	for i := 0; i < 400; i++ {
+	for range 400 {
 		c, err := net.DialTimeout("unix", zip.SocketPath(role), time.Second)
 		if err != nil {
 			return

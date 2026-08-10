@@ -453,7 +453,7 @@ func (s *drain) consume(ctx context.Context, cl *infra.PubSubClient) error {
 		// than the round-trip's.
 		var once sync.Once
 		send := func(err error) { once.Do(func() { errc <- err }) }
-		for i := 0; i < consumeConcurrency; i++ {
+		for i := range consumeConcurrency {
 			// Contained: this runs over bus payloads, so a panic here would kill the
 			// process and every tenant with it rather than this one consumer.
 			cloud.Go(s.log, "event.sink", []any{"signal", string(w.signal), "puller", i}, func() {

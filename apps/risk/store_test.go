@@ -345,7 +345,7 @@ func newTestPlane(t *testing.T) *plane {
 // into production code for the tests.
 func holdFolds(t *testing.T, p *plane) {
 	t.Helper()
-	for i := 0; i < maxFolds; i++ {
+	for i := range maxFolds {
 		select {
 		case p.folds <- struct{}{}:
 		default:
@@ -353,7 +353,7 @@ func holdFolds(t *testing.T, p *plane) {
 		}
 	}
 	t.Cleanup(func() {
-		for i := 0; i < maxFolds; i++ {
+		for range maxFolds {
 			select {
 			case <-p.folds:
 			default:

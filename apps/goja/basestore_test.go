@@ -148,7 +148,7 @@ func TestConcurrentMultiTenantDispatch(t *testing.T) {
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(tenants)*perTenant)
 	for _, org := range tenants {
-		for i := 0; i < perTenant; i++ {
+		for i := range perTenant {
 			wg.Add(1)
 			go func(org string, i int) {
 				defer wg.Done()

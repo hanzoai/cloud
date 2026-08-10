@@ -116,7 +116,7 @@ func TestScopeRulesFailOpenWhenCommerceIsNotDeployed(t *testing.T) {
 
 	var entries atomic.Int32
 	app := coresidentRateApp(t, &entries)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if got := rateReq(t, app, "hanzo", "P").StatusCode; got != http.StatusOK {
 			t.Fatalf("req%d = %d, want 200 (an unreachable config source must fail OPEN)", i+1, got)
 		}

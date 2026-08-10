@@ -73,7 +73,7 @@ func TestRoundTripSingleDispatchOK(t *testing.T) {
 	defer SetHandler(nil)
 
 	client := Client(0)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		req, _ := http.NewRequest(http.MethodGet, PlaceholderBase+"/ok", nil)
 		resp, err := client.Do(req)
 		if err != nil {

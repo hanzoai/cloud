@@ -159,7 +159,7 @@ func TestOnOpenSeed(t *testing.T) {
 // time/zero fallback that could collide) and surfaces its error path as a value.
 func TestNewIDUnique(t *testing.T) {
 	seen := map[string]bool{}
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		id, err := newID()
 		if err != nil {
 			t.Fatalf("newID: %v", err)

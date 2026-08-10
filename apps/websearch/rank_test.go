@@ -42,7 +42,7 @@ func TestRankIsTotalAndStable(t *testing.T) {
 	b := []webResult{r("https://c.example/3", ""), r("https://d.example/4", "")}
 
 	first := rankMerged([][]webResult{a, b}, 10)
-	for i := 0; i < 25; i++ {
+	for range 25 {
 		again := rankMerged([][]webResult{a, b}, 10)
 		if len(again) != len(first) {
 			t.Fatalf("length moved: %d then %d", len(first), len(again))
@@ -68,7 +68,7 @@ func TestChallengedEngineContributesNothing(t *testing.T) {
 // TestRankHonoursTheCap — the merge cap is the page size, not a suggestion.
 func TestRankHonoursTheCap(t *testing.T) {
 	var many []webResult
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		many = append(many, r("https://e.example/"+string(rune('a'+i%26))+string(rune('0'+i/26)), ""))
 	}
 	if got := rankMerged([][]webResult{many}, 20); len(got) != 20 {
@@ -146,7 +146,7 @@ func TestCacheDisabled(t *testing.T) {
 // query at a time.
 func TestCacheIsBounded(t *testing.T) {
 	cacheReset()
-	for i := 0; i < cacheMax+64; i++ {
+	for i := range cacheMax + 64 {
 		cachePut("https://bing.test/?q="+string(rune(i%1000))+"-"+time.Now().Format("150405.000000000"), []webResult{r("https://x.example/1", "")})
 	}
 	if n := cacheSize(); n > cacheMax {

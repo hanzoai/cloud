@@ -37,7 +37,7 @@ func TestAddress_IsAPureFunctionOfTheValue(t *testing.T) {
 	if len(first) != addressBytes {
 		t.Fatalf("an address is %d characters, want %d", len(first), addressBytes)
 	}
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		if again := address(halfSpace, snap, warmed); again != first {
 			t.Fatalf("the same value named itself twice: %q then %q", first, again)
 		}
@@ -253,7 +253,7 @@ func TestPublish_IsIdempotentOnTheValue(t *testing.T) {
 	if err != nil || !minted {
 		t.Fatalf("first publish: minted=%v err=%v", minted, err)
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		again, minted, err := p.publish(k)
 		if err != nil {
 			t.Fatalf("republish: %v", err)
@@ -578,7 +578,7 @@ func TestAddress_TwoBrandsShareAFileAndNotAValue(t *testing.T) {
 func fresh(t *testing.T, p *plane, k tenant, round string, n int, at time.Time) {
 	t.Helper()
 	evs := make([]observation, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		evs = append(evs, ob(t, round+"_"+itoa(i), kindAccount, "u_"+itoa(i%7),
 			float64(100+(i*37)%900), at.Add(time.Duration(i)*time.Second)))
 	}
@@ -604,10 +604,10 @@ func sampleSnapshot() anomaly.Snapshot {
 		Cur:     make([][]float64, trees),
 		Hist:    make([]float64, 256),
 	}
-	for i := 0; i < trees; i++ {
+	for i := range trees {
 		s.Ref[i] = make([]float64, nodes)
 		s.Cur[i] = make([]float64, nodes)
-		for j := 0; j < nodes; j++ {
+		for j := range nodes {
 			s.Ref[i][j] = float64(i*nodes+j) * 1.5
 			s.Cur[i][j] = float64(i*nodes+j) * 0.25
 		}

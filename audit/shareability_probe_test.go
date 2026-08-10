@@ -44,7 +44,7 @@ func TestShareability_ReaderSharesLiveWriterStore(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < total; i++ {
+		for i := range total {
 			if _, err := w.Append(context.Background(), Record{Action: "POST /v1/probe"}); err != nil {
 				t.Errorf("append %d: %v", i, err)
 				return

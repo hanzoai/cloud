@@ -126,7 +126,7 @@ func TestRings_OneOrganisationCannotEvictAnother(t *testing.T) {
 	// B fills its OWN bound several times over. Every one of these is ordinary use:
 	// distinct subjects, one event each, well inside every limit the API states.
 	flood := make([]observation, 0, ringKeyCeiling*3)
-	for i := 0; i < ringKeyCeiling*3; i++ {
+	for i := range ringKeyCeiling * 3 {
 		flood = append(flood, ob(t, "b_"+strconv.Itoa(i), kindAccount, "u_"+strconv.Itoa(i), 10,
 			at.Add(time.Duration(i)*time.Millisecond)))
 	}
@@ -295,7 +295,7 @@ func TestRecord_TwoBrandsShareAFileAndNotARecord(t *testing.T) {
 	if _, err := p.learn(a, shared); err != nil {
 		t.Fatalf("learn(A): %v", err)
 	}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		one := ob(t, "e_"+strconv.Itoa(i), kindAccount, "u_1", 100, at.Add(time.Duration(i)*time.Second))
 		if _, err := p.learn(b, one); err != nil {
 			t.Fatalf("learn(B): %v", err)
@@ -436,7 +436,7 @@ func TestRecord_IsBoundedPerTenant(t *testing.T) {
 	// Comfortably past the bound, in batches the API itself allows.
 	for i := 0; i < recordRows+2*maxBatch; i += maxBatch {
 		batch := make([]observation, 0, maxBatch)
-		for j := 0; j < maxBatch; j++ {
+		for j := range maxBatch {
 			n := i + j
 			batch = append(batch, ob(t, "e_"+strconv.Itoa(n), kindAccount, "u_"+strconv.Itoa(n%64), 1,
 				at.Add(time.Duration(n)*time.Millisecond)))
@@ -497,7 +497,7 @@ func TestWarm_FoldsAHistoryOnce(t *testing.T) {
 	probe.reset(true)
 	dir := t.TempDir()
 	k := key(t, brandA, orgA)
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + itoa(i%5),
 			"bucket": surfaceAt(i + 1),
@@ -547,7 +547,7 @@ func TestWarm_FoldsAHistoryOnce(t *testing.T) {
 func TestRings_TheCeilingIsMeasuredNotAsserted(t *testing.T) {
 	vel := newRings()
 	at := time.Now().UTC()
-	for i := 0; i < ringKeyCeiling*4; i++ {
+	for i := range ringKeyCeiling * 4 {
 		vel.record(types.Transaction{
 			ID: strconv.Itoa(i), OrgID: "b/o", AccountID: "account:u_" + strconv.Itoa(i),
 			USD: 1, Timestamp: at,
@@ -591,7 +591,7 @@ func TestEvent_DefaultIdsDoNotCollideInOneSecond(t *testing.T) {
 	p := planeAt(t, dir)
 	holdFolds(t, p)
 	obs := make([]observation, 0, n)
-	for i := 0; i < n; i++ {
+	for range n {
 		// The wire shape a caller sends when it has no id of its own, and every one
 		// of them inside the SAME second.
 		o, err := riskEvent{Kind: kindAccount, Subject: "u_1", Nano: 1_000_000_000, At: at.Format(time.RFC3339)}.observation(at)
@@ -753,7 +753,7 @@ func TestPrior_CountsTheDistinctSubjectsSharingAnIdentifier(t *testing.T) {
 
 	// ONE subject, many events, one device — a busy customer and not a farm.
 	busy := make([]observation, 0, fanSubjects*2)
-	for i := 0; i < fanSubjects*2; i++ {
+	for i := range fanSubjects * 2 {
 		busy = append(busy, ob(t, "busy_"+itoa(i), kindAccount, "u_busy", 1,
 			at.Add(time.Duration(i)*time.Second), "", "d_one"))
 	}
@@ -777,7 +777,7 @@ func TestPrior_CountsTheDistinctSubjectsSharingAnIdentifier(t *testing.T) {
 
 	// And now a real one: distinct subjects, one event apiece, the same device.
 	farm := make([]observation, 0, 2*fanSubjects)
-	for i := 0; i < 2*fanSubjects; i++ {
+	for i := range 2 * fanSubjects {
 		farm = append(farm, ob(t, "farm_"+itoa(i), kindAccount, "u_farm_"+itoa(i), 1,
 			at.Add(time.Duration(i)*time.Second), "", "d_farm"))
 	}
@@ -818,7 +818,7 @@ func TestPrior_ReadsNoIdentifierTheEventDoesNotCarry(t *testing.T) {
 
 	// Many subjects, none of them naming a device or a counterparty.
 	batch := make([]observation, 0, fanSubjects*2)
-	for i := 0; i < fanSubjects*2; i++ {
+	for i := range fanSubjects * 2 {
 		batch = append(batch, ob(t, "anon_"+itoa(i), kindAccount, "u_anon_"+itoa(i), 1,
 			at.Add(time.Duration(i)*time.Second)))
 	}
@@ -865,7 +865,7 @@ func TestPrior_IsScopedToTheAskingTenant(t *testing.T) {
 
 	// One tenant runs a farm on a device, at burst speed and at real value.
 	loud := make([]observation, 0, burstEvents)
-	for i := 0; i < burstEvents; i++ {
+	for i := range burstEvents {
 		loud = append(loud, ob(t, "loud_"+itoa(i), kindAccount, "u_loud_"+itoa(i%fanSubjects), 500,
 			at.Add(time.Duration(i)*time.Second), "", "d_shared"))
 	}

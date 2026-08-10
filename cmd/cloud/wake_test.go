@@ -103,7 +103,7 @@ func router(t *testing.T, name string) {
 // "invalid argument" about something the test is not about.
 func waitFor(t *testing.T, path string) {
 	t.Helper()
-	for i := 0; i < 400; i++ {
+	for range 400 {
 		if c, err := net.DialTimeout("unix", path, time.Second); err == nil {
 			_ = c.Close()
 			return

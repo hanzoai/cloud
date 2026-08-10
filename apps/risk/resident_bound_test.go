@@ -63,7 +63,7 @@ func TestResident_TheBoundHasAnOperatingPoint(t *testing.T) {
 	// Past the bound, one organisation at a time, so the LRU is well defined and
 	// `first` is the least recently used.
 	const past = 8
-	for i := 0; i < maxResident+past; i++ {
+	for i := range maxResident + past {
 		k := key(t, brandA, "orgbound"+strconv.Itoa(i))
 		// SERVED: every one of them gets a residency, including the ones past the
 		// bound. A refusal here is the cliff.

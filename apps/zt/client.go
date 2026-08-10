@@ -287,7 +287,7 @@ func (cl *client) do(ctx context.Context, path, query string, forceAuth bool) ([
 // their own type parameter.
 func listAll[T any](cl *client, ctx context.Context, path string) ([]T, error) {
 	var out []T
-	for page := 0; page < maxPages; page++ {
+	for page := range maxPages {
 		offset := page * perPage
 		q := url.Values{}
 		q.Set("limit", strconv.Itoa(perPage))

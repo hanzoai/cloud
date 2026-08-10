@@ -654,7 +654,7 @@ func TestSlackTurnPanicRecoveredAndSlotReleased(t *testing.T) {
 	// The recovered goroutine must release its slot; poll until a fresh acquire
 	// succeeds. Reaching here at all proves the panic did not crash the process.
 	released := false
-	for i := 0; i < 400; i++ {
+	for range 400 {
 		if channelLim.acquire(org) {
 			channelLim.release(org)
 			released = true

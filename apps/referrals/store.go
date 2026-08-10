@@ -148,7 +148,7 @@ func (s *Store) EnsureCode(ctx context.Context, org string) (string, error) {
 		return "", fmt.Errorf("lookup code: %w", err)
 	}
 	// Mint. Retry on the (astronomically unlikely) code collision with another org.
-	for n := 0; n < 8; n++ {
+	for n := range 8 {
 		cand := deriveCode(org, n)
 		_, err := s.db.ExecContext(ctx,
 			`INSERT INTO referral_codes (code, org, created_at) VALUES (?,?,strftime('%s','now'))`, cand, org)

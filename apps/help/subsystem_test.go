@@ -280,13 +280,13 @@ func TestPublicPlane_NoSharedBucketGlobalThrottle(t *testing.T) {
 	seedArticle(t, app, org, "kb-1", "KB One", "Published", true)
 
 	// Reads: 200 (> the old 120/min shared cap) must all avoid 429.
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		if code, _ := anon(t, app, http.MethodGet, "/v1/help/articles", nil, nil); code == http.StatusTooManyRequests {
 			t.Fatalf("public read #%d returned 429 — a shared-bucket global throttle is back", i)
 		}
 	}
 	// Intake: 40 (> the old 10/min shared cap) must all succeed (201), never 429.
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		code, raw := anon(t, app, http.MethodPost, "/v1/help/tickets", map[string]any{
 			"subject": "s", "email": "x@y.z", "description": "d",
 		}, nil)

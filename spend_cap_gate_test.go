@@ -188,14 +188,14 @@ func TestScopeRateLimit_PerScope429AndIsolation(t *testing.T) {
 	}
 
 	// Project isolation: project Q (same org) is NOT covered by P's rule.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if code := rateReq(t, app, "hanzo", "Q").StatusCode; code != 200 {
 			t.Fatalf("Q req%d = %d, want 200 (project P's limit must not gate Q)", i+1, code)
 		}
 	}
 
 	// Org isolation: org "other" has no rules — never throttled by hanzo's rule.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if code := rateReq(t, app, "other", "P").StatusCode; code != 200 {
 			t.Fatalf("other req%d = %d, want 200 (org hanzo's limit must not gate org other)", i+1, code)
 		}

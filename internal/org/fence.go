@@ -118,7 +118,7 @@ func (f *CASFencer) ElectsSelf(orgID string) bool {
 func (f *CASFencer) claim(ctx context.Context, orgID, self string) (ha.Lease, error) {
 	key := leaseKey(orgID)
 	var lastErr error
-	for attempt := 0; attempt < maxLeaseAttempts; attempt++ {
+	for range maxLeaseAttempts {
 		recorded, owner, version, err := f.readLease(ctx, key)
 		if err != nil {
 			return ha.Lease{}, err

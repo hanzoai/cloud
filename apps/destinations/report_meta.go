@@ -119,7 +119,7 @@ func (d metaReport) Report(ctx context.Context, _ Config, secret string, w Windo
 func metaAccounts(ctx context.Context, secret string) ([]string, error) {
 	var out []string
 	after := ""
-	for page := 0; page < maxPages; page++ {
+	for range maxPages {
 		q := url.Values{"fields": {"id"}, "limit": {"200"}}
 		if after != "" {
 			q.Set("after", after)
@@ -147,7 +147,7 @@ func metaAccounts(ctx context.Context, secret string) ([]string, error) {
 func metaInsights(ctx context.Context, secret, account string, w Window) ([]Metric, error) {
 	out := make([]Metric, 0, 64)
 	after := ""
-	for page := 0; page < maxPages; page++ {
+	for range maxPages {
 		// time_range is Meta's own JSON-in-a-query-parameter. Both dates render
 		// from the window's time.Time, so nothing a caller typed reaches it.
 		q := url.Values{

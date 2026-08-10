@@ -88,7 +88,7 @@ func TestMergeDoc_BoundsMergedResult(t *testing.T) {
 		t.Fatal("an over-sized merged document was accepted")
 	}
 	full := map[string]any{}
-	for i := 0; i < maxKeys; i++ {
+	for i := range maxKeys {
 		full[string(rune('a'+i%26))+string(rune('a'+i/26))] = 1
 	}
 	stored, err := mergeDoc(`{}`, full)

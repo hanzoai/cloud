@@ -137,7 +137,7 @@ var _ replica.ConditionalStore = (*etagCondStore)(nil)
 // non-atomic. Measured against production s3: 56/300 runs. With the payload bound
 // to the probe key and the raced version: 0/400.
 func TestProbeCASContentAddressedStoreConfirmed(t *testing.T) {
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		if err := ProbeCAS(context.Background(), newETagCondStore(), ".probe/cas-"); err != nil {
 			t.Fatalf("run %d: atomic content-addressed store must be confirmed, got: %v", i, err)
 		}

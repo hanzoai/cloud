@@ -47,7 +47,7 @@ func subCentCommerce(t *testing.T, rows []plane.UsageRow) {
 	t.Cleanup(func() { _ = app.Shutdown() })
 
 	path := zip.SocketPath("commerce")
-	for i := 0; i < 400; i++ {
+	for range 400 {
 		if c, err := net.DialTimeout("unix", path, time.Second); err == nil {
 			_ = c.Close()
 			return

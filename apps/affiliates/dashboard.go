@@ -353,7 +353,7 @@ func (o ops) mintLink(ctx context.Context, in *createLinkRequest) (*linkMint, er
 		link, err := newLink(o.s, ctx, a.ID, req, label)
 		return mintResult(o.s, link, err)
 	}
-	for attempt := 0; attempt < 8; attempt++ {
+	for range 8 {
 		code, gerr := randomLinkCode()
 		if gerr != nil {
 			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)

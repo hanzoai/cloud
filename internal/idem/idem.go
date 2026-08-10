@@ -77,7 +77,7 @@ func Once(ctx context.Context, db *sql.DB, key string, round uint64, apply func(
 	if err := EnsureSchema(ctx, db); err != nil {
 		return nil, false, err
 	}
-	for attempt := 0; attempt < maxBusyRetries; attempt++ {
+	for range maxBusyRetries {
 		result, applied, err = once(ctx, db, key, round, apply)
 		if isBusy(err) {
 			continue // busy_timeout was exceeded under contention; retry the whole tx.

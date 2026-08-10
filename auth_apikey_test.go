@@ -77,7 +77,7 @@ func TestIAMKeysCache(t *testing.T) {
 	}))
 	defer srv.Close()
 	k := &iamKeys{base: srv.URL, auth: "Basic test", http: srv.Client(), cache: newCache[string, *idClaims](time.Minute)}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if k.resolve(context.Background(), "sk-x") == nil {
 			t.Fatal("resolve nil")
 		}

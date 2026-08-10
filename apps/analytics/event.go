@@ -231,7 +231,7 @@ func keyAdmission(c *zip.Ctx, key string) (admission, bool) {
 // when the body is empty or all whitespace. The four bytes are JSON's insignificant
 // whitespace (RFC 8259 §2). The ONE place the ingest decoders skip leading space.
 func firstNonWS(body []byte) int {
-	for i := 0; i < len(body); i++ {
+	for i := range body {
 		switch body[i] {
 		case ' ', '\t', '\r', '\n':
 		default:

@@ -158,7 +158,7 @@ func TestPlane_BoundsOneTenantsConcurrency(t *testing.T) {
 	probe.reset(true)
 	p := newTestPlane(t)
 	a, b := key(t, brandA, orgA), key(t, brandA, orgB)
-	for i := 0; i < maxInFlight; i++ {
+	for i := range maxInFlight {
 		if err := p.enter(a); err != nil {
 			t.Fatalf("slot %d of %d refused: %v", i, maxInFlight, err)
 		}
@@ -171,7 +171,7 @@ func TestPlane_BoundsOneTenantsConcurrency(t *testing.T) {
 		t.Fatalf("one organisation at its own bound refused another organisation's call: %v", err)
 	}
 	p.leave(b)
-	for i := 0; i < maxInFlight; i++ {
+	for range maxInFlight {
 		p.leave(a)
 	}
 	if err := p.enter(a); err != nil {
@@ -239,7 +239,7 @@ func TestScoreAndLearn_MeterOneScreenPerEvent(t *testing.T) {
 	const batch = 7
 	var b strings.Builder
 	b.WriteString(`{"events":[`)
-	for i := 0; i < batch; i++ {
+	for i := range batch {
 		if i > 0 {
 			b.WriteByte(',')
 		}
@@ -279,7 +279,7 @@ func TestSearch_IsPricedFromItsMeasuredSize(t *testing.T) {
 		t.Fatalf("a %d-event search costs %d cents, which is too coarse for this bracket to mean anything", events, want)
 	}
 	hold := func(k tenant) {
-		for i := 0; i < events; i++ {
+		for i := range events {
 			probe.hold(string(k), map[string]any{
 				"subject_kind": kindAccount, "subject": "u_" + itoa(i%4),
 				"bucket": surfaceAt(i + 1),
@@ -502,7 +502,7 @@ func TestFold_IsBoundedAndRetriedRatherThanForgotten(t *testing.T) {
 	p := newTestPlane(t)
 	k := key(t, brandA, orgA)
 
-	for i := 0; i < maxFolds; i++ { // every ticket taken, as other tenants would
+	for range maxFolds { // every ticket taken, as other tenants would
 		p.folds <- struct{}{}
 	}
 	if _, err := p.resident(k); err != nil {
@@ -518,7 +518,7 @@ func TestFold_IsBoundedAndRetriedRatherThanForgotten(t *testing.T) {
 		t.Fatal("a tenant whose fold was deferred reports no gap — a zero fold with no reason is the silence this app refuses")
 	}
 
-	for i := 0; i < maxFolds; i++ { // the other tenants finish
+	for range maxFolds { // the other tenants finish
 		<-p.folds
 	}
 	if _, err := p.resident(k); err != nil {
@@ -588,7 +588,7 @@ func TestBounds_ArePublishedInTheDimensionThatBinds(t *testing.T) {
 	before := shelfBytes(t, sh)
 	batch := make([]observation, 0, sample)
 	at := time.Now().UTC().Add(-time.Hour)
-	for i := 0; i < sample; i++ {
+	for i := range sample {
 		// Distinct ids and subjects at the bound: the widest row the door admits.
 		batch = append(batch, ob(t, pad(strconv.Itoa(i), big), kindAccount, pad("s"+strconv.Itoa(i), big), 9_999,
 			at.Add(time.Duration(i)*time.Second), pad("p"+strconv.Itoa(i), big), pad("d"+strconv.Itoa(i), big)))
@@ -925,7 +925,7 @@ func TestSearch_IsMeteredOnWhatTheRunDid(t *testing.T) {
 	books := &ledger{available: 1_000_000_000}
 	app := mountBilled(t, books)
 	k := key(t, brandA, orgA)
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + strconv.Itoa(i%5),
 			"bucket": surfaceAt(i + 1),
@@ -970,7 +970,7 @@ func TestSearch_TheDebitLandsOnTheCallerThatAskedForIt(t *testing.T) {
 	books := &ledger{available: 1_000_000_000}
 	app := mountBilled(t, books)
 	k := key(t, brandA, orgA)
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + strconv.Itoa(i%5),
 			"bucket": surfaceAt(i + 1),
