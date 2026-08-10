@@ -514,13 +514,6 @@ func (in *venueAccountRef) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// venueProviderRef names the provider a link is being made against, from the path.
-type venueProviderRef struct {
-	// Provider is the cloud to link: digitalocean, aws, gcp or azure. An unknown
-	// provider is not found.
-	Provider string `json:"provider"`
-}
-
 // venueNoInput is the empty input of the two reads, which take nothing: what a
 // caller sees is entirely their own validated org's.
 type venueNoInput struct{}

@@ -61,7 +61,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -192,17 +191,6 @@ func clip(s string) string {
 		return s[:maxField]
 	}
 	return s
-}
-
-func limitOf(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
-		return defaultLimit
-	}
-	if n > maxLimit {
-		return maxLimit
-	}
-	return n
 }
 
 func nonNeg(n int64) int64 {

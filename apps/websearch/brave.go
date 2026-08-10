@@ -36,7 +36,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -47,25 +46,6 @@ func braveKey() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_BRAVE_KEY
 
 func braveURL() string {
 	return envOr("WEBSEARCH_BRAVE_URL", "https://api.search.brave.com/res/v1/web/search")
-}
-
-// bravePriceMillicents is what ONE search costs the CALLER, in thousandths of a
-// cent. It matches Brave's own list price to us — $5.00 per 1,000 = $0.005 =
-// 0.5 cents = 500 millicents — so the product is sold at cost on the upstream
-// call and earns on every answer the cache serves.
-//
-// Millicents because a cent cannot express a half-cent. Rounding up to 1c
-// doubles the price; rounding down to 0c makes the surface free, which is how a
-// metered product silently stops billing. WEBSEARCH_BRAVE_PRICE overrides.
-const bravePriceMillicents int64 = 500
-
-func bravePrice() int64 {
-	if v := strings.TrimSpace(os.Getenv("WEBSEARCH_BRAVE_PRICE")); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
-			return n
-		}
-	}
-	return bravePriceMillicents
 }
 
 // braveQuery is the request, in ONE place, because build() and the fetch must

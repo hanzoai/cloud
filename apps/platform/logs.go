@@ -14,7 +14,6 @@
 package platform
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -149,18 +148,6 @@ func buildLogContext(s *cloud.Service[state], ctx context.Context, d Deployment,
 	}
 	lines = append(lines, "(build pod logs are not available — the Job pod has not started yet or its TTL elapsed)")
 	return lines, false
-}
-
-// scanLogLines is a small utility that normalizes a raw log blob into trimmed lines,
-// used by tests to assert on individual lines without whitespace flakiness.
-func scanLogLines(raw string) []string {
-	var out []string
-	sc := bufio.NewScanner(strings.NewReader(raw))
-	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
-	for sc.Scan() {
-		out = append(out, sc.Text())
-	}
-	return out
 }
 
 func ptrInt64(v int64) *int64 { return &v }
