@@ -114,7 +114,7 @@ func (c *idClaims) userID() string {
 // with a space in it, not the `<name>` half of `<owner>/<name>`.
 //
 // The cost landed on the money path, which addresses a wallet as `<org>/<username>`
-// (clients/principal/wallet.go). Preferring `name` addressed `hanzo/Zach Kelling`,
+// (apps/principal/wallet.go). Preferring `name` addressed `hanzo/Zach Kelling`,
 // a wallet no funding path can name, while the balance sat in `hanzo/z`. Every
 // signed-in completion 402'd against a funded account. That file already documents
 // three prior recurrences of one bug — "two layers derived the same address two
