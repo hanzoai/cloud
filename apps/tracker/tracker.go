@@ -1,12 +1,13 @@
 // Package tracker is your org's issue tracker: projects, issues, and the filters to
 // find them.
 //
-// It mounts the Hanzo Cloud /v1/tracker/* surface — a native-Go, per-org tracker on
-// SQLite. It is the durable
-// replacement for the prior Svelte hanzo.team tracker, whose upstream each-block
-// reactive-batching render race left issue lists rendering zero rows. Native
-// @hanzo/gui over this one store sidesteps that entire class of bug: the rows
-// come back as plain JSON and render deterministically.
+// It mounts the Hanzo Cloud /v1/tracker/* surface. THE FORGE IS THE STORE
+// (source.go): a board is a repository on git.hanzo.ai and an issue is its issue,
+// so the reads below are reads OF the forge and nothing here mirrors them — a
+// second copy of a work item is a second answer to what its state is. The local
+// per-org SQLite (store.go) holds only what the forge cannot answer: the org-wide
+// index every source lands in (github_sink.go), which is what makes "is anyone
+// tracking X" a question with an answer.
 //
 // Org isolation is enforced SERVER-SIDE on every request: the org is
 // principal.Org(c) — the value SanitizeIdentity minted from the VALIDATED
@@ -16,16 +17,17 @@
 //
 // Surface (all org-scoped; /v1 only):
 //
-//	POST   /v1/tracker/projects                          create a project        -> Project (201)
-//	GET    /v1/tracker/projects                          list projects           -> [Project]
-//	GET    /v1/tracker/projects/:key                     project detail          -> Project
-//	PATCH  /v1/tracker/projects/:key                     update a project        -> Project
-//	DELETE /v1/tracker/projects/:key                     delete a project (+ issues)
-//	POST   /v1/tracker/projects/:key/issues              create an issue         -> Issue (201)
+//	GET    /v1/tracker/projects                          list boards             -> [Project]
+//	GET    /v1/tracker/projects/:key                     board detail            -> Project
+//	POST   /v1/tracker/projects                          405, named at the forge
+//	PATCH  /v1/tracker/projects/:key                     405, named at the forge
+//	DELETE /v1/tracker/projects/:key                     405, named at the forge
 //	GET    /v1/tracker/projects/:key/issues[?status=&kind=&repo=&source=&scheduled=]  -> [Issue]
-//	GET    /v1/tracker/projects/:key/issues/:num         issue detail            -> Issue
+//	POST   /v1/tracker/projects/:key/issues              file an issue           -> Issue (201)
 //	PATCH  /v1/tracker/projects/:key/issues/:num         update an issue         -> Issue
-//	DELETE /v1/tracker/projects/:key/issues/:num         delete an issue
+//	GET    /v1/tracker/milestones                        org rollup              -> [Milestone]
+//	GET    /v1/tracker/issues                            search across the org   -> [Issue]
+//	POST   /v1/tracker/projects/:key/issues/:num/claim   take a piece of work
 //
 // And the UI the surface exists for, embedded in this binary (ui/):
 //
@@ -38,18 +40,13 @@ package tracker
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"regexp"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
-	"github.com/hanzoai/cloud/apps/principal"
 	trackerui "github.com/hanzoai/cloud/apps/tracker/ui"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
@@ -90,14 +87,6 @@ var kinds = map[string]bool{
 	"issue": true, "pr": true, "epic": true,
 }
 
-// sources is the closed set of opening surfaces — which product ORIGINATED the
-// work item. Empty defaults to "team". Orthogonal to kind and validated
-// independently. source=helpdesk means "an engineering issue opened FROM a
-// support escalation", not "a helpdesk ticket" (a ticket is a DocType).
-var sources = map[string]bool{
-	"team": true, "git": true, "crm": true, "helpdesk": true, "cms": true, "agent": true,
-}
-
 // state is tracker's own data; shared deps (logger, billing meter) live in the
 // embedded cloud.Base, reached as s.Log / s.Bill.
 //
@@ -136,12 +125,6 @@ func storeFor(s *cloud.Service[state], org, project string) (*Store, error) {
 	return s.State.stores.For(ns)
 }
 
-// requestStore is storeFor for a request: the project is the one the gateway
-// validated, never a value the handler names itself.
-func requestStore(s *cloud.Service[state], c *zip.Ctx, org string) (*Store, error) {
-	return storeFor(s, org, principal.Project(c))
-}
-
 // Mount wires the tracker surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted) so Shutdown can close every per-tenant store,
 // so it constructs the Service value directly rather than via cloud.Mount.
@@ -170,28 +153,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// The PROSE for the two creates. Every other operation on this surface is a typed
-// op whose description zipdoc lifts from its doc comment; these two are raw by
-// construction (typed.go names the blocker), so they have no comment to lift and
-// were reaching the document — and every SDK and CLI generated from it — as an
-// operationId and nothing else. That left the tracker able to explain reading,
-// updating and deleting a board, and unable to explain making one.
+// The PROSE for the three refusals. Every other operation on this surface is a
+// typed op whose description zipdoc lifts from its doc comment; these three are
+// raw handlers answering ONE refusal (projectLifecycle in source.go), so there is
+// no comment to lift and they would otherwise reach the document — and every SDK
+// and CLI generated from it — as an operationId and nothing else, which reads
+// exactly like a route nobody bothered to describe rather than one that is
+// deliberately not here.
 //
-// Written as the missing half of the SAME story the typed siblings tell: the KEY is
-// what listProjects and getProject address a board by, and the identifier
-// getIssue answers with is the number assigned HERE. Keyed on the fiber pattern the
-// routes below register, so a description whose route moved stops rendering rather
-// than drifting.
+// Keyed on the fiber pattern the routes below register, so a description whose
+// route moved stops rendering rather than drifting.
 func init() {
-	// The three repository-lifecycle routes. They are raw handlers answering ONE
-	// refusal (projectLifecycle in source.go), so there is no doc comment for
-	// zipdoc to lift and the prose is written here — the same reason the creates
-	// used to be described here, for a route that now does the opposite.
-	//
-	// Every OTHER operation on this surface is a typed op whose description zipdoc
-	// lifts from its doc comment. POST .../issues USED to be described here too;
-	// it is a typed op now (ops.forgeCreateIssue), so its prose comes from its
-	// comment and a second copy here could only drift from it.
 	for _, m := range []struct{ path, method string }{
 		{"/v1/tracker/projects", http.MethodPost},
 		{"/v1/tracker/projects/:key", http.MethodPatch},
@@ -217,11 +189,10 @@ func init() {
 // :param siblings so Fiber's first-match scan resolves the collection endpoints
 // before the detail ones.
 //
-// Everything but the two creates is a TYPED op (typed.go) — one registry entry
-// carrying the schema, the prose, an MCP tool, a CLI command and an SDK method.
-// The creates stay raw because their balance denial is a body zip's error type
-// cannot express; typed.go states that refusal in full. Their prose is declared
-// above instead, through the registry openapi.Register shares.
+// Everything but the three refusals is a TYPED op — one registry entry carrying
+// the schema, the prose, an MCP tool, a CLI command and an SDK method. The
+// refusals stay raw because they have one answer and no shape to describe; their
+// prose is declared above instead, through the registry openapi.Describe shares.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
 	g := app.Group("/v1/tracker", requireCSRFOnWrites())
@@ -321,7 +292,11 @@ func requireCSRFOnWrites() zip.Handler {
 	}
 }
 
-// ---- HTTP response shapes (the published contract) ----
+// ---- the published response shapes ----
+//
+// Built by the forge reads (source.go) and by the org-wide search over the local
+// index (search.go). Both spell the same two views, because a caller must not be
+// able to tell which source answered from the shape of the answer.
 
 type trackerProject struct {
 	ID          string `json:"id"`
@@ -331,13 +306,6 @@ type trackerProject struct {
 	Description string `json:"description,omitempty"`
 	CreatedAt   int64  `json:"createdAt"`
 	UpdatedAt   int64  `json:"updatedAt"`
-}
-
-func toProjectView(p Project) trackerProject {
-	return trackerProject{
-		ID: p.ID, Org: p.Org, Key: p.Key, Name: p.Name, Description: p.Description,
-		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
-	}
 }
 
 type issueView struct {
@@ -361,257 +329,7 @@ type issueView struct {
 	UpdatedAt   int64    `json:"updatedAt"`
 }
 
-func toIssueView(projectKey string, i Issue) issueView {
-	return issueView{
-		ID:         i.ID,
-		Identifier: fmt.Sprintf("%s-%d", projectKey, i.Number),
-		ProjectKey: projectKey,
-		Number:     i.Number,
-		Kind:       i.Kind, Source: i.Source, Repo: i.Repo, ExtRef: i.ExtRef,
-		Title: i.Title, Description: i.Description,
-		Status: i.Status, Priority: i.Priority, Assignee: i.Assignee,
-		Labels:  splitLabels(i.Labels),
-		StartAt: i.StartAt, DueAt: i.DueAt,
-		CreatedAt: i.CreatedAt, UpdatedAt: i.UpdatedAt,
-	}
-}
-
-// ---- project handlers ----
-
-type createProjectReq struct {
-	Key         string `json:"key"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
-func createProject(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := requestStore(s, c, org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
-	var body createProjectReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := strings.TrimSpace(body.Name)
-	if name == "" || len(name) > maxField {
-		return zip.ErrBadRequest("name is required (<=256 chars)")
-	}
-	key := strings.ToUpper(strings.TrimSpace(body.Key))
-	if key == "" {
-		key = deriveKey(name)
-	}
-	if !keyRE.MatchString(key) {
-		return zip.ErrBadRequest("key must match ^[A-Z][A-Z0-9]{1,7}$")
-	}
-	desc := strings.TrimSpace(body.Description)
-	if len(desc) > maxDesc {
-		return zip.ErrBadRequest("description too long")
-	}
-
-	kind := "project"
-	fee := createFeeCents(kind)
-	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, kind, fee); err != nil {
-		return cloud.DenyResource(c, err)
-	}
-
-	id, err := genID("prj")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	now := time.Now().Unix()
-	p := Project{ID: id, Org: org, Key: key, Name: name, Description: desc, CreatedAt: now, UpdatedAt: now}
-	if err := store.CreateProject(c.Context(), p); err != nil {
-		if errors.Is(err, errConflict) {
-			return zip.ErrConflict("project key already exists in this org")
-		}
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
-	}
-	s.Bill.Meter(principal.Ledger(c), principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
-	return c.JSON(http.StatusCreated, toProjectView(p))
-}
-
-// ---- issue handlers ----
-
-// project resolves the caller's project by :key from the given per-org store,
-// or answers the right HTTP error.
-func project(s *cloud.Service[state], c *zip.Ctx, store *Store, org string) (Project, error) {
-	p, err := store.GetProject(c.Context(), org, keyParam(c))
-	if errors.Is(err, errNotFound) {
-		return Project{}, zip.ErrNotFound("project not found")
-	}
-	if err != nil {
-		return Project{}, zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
-	}
-	return p, nil
-}
-
-type createIssueReq struct {
-	Kind        string   `json:"kind"`   // issue|pr|epic, default issue
-	Source      string   `json:"source"` // team|git|crm|helpdesk|cms|agent, default team
-	Repo        string   `json:"repo"`   // git repo binding (kind pr/issue from git)
-	ExtRef      string   `json:"extRef"` // external anchor (PR branch, or link into another plane)
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Status      string   `json:"status"`
-	Priority    string   `json:"priority"`
-	Assignee    string   `json:"assignee"`
-	Labels      []string `json:"labels"`
-	StartAt     int64    `json:"startAt"` // unix seconds; 0/omitted = unscheduled
-	DueAt       int64    `json:"dueAt"`   // unix seconds; 0/omitted = no due date
-}
-
-func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := requestStore(s, c, org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
-	p, err := project(s, c, store, org)
-	if err != nil {
-		return err
-	}
-	var body createIssueReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	title := strings.TrimSpace(body.Title)
-	if title == "" || len(title) > maxTitle {
-		return zip.ErrBadRequest("title is required (<=512 chars)")
-	}
-	kind, err := normKind(body.Kind)
-	if err != nil {
-		return err
-	}
-	source, err := normSource(body.Source)
-	if err != nil {
-		return err
-	}
-	status, err := normStatus(body.Status)
-	if err != nil {
-		return err
-	}
-	priority, err := normPriority(body.Priority)
-	if err != nil {
-		return err
-	}
-	labels, err := normLabels(body.Labels)
-	if err != nil {
-		return err
-	}
-	desc := strings.TrimSpace(body.Description)
-	if len(desc) > maxDesc {
-		return zip.ErrBadRequest("description too long")
-	}
-	assignee := strings.TrimSpace(body.Assignee)
-	if len(assignee) > maxField {
-		return zip.ErrBadRequest("assignee too long")
-	}
-	repo := strings.TrimSpace(body.Repo)
-	if len(repo) > maxField {
-		return zip.ErrBadRequest("repo too long")
-	}
-	extRef := strings.TrimSpace(body.ExtRef)
-	if len(extRef) > maxField {
-		return zip.ErrBadRequest("extRef too long")
-	}
-	if err := checkSchedule(body.StartAt, body.DueAt); err != nil {
-		return err
-	}
-
-	// Billing category is the constant "issue" tracker row — an issue costs the
-	// same whatever kind it discriminates into, and ops prices it via
-	// CLOUD_TRACKER_FEE_CENTS_ISSUE. Decoupled from the polymorphic work-item Kind.
-	const billKind = "issue"
-	fee := createFeeCents(billKind)
-	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, billKind, fee); err != nil {
-		return cloud.DenyResource(c, err)
-	}
-
-	id, err := genID("issue")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	now := time.Now().Unix()
-	i := Issue{
-		ID: id, ProjectID: p.ID, Org: org,
-		Kind: kind, Source: source, Repo: repo, ExtRef: extRef,
-		Title: title, Description: desc, Status: status, Priority: priority,
-		Assignee: assignee, Labels: labels,
-		StartAt: body.StartAt, DueAt: body.DueAt,
-		CreatedAt: now, UpdatedAt: now,
-	}
-	created, err := store.CreateIssue(c.Context(), i)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
-	}
-	s.Bill.Meter(principal.Ledger(c), principal.Project(c), billKind, fee, c.RequestID(), cloud.ClientIP(c))
-	return c.JSON(http.StatusCreated, toIssueView(p.Key, created))
-}
-
 // ---- helpers ----
-
-// org resolves the org — the org-isolation KEY — for a request, using
-// c.Org() EXACTLY as SanitizeIdentity minted it from the validated IAM owner
-// claim (HIP-0026). Mirrors clients/crm and clients/prompts.
-func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
-
-// keyParam returns the uppercased :key path segment (project keys are stored
-// uppercase; the URL is matched case-insensitively).
-func keyParam(c *zip.Ctx) string { return strings.ToUpper(strings.TrimSpace(c.Param("key"))) }
-
-func normStatus(s string) (string, error) {
-	s = strings.ToLower(strings.TrimSpace(s))
-	if s == "" {
-		return "backlog", nil
-	}
-	if !statuses[s] {
-		return "", zip.ErrBadRequest("unknown status")
-	}
-	return s, nil
-}
-
-func normPriority(s string) (string, error) {
-	s = strings.ToLower(strings.TrimSpace(s))
-	if s == "" {
-		return "none", nil
-	}
-	if !priorities[s] {
-		return "", zip.ErrBadRequest("unknown priority")
-	}
-	return s, nil
-}
-
-func normKind(s string) (string, error) {
-	s = strings.ToLower(strings.TrimSpace(s))
-	if s == "" {
-		return "issue", nil
-	}
-	if !kinds[s] {
-		return "", zip.ErrBadRequest("unknown kind")
-	}
-	return s, nil
-}
-
-func normSource(s string) (string, error) {
-	s = strings.ToLower(strings.TrimSpace(s))
-	if s == "" {
-		return "team", nil
-	}
-	if !sources[s] {
-		return "", zip.ErrBadRequest("unknown source")
-	}
-	return s, nil
-}
 
 // maxScheduleAt is the far edge of the interval this tracker will store:
 // 2200-01-01T00:00:00Z. A project plan does not reach past it, and the number
@@ -656,34 +374,6 @@ func checkSchedule(startAt, dueAt int64) error {
 	return nil
 }
 
-// normLabels trims, validates and comma-joins labels for storage. A label is a
-// short tag; empty entries are dropped and a comma inside a label is rejected
-// (the storage separator).
-func normLabels(in []string) (string, error) {
-	var out []string
-	for _, l := range in {
-		l = strings.TrimSpace(l)
-		if l == "" {
-			continue
-		}
-		if len(l) > maxLabel {
-			return "", zip.ErrBadRequest("label too long")
-		}
-		if strings.ContainsRune(l, ',') {
-			return "", zip.ErrBadRequest("label must not contain a comma")
-		}
-		out = append(out, l)
-	}
-	return strings.Join(out, ","), nil
-}
-
-func splitLabels(s string) []string {
-	if s == "" {
-		return []string{}
-	}
-	return strings.Split(s, ",")
-}
-
 // deriveKey builds a fallback project key from a display name: the leading
 // letters, uppercased, capped — used when the caller omits an explicit key. The
 // result is validated by keyRE before use.
@@ -702,33 +392,6 @@ func deriveKey(name string) string {
 		return "PRJ"
 	}
 	return k
-}
-
-// createFeeCents resolves the flat create fee for a tracker resource. Unlike
-// provisioning (infra that always costs), a project tracker is FREE by default —
-// charging per issue is the wrong product. The billing seam is still wired
-// (Gate + Meter) for uniformity, and ops can price it per deployment via
-// CLOUD_TRACKER_FEE_CENTS[_PROJECT|_ISSUE]; default 0 = free and un-gated.
-func createFeeCents(kind string) int64 {
-	if v, ok := parseFee(os.Getenv("CLOUD_TRACKER_FEE_CENTS_" + strings.ToUpper(kind))); ok {
-		return v
-	}
-	if v, ok := parseFee(os.Getenv("CLOUD_TRACKER_FEE_CENTS")); ok {
-		return v
-	}
-	return 0
-}
-
-func parseFee(s string) (int64, bool) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, false
-	}
-	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil || n < 0 {
-		return 0, false
-	}
-	return n, true
 }
 
 // genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
