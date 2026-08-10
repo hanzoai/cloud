@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -150,7 +151,7 @@ type corpusView struct {
 //
 // Example: {"category": "viral-coefficient", "stage": "scaling"}
 func (o ops) strategies(ctx context.Context, in *strategiesQuery) (*corpusView, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}

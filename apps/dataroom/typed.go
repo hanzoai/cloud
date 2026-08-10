@@ -67,19 +67,6 @@ type ops struct{ s *cloud.Service[state] }
 // the org IS the address and there is no parameter to bind.
 type noInput struct{}
 
-// tenantOf is the validated org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. It is the same principal.Org answer the untyped
-// dispatch reads off the request, so both planes gate identically.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
-
 // bundleMessage is the human sentence in a dataroom refusal, for the Error()
 // string an off-HTTP caller sees. The bundle's envelope is a single `error` key
 // (its err() helper, and its top-level catch), which is a SHAPE OF ITS OWN — this
@@ -104,7 +91,7 @@ func bundleMessage(status int, body []byte) string {
 // is the BUNDLE's answer and comes back as a goja.BundleErr, so the client gets
 // the same bytes under the same status the untyped relay wrote.
 func (o ops) call(ctx context.Context, route string, params map[string]string, out any) error {
-	org, err := tenantOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return err
 	}
@@ -115,7 +102,7 @@ func (o ops) call(ctx context.Context, route string, params map[string]string, o
 // body with the relay's 413 — after the tenant, before the work, the order the
 // relay used — then assemble the caller's verbatim tokens and dispatch.
 func (o ops) write(ctx context.Context, route string, size goja.SizedIn, params map[string]string, fields map[string]goja.BodyField, out any) error {
-	org, err := tenantOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return err
 	}

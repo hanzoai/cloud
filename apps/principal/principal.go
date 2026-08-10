@@ -243,6 +243,39 @@ func OrgFrom(ctx context.Context) (string, bool) {
 	return OrgOf(c.User, c.Org)
 }
 
+// RequireOrg is [OrgFrom] composed with the ONE refusal, for the typed op that
+// cannot serve without an org: the isolation key, or the 403 that says why not.
+//
+// It exists because fourteen subsystems had written it themselves — the same five
+// lines under three names (`tenant`, `tenantOf`, `callerOf`), each with its own
+// paragraph restating that the org is never an In field. That is one decision in
+// fourteen places, and this package's own opening line says why that is the thing
+// to avoid: the trust decision lives once "and can never drift between six
+// hand-rolled copies". The decision did not drift. The REFUSAL was the copy —
+// `zip.ErrForbidden("X-Org-Id required")`, a string a fifteenth subsystem would
+// have had to spell correctly for its 403 to read like everyone else's.
+//
+// The org is never an In field: an In field is caller-supplied, so an org read
+// from one is a cross-tenant read the caller asserted for itself. It is the org
+// EXACTLY as the identity boundary minted it from the validated IAM owner claim —
+// never lowercased, stripped or truncated, because folding collapses DISTINCT
+// owners into one storage bucket, which is itself a cross-org break.
+//
+// It fails CLOSED off the HTTP path, where nothing parked an org and there is no
+// caller to read: a CLI invoke resolves nothing and the op refuses, rather than
+// serving the first request that arrives with no owner as if it had one.
+//
+// Ask [OrgFrom] instead where the absence is a BRANCH rather than a refusal, and
+// [Validated] where the plane has no org to scope by and the gate is only whether
+// the caller is signed in at all.
+func RequireOrg(ctx context.Context) (string, error) {
+	org, ok := OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return org, nil
+}
+
 // validatedKey names the slot the WEAKER fact crosses the same seam in.
 // Unexported zero-size type, exactly like orgKey.
 type validatedKey struct{}
