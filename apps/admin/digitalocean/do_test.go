@@ -58,16 +58,47 @@ func TestMutationWireShape(t *testing.T) {
 		})
 	}
 
-	// An unconfigured client must never reach the network.
-	blank := New("")
-	for name, err := range map[string]error{
-		"droplet": blank.DeleteDroplet(context.Background(), 1),
-		"lb":      blank.DeleteLoadBalancer(context.Background(), "x"),
-		"pool":    blank.ScaleNodePool(context.Background(), "c", "p", "n", 1),
-	} {
-		if err == nil {
+}
+
+// TestUnconfiguredClientNeverDials drives EVERY call on the client with no token
+// at a server that records any request, and requires each to refuse without one.
+// The refusal used to be restated above each method's first line; it lives in
+// `send` now, so this is the evidence that moving it lost nobody — the stub is
+// the thing that would notice a method slipping past.
+func TestUnconfiguredClientNeverDials(t *testing.T) {
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+	c := NewWithBase(srv.URL, "")
+
+	ctx := context.Background()
+	calls := map[string]func() error{
+		"Balance":            func() error { _, err := c.Balance(ctx); return err },
+		"History":            func() error { _, err := c.History(ctx, 10); return err },
+		"CreditIssued":       func() error { _, err := c.CreditIssued(ctx); return err },
+		"Volumes":            func() error { _, err := c.Volumes(ctx); return err },
+		"Droplets":           func() error { _, err := c.Droplets(ctx); return err },
+		"Clusters":           func() error { _, err := c.Clusters(ctx); return err },
+		"LoadBalancers":      func() error { _, err := c.LoadBalancers(ctx); return err },
+		"Kubeconfig":         func() error { _, err := c.Kubeconfig(ctx, "k8s-1"); return err },
+		"SnapshotVolume":     func() error { _, err := c.SnapshotVolume(ctx, "v1", "n"); return err },
+		"ResizeDroplet":      func() error { _, err := c.ResizeDroplet(ctx, 1, "s", false); return err },
+		"ResizeVolume":       func() error { _, err := c.ResizeVolume(ctx, "v1", "sfo3", 20); return err },
+		"DeleteVolume":       func() error { return c.DeleteVolume(ctx, "v1") },
+		"DeleteDroplet":      func() error { return c.DeleteDroplet(ctx, 1) },
+		"DeleteLoadBalancer": func() error { return c.DeleteLoadBalancer(ctx, "lb-1") },
+		"ScaleNodePool":      func() error { return c.ScaleNodePool(ctx, "c", "p", "n", 1) },
+	}
+	for name, call := range calls {
+		if err := call(); err == nil {
 			t.Errorf("%s: no error without a token", name)
 		}
+	}
+	if hits != 0 {
+		t.Errorf("an unconfigured client reached the network %d times", hits)
 	}
 }
 
