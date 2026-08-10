@@ -10,16 +10,21 @@
 // Deployment + Service + Ingress (+ HPA/PDB/Pods). This plane OBSERVES that
 // reconciliation the way a CD controller observes a synced Application —
 //
-//	GET  /v1/deploy/applications        — the fleet list: name, declared version,
-//	                                      health, sync, per app.
-//	GET  /v1/deploy/{name}/tree         — the owned-resource tree (ownerRef edges)
-//	                                      with per-node health + sync.
-//	GET  /v1/deploy/{name}/resource/{ref} — one node's live manifest + a
-//	                                      desired-vs-live diff.
-//	GET  /v1/deploy/{name}/logs         — the app's current pod logs.
-//	POST /v1/deploy/{name}/rollback     — pin the CR image tag to a prior semver
-//	                                      (the operator reconciles the rollout).
-//	POST /v1/deploy/{name}/sync         — request an operator reconcile now.
+// and it does so at the ArgoCD dashboard's own addresses, because the console that
+// consumes it is that dashboard (dashboard.go):
+//
+//	GET  /v1/deploy/applications                    — the fleet list: name, declared
+//	                                                  version, health, sync, per app.
+//	GET  /v1/deploy/applications/{name}             — one app, with its resource list.
+//	GET  /v1/deploy/applications/{name}/resource-tree — the owned-resource tree
+//	                                                  (ownerRef edges) with per-node
+//	                                                  health + sync.
+//	POST /v1/deploy/applications/{name}/sync        — request an operator reconcile now.
+//	POST /v1/deploy/applications/{name}/rollback    — the same request; rollback by
+//	                                                  revision is the image-pin follow-on.
+//	GET  /v1/deploy/gitops                          — the CD plane's own Applications.
+//	POST /v1/deploy/reconcile                       — render the configured git source
+//	                                                  and apply it, once (engine_mount.go).
 //
 // SECURITY — the projection READS are TENANT-SCOPED and the WRITES stay SuperAdmin-
 // only, all fail-closed on the SAME identity boundary the rest of cloud trusts
@@ -95,22 +100,6 @@ var (
 	configMapsGVR  = schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
 )
 
-// kindGVR resolves a resource ref's (group, kind) to its GVR — the fixed, closed
-// registry of kinds this plane reads. A ref for any kind NOT here is refused, so
-// the resource endpoint can never be steered at an arbitrary cluster object.
-// Keyed by "group/Kind" (group "" for the core API group).
-var kindGVR = map[string]schema.GroupVersionResource{
-	"hanzo.ai/App":                        k8s.Apps,
-	"apps/Deployment":                     k8s.Deployments,
-	"apps/ReplicaSet":                     replicaSetsGVR,
-	"/Pod":                                podsGVR,
-	"/Service":                            coreSvcGVR,
-	"/ConfigMap":                          configMapsGVR,
-	"networking.k8s.io/Ingress":           ingressGVR,
-	"autoscaling/HorizontalPodAutoscaler": hpaGVR,
-	"policy/PodDisruptionBudget":          pdbGVR,
-}
-
 // nsEnv maps each scanned platform namespace to its lifecycle env, mirroring
 // clients/paas (main first). Only these namespaces are read — the plane never
 // reaches beyond the platform tier.
@@ -125,12 +114,6 @@ func scanOrder() []string { return []string{"hanzo", "hanzo-testnet", "hanzo-dev
 var appNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 const userAgent = "hanzo-cloud-deploy"
-
-// deployDesiredTODO documents the desired-state source seam: "last-applied" (the
-// kubectl last-applied-configuration annotation on the live object) today; the
-// git.hanzo.ai manifest repo once RegisterPushBuilder commits CR changes there.
-// The diff shape does not change when the source flips.
-const deployDesiredTODO = "last-applied"
 
 // state is gitops's own data; shared deps live in the embedded cloud.Base.
 type state struct {
@@ -422,9 +405,6 @@ func ready(s *cloud.Service[state]) error {
 	return nil
 }
 
-// reqName reads and normalizes the {name} path segment.
-func reqName(c *zip.Ctx) string { return regexpLower(c.Param("name")) }
-
 func regexpLower(s string) string {
 	out := make([]byte, 0, len(s))
 	for i := 0; i < len(s); i++ {
@@ -438,19 +418,6 @@ func regexpLower(s string) string {
 		out = append(out, b)
 	}
 	return string(out)
-}
-
-// resolveNamespace finds the platform namespace an App CR lives in, scanning in
-// env order (main first). Returns a clean 404 when found in none.
-func resolveNamespace(s *cloud.Service[state], c *zip.Ctx, name string) (string, error) {
-	for _, ns := range scanOrder() {
-		if _, _, err := getAppCR(s, c.Context(), ns, name); err == nil {
-			return ns, nil
-		} else if !apierrors.IsNotFound(err) {
-			return "", k8sErr(s, "get", err)
-		}
-	}
-	return "", zip.ErrNotFound("application " + name + " not found in the platform namespaces")
 }
 
 // getAppCR gets an App CR by name from ns. Returns the object and its GVR so a
