@@ -364,6 +364,10 @@ var Apps = []App{
 	{Name: "index", Prefixes: []string{"/v1/index"}},
 	{Name: "catalog", Prefixes: []string{"/v1/catalog"}},
 	{Name: "world", Prefixes: []string{"/v1/world"}},
+	// web3 is named for the domain and serves none of it under /v1/web3, so the
+	// /v1/<name> default would cover nothing it registers — the apps/plan defect.
+	// The three prefixes are its whole surface (chains, rpc, tokens).
+	{Name: "web3", Prefixes: []string{"/v1/chains", "/v1/rpc", "/v1/tokens"}},
 	{Name: "bot", Prefixes: []string{"/v1/bot/connect", "/v1/bot/nodes", "/v1/bot/peer/invoke"}},
 	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}},
 	// bots is the headless bot: the run control plane at /v1/bots AND the door to

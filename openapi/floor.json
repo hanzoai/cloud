@@ -1,6 +1,6 @@
 {
-  "paths": 1792,
-  "operations": 2463,
+  "paths": 1796,
+  "operations": 2467,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -30,6 +30,7 @@
     "captable": 31,
     "cart": 4,
     "catalog": 8,
+    "chains": 2,
     "channels": 7,
     "chat": 2,
     "cloud": 5,
@@ -148,6 +149,7 @@
     "responses": 1,
     "risk": 31,
     "router": 30,
+    "rpc": 1,
     "run": 1,
     "runner": 3,
     "s3": 12,
@@ -170,6 +172,7 @@
     "tasks": 10,
     "team": 17,
     "templates": 5,
+    "tokens": 1,
     "tools": 8,
     "traces": 4,
     "tracker": 11,
