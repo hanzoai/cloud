@@ -122,7 +122,6 @@ func TestEveryCallerSizedFieldDeclaresACeiling(t *testing.T) {
 			walk(rt.Elem(), path+suffix)
 		case reflect.Struct:
 			for f := range rt.Fields() {
-				f := f
 				if !f.IsExported() {
 					continue
 				}

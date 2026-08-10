@@ -55,6 +55,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"sort"
@@ -1403,9 +1404,7 @@ func emitAudit(s *cloud.Service[state], ctx context.Context, action string, a Af
 		return
 	}
 	after := map[string]any{"affiliateId": a.ID, "org": a.Org, "code": a.Code, "status": a.Status}
-	for k, v := range extra {
-		after[k] = v
-	}
+	maps.Copy(after, extra)
 	rec := audit.Record{
 		Actor:    audit.Actor{Org: a.Org, Sub: "affiliates"},
 		Action:   action,

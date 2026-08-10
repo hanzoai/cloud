@@ -178,7 +178,6 @@ func walkEncodable(t *testing.T, typ reflect.Type, path string) {
 		return
 	}
 	for f := range typ.Fields() {
-		f := f
 		ft := f.Type
 		for ft.Kind() == reflect.Pointer {
 			ft = ft.Elem()
