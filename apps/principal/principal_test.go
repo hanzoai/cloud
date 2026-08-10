@@ -306,3 +306,82 @@ func TestIsDefaultProject(t *testing.T) {
 		}
 	}
 }
+
+// TestRequireOrg_IsOrgFromPlusTheOneRefusal pins what fourteen subsystems used
+// to write themselves: the org when there is one, and ONE 403 when there is not.
+// It drives the same three callers TestParked_TwoFactsNeverDisagree does, so the
+// refusal cannot start disagreeing with the decision it composes — a forged org
+// and an org-less machine token are both refused, and the ordinary caller's org
+// comes back verbatim.
+func TestRequireOrg_IsOrgFromPlusTheOneRefusal(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		headers map[string]string
+		org     string
+	}{
+		{"forged org, no credential", map[string]string{"X-Org-Id": "victim"}, ""},
+		{"org-less machine token", map[string]string{"X-User-Id": "u_1"}, ""},
+		{"ordinary caller", map[string]string{"X-User-Id": "u_1", "X-Org-Id": "acme"}, "acme"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			org, status, msg := required(t, tc.headers)
+			if tc.org == "" {
+				if status != 403 {
+					t.Fatalf("status = %d, want 403", status)
+				}
+				if msg != "X-Org-Id required" {
+					t.Fatalf("message = %q, want %q — the refusal is the one every subsystem answers", msg, "X-Org-Id required")
+				}
+				return
+			}
+			if status != 200 || org != tc.org {
+				t.Fatalf("org = %q status = %d, want %q/200", org, status, tc.org)
+			}
+		})
+	}
+}
+
+// TestRequireOrg_FailsClosedOffTheHTTPPath: a CLI invoke runs an op with a bare
+// context, so there is no caller to read and no org to resolve. It refuses rather
+// than serving the first request that arrives with no owner as if it had one.
+func TestRequireOrg_FailsClosedOffTheHTTPPath(t *testing.T) {
+	org, err := principal.RequireOrg(context.Background())
+	if err == nil {
+		t.Fatalf("RequireOrg off the HTTP path returned %q with no error — it must refuse", org)
+	}
+	if org != "" {
+		t.Fatalf("refused, and still answered an org: %q", org)
+	}
+}
+
+// required drives RequireOrg through a real request, reporting the org it
+// resolved or the status and message it refused with.
+func required(t *testing.T, headers map[string]string) (org string, status int, msg string) {
+	t.Helper()
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	app.Get("/required", func(c *zip.Ctx) error {
+		o, err := principal.RequireOrg(principal.WithOrg(c.Context(), c))
+		if err != nil {
+			return err
+		}
+		return c.JSON(200, map[string]any{"org": o})
+	})
+	req := httptest.NewRequest("GET", "/required", nil)
+	for h, v := range headers {
+		req.Header.Set(h, v)
+	}
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("required: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	var out struct {
+		Org   string `json:"org"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("required decode: %v (%s)", err, b)
+	}
+	return out.Org, resp.StatusCode, out.Error
+}

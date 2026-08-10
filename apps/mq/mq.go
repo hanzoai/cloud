@@ -53,7 +53,6 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/pubsub"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -162,26 +161,6 @@ func (br *broker) live(ctx context.Context) (context.Context, context.CancelFunc
 	}
 	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
 	return ctx, cancel, nil
-}
-
-// callerOf resolves the org — the tenant-isolation KEY — for a typed op, which
-// receives a context and its decoded In and nothing else. The org is a REQUEST
-// fact off the validated principal, never an In field: an In field is
-// caller-supplied, so a tenant key read from one would be a cross-tenant read
-// the caller asserted for itself.
-//
-// It reads the org Bridge PARKED, not the request. The org is all this surface
-// needs — nothing here turns on admin-ness, a project or a forwarded credential
-// — and principal.OrgFrom is the typed-op reader for exactly that, so reaching
-// for cloud.Request would take the escape hatch to recompute principal.Org(c),
-// the same value by the longer way. Fails closed off the HTTP path, where
-// nothing is parked and every op refuses rather than serving an untenanted one.
-func callerOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
 }
 
 // ── the org namespace ───────────────────────────────────────────────────────

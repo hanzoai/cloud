@@ -195,7 +195,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 	// Startup Program applications. The intake POST is PUBLIC (unauthenticated
 	// marketing form) and IP-rate-limited; the reads/mutations are staff-only,
-	// gated by tenant() like every other CRM route.
+	// gated by principal.RequireOrg like every other CRM route.
 	//
 	// The intake is the one route here that is NOT a typed op, and the rate limit
 	// is why: it is an HTTP middleware, and the MCP and CLI projections of a typed
@@ -235,20 +235,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 }
 
 // ---- shared helpers ----
-
-// tenant resolves the org — the tenant-isolation KEY — for a typed op. It is
-// principal.Org's answer carried across the typed signature by cloud.Bridge:
-// c.Org() EXACTLY as SanitizeIdentity minted it from the validated IAM owner
-// claim (HIP-0026), never lowercased, stripped or truncated (normalizing would
-// collapse DISTINCT owners into one bucket — itself a cross-tenant break). A
-// request with no validated principal parks nothing, so this refuses.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	return org, nil
-}
 
 // genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
 func genID(prefix string) (string, error) {
@@ -457,7 +443,7 @@ type oppReq struct {
 //
 // Example: {"name": "MaxPower Inc", "domainName": "maxpower.ai", "employees": 42}
 func (o ops) createCompany(ctx context.Context, in *companyReq) (*Company, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -485,7 +471,7 @@ func (o ops) createCompany(ctx context.Context, in *companyReq) (*Company, error
 
 // ListCompanies returns the caller org's companies, most recently updated first.
 func (o ops) listCompanies(ctx context.Context, in *companyPage) (*companyList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -501,7 +487,7 @@ func (o ops) listCompanies(ctx context.Context, in *companyPage) (*companyList, 
 //
 // Example: {"id": "comp_1"}
 func (o ops) getCompany(ctx context.Context, in *ref) (*Company, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -518,7 +504,7 @@ func (o ops) getCompany(ctx context.Context, in *ref) (*Company, error) {
 //
 // Example: {"id": "comp_1", "name": "MaxPower Inc", "employees": 64}
 func (o ops) updateCompany(ctx context.Context, in *companyReq) (*Company, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -545,7 +531,7 @@ func (o ops) updateCompany(ctx context.Context, in *companyReq) (*Company, error
 //
 // Example: {"id": "comp_1"}
 func (o ops) deleteCompany(ctx context.Context, in *ref) (*struct{}, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -567,7 +553,7 @@ func (o ops) deleteCompany(ctx context.Context, in *ref) (*struct{}, error) {
 //
 // Example: {"firstName": "Dave", "lastName": "Lorenzini", "email": "dave@maxpower.ai"}
 func (o ops) createContact(ctx context.Context, in *contactReq) (*Contact, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -595,7 +581,7 @@ func (o ops) createContact(ctx context.Context, in *contactReq) (*Contact, error
 // ListContacts returns the caller org's contacts, most recently updated first.
 // A companyId narrows the page to the people at that company.
 func (o ops) listContacts(ctx context.Context, in *contactPage) (*contactList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -611,7 +597,7 @@ func (o ops) listContacts(ctx context.Context, in *contactPage) (*contactList, e
 //
 // Example: {"id": "cont_1"}
 func (o ops) getContact(ctx context.Context, in *ref) (*Contact, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -628,7 +614,7 @@ func (o ops) getContact(ctx context.Context, in *ref) (*Contact, error) {
 //
 // Example: {"id": "cont_1", "firstName": "Dave", "jobTitle": "CTO"}
 func (o ops) updateContact(ctx context.Context, in *contactReq) (*Contact, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -655,7 +641,7 @@ func (o ops) updateContact(ctx context.Context, in *contactReq) (*Contact, error
 //
 // Example: {"id": "cont_1"}
 func (o ops) deleteContact(ctx context.Context, in *ref) (*struct{}, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -685,7 +671,7 @@ func normStage(s string) (string, bool) {
 //
 // Example: {"name": "Enterprise Deal", "amount": 5000000, "stage": "PROPOSAL"}
 func (o ops) createOpp(ctx context.Context, in *oppReq) (*Opportunity, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -717,7 +703,7 @@ func (o ops) createOpp(ctx context.Context, in *oppReq) (*Opportunity, error) {
 // ListOpportunities returns the caller org's deals, most recently updated first.
 // A stage narrows the page to one pipeline stage.
 func (o ops) listOpps(ctx context.Context, in *oppPage) (*oppList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -734,7 +720,7 @@ func (o ops) listOpps(ctx context.Context, in *oppPage) (*oppList, error) {
 //
 // Example: {"id": "oppo_1"}
 func (o ops) getOpp(ctx context.Context, in *ref) (*Opportunity, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -752,7 +738,7 @@ func (o ops) getOpp(ctx context.Context, in *ref) (*Opportunity, error) {
 //
 // Example: {"id": "oppo_1", "name": "Enterprise Deal", "stage": "CUSTOMER"}
 func (o ops) updateOpp(ctx context.Context, in *oppReq) (*Opportunity, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -781,7 +767,7 @@ func (o ops) updateOpp(ctx context.Context, in *oppReq) (*Opportunity, error) {
 //
 // Example: {"id": "oppo_1"}
 func (o ops) deleteOpp(ctx context.Context, in *ref) (*struct{}, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -799,7 +785,7 @@ func (o ops) deleteOpp(ctx context.Context, in *ref) (*struct{}, error) {
 
 // Summary counts the caller org's CRM records: companies, contacts, opportunities.
 func (o ops) summary(ctx context.Context, _ *noInput) (*crmSummary, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}

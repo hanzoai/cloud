@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/zap-proto/zip"
 )
@@ -199,7 +200,7 @@ type Streams struct {
 
 // list returns the org's streams, name-ordered, with their live state.
 func (s streams) list(ctx context.Context, in *listIn) (*Streams, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +233,7 @@ func (s streams) list(ctx context.Context, in *listIn) (*Streams, error) {
 
 // create creates a durable stream in the org's namespace and returns it.
 func (s streams) create(ctx context.Context, in *Config) (*Stream, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +267,7 @@ type nameIn struct {
 
 // get returns one stream's configuration and live state.
 func (s streams) get(ctx context.Context, in *nameIn) (*Stream, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +291,7 @@ func (s streams) get(ctx context.Context, in *nameIn) (*Stream, error) {
 // update reconfigures an existing stream; the path names the stream, and the
 // immutable fields (storage, retention) must restate what they are.
 func (s streams) update(ctx context.Context, in *Config) (*Stream, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +318,7 @@ func (s streams) update(ctx context.Context, in *Config) (*Stream, error) {
 
 // delete removes a stream with all its messages and consumers. Irreversible.
 func (s streams) delete(ctx context.Context, in *nameIn) (*struct{}, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +356,7 @@ type purgeOut struct {
 
 // purge removes messages from a stream, leaving its consumers in place.
 func (s streams) purge(ctx context.Context, in *Purge) (*purgeOut, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +454,7 @@ type readOut struct {
 // list reads stored messages without a consumer: by sequence, by newest on a
 // subject, or walking a subject forward from a sequence.
 func (m messages) list(ctx context.Context, in *readIn) (*readOut, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +521,7 @@ type seqIn struct {
 
 // delete erases one message by sequence; the sequence gap remains.
 func (m messages) delete(ctx context.Context, in *seqIn) (*struct{}, error) {
-	org, err := callerOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
