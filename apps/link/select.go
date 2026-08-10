@@ -37,12 +37,12 @@ func auto() Selection { return Selection{} }
 // and profile are single path-ish labels. Pure + total.
 func ParseModelRef(ref string) (model string, sel Selection) {
 	ref = trim(ref)
-	at := strings.IndexByte(ref, '@')
-	if at < 0 {
+	name, acct, split := strings.Cut(ref, "@")
+	if !split {
 		return ref, auto()
 	}
-	model = trim(ref[:at])
-	a, ok := ParseAccountRef(ref[at+1:])
+	model = trim(name)
+	a, ok := ParseAccountRef(acct)
 	if !ok {
 		return model, auto()
 	}
@@ -59,8 +59,8 @@ func ParseAccountRef(s string) (Account, bool) {
 		return Account{}, false
 	}
 	provider, profile := s, ""
-	if i := strings.IndexByte(s, ':'); i >= 0 {
-		provider, profile = trim(s[:i]), trim(s[i+1:])
+	if before, after, ok := strings.Cut(s, ":"); ok {
+		provider, profile = trim(before), trim(after)
 	}
 	if provider == "" {
 		return Account{}, false

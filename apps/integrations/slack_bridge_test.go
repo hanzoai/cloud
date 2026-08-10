@@ -395,7 +395,7 @@ func TestSlackLinkLeg1SetsCookieAndRedirects(t *testing.T) {
 func cookieValue(resp *http.Response, name string) (string, bool) {
 	for _, sc := range resp.Header.Values("Set-Cookie") {
 		if strings.HasPrefix(sc, name+"=") {
-			v := strings.SplitN(sc, ";", 2)[0]
+			v, _, _ := strings.Cut(sc, ";")
 			return strings.TrimPrefix(v, name+"="), true
 		}
 	}

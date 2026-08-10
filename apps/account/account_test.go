@@ -184,8 +184,8 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		f.capture(r)
 		id := r.URL.Query().Get("id") // admin/<slug>
 		slug := id
-		if i := strings.IndexByte(id, '/'); i >= 0 {
-			slug = id[i+1:]
+		if _, bare, qualified := strings.Cut(id, "/"); qualified {
+			slug = bare
 		}
 		f.mu.Lock()
 		defer f.mu.Unlock()

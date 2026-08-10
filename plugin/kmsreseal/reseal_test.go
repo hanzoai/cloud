@@ -116,11 +116,10 @@ func (f *fakeStandalone) Do(r *http.Request) (*http.Response, error) {
 
 	// /v1/kms/orgs/{org}/secrets(/{rest})
 	const marker = "/v1/kms/orgs/"
-	i := strings.Index(path, marker)
-	if i < 0 {
+	_, rest, under := strings.Cut(path, marker)
+	if !under {
 		return resp(404, `{"message":"no route"}`), nil
 	}
-	rest := path[i+len(marker):]
 	org, tail, _ := strings.Cut(rest, "/secrets")
 	if tok == "" {
 		return resp(403, `{"message":"no principal"}`), nil
