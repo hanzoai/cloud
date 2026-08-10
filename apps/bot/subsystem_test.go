@@ -33,7 +33,7 @@ func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 // routes() the binary calls — so what a test drives is the code that ships.
 func mountBot(t *testing.T, reg *Registry) *zip.App {
 	t.Helper()
-	deps := cloud.Deps{Logger: luxlog.New("test"), Version: "test"}
+	deps := cloud.Deps{Version: "test"}
 	s := &cloud.Service[state]{
 		Base:  cloud.NewBase(deps, "bot"),
 		State: state{reg: reg},

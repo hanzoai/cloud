@@ -11,7 +11,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/index"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -27,7 +26,7 @@ func mount(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	compose(app)
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
+	deps := cloud.Deps{DataDir: t.TempDir()}
 	if err := index.Mount(app, deps); err != nil {
 		t.Fatalf("index.Mount: %v", err)
 	}

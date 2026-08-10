@@ -26,7 +26,7 @@ func mountLink(t *testing.T) *zip.App {
 	// receives; it is the composer's install — once at the root of every program
 	// — so this package does not install its own and a test app owes it.
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
@@ -248,7 +248,7 @@ func TestRevokeStopsSessions(t *testing.T) {
 	// The composer's install, owed by any test app that mounts typed subsystems
 	// (see mountLink); without it every typed op here answers 403.
 	app.Use(cloud.Bridge())
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: dir}
+	deps := cloud.Deps{DataDir: dir}
 	if err := agents.Mount(app, deps); err != nil {
 		t.Fatalf("agents.Mount: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestRevokeCannotStopCoTenantSessions(t *testing.T) {
 	// The composer's install, owed by any test app that mounts typed subsystems
 	// (see mountLink); without it every typed op here answers 403.
 	app.Use(cloud.Bridge())
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: dir}
+	deps := cloud.Deps{DataDir: dir}
 	if err := agents.Mount(app, deps); err != nil {
 		t.Fatalf("agents.Mount: %v", err)
 	}

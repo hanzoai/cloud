@@ -170,7 +170,7 @@ func newHarness(t *testing.T) *harness {
 
 	app := zip.New(zip.Config{Logger: log})
 	compose(app)
-	deps := cloud.Deps{Logger: log, KMS: kmsClient, DataDir: dir}
+	deps := cloud.Deps{KMS: kmsClient, DataDir: dir}
 
 	if err := wallets.Mount(app, deps); err != nil {
 		t.Fatalf("wallets.Mount: %v", err)

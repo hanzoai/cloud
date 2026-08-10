@@ -74,8 +74,8 @@ var validJurisdictions = map[Jurisdiction]bool{
 // decision. The payment step cannot be reached until every founder passes (kycPass).
 const (
 	KYCPending           = "pending"
-	KYCVerified          = "verified"            // a real idv provider reported a pass
-	KYCReviewerConfirmed = "reviewer_confirmed"  // a privileged reviewer confirmed the founder (not provider-reported)
+	KYCVerified          = "verified"           // a real idv provider reported a pass
+	KYCReviewerConfirmed = "reviewer_confirmed" // a privileged reviewer confirmed the founder (not provider-reported)
 	KYCFailed            = "failed"
 )
 

@@ -88,7 +88,7 @@ func mountApp(t *testing.T, base string) *zip.App {
 	t.Setenv("CHAIN_DATA_TOKEN", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "lux", Env: "mainnet"}); err != nil {
+	if err := Mount(app, cloud.Deps{Brand: "lux", Env: "mainnet"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app

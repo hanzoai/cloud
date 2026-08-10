@@ -29,7 +29,7 @@ func doorApp(t *testing.T) *zip.App {
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), MCP: zip.MCPConfig{Source: Door()}})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })

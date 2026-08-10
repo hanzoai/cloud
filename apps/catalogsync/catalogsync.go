@@ -21,7 +21,6 @@ package catalogsync
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -61,10 +60,7 @@ var (
 // connect + consume loop runs in the background, and a connect failure is a warning and a
 // retry, never a crash — the same fail-soft contract as the forward storefront edge.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if deps.Logger == nil {
-		return fmt.Errorf("catalogsync.Mount: nil deps.Logger")
-	}
-	log := deps.Logger.New("subsystem", "catalogsync")
+	log := luxlog.Default().New("subsystem", "catalogsync")
 
 	url := pubsub.URL()
 	ctx, cancelFn := context.WithCancel(context.Background())

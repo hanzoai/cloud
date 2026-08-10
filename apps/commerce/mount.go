@@ -48,7 +48,7 @@ import (
 	commercensctx "github.com/hanzoai/commerce/util/nscontext"
 	"github.com/hanzoai/commerce/util/permission"
 	sqlitedrv "github.com/hanzoai/sqlite"
-	log "github.com/luxfi/log"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -57,7 +57,7 @@ func init() {
 	// commerce subsystem is enabled. Registered HERE (not called directly from
 	// package cloud) because the commerce client's entitlement client imports
 	// clients/plan, which imports cloud: the hook keeps the package graph acyclic.
-	cloud.RegisterCommerceClientFactory(func(cfg *cloud.Config, _ log.Logger) cloud.CommerceClient {
+	cloud.RegisterCommerceClientFactory(func(cfg *cloud.Config, _ luxlog.Logger) cloud.CommerceClient {
 		return InProcessClient(cfg.Brand)
 	})
 }
@@ -158,7 +158,7 @@ var Prefixes = []string{
 //     to commerce's own env, whose documented answer is a zero-config unencrypted
 //     dev store. Such a build has no encrypted path to fall back to; the choice is
 //     between an unencrypted dev store and no money plane at all.
-func commerceMasterKey(master []byte, lg log.Logger) []byte {
+func commerceMasterKey(master []byte, lg luxlog.Logger) []byte {
 	if sqlitedrv.CodecLinked() {
 		return master
 	}
@@ -221,10 +221,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("commerce: router is not a zip app — the embedded module has nothing to register on")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("commerce: nil deps.Logger")
-	}
-	lg := deps.Logger.New("subsystem", "commerce")
+	lg := luxlog.Default().New("subsystem", "commerce")
 	// The other direction of the same idea as the ops above: those publish what
 	// this process OWNS, and this reaches for the one thing it does not. The credit
 	// doors below screen against a model that can only live in one binary, so the

@@ -67,6 +67,8 @@ import (
 	"strings"
 	"sync"
 
+	luxlog "github.com/luxfi/log"
+
 	baseapp "github.com/hanzoai/base"
 	"github.com/hanzoai/base/apis"
 	"github.com/hanzoai/base/core"
@@ -117,10 +119,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("base.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("base.Mount: nil deps.Logger")
-	}
-	log := deps.Logger.New("subsystem", "base")
+	log := luxlog.Default().New("subsystem", "base")
 
 	// A typed op is a route PLUS a registry entry, and the registry lives on the
 	// App. A router that cannot reach it would serve the health route with no

@@ -43,6 +43,8 @@ import (
 	"strconv"
 	"strings"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/fleet"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -119,14 +121,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("visor.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("visor.Mount: nil deps.Logger")
-	}
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "visor"),
 		State: state{
 			cl:    newClient(),
-			fleet: fleet.New(deps.Brand, deps.Logger.New("subsystem", "fleet")),
+			fleet: fleet.New(deps.Brand, luxlog.Default().New("subsystem", "fleet")),
 			bill:  cloud.NewResourceMeter(deps, "compute"),
 		},
 	}

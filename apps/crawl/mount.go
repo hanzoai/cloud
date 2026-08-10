@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
@@ -145,9 +147,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("crawl.Mount: nil app")
 	}
-	logger := deps.Logger
+	logger := luxlog.Default()
 	if logger == nil {
-		return fmt.Errorf("crawl.Mount: nil deps.Logger")
+		return fmt.Errorf("crawl.Mount: nil luxlog.Default()")
 	}
 	logger = logger.New("subsystem", "crawl")
 

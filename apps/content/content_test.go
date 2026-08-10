@@ -122,10 +122,10 @@ func mountContent(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := framework.Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := framework.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("framework.Mount: %v", err)
 	}
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Domain: "api.test"}); err != nil {
+	if err := Mount(app, cloud.Deps{Domain: "api.test"}); err != nil {
 		t.Fatalf("content.Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(); _ = framework.Shutdown() })

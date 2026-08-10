@@ -1,9 +1,9 @@
 package cloud
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"errors"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"testing"
 )
 
@@ -21,7 +21,7 @@ import (
 // Absence is now an error, and the error says the app is not deployed here.
 func TestOnServiceReleaseAbsenceIsAnError(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // no socket for platform
-	t.Setenv("ZIP_ADDR", "")               // and no router that could start one
+	t.Setenv("ZIP_ADDR", "")                      // and no router that could start one
 	RegisterServiceReleaser(nil)
 
 	err := OnServiceRelease(context.Background(), ServiceReleaseEvent{

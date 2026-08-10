@@ -75,9 +75,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("product.Mount: nil app")
 	}
-	logger := deps.Logger
+	logger := luxlog.Default()
 	if logger == nil {
-		return fmt.Errorf("product.Mount: nil deps.Logger")
+		return fmt.Errorf("product.Mount: nil luxlog.Default()")
 	}
 	logger = logger.New("subsystem", "product")
 	cfg := loadConfig()

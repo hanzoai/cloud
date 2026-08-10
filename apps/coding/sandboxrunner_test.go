@@ -17,9 +17,9 @@ package coding
 // no-changes case is first.
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/base64"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"strings"
 	"sync"
 	"testing"

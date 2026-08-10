@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
 )
@@ -92,8 +94,8 @@ func NewRouterFromDeps(deps cloud.Deps, up Upstream) (*Router, bool, error) {
 		Links:    store,
 		Resolver: NewKMSResolver(deps.KMS),
 		Upstream: up,
-		Meter:    NewMeter(store, deps.Metering, feeFromEnv(), deps.Logger),
-		Logger:   deps.Logger,
+		Meter:    NewMeter(store, deps.Metering, feeFromEnv(), luxlog.Default()),
+		Logger:   luxlog.Default(),
 		Policy:   policyFromEnv(),
 		Cooldown: cooldownFromEnv(),
 	})

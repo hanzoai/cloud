@@ -21,9 +21,9 @@ package fleet_test
 // measure a fleet that does not exist.
 
 import (
-	"github.com/hanzoai/cloud/internal/planetest"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"path/filepath"
 	"sort"
 	"strconv"

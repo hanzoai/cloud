@@ -373,7 +373,6 @@ func (c *client) spell(t types.Type) string {
 	return types.TypeString(t, func(p *types.Package) string { return c.use(p.Path()) })
 }
 
-
 func (c *client) render() ([]byte, error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n", header)

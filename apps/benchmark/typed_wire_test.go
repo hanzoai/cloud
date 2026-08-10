@@ -24,7 +24,7 @@ func opsUnderTest(t *testing.T) (served map[string]bool, typed map[string]string
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("mount: %v", err)
 	}
 	doc, err := openapi.Spec(app, openapi.Info{Title: "benchmark", Version: "v1"})

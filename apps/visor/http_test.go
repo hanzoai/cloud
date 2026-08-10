@@ -139,7 +139,7 @@ func mountApp(t *testing.T, f *fakeVisor) *zip.App {
 	// there. Without it every typed route answers 403, exactly as it would in
 	// production if the middleware were missing.
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app

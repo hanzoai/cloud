@@ -217,9 +217,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("s3.Mount: nil app")
 	}
-	if deps.Logger == nil {
-		return fmt.Errorf("s3.Mount: nil deps.Logger")
-	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "storage"), State: state{admin: s3admin.New(), bill: cloud.NewResourceMeter(deps, "s3")}}
 
 	// Register the FULL surface unconditionally — even when S3 is unconfigured.

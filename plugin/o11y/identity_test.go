@@ -28,7 +28,6 @@ import (
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -91,7 +90,7 @@ type observed struct {
 func ask(t *testing.T, jwksURL string, mutate func(*http.Request)) observed {
 	t.Helper()
 	cfg := &cloud.Config{Brand: "hanzo", IAMIssuer: testIssuer, JWKSURL: jwksURL}
-	app := newApp(cfg, cloud.Deps{Logger: luxlog.NewNoOpLogger()})
+	app := newApp(cfg, cloud.Deps{})
 
 	var got observed
 	app.Get("/v1/o11y/probe", func(c *zip.Ctx) error {

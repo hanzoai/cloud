@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/authz/serve"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
@@ -61,7 +63,7 @@ func main() {
 		// The adapter lives HERE, on cloud's side: authz is a leaf and must never
 		// import cloud, so cloud's plugin contract bends to the leaf rather than the
 		// leaf learning about Deps.
-		Mount:  func(app cloud.Router, deps cloud.Deps) error { return serve.Mount(cloud.ZipApp(app), deps.Logger) },
+		Mount:  func(app cloud.Router, deps cloud.Deps) error { return serve.Mount(cloud.ZipApp(app), luxlog.Default()) },
 		Global: true,
 	}}, []string{"authz"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

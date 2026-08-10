@@ -35,7 +35,7 @@ func newApp(t *testing.T, extra func(*zip.App)) *zip.App {
 	if extra != nil {
 		extra(app)
 	}
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
+	deps := cloud.Deps{DataDir: t.TempDir()}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

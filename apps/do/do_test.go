@@ -107,7 +107,7 @@ func mountFake(t *testing.T) (*zip.App, *fakeVPCs, *fakeLBs) {
 	compose(app)
 	vpcs := &fakeVPCs{byID: map[string]*godo.VPC{}}
 	lbs := &fakeLBs{byID: map[string]*godo.LoadBalancer{}}
-	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "do"), State: state{vpcs: vpcs, lbs: lbs}}
+	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{}, "do"), State: state{vpcs: vpcs, lbs: lbs}}
 	routes(app, s)
 	return app, vpcs, lbs
 }
@@ -268,7 +268,7 @@ func TestForgePathRefused(t *testing.T) {
 	// X-Org-Id present but NO X-User-Id (the forgeable path) → still 403.
 	app2 := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app2)
-	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "do"), State: state{vpcs: &fakeVPCs{byID: map[string]*godo.VPC{}}, lbs: &fakeLBs{byID: map[string]*godo.LoadBalancer{}}}}
+	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{}, "do"), State: state{vpcs: &fakeVPCs{byID: map[string]*godo.VPC{}}, lbs: &fakeLBs{byID: map[string]*godo.LoadBalancer{}}}}
 	routes(app2, s)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/vpcs", nil)
 	rq.Header.Set("X-Org-Id", "victim") // forged org, no validated user
@@ -287,7 +287,7 @@ func TestForgePathRefused(t *testing.T) {
 func TestFailClosedWhenUnconfigured(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "do"), State: state{}} // nil seams → unconfigured
+	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{}, "do"), State: state{}} // nil seams → unconfigured
 	routes(app, s)
 
 	for _, path := range []string{"/v1/vpcs", "/v1/balancers"} {

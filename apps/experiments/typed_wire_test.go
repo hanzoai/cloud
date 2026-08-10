@@ -26,7 +26,7 @@ func opsUnderTest(t *testing.T) (served map[string]bool, typed map[string]string
 	// their own types, and this gate judges the shapes THIS surface publishes.
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

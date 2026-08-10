@@ -47,7 +47,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Artifact"
+                  "$ref": "#/components/schemas/ReleaseAsset"
                 }
               }
             },
@@ -368,24 +368,6 @@
   },
   "components": {
     "schemas": {
-      "Artifact": {
-        "properties": {
-          "cosign_cert": {
-            "type": "string"
-          },
-          "cosign_signature": {
-            "type": "string"
-          },
-          "download_url": {
-            "description": "DownloadURL is a short-lived signed URL to the artifact bytes. The\nscaffold returns the ArtifactRef as-is; production issues a signed URL.",
-            "type": "string"
-          },
-          "release": {
-            "$ref": "#/components/schemas/Release"
-          }
-        },
-        "type": "object"
-      },
       "DeviceSignals": {
         "properties": {
           "arch": {
@@ -640,6 +622,24 @@
           "yanked": {
             "description": "Yanked marks a pulled release (download refused; tokens may be revoked\nrelease-scoped too).",
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "ReleaseAsset": {
+        "properties": {
+          "cosign_cert": {
+            "type": "string"
+          },
+          "cosign_signature": {
+            "type": "string"
+          },
+          "download_url": {
+            "description": "DownloadURL is a short-lived signed URL to the artifact bytes. The\nscaffold returns the ArtifactRef as-is; production issues a signed URL.",
+            "type": "string"
+          },
+          "release": {
+            "$ref": "#/components/schemas/Release"
           }
         },
         "type": "object"

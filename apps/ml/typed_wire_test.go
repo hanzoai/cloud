@@ -79,7 +79,7 @@ const healthWire = "a REAL probe: 503 carries the degraded REPORT as its body " 
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("mltest"), DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("mltest"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app
@@ -90,7 +90,7 @@ func mountApp(t *testing.T) *zip.App {
 // fail-closed posture; a fake client is the reachable one.
 func wireApp(t *testing.T, dyn dynamic.Interface) *zip.App {
 	t.Helper()
-	deps := cloud.Deps{Logger: luxlog.New("mltest"), DataDir: t.TempDir()}
+	deps := cloud.Deps{DataDir: t.TempDir()}
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "ml"),
 		State: state{

@@ -101,15 +101,12 @@ func newStudioServer(t *testing.T, stub *studioStub) *httptest.Server {
 // Env). Framework gets its own real store. Cleanup unmounts both.
 func mountWith(t *testing.T, deps cloud.Deps) *zip.App {
 	t.Helper()
-	if deps.Logger == nil {
-		deps.Logger = luxlog.New("test")
-	}
 	if deps.Domain == "" {
 		deps.Domain = "api.test"
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := framework.Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := framework.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("framework.Mount: %v", err)
 	}
 	if err := Mount(app, deps); err != nil {

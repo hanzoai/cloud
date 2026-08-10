@@ -509,20 +509,6 @@ components:
         workflow:
           type: string
       type: object
-    Artifact:
-      properties:
-        cosign_cert:
-          type: string
-        cosign_signature:
-          type: string
-        download_url:
-          description: |-
-            DownloadURL is a short-lived signed URL to the artifact bytes. The
-            scaffold returns the ArtifactRef as-is; production issues a signed URL.
-          type: string
-        release:
-          $ref: '#/components/schemas/Release'
-      type: object
     AskAnswer:
       properties:
         answer:
@@ -7577,6 +7563,20 @@ components:
             Yanked marks a pulled release (download refused; tokens may be revoked
             release-scoped too).
           type: boolean
+      type: object
+    ReleaseAsset:
+      properties:
+        cosign_cert:
+          type: string
+        cosign_signature:
+          type: string
+        download_url:
+          description: |-
+            DownloadURL is a short-lived signed URL to the artifact bytes. The
+            scaffold returns the ArtifactRef as-is; production issues a signed URL.
+          type: string
+        release:
+          $ref: '#/components/schemas/Release'
       type: object
     ReleaseList:
       properties:
@@ -87537,7 +87537,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Artifact'
+                $ref: '#/components/schemas/ReleaseAsset'
           description: ok
       summary: Download resolves a release to its artifact, gated on a valid license.
       tags:

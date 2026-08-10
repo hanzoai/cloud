@@ -88,7 +88,7 @@ func TestCatalog_ServesBothRouteShapes(t *testing.T) {
 func TestAdminCatalog_HTTP(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	deps := cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo", DataDir: t.TempDir()}
+	deps := cloud.Deps{Brand: "hanzo", DataDir: t.TempDir()}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -263,7 +263,7 @@ func rootFreeContains(body []byte, id string) bool {
 func TestMount_EmptyDataDir_FailsClosed(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	defer func() { _ = Shutdown(context.Background()) }()
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo", DataDir: ""}); err == nil {
+	if err := Mount(app, cloud.Deps{Brand: "hanzo", DataDir: ""}); err == nil {
 		t.Fatal("Mount with empty DataDir must fail closed (got nil error)")
 	}
 }

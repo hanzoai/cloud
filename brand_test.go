@@ -17,10 +17,10 @@ func TestBrandFor(t *testing.T) {
 		"zoo":      "https://zoolabs.id",
 		"pars":     "https://pars.id",
 		"bootnode": "https://id.bootno.de",
-		"LUX":      "https://lux.id",   // case-insensitive
-		"  zoo  ":  "https://zoolabs.id",   // trimmed
-		"unknown":  "https://hanzo.id", // falls back to hanzo
-		"":         "https://hanzo.id", // empty → hanzo default
+		"LUX":      "https://lux.id",     // case-insensitive
+		"  zoo  ":  "https://zoolabs.id", // trimmed
+		"unknown":  "https://hanzo.id",   // falls back to hanzo
+		"":         "https://hanzo.id",   // empty → hanzo default
 	}
 	for brand, want := range cases {
 		if got := IssuerForBrand(brand); got != want {
