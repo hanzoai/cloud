@@ -7,23 +7,17 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/sandboxes/:id", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
 	zip.Describe("GET /:id/terminal", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Answers the terminal page.\n\nIt does NOT redeem the ticket, and that is the whole reason the page and the\nsocket are two addresses: a ticket is spent once, and spending it here would\nleave the page holding a credential that no longer opens anything. The page is\nmarkup — the socket is the gate, and it is the socket that checks.",
 	})
 	zip.Describe("GET /:id/terminal/ws", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("GET /v1/sandboxes/:id", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Serves one terminal. The ticket is spent BEFORE the upgrade, so a\nrequest that presents nothing gets an ordinary 401 with a body a client can\nread, rather than a socket that opens and immediately closes for reasons the\nbrowser will not tell it.",
 	})
 	zip.Describe("GET /v1/sandboxes/:id/fs", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Answers text, because this address always has: a file as its bytes, a\ndirectory as one entry per line. The typed Entry the core returns is what the\nplane carries; here it is rendered back to the one shape this route has served.",
 	})
 	zip.Describe("POST /:id/terminal/ticket", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Mints the ticket for one terminal. Gated exactly like its siblings — a\nvalidated principal, resolved to the org whose sandboxes may be addressed —\nand it resolves the sandbox before minting, so a ticket never names a sandbox\nthe caller does not own or one that is not running.",
 	})
 	zip.Describe("POST /sandbox/end", zip.Doc{
 		Description: "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too.",
@@ -72,12 +66,6 @@ func init() {
 			"WriteIn.id":   "ID is the sandbox to write into, from an earlier lease.",
 			"WriteIn.path": "Path is confined the same way PathIn.Path is. Missing parent directories are\ncreated.",
 		},
-	})
-	zip.Describe("POST /v1/sandboxes/:id/exec", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("POST /v1/sandboxes/:id/fs", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 	zip.Describe("POST /v1/sandboxes/end", zip.Doc{
 		Description: "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too.",

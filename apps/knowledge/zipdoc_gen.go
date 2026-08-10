@@ -82,7 +82,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/kb/import", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Reads the uploaded export, dispatches to the format normalizer, and\nfiles the resulting pages. `format` (query) selects the normalizer; `project`\n(query, optional) scopes every imported page to a project.",
 	})
 	zip.Describe("POST /v1/kb/search", zip.Doc{
 		Description: "Runs a semantic search over the caller org's own knowledge —\nits wiki pages, its agent memories and everything its connectors have synced —\nand returns the matching passages. This is the RAG entry point: an agent asks\n\"what does this org know about X\" and the org's OWN vector namespace answers.\nThe org comes from the validated principal, and both the collection and the\npayload filter are pinned to it, so cross-tenant retrieval is impossible. An\nunreachable index returns an honest empty result set with degraded=true, never\na 5xx.",

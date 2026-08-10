@@ -268,7 +268,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"appl_1","stage":"rejected","reason":"not a fit this round"}`),
 	})
 	zip.Describe("POST /v1/crm/applications", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Is the UNAUTHENTICATED public application endpoint. It validates, drops\nhoneypot hits, dedups on (email, company), writes the ProgramApplication (+ a\nbest-effort CRM Company/Contact for sales visibility), and kicks off the AI\nscreen. It NEVER calls tenant(): the org is the fixed program org.",
 	})
 	zip.Describe("POST /v1/crm/companies", zip.Doc{
 		Description: "Adds a company to the caller's org and answers 201 with the stored record.\nA name is required; an empty currency defaults to USD.",

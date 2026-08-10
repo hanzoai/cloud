@@ -373,7 +373,7 @@ func init() {
 		Example: json.RawMessage(`{"founders":[{"name":"Ada","email":"ada@acme.com","equityBps":10000}]}`),
 	})
 	zip.Describe("POST /v1/company/fundraise/deck", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Shares a pitch deck in the org's data room. It is the second\naction on this surface that is NOT a typed op: the deck is the raw request\nBODY (any content type, named by ?name=), not a JSON document, so a typed In\nwould declare a request shape the route does not take — see routes(). Its byte\nrequest and this response ARE declared, through openapi.Register (see init).",
 	})
 	zip.Describe("POST /v1/company/fundraise/round", zip.Doc{
 		Description: "Records a fundraising round on the org's canonical cap table.\nAvailable only after incorporation (stage company); roundType defaults to\nPRICED.",
@@ -679,7 +679,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/company/payment", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Charges the one-time formation fee. It is the one action on this surface\nthat is NOT a typed op: a denial answers the fleet-wide billing contract\n(cloud.DenyResource — 402 insufficient_balance / spend_cap_exceeded, 503\nbalance_unavailable, each a {\"error\":{\"code\",\"message\"}} body), and zip's error\ntype renders a flat {status,code,error}. Typing it would reshape that error for\nevery metered client, so it stays a raw handler — see routes().\n\nThe gate is the LAST thing it does, after the stage check and the paid\nshort-circuit, so a caller the machine is about to refuse is never charged.\nThat ordering is why the gate cannot lift into middleware, where it would run\nfirst. Both facts are pinned: TestPaymentDenialWire, TestPaymentChargesLast.",
 	})
 	zip.Describe("POST /v1/company/skip", zip.Doc{
 		Description: "Skip marks the org as already incorporated and moves it onto the import path,\nso an existing company brings its documents and cap table in instead of forming\na new entity. Available only at the structure stage.",
