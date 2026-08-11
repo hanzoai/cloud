@@ -22,7 +22,7 @@ func init() {
 	zip.Describe("GET /v1/tel/messages", zip.Doc{
 		Description: "Lists the messages this org has sent or received, newest first. Records from\nour own store, not the carrier's — so it is what this platform did on the\norg's behalf, which is the set an audit or a bill has to agree with.",
 		Fields: map[string]string{
-			"Message.status": "queued | sent | delivered | failed",
+			"SMS.status": "queued | sent | delivered | failed",
 		},
 	})
 	zip.Describe("GET /v1/tel/numbers", zip.Doc{
@@ -52,7 +52,7 @@ func init() {
 	zip.Describe("POST /v1/tel/messages", zip.Doc{
 		Description: "Sends a message from one of this org's own numbers.\n\n`from` must be a number the org HOLDS, checked against the store rather than\ntaken on trust — a caller that could send from any number could impersonate\none, and the carrier would deliver it. `to` is required, and the body needs\ntext or media, because a message with neither is delivered as nothing and\nbilled as something.",
 		Fields: map[string]string{
-			"Message.status": "queued | sent | delivered | failed",
+			"SMS.status": "queued | sent | delivered | failed",
 		},
 	})
 	zip.Describe("POST /v1/tel/numbers", zip.Doc{
