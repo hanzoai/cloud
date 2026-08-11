@@ -153,7 +153,7 @@ func TestOneOrgCannotSeeOrSendAsAnother(t *testing.T) {
 // A message the carrier ACCEPTED is queued, never delivered. Recording acceptance
 // as delivery is how a message that never arrived shows up as one that did.
 func TestAcceptanceIsNotDelivery(t *testing.T) {
-	m, err := newStub().Send(context.Background(), MessageRequest{From: "+15550000000", To: "+15551111111", Text: "hi"})
+	m, err := newStub().Send(context.Background(), SMSRequest{From: "+15550000000", To: "+15551111111", Text: "hi"})
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}

@@ -92,7 +92,7 @@ func min(a, b int) int {
 
 // The carrier answers with its own field names. These envelopes are the ONE place
 // that vocabulary is translated into ours — every other file in this package
-// speaks Number, Call and Message.
+// speaks Number, Call and SMS.
 
 type numberRow struct {
 	ID          string   `json:"id"`
@@ -193,7 +193,7 @@ func (c *restCarrier) Hangup(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodPost, "/calls/"+url.PathEscape(id)+"/actions/hangup", map[string]any{}, nil)
 }
 
-func (c *restCarrier) Send(ctx context.Context, r MessageRequest) (Message, error) {
+func (c *restCarrier) Send(ctx context.Context, r SMSRequest) (SMS, error) {
 	req := map[string]any{"from": r.From, "to": r.To, "text": r.Text}
 	if len(r.Media) > 0 {
 		req["media_urls"] = r.Media
@@ -204,10 +204,10 @@ func (c *restCarrier) Send(ctx context.Context, r MessageRequest) (Message, erro
 		} `json:"data"`
 	}
 	if err := c.do(ctx, http.MethodPost, "/messages", req, &body); err != nil {
-		return Message{}, err
+		return SMS{}, err
 	}
 	// `queued`, not `sent`. The carrier has accepted it; whether it arrives is
 	// reported later, and recording acceptance as delivery is how a message that
 	// never landed shows up as one that did.
-	return Message{ID: body.Data.ID, From: r.From, To: r.To, Text: r.Text, Status: "queued"}, nil
+	return SMS{ID: body.Data.ID, From: r.From, To: r.To, Text: r.Text, Status: "queued"}, nil
 }

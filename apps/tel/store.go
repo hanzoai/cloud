@@ -194,7 +194,7 @@ func (s *Store) Call(ctx context.Context, org, id string) (Call, error) {
 	return c, err
 }
 
-func (s *Store) PutMessage(ctx context.Context, m Message) error {
+func (s *Store) PutMessage(ctx context.Context, m SMS) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO tel_messages (org,id,from_no,to_no,body,status) VALUES (?,?,?,?,?,?)
 		 ON CONFLICT(org,id) DO UPDATE SET status=excluded.status`,
@@ -202,16 +202,16 @@ func (s *Store) PutMessage(ctx context.Context, m Message) error {
 	return err
 }
 
-func (s *Store) Messages(ctx context.Context, org string) ([]Message, error) {
+func (s *Store) Messages(ctx context.Context, org string) ([]SMS, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT org,id,from_no,to_no,body,status FROM tel_messages WHERE org=? ORDER BY sent DESC LIMIT 500`, org)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []Message{}
+	out := []SMS{}
 	for rows.Next() {
-		var m Message
+		var m SMS
 		if err := rows.Scan(&m.Org, &m.ID, &m.From, &m.To, &m.Text, &m.Status); err != nil {
 			return nil, err
 		}
