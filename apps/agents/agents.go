@@ -845,7 +845,7 @@ func init() {
 func run(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	// tenant() above already required a VALIDATED principal (principal.Org
 	// returns ok only when c.User() — set solely from a JWT SanitizeIdentity

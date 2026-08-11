@@ -489,7 +489,7 @@ func (o ops) deleteCampaign(ctx context.Context, in *campaignRef) (*noContent, e
 func launchCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
 	if err != nil {

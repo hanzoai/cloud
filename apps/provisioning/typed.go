@@ -31,6 +31,7 @@ package provisioning
 import (
 	"context"
 	"errors"
+	"github.com/hanzoai/cloud/apps/principal"
 	"net/http"
 	"strings"
 
@@ -142,11 +143,11 @@ type provisionedResource struct {
 func tenantOf(ctx context.Context) (string, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
+		return "", principal.RefusedFrom(ctx)
 	}
 	org, ok := tenant(c)
 	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
+		return "", principal.Refused(c)
 	}
 	return org, nil
 }

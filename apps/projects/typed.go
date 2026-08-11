@@ -46,6 +46,7 @@ package projects
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/apps/principal"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -81,11 +82,11 @@ type void = struct{}
 func (o ops) callerOf(ctx context.Context) (*zip.Ctx, string, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required") // no request ⇒ no attested caller
+		return nil, "", principal.RefusedFrom(ctx) // no request ⇒ no attested caller
 	}
 	org, ok := org(c)
 	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+		return nil, "", principal.RefusedFrom(ctx)
 	}
 	return c, org, nil
 }

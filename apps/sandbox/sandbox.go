@@ -292,7 +292,7 @@ type createBody struct {
 func create(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body createBody
 	if err := c.Bind(&body); err != nil {
@@ -314,7 +314,7 @@ func create(s *Service, c *zip.Ctx) error {
 func list(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	out, err := List(s, c.Context(), o, c.Query("project"), c.Query("status"))
 	if err != nil {
@@ -326,7 +326,7 @@ func list(s *Service, c *zip.Ctx) error {
 func get(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	m, err := Get(s, c.Context(), o, idParam(c))
 	if err != nil {
@@ -338,7 +338,7 @@ func get(s *Service, c *zip.Ctx) error {
 func del(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	if err := End(s, c.Context(), o, idParam(c), c.Query("purge") == "1"); err != nil {
 		return err
@@ -350,7 +350,7 @@ func del(s *Service, c *zip.Ctx) error {
 func execIn(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body struct {
 		Argv       []string `json:"argv"`
@@ -376,7 +376,7 @@ func execIn(s *Service, c *zip.Ctx) error {
 func fsRead(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	e, err := Read(s, c.Context(), o, idParam(c), c.Query("path"))
 	if err != nil {
@@ -392,7 +392,7 @@ func fsRead(s *Service, c *zip.Ctx) error {
 func fsWrite(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	path, n, err := Write(s, c.Context(), o, idParam(c), c.Query("path"), c.Body())
 	if err != nil {

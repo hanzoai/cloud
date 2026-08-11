@@ -180,7 +180,7 @@ func (br *broker) live(ctx context.Context) (context.Context, context.CancelFunc
 func callerOf(ctx context.Context) (string, error) {
 	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
+		return "", principal.RefusedFrom(ctx)
 	}
 	return org, nil
 }
