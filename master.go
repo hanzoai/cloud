@@ -4,31 +4,21 @@ package cloud
 
 // master.go — the data-plane key, resolved once, before the first store opens.
 //
-// cek derives every database's key from ONE master and refuses to open a file
-// without it, so this runs before anything in this process touches the disk.
+// The deployment supplies it in the environment, from KMS, and every child
+// inherits it — which is how they all open the same encrypted files. With none
+// supplied, a process over an EMPTY data directory mints a random master that
+// dies with it, so a laptop needs no configuration.
 //
-// THERE ARE TWO ANSWERS AND NO THIRD. The deployment supplies the key in the
-// environment, from KMS, exactly the way every other secret in the estate
-// arrives — so a child process inherits it like any other configuration and has
-// nothing to ask anyone for. Or nothing supplies one, and a process over an
-// EMPTY data directory mints a random master that dies with it, which is what
-// lets a laptop run with no configuration at all.
+// THE REFUSAL IS THE LOAD-BEARING HALF. Minting over a directory that already
+// holds databases SUCCEEDS, and every one of those files then reads as "file is
+// not a database" while the data sits intact and unreadable. So that case is a
+// fault: the stores fail closed rather than opening under a key nothing was
+// written with.
 //
-// THE REFUSAL IS THE LOAD-BEARING HALF. Minting a master over a directory that
-// already holds databases SUCCEEDS, and every one of those files then reads as
-// "file is not a database" while the data sits intact and unreadable. So a data
-// directory with databases in it and no key is a fault: the stores fail closed
-// rather than opening under a key nothing was written with.
-//
-// This replaced a 1,237-line broker that held the key in one process and served
-// per-app credential bundles to the others over a unix socket, identified by an
-// HMAC stamp the launcher minted. It bought a boundary against ACCIDENT — its
-// own documentation said so, and said it was not a boundary against a peer that
-// reads its neighbours, since the stamp sat in the child's environment where any
-// same-uid process could read it. The pod is the data-plane boundary either way:
-// every process in it opens the same encrypted files under the same master. So
-// the broker's cost was a socket protocol, a bespoke token scheme and a class of
-// boot-ordering failures, for a property the pod already had.
+// This replaced a 1,237-line broker that served per-app credential bundles over
+// a socket. Its own docs said the boundary was against ACCIDENT, not against a
+// peer that reads its neighbours — the stamp sat in the child's environment. The
+// pod is the data-plane boundary either way.
 
 import (
 	"encoding/base64"
