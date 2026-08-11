@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Desktop</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #d { position: absolute; inset: 0; }
+  #s {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; gap: 12px; flex-direction: column;
+    background: #000; color: #8b8b8b;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  #s[hidden] { display: none; }
+  #s button {
+    font: inherit; color: #ddd; background: #1c1c1c; border: 1px solid #333;
+    border-radius: 6px; padding: 4px 12px; cursor: pointer;
+  }
+  #s button:hover { border-color: #555; }
+</style>
+</head>
+<body>
+<div id="d"></div>
+<div id="s"><span id="m">Starting your desktop…</span></div>
+<script type="module">
+__RFB__
+
+// The page knows its own address, so nothing here is templated. The socket is
+// this document's path plus /ws, carrying this document's query string
+// unchanged — which is where the ticket already is. A page with no
+// substitutions has no injection surface and can be served as a constant.
+const status = document.getElementById('s')
+const message = document.getElementById('m')
+
+function stopped(why) {
+  status.hidden = false
+  message.textContent = why
+  if (document.getElementById('r')) return
+  const again = document.createElement('button')
+  again.id = 'r'
+  again.textContent = 'Reconnect'
+  again.onclick = () => location.reload()
+  status.appendChild(again)
+}
+
+const socket = location.origin.replace(/^http/, 'ws') +
+  location.pathname.replace(/\/+$/, '') + '/ws' + location.search
+
+const screen = new window.RFB(document.getElementById('d'), socket, { shared: true })
+
+// SCALED, NOT RESIZED. The screen is whatever size the X server was started
+// with, and asking the session to follow the pane would ask a server with no
+// RandR to do something it cannot — so the pixels are fitted to the pane here
+// instead, where a failure is a slightly soft image rather than no image.
+screen.scaleViewport = true
+screen.resizeSession = false
+// The whole point is that it can be used, so the keyboard and the pointer go
+// through: a click focuses the canvas, and from then on keys land in the
+// desktop rather than in the page around it.
+screen.viewOnly = false
+screen.focusOnClick = true
+
+screen.addEventListener('connect', () => {
+  status.hidden = true
+  screen.focus()
+  // The readiness handshake, same shape and same reason as the terminal's: a
+  // host that frames this page has no other way to tell "the desktop is up"
+  // from "the page 404'd into a sign-in", and a host that guesses gets a blank
+  // pane it cannot explain.
+  if (window.parent !== window) {
+    window.parent.postMessage({ source: 'hanzo-screen', ready: true }, '*')
+  }
+})
+// Both ends of a failure say the same thing to a person. `clean` is noVNC's
+// word for "the server said goodbye" — anything else is the socket dying under
+// it, and neither is something to leave a black rectangle for.
+screen.addEventListener('disconnect', (e) => {
+  stopped(e.detail && e.detail.clean ? 'The desktop closed.' : 'The connection failed.')
+})
+screen.addEventListener('securityfailure', (e) => {
+  stopped((e.detail && e.detail.reason) || 'The desktop refused the connection.')
+})
+window.addEventListener('focus', () => screen.focus())
+</script>
+</body>
+</html>
