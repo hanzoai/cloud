@@ -84,16 +84,16 @@ func (s *stubCarrier) Call(_ context.Context, r CallRequest) (Call, error) {
 
 func (s *stubCarrier) Hangup(context.Context, string) error { return nil }
 
-func (s *stubCarrier) Send(_ context.Context, r MessageRequest) (Message, error) {
+func (s *stubCarrier) Send(_ context.Context, r SMSRequest) (SMS, error) {
 	if r.To == "" || r.From == "" {
-		return Message{}, fmt.Errorf("from and to are required")
+		return SMS{}, fmt.Errorf("from and to are required")
 	}
 	if r.Text == "" && len(r.Media) == 0 {
-		return Message{}, fmt.Errorf("a message needs text or media")
+		return SMS{}, fmt.Errorf("a message needs text or media")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return Message{ID: s.id("msg"), From: r.From, To: r.To, Text: r.Text, Status: "queued"}, nil
+	return SMS{ID: s.id("msg"), From: r.From, To: r.To, Text: r.Text, Status: "queued"}, nil
 }
 
 func orDefault(v, d string) string {

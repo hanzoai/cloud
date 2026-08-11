@@ -29,7 +29,7 @@
 //	POST   /v1/tel/calls               place a call                     -> Call (201)
 //	DELETE /v1/tel/calls/:id           hang up
 //	GET    /v1/tel/messages            message records                  -> {data:[…]}
-//	POST   /v1/tel/messages            send one                         -> Message (201)
+//	POST   /v1/tel/messages            send one                         -> SMS (201)
 //	GET    /v1/tel/summary             per-org roll-up
 //
 // Every route is a TYPED op — one registry entry, which is what the OpenAPI
@@ -303,7 +303,7 @@ func (o ops) hangup(ctx context.Context, in *idInput) (*noInput, error) {
 }
 
 type messageList struct {
-	Data []Message `json:"data"`
+	Data []SMS `json:"data"`
 }
 
 type messageInput struct {
@@ -335,7 +335,7 @@ func (o ops) listMessages(ctx context.Context, _ *noInput) (*messageList, error)
 // one, and the carrier would deliver it. `to` is required, and the body needs
 // text or media, because a message with neither is delivered as nothing and
 // billed as something.
-func (o ops) sendMessage(ctx context.Context, in *messageInput) (*Message, error) {
+func (o ops) sendMessage(ctx context.Context, in *messageInput) (*SMS, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -350,7 +350,7 @@ func (o ops) sendMessage(ctx context.Context, in *messageInput) (*Message, error
 		return nil, zip.Errorf(http.StatusForbidden, "from is not a number this org holds")
 	}
 
-	m, err := o.s.State.carrier.Send(ctx, MessageRequest{
+	m, err := o.s.State.carrier.Send(ctx, SMSRequest{
 		From: in.From, To: in.To, Text: in.Text, Media: in.Media,
 	})
 	if err != nil {
