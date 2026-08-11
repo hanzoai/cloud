@@ -33,7 +33,7 @@ type Carrier interface {
 	// a carrier that returns "sent" synchronously is telling you it accepted the
 	// request, and reporting that as delivery is how a message that never arrived
 	// gets recorded as one that did.
-	Send(ctx context.Context, r MessageRequest) (Message, error)
+	Send(ctx context.Context, r SMSRequest) (SMS, error)
 }
 
 // NumberQuery narrows a search. Country is required — numbering is national, and
@@ -47,14 +47,14 @@ type NumberQuery struct {
 
 // Number is a phone number as this platform holds it.
 type Number struct {
-	ID       string `json:"id"`
-	E164     string `json:"e164"`
-	Country  string `json:"country"`
-	Type     string `json:"type"`
-	Org      string `json:"org,omitempty"`
+	ID       string   `json:"id"`
+	E164     string   `json:"e164"`
+	Country  string   `json:"country"`
+	Type     string   `json:"type"`
+	Org      string   `json:"org,omitempty"`
 	Capable  []string `json:"capable,omitempty"` // voice | sms | mms | fax
-	Monthly  int64  `json:"monthly,omitempty"`   // minor units, as the carrier quoted it
-	Currency string `json:"currency,omitempty"`
+	Monthly  int64    `json:"monthly,omitempty"` // minor units, as the carrier quoted it
+	Currency string   `json:"currency,omitempty"`
 }
 
 // CallRequest is one outbound call. Agent, when set, hands the call to a Hanzo
@@ -77,8 +77,8 @@ type Call struct {
 	Agent  string `json:"agent,omitempty"`
 }
 
-// MessageRequest is one outbound message.
-type MessageRequest struct {
+// SMSRequest is one outbound message.
+type SMSRequest struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 	Text string `json:"text"`
@@ -87,8 +87,9 @@ type MessageRequest struct {
 	Media []string `json:"media,omitempty"`
 }
 
-// Message is a message as this platform holds it.
-type Message struct {
+// SMS is a message as this platform holds it -- text, or media, or both;
+// the carriers call the media case MMS and route it over the same number.
+type SMS struct {
 	ID     string `json:"id"`
 	From   string `json:"from"`
 	To     string `json:"to"`
