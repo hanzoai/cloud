@@ -389,7 +389,7 @@ type createProjectReq struct {
 func createProject(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	store, err := requestStore(s, c, org)
 	if err != nil {
@@ -468,7 +468,7 @@ type createIssueReq struct {
 func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	store, err := requestStore(s, c, org)
 	if err != nil {

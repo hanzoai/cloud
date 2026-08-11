@@ -272,14 +272,53 @@ func OrgFrom(ctx context.Context) (string, bool) {
 // says so. Changing the other thirty-six would move an externally visible code for
 // every unauthenticated caller in the fleet, which is a decision about the API and
 // not a duplicate to delete, so it is left alone and left visible.
+// Refused is the refusal itself, for the ~90 handlers that ask Org(c) and answer
+// their own 403. Same two halves Acting separates, same status, said correctly:
+//
+//	no credential this process could read  →  "a validated principal is required"
+//	attested, but no tenant to act for     →  "an org scope is required"
+//
+// They all said "X-Org-Id required", which names a header the caller usually DID
+// send and often cannot send — the edge mints it from the token and strips any
+// client copy. Read literally it is an instruction to do the thing you already
+// did, so it sends you to look at your request when the answer is your identity.
+// Measured cost, not a style note: it misdirected three separate diagnoses in one
+// day, one of them into rebuilding a CLI path that was never broken.
+//
+// THE STATUS IS UNCHANGED. 401 is the better reading of the first half and moving
+// it would change an externally visible code for every unauthenticated caller in
+// the fleet — a decision about the API, deliberately left alone. This changes only
+// which of the two things went wrong, which nothing else was saying.
+//
+// Refused/RefusedFrom is the Org/OrgFrom pair again: one question, two shapes, for
+// a handler that holds the request and a core that holds only the context.
+func Refused(c *zip.Ctx) error { return refused(Validated(c)) }
+
+// RefusedFrom is [Refused] where only the context crossed the seam.
+func RefusedFrom(ctx context.Context) error { return refused(ValidatedFrom(ctx)) }
+
+// Refusal is the sentence [Refused] carries, for a surface that writes its own
+// envelope — the ZAP and JSON-RPC shapes name their message field themselves —
+// and so needs the words rather than the error.
+func Refusal(c *zip.Ctx) string { return sentence(Validated(c)) }
+
+// sentence holds both wordings. Everything above differs only in where it
+// learns the predicate and what it wraps the answer in; a refusal worded
+// several ways is the thing this whole change exists to stop.
+func sentence(validated bool) string {
+	if !validated {
+		return "a validated principal is required"
+	}
+	return "an org scope is required"
+}
+
+func refused(validated bool) error { return zip.ErrForbidden(sentence(validated)) }
+
 func Acting(ctx context.Context) (string, error) {
 	if org, ok := OrgFrom(ctx); ok {
 		return org, nil
 	}
-	if !ValidatedFrom(ctx) {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	return "", zip.ErrForbidden("an org scope is required")
+	return "", RefusedFrom(ctx)
 }
 
 // validatedKey names the slot the WEAKER fact crosses the same seam in.

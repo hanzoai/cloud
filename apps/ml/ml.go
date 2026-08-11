@@ -578,7 +578,10 @@ func tenantNS(rawOrg, rawProject string, isAdmin bool) (ns, org, project string,
 	case org == "" && isAdmin:
 		org = "admin" // literal admin bucket
 	case org == "":
-		return "", "", "", zip.ErrForbidden("X-Org-Id required")
+		// Not principal.Refused: this is a pure function over strings and cannot
+		// see whether anybody was attested, so it says only the half it knows.
+		// Claiming the other would be the same misdirection in a new place.
+		return "", "", "", zip.ErrForbidden("an org scope is required")
 	case !orgRE.MatchString(org):
 		return "", "", "", zip.ErrForbidden("invalid org identifier")
 	}

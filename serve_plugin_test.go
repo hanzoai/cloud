@@ -19,8 +19,12 @@ func TestListenOn_PluginServesTheSocketItWasGiven(t *testing.T) {
 	t.Setenv(zip.AddrEnv, sock)
 
 	addrs, ops := listenOn(testListenCfg())
-	if want := []string{sock}; !reflect.DeepEqual(addrs, want) {
-		t.Fatalf("addrs = %q, want %q — the host waits on that socket and nothing else", addrs, want)
+	// The socket it was given, and the plain-HTTP leg derived from it that carries
+	// an upgrade across the mount. Both names come from the one address, so there
+	// is still nothing a deployment has to keep in step.
+	want := []string{sock, "http://" + sock + ".http"}
+	if !reflect.DeepEqual(addrs, want) {
+		t.Fatalf("addrs = %q, want %q — the host waits on that socket and nothing it was not told about", addrs, want)
 	}
 	// Second-order bug: one ops port, N children. Binding it here means every
 	// plugin after the first dies on "address already in use", and the host's

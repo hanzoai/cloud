@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"net/http"
 	"strings"
@@ -355,10 +356,10 @@ func resolvePackRepo(s *cloud.Service[state], c *zip.Ctx, allowPublic bool) (pac
 		case allowPublic:
 			orgID = c.Param("org")
 			if orgID == "" || !orgRE.MatchString(orgID) {
-				return packCaller{}, zip.ErrForbidden("X-Org-Id required")
+				return packCaller{}, principal.Refused(c)
 			}
 		default:
-			return packCaller{}, zip.ErrForbidden("X-Org-Id required")
+			return packCaller{}, principal.Refused(c)
 		}
 	}
 	name, err := repoNameParam(c)

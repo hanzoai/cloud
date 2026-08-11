@@ -361,7 +361,7 @@ func routeID(s *cloud.Service[state], name string, readBody bool) zip.Handler {
 func dispatch(s *cloud.Service[state], c *zip.Ctx, route string, params map[string]string, readBody bool) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body any
 	if readBody {

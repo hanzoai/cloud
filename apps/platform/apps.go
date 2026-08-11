@@ -163,7 +163,7 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	super := principal.IsSuperAdmin(c)
 
@@ -341,7 +341,7 @@ type unreadable struct {
 func listDeclared(s *cloud.Service[state], fs *cloud.Service[fleetState], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	dir, err := resolveOrg(org, c.Query("org"), principal.IsSuperAdmin(c))
 	if err != nil {
@@ -378,7 +378,7 @@ func listDeclared(s *cloud.Service[state], fs *cloud.Service[fleetState], c *zip
 func getDeclared(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	name := c.Param("app")
 	if !slugRE.MatchString(name) {
@@ -405,7 +405,7 @@ func getDeclared(s *cloud.Service[state], c *zip.Ctx) error {
 func getDeclaredCD(s *cloud.Service[state], fs *cloud.Service[fleetState], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	name := c.Param("app")
 	if !slugRE.MatchString(name) {

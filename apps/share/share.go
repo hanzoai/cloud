@@ -73,7 +73,7 @@ func gate(s *cloud.Service[state], ctx context.Context) (string, error) {
 	}
 	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
+		return "", principal.RefusedFrom(ctx)
 	}
 	return org, nil
 }
