@@ -80,17 +80,22 @@ var framers = sync.OnceValue(func() string {
 	return "frame-ancestors 'self' " + strings.Join(slices.Sorted(maps.Keys(seen)), " ")
 })
 
-// serve answers the terminal page.
+// serve answers one of these pages — the terminal's (above) or the screen's
+// (screen.go). They differ only in the document, so how a page is served is
+// written once: the headers are the whole of it, and a second copy of them is a
+// second answer to who may frame us.
 //
 // It does NOT redeem the ticket, and that is the whole reason the page and the
 // socket are two addresses: a ticket is spent once, and spending it here would
 // leave the page holding a credential that no longer opens anything. The page is
 // markup — the socket is the gate, and it is the socket that checks.
-func serve(s *Service, c *zip.Ctx) error {
-	// The page is a constant, so its own headers are the only thing that can vary,
-	// and both of these are about where it may be shown rather than what it says.
-	c.SetHeader("Content-Security-Policy", framers())
-	c.SetHeader("Cache-Control", "no-store")
-	c.SetHeader("Content-Type", "text/html; charset=utf-8")
-	return c.String(http.StatusOK, document())
+func serve(doc func() string) func(*Service, *zip.Ctx) error {
+	return func(s *Service, c *zip.Ctx) error {
+		// A page is a constant, so its own headers are the only thing that can vary,
+		// and both of these are about where it may be shown rather than what it says.
+		c.SetHeader("Content-Security-Policy", framers())
+		c.SetHeader("Cache-Control", "no-store")
+		c.SetHeader("Content-Type", "text/html; charset=utf-8")
+		return c.String(http.StatusOK, doc())
+	}
 }
