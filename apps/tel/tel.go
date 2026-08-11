@@ -29,7 +29,7 @@
 //	POST   /v1/tel/calls               place a call                     -> Call (201)
 //	DELETE /v1/tel/calls/:id           hang up
 //	GET    /v1/tel/messages            message records                  -> {data:[…]}
-//	POST   /v1/tel/messages            send one                         -> Message (201)
+//	POST   /v1/tel/messages            send one                         -> SMS (201)
 //	GET    /v1/tel/summary             per-org roll-up
 //
 // Every route is a TYPED op — one registry entry, which is what the OpenAPI
@@ -158,6 +158,8 @@ func (o ops) searchNumbers(ctx context.Context, in *searchInput) (*numberList, e
 	return &numberList{Data: found}, nil
 }
 
+// listNumbers returns the numbers this org holds. Scoped to the caller's org, so a
+// number bought by one tenant is invisible to every other.
 func (o ops) listNumbers(ctx context.Context, _ *noInput) (*numberList, error) {
 	org, err := principal.RequireOrg(ctx)
 	if err != nil {
@@ -231,6 +233,8 @@ type callInput struct {
 	Webhook string `json:"webhook,omitempty"`
 }
 
+// listCalls returns this org's call history, newest first as the store gives it.
+// Org-scoped like every read here.
 func (o ops) listCalls(ctx context.Context, _ *noInput) (*callList, error) {
 	org, err := principal.RequireOrg(ctx)
 	if err != nil {
@@ -277,6 +281,9 @@ func (o ops) placeCall(ctx context.Context, in *callInput) (*Call, error) {
 	return &call, nil
 }
 
+// hangup ends a live call. The holding is checked before the carrier is asked, so
+// a call belonging to another org answers 404 rather than being torn down: the
+// carrier knows nothing about tenancy and would obey either way.
 func (o ops) hangup(ctx context.Context, in *idInput) (*noInput, error) {
 	org, err := principal.RequireOrg(ctx)
 	if err != nil {
@@ -293,7 +300,7 @@ func (o ops) hangup(ctx context.Context, in *idInput) (*noInput, error) {
 }
 
 type messageList struct {
-	Data []Message `json:"data"`
+	Data []SMS `json:"data"`
 }
 
 type messageInput struct {
@@ -303,6 +310,7 @@ type messageInput struct {
 	Media []string `json:"media,omitempty"`
 }
 
+// listMessages returns this org's message history. Org-scoped like every read here.
 func (o ops) listMessages(ctx context.Context, _ *noInput) (*messageList, error) {
 	org, err := principal.RequireOrg(ctx)
 	if err != nil {
@@ -315,7 +323,11 @@ func (o ops) listMessages(ctx context.Context, _ *noInput) (*messageList, error)
 	return &messageList{Data: rows}, nil
 }
 
-func (o ops) sendMessage(ctx context.Context, in *messageInput) (*Message, error) {
+// sendMessage sends one message. `from` must be a number this org holds -- the carrier
+// will send from any number it routes, so without that check one tenant could
+// originate traffic on another's number, and the bill and the reputation would
+// follow the number rather than the sender.
+func (o ops) sendMessage(ctx context.Context, in *messageInput) (*SMS, error) {
 	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
@@ -330,7 +342,7 @@ func (o ops) sendMessage(ctx context.Context, in *messageInput) (*Message, error
 		return nil, zip.Errorf(http.StatusForbidden, "from is not a number this org holds")
 	}
 
-	m, err := o.s.State.carrier.Send(ctx, MessageRequest{
+	m, err := o.s.State.carrier.Send(ctx, SMSRequest{
 		From: in.From, To: in.To, Text: in.Text, Media: in.Media,
 	})
 	if err != nil {
@@ -349,6 +361,8 @@ type summary struct {
 	Messages int `json:"messages"`
 }
 
+// summary counts what this org holds and has used -- numbers, calls, messages. The
+// one read the dashboard makes, so it is three counts rather than three lists.
 func (o ops) summary(ctx context.Context, _ *noInput) (*summary, error) {
 	org, err := principal.RequireOrg(ctx)
 	if err != nil {

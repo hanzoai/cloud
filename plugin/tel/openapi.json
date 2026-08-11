@@ -1,0 +1,504 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package tel is the telecommunications surface: phone numbers, calls and messages, on whatever carrier the deployment is configured for.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "tel"
+    }
+  ],
+  "paths": {
+    "/v1/tel/calls": {
+      "get": {
+        "operationId": "get_v1_tel_calls",
+        "summary": "Returns this org's call history, newest first as the store gives it.",
+        "description": "Returns this org's call history, newest first as the store gives it.\nOrg-scoped like every read here.",
+        "tags": [
+          "tel"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/callList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_tel_calls",
+        "summary": "Dials.",
+        "description": "Dials. An `agent` names a Hanzo assistant to answer it; the call is\nrefused up front when no assistant plane is configured, because a call that\nconnects to silence has already cost the person who answered it.",
+        "tags": [
+          "tel"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/callInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Call"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/tel/calls/{id}": {
+      "delete": {
+        "operationId": "delete_v1_tel_calls_by_id",
+        "summary": "Ends a live call.",
+        "description": "Ends a live call. The holding is checked before the carrier is asked, so\na call belonging to another org answers 404 rather than being torn down: the\ncarrier knows nothing about tenancy and would obey either way.",
+        "tags": [
+          "tel"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/noInput"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/tel/messages": {
+      "get": {
+        "operationId": "get_v1_tel_messages",
+        "summary": "Returns this org's message history.",
+        "description": "Returns this org's message history. Org-scoped like every read here.",
+        "tags": [
+          "tel"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/messageList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_tel_messages",
+        "summary": "Sends one message.",
+        "description": "Sends one message. `from` must be a number this org holds -- the carrier\nwill send from any number it routes, so without that check one tenant could\noriginate traffic on another's number, and the bill and the reputation would\nfollow the number rather than the sender.",
+        "tags": [
+          "tel"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/messageInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SMS"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/tel/numbers": {
+      "get": {
+        "operationId": "get_v1_tel_numbers",
+        "summary": "Returns the numbers this org holds.",
+        "description": "Returns the numbers this org holds. Scoped to the caller's org, so a\nnumber bought by one tenant is invisible to every other.",
+        "tags": [
+          "tel"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/numberList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_tel_numbers",
+        "summary": "Provisions with the carrier FIRST and records second.",
+        "description": "Provisions with the carrier FIRST and records second. The other order\nrecords a holding that may not exist, and a number the platform believes it owns\nbut cannot use is worse than one it failed to buy.",
+        "tags": [
+          "tel"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/buyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Number"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/tel/numbers/available": {
+      "get": {
+        "operationId": "get_v1_tel_numbers_available",
+        "summary": "Asks the carrier what is available to buy.",
+        "description": "Asks the carrier what is available to buy. Nothing is recorded —\na search is not a holding, and treating it as one is how inventory leaks.",
+        "tags": [
+          "tel"
+        ],
+        "parameters": [
+          {
+            "name": "Country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Area",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/numberList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/tel/numbers/{id}": {
+      "delete": {
+        "operationId": "delete_v1_tel_numbers_by_id",
+        "summary": "Checks the holding is THIS org's before it reaches the carrier.",
+        "description": "Checks the holding is THIS org's before it reaches the carrier.\nWithout that read, an id belonging to another tenant would be released by\nwhoever guessed it.",
+        "tags": [
+          "tel"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/noInput"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/tel/summary": {
+      "get": {
+        "operationId": "get_v1_tel_summary",
+        "summary": "Counts what this org holds and has used -- numbers, calls, messages.",
+        "description": "Counts what this org holds and has used -- numbers, calls, messages. The\none read the dashboard makes, so it is three counts rather than three lists.",
+        "tags": [
+          "tel"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/summary"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Call": {
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "status": {
+            "description": "queued | ringing | answered | completed | failed",
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Number": {
+        "properties": {
+          "capable": {
+            "description": "voice | sms | mms | fax",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "country": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "e164": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "monthly": {
+            "description": "minor units, as the carrier quoted it",
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SMS": {
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "status": {
+            "description": "queued | sent | delivered | failed",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "buyInput": {
+        "properties": {
+          "e164": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "callInput": {
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "record": {
+            "description": "Record is a per-call flag rather than a product. Where a recording lands and\nhow long it is kept is the org's retention policy, not this call's.",
+            "type": "boolean"
+          },
+          "to": {
+            "type": "string"
+          },
+          "webhook": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "callList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Call"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "messageInput": {
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "media": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "messageList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SMS"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "noInput": {
+        "properties": {},
+        "type": "object"
+      },
+      "numberList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Number"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "summary": {
+        "properties": {
+          "calls": {
+            "type": "integer"
+          },
+          "messages": {
+            "type": "integer"
+          },
+          "numbers": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}
