@@ -51,6 +51,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"net/http"
 	"strings"
@@ -260,7 +261,7 @@ func open(door string) func(*Service, *zip.Ctx) error {
 	return func(s *Service, c *zip.Ctx) error {
 		o, ok := orgOf(c)
 		if !ok {
-			return zip.ErrForbidden("X-Org-Id required")
+			return principal.Refused(c)
 		}
 		id := idParam(c)
 		m, _, err := find(s, c.Context(), o, id)

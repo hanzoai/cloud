@@ -234,7 +234,7 @@ func publicHostEnabled() bool {
 func serveOrg(p *pool, log interface{ Error(string, ...any) }, c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	h, release, err := p.acquire(org)
 	if err != nil {

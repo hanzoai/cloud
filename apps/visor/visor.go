@@ -96,11 +96,11 @@ type noArgs struct{}
 func scope(ctx context.Context) (*zip.Ctx, string, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+		return nil, "", principal.RefusedFrom(ctx)
 	}
 	org, ok := tenant(c)
 	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+		return nil, "", principal.Refused(c)
 	}
 	return c, org, nil
 }
@@ -474,7 +474,7 @@ func listSizes(s *cloud.Service[state], c *zip.Ctx) error   { return catalog(s, 
 // wire shape stays the single source of truth.
 func catalog(s *cloud.Service[state], c *zip.Ctx, upstream string) error {
 	if _, ok := tenant(c); !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var data json.RawMessage
 	if err := s.State.cl.call(c, http.MethodGet, upstream, "", nil, &data); err != nil {
@@ -569,7 +569,7 @@ func init() {
 func launchMachine(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body launchReq
 	if err := c.Bind(&body); err != nil {

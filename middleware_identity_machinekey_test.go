@@ -47,7 +47,7 @@ func orgScopedProbe(t *testing.T, v *identityValidator, mutate func(*http.Reques
 	app.Get("/v1/agents", func(c *zip.Ctx) error {
 		o, ok := principal.Org(c)
 		if !ok {
-			return zip.ErrForbidden("X-Org-Id required")
+			return principal.Refused(c)
 		}
 		org = o
 		return c.JSON(http.StatusOK, map[string]string{"org": o})

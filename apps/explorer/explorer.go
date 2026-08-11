@@ -108,7 +108,7 @@ type noInput struct{}
 // proof-of-auth gate, checked in ONE place before any handler touches an upstream.
 func gate(ctx context.Context) error {
 	if _, ok := principal.OrgFrom(ctx); !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.RefusedFrom(ctx)
 	}
 	return nil
 }

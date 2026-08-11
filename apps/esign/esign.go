@@ -315,7 +315,7 @@ func owner(s *cloud.Service[state], route string, params map[string]string, read
 	return func(c *zip.Ctx) error {
 		org, ok := principal.Org(c)
 		if !ok {
-			return zip.ErrForbidden("X-Org-Id required")
+			return principal.Refused(c)
 		}
 		return dispatch(s, c, route, org, params, readBody)
 	}
@@ -326,7 +326,7 @@ func ownerID(s *cloud.Service[state], route string, readBody bool) zip.Handler {
 	return func(c *zip.Ctx) error {
 		org, ok := principal.Org(c)
 		if !ok {
-			return zip.ErrForbidden("X-Org-Id required")
+			return principal.Refused(c)
 		}
 		return dispatch(s, c, route, org, map[string]string{"id": c.Param("id")}, readBody)
 	}

@@ -253,11 +253,11 @@ func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
 		// Off the HTTP path (a CLI LocalInvoke) there is no attested tenant and no
 		// attested actor, so there is nothing to scope by. Same 403 as an
 		// unauthenticated request.
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+		return nil, "", principal.RefusedFrom(ctx)
 	}
 	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+		return nil, "", principal.RefusedFrom(ctx)
 	}
 	// THE BRAND GATE. One cloud binary serves every brand's API host and its
 	// validator trusts EVERY white-label issuer (auth_identity.go, trustedIssuers
