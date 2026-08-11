@@ -16,7 +16,7 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.3.1
 	github.com/hanzoai/cek v0.2.3
-	github.com/hanzoai/commerce v1.50.39
+	github.com/hanzoai/commerce v1.50.42
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
@@ -32,11 +32,11 @@ require (
 	github.com/hanzoai/sqlite v0.5.2
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
-	github.com/hanzos3/go v1.0.1
+	github.com/hanzos3/go v1.0.2
 	github.com/luxfi/log v1.6.0
 	github.com/luxfi/node v1.36.15
 	github.com/luxfi/trace v1.4.0
-	github.com/luxfi/zapdb v1.10.1
+	github.com/luxfi/zapdb v1.10.6
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/nats-io/nats.go v1.50.0
 	github.com/spf13/cobra v1.10.2
@@ -86,14 +86,12 @@ require (
 	github.com/hanzokv/go/extra/kvcmd/v9 v9.22.0 // indirect
 	github.com/hanzokv/go/extra/kvotel/v9 v9.22.0 // indirect
 	github.com/hanzos3/crc64nvme v1.1.2 // indirect
-	github.com/hanzos3/go-sdk v1.0.2 // indirect
 	github.com/hanzos3/md5-simd v1.1.3 // indirect
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/linode/linodego v1.67.0 // indirect
 	github.com/luxfi/filesystem v0.0.1 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
-	github.com/minio/minio-go/v7 v7.0.100 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/moby/spdystream v0.5.1 // indirect
 	github.com/moby/term v0.5.2 // indirect
@@ -522,8 +520,6 @@ require (
 	github.com/microsoft/go-mssqldb v1.9.5 // indirect
 	github.com/miekg/dns v1.1.72 // indirect
 	github.com/mimoo/StrobeGo v0.0.0-20220103164710-9a04d6ca976b // indirect
-	github.com/minio/crc64nvme v1.1.1 // indirect
-	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.1-0.20231216201459-8508981c8b6c // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
@@ -692,7 +688,7 @@ require (
 	github.com/hanzoai/agent v0.1.3
 	github.com/hanzoai/ai v1.833.7
 	github.com/hanzoai/authz v1.10.29
-	github.com/hanzoai/base v1.5.17
+	github.com/hanzoai/base v1.5.18
 	github.com/hanzoai/licensing v0.1.10
 	github.com/hanzoai/metrics v1.110.6
 	github.com/hanzoai/o11y v1.5.63
