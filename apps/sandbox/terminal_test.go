@@ -300,6 +300,41 @@ func TestNamedShellAttachesAndDegrades(t *testing.T) {
 	}
 }
 
+// THE TERMINAL HAS TO SAY WHAT KIND OF TERMINAL IT IS.
+//
+// The exec subresource opens a pty and sets no environment on it, so TERM arrives
+// unset and tmux refuses the screen it was given: "terminal does not support
+// clear", then exit. Beside `exec`, that refusal is not a degradation — the shell
+// is already gone, nothing is left to fall back to, and the socket closes. Every
+// named terminal opened and immediately reported the connection closed, and no
+// session was ever created to reattach to.
+//
+// So it is asserted on BOTH shapes and BEFORE the first command: a TERM exported
+// after the shell has been replaced is a TERM nothing reads.
+func TestShellNamesTheTerminal(t *testing.T) {
+	for _, session := range []string{"", "pane-1"} {
+		cmd := shell(session)[2]
+		if !strings.Contains(cmd, "TERM=") {
+			t.Errorf("shell(%q) = %q sets no TERM — Kubernetes sets none either, and a "+
+				"pty of unknown type is one tmux will not draw on", session, cmd)
+			continue
+		}
+		if !strings.Contains(cmd, "xterm") {
+			t.Errorf("shell(%q) = %q does not name an xterm; every surface frames the "+
+				"same xterm.js page, so anything else is a lie about the far end",
+				session, cmd)
+		}
+		// Before the shell is replaced, or it is never read.
+		if i, j := strings.Index(cmd, "TERM="), strings.Index(cmd, "exec"); i < 0 || j < 0 || i > j {
+			t.Errorf("shell(%q) = %q exports TERM after the first exec", session, cmd)
+		}
+		// A caller that already said which terminal it is keeps its answer.
+		if !strings.Contains(cmd, ":-") {
+			t.Errorf("shell(%q) = %q overwrites TERM instead of defaulting it", session, cmd)
+		}
+	}
+}
+
 // The name reaches a COMMAND LINE, so what may be in it is an allowlist and not
 // an escape. This is the injection gate and it is measured as one.
 func TestSessionNameIsAnAllowlist(t *testing.T) {
