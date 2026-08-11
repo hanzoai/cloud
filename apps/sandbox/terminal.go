@@ -95,11 +95,30 @@ const ticketTTL = 30 * time.Second
 // a caller its session names, not its terminal.
 func shell(session string) []string {
 	if session == "" {
-		return []string{"/bin/sh", "-lc", plain}
+		return []string{"/bin/sh", "-lc", term + plain}
 	}
 	return []string{"/bin/sh", "-lc",
-		"command -v tmux >/dev/null 2>&1 && exec tmux new -A -s " + shellQuote(session) + "; " + plain}
+		term + "command -v tmux >/dev/null 2>&1 && exec tmux new -A -s " + shellQuote(session) + "; " + plain}
 }
+
+// term names the terminal to the programs running in it, and NOTHING ELSE DOES.
+//
+// The exec subresource opens a pty and stops there — Kubernetes sets no
+// environment on it, so TERM arrives unset, and a pty whose type is unknown is
+// one a full-screen program refuses to draw on. tmux says so exactly: "open
+// terminal failed: terminal does not support clear", and then exits.
+//
+// That single missing variable took the whole terminal down rather than costing
+// it tmux, because the fallback beside it cannot run: `exec` has already replaced
+// the shell, so a tmux that STARTS and fails leaves nothing behind to fall back
+// to and the socket closes. The named session was never created, every reconnect
+// repeated it, and what a person saw was a terminal that opened and immediately
+// said the connection had closed.
+//
+// xterm-256color is the truth about the other end: every surface frames the same
+// xterm.js page. `:-` and not a bare assignment, so a caller that has already
+// said which terminal it is keeps its answer.
+const term = "export TERM=${TERM:-xterm-256color}; "
 
 const plain = "exec zsh -l 2>/dev/null || exec bash -l 2>/dev/null || exec sh -l"
 
