@@ -158,6 +158,11 @@ func (o ops) searchNumbers(ctx context.Context, in *searchInput) (*numberList, e
 	return &numberList{Data: found}, nil
 }
 
+// Lists the phone numbers this org HOLDS — the ones it has bought and not
+// released. Distinct from the availability search one path down
+// (`/numbers/available`), which asks the carrier what could be bought: this
+// answers only from our own store, so it is what an org owns rather than what
+// it could own.
 func (o ops) listNumbers(ctx context.Context, _ *noInput) (*numberList, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
@@ -231,6 +236,8 @@ type callInput struct {
 	Webhook string `json:"webhook,omitempty"`
 }
 
+// Lists the calls this org has placed or received, newest first. Like the
+// message list beside it, these are our own records rather than the carrier's.
 func (o ops) listCalls(ctx context.Context, _ *noInput) (*callList, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
@@ -277,6 +284,9 @@ func (o ops) placeCall(ctx context.Context, in *callInput) (*Call, error) {
 	return &call, nil
 }
 
+// Ends a call this org placed. The holding is read for THIS org before the
+// carrier is asked, for the reason releaseNumber gives one surface up: an id
+// belonging to another tenant would otherwise be hung up by whoever guessed it.
 func (o ops) hangup(ctx context.Context, in *idInput) (*noInput, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
@@ -303,6 +313,9 @@ type messageInput struct {
 	Media []string `json:"media,omitempty"`
 }
 
+// Lists the messages this org has sent or received, newest first. Records from
+// our own store, not the carrier's — so it is what this platform did on the
+// org's behalf, which is the set an audit or a bill has to agree with.
 func (o ops) listMessages(ctx context.Context, _ *noInput) (*messageList, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
@@ -315,6 +328,13 @@ func (o ops) listMessages(ctx context.Context, _ *noInput) (*messageList, error)
 	return &messageList{Data: rows}, nil
 }
 
+// Sends a message from one of this org's own numbers.
+//
+// `from` must be a number the org HOLDS, checked against the store rather than
+// taken on trust — a caller that could send from any number could impersonate
+// one, and the carrier would deliver it. `to` is required, and the body needs
+// text or media, because a message with neither is delivered as nothing and
+// billed as something.
 func (o ops) sendMessage(ctx context.Context, in *messageInput) (*Message, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
@@ -349,6 +369,9 @@ type summary struct {
 	Messages int `json:"messages"`
 }
 
+// Counts what this org holds on the telephony plane: its numbers, its calls and
+// its messages. The one read a dashboard makes before it asks for any list, so
+// it answers three totals and no rows.
 func (o ops) summary(ctx context.Context, _ *noInput) (*summary, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
