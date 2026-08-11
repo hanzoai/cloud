@@ -102,6 +102,41 @@ authority for them.
 this itself; it asks over the plane. Noted in advance because that mistake has
 been made five times in this codebase and caught five times afterwards.
 
+## The screen, and the three things that were not obvious
+
+A `desktop` sandbox has an X server, and `/v1/sandboxes/:id/screen` is how you
+look at it: the terminal's three doors again — a ticket, a page, a socket —
+differing only in the bytes on the wire (RFB) and the client in the page (noVNC,
+inlined the way xterm is). The ticket, the bridge, the lease that bounds a
+session and the attention that keeps it from being reaped are the SAME code;
+what a session runs is the only argument.
+
+**The pixels come out through the exec channel.** The image binds its VNC server
+to `127.0.0.1:5900` on purpose — a screen reachable from the pod network is a
+screen whose only defence is a NetworkPolicy — so there is no address to dial.
+`socat - TCP:127.0.0.1:5900` on the exec subresource IS the transport. Nothing
+new is exposed and there is nothing new to authorize.
+
+**Not on a pty, and this one is a silent corrupter.** A pty translates bytes; RFB
+is bytes. A screen on `tty()` works until a pixel happens to be 0x0d. It is
+`stream()` for that reason and no other, and stderr comes back with it so a pod
+whose screen is not running says "connection refused" instead of showing a black
+rectangle.
+
+**The image's screen died at thirty seconds, and nothing could see it.**
+`x0vncserver` is TigerVNC's session MANAGER, not its server: it starts
+X0tigervnc and then waits for the port by binding INADDR_ANY with SO_REUSEADDR —
+a test a LOOPBACK listener can never pass, because 127.0.0.1:5900 leaves
+0.0.0.0:5900 free. After 300 tries at 100ms it killed a server that had been
+serving since boot. Every symptom pointed elsewhere: the pod is Running, exec
+answers, X and openbox are up, and only a VNC client ever finds out. hanzoai/bot
+965d91487 calls the server directly.
+
+Same shape, one layer up: zsh was installed in every class and was the prompt of
+none, because the user's login shell stayed `/bin/bash` and tmux asks passwd what
+to run. Installed is not in use — for a shell, for a VNC server, for anything a
+supervisor stands in front of.
+
 ## The harness
 
 ```
