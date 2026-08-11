@@ -589,7 +589,21 @@ func listenOn(cfg *Config) (addrs []string, ops string) {
 	// ZIP_RUNTIME_DIR, so this only fills in the default the plane already assumes.
 	bindRuntimeDir()
 	if sock := zip.Addr(""); sock != "" {
-		return []string{sock}, ""
+		// TWO addresses, because a plugin answers two kinds of caller.
+		//
+		// The socket carries ZAP: one framed request, one framed reply, which is
+		// every typed op and every mounted route. An UPGRADED connection is
+		// neither — after the handshake there are no more requests, only bytes —
+		// so a websocket cannot cross that framing, and the terminal's first
+		// frame arrived at an HTTP header parser as nonsense. The session the
+		// plugin meant to run after the handshake therefore never started, and
+		// what a person saw was a terminal that opened and immediately closed.
+		//
+		// So a plugin listens a second time in plain HTTP, beside the first, and
+		// the host relays an upgrade there. The name is DERIVED and not
+		// configured (zip's plain()): one address is still the whole of what a
+		// mount is told, and there is no second value to keep in step.
+		return []string{sock, "http://" + sock + ".http"}, ""
 	}
 	// ONE app, TWO transports here, both serving the identical route surface so
 	// /v1/* answers over either and WS/SSE keep working on the HTTP one:
