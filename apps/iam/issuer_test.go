@@ -18,19 +18,13 @@ import (
 	"github.com/hanzoai/orm"
 )
 
-// EACH BRAND ISSUES AS ITSELF. `iss` is the boundary a relying party pins, so a
-// deployment answering one issuer for every brand mints tokens that every
-// non-default brand's own RPs reject — hanzo.id looks perfect while lux.id,
-// zoolabs.id, pars.id, osage.id and both id.* hosts are broken.
+// Each brand issues as itself. `iss` is what a relying party pins, so one issuer
+// for every brand means hanzo.id looks perfect while every other brand's tokens
+// are rejected by its own clients — which is how it shipped: a repoint passed
+// the gate that existed (the key set matched) and was still wrong.
 //
-// It went out that way. A repoint of the identity hosts at cloud passed the
-// gate that existed (the key set matched exactly) and was still wrong, because
-// nothing pinned the brands here and everything fell back to IAM_ISSUER.
-//
-// This covers the IN-PROCESS half: given the map, the embedded subsystem
-// resolves per Host. The OTHER half is the plugin hop, where the Host used to
-// be overwritten with the child's socket path and no map could help — that is
-// zip's TestForwardKeepsTheCallersHost, fixed in v1.27.2.
+// This is the in-process half. The other was the Host not surviving the plugin
+// hop, which no config could reach: zip v1.27.3 / zap-proto/http v0.3.2.
 func TestDiscoveryIssuesAsTheBrandItWasAskedAs(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Dir(StorePath(dir)), 0o700); err != nil {
