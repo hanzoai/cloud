@@ -193,7 +193,7 @@ func (o settingsOps) getSettings(ctx context.Context, in *productIn) (*settingsV
 	s := o.s
 	org, ok := s.tenant(ctx)
 	if !ok {
-		return nil, zip.ErrForbidden("X-Org-Id required")
+		return nil, principal.RefusedFrom(ctx)
 	}
 	product, err := requireProduct(in.Product)
 	if err != nil {
@@ -241,7 +241,7 @@ func (o settingsOps) putSettings(ctx context.Context, in *settingsReq) (*setting
 	s := o.s
 	org, ok := s.tenant(ctx)
 	if !ok {
-		return nil, zip.ErrForbidden("X-Org-Id required")
+		return nil, principal.RefusedFrom(ctx)
 	}
 	product, err := requireProduct(in.Product)
 	if err != nil {

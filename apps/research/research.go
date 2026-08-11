@@ -305,7 +305,7 @@ var shutdownStores = func() error { return nil }
 func (o ops) orgStore(ctx context.Context) (*store, string, error) {
 	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+		return nil, "", principal.RefusedFrom(ctx)
 	}
 	st, err := storeFor(o.s.State.stores, org)
 	if err != nil {
@@ -705,7 +705,7 @@ type noInput struct{}
 func getArtifactBlob(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return errJSON(c, http.StatusForbidden, "X-Org-Id required")
+		return errJSON(c, http.StatusForbidden, principal.Refusal(c))
 	}
 	st, err := storeFor(s.State.stores, org)
 	if err != nil {

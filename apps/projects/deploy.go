@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -201,7 +202,7 @@ func publishSite(s *cloud.Service[state], ctx context.Context, org string, p Pro
 func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	p, err := loadProject(s, c.Context(), org, slugParam(c))
 	if err != nil {

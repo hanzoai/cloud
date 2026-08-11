@@ -179,7 +179,7 @@ type ops struct{ s *cloud.Service[*state] }
 func tenant(ctx context.Context) (org, project string, err error) {
 	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return "", "", zip.ErrForbidden("X-Org-Id required")
+		return "", "", principal.RefusedFrom(ctx)
 	}
 	project = principal.ProjectFrom(ctx)
 	if principal.IsDefaultProject(project) {

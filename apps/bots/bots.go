@@ -288,7 +288,7 @@ func (o ops) list(ctx context.Context, _ *noArgs) (*BotRuns, error) {
 	// bare, forgeable X-Org-Id (the direct-to-pod path) never reaches here.
 	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return nil, zip.ErrForbidden("X-Org-Id required")
+		return nil, principal.RefusedFrom(ctx)
 	}
 	runs, err := o.s.State.runtime.List(ctx, org)
 	if err != nil {
@@ -330,7 +330,7 @@ func toBotRun(s *cloud.Service[state], r Run) BotRun {
 func (o ops) stop(ctx context.Context, in *stopBotIn) (*BotStopped, error) {
 	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return nil, zip.ErrForbidden("X-Org-Id required")
+		return nil, principal.RefusedFrom(ctx)
 	}
 	runID := strings.TrimSpace(in.RunID)
 	if runID == "" {
