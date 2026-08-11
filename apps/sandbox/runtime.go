@@ -34,6 +34,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -766,7 +767,7 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 		// display; they do not open anything the entrypoint has not bound, and it
 		// binds loopback.
 		c["ports"] = []any{
-			map[string]any{"name": "vnc", "containerPort": int64(5900)},
+			map[string]any{"name": "vnc", "containerPort": int64(rfb)},
 			map[string]any{"name": "novnc", "containerPort": int64(6080)},
 		}
 	}
@@ -1095,6 +1096,42 @@ func (r *runtime) tty(ctx context.Context, m Sandbox, argv []string, stdin io.Re
 		return fmt.Errorf("sandbox is %s", cmp.Or(m.Status, "unknown"))
 	}
 	return r.str.tty(ctx, r.ns, m.Pod, argv, stdin, stdout, size)
+}
+
+// screen carries the sandbox's DISPLAY out as bytes: RFB, exactly as the VNC
+// server inside the pod speaks it, in both directions.
+//
+// It is the third shape of the one channel and not a third channel. There is no
+// address to dial — the desktop image binds its VNC server to loopback on
+// purpose, so the pod network can no more reach a screen than the internet can —
+// and the exec subresource is the only way into a sandbox that exists. `socat`
+// joins that stream to the loopback port, and what comes back is the protocol
+// unaltered: this function transports and never interprets.
+//
+// NO TTY, and that is the difference that matters. A pty translates — CR to LF,
+// among others — and RFB is arbitrary bytes, so a screen on a terminal is a
+// screen that corrupts the moment a pixel happens to be 0x0d. The plain stream
+// carries what it is given.
+//
+// stderr is COLLECTED rather than discarded, because the one failure anybody
+// will hit says its whole reason there. A pod whose screen is not running
+// refuses the connection, socat says so in one line and exits non-zero, and
+// without this the person watching gets a blank rectangle and a close frame that
+// says the command exited. With it, they get "connection refused".
+func (r *runtime) screen(ctx context.Context, m Sandbox, in io.Reader, out io.Writer) error {
+	if err := r.ready(); err != nil {
+		return err
+	}
+	if m.Status != "running" || m.Pod == "" {
+		return fmt.Errorf("sandbox is %s", cmp.Or(m.Status, "unknown"))
+	}
+	var why capped
+	err := r.str.stream(ctx, r.ns, m.Pod,
+		[]string{"socat", "-", "TCP:127.0.0.1:" + strconv.Itoa(rfb)}, in, out, &why)
+	if said := strings.TrimSpace(why.String()); err != nil && said != "" {
+		return fmt.Errorf("%s", said)
+	}
+	return err
 }
 
 func asCodeExit(err error, out *utilexec.CodeExitError) bool {
