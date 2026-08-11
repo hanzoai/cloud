@@ -72,30 +72,10 @@
 //	/login/oauth/… browser authorize surface (the /v1/iam/oauth/authorize 302 target)
 //	/.well-known/… OIDC discovery + JWKS at the issuer root (RFC 8414)
 //
-// PER-HOST BEHAVIOUR DOES NOT SURVIVE THE PLUGIN HOP, and identity is the
-// subsystem that most needs it. iam serves every brand from one instance and
-// emits each brand's OWN issuer, resolved from the request Host through
-// IAM_ISSUER_MAP — `iss` is the boundary a relying party pins, so lux.id must
-// mint https://lux.id or every Lux RP rejects the token.
-//
-// As a plugin CHILD it cannot: zip's prefix proxy forwards with
-// forward(req, resp, client, host, …) where host is the CHILD'S SOCKET ADDRESS,
-// and forward calls req.SetHost(host) (zip transport.go). So the child is asked
-// as its socket, matches no brand in the map, and falls back to IAM_ISSUER —
-// one issuer for every brand. Ctx.Host() deliberately ignores X-Forwarded-Host,
-// which is right (a client header must not steer the issuer) and is also why
-// there is no header for the host to smuggle the brand in.
-//
-// Measured, by repointing ingress at cloud and asking per Host:
-//
-//	iam    Host: lux.id -> "issuer":"https://lux.id"
-//	cloud  Host: lux.id -> "issuer":"https://hanzo.id"
-//
-// The map was present in the child's own environment; the Host was not. So this
-// is not a config gap and adding config cannot close it — the fix is zip
-// carrying the original Host across the hop, and until it does, the standalone
-// iam owns the brand hosts. Do not re-attempt the cutover on a green key set
-// alone: the key set matched exactly while this was broken.
+// Each brand emits its OWN issuer, resolved from the request Host. That needs the
+// Host to survive the hop to this child, which it did not until zap-proto/http
+// v0.3.2 stopped dropping it on the wire; every brand fell back to one issuer,
+// and a token claiming the wrong iss is rejected by that brand's own clients.
 //
 // STAGING (security-critical): activation is the standard enable-list gate — the
 // operator adds "iam" to the cloud deployment's --enable only AFTER the v2 config
@@ -192,15 +172,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	log := luxlog.Default().New("subsystem", "iam")
 
-	// THE BRAND MAP IS DERIVED, NOT WRITTEN DOWN. iam resolves each brand's OIDC
-	// issuer from the request Host through IAM_ISSUER_MAP, and that map was a
-	// thirteen-entry JSON blob duplicated in two deployment files — two copies of
-	// a cross-brand routing table the brand registry already holds. A new brand
-	// was three edits away from minting under another brand's issuer, and `iss`
-	// is the boundary a relying party pins, so its own clients would reject it.
-	//
-	// An operator who pins one still wins: this fills the variable only when it is
-	// empty, so a deployment can still say something the registry does not know.
+	// The brand map is derived from the registry rather than written down: it was a
+	// thirteen-entry blob duplicated in two deployment files, so a new brand was
+	// three edits away from minting under another brand's issuer. An operator who
+	// pins one still wins.
 	if os.Getenv("IAM_ISSUER_MAP") == "" {
 		if b, err := json.Marshal(brand.IssuerByHost()); err == nil {
 			_ = os.Setenv("IAM_ISSUER_MAP", string(b))
@@ -256,23 +231,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		}
 	}
 
-	// A STORE THAT OPENED IS NOT YET A STORE THAT CAN SERVE, and this is the one
-	// path openStore's refusal does not cover. It refuses a file that is ABSENT;
-	// an EMPTY one passes that stat and opens perfectly, so IAM mounts, answers
-	// every address it declares, and hands out {"keys":[]} at 200 — precisely the
-	// outcome openStore exists to prevent, reached the one way it cannot see.
-	//
-	// That is worse than the 503 it replaces, because an empty keyset is a
-	// well-formed answer: a relying party reads it as "this token does not
-	// verify" rather than as "identity is down", so every token in the fleet
-	// fails and nothing anywhere reports a fault. Measured on this deployment —
-	// a 4 KB store beside the standalone iam's 16 MB one, serving 0 signing
-	// certificates against its 9.
-	//
-	// Checked AFTER Seed, which is what fills a newly provisioned store: refusing
-	// before it would make a first boot unable to seed itself and turn an empty
-	// store into a permanent one. A signing certificate is the load-bearing row —
-	// without one nothing can be issued and nothing already issued can be checked.
+	// An EMPTY store is not a store that can serve, and openStore cannot see it:
+	// it refuses a file that is ABSENT, while one that exists and holds nothing
+	// opens cleanly and answers jwks with {"keys":[]} at 200. A relying party
+	// reads that as "this token does not verify", not as an outage, so every token
+	// in the fleet fails with nothing reporting a fault. Checked AFTER Seed, which
+	// is what fills a new store.
 	if db != nil {
 		certs, cerr := iamstore.ListCerts(context.Background(), db)
 		if cerr != nil || len(certs) == 0 {
