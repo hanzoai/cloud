@@ -25,20 +25,20 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-// screen collects what the shell printed, safely: the stream writes from its own
+// transcript collects what the shell printed, safely: the stream writes from its own
 // goroutine while the test reads.
-type screen struct {
+type transcript struct {
 	mu sync.Mutex
 	b  strings.Builder
 }
 
-func (s *screen) Write(p []byte) (int, error) {
+func (s *transcript) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.Write(p)
 }
 
-func (s *screen) String() string {
+func (s *transcript) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.String()
@@ -79,7 +79,7 @@ func TestLiveTerminalIsARealShell(t *testing.T) {
 	}()
 
 	in := newPipe()
-	out := &screen{}
+	out := &transcript{}
 	w := newWindow()
 	w.to(100, 30)
 
@@ -130,7 +130,7 @@ func TestLiveTerminalIsARealShell(t *testing.T) {
 	in.drop()
 }
 
-func waitFor(out *screen, want string, within time.Duration) bool {
+func waitFor(out *transcript, want string, within time.Duration) bool {
 	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
 		if strings.Contains(out.String(), want) {
@@ -145,7 +145,7 @@ func oneLine(s string) string {
 	return strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(s, "\r", " "), "\n", " "))
 }
 
-var _ io.Writer = (*screen)(nil)
+var _ io.Writer = (*transcript)(nil)
 var _ remotecommand.TerminalSizeQueue = (*window)(nil)
 
 // TestLiveTerminalNamedSession is the property tabs depends on: one sandbox, many
@@ -193,7 +193,7 @@ func TestLiveTerminalNamedSession(t *testing.T) {
 	// Whether or not tmux is there, a NAMED terminal must still give a prompt.
 	// That is the degradation the fallback exists for, and it is the difference
 	// between "your panes are not multiplexed" and "your terminal is broken".
-	in, out, w := newPipe(), &screen{}, newWindow()
+	in, out, w := newPipe(), &transcript{}, newWindow()
 	w.to(100, 30)
 	ended := make(chan error, 1)
 	go func() { ended <- r.tty(ctx, m, shell("pane-1"), in, out, w) }()
