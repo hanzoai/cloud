@@ -195,6 +195,7 @@ func Routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/:id/fs", cloud.Handle(s, fsWrite))
 
 	terminal(g, s)
+	screen(g, s)
 
 	// THE AGENT'S DOOR. Everything above is a RAW route, and a raw route is
 	// invisible to every projection zip derives from its typed registry — REST is
