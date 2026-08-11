@@ -134,7 +134,7 @@ func ResourceFee(class string) int64 {
 
 const feeEnv = "SANDBOX_FEE_CENTS"
 
-func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (Sandbox, error) {
+func Lease(s *Service, ctx context.Context, org, ledger string, super bool, spec Spec) (Sandbox, error) {
 	if strings.TrimSpace(org) == "" {
 		return Sandbox{}, zip.ErrForbidden("org required")
 	}
@@ -222,10 +222,14 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	// cannot be honoured must leave nothing behind. Refusing after store.Put would
 	// bill nobody and strand a row and a PVC.
 	//
-	// The org is the one this function was HANDED, never a field on Spec: it is the
-	// caller's tenant, resolved by the adapter from principal.Org, and it is what the
-	// ledger is keyed by. Personal and org spend separate inside it, because the
-	// payer carries IAM's signed billing_account claim.
+	// THE LEDGER IS NOT THE NAMESPACE. org says whose DATA this is; ledger says whose
+	// BOOKS pay, and the two differ in exactly one case — a platform SuperAdmin acting
+	// in somebody else's org spends its own, which is what platform sudo means. Keying
+	// the gate on org would have charged the tenant being inspected for the operator
+	// inspecting it. Both arrive as arguments, resolved by the adapter (principal.Ledger
+	// on the request, principal.LedgerFrom on the plane), because this core reads no
+	// identity of its own. Personal and org spend separate INSIDE the ledger, because
+	// the payer carries IAM's signed billing_account claim.
 	//
 	// ("", false) for the project scope is the documented no-principal answer: this
 	// core takes identity as arguments and reads none, so it cannot state whether a
@@ -233,7 +237,7 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	// a value it cannot vouch for.
 	fee := ResourceFee(class)
 	if fee > 0 {
-		if err := s.Bill.Gate(ctx, org, "", false, "sandbox", fee); err != nil {
+		if err := s.Bill.Gate(ctx, ledger, "", false, "sandbox", fee); err != nil {
 			return Sandbox{}, err
 		}
 	}
@@ -303,7 +307,7 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	// could not cover it, and metering a lease that failed to start would bill for
 	// a pod nobody got. Class is the unit — an exec is not a desktop — so the meter
 	// says which was leased rather than that one more thing happened.
-	s.Bill.MeterUsage(org, "sandbox", metering.Usage{
+	s.Bill.MeterUsage(ledger, "sandbox", metering.Usage{
 		Model:       class + "/" + m.Runtime,
 		AmountCents: fee,
 	})

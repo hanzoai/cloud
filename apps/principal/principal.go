@@ -464,13 +464,30 @@ func BillingOrg(c *zip.Ctx) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	if IsSuperAdmin(c) {
-		// Masquerade (or a SuperAdmin at home, where owner == org): spend own books.
-		if owner := Owner(c); owner != "" {
-			return owner, true
-		}
+	return ledgerOf(org, Owner(c), IsSuperAdmin(c)), true
+}
+
+// ledgerOf is the masquerade rule over plain values, so the handler shape and the
+// context shape cannot answer it differently. A SuperAdmin acting in another org
+// spends its OWN books — that is what platform sudo means, and it is the whole of
+// the difference between the org that PAYS and the org whose DATA is being read.
+// At home the two coincide, so the rule needs no second case.
+func ledgerOf(org, owner string, super bool) string {
+	if super && owner != "" {
+		return owner
 	}
-	return org, true
+	return org
+}
+
+// LedgerFrom is [Ledger] where only the context crossed the seam — the ZAP plane,
+// and any core that took identity as arguments rather than reading a request.
+func LedgerFrom(ctx context.Context) string {
+	c := zip.CallerOf(ctx)
+	org := strings.TrimSpace(c.Org)
+	if org == "" {
+		return ""
+	}
+	return ledgerOf(org, strings.TrimSpace(c.Owner), c.Admin)
 }
 
 // Ledger is the bare-string form of BillingOrg for the in-handler resource meters
