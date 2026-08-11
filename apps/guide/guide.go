@@ -698,7 +698,7 @@ func (o ops) getCurriculum(ctx context.Context, _ *noInput) (*curriculumView, er
 func putCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	body := c.Body()
 	if len(body) == 0 {
@@ -832,7 +832,7 @@ func applyStep(s *cloud.Service[state], ctx context.Context, org, id string, tar
 func transition(s *cloud.Service[state], c *zip.Ctx, target State) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	ov, err := applyStep(s, c.Context(), org, idParam(c), target, true)
 	var blocked blockedErr
@@ -890,7 +890,7 @@ func (o ops) setStep(ctx context.Context, in *stepRef, target State) (*overviewV
 func doStep(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	payer := principal.Ledger(c)
 	id := idParam(c)

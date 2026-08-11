@@ -74,11 +74,11 @@ type issueList []issueView
 func (o ops) scope(ctx context.Context) (*zip.Ctx, string, *Store, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return nil, "", nil, zip.ErrForbidden("X-Org-Id required")
+		return nil, "", nil, principal.RefusedFrom(ctx)
 	}
 	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return nil, "", nil, zip.ErrForbidden("X-Org-Id required")
+		return nil, "", nil, principal.RefusedFrom(ctx)
 	}
 	store, err := requestStore(o.s, c, org)
 	if err != nil {

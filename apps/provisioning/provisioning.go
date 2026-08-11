@@ -350,7 +350,7 @@ func create(s *cloud.Service[state], kind string) zip.Handler {
 	return func(c *zip.Ctx) error {
 		org, ok := tenant(c)
 		if !ok {
-			return zip.ErrForbidden("X-Org-Id required")
+			return principal.Refused(c)
 		}
 
 		var body provisionRequest

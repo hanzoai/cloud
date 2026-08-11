@@ -67,7 +67,8 @@ var unextracted = []string{
 	"referrals", "registry", "risk", "rollingcap", "s3admin",
 	"samples", "sandbox", "sbom", "search", "security", "settings", "share",
 	"sites",
-	"storage", "sync", "templates", "tenant", "tools", "tracker", "translate",
+	"storage", "sync", "tel", "templates", "tenant", "tools", "tracker",
+	"translate",
 	"treasury", "validators", "venue", "wallets", "webhooks", "websearch",
 	"x402",
 }

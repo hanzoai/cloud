@@ -50,11 +50,11 @@ type ops struct{ s *cloud.Service[state] }
 func scope(ctx context.Context) (org, user string, err error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return "", "", zip.ErrForbidden("X-Org-Id required")
+		return "", "", principal.RefusedFrom(ctx)
 	}
 	org, user, ok = caller(c)
 	if !ok {
-		return "", "", zip.ErrForbidden("X-Org-Id required")
+		return "", "", principal.RefusedFrom(ctx)
 	}
 	return org, user, nil
 }
