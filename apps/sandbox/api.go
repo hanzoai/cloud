@@ -27,7 +27,9 @@ package sandbox
 import (
 	"cmp"
 	"context"
+	"github.com/hanzoai/cloud/apps/metering"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -107,6 +109,31 @@ const dirExit = 10
 // core read identity, and the reason every function in this file takes `org` as an
 // argument is that none of them may. So it arrives the way org does: named by the
 // adapter that knows it, from the one predicate that answers it.
+// ResourceFee is what one lease of `class` costs, in cents.
+//
+//	SANDBOX_FEE_CENTS_EXEC / _DEV / _DESKTOP   per class
+//	SANDBOX_FEE_CENTS                          the fallback for all three
+//
+// DEFAULTS TO FREE, and deliberately not to cloud.ResourceFeeCents, whose default
+// is $1.00. Every class has been free since sandboxes existed; shipping the meter
+// must not also ship a price, or the first anybody hears of it is a 402 on a
+// button that worked yesterday. Turning it on is a values change.
+//
+// A negative or unparseable value falls through to free rather than to the
+// fallback, so a typo cannot price a class by accident in either direction.
+func ResourceFee(class string) int64 {
+	for _, k := range []string{feeEnv + "_" + strings.ToUpper(class), feeEnv} {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+const feeEnv = "SANDBOX_FEE_CENTS"
+
 func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (Sandbox, error) {
 	if strings.TrimSpace(org) == "" {
 		return Sandbox{}, zip.ErrForbidden("org required")
@@ -186,6 +213,31 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 		}
 	}
 
+	// THE MONEY, before the pod. A sandbox is a microVM on somebody's node and it
+	// was leased free: nothing gated it and nothing recorded it, so the reaper was
+	// the only thing standing between a button and unbounded compute. It stopped a
+	// runaway; it never charged for the ones that ran.
+	//
+	// The gate goes HERE for the same reason the credential does — a lease that
+	// cannot be honoured must leave nothing behind. Refusing after store.Put would
+	// bill nobody and strand a row and a PVC.
+	//
+	// The org is the one this function was HANDED, never a field on Spec: it is the
+	// caller's tenant, resolved by the adapter from principal.Org, and it is what the
+	// ledger is keyed by. Personal and org spend separate inside it, because the
+	// payer carries IAM's signed billing_account claim.
+	//
+	// ("", false) for the project scope is the documented no-principal answer: this
+	// core takes identity as arguments and reads none, so it cannot state whether a
+	// project claim was validated — and claiming it was would hard-enforce a cap on
+	// a value it cannot vouch for.
+	fee := ResourceFee(class)
+	if fee > 0 {
+		if err := s.Bill.Gate(ctx, org, "", false, "sandbox", fee); err != nil {
+			return Sandbox{}, err
+		}
+	}
+
 	// THE ONE BRANCH ON WHICH AN IDENTITY REACHES A CREDENTIAL, and it is the same
 	// predicate that reached the image — see cred.go, where both live so they
 	// cannot drift apart. Read HERE, before the row and before the pod, for the
@@ -246,6 +298,15 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 		_ = store.Put(ctx, m)
 		return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "start sandbox: %v", err)
 	}
+
+	// Recorded only once it RUNS. The gate above already refused a balance that
+	// could not cover it, and metering a lease that failed to start would bill for
+	// a pod nobody got. Class is the unit — an exec is not a desktop — so the meter
+	// says which was leased rather than that one more thing happened.
+	s.Bill.MeterUsage(org, "sandbox", metering.Usage{
+		Model:       class + "/" + m.Runtime,
+		AmountCents: fee,
+	})
 	m.Status = "running"
 	if err := store.Put(ctx, m); err != nil {
 		return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "put: %v", err)
