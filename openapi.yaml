@@ -1304,6 +1304,22 @@ components:
         updatedAt:
           type: integer
       type: object
+    Call:
+      properties:
+        agent:
+          type: string
+        from:
+          type: string
+        id:
+          type: string
+        org:
+          type: string
+        status:
+          description: queued | ringing | answered | completed | failed
+          type: string
+        to:
+          type: string
+      type: object
     Campaign:
       properties:
         budget:
@@ -5822,6 +5838,29 @@ components:
         size:
           type: string
       type: object
+    Number:
+      properties:
+        capable:
+          description: voice | sms | mms | fax
+          items:
+            type: string
+          type: array
+        country:
+          type: string
+        currency:
+          type: string
+        e164:
+          type: string
+        id:
+          type: string
+        monthly:
+          description: minor units, as the carrier quoted it
+          type: integer
+        org:
+          type: string
+        type:
+          type: string
+      type: object
     Offer:
       properties:
         available:
@@ -8207,6 +8246,22 @@ components:
             TimeoutSec bounds this ONE command, so a wedged program holds the caller for
             its own timeout rather than for the whole lease.
           type: integer
+      type: object
+    SMS:
+      properties:
+        from:
+          type: string
+        id:
+          type: string
+        org:
+          type: string
+        status:
+          description: queued | sent | delivered | failed
+          type: string
+        text:
+          type: string
+        to:
+          type: string
       type: object
     SaaSCategory:
       properties:
@@ -13973,6 +14028,11 @@ components:
             5000; anything above 30000 is clamped to 30000.
           type: integer
       type: object
+    buyInput:
+      properties:
+        e164:
+          type: string
+      type: object
     byoGPU:
       properties:
         arch:
@@ -14046,6 +14106,29 @@ components:
           type: string
         version:
           type: string
+      type: object
+    callInput:
+      properties:
+        agent:
+          type: string
+        from:
+          type: string
+        record:
+          description: |-
+            Record is a per-call flag rather than a product. Where a recording lands and
+            how long it is kept is the org's retention policy, not this call's.
+          type: boolean
+        to:
+          type: string
+        webhook:
+          type: string
+      type: object
+    callList:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/Call'
+          type: array
       type: object
     campaignInput:
       properties:
@@ -24599,6 +24682,26 @@ components:
             mesh entry.'
           type: string
       type: object
+    messageInput:
+      properties:
+        from:
+          type: string
+        media:
+          items:
+            type: string
+          type: array
+        text:
+          type: string
+        to:
+          type: string
+      type: object
+    messageList:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/SMS'
+          type: array
+      type: object
     messagePage:
       properties:
         data:
@@ -25070,6 +25173,9 @@ components:
           description: Stream is the stream name, from the path.
           type: string
       type: object
+    noInput:
+      properties: {}
+      type: object
     nodeList:
       properties:
         nodes:
@@ -25209,6 +25315,13 @@ components:
             each, and the response shape follows the count (see the items field).
           items:
             type: string
+          type: array
+      type: object
+    numberList:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/Number'
           type: array
       type: object
     o11y.AWSAccountConfig:
@@ -45028,6 +45141,15 @@ components:
           type: string
       required:
       - benchmarks
+      type: object
+    summary:
+      properties:
+        calls:
+          type: integer
+        messages:
+          type: integer
+        numbers:
+          type: integer
       type: object
     summaryResp:
       properties:
@@ -113134,6 +113256,240 @@ paths:
       tags:
       - team
       x-app: team
+  /v1/tel/calls:
+    get:
+      description: |-
+        Lists the calls this org has placed or received, newest first. Like the
+        message list beside it, these are our own records rather than the carrier's.
+      operationId: get_v1_tel_calls
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/callList'
+          description: ok
+      summary: Lists the calls this org has placed or received, newest first.
+      tags:
+      - tel
+      x-app: tel
+    post:
+      description: |-
+        Dials. An `agent` names a Hanzo assistant to answer it; the call is
+        refused up front when no assistant plane is configured, because a call that
+        connects to silence has already cost the person who answered it.
+      operationId: post_v1_tel_calls
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/callInput'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Call'
+          description: created
+      summary: Dials.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/calls/{id}:
+    delete:
+      description: |-
+        Ends a call this org placed. The holding is read for THIS org before the
+        carrier is asked, for the reason releaseNumber gives one surface up: an id
+        belonging to another tenant would otherwise be hung up by whoever guessed it.
+      operationId: delete_v1_tel_calls_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/noInput'
+          description: ok
+      summary: Ends a call this org placed.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/messages:
+    get:
+      description: |-
+        Lists the messages this org has sent or received, newest first. Records from
+        our own store, not the carrier's — so it is what this platform did on the
+        org's behalf, which is the set an audit or a bill has to agree with.
+      operationId: get_v1_tel_messages
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/messageList'
+          description: ok
+      summary: Lists the messages this org has sent or received, newest first.
+      tags:
+      - tel
+      x-app: tel
+    post:
+      description: |-
+        Sends a message from one of this org's own numbers.
+
+        `from` must be a number the org HOLDS, checked against the store rather than
+        taken on trust — a caller that could send from any number could impersonate
+        one, and the carrier would deliver it. `to` is required, and the body needs
+        text or media, because a message with neither is delivered as nothing and
+        billed as something.
+      operationId: post_v1_tel_messages
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/messageInput'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMS'
+          description: created
+      summary: Sends a message from one of this org's own numbers.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/numbers:
+    get:
+      description: |-
+        Lists the phone numbers this org HOLDS — the ones it has bought and not
+        released. Distinct from the availability search one path down
+        (`/numbers/available`), which asks the carrier what could be bought: this
+        answers only from our own store, so it is what an org owns rather than what
+        it could own.
+      operationId: get_v1_tel_numbers
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/numberList'
+          description: ok
+      summary: Lists the phone numbers this org HOLDS — the ones it has bought and
+        not released.
+      tags:
+      - tel
+      x-app: tel
+    post:
+      description: |-
+        Provisions with the carrier FIRST and records second. The other order
+        records a holding that may not exist, and a number the platform believes it owns
+        but cannot use is worse than one it failed to buy.
+      operationId: post_v1_tel_numbers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/buyInput'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Number'
+          description: created
+      summary: Provisions with the carrier FIRST and records second.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/numbers/{id}:
+    delete:
+      description: |-
+        Checks the holding is THIS org's before it reaches the carrier.
+        Without that read, an id belonging to another tenant would be released by
+        whoever guessed it.
+      operationId: delete_v1_tel_numbers_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/noInput'
+          description: ok
+      summary: Checks the holding is THIS org's before it reaches the carrier.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/numbers/available:
+    get:
+      description: |-
+        Asks the carrier what is available to buy. Nothing is recorded —
+        a search is not a holding, and treating it as one is how inventory leaks.
+      operationId: get_v1_tel_numbers_available
+      parameters:
+      - in: query
+        name: Country
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: Area
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: Type
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: Limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/numberList'
+          description: ok
+      summary: Asks the carrier what is available to buy.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/summary:
+    get:
+      description: |-
+        Counts what this org holds on the telephony plane: its numbers, its calls and
+        its messages. The one read a dashboard makes before it asks for any list, so
+        it answers three totals and no rows.
+      operationId: get_v1_tel_summary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/summary'
+          description: ok
+      summary: 'Counts what this org holds on the telephony plane: its numbers, its
+        calls and its messages.'
+      tags:
+      - tel
+      x-app: tel
   /v1/templates:
     get:
       description: |-
@@ -116453,6 +116809,9 @@ tags:
 - description: 'Package team is your org''s shared workspace: documents edited together,
     files, seats, and agents as teammates.'
   name: team
+- description: 'Package tel is the telecommunications surface: phone numbers, calls
+    and messages, on whatever carrier the deployment is configured for.'
+  name: tel
 - description: Package templates is a gallery of starter kits you can deploy as they
     come.
   name: templates
