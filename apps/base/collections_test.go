@@ -26,6 +26,8 @@ func TestAllowCollections(t *testing.T) {
 		"/v1/collections/tenants/records/abc123", // one record
 		"v1/collections/submissions/records",     // no leading slash (defensive)
 		"/v1/collections/meta/records",           // a collection literally named "meta"
+		"/rest/v1/posts",                         // the same rows, on the Supabase wire
+		"rest/v1/posts",                          // no leading slash (defensive)
 	}
 	for _, p := range ok {
 		if !allowCollections(p) {
@@ -41,6 +43,10 @@ func TestAllowCollections(t *testing.T) {
 		"/v1/backups",                         // Base admin
 		"/v1/logs",                            // Base admin
 		"/v2/collections",                     // wrong version
+		"/rest/v1",                            // no table named
+		"/rest/v1/",                           // still no table
+		"/rest/v1/rpc/do_something",           // a function call is a different authority
+		"/rest/v1/posts/extra",                // over-deep; the table IS the whole path here
 		"",                                    // empty
 	}
 	for _, p := range deny {
