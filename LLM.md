@@ -5540,99 +5540,77 @@ excludes Mojeek — an independent index and, with DDG, one of the two engines t
 honours `site:` (`site:x.com openai` → 20 real x.com URLs on Mojeek, 10 on DDG,
 `blind` on Bing). The in-code default is now all three.
 
-## cloud IMPORTS NO APP. An app imports zip, never cloud.
-
-The rule, stated once, because every violation of it costs the same thing twice:
+## cloud imports no app. An app imports zip, never cloud.
 
     zip          the framework
     <app> repo   a subsystem: imports zip, returns a *zip.App, knows no host
-    cloud        a host: knows an app's NAME, its PREFIX and where its binary
-                 lives — never what it does
+    cloud        a host: knows an app's NAME, PREFIX and where its binary lives
 
-**An app that imports its host cannot be mounted by a second one**, and that is
-not hypothetical. hanzoai/cloud has two editions and both declared the module
-path `github.com/hanzoai/cloud`, so `cloud.Deps` named a DIFFERENT type in each:
-`github.com/hanzoai/ai` took `cloud.Deps` and therefore could be composed by
-exactly one of them. It also made the graph circular — cloud imports ai to mount
+An app that imports its host cannot be mounted by a second one. hanzoai/cloud has
+two editions and both declared the module path `github.com/hanzoai/cloud`, so
+`cloud.Deps` named a different type in each and `hanzoai/ai` could be composed by
+exactly one of them. It also makes the graph circular — cloud imports ai to mount
 it — which is why a fix in either had to be applied by hand in both.
 
-`hanzoai/ai` is the worked example, and it cost two values:
+ai is the worked example, and the coupling was two values:
 
-- `Mount(app *zip.App, deps cloud.Deps)` reached ONE field, `deps.KMS`, and
-  handed it to `object.SetSecretStore`, which already took ai's OWN interface.
-  It takes `object.SecretStore` directly now.
-- `object/crawl.go` imported `cloud/apps/crawl` for ONE function. The host binds
-  it (`object.SetFetcher`) and ai declares the shape it needs.
+- `Mount(app, deps cloud.Deps)` reached ONE field, `deps.KMS`, and handed it to
+  `object.SetSecretStore`, which already took ai's OWN interface.
+- `object/crawl.go` imported `cloud/apps/crawl` for ONE function; the host binds
+  it (`SetFetcher`) and ai declares the shape it needs.
 
 `github.com/hanzoai/cloud` is now absent from ai's go.mod. Do the same for the
-rest: find what the app actually reads, declare that shape in the APP, and let
-the host supply it. The dependency points from the host INTO the subsystem.
+rest: find what the app reads, declare that shape in the APP, let the host supply
+it.
 
-### "Mount" is gone. An app IS an app, and composing one is Use.
+### An app IS an app, so composing one is Use
 
-    Mount(app *zip.App, deps ...) error        the host hands over its router
-    App(deps ...) (*zip.App, error)            the app returns itself
+    Mount(app *zip.App, deps ...) error    the host hands over its router
+    App(deps ...) (*zip.App, error)        the app returns itself
 
-`*zip.App` is a `Component` and `Use` is the ONE composition verb, so an app that
-RETURNS itself is composable by any host with no adapter. `mount.go` is `app.go`
-and `mountRoutes` is `routes` for the same reason: a file is named for what it
-holds, not for the verb a caller happens to use. This is also what makes an app
-loadable as a plugin without a second shape — a plugin main serves the app it is
-handed, and there is now an app to hand it.
+`*zip.App` is a `Component` and `Use` is the one composition verb, so an app that
+returns itself composes into any host with no adapter — and is loadable as a
+plugin with no second shape. `mount.go` is `app.go`, `mountRoutes` is `routes`.
 
-### The host is gated slim, and the gate checks the GRAPH
+### The host is gated slim, on the GRAPH
 
 `hanzo.yml`'s `host-is-light` fails the build if `cmd/cloud`'s import graph
 reaches a subsystem. It checks the graph rather than the NAME, because the name
-was a proxy and the proxy went wrong: `apps/sites` must run in this process (it
-serves `<slug>.hanzo.app` on the public port, and the image runs this binary
-there), and it is a leaf that drags in nothing. Two app packages are in the graph
-today, both named exceptions with their reason. Adding a third without one is how
-a subsystem's whole graph comes back.
+was a proxy that went wrong: `apps/sites` must run in this process (it serves
+`<slug>.hanzo.app` on the public port) and is a leaf that drags in nothing. Two
+app packages are in the graph, both named exceptions with reasons. A third
+without one is how a subsystem's whole graph comes back.
 
-### Dynamic load and zero-downtime reload ALREADY EXIST — do not rebuild them
+### Dynamic load and zero-downtime reload EXIST — do not rebuild them
 
-Measured against the code, not planned:
-
-- `manifest.App.Plugin()` is the SOLE resolver, a ladder ending at the network:
-  `CLOUD_<NAME>_ADDR` -> `CLOUD_<NAME>_BIN` -> a sibling binary -> the multi-call
-  binary -> `CLOUD_PLUGINS`, the release index.
-- `CLOUD_PLUGINS` points at `binaries.json`; `manifest/release.go` DROPS any entry
-  without a `sha256`, and zip verifies before it chmods, so fetching code stays
-  safe to execute and the digest is the cache key — restart and rollback touch no
+- `manifest.App.Plugin()` is the sole resolver, a ladder ending at the network:
+  `CLOUD_<NAME>_ADDR` → `CLOUD_<NAME>_BIN` → a sibling binary → the multi-call
+  binary → `CLOUD_PLUGINS`, the release index.
+- `manifest/release.go` DROPS any index entry without a `sha256`, and zip verifies
+  before chmod, so the digest is the cache key: restart and rollback touch no
   network.
-- `zip.App.ReloadTo(name, Plugin{URL, Sum})` behind
-  `POST /v1/admin/plugins/:name/reload`: SuperAdmin-gated, written to the
-  hash-chained audit trail BEFORE it acts, and it proves the replacement is
-  LISTENING before any traffic moves — a bad build leaves the old one serving.
-  Naming a digest this host has run before IS the rollback, and it costs no
-  network. Fleet scope stops at the first failure, so a build that cannot come up
-  reaches exactly one host.
-- `disable` answers 503 and never unregisters a route: removing routes and
-  re-adding them on enable grows the table without bound across cycles, and 503
-  ("this exists and is down") is retryable where 404 ("no such API") gets cached.
+- `zip.App.ReloadTo` behind `POST /v1/admin/plugins/:name/reload` — SuperAdmin,
+  audited BEFORE it acts, and it proves the replacement LISTENING before traffic
+  moves. Naming a digest this host has run IS the rollback. Fleet scope stops at
+  the first failure.
+- `disable` answers 503 and never unregisters a route: re-adding on enable would
+  grow the table without bound, and 503 is retryable where a cached 404 is not.
 
 **A running host cannot be pushed to.** `fetch` caches success for the process
-lifetime, so rewriting an index a live host has already read changes nothing for
-it. New bits arrive exactly two ways: restart it, or `ReloadTo`. Any per-org or
-on-demand upgrade path has to drive one of those two.
+lifetime, so rewriting an index a live host has read changes nothing for it. New
+bits arrive two ways: restart, or `ReloadTo`.
 
-### What is NOT built yet, and what each is blocked on
+### Not built yet
 
-1. **An app building itself from its OWN repo.** Today `mk/fleet.mk dist` builds
-   every plugin from cloud's tree — right for the image, wrong for the target,
-   where `hanzoai/ai` builds and publishes its own. The app side is ready the
-   moment an app is a `*zip.App` with no cloud import; what is missing is a
-   per-repo publish that writes the `<name>-<os>-<arch>` filename the index keys
-   on.
-2. **The publish lane to S3.** `hanzo.yml` carries it COMMENTED with both
-   blockers named: hanzoai/ci's `run:`/`out:` lane indexes per RECIPE rather than
-   per FILE (so it writes `os: any, arch: any`, which `manifest/release.go`
-   cannot resolve), and `bucket:` needs S3 admin keys that are in KMS for no org.
-   The layout is decided: artifacts first, `binaries.json` LAST, so the index
-   never names an object that is not there.
-3. **Managing versions from admin.hanzo.ai.** The route and the audit exist; the
-   surface does not.
+1. **An app building from its OWN repo.** `mk/fleet.mk dist` builds every plugin
+   from cloud's tree — right for the image, wrong for the target. The app side is
+   ready once an app is a `*zip.App` with no cloud import.
+2. **The publish lane to S3.** Commented in `hanzo.yml` with both blockers:
+   hanzoai/ci's `run:`/`out:` indexes per RECIPE not per FILE (writes
+   `os: any, arch: any`, which `release.go` cannot resolve), and `bucket:` needs
+   S3 keys that are in KMS for no org.
+3. **Version management from admin.hanzo.ai.** Route and audit exist; the surface
+   does not.
 
-Do not work around any of these by importing an app into the host. That trades a
-missing publish lane for a permanent architectural inversion.
+Do not work around these by importing an app into the host. That trades a missing
+publish lane for a permanent inversion.
