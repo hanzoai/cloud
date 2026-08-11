@@ -132,6 +132,12 @@ func mountCollections(app cloud.Router) error {
 	h := func(c *zip.Ctx) error { return serveCollections(proxy, c) }
 	app.All("/v1/collections", h)
 	app.All("/v1/collections/*", h)
+	// The Supabase wire sits at the ROOT on the managed Base, not under /v1, so
+	// the rules above do not carry it and a client's request would resolve
+	// against this app instead — which answers 200 with a page, not a 404. A
+	// working request returning nonsense is the worst of the failure modes, so
+	// the address is registered rather than left to fall through.
+	app.All("/rest/v1/*", h)
 	return nil
 }
 
@@ -182,6 +188,23 @@ func allowCollections(path string) bool {
 	rel := strings.Trim(path, "/")
 	if rel == "v1/collections" || rel == "v1/collections/meta/scaffolds" {
 		return true
+	}
+
+	// The same rows, in the shape a Supabase client asks for. The managed Base
+	// renders a collection's records a second way at /rest/v1/<table> — one
+	// collection lookup, one list rule, one field resolver, the same read — so
+	// admitting it grants nothing the records address below does not already
+	// grant. It is the client that cannot be talked out of the path: supabase-js
+	// builds /rest/v1 from the host it is given, so a caller reaches a managed
+	// Base by changing a hostname or not at all.
+	//
+	// Exactly one segment, for the reason every shape here is exact. On this
+	// wire the table name IS the whole path, so anything deeper is a shape this
+	// proxy has never had a reason to forward — /rest/v1/rpc/<fn> among them,
+	// which Base does not serve and which would be a different authority if it
+	// did.
+	if table, ok := strings.CutPrefix(rel, "rest/v1/"); ok {
+		return table != "" && !strings.Contains(table, "/")
 	}
 	rest, ok := strings.CutPrefix(rel, "v1/collections/")
 	if !ok || rest == "" {
