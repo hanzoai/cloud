@@ -10,12 +10,12 @@ func TestRoundMinor(t *testing.T) {
 		dec  string
 		want int64
 	}{
-		{"0.00589", 1},    // the 502: sub-cent rounds half-away to one cent
-		{"0.004", 0},      // below half stays zero
-		{"0.005", 1},      // exact half rounds away from zero
-		{"-0.005", -1},    // ...in both directions
-		{"12.34", 1234},   // exact amounts pass through unchanged
-		{"4.995", 500},    // the FloorMinor doc's balance case — HERE it rounds up,
+		{"0.00589", 1},  // the 502: sub-cent rounds half-away to one cent
+		{"0.004", 0},    // below half stays zero
+		{"0.005", 1},    // exact half rounds away from zero
+		{"-0.005", -1},  // ...in both directions
+		{"12.34", 1234}, // exact amounts pass through unchanged
+		{"4.995", 500},  // the FloorMinor doc's balance case — HERE it rounds up,
 		// which is why RoundMinor must never gate a spend (FloorMinor's job)
 	}
 	for _, c := range cases {

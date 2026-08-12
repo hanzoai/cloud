@@ -205,13 +205,30 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 	// fact and are resolved together; asking a separate seam where to clone from
 	// would be a second answer that could disagree with the credential.
 	//
-	// A routed run needs none — the machine authenticates git with its own — so
-	// the request is skipped and a workspace whose repository the forge does not
-	// hold can still route. A sandbox run without one fails closed, never a run
-	// that proceeds and discovers at push time that it cannot write.
+	// A ROUTED RUN NEEDS NO CREDENTIAL — the machine authenticates git with its
+	// own — BUT IT STILL NEEDS THE ACTOR, and that is the distinction this used to
+	// get wrong. The credential is what the sandbox path takes from here; the
+	// ENTITLEMENT is what both paths take, because both act on a repository.
+	//
+	// Without it, a routed run was a confused deputy with a longer reach than the
+	// sandbox one: cloud confirmed the repository as a site administrator, handed
+	// the address to a machine holding the org's own broad credentials, and
+	// streamed what it found back into the caller's session. Naming a repository
+	// you cannot read was enough.
+	//
+	// So the actor is resolved ONCE, for every run, before either path.
+	actor := actorOf(ctx)
+	if actor == "" {
+		_ = d.Sessions.Close(ctx, org, sessionID, statusError)
+		pool.release(org)
+		return Accepted{}, fmt.Errorf(
+			"coding: this run has no forge identity to act as, so its access to %s cannot be established", repo)
+	}
+	req.Actor = actor
+
 	var granted forge.Grant
 	if req.TargetID == "" {
-		g, err := delegate(ctx, org, actorOf(ctx), repo, sessionID)
+		g, err := delegate(ctx, org, actor, repo, sessionID)
 		if err != nil {
 			_ = d.Sessions.Close(ctx, org, sessionID, statusError)
 			pool.release(org)

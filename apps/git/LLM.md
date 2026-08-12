@@ -27,14 +27,27 @@ picks the repository, as a SUDOED read, so the forge's own ACL applied to the
 human is the answer; a run with no forge login is refused rather than falling
 back to the machine, which is a site administrator.
 
+Both doors take the actor — the sandbox one to be handed a key, the ROUTED one
+because the machine it dispatches to holds credentials broader than the caller's,
+so an address resolved as a site admin is a repository the caller could not open
+themselves.
+
 **Confinement is the forge's, not the orchestrator's.** A run pushes SSH
 straight to Forgejo, which never sees our refspec, so the branch rules live in
 `forge/protect.go`: repositories this code creates are born with their default
 branch refusing every direct and force push, and an EXISTING repository that
 does not already refuse a deploy key is refused a grant rather than silently
 re-policied. The predicate is the fork's own
-(`routers/private/hook_pre_receive.go:270-285`). Tags are NOT covered — this
-fork publishes no tag-protection API.
+(`routers/private/hook_pre_receive.go:270-285`), and it covers the default
+branch plus the conventional release lines.
+
+Two residuals, both named in `forge/protect.go`. TAGS are uncovered and are the
+bigger of the two: this fork publishes no tag-protection API, and Actions reads
+workflow files from the pushed commit, so `on:push:tags` fires — a movable tag
+is a supply-chain primitive, not a mislabelled commit. Closing it needs a change
+in the fork's pre-receive tag path. Branches outside the protected patterns are
+the smaller one; what bounds both is that a run reaches only repositories its
+actor could already write.
 
 **A run's credential is a write DEPLOY KEY** minted per run on the one repository
 and deleted at run end (`forge/grant.go`). It is a deploy key and not a token
