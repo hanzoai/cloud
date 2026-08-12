@@ -695,3 +695,84 @@ func TestPin_RefusesAWildcardAndSaysWhenItDegrades(t *testing.T) {
 		t.Error("a bracketed non-default-port line was rejected")
 	}
 }
+
+// A BRANCH NAME IS ESCAPED INTO THE PROTECTION LOOKUP.
+//
+// git permits '#' in a ref name, and a bare '#' in a URL is a FRAGMENT — never
+// sent to the server. Unescaped, a repository whose default branch is `main#x`
+// would have the forge answer for `main`, so a rule protecting `main` would read
+// as protecting `main#x` while that branch was wide open.
+func TestProtected_EscapesTheBranchIntoTheLookup(t *testing.T) {
+	var asked string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/branch_protections/") {
+			// EscapedPath, not Path: Path is already decoded, so it cannot show
+			// whether the '#' travelled as an escape or was dropped as a fragment —
+			// which is the whole question.
+			asked = r.URL.EscapedPath()
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"name": "api", "full_name": "acme/api", "default_branch": "main#x",
+		})
+	}))
+	defer srv.Close()
+	c, err := New(srv.URL, "machine-token-value")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	got, err := c.Machine().Protected(context.Background(), "acme", "api")
+	if err != nil {
+		t.Fatalf("Protected: %v", err)
+	}
+	if got {
+		t.Fatal("a branch with no rule read as protected")
+	}
+	// The '#' must have REACHED the forge, escaped — not been swallowed as a
+	// fragment, which would have asked about `main` and read its rule as this
+	// branch's.
+	if !strings.HasSuffix(asked, "/branch_protections/main%23x") {
+		t.Fatalf("the branch was not escaped into the path: %q", asked)
+	}
+}
+
+// Protect covers the release lines without catching ordinary work branches.
+func TestProtect_CoversReleasesWithoutCatchingWorkBranches(t *testing.T) {
+	s := newRepoStub(t)
+	c := s.client(t)
+	if err := c.Machine().Protect(context.Background(), "acme", "api", "main"); err != nil {
+		t.Fatalf("Protect: %v", err)
+	}
+	var wrote []string
+	s.mu.Lock()
+	for i, r := range s.reqs {
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/branch_protections") {
+			var body map[string]any
+			_ = json.Unmarshal([]byte(s.bodies[i]), &body)
+			wrote = append(wrote, body["rule_name"].(string))
+		}
+	}
+	s.mu.Unlock()
+
+	want := map[string]bool{"main": false, "release/**": false, "v[0-9]*": false}
+	for _, n := range wrote {
+		if _, ok := want[n]; !ok {
+			t.Fatalf("an unexpected rule was written: %q", n)
+		}
+		want[n] = true
+	}
+	for n, seen := range want {
+		if !seen {
+			t.Fatalf("the release lines are not protected: %q was never written", n)
+		}
+	}
+	// `v*` would make validation, vendor-bump and v2-spike pull-request-only in
+	// every repository this creates.
+	for _, n := range wrote {
+		if n == "v*" {
+			t.Fatal("v* catches ordinary work branches, not just versions")
+		}
+	}
+}

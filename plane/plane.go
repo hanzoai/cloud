@@ -2509,7 +2509,8 @@ type RouteRunIn struct {
 	// Actor + AgentRef are cloud-side attribution for the completion path (the
 	// session close and the PR assignee). They never cross to the machine.
 	Actor    string `json:"actor,omitempty"`
-	AgentRef string `json:"agentRef,omitempty"` // ForgeActor is the forge login the run acts as. It is CLOUD-SIDE, like Actor:
+	AgentRef string `json:"agentRef,omitempty"`
+	// ForgeActor is the forge login the run acts as. It is CLOUD-SIDE, like Actor:
 	// the completion opens the pull request as that person and the executing
 	// machine never sees it.
 	ForgeActor string `json:"forgeActor,omitempty"`
