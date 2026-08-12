@@ -103,7 +103,11 @@ type Runner interface {
 // PRInput / PRRef mirror tracker's agent-PR shape without leaking its types into
 // the seam (the adapter bridges).
 type PRInput struct {
-	Org      string
+	Org string
+	// Actor is the forge login the proposal is opened as — the person the run
+	// acts for. It is not Assignee: that is who the tracker row is assigned to
+	// (the agent), and the two are different facts.
+	Actor    string
 	Project  string
 	Repo     string
 	Base     string
@@ -194,9 +198,14 @@ type Req struct {
 	// key that opens it, and the host key that pins the forge. Start resolves all
 	// three together from one grant — see start.go — and a routed run carries
 	// none of them.
-	Remote         string
-	Key            string // write-only secret — never logged
-	Known          string
+	Remote string
+	Key    string // write-only secret — never logged
+	Known  string
+	// Actor is the forge login this run acts as — the AUTHENTICATED caller, not
+	// the attributed Subject. It is what every repository question is asked as,
+	// on BOTH the sandbox and the routed path, so the forge's own ACL decides
+	// which repository a run may reach.
+	Actor          string
 	TimeoutSeconds int
 	TargetID       string // when set, route to this registered machine instead of the sandbox
 	// Tool / Desktop are the caller's choice of harness and whether it needs a
@@ -234,6 +243,11 @@ type RoutedRun struct {
 	// machine (the durable view the machine claims omits them).
 	Actor    string
 	AgentRef string
+	// ForgeActor is the login the proposal is opened as when the machine reports
+	// back. It is carried for the same reason Branch is: the completion happens
+	// minutes later in another process, and re-deriving it there would be a
+	// second answer to who this run acts for.
+	ForgeActor string
 }
 
 // Result is the terminal outcome the trigger surface renders.
@@ -272,7 +286,7 @@ type Dispatcher struct {
 	Sessions  Sessions
 	PR        PR
 	Runner    Runner
-	CloneURL  func(ctx context.Context, org, repo string) string
+	CloneURL  func(ctx context.Context, org, actor, repo string) string
 	VerifyRef func(ctx context.Context, org, repo, branch string) (string, bool)
 	// Log is an optional structured log seam for best-effort mirror failures; nil
 	// is fine (mirror failures are non-fatal and simply dropped).
@@ -425,7 +439,8 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	return d.completeChanged(term, completion{
 		org: org, repo: repo, project: strings.TrimSpace(req.Project), base: req.Base,
 		prompt: prompt, sessionID: sessionID, branch: branch, actor: actor, agentRef: agentRef,
-		diffstat: runRes.Diffstat, logTail: runRes.LogTail,
+		forgeActor: req.Actor,
+		diffstat:   runRes.Diffstat, logTail: runRes.LogTail,
 	}, res)
 }
 
@@ -435,7 +450,12 @@ type completion struct {
 	org, repo, project, base  string
 	prompt, sessionID, branch string
 	actor, agentRef           string
-	diffstat, logTail         string
+	// forgeActor is the login the proposal is opened as. It is separate from
+	// actor, which is the attributed subject the session records — one is who the
+	// work is FOR, the other is who the forge acts AS, and they are only the same
+	// string when the caller's subject happens to be their forge login.
+	forgeActor        string
+	diffstat, logTail string
 }
 
 // completeChanged is the shared terminal for a run that reported CHANGES: confirm the
@@ -458,7 +478,7 @@ func (d Dispatcher) completeChanged(ctx context.Context, c completion, res Resul
 		}
 	}
 	pr, perr := d.PR.Open(ctx, PRInput{
-		Org: c.org, Project: strings.TrimSpace(c.project), Repo: c.repo,
+		Org: c.org, Actor: c.forgeActor, Project: strings.TrimSpace(c.project), Repo: c.repo,
 		Base: baseOr(c.base), Head: c.branch, Title: codingTitle(c.repo, c.prompt),
 		Body: prBody(c.prompt, c.base, c.branch, res.CommitSha, c.diffstat, c.sessionID), Assignee: c.agentRef,
 	})
@@ -522,7 +542,8 @@ func (d Dispatcher) finalizeRouted(ctx context.Context, in RoutedRun, res Routed
 	_ = d.completeChanged(ctx, completion{
 		org: in.Org, repo: in.Repo, project: in.Project, base: in.Base,
 		prompt: in.Prompt, sessionID: in.SessionID, branch: branch, actor: in.Actor, agentRef: agentRef,
-		diffstat: res.Diffstat, logTail: "",
+		forgeActor: in.ForgeActor,
+		diffstat:   res.Diffstat, logTail: "",
 	}, out)
 }
 
@@ -558,9 +579,19 @@ func (d Dispatcher) routed(ctx context.Context, req Req, org, repo, prompt strin
 
 	// The machine clones the org's repo with its OWN credential; we still need the
 	// clone URL (non-secret) to hand it.
+	//
+	// IT IS RESOLVED AS THE ACTOR. The machine's credentials are broader than the
+	// caller's, so confirming the repository as a site administrator and then
+	// handing the address to that machine is a confused deputy — the caller would
+	// be reading a repository they have no access to, through a machine that
+	// does. The address is only produced for someone who could have found it.
+	if strings.TrimSpace(req.Actor) == "" {
+		res.Error = "git is not available"
+		return res
+	}
 	cloneURL := ""
 	if d.CloneURL != nil {
-		cloneURL = d.CloneURL(ctx, org, repo)
+		cloneURL = d.CloneURL(ctx, org, req.Actor, repo)
 	}
 	if cloneURL == "" {
 		res.Error = "git is not available"
@@ -601,7 +632,7 @@ func (d Dispatcher) routed(ctx context.Context, req Req, org, repo, prompt strin
 		Org: org, TargetID: target, SessionID: sessionID,
 		Repo: repo, Project: strings.TrimSpace(req.Project), Base: strings.TrimSpace(req.Base),
 		Branch: branch, Prompt: prompt, CloneURL: cloneURL, TimeoutSeconds: timeoutOr(req.TimeoutSeconds),
-		Actor: actor, AgentRef: agentRef,
+		Actor: actor, AgentRef: agentRef, ForgeActor: req.Actor,
 	}
 	// Enqueue on the durable engine. A failure fails the run closed (session
 	// error) rather than leaving a zombie "running" session or running locally.

@@ -99,8 +99,8 @@ func dispatcherFor(sess *fakeSessions, tr *fakePR, run *fakeRunner, verifyOK boo
 	var cloneCalls []string
 	d := Dispatcher{
 		Sessions: sess, PR: tr, Runner: run,
-		CloneURL: func(_ context.Context, org, repo string) string {
-			cloneCalls = append(cloneCalls, org+"/"+repo)
+		CloneURL: func(_ context.Context, org, actor, repo string) string {
+			cloneCalls = append(cloneCalls, actor+"@"+org+"/"+repo)
 			return "https://git.test/v1/git/" + org + "/" + repo + ".git"
 		},
 		VerifyRef: func(_ context.Context, _, _, branch string) (string, bool) {
