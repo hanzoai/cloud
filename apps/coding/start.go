@@ -217,12 +217,11 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 	// you cannot read was enough.
 	//
 	// So the actor is resolved ONCE, for every run, before either path.
-	actor := actorOf(ctx)
-	if actor == "" {
+	actor, aerr := resolveActor(ctx, actorOf(ctx))
+	if aerr != nil {
 		_ = d.Sessions.Close(ctx, org, sessionID, statusError)
 		pool.release(org)
-		return Accepted{}, fmt.Errorf(
-			"coding: this run has no forge identity to act as, so its access to %s cannot be established", repo)
+		return Accepted{}, aerr
 	}
 	req.Actor = actor
 
@@ -287,42 +286,29 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 	}, nil
 }
 
-// actorOf is the forge login a run acts as: the AUTHENTICATED caller, read off
-// the door's context and never off the request body.
+// actorOf is the address a run's forge identity is resolved FROM.
 //
-// IT IS NEVER THE ID, and that is what this used to pass. X-User-Id is the
-// token's `sub` — a UUID — and Sudo takes a forge LOGIN, so the forge answered
-// "unknown actor" for every real caller and every coding run refused with a 400.
-// It had never heard of them, correctly.
+// IT IS NEVER THE ID. X-User-Id is the token's `sub` — a UUID — and Sudo takes a
+// forge LOGIN, so passing it made the forge answer "unknown actor" for every
+// real caller and every coding run refused with a 400. It had never heard of
+// them, correctly.
 //
-// The login is DERIVED FROM THE EMAIL, because that is how this forge derives
-// it: registration runs through OIDC with oauth2_client.USERNAME set to `email`,
-// so a user's forge name is their address folded by the forge's own
-// NormalizeUserName. forge.Login reproduces exactly that (login.go). Deriving it
-// from the IAM username instead would agree for everyone whose username happens
-// to equal their email's local part and address the wrong account for the rest.
-//
-// The IAM username is the FALLBACK and only that: it is what an API-key
-// principal carries when there is no email claim to derive from, and it is a
-// different spelling of the same person rather than a different person — so
-// falling back cannot escalate. Both spellings are checked by the forge, which
-// either knows the login or refuses it.
+// It is the EMAIL, because that is what this forge names its users by
+// (oauth2_client.USERNAME=email), and because an address is the one thing about
+// a caller that the forge can independently CONFIRM — see forge.LoginFor, which
+// turns it from a guess into a proven identity. The IAM username is not used:
+// it derives a login just as well and there is nothing to check it against.
 //
 // It is not Subject either. Subject is who the run is ATTRIBUTED to — a linked
 // account id that arrives in the body and that the Slack adapter fills from its
 // own link table — and attribution is not entitlement. Using it to authorize
 // would let a caller name the person whose access it wants.
 //
-// An empty actor is refused downstream rather than defaulted, and a login this
-// forge does not know is refused BY the forge. Both are the honest direction:
-// the alternative is minting on the machine's authority, and the machine is a
-// site administrator.
+// Both headers it reads are in authorityHeaders: stripped on ingress and
+// re-minted only from validated claims (middleware_identity.go), so neither is
+// a value a caller can choose.
 func actorOf(ctx context.Context) string {
-	c := cloud.Who(ctx)
-	if login := forge.Login(c.Email); login != "" {
-		return login
-	}
-	return strings.TrimSpace(c.Name)
+	return strings.TrimSpace(cloud.Who(ctx).Email)
 }
 
 // runContext is the context ONE coding run executes on: detached from the door's
