@@ -162,7 +162,7 @@ func (planePR) Open(ctx context.Context, in PRInput) (PRRef, error) {
 	// GitHub — a pull request there, and otherwise a link to a branch-browsing
 	// page, which nobody can approve. The forge has native pull requests, so the
 	// question has one answer.
-	url, perr := propose(ctx, in.Org, in.Repo, in.Base, in.Head, in.Title, in.Body)
+	url, perr := propose(ctx, in.Org, in.Actor, in.Repo, in.Base, in.Head, in.Title, in.Body)
 	if perr != nil {
 		return ref, perr
 	}
@@ -176,12 +176,17 @@ func (planePR) Open(ctx context.Context, in PRInput) (PRRef, error) {
 // clones the SSH remote its grant names, which is the only address its key
 // opens.
 //
+// It is resolved AS THE ACTOR, because the machine that receives this address
+// holds credentials broader than the caller's: an address produced by a site
+// administrator and handed to that machine is a repository the caller could not
+// have opened themselves.
+//
 // An error is an EMPTY url, which the dispatcher already reads as "git is not
 // available" and refuses the run on, so no caller learns a new failure mode.
-func forgeCloneURL(ctx context.Context, org, repo string) string {
+func forgeCloneURL(ctx context.Context, org, actor, repo string) string {
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	return remote(ctx, org, repo)
+	return remote(ctx, org, actor, repo)
 }
 
 // forgeVerifyRef is the integrity gate: the FORGE is asked what the branch
@@ -239,7 +244,7 @@ func Enqueue(ctx context.Context, in plane.RouteRunIn, log func(msg string, kv .
 		Org: in.Org, TargetID: in.TargetID, SessionID: in.SessionID,
 		Repo: in.Repo, Project: in.Project, Base: in.Base, Branch: in.Branch,
 		Prompt: in.Prompt, CloneURL: in.CloneURL, TimeoutSeconds: in.TimeoutSeconds,
-		Actor: in.Actor, AgentRef: in.AgentRef,
+		Actor: in.Actor, AgentRef: in.AgentRef, ForgeActor: in.ForgeActor,
 	})
 }
 

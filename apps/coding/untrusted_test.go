@@ -83,7 +83,7 @@ func TestACompromisedSandboxCannotRenameItsOwnBranch(t *testing.T) {
 			OK: true, Changed: true, CommitSha: "deadbeef",
 			Branch: "main", // the lie
 		}},
-		CloneURL: func(context.Context, string, string) string { return "https://git.test/acme/api.git" },
+		CloneURL: func(context.Context, string, string, string) string { return "https://git.test/acme/api.git" },
 		VerifyRef: func(_ context.Context, _, _, branch string) (string, bool) {
 			verified[branch] = true
 			return "deadbeef", true

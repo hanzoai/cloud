@@ -76,6 +76,36 @@ type Source struct {
 	mu   sync.Mutex
 	c    *Client
 	when time.Time
+	// pinned records whether the last resolve found a usable configured host key,
+	// and why not when it did not. Read by [Source.Pinned]; see [HostKeyRef].
+	pinned bool
+	why    string
+}
+
+// Pinned reports whether the forge's host key is CONFIGURED rather than learned
+// on first use, and why not when it is not.
+//
+// A caller logs this once at startup. Without it the degradation is silent: a
+// wrong ref, a KMS hiccup or a secret nobody created all read exactly like a
+// healthy deployment right up until somebody intercepts the first handshake a
+// pod makes.
+func (s *Source) Pinned() (bool, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pinned, s.why
+}
+
+// badPin refuses a known_hosts line that verifies nothing.
+//
+// A wildcard host pattern matches every host, so ssh would accept whatever key
+// it is offered — a pin in appearance and an open door in fact. Empty and
+// single-field lines are refused for the same reason: they are not a pin.
+func badPin(line string) bool {
+	f := strings.Fields(strings.TrimSpace(line))
+	if len(f) < 3 {
+		return true
+	}
+	return strings.ContainsAny(f[0], "*?")
 }
 
 // Client returns a client authenticated with the deployment's machine
@@ -112,12 +142,25 @@ func (s *Source) Client(ctx context.Context, kms Secrets, domain string) (*Clien
 	if err != nil {
 		return nil, err
 	}
-	// The configured pin, read beside the credential it travels with. A missing
-	// one is not an error — see [HostKeyRef] — and an unreadable one is treated
-	// the same way, because KMS having no such secret and KMS being unhappy are
-	// the same fact to this caller.
-	if hk, herr := kms.GetSecret(ctx, HostKeyRef); herr == nil {
-		c.known = strings.TrimSpace(string(hk))
+	// The configured pin, read beside the credential it travels with.
+	//
+	// A missing or unreadable one is not fatal — see [HostKeyRef] — but it is
+	// RECORDED, because the difference between a configured pin and a learned one
+	// is the difference between a fact and a guess, and a deployment that thinks
+	// it configured a pin must not discover otherwise only by being attacked. The
+	// signal is a field rather than a log line: this package has no logger, and
+	// inventing one to say a single thing would put a dependency in every caller.
+	s.pinned, s.why = false, ""
+	hk, herr := kms.GetSecret(ctx, HostKeyRef)
+	switch {
+	case herr != nil:
+		s.why = fmt.Sprintf("%s is unreadable (%v)", HostKeyRef, herr)
+	case badPin(string(hk)):
+		// A wildcard line pins NOTHING — ssh accepts any key for the pattern — so
+		// it is worse than absent: it reads as configured and verifies nothing.
+		s.why = fmt.Sprintf("%s is not a usable known_hosts line", HostKeyRef)
+	default:
+		c.known, s.pinned = strings.TrimSpace(string(hk)), true
 	}
 	// Carry the warm repository list across the rotation. Without this the
 	// credential's lifetime would silently become the read cache's, and one read
