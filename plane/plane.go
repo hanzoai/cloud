@@ -190,13 +190,6 @@ const (
 	// integrations, the app that knows whether one is imported is git.
 	GitStatus = "git_status"
 
-	// GitGrant / GitRevoke delegate — and withdraw — the right to create ONE ref
-	// in ONE repository. git owns refs, so git decides who may write one, and an
-	// orchestrator that dispatches untrusted work asks for this instead of
-	// carrying the org's git credential. See apps/git/grant.go.
-	GitGrant  = "git_grant"
-	GitRevoke = "git_revoke"
-
 	// GitMirror declares (or removes) a native repo's OUTBOUND mirror target. The
 	// sync engine decides a mirror should exist; the git app owns the repos and
 	// the reactor that pushes them. Two processes, so declaring it was a nil call
@@ -999,47 +992,6 @@ type Imported struct {
 	// Repo names what was imported.
 	Repo string `json:"repo"`
 }
-
-// GrantIn asks the forge to delegate ONE ref write in ONE repository.
-//
-// There is no Org field, on purpose: the tenant rides the caller's plane
-// identity, so an app cannot delegate a write into a repository it does not act
-// for by naming one.
-type GrantIn struct {
-	// Repo is the repository the grant addresses, and the only one it opens.
-	Repo string `json:"repo" validate:"required"`
-	// Project is the repository's sub-scope; empty is the org's default scope.
-	Project string `json:"project,omitempty"`
-	// Ref is the FULL ref the grant may create, and the only one. The forge
-	// delegates the machine namespace and nothing else.
-	Ref string `json:"ref" validate:"required"`
-	// TTLSeconds bounds the grant. Absent, or longer than the forge's cap, gets
-	// the cap — a grant is never open-ended.
-	TTLSeconds int `json:"ttlSeconds,omitempty"`
-}
-
-// Granted is the delegated capability.
-type Granted struct {
-	// Token is the bearer. It authenticates nobody and opens nothing but the pack
-	// protocol on the repository named in the request — never a log line.
-	Token string `json:"token"`
-	// Handle revokes the grant. It is the token's digest, so carrying it back
-	// never means presenting the secret twice.
-	Handle string `json:"handle"`
-	// ExpiresAt is the unix second the grant stops working regardless.
-	ExpiresAt int64 `json:"expiresAt"`
-}
-
-// RevokeIn withdraws a grant early, so its life is the run's life rather than
-// its TTL.
-type RevokeIn struct {
-	// Handle is what Granted returned. An unknown handle, or one belonging to
-	// another org, is a no-op rather than an error: revoking is idempotent.
-	Handle string `json:"handle" validate:"required"`
-}
-
-// Revoked is the empty receipt for a withdrawal.
-type Revoked struct{}
 
 // RevIn asks which commit a ref names. An empty Ref means the repo's default
 // branch.
@@ -2405,27 +2357,6 @@ const (
 	// that hands it out have to be the same process, and that process is agents.
 	AgentsRouteRun = "agents_route_run"
 
-	// GitCloneURL is the canonical clone URL for an org's native repo — the only
-	// thing the sandbox is ever pointed at, so the run cannot reach another
-	// tenant's namespace.
-	GitCloneURL = "git_clone_url"
-
-	// GitVerifyRef reports the tip of a branch by reading the bare repo on git's
-	// own storage. It is the INTEGRITY gate: cloud trusts the ref it can read,
-	// not the remote runner's claim to have pushed one. Found=false is
-	// fail-closed and costs the run its PR.
-	GitVerifyRef = "git_verify_ref"
-
-	// GitPropose offers a run's branch for merging into its base, and answers the
-	// address a human opens to read it.
-	//
-	// ONE seam, two backends, chosen by where the code actually lives rather than
-	// by who is asking: a repository that mirrors into GitHub gets a real pull
-	// request there (its head pushed to the mirror first, because GitHub refuses a
-	// pull request whose head it cannot see), and one that lives only in the forge
-	// gets its branch page. The caller asks for the address and never for the host.
-	GitPropose = "git_propose"
-
 	// TrackerAgentPR opens the native PR work item for a finished run.
 	TrackerAgentPR = "tracker_agent_pr"
 
@@ -2521,53 +2452,6 @@ type TargetRef struct {
 type TargetGateIn struct {
 	Org      string `json:"org"`
 	TargetID string `json:"targetId"`
-}
-
-// RepoRefIn names one of an org's native repos.
-type RepoRefIn struct {
-	Org  string `json:"org"`
-	Repo string `json:"repo"`
-}
-
-// RepoCloneURL is the canonical clone URL. Empty means git could not answer,
-// which the run reads as "git is not available" and refuses to proceed.
-type RepoCloneURL struct {
-	URL string `json:"url"`
-}
-
-// RefIn names one branch of one repo.
-type RefIn struct {
-	Org    string `json:"org"`
-	Repo   string `json:"repo"`
-	Branch string `json:"branch"`
-}
-
-// RefTip is what git's own storage says about that branch. Found is EXPLICIT
-// rather than inferred from an empty SHA: "the branch is not there" and "the
-// read failed" both have to fail the integrity gate, and an absent tip that read
-// as a present-but-unknown one would file a PR for a branch nobody can fetch.
-type RefTip struct {
-	SHA   string `json:"sha,omitempty"`
-	Found bool   `json:"found"`
-}
-
-// ProposeIn offers Head for merging into Base. The org is the caller's plane
-// identity and never a field, so a run can only ever propose within its own
-// namespace.
-type ProposeIn struct {
-	Repo    string `json:"repo" validate:"required"`
-	Project string `json:"project,omitempty"`
-	Base    string `json:"base,omitempty"`
-	Head    string `json:"head" validate:"required"`
-	Title   string `json:"title,omitempty"`
-	Body    string `json:"body,omitempty"`
-}
-
-// Proposed is where the proposal can be read. Empty is a real answer — a
-// project-scoped repository has no browsable page — and it costs a link, never a
-// run.
-type Proposed struct {
-	URL string `json:"url,omitempty"`
 }
 
 // AgentPRIn opens the native PR work item for a pushed branch.

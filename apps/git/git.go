@@ -257,9 +257,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// the reactor that pushes them. Registered above for the co-resident case, and
 	// published here for the split one (mirror_control.go).
 	exposeMirror()
-	// Delegate ONE ref write to a process running untrusted work, so it does not
-	// have to hold a credential that opens the rest of the tenant (grant.go).
-	exposeGrant()
 	// What the org keeps in git, as headline numbers — the read a caller makes
 	// when it does not yet know a repo's name (figures_rpc.go).
 	exposeFigures()

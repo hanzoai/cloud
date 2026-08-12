@@ -137,17 +137,24 @@ type RunRequest struct {
 	// already drive a headless one.
 	Desktop bool
 
-	// The repo is OPTIONAL. CloneURL empty means the run has no checkout — and
-	// then CredUser/CredToken MUST be empty too, because a credential a run can
-	// never use only exists to leak. The runtime refuses the combination.
-	CloneURL          string
+	// The repo is OPTIONAL. Remote empty means the run has no checkout — and then
+	// Key MUST be empty too, because a credential a run can never use only exists
+	// to leak. The runtime refuses the combination.
+	//
+	// Remote is the forge's SSH address, because the grant behind it is a deploy
+	// key and a deploy key is SSH-only: the forge's HTTP path resolves permission
+	// from an authenticated USER and has no deploy-key branch at all.
+	Remote            string
 	BaseBranch        string
 	Branch            string
 	Prompt            string
 	SessionID         string
 	RunTimeoutSeconds int
-	CredUser          string
-	CredToken         string // write-only secret — never logged
+	// Key is the run's OpenSSH private key — write-only, never logged, scrubbed
+	// out of everything that leaves the sandbox. Known is the forge's host key,
+	// which is public and pins the host the run will talk to.
+	Key   string
+	Known string
 }
 
 type Step struct {
@@ -176,15 +183,20 @@ type RunResult struct {
 // cloud-side sandbox, and the credential is NOT used (the machine authenticates
 // with its own). When empty, the local sandbox path runs unchanged.
 type Req struct {
-	Org            string
-	UserID         string // linked Hanzo subject — session attribution + X-User-Id
-	AgentRef       string // agent label (e.g. "hanzo")
-	Repo           string
-	Project        string // IAM project slug (tracker + git scope); "" = org default
-	Base           string // base branch; "" = repo default
-	Prompt         string
-	CredUser       string
-	CredToken      string
+	Org      string
+	UserID   string // linked Hanzo subject — session attribution + X-User-Id
+	AgentRef string // agent label (e.g. "hanzo")
+	Repo     string
+	Project  string // IAM project slug (tracker + git scope); "" = org default
+	Base     string // base branch; "" = repo default
+	Prompt   string
+	// Remote, Key and Known are the run's checkout: where the repository is, the
+	// key that opens it, and the host key that pins the forge. Start resolves all
+	// three together from one grant — see start.go — and a routed run carries
+	// none of them.
+	Remote         string
+	Key            string // write-only secret — never logged
+	Known          string
 	TimeoutSeconds int
 	TargetID       string // when set, route to this registered machine instead of the sandbox
 	// Tool / Desktop are the caller's choice of harness and whether it needs a
@@ -320,15 +332,10 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 		return d.routed(ctx, req, org, repo, prompt, res)
 	}
 
-	if strings.TrimSpace(req.CredToken) == "" {
-		res.Error = "no agent credential for this org"
-		return res
-	}
-	cloneURL := ""
-	if d.CloneURL != nil {
-		cloneURL = d.CloneURL(ctx, org, repo)
-	}
-	if cloneURL == "" {
+	// ONE check, because there is now one fact. The grant IS the remote and the
+	// credential: Start resolved them together, so a run either has a repository
+	// it can push to or it has neither half, and the two could not disagree.
+	if strings.TrimSpace(req.Remote) == "" || strings.TrimSpace(req.Key) == "" {
 		res.Error = "git is not available"
 		return res
 	}
@@ -367,9 +374,9 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	// 2. Dispatch to the sandbox runtime, mirroring every progress line live.
 	runReq := RunRequest{
 		Tool: req.Tool, Desktop: req.Desktop,
-		CloneURL: cloneURL, BaseBranch: strings.TrimSpace(req.Base), Branch: branch,
+		Remote: req.Remote, BaseBranch: strings.TrimSpace(req.Base), Branch: branch,
 		Prompt: prompt, SessionID: sessionID, RunTimeoutSeconds: timeoutOr(req.TimeoutSeconds),
-		CredUser: req.CredUser, CredToken: req.CredToken,
+		Key: req.Key, Known: req.Known,
 	}
 	onStep := func(s Step) {
 		kind := kindLog
