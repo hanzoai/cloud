@@ -90,7 +90,8 @@ func TestACompromisedSandboxCannotRenameItsOwnBranch(t *testing.T) {
 		},
 	}
 	res := d.Run(context.Background(), Req{
-		Org: "acme", Repo: "api", Prompt: "do a thing", CredToken: "hgg_x", UserID: "u",
+		Org: "acme", Repo: "api", Prompt: "do a thing", UserID: "u",
+		Remote: "git@git.test:acme/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",
 	})
 
 	want := BranchFor("sess_abc123def456")

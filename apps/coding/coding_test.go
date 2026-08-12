@@ -92,8 +92,9 @@ func (f *fakeRunner) Run(_ context.Context, org, userID string, req RunRequest, 
 }
 
 // dispatcherFor builds a Dispatcher whose git seams are org-aware fakes: CloneURL
-// echoes the (org, repo) so a test can assert the sandbox is pointed only at the
-// caller's namespace; VerifyRef succeeds for a configured branch.
+// echoes the (org, repo) — it backs the ROUTED path, where a customer's machine
+// gets an address and brings its own credential; VerifyRef succeeds for a
+// configured branch.
 func dispatcherFor(sess *fakeSessions, tr *fakePR, run *fakeRunner, verifyOK bool) (Dispatcher, *[]string) {
 	var cloneCalls []string
 	d := Dispatcher{
@@ -112,12 +113,16 @@ func dispatcherFor(sess *fakeSessions, tr *fakePR, run *fakeRunner, verifyOK boo
 	return d, &cloneCalls
 }
 
-const secretToken = "sk-SUPERSECRETcredential-value"
+const secretToken = "-----BEGIN OPENSSH PRIVATE KEY-----\nSUPERSECRETKEYMATERIAL\n-----END OPENSSH PRIVATE KEY-----"
 
+// baseReq is what Start hands Run: the repository's SSH remote and the run's own
+// key, resolved together from ONE grant, so they cannot disagree about which
+// repository the run may write.
 func baseReq() Req {
 	return Req{
 		Org: "acme", UserID: "u-123", AgentRef: "hanzo", Repo: "api",
-		Prompt: "fix the null deref in handler", CredUser: "x-access-token", CredToken: secretToken,
+		Prompt: "fix the null deref in handler",
+		Remote: "git@git.test:acme/api.git", Key: secretToken, Known: "git.test ssh-ed25519 AAAAPIN",
 	}
 }
 
@@ -143,13 +148,19 @@ func TestRun_HappyPath_PushVerifyPR_NoCredentialLeak(t *testing.T) {
 	if res.CommitSha != "verifiedsha" {
 		t.Fatalf("commit should be the authoritative verified tip, got %q", res.CommitSha)
 	}
-	// Clone URL pointed ONLY at the caller's org/repo.
-	if len(*cloneCalls) != 1 || (*cloneCalls)[0] != "acme/api" {
-		t.Fatalf("clone must target acme/api only, got %v", *cloneCalls)
+	// The sandbox is pointed ONLY at the caller's own repository, and at the one
+	// address its key opens. It does not go through the CloneURL seam at all —
+	// that would be a second answer to "which repository", able to disagree with
+	// the credential.
+	if len(*cloneCalls) != 0 {
+		t.Fatalf("a sandbox run resolved an address separately from its grant: %v", *cloneCalls)
+	}
+	if run.gotReq.Remote != "git@git.test:acme/api.git" {
+		t.Fatalf("the sandbox was pointed at %q, not the caller's own repo", run.gotReq.Remote)
 	}
 	// Runner received the caller's org + credential.
-	if run.gotOrg != "acme" || run.gotUser != "u-123" || run.gotReq.CredToken != secretToken {
-		t.Fatalf("runner req wrong: org=%q user=%q credSet=%v", run.gotOrg, run.gotUser, run.gotReq.CredToken != "")
+	if run.gotOrg != "acme" || run.gotUser != "u-123" || run.gotReq.Key != secretToken {
+		t.Fatalf("runner req wrong: org=%q user=%q credSet=%v", run.gotOrg, run.gotUser, run.gotReq.Key != "")
 	}
 	// Session lifecycle: opened once, closed done.
 	if len(sess.opened) != 1 || sess.opened[0].org != "acme" || sess.opened[0].agent != "hanzo" {
@@ -271,9 +282,9 @@ func TestRun_MissingCredential_FailsBeforeOpeningSession(t *testing.T) {
 	d, _ := dispatcherFor(sess, &fakePR{}, &fakeRunner{}, true)
 
 	req := baseReq()
-	req.CredToken = ""
+	req.Key = ""
 	res := d.Run(context.Background(), req)
-	if res.OK || !strings.Contains(res.Error, "credential") {
+	if res.OK || !strings.Contains(res.Error, "git is not available") {
 		t.Fatalf("want credential fail-closed, got %+v", res)
 	}
 	if len(sess.opened) != 0 {
@@ -283,10 +294,10 @@ func TestRun_MissingCredential_FailsBeforeOpeningSession(t *testing.T) {
 
 func TestRun_MissingRepoOrPrompt_FailsClosed(t *testing.T) {
 	d, _ := dispatcherFor(&fakeSessions{id: "s"}, &fakePR{}, &fakeRunner{}, true)
-	if r := d.Run(context.Background(), Req{Org: "acme", CredToken: "x", Prompt: "do it"}); r.OK || r.Error == "" {
+	if r := d.Run(context.Background(), Req{Org: "acme", Remote: "r", Key: "k", Prompt: "do it"}); r.OK || r.Error == "" {
 		t.Fatalf("missing repo must fail: %+v", r)
 	}
-	if r := d.Run(context.Background(), Req{Org: "acme", Repo: "api", CredToken: "x"}); r.OK || r.Error == "" {
+	if r := d.Run(context.Background(), Req{Org: "acme", Repo: "api", Remote: "r", Key: "k"}); r.OK || r.Error == "" {
 		t.Fatalf("missing prompt must fail: %+v", r)
 	}
 }

@@ -147,13 +147,24 @@ const maxRollup = 300
 var (
 	// ErrNoActor is returned by every call on a client with no Sudo actor. It is
 	// a refusal, never a fallback to the machine identity.
-	ErrNoActor = errors.New("forge: no actor — a user-facing call must be scoped with As()")
+	ErrNoActor = errors.New("forge: no actor — a user-facing call must be scoped with As() or Machine()")
 
 	// ErrUnknownActor means the forge does not know the actor we sudoed as.
 	ErrUnknownActor = errors.New("forge: unknown actor — no forge identity for this user")
 
 	// ErrNoToken means the machine credential is absent or empty.
 	ErrNoToken = errors.New("forge: no service token")
+
+	// ErrNotFound is a 404 on a MACHINE call, where there is no actor for it to
+	// be a statement about. On a sudoed call the same status is ErrUnknownActor,
+	// because there it genuinely cannot be told apart from "this user may not see
+	// that" — and reading it as plain absence is how a permission failure becomes
+	// a silently empty answer.
+	ErrNotFound = errors.New("forge: not found")
+
+	// ErrExists is a 409, which the create paths treat as success-by-another-name:
+	// a repository that is already there is the state the caller wanted.
+	ErrExists = errors.New("forge: already exists")
 )
 
 // Client talks to one forge as one actor.
@@ -165,9 +176,15 @@ var (
 // is shaped so that it cannot be written.
 type Client struct {
 	base  string // scheme://host/v1
+	host  string // bare host (git.hanzo.ai) — the clone/ssh remotes are built from it
 	token string // machine credential from KMS — NEVER logged
 	actor string // Forgejo Sudo login; empty ⇒ every call refuses
-	http  *http.Client
+	// machine drops Sudo and calls as the DEPLOYMENT. It is a separate field
+	// rather than a sentinel actor so that "unscoped" and "deliberately the
+	// machine" cannot be spelled the same way — the whole refusal in [Client.As]
+	// rests on an empty actor meaning a bug, and a magic string would erase that.
+	machine bool
+	http    *http.Client
 
 	// The two list endpoints that cost seconds rather than milliseconds are
 	// answered through a read cache keyed by (actor, org) — see cache.go for
@@ -207,6 +224,7 @@ func New(host, token string) (*Client, error) {
 	}
 	return &Client{
 		base:  strings.TrimSuffix(u.Scheme+"://"+u.Host, "/") + API,
+		host:  u.Host,
 		token: strings.TrimSpace(token),
 		// A backstop, not the budget. A caller with a deadline on its context
 		// binds the call tighter than this and is what actually bounds a
@@ -259,13 +277,41 @@ func (c *Client) key(org string) string { return c.actor + "\x00" + org }
 // falls back to the machine identity.
 func (c *Client) As(login string) *Client {
 	cp := *c
-	cp.actor = strings.TrimSpace(login)
+	cp.actor, cp.machine = strings.TrimSpace(login), false
 	return &cp
 }
 
-// Actor is the forge login this client acts as, empty if unscoped. For logs and
-// errors — the actor is an identity, not a credential, and is safe to record.
+// Machine returns a client that calls as the DEPLOYMENT itself, with no Sudo.
+//
+// It is the identity behind the machine token, which Forgejo requires to be a
+// site administrator for Sudo to work at all (routers/api/v1/api.go sudo()), so
+// it can do anything on this forge. That is why it is a NAMED, deliberate step
+// and never something [Client.As] falls back to.
+//
+// It is for the operations that have no human behind them and cannot borrow
+// one: provisioning a run's credential (Forgejo requires repo-ADMIN to add a
+// deploy key, which an ordinary engineer with push rights does not have), and
+// confirming that a ref a sandbox claims to have pushed really landed. Both are
+// acts of the platform, not of a person, and pretending otherwise by sudoing as
+// whoever triggered the run would attribute a platform decision to them.
+//
+// A machine call is not an unchecked one. The caller authorizes the HUMAN
+// separately — see [Client.Writable] — so the forge's own ACL still decides
+// whether that person may write the repository before the machine acts for them.
+func (c *Client) Machine() *Client {
+	cp := *c
+	cp.actor, cp.machine = "", true
+	return &cp
+}
+
+// Actor is the forge login this client acts as, empty if unscoped or machine.
+// For logs and errors — the actor is an identity, not a credential, and is safe
+// to record.
 func (c *Client) Actor() string { return c.actor }
+
+// Host is the bare forge host (git.hanzo.ai). It is what the clone and SSH
+// remotes are built from, so a caller never spells the host itself.
+func (c *Client) Host() string { return c.host }
 
 // do issues one authenticated, sudoed GET and decodes JSON into out.
 //
@@ -284,7 +330,7 @@ func (c *Client) do(ctx context.Context, path string, q url.Values, out any) err
 // end of the list one serial page at a time. Everything else calls do and stays
 // unaware that a response has headers at all.
 func (c *Client) get(ctx context.Context, path string, q url.Values, out any) (http.Header, error) {
-	if c.actor == "" {
+	if c.actor == "" && !c.machine {
 		return nil, ErrNoActor
 	}
 	if c.token == "" {
@@ -303,7 +349,9 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, out any) (h
 	// parameter lands in access logs and proxy traces, so the actor of every
 	// request would be written into logs the forge and every hop keep. The header
 	// form keeps attribution out of URL telemetry.
-	req.Header.Set("Sudo", c.actor)
+	if !c.machine {
+		req.Header.Set("Sudo", c.actor)
+	}
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.http.Do(req)
@@ -322,6 +370,11 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, out any) (h
 		// and for "this actor cannot see that". Neither is an error the caller can
 		// fix by retrying, and both must read as "no access", never as an empty
 		// success — a 404 rendered as an empty list is how a board silently lies.
+		// A machine call has no actor for it to be a statement about, so there the
+		// same status is plain absence.
+		if c.machine {
+			return nil, fmt.Errorf("%w: %s", ErrNotFound, path)
+		}
 		return nil, fmt.Errorf("%w: %s", ErrUnknownActor, c.actor)
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return nil, fmt.Errorf("forge: %s: credential rejected (%d)", path, resp.StatusCode)
@@ -351,7 +404,29 @@ type Repo struct {
 	FullName string `json:"full_name"`
 	Private  bool   `json:"private"`
 	Archived bool   `json:"archived"`
+	Empty    bool   `json:"empty"`
 	Open     int    `json:"open_issues_count"`
+	Branch   string `json:"default_branch"`
+	Size     int64  `json:"size"` // KiB, as the forge reports it
+
+	// SSH is the remote a run clones and pushes, taken from the forge rather than
+	// built here: it already carries a non-default port and any host rewrite the
+	// deployment has, and re-deriving it would be a second spelling of the one
+	// address that has to be right.
+	SSH string `json:"ssh_url"`
+
+	// Perm is what the READING actor may do here, as the forge computed it. It
+	// is present on a repository read and absent from a list, and it is how a
+	// caller asks "may this person write?" without reimplementing the ACL —
+	// see [Client.Writable].
+	Perm *Perm `json:"permissions,omitempty"`
+}
+
+// Perm is the forge's own verdict on one actor's access to one repository.
+type Perm struct {
+	Admin bool `json:"admin"`
+	Push  bool `json:"push"`
+	Pull  bool `json:"pull"`
 }
 
 // User is a forge account, as an issue's author or assignee.
@@ -799,7 +874,7 @@ type sendOpts struct {
 }
 
 func (c *Client) send(ctx context.Context, o sendOpts) error {
-	if c.actor == "" {
+	if c.actor == "" && !c.machine {
 		return ErrNoActor
 	}
 	if c.token == "" {
@@ -818,7 +893,9 @@ func (c *Client) send(ctx context.Context, o sendOpts) error {
 		return fmt.Errorf("forge: build request: %w", err)
 	}
 	req.Header.Set("Authorization", "token "+c.token)
-	req.Header.Set("Sudo", c.actor)
+	if !c.machine {
+		req.Header.Set("Sudo", c.actor)
+	}
 	req.Header.Set("Accept", "application/json")
 	if o.body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -831,7 +908,15 @@ func (c *Client) send(ctx context.Context, o sendOpts) error {
 
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
+		if c.machine {
+			return fmt.Errorf("%w: %s", ErrNotFound, o.path)
+		}
 		return fmt.Errorf("%w: %s", ErrUnknownActor, c.actor)
+	case resp.StatusCode == http.StatusConflict:
+		// Named rather than lumped into the generic failure below, because the
+		// create paths treat it as the state they wanted: a repository that is
+		// already there does not have to be made again.
+		return fmt.Errorf("%w: %s", ErrExists, o.path)
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
 		// A sudoed write the ACTOR may not make lands here. It is the forge
 		// enforcing its own ACL on the human, which is the point of Sudo.
@@ -927,6 +1012,17 @@ func (c *Client) SetLabels(ctx context.Context, org, repo string, number int64, 
 		path:   fmt.Sprintf("/repos/%s/%s/issues/%d/labels", url.PathEscape(org), url.PathEscape(repo), number),
 		body:   map[string]any{"labels": labels},
 	})
+}
+
+// isMissing reports whether err is the forge saying "there is no such thing",
+// in either of the two spellings a 404 can arrive in — as plain absence on a
+// machine call, or as an unreadable/unknown actor on a sudoed one.
+//
+// It exists so that the callers for which absence IS the wanted state (a
+// withdrawal, a create-if-absent) can say so once instead of each remembering
+// that the same status has two names.
+func isMissing(err error) bool {
+	return errors.Is(err, ErrNotFound) || errors.Is(err, ErrUnknownActor)
 }
 
 // validOrg refuses an org that is empty or not a forge path segment.
