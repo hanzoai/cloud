@@ -16,6 +16,7 @@ package forge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -32,6 +33,22 @@ import (
 // reach of any script on the page), and not a per-user grant this process would
 // have to custody and rotate N times.
 const TokenRef = "orgs/hanzo/deploy/FORGE_TRACKER_TOKEN@prod"
+
+// HostKeyRef is the KMS coordinate of the forge's SSH host key, as a known_hosts
+// line.
+//
+// Cloud OPERATES this forge, so its host key is a value the deployment can
+// simply KNOW. Learning it by connecting is trust-on-first-use however carefully
+// it is done, and a process that learned it once holds that answer for its whole
+// life — so a single well-timed interception poisons every run the pod serves.
+// Configured, there is no first use to get wrong.
+//
+// Absent, [Client.Known] falls back to learning it. That is a weaker deployment
+// and it says so in the log rather than failing closed, because a forge whose
+// key has not been recorded yet is a deployment that has not finished being set
+// up, not one under attack — and the fallback still beats the sandbox trusting
+// its own network.
+const HostKeyRef = "orgs/hanzo/deploy/FORGE_HOST_KEY@prod"
 
 // fresh bounds how long a resolved credential is reused. A rotated token is
 // therefore live within this window without a restart, and a revoked one stops
@@ -95,6 +112,13 @@ func (s *Source) Client(ctx context.Context, kms Secrets, domain string) (*Clien
 	if err != nil {
 		return nil, err
 	}
+	// The configured pin, read beside the credential it travels with. A missing
+	// one is not an error — see [HostKeyRef] — and an unreadable one is treated
+	// the same way, because KMS having no such secret and KMS being unhappy are
+	// the same fact to this caller.
+	if hk, herr := kms.GetSecret(ctx, HostKeyRef); herr == nil {
+		c.known = strings.TrimSpace(string(hk))
+	}
 	// Carry the warm repository list across the rotation. Without this the
 	// credential's lifetime would silently become the read cache's, and one read
 	// every [fresh] would pay the full cold-path wait for no reason anyone
@@ -134,6 +158,10 @@ func (s *Source) Invalidate() {
 
 // ── the org, on this forge ───────────────────────────────────────────────────
 
+// ErrNoOwner means this IAM org has no namespace on the forge. It is a REFUSAL
+// and never a fallback to the org's own name — see [Owner].
+var ErrNoOwner = errors.New("forge: this org has no namespace on the forge")
+
 // owners maps an IAM org to the org that owns its work ON THE FORGE.
 //
 // The two names are not the same fact, and this deployment is the proof. The IAM
@@ -151,23 +179,39 @@ func (s *Source) Invalidate() {
 //
 // A declared table rather than a branch inside a resolver: the mapping is a
 // VALUE, so it can be read, tested and added to without touching the code that
-// applies it. Identity by default, so a tenant whose two names already agree
-// needs no entry.
+// applies it.
+//
+// # It is CLOSED, and that is the whole security property
+//
+// This table used to fall back to the org's own name, so an IAM org WAS a forge
+// coordinate whenever it was not mapped. That is a cross-tenant write, and it
+// needs no bug to reach — only a signup. Sign up, create the org `hanzoai`
+// (which apps/account's reservedOrgs did not reserve: it reserves the BRAND
+// names hanzo/lux/zoo/pars, not the forge namespaces hanzoai/luxfi/zooai), and
+// every read and write this package makes for that tenant addresses the
+// estate's own repositories. On the coding path that is a write deploy key on
+// hanzoai/cloud handed to a pod running model output — and those repositories
+// carry Actions workflows on self-hosted in-cluster runners, so it is remote
+// code execution reached by filling in a signup form.
+//
+// So an unmapped org is a REFUSAL. The reachable set of forge namespaces is
+// exactly the VALUES here, no IAM org name can ever become one by being spelled
+// a certain way, and adding a tenant is a deliberate edit to this table rather
+// than a side effect of naming.
 var owners = map[string]string{"hanzo": "hanzoai"}
 
-// Owner is the forge org for a VALIDATED IAM org.
+// Owner is the forge org for a VALIDATED IAM org, or [ErrNoOwner].
 //
 // It is applied to a principal's own org and never to anything a caller sent:
 // this decides WHICH ORG is asked about, and a caller-supplied value here would
 // be a tenant selecting its own tenancy.
 //
-// It does not touch WHO the forge answers as. That remains the Sudo actor, so
-// the forge's own ACL still decides what comes back — which means a wrong entry
-// in this table can show a user an empty answer, but cannot show them anything
-// they are not entitled to see. The two controls stay independent.
-func Owner(org string) string {
+// It does not decide WHO the forge answers as. That remains the Sudo actor, so
+// the forge's own ACL still decides what comes back, and the two controls stay
+// independent.
+func Owner(org string) (string, error) {
 	if o, ok := owners[strings.ToLower(strings.TrimSpace(org))]; ok {
-		return o
+		return o, nil
 	}
-	return org
+	return "", fmt.Errorf("%w: %q", ErrNoOwner, org)
 }

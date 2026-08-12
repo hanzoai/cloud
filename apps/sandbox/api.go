@@ -75,6 +75,11 @@ type Cmd struct {
 	// sees the work happen instead of a blank pause with a verdict at the end.
 	// Empty means nothing is watching, and then nothing is sent — see work.go.
 	Session string
+	// Blind are the caller's secrets, hidden from BOTH doors this command's bytes
+	// leave by — the narration above and the result returned. Redaction has to
+	// happen here rather than at the caller because the narration never passes
+	// through the caller: see blind.go.
+	Blind []string
 }
 
 // Entry is what a path IS: a file's bytes, or a directory's entries. One read
@@ -369,9 +374,14 @@ func Run(s *Service, ctx context.Context, org, id string, cmd Cmd) (ExecResult, 
 	defer stop()
 	forget := s.State.work.start(m.ID, stop)
 	defer forget()
-	say := newTell(org, cmd.Session)
+	// The secrets this command must never publish, applied at BOTH doors it
+	// leaves by: the narration below as it is produced, and the result returned
+	// to the caller. See blind.go.
+	blind := newBlinder(cmd.Blind)
+	say := newTell(org, cmd.Session, blind)
 
 	r, err := s.State.rt.exec(ctx, m, argv, strings.NewReader(cmd.Stdin), cmd.TimeoutSec, say)
+	r = blind.result(r)
 	// The last word is said on EVERY path, including the one a stop took. A run
 	// that vanishes mid-sentence leaves a watcher reading "working…" forever.
 	say.done(r.ExitCode, err)

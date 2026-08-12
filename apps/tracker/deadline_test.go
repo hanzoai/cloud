@@ -79,7 +79,7 @@ func TestForgeDeadline_AWedgedForgeIs504AndNotAHang(t *testing.T) {
 	for _, path := range []string{"/v1/tracker/projects", "/v1/tracker/milestones"} {
 		t.Run(path, func(t *testing.T) {
 			start := time.Now()
-			code, body := asUser(t, app, http.MethodGet, path, "acme", "alice", nil)
+			code, body := asUser(t, app, http.MethodGet, path, "hanzo", "alice", nil)
 			took := time.Since(start)
 
 			if code != http.StatusGatewayTimeout {
@@ -99,7 +99,7 @@ func TestForgeDeadline_AWedgedForgeIs504AndNotAHang(t *testing.T) {
 func TestForgeDeadline_ATimeoutIsNeverAnEmptyBoard(t *testing.T) {
 	app := mountAt(t, wedgedForge(t).URL, 300*time.Millisecond)
 
-	code, body := asUser(t, app, http.MethodGet, "/v1/tracker/projects", "acme", "alice", nil)
+	code, body := asUser(t, app, http.MethodGet, "/v1/tracker/projects", "hanzo", "alice", nil)
 	if code == http.StatusOK {
 		t.Fatalf("a timeout was rendered as a successful empty board: %s", body)
 	}
@@ -117,7 +117,7 @@ func TestForgeDeadline_TheWritesAreBoundedToo(t *testing.T) {
 
 	start := time.Now()
 	code, _ := asUser(t, app, http.MethodPost, "/v1/tracker/projects/api/issues",
-		"acme", "alice", map[string]any{"title": "a card filed at a wedged forge"})
+		"hanzo", "alice", map[string]any{"title": "a card filed at a wedged forge"})
 	if took := time.Since(start); took > 10*time.Second {
 		t.Fatalf("an unbounded write: took %s", took)
 	}

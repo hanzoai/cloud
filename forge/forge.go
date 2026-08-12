@@ -179,6 +179,9 @@ type Client struct {
 	host  string // bare host (git.hanzo.ai) — the clone/ssh remotes are built from it
 	token string // machine credential from KMS — NEVER logged
 	actor string // Forgejo Sudo login; empty ⇒ every call refuses
+	// known is the forge's SSH host key as a known_hosts line, configured rather
+	// than learned. Empty falls back to a handshake — see [Client.Known].
+	known string
 	// machine drops Sudo and calls as the DEPLOYMENT. It is a separate field
 	// rather than a sentinel actor so that "unscoped" and "deliberately the
 	// machine" cannot be spelled the same way — the whole refusal in [Client.As]
