@@ -33,6 +33,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/hanzoai/cloud/plane/iam"
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -146,4 +147,54 @@ func (c *Client) LoginFor(ctx context.Context, email string) (string, error) {
 		return "", fmt.Errorf("%w: %s is not %s", ErrNotYours, login, email)
 	}
 	return login, nil
+}
+
+// Caller is the forge login the REQUEST'S CALLER has proved is theirs, and it is
+// the one way any surface should resolve who to act as.
+//
+// It is distinct from [Client.Actor], which reports who this client is already
+// scoped to: that is state, this is a resolution. The usual shape is
+// c.As(c.Caller(ctx)).
+//
+// It composes the two proofs that a forge identity needs, and both are here
+// rather than at the call sites because a caller that had to remember them is a
+// caller that will eventually be written without one:
+//
+//	the address is CONFIRMED   IAM records whether the person proved it, and a
+//	                           direct password signup records FALSE until they
+//	                           do. An address somebody merely typed is a claim.
+//	the address IS the account's   [Client.LoginFor] settles that with the forge,
+//	                           because a login is a local part and many
+//	                           addresses derive one.
+//
+// Neither alone is enough. Confirming proves the person holds the address but
+// not that the login it derives is theirs; the forge check proves the login
+// matches an address but not that the caller holds it. Together the only way to
+// act as z@hanzo.ai is to have proved z@hanzo.ai.
+//
+// THE ADDRESS COMES FROM IAM, not from the request. The identity header would do
+// — it is minted from validated claims — but asking the store means the single
+// input to this whole chain is the caller's SUBJECT, which the plane carries and
+// nothing can forge, and the address is read from the same record that says
+// whether it was proved. One source, one moment, no gap between the two facts.
+//
+// Fail closed at every step: an unreachable store, a principal it does not know,
+// an unconfirmed address and a login that belongs to somebody else are each a
+// refusal. There is no path here that ends at the machine identity.
+func (c *Client) Caller(ctx context.Context) (string, error) {
+	who, err := iam.IAMEmail(ctx)
+	if err != nil {
+		return "", fmt.Errorf("forge: could not establish who this caller is: %w", err)
+	}
+	if who == nil || strings.TrimSpace(who.Address) == "" {
+		return "", fmt.Errorf("forge: this caller has no address, so it has no forge identity")
+	}
+	if !who.Verified {
+		// Named plainly, because it is the one refusal here a person can act on
+		// themselves — and because it is the intended behaviour rather than a
+		// fault: an unconfirmed address cannot be the basis of an identity.
+		return "", fmt.Errorf("forge: verify %s first — an unconfirmed address cannot be used "+
+			"to act as anyone on the forge", who.Address)
+	}
+	return c.LoginFor(ctx, who.Address)
 }

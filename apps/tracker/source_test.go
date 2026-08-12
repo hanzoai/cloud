@@ -28,8 +28,12 @@ import (
 
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
+	"net"
+	"os"
+	"time"
 )
 
 // kmsStub answers the one secret the tracker reads. It is NOT a general KMS: a
@@ -68,6 +72,18 @@ type stubForge struct {
 	token  string
 }
 
+// writtenBy is the Sudo actor of every write the forge received — who the board
+// acted AS, which is the only thing a caller can put another person's name on.
+func (f *stubForge) writtenBy() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, 0, len(f.writes))
+	for _, w := range f.writes {
+		out = append(out, w.actor)
+	}
+	return out
+}
+
 type write struct {
 	method, path, actor string
 	body                map[string]any
@@ -88,6 +104,18 @@ func newForge(t *testing.T) *stubForge {
 
 		if r.Header.Get("Authorization") != "token "+f.token {
 			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		// The ownership lookup behind forge.LoginFor is a MACHINE call — no Sudo —
+		// so it is answered ahead of the sudo gate. Every stub user owns the
+		// address their login derives from; a test that needs the two to DISAGREE
+		// states its own row in `identity`.
+		if login, ok := strings.CutPrefix(strings.TrimPrefix(r.URL.Path, "/v1"), "/users/"); ok {
+			if _, exists := f.visible[login]; !exists {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			writeJSON(w, map[string]any{"login": login, "email": login + "@hanzo.ai"})
 			return
 		}
 		actor := r.Header.Get("Sudo")
@@ -195,8 +223,61 @@ func issue(number int, title, state string, labels ...string) map[string]any {
 }
 
 // mountForge mounts the tracker against a stub forge and a stub KMS.
+// identity is what the store answers about each subject, keyed by X-User-Id
+// exactly as the real op keys it. A test states rows it needs before mounting;
+// serveIdentity defaults every asUser subject to a CONFIRMED address whose local
+// part is the login, which is what the forge stub also says.
+var identity map[string]plane.Email
+
+// serveIdentity stands up the iam peer scopeForge resolves the actor through.
+// Without it every forge-backed read refuses, which is the point: an
+// unresolvable identity is not a board, it is a 403.
+func serveIdentity(t *testing.T) {
+	t.Helper()
+	t.Setenv("ZIP_RUNTIME_DIR", shortDir(t))
+	app := zip.New(zip.Config{AppName: "iam", DisableStartupMessage: true})
+	zip.Post[struct{}, plane.Email](app, "/iam/email",
+		func(ctx context.Context, _ *struct{}) (*plane.Email, error) {
+			sub := zip.CallerOf(ctx).User
+			if e, ok := identity[sub]; ok {
+				return &e, nil
+			}
+			// Every asUser subject is "u_<login>", and by default owns the address
+			// that login derives from.
+			if login, ok := strings.CutPrefix(sub, "u_"); ok && login != "" {
+				return &plane.Email{Address: login + "@hanzo.ai", Verified: true}, nil
+			}
+			return nil, zip.ErrUnauthorized("no such subject")
+		}, zip.WithOperationID(plane.IAMEmail))
+	plane.Bind()
+	go func() { _ = app.Listen(zip.SocketPath("iam")) }()
+	t.Cleanup(func() { _ = app.Shutdown() })
+	for i := 0; i < 200; i++ {
+		if c, err := net.Dial("unix", zip.SocketPath("iam")); err == nil {
+			_ = c.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the iam peer never came up")
+}
+
+// shortDir is a runtime dir short enough to hold a unix socket path: t.TempDir()
+// embeds the test NAME, and sun_path caps at 104 bytes on darwin.
+func shortDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "z")
+	if err != nil {
+		t.Fatalf("runtime dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func mountForge(t *testing.T, f *stubForge) *zip.App {
 	t.Helper()
+	identity = map[string]plane.Email{}
+	serveIdentity(t)
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
@@ -729,6 +810,8 @@ func TestForgeBrandGate_OwnBrandAndUnbrandedStillWork(t *testing.T) {
 // is what the brand gate compares the principal's vouching brand against.
 func mountForgeBranded(t *testing.T, f *stubForge, brand string) *zip.App {
 	t.Helper()
+	identity = map[string]plane.Email{}
+	serveIdentity(t)
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
