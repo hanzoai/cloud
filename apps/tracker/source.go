@@ -54,7 +54,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/brand"
@@ -218,11 +217,10 @@ func onForge[T any](o ops, ctx context.Context, fn func(context.Context, *forge.
 // answer through), returning a client already scoped to both.
 //
 // Both come from the validated principal and neither can be supplied by the
-// caller. A request with no validated org, or with no IAM username to act as,
+// caller. A request with no validated org, or with no PROVED forge identity,
 // gets 403 — never a client carrying the bare machine identity.
 func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
-	c, ok := cloud.Request(ctx)
-	if !ok {
+	if _, ok := cloud.Request(ctx); !ok {
 		// Off the HTTP path (a CLI LocalInvoke) there is no attested tenant and no
 		// attested actor, so there is nothing to scope by. Same 403 as an
 		// unauthenticated request.
@@ -257,14 +255,34 @@ func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
 			"vouched", vouched, "deployment", o.s.Brand, "org", org)
 		return nil, "", zip.ErrForbidden("this deployment's forge does not serve that brand's principals")
 	}
-	actor := actorOf(c)
-	if actor == "" {
-		return nil, "", zip.ErrForbidden("no forge identity for this principal")
-	}
 	cl, err := o.s.State.forge.resolve(ctx, o.s)
 	if err != nil {
 		o.s.Log.Error("forge credential unavailable", "err", err)
 		return nil, "", zip.Errorf(http.StatusServiceUnavailable, "forge unavailable")
+	}
+	// WHO the forge answers as, resolved and PROVED — see forge.Client.Caller.
+	//
+	// This used to be the IAM username, handed straight to Sudo. The two are
+	// different namespaces: a forge login is the local part of a confirmed
+	// address, and an IAM username is separately chosen. On a shared signup org
+	// they collide by choice — a stranger picking the username `z` sudoed as the
+	// staff member whose address is z@…, and this surface WRITES: it opens issues
+	// and moves cards as whoever it acts for.
+	//
+	// The same resolver the coding path uses, deliberately: one question, one
+	// answer, and no second implementation to drift.
+	actor, aerr := cl.Caller(ctx)
+	if aerr != nil {
+		// A FORGE THAT DID NOT ANSWER IN TIME IS NOT A MISSING IDENTITY. The
+		// resolution reads the forge, so a wedged one fails here first — and
+		// reporting that as 403 would send an operator looking for a permissions
+		// problem that does not exist. The deadline keeps its own answer (504),
+		// which is what o.answer already says about every other read.
+		if errors.Is(aerr, context.DeadlineExceeded) || errors.Is(aerr, context.Canceled) {
+			return nil, "", o.answer(aerr)
+		}
+		o.s.Log.Warn("tracker: no proved forge identity for this principal", "err", aerr)
+		return nil, "", zip.ErrForbidden("no forge identity for this principal")
 	}
 	// The ORG is translated here, at the one place the validated tenant becomes a
 	// forge coordinate, so no call site can ask the forge about an IAM name.
@@ -273,23 +291,6 @@ func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
 		return nil, "", zip.ErrForbidden("this org has no namespace on the forge")
 	}
 	return cl.As(actor), owner, nil
-}
-
-// actorOf is the IAM username the forge should act as.
-//
-// X-User-Name is the `name` half of <owner>/<name>, stamped by the identity
-// boundary from VALIDATED claims only — it is in authorityHeaders, so a client's
-// own copy is stripped on ingress and cannot survive. It is therefore safe to
-// hand to Sudo: a caller cannot name someone else.
-//
-// It falls back to X-User-Id only when the username is absent, which is the same
-// order resolveCaller uses — the gateway path historically minted the name into
-// X-User-Id while the in-binary direct-Bearer path stamps the UUID subject.
-func actorOf(c *zip.Ctx) string {
-	if n := strings.TrimSpace(c.Header(authz.HeaderUserName)); n != "" {
-		return n
-	}
-	return strings.TrimSpace(c.User())
 }
 
 // answer renders a forge error onto the wire.
