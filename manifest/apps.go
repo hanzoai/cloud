@@ -61,7 +61,7 @@ var Apps = []App{
 	// route the three and nothing more. They were in manifest/router_test.go's
 	// `unreachable` ledger until now — a relying party's FIRST call, reaching no app.
 	{Name: "iam", Prefixes: []string{"/.well-known/jwks", "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration", "/login/oauth", "/v1/iam"}},
-	{Name: "base", Prefixes: []string{"/v1/base", "/v1/collections", "/v1/waitlist"}},
+	{Name: "base", Prefixes: []string{"/rest/v1", "/v1/base", "/v1/collections", "/v1/waitlist"}},
 	// /v1/summary is the PUBLIC platform status document (apps/o11y/summary.go),
 	// the outward projection of the fleet health probes o11y already runs. It has
 	// to be listed here or the host never routes it to this app and it falls to
