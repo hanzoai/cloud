@@ -20,6 +20,22 @@ Propose had two backends chosen by a mirror row — a GitHub pull request, or a
 link to a branch page nobody can approve. The forge has native pull requests, so
 that question has one answer now.
 
+**Two controls bound that credential, and both are enforced.** The ORG picks the
+namespace through a CLOSED table (`forge.Owner`) — an unmapped IAM org is
+refused, never turned into a forge namespace by being spelled one. The ACTOR
+picks the repository, as a SUDOED read, so the forge's own ACL applied to the
+human is the answer; a run with no forge login is refused rather than falling
+back to the machine, which is a site administrator.
+
+**Confinement is the forge's, not the orchestrator's.** A run pushes SSH
+straight to Forgejo, which never sees our refspec, so the branch rules live in
+`forge/protect.go`: repositories this code creates are born with their default
+branch refusing every direct and force push, and an EXISTING repository that
+does not already refuse a deploy key is refused a grant rather than silently
+re-policied. The predicate is the fork's own
+(`routers/private/hook_pre_receive.go:270-285`). Tags are NOT covered — this
+fork publishes no tag-protection API.
+
 **A run's credential is a write DEPLOY KEY** minted per run on the one repository
 and deleted at run end (`forge/grant.go`). It is a deploy key and not a token
 because Forgejo's token scopes are categories rather than repositories

@@ -2217,6 +2217,18 @@ type RunIn struct {
 	// TimeoutSec bounds this ONE command, so a wedged program holds the caller for
 	// its own timeout rather than for the whole lease.
 	TimeoutSec int `json:"timeoutSec,omitempty"`
+	// Blind is the set of secrets this command must never publish.
+	//
+	// It exists because output is redacted where it is PRODUCED or not at all. A
+	// caller that scrubbed the returned result would still have streamed the
+	// unredacted bytes into the session as they were written — to a durable event
+	// store, an SSE feed and a chat thread — because the narration leaves the
+	// sandbox by a different door from the result. Nothing downstream can take a
+	// secret back out of a message that has already been delivered.
+	//
+	// The sandbox holds these only for the life of the one command, applies them
+	// to every stream leaving it, and never logs or stores them.
+	Blind []string `json:"blind,omitempty"`
 	// Session is the live agent session this command narrates into: its output is
 	// appended there AS IT IS PRODUCED, so every surface watching that session
 	// watches the command work instead of a blank pause. A long run is otherwise a

@@ -157,43 +157,16 @@ func (f *forgeSource) invalidate() {
 	f.client = nil
 }
 
-// forgeOwners maps an IAM org to the org that owns its work ON THE FORGE.
+// forgeOwner is the forge org for a VALIDATED IAM org, from forge's own CLOSED
+// table. It lived here as a second copy of that table until the coding path
+// needed the same translation; two copies of "which namespace is this tenant's"
+// is two chances to disagree, and the copy that fell back to the org's own name
+// made an unmapped IAM org address the estate's repositories directly.
 //
-// The two names are not the same fact, and this deployment is the proof. The IAM
-// tenant is `hanzo`; its work lives under `hanzoai`, which is the name the estate
-// writes wherever a namespace is written down — github.com/hanzoai,
-// ghcr.io/hanzoai, git.hanzo.ai/hanzoai. Measured on git.hanzo.ai:
-//
-//	forge org `hanzo`     64 repos, 0 issues, and hanzo/cloud is 404
-//	forge org `hanzoai`   250 repos, the actual work, hanzoai/cloud is 200
-//
-// A NEAR-EMPTY NAMESAKE also exists, which is why mapping by name did not fail
-// loudly: the forge answered 200 with an empty list, and an empty board reads as
-// "you have no work" rather than as "we asked the wrong org". That is the whole
-// hazard — a wrong answer that looks like a healthy one.
-//
-// A declared table rather than a branch inside the resolver: the mapping is a
-// VALUE, so it can be read, tested and added to without touching the code that
-// applies it. Identity by default, so a tenant whose two names already agree
-// needs no entry.
-var forgeOwners = map[string]string{"hanzo": "hanzoai"}
-
-// forgeOwner is the forge org for a VALIDATED IAM org.
-//
-// It is applied to the principal's own org and never to anything a caller sent:
-// this decides WHICH ORG is asked about, and a caller-supplied value here would
-// be a tenant selecting its own tenancy.
-//
-// It does not touch WHO the forge answers as. That remains the Sudo actor, so
-// the forge's own ACL still decides what comes back — which means a wrong entry
-// in this table can show a user an empty board, but cannot show them anything
-// they are not entitled to see. The two controls stay independent.
-func forgeOwner(org string) string {
-	if o, ok := forgeOwners[strings.ToLower(strings.TrimSpace(org))]; ok {
-		return o
-	}
-	return org
-}
+// An org with no forge namespace is REFUSED, which reads to a caller as 403
+// rather than as an empty board — an org that has no forge is a fact about the
+// deployment, not about the user's work.
+func forgeOwner(org string) (string, error) { return forge.Owner(org) }
 
 // budget bounds a forge-backed request end to end.
 //
@@ -295,7 +268,11 @@ func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
 	}
 	// The ORG is translated here, at the one place the validated tenant becomes a
 	// forge coordinate, so no call site can ask the forge about an IAM name.
-	return cl.As(actor), forgeOwner(org), nil
+	owner, oerr := forgeOwner(org)
+	if oerr != nil {
+		return nil, "", zip.ErrForbidden("this org has no namespace on the forge")
+	}
+	return cl.As(actor), owner, nil
 }
 
 // actorOf is the IAM username the forge should act as.

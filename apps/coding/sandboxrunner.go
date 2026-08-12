@@ -310,7 +310,13 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	if cred != "" {
 		argv, stdin = keyed(argv), cred+"\n"
 	}
-	ran, err := runIn(ctx, id, argv, ttl, req.SessionID, stdin)
+	// THE GATEWAY CREDENTIAL IS BLINDED TOO, and it is the one most likely to be
+	// printed: it becomes HANZO_API_KEY inside the box, so any `env`, any harness
+	// that dumps its configuration, and any stack trace carrying the environment
+	// publishes it. It is the DEPLOYMENT's identity rather than this run's, so it
+	// is the more valuable of the two.
+	in.cred = cred
+	ran, err := runIn(ctx, id, argv, ttl, req.SessionID, stdin, in.secrets()...)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("coding: run: %w", err)
 	}
@@ -386,10 +392,30 @@ type sandbox struct {
 	id      string
 	ttl     int
 	session string
-	// key is the run's private key. It is held to be SCRUBBED, not to be used —
-	// the copy git reads is the file [sandbox.arm] wrote — and it is the one
-	// string that must never appear in a session event, a Slack line or a log.
-	key string
+	// key is the run's private key and cred is the deployment's gateway token.
+	// Both are held to be BLINDED, never to be used: the copy git reads is the
+	// file [sandbox.arm] wrote, and the copy the harness reads arrived on its
+	// stdin. They are the two strings that must never appear in a session event,
+	// a Slack line or a log.
+	key, cred string
+}
+
+// secrets is what every command of this run must never publish.
+//
+// It travels WITH each command (plane.RunIn.Blind) rather than being applied to
+// what comes back, because a sandbox narrates straight into the session as bytes
+// are produced — that stream never passes through this process, so a scrub here
+// would run minutes after the secret was already delivered to a durable event
+// store, an SSE feed and a chat thread. apps/sandbox/blind.go states the rest.
+func (in sandbox) secrets() []string {
+	var out []string
+	if strings.TrimSpace(in.key) != "" {
+		out = append(out, in.key)
+	}
+	if strings.TrimSpace(in.cred) != "" {
+		out = append(out, in.cred)
+	}
+	return out
 }
 
 // Where the run's credential lives inside the sandbox.
@@ -428,7 +454,7 @@ func (in sandbox) arm(req RunRequest) error {
 	_, err := runIn(in.ctx, in.id, []string{"sh", "-c",
 		`umask 077 && mkdir -p "$(dirname "$1")" && cat > "$1" && printf '%s\n' "$3" > "$2"`,
 		"sh", keyPath, knownPath, req.Known},
-		in.ttl, in.session, req.Key)
+		in.ttl, in.session, req.Key, in.secrets()...)
 	if err != nil {
 		return fmt.Errorf("coding: install the run credential: %s", in.scrub(err.Error()))
 	}
@@ -452,7 +478,8 @@ func (in sandbox) deliver(req RunRequest, branch, base string, out *RunResult, s
 	// `git -c` before a subcommand is not written into the repository's config.
 	if _, err := runIn(in.ctx, in.id, []string{"git",
 		"-c", "user.name=" + authorName, "-c", "user.email=" + authorEmail,
-		"commit", "--quiet", "-m", message(req.Prompt, in.session)}, in.ttl, in.session, ""); err != nil {
+		"commit", "--quiet", "-m", message(req.Prompt, in.session)},
+		in.ttl, in.session, "", in.secrets()...); err != nil {
 		return fmt.Errorf("coding: commit: %w", err)
 	}
 
@@ -520,11 +547,14 @@ func pushArgv(req RunRequest, branch string) []string {
 // a default ~/.ssh/id_* first; without it a sandbox image that happens to carry
 // a key would authenticate as something other than this run.
 //
-// THE HOST IS PINNED. StrictHostKeyChecking=yes against a known_hosts file CLOUD
-// wrote means the run trusts the host key cloud saw, not whatever answers on the
-// sandbox's network — which is the one network in this system carrying untrusted
-// output. `accept-new` would have been trust-on-first-use per run, which is not
-// a pin at all.
+// THE HOST IS PINNED, TO EXACTLY ONE KEY. StrictHostKeyChecking=yes against a
+// known_hosts file CLOUD wrote means the run trusts the key cloud holds, not
+// whatever answers on the sandbox's network — which is the one network in this
+// system carrying untrusted output. `accept-new` would have been
+// trust-on-first-use per run, which is not a pin at all. GlobalKnownHostsFile is
+// sent to /dev/null in the same breath: ssh consults /etc/ssh/ssh_known_hosts as
+// well, so an image (or a layer added to one) carrying an entry for the forge
+// would be a second trusted key that our pin never sees.
 //
 // One function, because clone and push are the same act — reach that remote as
 // this key — and a second spelling is a second place to get it wrong.
@@ -533,7 +563,8 @@ func gitAs(req RunRequest) []string {
 		return []string{"git"}
 	}
 	return []string{"git", "-c", "core.sshCommand=ssh -i " + keyPath +
-		" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=" + knownPath}
+		" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" +
+		" -o UserKnownHostsFile=" + knownPath + " -o GlobalKnownHostsFile=/dev/null"}
 }
 
 // tip reads the checkout's current commit.
@@ -552,7 +583,7 @@ func (in sandbox) tip() (string, error) {
 // same fact: a clone that did not clone or a push that did not push leaves
 // nothing to report, so the exit code is read and the run stops.
 func (in sandbox) do(argv []string, what string) (*plane.Ran, error) {
-	ran, err := runIn(in.ctx, in.id, argv, in.ttl, in.session, "")
+	ran, err := runIn(in.ctx, in.id, argv, in.ttl, in.session, "", in.secrets()...)
 	if err != nil {
 		return nil, fmt.Errorf("coding: %s: %s", what, in.scrub(err.Error()))
 	}
@@ -589,7 +620,7 @@ func message(prompt, session string) string {
 // rather than sitting loose so that every path out of a command goes through it
 // without anyone having to remember.
 func (in sandbox) scrub(s string) string {
-	if strings.TrimSpace(in.key) == "" {
+	if len(in.secrets()) == 0 {
 		return s
 	}
 	// The key is multi-line PEM, so it is scrubbed BOTH whole and line by line: a
@@ -599,14 +630,16 @@ func (in sandbox) scrub(s string) string {
 	// are skipped — they are the same public constant in every OpenSSH key and
 	// redacting them only makes the output unreadable.
 	var rep []string
-	for _, line := range strings.Split(in.key, "\n") {
-		line = strings.TrimSpace(line)
-		if len(line) < 16 || strings.HasPrefix(line, "-----") {
-			continue
+	for _, sec := range in.secrets() {
+		for _, line := range strings.Split(sec, "\n") {
+			line = strings.TrimSpace(line)
+			if len(line) < 16 || strings.HasPrefix(line, "-----") {
+				continue
+			}
+			rep = append(rep, line, redacted)
 		}
-		rep = append(rep, line, redacted)
+		rep = append(rep, sec, redacted)
 	}
-	rep = append(rep, in.key, redacted)
 	return strings.NewReplacer(rep...).Replace(s)
 }
 
@@ -618,9 +651,9 @@ const redacted = "[redacted]"
 // here, because the bytes are IN THE SANDBOX and this call does not return until
 // the command is over. Streamed from where they are produced, a twenty-five
 // minute agent edit loop is watchable; collected here, it is a silence.
-func runIn(ctx context.Context, id string, argv []string, ttl int, session, stdin string) (*plane.Ran, error) {
+func runIn(ctx context.Context, id string, argv []string, ttl int, session, stdin string, blind ...string) (*plane.Ran, error) {
 	ran, err := plane.Ask[plane.RunIn, plane.Ran](ctx, "sandboxes", plane.SandboxRun,
-		&plane.RunIn{ID: id, Argv: argv, TimeoutSec: ttl, Session: session, Stdin: stdin})
+		&plane.RunIn{ID: id, Argv: argv, TimeoutSec: ttl, Session: session, Stdin: stdin, Blind: blind})
 	if err != nil {
 		return nil, err
 	}

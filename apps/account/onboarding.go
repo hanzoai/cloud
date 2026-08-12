@@ -26,6 +26,16 @@ var reservedOrgs = map[string]bool{
 	"lux":   true,
 	"zoo":   true,
 	"pars":  true,
+	// The FORGE and registry namespaces the estate's own code lives under
+	// (git.hanzo.ai/hanzoai, ghcr.io/hanzoai, github.com/luxfi, …). They are not
+	// brand names, which is exactly why they were missing: the list above reads
+	// as "our brands" and these read as somebody's username. A customer org
+	// holding one of these names is a claim on the estate's own namespace
+	// wherever an org name is used to address a namespace, so they are reserved
+	// here as well as refused at the point of translation (forge.Owner).
+	"hanzoai": true,
+	"luxfi":   true,
+	"zooai":   true,
 }
 
 const (
