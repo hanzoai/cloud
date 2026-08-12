@@ -137,9 +137,6 @@ func (t *tell) take(now time.Time, force bool) string {
 		return ""
 	}
 	b := t.buf
-	if len(b) > tellCap {
-		b = b[len(b)-tellCap:]
-	}
 	// REDACT FIRST, THEN CUT — the order is the whole of it.
 	//
 	// The stream is chopped by a CLOCK, not by content, so a program that writes
@@ -154,6 +151,14 @@ func (t *tell) take(now time.Time, force bool) string {
 	// so holding back exactly that many bytes retains it whole for the next
 	// flush, where the rest of it will have arrived.
 	s := t.blind.hide(string(b))
+	// TRUNCATE AFTER HIDING, for the same reason the cut below happens after it:
+	// dropping the head of the buffer first would discard the front of a secret
+	// straddling that boundary and emit its tail in the clear. Hidden first, every
+	// complete secret is already a marker, so the cut can only land in ordinary
+	// text or in one.
+	if len(s) > tellCap {
+		s = s[len(s)-tellCap:]
+	}
 	keep := 0
 	if !force {
 		if keep = t.blind.carry(); keep > tellCap/2 {
