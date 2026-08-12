@@ -46,6 +46,10 @@ const mark = "[redacted]"
 // command with no secrets needs no branch at any call site.
 type blinder struct {
 	rep *strings.Replacer
+	// longest is the length of the longest registered secret. It is what the
+	// narrator holds back between flushes so a secret cannot be split across two
+	// of them — see [blinder.carry].
+	longest int
 }
 
 // newBlinder builds a blinder for these secrets.
@@ -58,13 +62,26 @@ type blinder struct {
 // OpenSSH key, and hiding them only makes the output unreadable.
 func newBlinder(secrets []string) *blinder {
 	var pairs []string
+	longest := 0
 	seen := map[string]bool{}
 	add := func(s string) {
-		if len(s) < minBlind || seen[s] || strings.HasPrefix(s, "-----") {
+		if len(s) < minBlind || seen[s] {
 			return
 		}
 		seen[s] = true
 		pairs = append(pairs, s, mark)
+		if len(s) > longest {
+			longest = len(s)
+		}
+	}
+	// A PEM key BEGINS with the armour, so a blanket skip of "-----" dropped the
+	// whole-key registration entirely and left only the per-line forms — which
+	// covers a `cat` but not a single-line echo of the whole thing. The armour is
+	// skipped only where it IS the whole candidate: as a line of its own.
+	addLine := func(s string) {
+		if !strings.HasPrefix(s, "-----") {
+			add(s)
+		}
 	}
 	// Each secret is registered in every spelling it can LEAVE in, because the
 	// event a watcher reads is JSON: a value carrying a quote, a backslash or a
@@ -72,24 +89,41 @@ func newBlinder(secrets []string) *blinder {
 	// plain form leaves the escaped one intact in the payload. The escaped
 	// spelling of a multi-line key is also its whole self on ONE line, which is
 	// the form a JSON log line actually carries.
-	both := func(s string) {
-		add(s)
+	both := func(reg func(string), s string) {
+		reg(s)
 		if q, err := json.Marshal(s); err == nil {
-			add(strings.Trim(string(q), `"`))
+			reg(strings.Trim(string(q), `"`))
 		}
 	}
 	for _, s := range secrets {
-		both(s)
+		both(add, s)
 		if strings.Contains(s, "\n") {
 			for _, l := range strings.Split(s, "\n") {
-				both(strings.TrimSpace(l))
+				both(addLine, strings.TrimSpace(l))
 			}
 		}
 	}
 	if len(pairs) == 0 {
 		return nil
 	}
-	return &blinder{rep: strings.NewReplacer(pairs...)}
+	return &blinder{rep: strings.NewReplacer(pairs...), longest: longest}
+}
+
+// carry is how many trailing bytes a streaming caller must hold back between
+// two flushes for this blinder to work at all.
+//
+// A fixed-string replacement only matches a CONTIGUOUS secret, and a stream is
+// chopped by a timer rather than by content — so `head -c 200 key; sleep 2; tail
+// -c +201 key` puts the two halves in different messages and neither half
+// matches. Holding back one byte less than the longest secret guarantees that
+// whatever straddled a boundary is whole in the next flush.
+//
+// Zero for a nil blinder: nothing is registered, so nothing can be split.
+func (b *blinder) carry() int {
+	if b == nil || b.longest <= 1 {
+		return 0
+	}
+	return b.longest - 1
 }
 
 // hide returns s with every known secret replaced.

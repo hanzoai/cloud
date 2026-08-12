@@ -65,6 +65,15 @@ func newRepoStub(t *testing.T) *repoStub {
 		s.mu.Unlock()
 
 		switch {
+		case strings.Contains(r.URL.Path, "/branch_protections/") && r.Method == http.MethodGet:
+			name := r.URL.Path[strings.Index(r.URL.Path, "/branch_protections/")+len("/branch_protections/"):]
+			for _, ru := range s.rules {
+				if ru["rule_name"] == name {
+					_ = json.NewEncoder(w).Encode(ru)
+					return
+				}
+			}
+			w.WriteHeader(http.StatusNotFound)
 		case strings.HasSuffix(r.URL.Path, "/branch_protections") && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(s.rules)
 		case strings.HasSuffix(r.URL.Path, "/branch_protections") && r.Method == http.MethodPost:
@@ -572,6 +581,20 @@ func TestGrant_RefusedWhenTheDefaultBranchDoesNotRefuseTheKey(t *testing.T) {
 		t.Fatalf("a deploy-key-whitelisted branch counted as protected: %v", err)
 	}
 
+	// A GLOB is not read as protecting the branch. The forge matches globs and we
+	// do not, so a rule named `**` reads as absent here — and the refusal has to
+	// SAY that, or an operator who protected `**` is left guessing.
+	s.rules = []map[string]any{{
+		"rule_name": "**", "enable_push": false, "enable_force_push": false,
+	}}
+	_, err = c.Machine().Grant(context.Background(), "acme", "api", "sess_x")
+	if !errors.Is(err, ErrOpen) {
+		t.Fatalf("a glob rule was read as protecting the branch: %v", err)
+	}
+	if !strings.Contains(err.Error(), "**") || !strings.Contains(err.Error(), "main") {
+		t.Fatalf("the refusal does not name the remedy: %v", err)
+	}
+
 	// And the shape Protect writes does refuse it.
 	s.rules = []map[string]any{{
 		"rule_name": "main", "enable_push": false, "enable_force_push": false,
@@ -647,5 +670,28 @@ func TestKnown_PrefersTheConfiguredPin(t *testing.T) {
 	got, err := c.Known(context.Background())
 	if err != nil || got != c.known {
 		t.Fatalf("Known = %q, %v; the configured pin must win without a handshake", got, err)
+	}
+}
+
+// A pin that verifies NOTHING is refused, and the degradation is visible.
+//
+// A wildcard host pattern matches every host, so ssh accepts whatever key it is
+// offered: it reads as configured and is an open door. Silently accepting it —
+// or silently swallowing a KMS error — is the failure mode where a deployment
+// believes it has a pin right up until somebody uses the first handshake.
+func TestPin_RefusesAWildcardAndSaysWhenItDegrades(t *testing.T) {
+	for _, bad := range []string{
+		"* ssh-ed25519 AAAA", "*.hanzo.ai ssh-ed25519 AAAA",
+		"git.hanzo.ai ssh-ed25519", "", "   ", "git.hanzo.ai",
+	} {
+		if !badPin(bad) {
+			t.Errorf("badPin(%q) = false; a line that pins nothing was accepted", bad)
+		}
+	}
+	if badPin("git.hanzo.ai ssh-ed25519 AAAAC3NzaC1lZDI1NTE5") {
+		t.Error("a real known_hosts line was rejected")
+	}
+	if badPin("[git.hanzo.ai]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5") {
+		t.Error("a bracketed non-default-port line was rejected")
 	}
 }

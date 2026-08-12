@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 const pem = `-----BEGIN OPENSSH PRIVATE KEY-----
@@ -104,5 +105,80 @@ func TestBlind_IgnoresValuesTooShortToBeSecrets(t *testing.T) {
 	var none *blinder
 	if got := none.hide("untouched"); got != "untouched" {
 		t.Fatalf("nil blinder changed the output: %q", got)
+	}
+}
+
+// A SECRET SPLIT ACROSS TWO FLUSHES IS STILL HIDDEN.
+//
+// This is the bypass that survives encoding-awareness: the stream is chopped by
+// a CLOCK, so a program that writes half the key, waits past the flush interval,
+// then writes the rest puts the two halves in different messages and a
+// fixed-string replacement matches neither. `head -c 200 key; sleep 2; tail -c
+// +201 key` is the whole attack.
+func TestTell_ASecretSplitAcrossFlushesIsStillHidden(t *testing.T) {
+	secret := strings.ReplaceAll(pem, "\n", "") // one long contiguous run of bytes
+	b := newBlinder([]string{secret})
+	if b.carry() != len(secret)-1 {
+		t.Fatalf("carry = %d, want one less than the secret (%d)", b.carry(), len(secret))
+	}
+
+	tl := &tell{org: "acme", session: "s", blind: b}
+	half := len(secret) / 2
+
+	// First write, flushed on its own tick.
+	tl.buf = append(tl.buf, secret[:half]...)
+	first := tl.take(time.Now(), false)
+
+	// Second write, a flush interval later — the rest of the secret.
+	tl.buf = append(tl.buf, secret[half:]...)
+	second := tl.take(time.Now().Add(2*tellEvery), false)
+
+	// The last words, whatever is left.
+	third := tl.take(time.Now().Add(4*tellEvery), true)
+
+	whole := b.hide(first) + b.hide(second) + b.hide(third)
+	if strings.Contains(whole, secret) {
+		t.Fatalf("the split secret was reassembled in the clear:\n%q", whole)
+	}
+	// And not merely because it was dropped — the redaction must have fired.
+	if !strings.Contains(whole, mark) {
+		t.Fatalf("nothing was redacted; the secret may simply have been lost: %q", whole)
+	}
+}
+
+// A forced flush keeps NOTHING back. done() is a watcher's last word, and a
+// carry-over that swallowed it would trade a leak for a silence.
+func TestTell_AForcedFlushHoldsNothingBack(t *testing.T) {
+	b := newBlinder([]string{"a-secret-value-long-enough"})
+	tl := &tell{org: "acme", session: "s", blind: b}
+	tl.buf = append(tl.buf, "the tail end of the output"...)
+	if got := tl.take(time.Now(), true); got != "the tail end of the output" {
+		t.Fatalf("a forced flush dropped its last words: %q", got)
+	}
+	if len(tl.buf) != 0 {
+		t.Fatalf("a forced flush left %d bytes behind", len(tl.buf))
+	}
+}
+
+// With no secrets there is nothing to hold back, so ordinary output is not
+// delayed by a byte.
+func TestTell_NoSecretsMeansNoCarry(t *testing.T) {
+	tl := &tell{org: "acme", session: "s", blind: newBlinder(nil)}
+	tl.buf = append(tl.buf, "plain output"...)
+	if got := tl.take(time.Now(), false); got != "plain output" {
+		t.Fatalf("output was held back with no secrets registered: %q", got)
+	}
+}
+
+// The WHOLE key is registered, not only its lines. A blanket skip of the "-----"
+// armour dropped the whole-key form — which covers a `cat` (line by line) but
+// not a single-line echo of the entire thing.
+func TestBlind_RegistersTheWholeKeyNotOnlyItsLines(t *testing.T) {
+	b := newBlinder([]string{pem})
+	if got := b.hide("dumped: " + pem); strings.Contains(got, secretLines(t, pem)[0]) {
+		t.Fatalf("the whole key survived: %q", got)
+	}
+	if b.carry() < len(pem)-1 {
+		t.Fatalf("carry = %d; the whole key was never registered, so a split of it is not covered", b.carry())
 	}
 }

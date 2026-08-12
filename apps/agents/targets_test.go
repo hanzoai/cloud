@@ -85,9 +85,9 @@ func TestTargetSessionLoad(t *testing.T) {
 		}
 	}
 	// Target T maps host "spark".
-	mk("acme", "s1", "", "T", StatusRunning) // dispatched to T, no host
+	mk("acme", "s1", "", "T", StatusRunning)     // dispatched to T, no host
 	mk("acme", "s2", "spark", "", StatusRunning) // on T's host, running
-	mk("acme", "s3", "spark", "", StatusDone) // on T's host, finished
+	mk("acme", "s3", "spark", "", StatusDone)    // on T's host, finished
 	mk("acme", "s4", "other", "", StatusRunning) // unrelated host, no target
 	mk("evil", "s5", "spark", "", StatusRunning) // FOREIGN org, same host
 

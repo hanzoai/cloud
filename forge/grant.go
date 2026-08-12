@@ -154,8 +154,10 @@ func (c *Client) Grant(ctx context.Context, owner, repo, name string) (Grant, er
 		return Grant{}, fmt.Errorf("forge: %s/%s: cannot read branch protection: %w", owner, repo, err)
 	}
 	if !guarded {
-		return Grant{}, fmt.Errorf("%w: %s/%s (protect %s against direct and force pushes first)",
-			ErrOpen, owner, repo, r.Branch)
+		// The refusal NAMES THE REMEDY. The commonest cause is not an attack, it
+		// is a rule spelled as a glob, and an error that only said "unprotected"
+		// would send an operator to read this file.
+		return Grant{}, fmt.Errorf("%w: %s/%s: %s", ErrOpen, owner, repo, c.Missing(ctx, owner, repo))
 	}
 
 	priv, pub, err := keypair()
@@ -438,4 +440,43 @@ func scan(ctx context.Context, hostport string) (string, error) {
 		name = "[" + h + "]:" + p
 	}
 	return name + " " + string(ssh.MarshalAuthorizedKey(key)), nil
+}
+
+// SweepOrg withdraws every abandoned run grant across an ORG.
+//
+// It is the bound the per-repository sweep cannot supply. That one runs when the
+// NEXT run on the SAME repository starts, so a repository nobody works on again
+// keeps its abandoned key forever — and the case that produces abandoned keys is
+// a rolling deploy, which orphans every in-flight run's key at once and is a
+// thing this estate does several times a day. Run at startup, "forever" becomes
+// "until the next restart".
+//
+// Best-effort and bounded: one repository's failure does not stop the others,
+// and both walks are paged, so an org that has grown past a page is still swept
+// to the end rather than to the end of page one.
+//
+// It is deliberately NOT scheduled. A restart is already the event that produces
+// the orphans, so it is also the honest moment to clear them; a timer would be a
+// second lifetime to reason about.
+func (c *Client) SweepOrg(ctx context.Context, owner string) (int, error) {
+	repos, err := c.Machine().Repos(ctx, owner)
+	if err != nil {
+		return 0, err
+	}
+	swept := 0
+	for _, r := range repos {
+		old, err := c.Grants(ctx, owner, r.Name)
+		if err != nil {
+			continue
+		}
+		cut := time.Now().Add(-stale)
+		for _, g := range old {
+			if !g.Made.IsZero() && g.Made.Before(cut) {
+				if c.Revoke(ctx, owner, r.Name, g.ID) == nil {
+					swept++
+				}
+			}
+		}
+	}
+	return swept, nil
 }

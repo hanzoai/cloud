@@ -140,9 +140,33 @@ func (t *tell) take(now time.Time, force bool) string {
 	if len(b) > tellCap {
 		b = b[len(b)-tellCap:]
 	}
-	s := string(b)
-	t.buf, t.at = t.buf[:0], now
-	return s
+	// REDACT FIRST, THEN CUT — the order is the whole of it.
+	//
+	// The stream is chopped by a CLOCK, not by content, so a program that writes
+	// half a key, waits, and writes the rest defeats a fixed-string replacement
+	// with neither half matching. Cutting first and redacting the pieces does not
+	// fix that: it just moves the split, and the emitted piece can be all but one
+	// byte of the secret.
+	//
+	// So the whole buffer is hidden first, which replaces every COMPLETE secret in
+	// it. The only thing that can still be in the clear is a secret straddling the
+	// END of the buffer, and that is at most one byte short of the longest one —
+	// so holding back exactly that many bytes retains it whole for the next
+	// flush, where the rest of it will have arrived.
+	s := t.blind.hide(string(b))
+	keep := 0
+	if !force {
+		if keep = t.blind.carry(); keep > tellCap/2 {
+			keep = tellCap / 2
+		}
+		if keep > len(s) {
+			keep = len(s)
+		}
+	}
+	// A forced flush keeps nothing: `done` is a watcher's last word and must not
+	// be swallowed by the carry-over.
+	t.buf, t.at = append(t.buf[:0], s[len(s)-keep:]...), now
+	return s[:len(s)-keep]
 }
 
 // say appends one event to the session, best-effort.

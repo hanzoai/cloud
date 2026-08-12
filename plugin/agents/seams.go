@@ -124,4 +124,6 @@ func planeRouteRun(ctx context.Context, in *plane.RouteRunIn) (*plane.CodingAck,
 
 // routeLog carries coding's best-effort failures (a dropped session mirror, a PR
 // that would not file) into this process's log instead of dropping them.
-func routeLog(msg string, kv ...any) { luxlog.New("agents").New("subsystem", "coding").Warn(msg, kv...) }
+func routeLog(msg string, kv ...any) {
+	luxlog.New("agents").New("subsystem", "coding").Warn(msg, kv...)
+}
