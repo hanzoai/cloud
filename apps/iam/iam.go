@@ -169,6 +169,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	exposeRoster()
 	exposeProjects()
 	exposeApproval()
+	exposeEmail()
 
 	log := deps.Logger.New("subsystem", "iam")
 
