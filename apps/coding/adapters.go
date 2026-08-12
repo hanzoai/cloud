@@ -61,8 +61,8 @@ func NewDispatcher(log func(msg string, kv ...any)) Dispatcher {
 		// apiserver instead of a CLI that is not installed — and over the plane, so
 		// there is no HTTP hop to port.
 		Runner:     sandboxRunner{},
-		CloneURL:   planeCloneURL,
-		VerifyRef:  planeVerifyRef,
+		CloneURL:   forgeCloneURL,
+		VerifyRef:  forgeVerifyRef,
 		Log:        log,
 		Route:      planeRoute,
 		TargetGate: planeTargetGate,
@@ -151,51 +151,47 @@ func (planePR) Open(ctx context.Context, in PRInput) (PRRef, error) {
 	}
 	ref := PRRef{Identifier: out.Identifier, ProjectKey: out.ProjectKey, Number: out.Number}
 
-	// The address. Its failure is returned BESIDE the row rather than instead of
-	// it: the work is pushed and tracked either way, and a run that could not
-	// reach GitHub must say so out loud instead of quietly answering with a forge
-	// link that is not where the review will happen.
-	p, perr := plane.Ask[plane.ProposeIn, plane.Proposed](ctx, gitApp, plane.GitPropose,
-		&plane.ProposeIn{
-			Project: in.Project, Repo: in.Repo, Base: in.Base,
-			Head: in.Head, Title: in.Title, Body: in.Body,
-		})
+	// The address, opened on the forge AS THE PERSON the run is for. Its failure is
+	// returned BESIDE the row rather than instead of it: the work is pushed and
+	// tracked either way, and a run that could not open a pull request must say so
+	// out loud instead of quietly answering with a link that is not where the
+	// review will happen.
+	//
+	// It is a real pull request for every repository now. The seam this replaces
+	// answered two different things depending on whether a mirror row pointed at
+	// GitHub — a pull request there, and otherwise a link to a branch-browsing
+	// page, which nobody can approve. The forge has native pull requests, so the
+	// question has one answer.
+	url, perr := propose(ctx, in.Org, in.Repo, in.Base, in.Head, in.Title, in.Body)
 	if perr != nil {
 		return ref, perr
 	}
-	if p != nil {
-		ref.URL = p.URL
-	}
+	ref.URL = url
 	return ref, nil
 }
 
-// planeCloneURL asks git for the org's clone URL. An error is an EMPTY url,
-// which the dispatcher already reads as "git is not available" and refuses the
-// run on — the same fail-closed answer the in-process seam gave when git was
-// absent, so no caller learns a new failure mode.
-func planeCloneURL(ctx context.Context, org, repo string) string {
+// forgeCloneURL is the HTTPS address of a repository, for a ROUTED run — one
+// executing on a machine the customer owns, which authenticates git with its own
+// already-held credentials. The sandbox path does not come through here: it
+// clones the SSH remote its grant names, which is the only address its key
+// opens.
+//
+// An error is an EMPTY url, which the dispatcher already reads as "git is not
+// available" and refuses the run on, so no caller learns a new failure mode.
+func forgeCloneURL(ctx context.Context, org, repo string) string {
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	out, err := plane.Ask[plane.RepoRefIn, plane.RepoCloneURL](ctx, gitApp, plane.GitCloneURL,
-		&plane.RepoRefIn{Org: org, Repo: repo})
-	if err != nil || out == nil {
-		return ""
-	}
-	return out.URL
+	return remote(ctx, org, repo)
 }
 
-// planeVerifyRef is the integrity gate: git reads the tip off its own storage.
-// An unreachable git is an UNVERIFIABLE ref, which is treated as absent — the
-// run fails closed and files no PR, rather than trusting the sandbox's claim.
-func planeVerifyRef(ctx context.Context, org, repo, branch string) (string, bool) {
+// forgeVerifyRef is the integrity gate: the FORGE is asked what the branch
+// points at. An unreachable forge is an UNVERIFIABLE ref, which is treated as
+// absent — the run fails closed and files no PR, rather than trusting the
+// sandbox's claim to have pushed one.
+func forgeVerifyRef(ctx context.Context, org, repo, branch string) (string, bool) {
 	ctx, cancel := bounded(ctx)
 	defer cancel()
-	out, err := plane.Ask[plane.RefIn, plane.RefTip](ctx, gitApp, plane.GitVerifyRef,
-		&plane.RefIn{Org: org, Repo: repo, Branch: branch})
-	if err != nil || out == nil || !out.Found {
-		return "", false
-	}
-	return out.SHA, true
+	return landed(ctx, org, repo, branch)
 }
 
 // planeTargetGate is the fail-closed existence+liveness check for a routed run's
@@ -252,6 +248,5 @@ var enqueueOnce sync.Once
 // The peers, spelled once.
 const (
 	agentsApp  = "agents"
-	gitApp     = "git"
 	trackerApp = "tracker"
 )

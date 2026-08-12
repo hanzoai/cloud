@@ -1,7 +1,7 @@
 package git
 
-// The OTHER seven ref writers, proved the same way refpolicy_wire_test.go proves
-// the first: with the real client, against the real server, doing the thing an
+// The OTHER ref writers, proved the same way refpolicy_wire_test.go proves the
+// first: with the real client, against the real server, doing the thing an
 // attacker would actually do.
 //
 // refpolicy_wire_test.go proved the rule was correct AND reached — at ONE door.
@@ -12,7 +12,6 @@ package git
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/base64"
 	"io"
 	"net/http/httptest"
@@ -266,132 +265,6 @@ func TestInboundSyncCannotAdvanceAnAgentBranch(t *testing.T) {
 	t.Logf("REFUSED before the fetch ran: %s", res.Detail)
 }
 
-// ── the grant: what it can and cannot do ─────────────────────────────────────
-
-// A grant is not an identity. This is the whole of C2's fix, and it is the test
-// that matters most: the credential a compromised run holds must open the one
-// ref it was minted for and NOTHING else in the platform.
-func TestAGrantIsNotAPrincipal(t *testing.T) {
-	app := mountApp(t)
-	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
-		t.Fatalf("create repo: %d %s", code, b)
-	}
-	tok, _, err := issued.issue(grant{org: "acme", repo: "code", ref: "refs/heads/agent/abc123def456"}, 0)
-	if err != nil {
-		t.Fatalf("issue: %v", err)
-	}
-
-	// Every control-plane door, with the grant as the credential. All must refuse:
-	// the grant resolves to no principal, so tenantOf has nothing to read.
-	for _, d := range []struct {
-		method, path string
-		body         any
-	}{
-		{http.MethodGet, "/v1/git/repos", nil},
-		{http.MethodGet, "/v1/git/usage", nil},
-		{http.MethodDelete, "/v1/git/repos/code", nil},
-		{http.MethodPost, "/v1/git/repos/code/mirror", map[string]any{"source": "https://example.com/x.git"}},
-		{http.MethodPost, "/v1/git/repos/code/push", map[string]any{
-			"branch": "main", "files": []map[string]any{{"path": "x", "content": "y"}}}},
-		{http.MethodPost, "/v1/git/keys", map[string]any{"title": "t", "publicKey": "ssh-ed25519 AAAA"}},
-	} {
-		code, b := doAuth(t, app, d.method, d.path, tok, d.body)
-		if code != http.StatusForbidden {
-			t.Fatalf("A GRANT REACHED %s %s: %d %s", d.method, d.path, code, b)
-		}
-	}
-	t.Log("the grant reaches none of the control plane — it is not a principal anywhere")
-}
-
-// A grant addresses the repository it names, and answers the stranger's 404 for
-// any other — so it cannot even be used to learn which repositories an org has.
-func TestAGrantOpensOnlyItsOwnRepo(t *testing.T) {
-	app := mountApp(t)
-	for _, name := range []string{"code", "secrets"} {
-		if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": name}); code != 201 {
-			t.Fatalf("create %s: %d %s", name, code, b)
-		}
-	}
-	tok, _, err := issued.issue(grant{org: "acme", repo: "code", ref: "refs/heads/agent/abc123def456"}, 0)
-	if err != nil {
-		t.Fatalf("issue: %v", err)
-	}
-	if code, b := doAuth(t, app, http.MethodGet,
-		"/v1/git/acme/code/info/refs?service=git-receive-pack", tok, nil); code != 200 {
-		t.Fatalf("the grant must open its own repo: %d %s", code, b)
-	}
-	if code, b := doAuth(t, app, http.MethodGet,
-		"/v1/git/acme/secrets/info/refs?service=git-receive-pack", tok, nil); code != http.StatusNotFound {
-		t.Fatalf("A GRANT REACHED ANOTHER REPO: %d %s", code, b)
-	}
-	t.Log("the grant opens acme/code and answers 404 for acme/secrets")
-}
-
-// The whole thing end to end, with the REAL git CLI holding ONLY the grant —
-// which is exactly what the sandbox holds. It must be able to do its job, and
-// nothing else.
-func TestARunPushesWithItsGrantAndNothingMore(t *testing.T) {
-	app := mountApp(t)
-	base := liveServer(t, app)
-	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
-		t.Fatalf("create repo: %d %s", code, b)
-	}
-	// Seed a trunk as the org's human would.
-	if code, b := do(t, app, http.MethodPost, "/v1/git/repos/code/push", "acme", map[string]any{
-		"branch": "main", "message": "seed",
-		"files": []map[string]any{{"path": "README.md", "content": "# seed\n"}},
-	}); code != 200 {
-		t.Fatalf("seed main: %d %s", code, b)
-	}
-
-	branch := "agent/abc123def456"
-	tok, _, err := issued.issue(grant{org: "acme", repo: "code", ref: "refs/heads/" + branch}, 0)
-	if err != nil {
-		t.Fatalf("issue: %v", err)
-	}
-	// The ONLY credential the run carries. No X-Org-Id, no X-User-Id — the
-	// sandbox has no identity headers to send and no principal behind it.
-	auth := []string{"-c", "http.extraHeader=Authorization: Basic " +
-		base64.StdEncoding.EncodeToString([]byte("x-access-token:"+tok))}
-	url := base + "/v1/git/acme/code.git"
-
-	work := filepath.Join(t.TempDir(), "clone")
-	gitRun(t, "", append(auth, "clone", "-q", url, work)...)
-	t.Log("the grant cloned its repo")
-
-	gitRun(t, work, "checkout", "-q", "-b", branch)
-	write(t, work, "feature.txt", "agent work\n")
-	gitRun(t, work, "add", "-A")
-	gitRun(t, work, "commit", "-q", "-m", "agent change")
-	if out, err := gitTestCmd(work, append(auth, "push", "origin", "HEAD:refs/heads/"+branch)...).CombinedOutput(); err != nil {
-		t.Fatalf("the run must be able to push its own branch: %v\n%s", err, out)
-	}
-	t.Log("the grant pushed the one ref it names")
-
-	// Everything else the same credential might try.
-	for _, tc := range []struct{ name, refspec, want string }{
-		{"the trunk", "HEAD:refs/heads/main", "may only write"},
-		{"another run's branch", "HEAD:refs/heads/agent/somebody-else", "may only write"},
-		{"a ref outside the machine namespace", "HEAD:refs/heads/release", "may only write"},
-		{"deleting the trunk", ":refs/heads/main", "may only write"},
-		{"appending to its own branch", "HEAD:refs/heads/" + branch, "agent branch"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			write(t, work, "more.txt", tc.name)
-			gitRun(t, work, "add", "-A")
-			gitRun(t, work, "commit", "-q", "-m", "more")
-			out, err := gitTestCmd(work, append(auth, "push", "origin", tc.refspec)...).CombinedOutput()
-			if err == nil {
-				t.Fatalf("A GRANT WROTE %s\n%s", tc.name, out)
-			}
-			if !strings.Contains(string(out), tc.want) {
-				t.Fatalf("refused, but not by the rule (%q):\n%s", tc.want, out)
-			}
-			t.Logf("REFUSED: %s", firstRejectLine(string(out)))
-		})
-	}
-}
-
 // firstRejectLine pulls git's own rejection line out of its output, for a log
 // line that shows what the pusher actually read.
 func firstRejectLine(out string) string {
@@ -401,51 +274,6 @@ func firstRejectLine(out string) string {
 		}
 	}
 	return strings.TrimSpace(out)
-}
-
-// An expired grant is not a grant. The TTL is the backstop for a run that dies
-// without withdrawing its own credential.
-func TestAGrantExpires(t *testing.T) {
-	tok, handle, err := issued.issue(grant{org: "acme", repo: "code", ref: "refs/heads/agent/x"}, 0)
-	if err != nil {
-		t.Fatalf("issue: %v", err)
-	}
-	if _, ok := issued.lookup(tok); !ok {
-		t.Fatal("a fresh grant must resolve")
-	}
-	// Age THIS grant, rather than sleeping for the TTL. Only this one: the table
-	// is process-wide, so a test that expired everything would be reaching into
-	// its neighbours.
-	key := sha256.Sum256([]byte(tok))
-	issued.mu.Lock()
-	g := issued.m[key]
-	g.expires = g.expires.Add(-2 * grantMaxTTL)
-	issued.m[key] = g
-	issued.mu.Unlock()
-	if _, ok := issued.lookup(tok); ok {
-		t.Fatal("AN EXPIRED GRANT STILL RESOLVES")
-	}
-	// And revoking is idempotent on an already-gone grant.
-	issued.revoke("acme", handle)
-	t.Log("an expired grant resolves to nothing")
-}
-
-// Revocation is what makes a grant's life the RUN's life, and it is org-scoped
-// so a handle is not authority over someone else's capability.
-func TestAGrantIsRevokedByItsOwnerOnly(t *testing.T) {
-	tok, handle, err := issued.issue(grant{org: "acme", repo: "code", ref: "refs/heads/agent/x"}, 0)
-	if err != nil {
-		t.Fatalf("issue: %v", err)
-	}
-	issued.revoke("beta", handle) // another tenant, same handle
-	if _, ok := issued.lookup(tok); !ok {
-		t.Fatal("ANOTHER ORG REVOKED THIS GRANT")
-	}
-	issued.revoke("acme", handle)
-	if _, ok := issued.lookup(tok); ok {
-		t.Fatal("the owner's revoke did not take")
-	}
-	t.Log("only the holding org revokes")
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -498,87 +326,6 @@ func doAuth(t *testing.T, app *zip.App, method, path, token string, body any) (i
 	defer func() { _ = resp.Body.Close() }()
 	out, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, out
-}
-
-// TestAGrantAuthenticatesTheWayTheSandboxPresentsIt is the end-to-end proof for
-// the shape apps/coding actually builds, and it exists because the shape it used
-// to build could not work.
-//
-// A run's clone and push carried the grant as URL userinfo —
-// https://x-access-token:hgg_…@host/… — on the reasoning that a credential in a
-// URL leaves nothing behind. Two things were wrong with it, and the second is
-// fatal rather than untidy:
-//
-//   - git writes the URL it was given into .git/config verbatim, so the grant sat
-//     readable in the checkout that then executes untrusted model output.
-//   - git does not SEND a URL-embedded credential until it is challenged. It makes
-//     an anonymous request and waits for 401 WWW-Authenticate. resolvePackRepo
-//     answers a caller it cannot place with 403, never 401 — so the grant was
-//     never presented at all.
-//
-// The header form is what the rest of the forge already uses (mirror_out.go), and
-// this pins that a URL-SCOPED one — which git attaches to this repository and to
-// no other host the run might be steered at — authenticates the same way.
-func TestAGrantAuthenticatesTheWayTheSandboxPresentsIt(t *testing.T) {
-	app := mountApp(t)
-	base := liveServer(t, app)
-	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
-		t.Fatalf("create repo: %d %s", code, b)
-	}
-	if code, b := do(t, app, http.MethodPost, "/v1/git/repos/code/push", "acme", map[string]any{
-		"branch": "main", "message": "seed",
-		"files": []map[string]any{{"path": "README.md", "content": "# seed\n"}},
-	}); code != 200 {
-		t.Fatalf("seed main: %d %s", code, b)
-	}
-
-	branch := "agent/abc123def456"
-	tok, _, err := issued.issue(grant{org: "acme", repo: "code", ref: "refs/heads/" + branch}, 0)
-	if err != nil {
-		t.Fatalf("issue: %v", err)
-	}
-	url := base + "/v1/git/acme/code.git"
-	// EXACTLY what apps/coding builds (sandboxrunner.go gitAs): one -c, scoped to
-	// this url, applied to this invocation.
-	auth := []string{"-c", "http." + url + ".extraHeader=Authorization: Basic " +
-		base64.StdEncoding.EncodeToString([]byte("x-access-token:"+tok))}
-
-	work := filepath.Join(t.TempDir(), "clone")
-	gitRun(t, "", append(auth, "clone", "-q", "--depth", "1", "-b", "main", url, work)...)
-	t.Log("the grant cloned its repo with a url-scoped header")
-
-	// AND IT LEFT NOTHING BEHIND. The checkout the model edits holds no credential:
-	// a top-level -c is not written into the new repository's config.
-	cfg, err := os.ReadFile(filepath.Join(work, ".git", "config"))
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	for _, leak := range []string{tok, "extraHeader", "Authorization"} {
-		if strings.Contains(string(cfg), leak) {
-			t.Fatalf("the clone persisted %q into .git/config:\n%s", leak, cfg)
-		}
-	}
-	t.Log("nothing was written to .git/config")
-
-	gitRun(t, work, "switch", "-q", "-c", branch)
-	write(t, work, "feature.txt", "agent work\n")
-	gitRun(t, work, "add", "-A")
-	gitRun(t, work, "commit", "-q", "-m", "agent change")
-	if out, err := gitTestCmd(work, append(auth, "push", url, "HEAD:refs/heads/"+branch)...).CombinedOutput(); err != nil {
-		t.Fatalf("the run must be able to push its own branch: %v\n%s", err, out)
-	}
-	t.Log("the grant pushed the one ref it names")
-
-	// The trunk is still refused with the credential presented THIS way, so the
-	// change of form did not change what the form is allowed to do.
-	out, err := gitTestCmd(work, append(auth, "push", url, "HEAD:refs/heads/main")...).CombinedOutput()
-	if err == nil {
-		t.Fatalf("A GRANT WROTE THE TRUNK\n%s", out)
-	}
-	if !strings.Contains(string(out), "may only write") {
-		t.Fatalf("refused, but not by the ref policy:\n%s", out)
-	}
-	t.Logf("REFUSED: %s", firstRejectLine(string(out)))
 }
 
 // ── writer 9: the merge door ─────────────────────────────────────────────────

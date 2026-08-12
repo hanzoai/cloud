@@ -1,5 +1,49 @@
 # apps/git — typed-op status
 
+## The coding orchestrator no longer comes here
+
+A run's push credential, its clone URL, its ref check and its pull request are
+now the FORGE's (git.hanzo.ai, `forge/`), not this app's. What that removed:
+
+- `grant.go` and the `hgg_` credential class. It was the one bearer in the whole
+  binary that resolved to no principal, honoured in exactly one place
+  (`resolvePackRepo`). Nothing in cloud is now reached by anything but a
+  validated principal or a public read, and `packCaller` has no `ref` field
+  because no caller is confined to one any more.
+- `export.go` (`CloneURL`, `VerifyRef`) and `propose.go`, with
+  `plugin/git/seams.go` that published them. A run's ref check read a bare repo
+  off local disk; it now reads the forge, which is where the run actually pushed.
+- Five plane ops: `git_grant`, `git_revoke`, `git_clone_url`, `git_verify_ref`,
+  `git_propose`, and their wire shapes.
+
+Propose had two backends chosen by a mirror row — a GitHub pull request, or a
+link to a branch page nobody can approve. The forge has native pull requests, so
+that question has one answer now.
+
+**A run's credential is a write DEPLOY KEY** minted per run on the one repository
+and deleted at run end (`forge/grant.go`). It is a deploy key and not a token
+because Forgejo's token scopes are categories rather than repositories
+(`models/auth/access_token_scope.go`), and because minting a token at all needs
+the target's PASSWORD (`POST /users/{u}/tokens` is behind
+`reqBasicOrRevProxyAuth`) — the machine credential cannot mint one. Deploy keys
+are SSH-only: the HTTP path resolves permission from an authenticated user and
+has no deploy-key branch, so a run's remote is the forge's `ssh_url`.
+
+**Still here, and still on local bare repos:** the import/inbound-sync pair, the
+outbound mirror, the code index, Slack notify, the deploy tree read, the LSP
+tree/rev reads, project visibility and the git figures. Retiring those needs a
+decision that is NOT a coding-path decision — see the inbound fast-forward guard
+below.
+
+**The open blocker.** `InboundSync` is fast-forward-only and reports a
+divergence as a Conflict with native PRESERVED. Forgejo's pull mirror is
+`git remote update --prune` over a mirror refspec (`services/mirror/mirror_pull.go`),
+which force-overwrites, and its push mirror is `git push --mirror`
+(`services/mirror/mirror_push.go`), which pushes every ref. Neither preserves the
+guard. Moving inbound sync to the forge therefore needs a decision: accept
+upstream-wins, or have cloud fetch and push fast-forward-only itself.
+
+
 COMPLETE at **28 typed / 30 refused**, and that partition is now a **GATE, not
 prose**: `untypedByDesign` (typed_wire_test.go) is the closed list of the 30
 refusals with the wire fact behind each, and `TestEveryRouteIsTypedOrNamed`

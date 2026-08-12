@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -227,4 +228,19 @@ func mirrorPushAuthHeader(host string) string {
 func githubOwnerOf(remote string) string {
 	owner, _ := githubRepoOf(remote)
 	return owner
+}
+
+// githubRepoOf reads the account and repository out of a GitHub remote —
+// https://github.com/<owner>/<name>[.git]. Both empty when the URL names
+// neither, which the caller reads as "this target is not GitHub".
+func githubRepoOf(raw string) (owner, name string) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || !strings.EqualFold(u.Hostname(), "github.com") {
+		return "", ""
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) < 2 {
+		return "", ""
+	}
+	return parts[0], strings.TrimSuffix(parts[1], ".git")
 }

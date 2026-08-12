@@ -18,7 +18,6 @@ package coding
 
 import (
 	"context"
-	"encoding/base64"
 	"slices"
 	"strings"
 	"sync"
@@ -28,22 +27,36 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// theGrant is the push credential a run holds. Spelled once so every assertion
-// about where it may and may not appear is asking about the same string.
-const theGrant = "hgg_LIVEGRANTVALUE"
+// theKey is the push credential a run holds: an OpenSSH private key, minted per
+// run and registered on ONE repository as a deploy key. Spelled once, and
+// spelled MULTI-LINE on purpose — every assertion about where it may and may not
+// appear has to ask about a value that a log can re-wrap, re-indent or print one
+// line at a time.
+const theKey = `-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gt
+ZWQyNTUxOQAAACBSRUFMTE9PS0lOR1NFQ1JFVEtFWU1BVEVSSUFMMTIzNDU2Nzg5MA
+-----END OPENSSH PRIVATE KEY-----`
+
+// theHostKey is the forge's PUBLIC host key, as cloud learned it. It is not a
+// secret — it is the pin — so unlike theKey it is expected on argv.
+const theHostKey = "git.test ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHOSTKEYVALUEHERE"
 
 const (
-	cleanURL = "https://git.test/v1/git/acme/api.git"
-	theSHA   = "1111111111111111111111111111111111111111"
-	newSHA   = "2222222222222222222222222222222222222222"
+	sshRemote = "git@git.test:acme/api.git"
+	theSHA    = "1111111111111111111111111111111111111111"
+	newSHA    = "2222222222222222222222222222222222222222"
 )
 
 // pod is a fake sandbox that records every command and answers whatever the test
 // scripts. It records the argv VERBATIM, because the questions worth asking of
 // this file are all questions about arguments.
 type pod struct {
-	mu     sync.Mutex
-	ran    [][]string
+	mu  sync.Mutex
+	ran [][]string
+	// fed is what each command was given on STDIN, index-aligned with ran. The
+	// run's key travels this way and nowhere else, so a test that only watched
+	// argv could not tell "the secret is confined" from "the secret is absent".
+	fed    []string
 	answer func(argv []string) plane.Ran
 	// leased is every lease the run asked for, verbatim. A lease is a REQUEST for
 	// resources — a class, a ttl, and whether a disk is wanted — and the only place
@@ -51,10 +64,11 @@ type pod struct {
 	leased []plane.LeaseIn
 }
 
-func (p *pod) exec(argv []string) plane.Ran {
+func (p *pod) exec(argv []string, stdin string) plane.Ran {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ran = append(p.ran, append([]string(nil), argv...))
+	p.fed = append(p.fed, stdin)
 	if p.answer == nil {
 		return plane.Ran{}
 	}
@@ -103,7 +117,7 @@ func (p *pod) gitVerb(verb string) bool {
 // production one with a production transport.
 func servePod(t *testing.T, p *pod) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", socketDir(t))
 
 	sandboxes := zip.New(zip.Config{AppName: "sandboxes", DisableStartupMessage: true})
 	zip.Post[plane.LeaseIn, plane.Leased](sandboxes, "/sandbox/lease",
@@ -115,7 +129,7 @@ func servePod(t *testing.T, p *pod) {
 		}, zip.WithOperationID(plane.SandboxLease))
 	zip.Post[plane.RunIn, plane.Ran](sandboxes, "/sandbox/run",
 		func(_ context.Context, in *plane.RunIn) (*plane.Ran, error) {
-			r := p.exec(in.Argv)
+			r := p.exec(in.Argv, in.Stdin)
 			return &r, nil
 		}, zip.WithOperationID(plane.SandboxRun))
 	zip.Post[plane.EndIn, struct{}](sandboxes, "/sandbox/end",
@@ -142,9 +156,9 @@ func servePod(t *testing.T, p *pod) {
 // for the session, and the grant that may write exactly that one ref.
 func aRun() RunRequest {
 	return RunRequest{
-		CloneURL: cleanURL, BaseBranch: "main", Branch: "agent/abc123def456",
+		Remote: sshRemote, BaseBranch: "main", Branch: "agent/abc123def456",
 		Prompt: "fix the flake", SessionID: "sess_abc123def456",
-		RunTimeoutSeconds: 60, CredUser: "x-access-token", CredToken: theGrant,
+		RunTimeoutSeconds: 60, Key: theKey, Known: theHostKey,
 	}
 }
 
@@ -321,13 +335,14 @@ func TestSandboxRun_AFailedToolWritesNoRef(t *testing.T) {
 	}
 }
 
-// THE GRANT NEVER TOUCHES DISK AND IS NEVER SAID OUT LOUD.
+// THE KEY ARRIVES ON STDIN AND IS NEVER AN ARGUMENT.
 //
-// It may appear in exactly one place — the git option that applies it to a single
-// invocation — and nowhere else: not as a URL operand (git writes those into
-// .git/config), not in a config write, and not in a step, a log line or the tail
-// a run hands back for a person to read.
-func TestSandboxRun_TheGrantStaysOffDiskAndOutOfWhatIsSaid(t *testing.T) {
+// Argv is public — every process in the pod can read another's command line out
+// of /proc, and a run echoes its own argv into its session narration — and the
+// process this pod is about to run executes a language model's output. So the
+// one command that carries the key must carry it on stdin, and no command may
+// carry it at all.
+func TestSandboxRun_TheKeyTravelsOnStdinAndNeverOnArgv(t *testing.T) {
 	p := &pod{answer: func(argv []string) plane.Ran {
 		if slices.Contains(argv, "rev-parse") {
 			return plane.Ran{Stdout: theSHA + "\n"}
@@ -342,70 +357,173 @@ func TestSandboxRun_TheGrantStaysOffDiskAndOutOfWhatIsSaid(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	// The grant travels as base64, which is how git presents basic auth. Both
-	// spellings are asked about: the literal must appear NOWHERE, and the one
-	// that actually travels must appear only where it is confined.
-	basic := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + theGrant))
-	wantOpt := "http." + cleanURL + ".extraHeader=Authorization: Basic " + basic
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	for _, argv := range p.ran {
+	// Every secret-bearing line of the key, not just the whole blob: a value that
+	// only matches when un-rewrapped is a value a re-indenting log would leak.
+	var secret []string
+	for _, line := range strings.Split(theKey, "\n") {
+		if line = strings.TrimSpace(line); len(line) >= 16 && !strings.HasPrefix(line, "-----") {
+			secret = append(secret, line)
+		}
+	}
+
+	fedTheKey := 0
+	for n, argv := range p.ran {
 		for i, a := range argv {
-			if strings.Contains(a, theGrant) {
-				t.Fatalf("the grant appears verbatim in argv[%d]: %q", i, strings.Join(argv, " "))
-			}
-			if !strings.Contains(a, basic) {
-				continue
-			}
-			// Exactly one shape: an option applied to THIS invocation, scoped to the
-			// ONE url it is for. `git -c` before the subcommand is not written into
-			// the new repository's config, so the checkout the model then edits holds
-			// no credential; the url scope is what stops git attaching it to a
-			// redirect or another host the repository's own contents point at.
-			if i == 0 || argv[i-1] != "-c" || a != wantOpt {
-				t.Fatalf("the credential is in argv[%d] as %q, want the confined option %q", i, a, wantOpt)
+			for _, sec := range secret {
+				if strings.Contains(a, sec) {
+					t.Fatalf("the key is in argv[%d] of %q", i, strings.Join(argv, " "))
+				}
 			}
 		}
-		// Nothing may persist it. A `git config` write, a credential helper with a
-		// store behind it, or a redirect into a file each survive the command.
+		if strings.Contains(p.fed[n], secret[0]) {
+			fedTheKey++
+			// It is installed by ONE command, and that command writes it with a
+			// umask ssh will accept — ssh refuses a key others can read, so the mode
+			// is the difference between a run that clones and one that does not.
+			line := strings.Join(argv, " ")
+			if !strings.Contains(line, "umask 077") {
+				t.Fatalf("the key is written without a private umask: %q", line)
+			}
+			if !strings.Contains(line, keyPath) {
+				t.Fatalf("the key is not written to the one path git is told to read: %q", line)
+			}
+		}
+	}
+	if fedTheKey != 1 {
+		t.Fatalf("the key was fed to %d commands, want exactly 1", fedTheKey)
+	}
+
+	// IT IS NOT IN THE CHECKOUT. The checkout is what the model edits and what
+	// `git add -A` stages, so a key kept there is one commit away from being
+	// pushed to the branch this very grant opens.
+	if !strings.HasPrefix(keyPath, "/tmp/") {
+		t.Fatalf("the key lives at %q, inside the tree the run stages and pushes", keyPath)
+	}
+
+	// Nothing a person reads carries it.
+	for _, sec := range secret {
+		for _, said := range said {
+			if strings.Contains(said, sec) {
+				t.Fatalf("the key was narrated: %q", said)
+			}
+		}
+		if strings.Contains(res.LogTail, sec) {
+			t.Fatalf("the key came back in the log tail: %q", res.LogTail)
+		}
+	}
+}
+
+// THE HOST IS PINNED TO WHAT CLOUD SAW, and the credential is confined to one
+// invocation.
+//
+// The sandbox's network is the one network in this system carrying untrusted
+// output, so a run that accepted whatever host key answered would hand a write
+// credential — and its trust in the code it checks out — to anyone standing in
+// front of the forge. `accept-new` is trust-on-first-use per run, which for a
+// pod that lives once is no pin at all.
+func TestSandboxRun_PinsTheForgeHostAndConfinesTheCredential(t *testing.T) {
+	// The tip MOVES, so the run reaches its push: clone and push are the two
+	// commands that carry the key, and a run that stopped at "no changes" would
+	// let this test pass having checked only half of them.
+	tip := theSHA
+	p := &pod{}
+	p.answer = func(argv []string) plane.Ran {
+		switch {
+		case slices.Contains(argv, "commit"):
+			tip = newSHA
+			return plane.Ran{}
+		case slices.Contains(argv, "rev-parse"):
+			return plane.Ran{Stdout: tip + "\n"}
+		}
+		return plane.Ran{}
+	}
+	servePod(t, p)
+
+	if _, err := (sandboxRunner{}).Run(context.Background(), "acme", "u_1", aRun(), nil); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	saw := 0
+	for _, argv := range p.ran {
+		if len(argv) == 0 || argv[0] != "git" {
+			continue
+		}
+		for i, a := range argv {
+			if !strings.HasPrefix(a, "core.sshCommand=") {
+				continue
+			}
+			saw++
+			// `git -c` BEFORE the subcommand is not written into the new
+			// repository's config, unlike `git clone -c` — so the checkout the model
+			// then edits names no identity file.
+			if i == 0 || argv[i-1] != "-c" {
+				t.Fatalf("the ssh command is not a per-invocation option: %q", strings.Join(argv, " "))
+			}
+			for _, want := range []string{
+				"-i " + keyPath,
+				"-o IdentitiesOnly=yes",        // no agent key, no ~/.ssh/id_* first
+				"-o StrictHostKeyChecking=yes", // never TOFU
+				"-o UserKnownHostsFile=" + knownPath,
+			} {
+				if !strings.Contains(a, want) {
+					t.Fatalf("the ssh command is missing %q: %q", want, a)
+				}
+			}
+			for _, forbidden := range []string{"StrictHostKeyChecking=no", "StrictHostKeyChecking=accept-new", "/dev/null"} {
+				if strings.Contains(a, forbidden) {
+					t.Fatalf("the ssh command disables host verification with %q: %q", forbidden, a)
+				}
+			}
+		}
+		// Nothing may persist a credential past the command that used it.
 		line := strings.Join(argv, " ")
-		for _, persists := range []string{"git config", "credential.helper=store", "credential.helper=cache", ".git/config"} {
+		for _, persists := range []string{"git config", "credential.helper", ".git/config"} {
 			if strings.Contains(line, persists) {
 				t.Fatalf("a command persists a credential: %q", line)
 			}
 		}
 	}
-
-	// The URL OPERAND — what git records as the remote — is the clean one.
-	for _, argv := range p.ran {
-		for _, a := range argv {
-			if strings.HasPrefix(a, "https://") && strings.Contains(a, "@") {
-				t.Fatalf("a credential rode a URL operand: %q", a)
-			}
-		}
+	if saw < 2 {
+		t.Fatalf("only %d git commands carried the run's key; clone and push both must", saw)
 	}
 
-	// Nothing a person reads carries it, in either spelling.
-	for _, s := range said {
-		if strings.Contains(s, theGrant) || strings.Contains(s, basic) {
-			t.Fatalf("the grant was narrated: %q", s)
-		}
-	}
-	if strings.Contains(res.LogTail, theGrant) || strings.Contains(res.LogTail, basic) {
-		t.Fatalf("the grant came back in the log tail: %q", res.LogTail)
+	// The known_hosts the run pins to is the line CLOUD learned, written by the
+	// same command that installs the key.
+	if _, ok := p.did(theHostKey); !ok {
+		t.Fatalf("the forge host key cloud learned never reached the pod:\n%s", strings.Join(p.lines(), "\n"))
 	}
 }
 
-// A command's output is scrubbed of BOTH spellings on the way out, so a git that
-// ever echoed what it was given cannot put a live credential in a session event,
-// a span or a Slack thread.
-func TestSandboxRun_AnEchoedCredentialIsScrubbedOnTheWayOut(t *testing.T) {
-	basic := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + theGrant))
+// A run with NO host key to pin is refused before anything is leased. Falling
+// back to "trust whatever answers" is the one thing this must never do.
+func TestSandboxRun_RefusesToCloneUnpinned(t *testing.T) {
+	p := &pod{}
+	servePod(t, p)
+
+	req := aRun()
+	req.Known = ""
+	if _, err := (sandboxRunner{}).Run(context.Background(), "acme", "u_1", req, nil); err == nil {
+		t.Fatal("a run with no host key to pin must be refused, not run unpinned")
+	}
+	if p.gitVerb("clone") {
+		t.Fatalf("an unpinned run still cloned:\n%s", strings.Join(p.lines(), "\n"))
+	}
+}
+
+// A command's output is scrubbed on the way out — line by line as well as whole
+// — so a git that ever echoed its key cannot put live material in a session
+// event, a span or a Slack thread.
+func TestSandboxRun_AnEchoedKeyIsScrubbedOnTheWayOut(t *testing.T) {
+	body := strings.Split(theKey, "\n")[1] // one secret line, as a log would print it
 	p := &pod{answer: func(argv []string) plane.Ran {
 		if slices.Contains(argv, "rev-parse") {
 			return plane.Ran{Stdout: theSHA + "\n"}
 		}
 		if slices.Contains(argv, "dev") {
-			return plane.Ran{Stdout: "used " + theGrant + " and header " + basic + "\n"}
+			return plane.Ran{Stdout: "read key: " + body + "\n"}
 		}
 		return plane.Ran{}
 	}}
@@ -415,8 +533,8 @@ func TestSandboxRun_AnEchoedCredentialIsScrubbedOnTheWayOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if strings.Contains(res.LogTail, theGrant) || strings.Contains(res.LogTail, basic) {
-		t.Fatalf("an echoed credential survived: %q", res.LogTail)
+	if strings.Contains(res.LogTail, body) {
+		t.Fatalf("an echoed key line survived: %q", res.LogTail)
 	}
 	if !strings.Contains(res.LogTail, "[redacted]") {
 		t.Fatalf("nothing was scrubbed: %q", res.LogTail)

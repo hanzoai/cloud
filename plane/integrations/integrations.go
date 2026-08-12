@@ -30,8 +30,24 @@ const App = "integrations"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.ChatIdentity,
+	plane.ChatSend,
 	plane.IntegrationsConnection,
 	plane.IntegrationsSlackSend,
+}
+
+// ChatIdentity resolve the Hanzo account a chat user has linked.
+//
+// Calls plane.ChatIdentity on integrations over the peer plane.
+func ChatIdentity(ctx context.Context, in *plane.ChatIdentityIn) (*plane.ChatIdentityOut, error) {
+	return plane.Ask[plane.ChatIdentityIn, plane.ChatIdentityOut](ctx, App, plane.ChatIdentity, in)
+}
+
+// ChatSend post one message back to a chat platform as the org.
+//
+// Calls plane.ChatSend on integrations over the peer plane.
+func ChatSend(ctx context.Context, in *plane.ChatSendIn) (*plane.ChatSendOut, error) {
+	return plane.Ask[plane.ChatSendIn, plane.ChatSendOut](ctx, App, plane.ChatSend, in)
 }
 
 // IntegrationsConnection whether the caller's org has connected a provider.
