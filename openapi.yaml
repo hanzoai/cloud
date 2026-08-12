@@ -1290,6 +1290,22 @@ components:
         updatedAt:
           type: integer
       type: object
+    Call:
+      properties:
+        agent:
+          type: string
+        from:
+          type: string
+        id:
+          type: string
+        org:
+          type: string
+        status:
+          description: queued | ringing | answered | completed | failed
+          type: string
+        to:
+          type: string
+      type: object
     Campaign:
       properties:
         budget:
@@ -2790,37 +2806,6 @@ components:
             type: string
           type: array
       type: object
-    DeviceSignals:
-      properties:
-        arch:
-          type: string
-        cpuid:
-          description: CPUID is a CPU/board identifier string.
-          type: string
-        disk_serial:
-          description: DiskSerial of the boot/root volume.
-          type: string
-        hostname:
-          description: Hostname is a weak signal, used only as a tiebreaker.
-          type: string
-        install_id:
-          description: InstallID is a per-install random the agent persists locally
-            on first run.
-          type: string
-        machine_id:
-          description: |-
-            MachineID is a stable per-host id (e.g. /etc/machine-id, IOPlatformUUID,
-            MachineGuid). Strongest single signal where present.
-          type: string
-        macs:
-          description: MAC addresses of stable interfaces (order-insensitive; we sort).
-          items:
-            type: string
-          type: array
-        os:
-          description: OS / Arch coarse platform tags.
-          type: string
-      type: object
     Diagnostic:
       properties:
         code:
@@ -3565,29 +3550,6 @@ components:
         title:
           type: string
       type: object
-    FingerprintRequest:
-      properties:
-        signals:
-          $ref: '#/components/schemas/DeviceSignals'
-          description: |-
-            Signals is the host material the client agent collected. Which fields
-            actually participate in the binding is deliberately unspecified — send
-            everything available and let the server decide.
-      type: object
-    FingerprintResponse:
-      properties:
-        fingerprint:
-          description: |-
-            Fingerprint is the OPAQUE binding value to pass to POST /v1/licensing/issue.
-            It is one-way: the raw signals cannot be recovered from it and are never
-            echoed back.
-          type: string
-        version:
-          description: |-
-            Version is the binding algorithm revision, so a stored fingerprint stays
-            recognizable across a recipe rotation.
-          type: string
-      type: object
     Flow:
       properties:
         created:
@@ -4233,24 +4195,6 @@ components:
             degraded.
           type: string
       type: object
-    HealthView:
-      properties:
-        env:
-          description: Env is the deployment environment ("dev" | "staging" | "prod").
-          type: string
-        service:
-          description: Service is always "licensing".
-          type: string
-        signer:
-          description: |-
-            Signer names the KMS provider signing licenses here. "local" means a
-            development key: tokens it mints are not production credentials.
-          type: string
-        status:
-          description: Status is "ok" whenever the process is up — this is not a dependency
-            probe.
-          type: string
-      type: object
     Holding:
       properties:
         costCents:
@@ -4469,96 +4413,6 @@ components:
           type: string
         total:
           type: integer
-      type: object
-    IssueRequest:
-      properties:
-        fingerprint:
-          description: |-
-            Fingerprint is a previously-registered device binding value, as returned by
-            POST /v1/licensing/fingerprint. Leave it empty and pass Signals to bind the
-            device at issue time instead.
-          type: string
-        holder:
-          description: |-
-            Holder overrides who the token is issued to; defaults to the caller's own
-            validated subject. It NAMES the token's bearer and grants nothing on its
-            own — the entitlement checked is always the caller's org's.
-          type: string
-        product:
-          description: Product is the licensed commerce product the caller wants a
-            token for.
-          type: string
-        release:
-          description: |-
-            Release scopes the token to one signed binary release, recorded as a
-            "release:<id>" feature so a single bad release can be revoked on its own.
-          type: string
-        signals:
-          $ref: '#/components/schemas/DeviceSignals'
-          description: |-
-            Signals binds the device at issue time, as an alternative to a
-            pre-registered fingerprint. The raw signals are never stored or echoed —
-            they are folded immediately into the one-way binding value.
-        ttl_seconds:
-          description: |-
-            TTLSeconds requests a token lifetime in seconds. It is clamped to the
-            deployment maximum AND to the entitlement's own expiry — a token never
-            outlives the subscription that paid for it.
-          type: integer
-      required:
-      - product
-      type: object
-    IssueResponse:
-      properties:
-        app_id:
-          description: |-
-            AppID is the brand this token runs under ("hanzo" | "lux" | "zoo"). The
-            engine refuses a token whose app_id is not the one it was built for.
-          type: string
-        exp:
-          description: Exp is the token's expiry, Unix seconds.
-          type: integer
-        features:
-          description: |-
-            Features are the capability grants copied verbatim from the plan the org
-            bought. The engine enforces exactly these.
-          items:
-            type: string
-          type: array
-        fingerprint_bound:
-          description: |-
-            Bound reports whether a device fingerprint was folded into the token. An
-            unbound token runs on any machine; a bound one runs only on the machine it
-            was bound to.
-          type: boolean
-        holder:
-          description: Holder is who the token was issued to.
-          type: string
-        nonce:
-          description: |-
-            Nonce uniquely identifies this token, and is what a per-token revocation
-            names.
-          type: string
-        token:
-          description: |-
-            Token is the signed license, `base64url(payload).base64url(ed25519_sig)`.
-            It is the credential the engine runs on — treat it as a secret.
-          type: string
-      type: object
-    JWK:
-      properties:
-        crv:
-          description: Crv is always "Ed25519".
-          type: string
-        kty:
-          description: Kty is always "OKP".
-          type: string
-        use:
-          description: Use is always "sig".
-          type: string
-        x:
-          description: X is the public key, base64url (the JWK convention).
-          type: string
       type: object
     JournalEntry:
       properties:
@@ -5822,6 +5676,29 @@ components:
         size:
           type: string
       type: object
+    Number:
+      properties:
+        capable:
+          description: voice | sms | mms | fax
+          items:
+            type: string
+          type: array
+        country:
+          type: string
+        currency:
+          type: string
+        e164:
+          type: string
+        id:
+          type: string
+        monthly:
+          description: minor units, as the carrier quoted it
+          type: integer
+        org:
+          type: string
+        type:
+          type: string
+      type: object
     Offer:
       properties:
         available:
@@ -6742,37 +6619,6 @@ components:
         status:
           type: string
       type: object
-    PubkeyView:
-      properties:
-        alg:
-          description: Alg is always "Ed25519".
-          type: string
-        keys:
-          description: |-
-            Keys is the same key as a single-entry JWKS (OKP/Ed25519), for JWKS-shaped
-            consumers.
-          items:
-            $ref: '#/components/schemas/JWK'
-          type: array
-        provider:
-          description: |-
-            Provider names the KMS holding the private half ("local" | "aws" | ...).
-            "local" means a development key — never trust it in production.
-          type: string
-        public_key:
-          description: |-
-            PublicKey is the 32-byte Ed25519 public key, standard base64. This is the
-            form the engine embeds for offline verification.
-          type: string
-        schema:
-          description: Schema is the license payload schema version this key signs.
-          type: integer
-        token_format:
-          description: |-
-            TokenFormat states the wire layout so an implementer can verify a token
-            without this service's source.
-          type: string
-      type: object
     PublishInput:
       properties:
         doctype:
@@ -7510,83 +7356,6 @@ components:
             the key the register sorts on (newest activity first).
           type: integer
       type: object
-    Release:
-      properties:
-        app_id:
-          description: AppID scopes the release to an app build ("hanzo" | "lux" |
-            "zoo").
-          type: string
-        artifact_ref:
-          description: ArtifactRef is where the binary lives (object-store key / OCI
-            ref / path).
-          type: string
-        cosign_cert:
-          description: |-
-            CosignCert is the cosign/Fulcio cert (keyless) or public key ref used to
-            verify CosignSignature. The download response hands this to the client.
-          type: string
-        cosign_signature:
-          description: CosignSignature is the base64 cosign signature over the artifact
-            digest.
-          type: string
-        created_at:
-          type: integer
-        id:
-          description: |-
-            ID is the release identifier, e.g. "engine-rocm-0.4.2-linux-amd64". The
-            accelerator belongs here — one product is built several ways — and never
-            in Product below.
-          type: string
-        min_features:
-          description: MinFeatures, when set, are features the license must include
-            to download.
-          items:
-            type: string
-          type: array
-        platform:
-          description: Platform is "<os>/<arch>", e.g. "linux/amd64".
-          type: string
-        product:
-          description: |-
-            Product is the licensed product this artifact belongs to (commerce SKU):
-            "engine" for every one of those builds.
-          type: string
-        sha256:
-          description: SHA256 is the hex digest of the artifact (integrity + cosign
-            subject).
-          type: string
-        version:
-          description: Version is the semantic version of the binary.
-          type: string
-        yanked:
-          description: |-
-            Yanked marks a pulled release (download refused; tokens may be revoked
-            release-scoped too).
-          type: boolean
-      type: object
-    ReleaseAsset:
-      properties:
-        cosign_cert:
-          type: string
-        cosign_signature:
-          type: string
-        download_url:
-          description: |-
-            DownloadURL is a short-lived signed URL to the artifact bytes. The
-            scaffold returns the ArtifactRef as-is; production issues a signed URL.
-          type: string
-        release:
-          $ref: '#/components/schemas/Release'
-      type: object
-    ReleaseList:
-      properties:
-        releases:
-          description: Releases is the published releases, always an array and never
-            null.
-          items:
-            $ref: '#/components/schemas/Release'
-          type: array
-      type: object
     ReleaseState:
       properties:
         endedAt:
@@ -7934,51 +7703,6 @@ components:
             Part of the entry's identity: the two tiers keep separate renderings.
           type: string
       type: object
-    RevocationEntry:
-      properties:
-        at:
-          type: integer
-        by:
-          type: string
-        reason:
-          type: string
-        scope:
-          type: string
-        value:
-          type: string
-      type: object
-    RevokeRequest:
-      properties:
-        reason:
-          description: |-
-            Reason is the operator's note, echoed back by verify so a support agent can
-            explain the refusal.
-          type: string
-        scope:
-          description: |-
-            Scope is what the revocation matches on: "nonce" kills one token,
-            "holder" every token issued to one bearer, "fingerprint" every token bound
-            to one device, and "release" every token scoped to one binary release.
-          type: string
-        value:
-          description: Value is the concrete nonce, holder, fingerprint or release
-            id to revoke.
-          type: string
-      required:
-      - scope
-      - value
-      type: object
-    RevokeResponse:
-      properties:
-        entry:
-          $ref: '#/components/schemas/RevocationEntry'
-          description: Entry is the stored revocation, including who recorded it and
-            when.
-        revoked:
-          description: Revoked is always true — a failure is an error status, not
-            a false here.
-          type: boolean
-      type: object
     RoleAssignment:
       properties:
         role:
@@ -8221,6 +7945,22 @@ components:
             TimeoutSec bounds this ONE command, so a wedged program holds the caller for
             its own timeout rather than for the whole lease.
           type: integer
+      type: object
+    SMS:
+      properties:
+        from:
+          type: string
+        id:
+          type: string
+        org:
+          type: string
+        status:
+          description: queued | sent | delivered | failed
+          type: string
+        text:
+          type: string
+        to:
+          type: string
       type: object
     SaaSCategory:
       properties:
@@ -10450,55 +10190,6 @@ components:
           type: string
         status:
           type: string
-      type: object
-    VerifyRequest:
-      properties:
-        app:
-          description: |-
-            App overrides the app_id the token is expected to carry. Leave it empty and
-            the token's own app_id is used — an online verify is informational, and it
-            is the ENGINE that enforces the app at boot.
-          type: string
-        token:
-          description: Token is the license token to check.
-          type: string
-      required:
-      - token
-      type: object
-    VerifyResponse:
-      properties:
-        app_id:
-          description: AppID is the brand the token runs under.
-          type: string
-        exp:
-          description: Exp is the token's expiry, Unix seconds.
-          type: integer
-        features:
-          description: Features are the capability grants the token carries.
-          items:
-            type: string
-          type: array
-        fingerprint_bound:
-          description: Bound reports that the token carries a device binding.
-          type: boolean
-        holder:
-          description: Holder is who the token was issued to.
-          type: string
-        nonce:
-          description: Nonce uniquely identifies the token.
-          type: string
-        reason:
-          description: Reason says why an invalid token was rejected. Empty when Valid.
-          type: string
-        revoked:
-          description: Revoked reports that the signature was good but the token has
-            been revoked.
-          type: boolean
-        valid:
-          description: |-
-            Valid is the single answer: signature, schema, expiry, app and revocation
-            all passed.
-          type: boolean
       type: object
     VersionMeta:
       properties:
@@ -14017,6 +13708,11 @@ components:
             5000; anything above 30000 is clamped to 30000.
           type: integer
       type: object
+    buyInput:
+      properties:
+        e164:
+          type: string
+      type: object
     byoGPU:
       properties:
         arch:
@@ -14090,6 +13786,29 @@ components:
           type: string
         version:
           type: string
+      type: object
+    callInput:
+      properties:
+        agent:
+          type: string
+        from:
+          type: string
+        record:
+          description: |-
+            Record is a per-call flag rather than a product. Where a recording lands and
+            how long it is kept is the org's retention policy, not this call's.
+          type: boolean
+        to:
+          type: string
+        webhook:
+          type: string
+      type: object
+    callList:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/Call'
+          type: array
       type: object
     campaignInput:
       properties:
@@ -24326,6 +24045,370 @@ components:
             this is the schedule actually in force, not one compiled in.
           type: integer
       type: object
+    licensing.DeviceSignals:
+      properties:
+        arch:
+          type: string
+        cpuid:
+          description: CPUID is a CPU/board identifier string.
+          type: string
+        disk_serial:
+          description: DiskSerial of the boot/root volume.
+          type: string
+        hostname:
+          description: Hostname is a weak signal, used only as a tiebreaker.
+          type: string
+        install_id:
+          description: InstallID is a per-install random the agent persists locally
+            on first run.
+          type: string
+        machine_id:
+          description: |-
+            MachineID is a stable per-host id (e.g. /etc/machine-id, IOPlatformUUID,
+            MachineGuid). Strongest single signal where present.
+          type: string
+        macs:
+          description: MAC addresses of stable interfaces (order-insensitive; we sort).
+          items:
+            type: string
+          type: array
+        os:
+          description: OS / Arch coarse platform tags.
+          type: string
+      type: object
+    licensing.FingerprintRequest:
+      properties:
+        signals:
+          $ref: '#/components/schemas/licensing.DeviceSignals'
+          description: |-
+            Signals is the host material the client agent collected. Which fields
+            actually participate in the binding is deliberately unspecified — send
+            everything available and let the server decide.
+      type: object
+    licensing.FingerprintResponse:
+      properties:
+        fingerprint:
+          description: |-
+            Fingerprint is the OPAQUE binding value to pass to POST /v1/licensing/issue.
+            It is one-way: the raw signals cannot be recovered from it and are never
+            echoed back.
+          type: string
+        version:
+          description: |-
+            Version is the binding algorithm revision, so a stored fingerprint stays
+            recognizable across a recipe rotation.
+          type: string
+      type: object
+    licensing.HealthView:
+      properties:
+        env:
+          description: Env is the deployment environment ("dev" | "staging" | "prod").
+          type: string
+        service:
+          description: Service is always "licensing".
+          type: string
+        signer:
+          description: |-
+            Signer names the KMS provider signing licenses here. "local" means a
+            development key: tokens it mints are not production credentials.
+          type: string
+        status:
+          description: Status is "ok" whenever the process is up — this is not a dependency
+            probe.
+          type: string
+      type: object
+    licensing.IssueRequest:
+      properties:
+        fingerprint:
+          description: |-
+            Fingerprint is a previously-registered device binding value, as returned by
+            POST /v1/licensing/fingerprint. Leave it empty and pass Signals to bind the
+            device at issue time instead.
+          type: string
+        holder:
+          description: |-
+            Holder overrides who the token is issued to; defaults to the caller's own
+            validated subject. It NAMES the token's bearer and grants nothing on its
+            own — the entitlement checked is always the caller's org's.
+          type: string
+        product:
+          description: Product is the licensed commerce product the caller wants a
+            token for.
+          type: string
+        release:
+          description: |-
+            Release scopes the token to one signed binary release, recorded as a
+            "release:<id>" feature so a single bad release can be revoked on its own.
+          type: string
+        signals:
+          $ref: '#/components/schemas/licensing.DeviceSignals'
+          description: |-
+            Signals binds the device at issue time, as an alternative to a
+            pre-registered fingerprint. The raw signals are never stored or echoed —
+            they are folded immediately into the one-way binding value.
+        ttl_seconds:
+          description: |-
+            TTLSeconds requests a token lifetime in seconds. It is clamped to the
+            deployment maximum AND to the entitlement's own expiry — a token never
+            outlives the subscription that paid for it.
+          type: integer
+      required:
+      - product
+      type: object
+    licensing.IssueResponse:
+      properties:
+        app_id:
+          description: |-
+            AppID is the brand this token runs under ("hanzo" | "lux" | "zoo"). The
+            engine refuses a token whose app_id is not the one it was built for.
+          type: string
+        exp:
+          description: Exp is the token's expiry, Unix seconds.
+          type: integer
+        features:
+          description: |-
+            Features are the capability grants copied verbatim from the plan the org
+            bought. The engine enforces exactly these.
+          items:
+            type: string
+          type: array
+        fingerprint_bound:
+          description: |-
+            Bound reports whether a device fingerprint was folded into the token. An
+            unbound token runs on any machine; a bound one runs only on the machine it
+            was bound to.
+          type: boolean
+        holder:
+          description: Holder is who the token was issued to.
+          type: string
+        nonce:
+          description: |-
+            Nonce uniquely identifies this token, and is what a per-token revocation
+            names.
+          type: string
+        token:
+          description: |-
+            Token is the signed license, `base64url(payload).base64url(ed25519_sig)`.
+            It is the credential the engine runs on — treat it as a secret.
+          type: string
+      type: object
+    licensing.JWK:
+      properties:
+        crv:
+          description: Crv is always "Ed25519".
+          type: string
+        kty:
+          description: Kty is always "OKP".
+          type: string
+        use:
+          description: Use is always "sig".
+          type: string
+        x:
+          description: X is the public key, base64url (the JWK convention).
+          type: string
+      type: object
+    licensing.PubkeyView:
+      properties:
+        alg:
+          description: Alg is always "Ed25519".
+          type: string
+        keys:
+          description: |-
+            Keys is the same key as a single-entry JWKS (OKP/Ed25519), for JWKS-shaped
+            consumers.
+          items:
+            $ref: '#/components/schemas/licensing.JWK'
+          type: array
+        provider:
+          description: |-
+            Provider names the KMS holding the private half ("local" | "aws" | ...).
+            "local" means a development key — never trust it in production.
+          type: string
+        public_key:
+          description: |-
+            PublicKey is the 32-byte Ed25519 public key, standard base64. This is the
+            form the engine embeds for offline verification.
+          type: string
+        schema:
+          description: Schema is the license payload schema version this key signs.
+          type: integer
+        token_format:
+          description: |-
+            TokenFormat states the wire layout so an implementer can verify a token
+            without this service's source.
+          type: string
+      type: object
+    licensing.Release:
+      properties:
+        app_id:
+          description: AppID scopes the release to an app build ("hanzo" | "lux" |
+            "zoo").
+          type: string
+        artifact_ref:
+          description: ArtifactRef is where the binary lives (object-store key / OCI
+            ref / path).
+          type: string
+        cosign_cert:
+          description: |-
+            CosignCert is the cosign/Fulcio cert (keyless) or public key ref used to
+            verify CosignSignature. The download response hands this to the client.
+          type: string
+        cosign_signature:
+          description: CosignSignature is the base64 cosign signature over the artifact
+            digest.
+          type: string
+        created_at:
+          type: integer
+        id:
+          description: |-
+            ID is the release identifier, e.g. "engine-rocm-0.4.2-linux-amd64". The
+            accelerator belongs here — one product is built several ways — and never
+            in Product below.
+          type: string
+        min_features:
+          description: MinFeatures, when set, are features the license must include
+            to download.
+          items:
+            type: string
+          type: array
+        platform:
+          description: Platform is "<os>/<arch>", e.g. "linux/amd64".
+          type: string
+        product:
+          description: |-
+            Product is the licensed product this artifact belongs to (commerce SKU):
+            "engine" for every one of those builds.
+          type: string
+        sha256:
+          description: SHA256 is the hex digest of the artifact (integrity + cosign
+            subject).
+          type: string
+        version:
+          description: Version is the semantic version of the binary.
+          type: string
+        yanked:
+          description: |-
+            Yanked marks a pulled release (download refused; tokens may be revoked
+            release-scoped too).
+          type: boolean
+      type: object
+    licensing.ReleaseAsset:
+      properties:
+        cosign_cert:
+          type: string
+        cosign_signature:
+          type: string
+        download_url:
+          description: |-
+            DownloadURL is a short-lived signed URL to the artifact bytes. The
+            scaffold returns the ArtifactRef as-is; production issues a signed URL.
+          type: string
+        release:
+          $ref: '#/components/schemas/licensing.Release'
+      type: object
+    licensing.ReleaseList:
+      properties:
+        releases:
+          description: Releases is the published releases, always an array and never
+            null.
+          items:
+            $ref: '#/components/schemas/licensing.Release'
+          type: array
+      type: object
+    licensing.RevocationEntry:
+      properties:
+        at:
+          type: integer
+        by:
+          type: string
+        reason:
+          type: string
+        scope:
+          type: string
+        value:
+          type: string
+      type: object
+    licensing.RevokeRequest:
+      properties:
+        reason:
+          description: |-
+            Reason is the operator's note, echoed back by verify so a support agent can
+            explain the refusal.
+          type: string
+        scope:
+          description: |-
+            Scope is what the revocation matches on: "nonce" kills one token,
+            "holder" every token issued to one bearer, "fingerprint" every token bound
+            to one device, and "release" every token scoped to one binary release.
+          type: string
+        value:
+          description: Value is the concrete nonce, holder, fingerprint or release
+            id to revoke.
+          type: string
+      required:
+      - scope
+      - value
+      type: object
+    licensing.RevokeResponse:
+      properties:
+        entry:
+          $ref: '#/components/schemas/licensing.RevocationEntry'
+          description: Entry is the stored revocation, including who recorded it and
+            when.
+        revoked:
+          description: Revoked is always true — a failure is an error status, not
+            a false here.
+          type: boolean
+      type: object
+    licensing.VerifyRequest:
+      properties:
+        app:
+          description: |-
+            App overrides the app_id the token is expected to carry. Leave it empty and
+            the token's own app_id is used — an online verify is informational, and it
+            is the ENGINE that enforces the app at boot.
+          type: string
+        token:
+          description: Token is the license token to check.
+          type: string
+      required:
+      - token
+      type: object
+    licensing.VerifyResponse:
+      properties:
+        app_id:
+          description: AppID is the brand the token runs under.
+          type: string
+        exp:
+          description: Exp is the token's expiry, Unix seconds.
+          type: integer
+        features:
+          description: Features are the capability grants the token carries.
+          items:
+            type: string
+          type: array
+        fingerprint_bound:
+          description: Bound reports that the token carries a device binding.
+          type: boolean
+        holder:
+          description: Holder is who the token was issued to.
+          type: string
+        nonce:
+          description: Nonce uniquely identifies the token.
+          type: string
+        reason:
+          description: Reason says why an invalid token was rejected. Empty when Valid.
+          type: string
+        revoked:
+          description: Revoked reports that the signature was good but the token has
+            been revoked.
+          type: boolean
+        valid:
+          description: |-
+            Valid is the single answer: signature, schema, expiry, app and revocation
+            all passed.
+          type: boolean
+      type: object
     limitsBlock:
       properties:
         apiRateLimit:
@@ -24694,6 +24777,26 @@ components:
           description: 'Status is "active": a listed service is a configured, dialable
             mesh entry.'
           type: string
+      type: object
+    messageInput:
+      properties:
+        from:
+          type: string
+        media:
+          items:
+            type: string
+          type: array
+        text:
+          type: string
+        to:
+          type: string
+      type: object
+    messageList:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/SMS'
+          type: array
       type: object
     messagePage:
       properties:
@@ -25166,6 +25269,9 @@ components:
           description: Stream is the stream name, from the path.
           type: string
       type: object
+    noInput:
+      properties: {}
+      type: object
     nodeList:
       properties:
         nodes:
@@ -25305,6 +25411,13 @@ components:
             each, and the response shape follows the count (see the items field).
           items:
             type: string
+          type: array
+      type: object
+    numberList:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/Number'
           type: array
       type: object
     o11y.AWSAccountConfig:
@@ -45156,6 +45269,15 @@ components:
           type: string
       required:
       - benchmarks
+      type: object
+    summary:
+      properties:
+        calls:
+          type: integer
+        messages:
+          type: integer
+        numbers:
+          type: integer
       type: object
     summaryResp:
       properties:
@@ -87596,6 +87718,11 @@ paths:
         required: true
         schema:
           type: string
+      - in: header
+        name: X-License-Token
+        required: false
+        schema:
+          type: string
       - in: query
         name: token
         required: false
@@ -87606,7 +87733,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReleaseAsset'
+                $ref: '#/components/schemas/licensing.ReleaseAsset'
           description: ok
       summary: Download resolves a release to its artifact, gated on a valid license.
       tags:
@@ -87635,14 +87762,14 @@ paths:
                 machine_id: …
                 os: linux
             schema:
-              $ref: '#/components/schemas/FingerprintRequest'
+              $ref: '#/components/schemas/licensing.FingerprintRequest'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FingerprintResponse'
+                $ref: '#/components/schemas/licensing.FingerprintResponse'
           description: ok
       summary: Fingerprint turns raw device signals into the opaque value that binds
         a license to one machine.
@@ -87665,7 +87792,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthView'
+                $ref: '#/components/schemas/licensing.HealthView'
           description: ok
       summary: Health reports which signer this deployment mints with, and in which
         env.
@@ -87697,14 +87824,14 @@ paths:
                 machine_id: …
                 os: linux
             schema:
-              $ref: '#/components/schemas/IssueRequest'
+              $ref: '#/components/schemas/licensing.IssueRequest'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IssueResponse'
+                $ref: '#/components/schemas/licensing.IssueResponse'
           description: ok
       summary: Issue mints a signed license token for a product the caller's org already
         pays for.
@@ -87729,7 +87856,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PubkeyView'
+                $ref: '#/components/schemas/licensing.PubkeyView'
           description: ok
       summary: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey
         and /jwks.
@@ -87754,7 +87881,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PubkeyView'
+                $ref: '#/components/schemas/licensing.PubkeyView'
           description: ok
       summary: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey
         and /jwks.
@@ -87776,7 +87903,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReleaseList'
+                $ref: '#/components/schemas/licensing.ReleaseList'
           description: ok
       summary: Lists the signed binary releases this deployment can serve.
       tags:
@@ -87802,14 +87929,14 @@ paths:
               product: engine
               version: 1.4.0
             schema:
-              $ref: '#/components/schemas/Release'
+              $ref: '#/components/schemas/licensing.Release'
         required: true
       responses:
         "201":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Release'
+                $ref: '#/components/schemas/licensing.Release'
           description: created
       summary: Publishes a signed binary release, answering 201 Created.
       tags:
@@ -87835,7 +87962,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Release'
+                $ref: '#/components/schemas/licensing.Release'
           description: ok
       summary: 'Reads one release''s metadata: its product, version, platform and
         the cosign material a client verifies the binary against.'
@@ -87865,14 +87992,14 @@ paths:
               scope: nonce
               value: 9f2c…
             schema:
-              $ref: '#/components/schemas/RevokeRequest'
+              $ref: '#/components/schemas/licensing.RevokeRequest'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RevokeResponse'
+                $ref: '#/components/schemas/licensing.RevokeResponse'
           description: ok
       summary: Revoke turns off tokens that have already been issued.
       tags:
@@ -87898,14 +88025,14 @@ paths:
             example:
               token: eyJ2Ijox….Ab3…
             schema:
-              $ref: '#/components/schemas/VerifyRequest'
+              $ref: '#/components/schemas/licensing.VerifyRequest'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VerifyResponse'
+                $ref: '#/components/schemas/licensing.VerifyResponse'
           description: ok
       summary: 'Verify checks a license token online: signature, schema, expiry, app_id
         and the revocation list.'
@@ -113432,6 +113559,229 @@ paths:
       tags:
       - team
       x-app: team
+  /v1/tel/calls:
+    get:
+      description: |-
+        Returns this org's call history, newest first as the store gives it.
+        Org-scoped like every read here.
+      operationId: get_v1_tel_calls
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/callList'
+          description: ok
+      summary: Returns this org's call history, newest first as the store gives it.
+      tags:
+      - tel
+      x-app: tel
+    post:
+      description: |-
+        Dials. An `agent` names a Hanzo assistant to answer it; the call is
+        refused up front when no assistant plane is configured, because a call that
+        connects to silence has already cost the person who answered it.
+      operationId: post_v1_tel_calls
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/callInput'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Call'
+          description: created
+      summary: Dials.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/calls/{id}:
+    delete:
+      description: |-
+        Ends a live call. The holding is checked before the carrier is asked, so
+        a call belonging to another org answers 404 rather than being torn down: the
+        carrier knows nothing about tenancy and would obey either way.
+      operationId: delete_v1_tel_calls_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/noInput'
+          description: ok
+      summary: Ends a live call.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/messages:
+    get:
+      description: Returns this org's message history. Org-scoped like every read
+        here.
+      operationId: get_v1_tel_messages
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/messageList'
+          description: ok
+      summary: Returns this org's message history.
+      tags:
+      - tel
+      x-app: tel
+    post:
+      description: |-
+        Sends one message. `from` must be a number this org holds -- the carrier
+        will send from any number it routes, so without that check one tenant could
+        originate traffic on another's number, and the bill and the reputation would
+        follow the number rather than the sender.
+      operationId: post_v1_tel_messages
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/messageInput'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMS'
+          description: created
+      summary: Sends one message.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/numbers:
+    get:
+      description: |-
+        Returns the numbers this org holds. Scoped to the caller's org, so a
+        number bought by one tenant is invisible to every other.
+      operationId: get_v1_tel_numbers
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/numberList'
+          description: ok
+      summary: Returns the numbers this org holds.
+      tags:
+      - tel
+      x-app: tel
+    post:
+      description: |-
+        Provisions with the carrier FIRST and records second. The other order
+        records a holding that may not exist, and a number the platform believes it owns
+        but cannot use is worse than one it failed to buy.
+      operationId: post_v1_tel_numbers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/buyInput'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Number'
+          description: created
+      summary: Provisions with the carrier FIRST and records second.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/numbers/{id}:
+    delete:
+      description: |-
+        Checks the holding is THIS org's before it reaches the carrier.
+        Without that read, an id belonging to another tenant would be released by
+        whoever guessed it.
+      operationId: delete_v1_tel_numbers_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/noInput'
+          description: ok
+      summary: Checks the holding is THIS org's before it reaches the carrier.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/numbers/available:
+    get:
+      description: |-
+        Asks the carrier what is available to buy. Nothing is recorded —
+        a search is not a holding, and treating it as one is how inventory leaks.
+      operationId: get_v1_tel_numbers_available
+      parameters:
+      - in: query
+        name: Country
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: Area
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: Type
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: Limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/numberList'
+          description: ok
+      summary: Asks the carrier what is available to buy.
+      tags:
+      - tel
+      x-app: tel
+  /v1/tel/summary:
+    get:
+      description: |-
+        Counts what this org holds and has used -- numbers, calls, messages. The
+        one read the dashboard makes, so it is three counts rather than three lists.
+      operationId: get_v1_tel_summary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/summary'
+          description: ok
+      summary: Counts what this org holds and has used -- numbers, calls, messages.
+      tags:
+      - tel
+      x-app: tel
   /v1/templates:
     get:
       description: |-
@@ -116797,6 +117147,9 @@ tags:
 - description: 'Package team is your org''s shared workspace: documents edited together,
     files, seats, and agents as teammates.'
   name: team
+- description: 'Package tel is the telecommunications surface: phone numbers, calls
+    and messages, on whatever carrier the deployment is configured for.'
+  name: tel
 - description: Package templates is a gallery of starter kits you can deploy as they
     come.
   name: templates
