@@ -66,6 +66,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -129,10 +130,32 @@ func (c *Client) Grant(ctx context.Context, owner, repo, name string) (Grant, er
 		return Grant{}, fmt.Errorf("forge: a grant needs a name")
 	}
 	// CONTROL ONE, and it runs first so that a caller who may not write learns
-	// nothing about the repository and leaves nothing behind on it.
+	// nothing about the repository and leaves nothing behind on it. It is a
+	// SUDOED read, so the answer is the forge's ACL applied to the human — a
+	// caller that reached here on the machine client would be asking whether a
+	// site administrator may push, which is true everywhere and is therefore no
+	// control at all.
 	r, err := c.Writable(ctx, owner, repo)
 	if err != nil {
 		return Grant{}, err
+	}
+	// CONTROL TWO: the repository must REFUSE this key on its default branch
+	// before one exists. The credential is per-repository, so without a rule the
+	// forge enforces, a run can rewrite main — and on a repository carrying
+	// Actions workflows on self-hosted runners, that is code execution rather
+	// than a bad commit. The orchestrator's single refspec does not substitute:
+	// the push is SSH straight to the forge, with none of our code in the path.
+	//
+	// REFUSED rather than protected in passing, because silently changing an
+	// existing repository's branch policy is not this code's decision (protect.go
+	// says why). A repository this package created is already protected.
+	guarded, err := c.Protected(ctx, owner, repo)
+	if err != nil {
+		return Grant{}, fmt.Errorf("forge: %s/%s: cannot read branch protection: %w", owner, repo, err)
+	}
+	if !guarded {
+		return Grant{}, fmt.Errorf("%w: %s/%s (protect %s against direct and force pushes first)",
+			ErrOpen, owner, repo, r.Branch)
 	}
 
 	priv, pub, err := keypair()
@@ -226,15 +249,42 @@ func (c *Client) Grants(ctx context.Context, owner, repo string) ([]Grant, error
 		Title   string    `json:"title"`
 		Created time.Time `json:"created_at"`
 	}
+	// PAGED. The forge answers a bounded page (30 by default) and a repository
+	// that has accumulated abandoned keys is exactly the one with more than a
+	// page of them — so an unpaged read would stop seeing the keys precisely when
+	// there are enough to matter.
+	q := url.Values{"limit": {strconv.Itoa(page)}, "page": {"1"}}
 	if err := c.Machine().do(ctx,
-		"/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(repo)+"/keys", nil, &keys); err != nil {
+		"/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(repo)+"/keys", q, &keys); err != nil {
 		return nil, err
+	}
+	for p := 2; len(keys)%page == 0 && len(keys) > 0 && p <= maxPages; p++ {
+		var more []struct {
+			ID      int64     `json:"id"`
+			Title   string    `json:"title"`
+			Created time.Time `json:"created_at"`
+		}
+		q := url.Values{"limit": {strconv.Itoa(page)}, "page": {strconv.Itoa(p)}}
+		if err := c.Machine().do(ctx,
+			"/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(repo)+"/keys", q, &more); err != nil {
+			return nil, err
+		}
+		if len(more) == 0 {
+			break
+		}
+		keys = append(keys, more...)
 	}
 	var out []Grant
 	for _, k := range keys {
-		if strings.HasPrefix(k.Title, grantTitle) {
-			out = append(out, Grant{ID: k.ID, Owner: owner, Repo: repo, Made: k.Created})
+		// The title must be one THIS package writes: the prefix and a session id
+		// after it, with no spaces. A human is free to name a key "hanzo-run-mine",
+		// and a sweep that deleted it because the prefix matched would be this code
+		// removing somebody else's access.
+		name, ok := strings.CutPrefix(k.Title, grantTitle)
+		if !ok || name == "" || strings.ContainsAny(name, " \t/") {
+			continue
 		}
+		out = append(out, Grant{ID: k.ID, Owner: owner, Repo: repo, Made: k.Created})
 	}
 	return out, nil
 }
@@ -303,7 +353,8 @@ var hostKeys struct {
 
 // Known is the forge's SSH host key as a known_hosts line.
 //
-// It is learned HERE, by cloud, and handed to the run — which is the whole point.
+// It is CONFIGURED where the deployment has recorded it ([HostKeyRef]), and
+// learned here otherwise — either way by cloud, and handed to the run.
 // A sandbox told to accept whatever key answers (StrictHostKeyChecking=no, or
 // accept-new) trusts its own network, and the sandbox's network is the one place
 // in this system that runs untrusted output. Pinning to what cloud saw means an
@@ -314,6 +365,12 @@ var hostKeys struct {
 // makes no authenticated call — the handshake is abandoned as soon as the key is
 // in hand.
 func (c *Client) Known(ctx context.Context) (string, error) {
+	// THE CONFIGURED PIN WINS. It is the deployment stating a fact it owns, and
+	// it removes the first-use window entirely; everything below is the fallback
+	// for a deployment that has not recorded it yet (see [HostKeyRef]).
+	if k := strings.TrimSpace(c.known); k != "" {
+		return k, nil
+	}
 	host := c.host
 	if host == "" {
 		return "", fmt.Errorf("forge: no host")

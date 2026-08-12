@@ -97,7 +97,19 @@ func (c *Client) Ensure(ctx context.Context, owner, repo, description string) (R
 	// Read it back either way: on the conflict path we have no body, and on the
 	// create path the response carries no permissions — and the permission is
 	// the thing the caller is about to rely on.
-	return c.Writable(ctx, owner, repo)
+	out, err := c.Writable(ctx, owner, repo)
+	if err != nil {
+		return Repo{}, err
+	}
+	// BORN PROTECTED. A run's key is per-repository, so the only thing standing
+	// between it and the default branch is a rule the forge enforces (protect.go).
+	// Applying it at creation is the one moment it changes nobody's workflow, and
+	// it is what lets [Client.Grant] refuse an unprotected repository without
+	// refusing every new one.
+	if perr := c.Protect(ctx, owner, repo, out.Branch); perr != nil {
+		return Repo{}, perr
+	}
+	return out, nil
 }
 
 // Tip is the commit a branch points at, and whether the branch is there at all.

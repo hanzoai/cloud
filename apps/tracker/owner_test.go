@@ -100,18 +100,23 @@ func row(repo, title string) map[string]any {
 
 // ── defect 1: the IAM org is not the forge org ───────────────────────────────
 
-func TestForgeOwner_TranslatesTheIAMOrgAndLeavesOthersAlone(t *testing.T) {
-	if got := forgeOwner("hanzo"); got != "hanzoai" {
-		t.Fatalf("forgeOwner(hanzo) = %q, want hanzoai — the board reads the wrong org", got)
+func TestForgeOwner_TranslatesTheIAMOrgAndRefusesTheRest(t *testing.T) {
+	got, err := forgeOwner("hanzo")
+	if err != nil || got != "hanzoai" {
+		t.Fatalf("forgeOwner(hanzo) = %q, %v; want hanzoai — the board reads the wrong org", got, err)
 	}
 	// Case and surrounding space must not decide a tenancy question.
-	if got := forgeOwner("  HANZO "); got != "hanzoai" {
-		t.Fatalf("forgeOwner(%q) = %q, want hanzoai", "  HANZO ", got)
+	if got, err := forgeOwner("  HANZO "); err != nil || got != "hanzoai" {
+		t.Fatalf("forgeOwner(%q) = %q, %v; want hanzoai", "  HANZO ", got, err)
 	}
-	// Identity for everyone else: a tenant whose two names agree needs no entry.
-	for _, org := range []string{"acme", "zoo", "lux"} {
-		if got := forgeOwner(org); got != org {
-			t.Fatalf("forgeOwner(%q) = %q, want it unchanged", org, got)
+	// REFUSED for everyone else. This used to be identity — "a tenant whose two
+	// names agree needs no entry" — which meant an unmapped IAM org WAS a forge
+	// coordinate, and the forge namespaces (hanzoai, luxfi, zooai) were names a
+	// customer could take at signup. An org with no forge is a 403, never a read
+	// of somebody else's namespace.
+	for _, org := range []string{"acme", "zoo", "lux", "hanzoai", "luxfi", "zooai"} {
+		if got, err := forgeOwner(org); err == nil {
+			t.Fatalf("forgeOwner(%q) = %q with no error — an unmapped org became a forge namespace", org, got)
 		}
 	}
 }
@@ -278,7 +283,11 @@ func TestLiveOwner_EveryMappingTargetActuallyHoldsWork(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), budget)
 	defer cancel()
 
-	for iam, owner := range forgeOwners {
+	for _, iam := range []string{"hanzo"} {
+		owner, oerr := forgeOwner(iam)
+		if oerr != nil {
+			t.Fatalf("%s has no forge namespace: %v", iam, oerr)
+		}
 		rows, err := cl.As(actor).Issues(ctx, owner, forge.IssueFilter{State: "all", Limit: 1})
 		if err != nil {
 			t.Errorf("%s -> %s: the mapping target does not answer: %v", iam, owner, err)
