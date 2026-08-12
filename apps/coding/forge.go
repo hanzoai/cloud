@@ -60,32 +60,62 @@ func domain() string {
 // delegate gives ONE run push access to ONE repository, and hands back
 // everything the sandbox needs to use it.
 //
-// THE TENANCY IS STRUCTURAL. The forge owner is derived from the run's org —
-// which the door resolved from a validated principal and never from a field —
-// so a run addresses its own namespace and there is no argument it could carry
-// to reach another. That is the same property the credential it replaces had,
-// arrived at the same way.
+// TWO INDEPENDENT CONTROLS, and neither is the other's backstop.
+//
+// THE ORG decides which namespace. It is derived from the run's org — resolved
+// by the door from a validated principal, never from a field — through a CLOSED
+// table (forge.Owner), so an org with no forge namespace is refused rather than
+// becoming one. There is no argument a run could carry to reach another tenant.
+//
+// THE ACTOR decides which repository, and it is the control that was missing.
+// This used to authorize with the machine client, whose identity is a site
+// administrator: forge.Writable then asked "may the site admin push here", which
+// is true of every repository on the forge, so any validated member of the org —
+// including one with read-only access — could name any repository in the
+// namespace and be handed a write key to it. Asking as the HUMAN makes the
+// forge's own ACL the answer.
+//
+// Sudo needs a forge LOGIN, so a run without one is refused rather than falling
+// back to the machine. That is the same refusal forge.Client.As makes and for
+// the same reason: the fallback IS the escalation.
 //
 // The repository is ENSURED rather than merely looked up, because the two hosts
 // were migrated one repository at a time and a run pointed at one that has not
 // arrived yet would otherwise discover it as a 404 from `git clone`, after a
-// sandbox was leased and a session opened.
+// sandbox was leased and a session opened. It is ensured AS THE ACTOR too, so a
+// repository is only ever created by someone entitled to create it.
 //
-// It acts as the MACHINE. Forgejo gates deploy keys on repo-ADMIN, which the
-// engineer a run is attributed to ordinarily does not have — authorizing on the
-// human here would mean only repository admins could ever run an agent. The
-// authority to be here is the org, established above.
-func delegate(ctx context.Context, org, repo, session string) (forge.Grant, error) {
+// Only the mint itself is the machine's: Forgejo gates deploy keys on
+// repo-ADMIN (routers/api/v1/api.go reqAdmin), which an engineer with push
+// rights does not have, so authorizing on the human there would mean only
+// repository admins could ever run an agent. The human's entitlement is
+// established first; the platform then acts on it.
+func delegate(ctx context.Context, org, actor, repo, session string) (forge.Grant, error) {
 	c, err := client(ctx)
 	if err != nil {
 		return forge.Grant{}, err
 	}
-	m := c.Machine()
-	owner := forge.Owner(org)
-	if _, err := m.Ensure(ctx, owner, repo, "created for a Hanzo agent run"); err != nil {
-		return forge.Grant{}, fmt.Errorf("coding: %s/%s is not available to this run: %w", owner, repo, err)
+	owner, err := forge.Owner(org)
+	if err != nil {
+		return forge.Grant{}, fmt.Errorf("coding: %w", err)
 	}
-	g, err := m.Grant(ctx, owner, repo, session)
+	if strings.TrimSpace(actor) == "" {
+		// A run with nobody to act as is refused, and the message says which door
+		// it came in by, because the two doors fail for different reasons. The
+		// HTTP door carries an authenticated caller; the Slack door does not —
+		// it resolves a linked ACCOUNT SUBJECT from its own table and states only
+		// the org on the hop, so there is no forge login to drop privilege to.
+		// Minting on the machine's authority instead would hand a write key to a
+		// request whose human was never established, which is the hole this
+		// closes.
+		return forge.Grant{}, fmt.Errorf(
+			"coding: this run has no forge identity to act as, so its access to %s cannot be established", repo)
+	}
+	as := c.As(actor)
+	if _, err := as.Ensure(ctx, owner, repo, "created for a Hanzo agent run"); err != nil {
+		return forge.Grant{}, fmt.Errorf("coding: %s cannot work on %s/%s: %w", actor, owner, repo, err)
+	}
+	g, err := as.Grant(ctx, owner, repo, session)
 	if err != nil {
 		return forge.Grant{}, fmt.Errorf("coding: the forge would not delegate a push for %s: %w", repo, err)
 	}
@@ -119,7 +149,10 @@ func remote(ctx context.Context, org, repo string) string {
 	if err != nil {
 		return ""
 	}
-	owner := forge.Owner(org)
+	owner, err := forge.Owner(org)
+	if err != nil {
+		return ""
+	}
 	r, err := c.Machine().Repo(ctx, owner, repo)
 	if err != nil || strings.TrimSpace(r.FullName) == "" {
 		return ""
@@ -139,7 +172,11 @@ func landed(ctx context.Context, org, repo, branch string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	sha, ok, err := c.Machine().Tip(ctx, forge.Owner(org), repo, branch)
+	owner, err := forge.Owner(org)
+	if err != nil {
+		return "", false
+	}
+	sha, ok, err := c.Machine().Tip(ctx, owner, repo, branch)
 	if err != nil {
 		return "", false
 	}
@@ -165,5 +202,9 @@ func propose(ctx context.Context, org, repo, base, head, title, body string) (st
 	if err != nil {
 		return "", err
 	}
-	return c.Machine().Propose(ctx, forge.Owner(org), repo, base, head, title, body)
+	owner, err := forge.Owner(org)
+	if err != nil {
+		return "", err
+	}
+	return c.Machine().Propose(ctx, owner, repo, base, head, title, body)
 }

@@ -132,7 +132,8 @@ func planeRun(ctx context.Context, in *plane.RunIn) (*plane.Ran, error) {
 		return nil, err
 	}
 	r, err := Run(s, ctx, org, in.ID, Cmd{Argv: in.Argv, Command: in.Command,
-		Stdin: in.Stdin, Dir: in.Dir, TimeoutSec: in.TimeoutSec, Session: in.Session})
+		Stdin: in.Stdin, Dir: in.Dir, TimeoutSec: in.TimeoutSec, Session: in.Session,
+		Blind: in.Blind})
 	if err != nil {
 		return nil, err
 	}

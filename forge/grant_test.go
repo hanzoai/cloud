@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -35,6 +36,9 @@ type repoStub struct {
 
 	// repo is what GET /repos/{o}/{r} answers; nil is 404.
 	repo *Repo
+	// rules is what the branch-protection list answers. The default is the shape
+	// Protect writes, so a test that is not ABOUT protection is not blocked by it.
+	rules []map[string]any
 	// keys is the deploy-key list, and posted records what was registered.
 	keys    []map[string]any
 	posted  map[string]any
@@ -44,7 +48,9 @@ type repoStub struct {
 
 func newRepoStub(t *testing.T) *repoStub {
 	t.Helper()
-	s := &repoStub{nextID: 41, repo: &Repo{
+	s := &repoStub{nextID: 41, rules: []map[string]any{{
+		"rule_name": "main", "enable_push": false, "enable_force_push": false,
+	}}, repo: &Repo{
 		Name: "api", FullName: "acme/api", Branch: "main",
 		SSH: "git@git.test:acme/api.git", Perm: &Perm{Pull: true, Push: true},
 	}}
@@ -59,6 +65,11 @@ func newRepoStub(t *testing.T) *repoStub {
 		s.mu.Unlock()
 
 		switch {
+		case strings.HasSuffix(r.URL.Path, "/branch_protections") && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(s.rules)
+		case strings.HasSuffix(r.URL.Path, "/branch_protections") && r.Method == http.MethodPost:
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"rule_name": "main"})
 		case strings.HasSuffix(r.URL.Path, "/keys") && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(s.keys)
 		case strings.HasSuffix(r.URL.Path, "/keys") && r.Method == http.MethodPost:
@@ -77,14 +88,25 @@ func newRepoStub(t *testing.T) *repoStub {
 			s.mu.Unlock()
 			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/repos"):
+			// The repository EXISTS from here on, as it would on the real forge —
+			// otherwise Ensure's read-back cannot see what it just made.
+			s.mu.Lock()
+			s.repo = &Repo{
+				Name: "api", FullName: "acme/api", Branch: "main", Private: true,
+				SSH: "git@git.test:acme/api.git", Perm: &Perm{Pull: true, Push: true, Admin: true},
+			}
+			s.mu.Unlock()
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]any{"name": "api"})
 		default:
-			if s.repo == nil {
+			s.mu.Lock()
+			repo := s.repo
+			s.mu.Unlock()
+			if repo == nil {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-			_ = json.NewEncoder(w).Encode(s.repo)
+			_ = json.NewEncoder(w).Encode(repo)
 		}
 	}))
 	t.Cleanup(s.Close)
@@ -469,5 +491,161 @@ func TestKnown_LearnsTheHostKeyFromTheForge(t *testing.T) {
 	again, err := c.Known(context.Background())
 	if err != nil || again != line || fmt.Sprint(hostKeys.m[ln.Addr().String()]) != before {
 		t.Fatalf("the host key was re-learned: %v", err)
+	}
+}
+
+// ── the authorization the credential rests on ────────────────────────────────
+
+// AN IAM ORG IS NEVER A FORGE COORDINATE BY DEFAULT.
+//
+// This table used to fall back to the org's own name, which made the mapping a
+// no-op for every unmapped tenant: an IAM org named `hanzoai` addressed the
+// estate's own repositories, and apps/account reserves the BRAND names
+// (hanzo/lux/zoo/pars) rather than the forge namespaces — so the name was free
+// to take at signup. On the coding path that is a write key on hanzoai/cloud
+// handed to a pod running model output.
+func TestOwner_IsClosedSoAnUnmappedOrgIsRefused(t *testing.T) {
+	got, err := Owner("hanzo")
+	if err != nil || got != "hanzoai" {
+		t.Fatalf("Owner(hanzo) = %q, %v; want hanzoai", got, err)
+	}
+	if got, err := Owner("  HANZO "); err != nil || got != "hanzoai" {
+		t.Fatalf("Owner is not normalising: %q, %v", got, err)
+	}
+	// The forge namespaces themselves, an ordinary tenant, and the shapes an
+	// attacker would reach for. NONE of them may resolve.
+	for _, org := range []string{"hanzoai", "luxfi", "zooai", "acme", "admin", "", "HANZOAI"} {
+		if got, err := Owner(org); err == nil {
+			t.Fatalf("Owner(%q) = %q with no error — an unmapped org became a forge namespace", org, got)
+		} else if !errors.Is(err, ErrNoOwner) {
+			t.Fatalf("Owner(%q) refused with %v, want ErrNoOwner", org, err)
+		}
+	}
+	// Every VALUE must be reachable only through its own key, so no forge
+	// namespace can be addressed by spelling it as an IAM org.
+	for iam, forgeOrg := range owners {
+		if _, err := Owner(forgeOrg); err == nil && forgeOrg != iam {
+			t.Fatalf("the forge namespace %q resolves as an IAM org name", forgeOrg)
+		}
+	}
+}
+
+// A GRANT IS REFUSED ON A REPOSITORY WHOSE DEFAULT BRANCH ACCEPTS IT.
+//
+// The credential is per-repository, so without a rule the forge enforces, a run
+// can push main — and the orchestrator's refspec is not in the path of an SSH
+// push. This is the control that replaces the retired per-ref grant.
+func TestGrant_RefusedWhenTheDefaultBranchDoesNotRefuseTheKey(t *testing.T) {
+	s := newRepoStub(t)
+	c := s.client(t)
+	pinned(t, c)
+
+	// No rules at all: Forgejo's pre-receive allows anything where the rule is nil.
+	s.rules = []map[string]any{}
+	_, err := c.Machine().Grant(context.Background(), "acme", "api", "sess_x")
+	if !errors.Is(err, ErrOpen) {
+		t.Fatalf("an unprotected repo minted a key: %v", err)
+	}
+	s.mu.Lock()
+	posted := s.posted
+	s.mu.Unlock()
+	if posted != nil {
+		t.Fatal("a refused grant still registered a key")
+	}
+
+	// A rule that blocks a plain push but permits a FORCE push is not protection:
+	// the run rewrites the branch anyway.
+	s.rules = []map[string]any{{
+		"rule_name": "main", "enable_push": false, "enable_force_push": true,
+	}}
+	if _, err := c.Machine().Grant(context.Background(), "acme", "api", "sess_x"); !errors.Is(err, ErrOpen) {
+		t.Fatalf("a force-pushable branch counted as protected: %v", err)
+	}
+
+	// A rule that allows push with a whitelist that INCLUDES deploy keys is the
+	// forge saying yes to exactly this credential.
+	s.rules = []map[string]any{{
+		"rule_name": "main", "enable_push": true,
+		"enable_push_whitelist": true, "push_whitelist_deploy_keys": true,
+	}}
+	if _, err := c.Machine().Grant(context.Background(), "acme", "api", "sess_x"); !errors.Is(err, ErrOpen) {
+		t.Fatalf("a deploy-key-whitelisted branch counted as protected: %v", err)
+	}
+
+	// And the shape Protect writes does refuse it.
+	s.rules = []map[string]any{{
+		"rule_name": "main", "enable_push": false, "enable_force_push": false,
+	}}
+	if _, err := c.Machine().Grant(context.Background(), "acme", "api", "sess_x"); err != nil {
+		t.Fatalf("a protected repo refused a grant: %v", err)
+	}
+}
+
+// deployKeyRefused is the fork's own pre-receive predicate, restated. It is
+// pinned directly because everything above rests on it being the SAME rule
+// (routers/private/hook_pre_receive.go:270-285).
+func TestDeployKeyRefusedMatchesThePreReceiveRule(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		r    rule
+		want bool
+	}{
+		{"no rule fields at all: push off, force off", rule{}, true},
+		{"push on, no whitelist", rule{Push: true}, false},
+		{"push on, whitelist without keys", rule{Push: true, PushList: true}, true},
+		{"push on, whitelist with keys", rule{Push: true, PushList: true, PushKeys: true}, false},
+		{"force on, no allowlist", rule{Force: true}, false},
+		{"force on, allowlist without keys", rule{Force: true, ForceList: true}, true},
+		{"force on, allowlist with keys", rule{Force: true, ForceList: true, ForceKeys: true}, false},
+	} {
+		if got := tc.r.deployKeyRefused(); got != tc.want {
+			t.Errorf("%s: deployKeyRefused = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A repository this package CREATES is born protected, in one step with its
+// creation — the one moment applying a branch rule changes nobody's workflow.
+func TestEnsure_BornProtected(t *testing.T) {
+	s := newRepoStub(t)
+	s.repo = nil // absent, so Ensure creates it
+	c := s.client(t)
+
+	if _, err := c.Machine().Ensure(context.Background(), "acme", "api", "d"); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var protectedWith map[string]any
+	for i, r := range s.reqs {
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/branch_protections") {
+			_ = json.Unmarshal([]byte(s.bodies[i]), &protectedWith)
+		}
+	}
+	if protectedWith == nil {
+		t.Fatal("a repository was created with no branch protection; a run's key could rewrite it")
+	}
+	if push, _ := protectedWith["enable_push"].(bool); push {
+		t.Fatalf("the rule permits direct pushes: %v", protectedWith)
+	}
+	if force, _ := protectedWith["enable_force_push"].(bool); force {
+		t.Fatalf("the rule permits force pushes: %v", protectedWith)
+	}
+}
+
+// The configured pin WINS over a handshake, so there is no first use to
+// intercept.
+func TestKnown_PrefersTheConfiguredPin(t *testing.T) {
+	c, err := New("https://git.test", "machine-token-value")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	c.known = "git.test ssh-ed25519 AAAACONFIGURED"
+	// A host that would refuse a TCP connection: reaching it at all is the failure.
+	c.host = "127.0.0.1:1"
+
+	got, err := c.Known(context.Background())
+	if err != nil || got != c.known {
+		t.Fatalf("Known = %q, %v; the configured pin must win without a handshake", got, err)
 	}
 }

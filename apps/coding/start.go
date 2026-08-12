@@ -211,7 +211,7 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 	// that proceeds and discovers at push time that it cannot write.
 	var granted forge.Grant
 	if req.TargetID == "" {
-		g, err := delegate(ctx, org, repo, sessionID)
+		g, err := delegate(ctx, org, actorOf(ctx), repo, sessionID)
 		if err != nil {
 			_ = d.Sessions.Close(ctx, org, sessionID, statusError)
 			pool.release(org)
@@ -268,6 +268,22 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 		SessionID: sessionID, Branch: branch, Repo: repo,
 		Routed: req.TargetID != "", TargetID: req.TargetID,
 	}, nil
+}
+
+// actorOf is the forge login a run acts as: the AUTHENTICATED caller, read off
+// the door's context and never off the request body.
+//
+// It is deliberately not Subject. Subject is who the run is ATTRIBUTED to — a
+// linked account id that arrives in the body and that the Slack adapter fills
+// from its own link table — and attribution is not entitlement. Using it to
+// authorize would let a caller name the person whose access it wants.
+//
+// An empty actor is refused downstream rather than defaulted, and a login this
+// forge does not know is refused BY the forge. Both are the honest direction:
+// the alternative is minting on the machine's authority, and the machine is a
+// site administrator.
+func actorOf(ctx context.Context) string {
+	return strings.TrimSpace(cloud.Who(ctx).User)
 }
 
 // runContext is the context ONE coding run executes on: detached from the door's

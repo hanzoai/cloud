@@ -70,6 +70,10 @@ type line struct {
 // writes stdout and stderr from different goroutines.
 type tell struct {
 	org, session string
+	// blind redacts what the caller said must never be published. It is applied
+	// HERE, at the moment a line becomes an event, because this is the door the
+	// bytes leave by — see [blinder] and plane.RunIn.Blind.
+	blind *blinder
 
 	mu   sync.Mutex
 	buf  []byte
@@ -79,11 +83,11 @@ type tell struct {
 
 // newTell returns the sink for one command, or nil when no session was named. A
 // nil *tell's methods are no-ops, so no caller has to branch on being watched.
-func newTell(org, session string) *tell {
+func newTell(org, session string, blind *blinder) *tell {
 	if strings.TrimSpace(org) == "" || strings.TrimSpace(session) == "" {
 		return nil
 	}
-	return &tell{org: org, session: session}
+	return &tell{org: org, session: session, blind: blind}
 }
 
 func (t *tell) Write(p []byte) (int, error) {
@@ -153,10 +157,15 @@ func (t *tell) say(kind string, l line) {
 	if dead {
 		return
 	}
+	l.Message, l.Step = t.blind.hide(l.Message), t.blind.hide(l.Step)
 	payload, err := json.Marshal(l)
 	if err != nil {
 		return
 	}
+	// Belt AND braces, on the ENCODED form: a secret containing a quote, a
+	// backslash or a newline is re-spelled by the JSON encoder, so the escaped
+	// form can survive a replacement made on the plain one.
+	payload = []byte(t.blind.hide(string(payload)))
 	// A DETACHED, TENANT-STATED context. The command's own may already be
 	// cancelled — a stop is exactly that case — and the last thing a stopped run
 	// says is the part a watcher most needs. plane.For supplies the org where

@@ -116,7 +116,7 @@ func TestOutputLeavesTheSandboxWhileTheCommandIsStillRunning(t *testing.T) {
 	// The chunk is HELD IN THE BUFFER rather than sent, by stating that an append
 	// just happened. That measures the plumbing — do the command's bytes reach the
 	// narration at all, mid-command — with no peer to send them to.
-	say := newTell("acme", "sess_1")
+	say := newTell("acme", "sess_1", nil)
 	say.at = time.Now()
 
 	done := make(chan ExecResult, 1)
@@ -376,7 +376,7 @@ func TestABurstKeepsItsTail(t *testing.T) {
 // buffer, no peer call, no branch at the call site.
 func TestNothingIsSaidWhenNobodyIsWatching(t *testing.T) {
 	for _, tc := range []struct{ org, session string }{{"acme", ""}, {"acme", "   "}, {"", "sess_1"}} {
-		if x := newTell(tc.org, tc.session); x != nil {
+		if x := newTell(tc.org, tc.session, nil); x != nil {
 			t.Errorf("newTell(%q, %q) produced a sink; there is nowhere for it to send", tc.org, tc.session)
 		}
 	}
@@ -394,14 +394,14 @@ func TestNothingIsSaidWhenNobodyIsWatching(t *testing.T) {
 // Cmd carries no org field, so a request cannot supply one — which is why a run
 // can only ever narrate into its own tenant's session.
 func TestNarrationCannotNameATenant(t *testing.T) {
-	x := newTell("acme", "sess_1")
+	x := newTell("acme", "sess_1", nil)
 	if x.org != "acme" {
 		t.Fatalf("tell org = %q, want the proven caller's", x.org)
 	}
 	// If Cmd ever grows an org, this fails to compile — which is the point.
 	var c Cmd
 	c.Session = "sess_1"
-	if got := newTell("acme", c.Session).org; got != "acme" {
+	if got := newTell("acme", c.Session, nil).org; got != "acme" {
 		t.Errorf("the org came from somewhere other than the caller: %q", got)
 	}
 }
