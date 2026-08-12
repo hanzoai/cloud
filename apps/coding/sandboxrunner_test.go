@@ -472,10 +472,19 @@ func TestSandboxRun_PinsTheForgeHostAndConfinesTheCredential(t *testing.T) {
 					t.Fatalf("the ssh command is missing %q: %q", want, a)
 				}
 			}
-			for _, forbidden := range []string{"StrictHostKeyChecking=no", "StrictHostKeyChecking=accept-new", "/dev/null"} {
+			for _, forbidden := range []string{
+				"StrictHostKeyChecking=no", "StrictHostKeyChecking=accept-new",
+				"UserKnownHostsFile=/dev/null", // the pin must not be thrown away
+			} {
 				if strings.Contains(a, forbidden) {
 					t.Fatalf("the ssh command disables host verification with %q: %q", forbidden, a)
 				}
+			}
+			// The SECOND known_hosts ssh reads is silenced. /etc/ssh/ssh_known_hosts
+			// is part of the image, so an entry for the forge there would be a
+			// trusted key our pin never sees.
+			if !strings.Contains(a, "GlobalKnownHostsFile=/dev/null") {
+				t.Fatalf("the system known_hosts is still trusted: %q", a)
 			}
 		}
 		// Nothing may persist a credential past the command that used it.

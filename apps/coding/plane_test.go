@@ -82,11 +82,11 @@ func serveForge(t *testing.T, p *peers) {
 			_ = json.NewDecoder(r.Body).Decode(&in)
 			p.proposed = in.Head
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"html_url": "https://git.test/acme/api/pulls/1",
+				"html_url": "https://git.test/hanzoai/api/pulls/1",
 			})
 		default:
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"name": "api", "full_name": "acme/api", "default_branch": "main",
+				"name": "api", "full_name": "hanzoai/api", "default_branch": "main",
 				"ssh_url": "git@git.test:acme/api.git",
 			})
 		}
@@ -204,8 +204,8 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 		result: RunResult{Changed: true, OK: true, CommitSha: "deadbeef", Diffstat: " 1 file changed"},
 	}
 	res := planeDispatcher(run).Run(context.Background(), Req{
-		Org: "acme", UserID: "u_1", AgentRef: "hanzo", Repo: "api",
-		Prompt: "fix the flake", Remote: "git@git.test:acme/api.git",
+		Org: "hanzo", UserID: "u_1", AgentRef: "hanzo", Repo: "api",
+		Prompt: "fix the flake", Remote: "git@git.test:hanzoai/api.git",
 		Key:   "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----",
 		Known: "git.test ssh-ed25519 AAAAPIN",
 	})
@@ -222,7 +222,7 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 	if p.proposed != "agent/abc123def456" {
 		t.Fatalf("git was never asked to propose the branch, got %q", p.proposed)
 	}
-	if res.PR.URL != "https://git.test/acme/api/pulls/1" {
+	if res.PR.URL != "https://git.test/hanzoai/api/pulls/1" {
 		t.Fatalf("the address did not come back with the run: %q", res.PR.URL)
 	}
 	if res.CommitSha != "verifiedsha" {
@@ -231,7 +231,7 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 	// THE INTEGRITY GATE ASKED THE FORGE, and asked about THIS org's repository.
 	var verified bool
 	for _, a := range p.asked {
-		if strings.HasPrefix(a, "GET /v1/repos/acme/api/branches/agent/") {
+		if strings.HasPrefix(a, "GET /v1/repos/hanzoai/api/branches/agent/") {
 			verified = true
 		}
 	}
@@ -239,14 +239,14 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 		t.Fatalf("the forge was never asked whether the branch landed: %v", p.asked)
 	}
 	// ISOLATION: the sandbox is pointed only at THIS org's namespace.
-	if !strings.Contains(run.gotReq.Remote, "acme/api.git") {
+	if !strings.Contains(run.gotReq.Remote, "hanzoai/api.git") {
 		t.Fatalf("the sandbox remote did not survive the crossing: %q", run.gotReq.Remote)
 	}
 	if !strings.Contains(run.gotReq.Key, "OPENSSH PRIVATE KEY") {
 		t.Fatal("the credential must reach the sandbox unchanged")
 	}
 	// The session opened, streamed and closed — all three ops, all across.
-	if len(p.sessions.opened) != 1 || p.sessions.opened[0].org != "acme" {
+	if len(p.sessions.opened) != 1 || p.sessions.opened[0].org != "hanzo" {
 		t.Fatalf("session open did not arrive: %+v", p.sessions.opened)
 	}
 	if len(p.sessions.closes) != 1 || p.sessions.closes[0].status != statusDone {
@@ -278,8 +278,8 @@ func TestRun_OverThePlane_UnverifiedRefFilesNoPR(t *testing.T) {
 
 	run := &fakeRunner{result: RunResult{Changed: true, OK: true, CommitSha: "deadbeef"}}
 	res := planeDispatcher(run).Run(context.Background(), Req{
-		Org: "acme", UserID: "u_1", Repo: "api", Prompt: "fix",
-		Remote: "git@git.test:acme/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",
+		Org: "hanzo", UserID: "u_1", Repo: "api", Prompt: "fix",
+		Remote: "git@git.test:hanzoai/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",
 	})
 
 	if res.OK || !strings.Contains(res.Error, "not found in native git") {
@@ -298,8 +298,8 @@ func TestRun_OverThePlane_UnverifiedRefFilesNoPR(t *testing.T) {
 func TestRun_OverThePlane_MissingPeerFailsHonestly(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", socketDir(t)) // nothing listening at all
 	res := planeDispatcher(&fakeRunner{}).Run(context.Background(), Req{
-		Org: "acme", UserID: "u_1", Repo: "api", Prompt: "fix",
-		Remote: "git@git.test:acme/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",
+		Org: "hanzo", UserID: "u_1", Repo: "api", Prompt: "fix",
+		Remote: "git@git.test:hanzoai/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",
 	})
 	if res.OK {
 		t.Fatalf("a run with no peers at all must not succeed: %+v", res)
