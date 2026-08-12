@@ -275,26 +275,17 @@ func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
 	return cl.As(actor), owner, nil
 }
 
-// actorOf is the forge LOGIN the forge should act as.
+// actorOf is the IAM username the forge should act as.
 //
-// It is derived from the validated email, because that is how this forge names
-// its users: registration runs through OIDC with oauth2_client.USERNAME=email,
-// so a person's forge login is their address folded by the forge's own rule
-// (forge.Login). Sudoing as the IAM username instead agrees for everyone whose
-// username happens to equal their email's local part and addresses the wrong
-// account — or none — for the rest.
+// X-User-Name is the `name` half of <owner>/<name>, stamped by the identity
+// boundary from VALIDATED claims only — it is in authorityHeaders, so a client's
+// own copy is stripped on ingress and cannot survive. It is therefore safe to
+// hand to Sudo: a caller cannot name someone else.
 //
-// X-User-Email and X-User-Name are both in authorityHeaders, so a client's own
-// copy is stripped on ingress and re-minted only from validated claims
-// (middleware_identity.go). Neither is a value a caller can choose, which is
-// what makes either safe to hand to Sudo.
-//
-// The username is the fallback for a principal carrying no email — an API key,
-// for one. It is a different spelling of the same person and cannot escalate.
+// It falls back to X-User-Id only when the username is absent, which is the same
+// order resolveCaller uses — the gateway path historically minted the name into
+// X-User-Id while the in-binary direct-Bearer path stamps the UUID subject.
 func actorOf(c *zip.Ctx) string {
-	if login := forge.Login(c.Header(authz.HeaderUserEmail)); login != "" {
-		return login
-	}
 	if n := strings.TrimSpace(c.Header(authz.HeaderUserName)); n != "" {
 		return n
 	}
