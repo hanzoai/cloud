@@ -86,13 +86,20 @@ func mountAgents(app cloud.Router, deps cloud.Deps) error {
 	go func() {
 		ctx, cancel := context.WithTimeout(cloud.For(context.Background(), forgeOrg), 5*time.Minute)
 		defer cancel()
-		if ok, why := coding.Pinned(); !ok {
-			deps.Logger.Warn("forge host key is not configured; the pin will be learned on first use", "why", why)
-		}
 		if n, err := coding.Sweep(ctx, forgeOrg); err != nil {
 			deps.Logger.Warn("could not sweep abandoned run keys", "err", err)
 		} else if n > 0 {
 			deps.Logger.Info("withdrew abandoned run keys", "count", n)
+		}
+		// AFTER the sweep, because the sweep is what resolves the credential and
+		// the pin is read alongside it. Asked first, this reported the zero value
+		// on every boot — "not configured", with an empty reason, whether or not
+		// the secret was there — which is worse than not asking: it is the one
+		// line a deploy checks to confirm the pin took effect.
+		if ok, why := coding.Pinned(); ok {
+			deps.Logger.Info("forge host key is configured")
+		} else {
+			deps.Logger.Warn("forge host key is not configured; the pin will be learned on first use", "why", why)
 		}
 	}()
 	return nil

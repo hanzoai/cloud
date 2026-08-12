@@ -148,8 +148,12 @@ func (c *Client) Protected(ctx context.Context, owner, repo string) (bool, error
 // wildcard, so a rule name containing a slash arrives whole.
 func (c *Client) rule(ctx context.Context, owner, repo, name string) (rule, error) {
 	var out rule
+	// ESCAPED like every other segment here. git permits '#' in a ref name, and a
+	// bare '#' is a URL FRAGMENT — never sent to the server — so a repository
+	// whose default branch is `main#x` would be answered for `main` and read as
+	// protected while `main#x` was open.
 	err := c.Machine().do(ctx, "/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(repo)+
-		"/branch_protections/"+name, nil, &out)
+		"/branch_protections/"+url.PathEscape(name), nil, &out)
 	return out, err
 }
 
@@ -227,7 +231,12 @@ func (c *Client) Protect(ctx context.Context, owner, repo, branch string) error 
 	// The release patterns are GLOBS on purpose: unlike [Client.Protected], which
 	// must decide by exact name, this is a rule being WRITTEN, and the forge is
 	// the thing that will match it.
-	for _, name := range []string{branch, "release/**", "v*"} {
+	//
+	// `v[0-9]*` and not `v*`: the latter reads as "version" to whoever writes it
+	// and as "validation", "vendor-bump" and "v2-spike" to the matcher, which
+	// would make ordinary working branches pull-request-only in every repository
+	// this creates. A digit after the v is what makes it a version.
+	for _, name := range []string{branch, "release/**", "v[0-9]*"} {
 		err := c.Machine().send(ctx, sendOpts{
 			method: http.MethodPost,
 			path:   "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/branch_protections",

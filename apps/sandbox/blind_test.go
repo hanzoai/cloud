@@ -182,3 +182,31 @@ func TestBlind_RegistersTheWholeKeyNotOnlyItsLines(t *testing.T) {
 		t.Fatalf("carry = %d; the whole key was never registered, so a split of it is not covered", b.carry())
 	}
 }
+
+// A SECRET STRADDLING THE 8KiB TRUNCATION IS NOT EMITTED TAIL-FIRST.
+//
+// The buffer is front-truncated when a command outruns the flush interval. Cut
+// before redacting, that cut discards the FRONT of a straddling secret and emits
+// its tail in the clear — a suffix of a private key is still key material. Hidden
+// first, every complete secret is already a marker, so the cut can only land in
+// ordinary text or in one.
+func TestTell_ASecretStraddlingTheTruncationIsNotEmitted(t *testing.T) {
+	secret := strings.ReplaceAll(pem, "\n", "")
+	b := newBlinder([]string{secret})
+	tl := &tell{org: "acme", session: "s", blind: b}
+
+	// Fill past the cap, then place the secret so it spans the truncation point:
+	// its head is in the discarded region and its tail is in the kept one.
+	head := strings.Repeat("x", tellCap-len(secret)/2)
+	tl.buf = append(tl.buf, (head + secret + strings.Repeat("y", 512))...)
+
+	out := tl.take(time.Now(), true) // forced, so nothing is held back
+
+	tail := secret[len(secret)/2:]
+	if strings.Contains(out, tail) {
+		t.Fatalf("the tail of a truncated secret was emitted in the clear:\n%q", out)
+	}
+	if !strings.Contains(out, mark) {
+		t.Fatalf("the secret was not redacted before the cut: %q", out)
+	}
+}
