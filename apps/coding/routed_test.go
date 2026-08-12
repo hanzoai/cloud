@@ -77,7 +77,7 @@ func TestRun_RoutedToTarget_EnqueuesNotLocal(t *testing.T) {
 		t.Fatalf("want routed+accepted to tgt_evo, got %+v", res)
 	}
 	// The local sandbox runner was NEVER invoked.
-	if run.gotOrg != "" || run.gotReq.CloneURL != "" {
+	if run.gotOrg != "" || run.gotReq.Remote != "" {
 		t.Fatalf("the local runner must not run for a routed dispatch: %+v", run.gotReq)
 	}
 	// The gate was consulted for exactly this (org,target).
@@ -120,7 +120,8 @@ func TestRun_NoTarget_LocalPathUnchanged(t *testing.T) {
 	gate := &fakeGate{}
 	d, _ := routedDispatcher(sess, run, router, gate)
 	// A local run DOES need a credential.
-	req := Req{Org: "acme", UserID: "u-1", AgentRef: "hanzo", Repo: "api", Prompt: "fix it", CredToken: "sk-secret"}
+	req := Req{Org: "acme", UserID: "u-1", AgentRef: "hanzo", Repo: "api", Prompt: "fix it",
+		Remote: "git@git.test:acme/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN"}
 
 	res := d.Run(context.Background(), req)
 
@@ -195,7 +196,7 @@ func TestRun_Routed_NeedsNoCredential_CarriesNoSecret(t *testing.T) {
 	d, _ := routedDispatcher(sess, &fakeRunner{}, router, gate)
 
 	req := routedReq()
-	req.CredToken = "" // explicitly none
+	req.Key, req.Remote = "", "" // explicitly none
 	res := d.Run(context.Background(), req)
 
 	if !res.OK || !res.Routed {
