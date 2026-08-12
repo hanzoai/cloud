@@ -18,7 +18,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
@@ -32,10 +31,27 @@ func forgeFor(t *testing.T, writers ...string) *[]string {
 	for _, w := range writers {
 		can[w] = true
 	}
+	// Every writer owns the address their login derives from. A test that needs
+	// the two to DISAGREE (the escalation) states its own table.
+	return forgeAs(t, can, func(login string) string { return login + "@hanzo.ai" })
+}
+
+// forgeAs is forgeFor with the login→address table stated, so a test can make a
+// derived login belong to somebody else.
+func forgeAs(t *testing.T, can map[string]bool, addr func(login string) string) *[]string {
+	t.Helper()
 	var minted []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		actor := r.Header.Get("Sudo")
 		switch {
+		case strings.HasPrefix(r.URL.Path, "/v1/users/"):
+			login := strings.TrimPrefix(r.URL.Path, "/v1/users/")
+			a := addr(login)
+			if a == "" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"login": login, "email": a})
 		case strings.HasSuffix(r.URL.Path, "/keys") && r.Method == http.MethodPost:
 			minted = append(minted, r.URL.Path)
 			w.WriteHeader(http.StatusCreated)
@@ -85,7 +101,7 @@ func forgeFor(t *testing.T, writers ...string) *[]string {
 // repository on the way to refusing them.
 func TestDelegate_RefusesAMemberWhoCannotPush(t *testing.T) {
 	minted := forgeFor(t, "zoe") // zoe may push; nobody else may
-	ctx := cloud.For(context.Background(), "hanzo")
+	ctx := asCaller(zip.Caller{Org: "hanzo", User: "sub", Email: "zoe@hanzo.ai"})
 
 	if _, err := delegate(ctx, "hanzo", "reader", "cloud", "sess_1"); err == nil {
 		t.Fatal("a read-only member was handed a write key to hanzoai/cloud")
@@ -108,7 +124,7 @@ func TestDelegate_RefusesAMemberWhoCannotPush(t *testing.T) {
 // site administrator, so falling back IS the escalation.
 func TestDelegate_RefusesWithNoActor(t *testing.T) {
 	minted := forgeFor(t, "zoe")
-	ctx := cloud.For(context.Background(), "hanzo")
+	ctx := asCaller(zip.Caller{Org: "hanzo", User: "sub", Email: "zoe@hanzo.ai"})
 
 	if _, err := delegate(ctx, "hanzo", "", "cloud", "sess_1"); err == nil {
 		t.Fatal("a run with no forge identity was handed a key on the machine's authority")
@@ -123,7 +139,7 @@ func TestDelegate_RefusesWithNoActor(t *testing.T) {
 // being spelled one, so signing up as `hanzoai` reached the estate's own repos.
 func TestDelegate_RefusesAnOrgWithNoForgeNamespace(t *testing.T) {
 	minted := forgeFor(t, "zoe")
-	ctx := cloud.For(context.Background(), "hanzoai")
+	ctx := asCaller(zip.Caller{Org: "hanzoai", User: "sub", Email: "zoe@hanzo.ai"})
 
 	// `zoe` is a writer, and the repo and protection are fine. The ONLY thing
 	// wrong is the org, and it must be enough.

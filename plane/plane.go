@@ -2536,9 +2536,17 @@ type RouteRunIn struct {
 // before the hop — because a run spends the org's balance and reaches the org's
 // repos, and a field the caller can set is not an identity.
 type CodingStartIn struct {
-	// Subject is the person the run is attributed to — a linked Hanzo identity the
-	// door already proved, never a name the caller picks. Empty is refused rather
-	// than defaulted: a run that lost its human must not execute as the org.
+	// Subject is the person the run is ATTRIBUTED to — the session's actor and the
+	// PR's assignee. Empty is refused rather than defaulted: a run that lost its
+	// human must not execute as the org.
+	//
+	// IT IS NOT AN AUTHORIZATION INPUT and must never become one. It arrives in
+	// this body and the HTTP door passes it through unread (plugin/agents
+	// httpCodingStart), so it is a name the caller picks. What the run ACTS AS on
+	// the forge is resolved separately, from the validated address on the caller's
+	// own identity and confirmed against the forge (apps/coding actorOf →
+	// forge.LoginFor) — because attribution is not entitlement, and a field a
+	// caller fills cannot be either.
 	Subject string `json:"subject"`
 	// Repo is what to work on, as `owner/name` in the caller's own org. The engine
 	// resolves the clone URL and the push credential from the org itself, so this
