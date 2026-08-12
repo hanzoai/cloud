@@ -18,6 +18,7 @@ package coding
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -192,6 +193,25 @@ func delegate(ctx context.Context, org, actor, repo, session string) (forge.Gran
 	}
 	as := c.As(actor)
 	if _, err := as.Ensure(ctx, owner, repo, "created for a Hanzo agent run"); err != nil {
+		// AN UNKNOWN ACTOR IS A MISSING FORGE ACCOUNT, and it says so.
+		//
+		// Sudo resolves a LOGIN against a user row and does not create one
+		// (routers/api/v1/api.go sudo → GetUserByName, 404 when absent), and the
+		// forge only provisions a user at an interactive SSO sign-in. So a person
+		// whose first touch of the forge is a coding run has no row to act as, and
+		// the generic refusal reads as "you cannot work on this repository" when
+		// the truth is "you have never signed in".
+		//
+		// Cloud does NOT create the row. The forge links an SSO login to an
+		// existing name only under ACCOUNT_LINKING=auto, and that setting defaults
+		// to `login` — a password prompt, which an IAM-native forge has no answer
+		// for — so pre-creating users would lock out exactly the people it was
+		// meant to help. One sign-in is the fix, and it is theirs to make.
+		if errors.Is(err, forge.ErrUnknownActor) {
+			return forge.Grant{}, fmt.Errorf(
+				"coding: %s has no account on the forge yet — sign in to %s once, then start the run",
+				actor, c.Host())
+		}
 		return forge.Grant{}, fmt.Errorf("coding: %s cannot work on %s/%s: %w", actor, owner, repo, err)
 	}
 	g, err := as.Grant(ctx, owner, repo, session)

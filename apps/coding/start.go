@@ -290,17 +290,39 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 // actorOf is the forge login a run acts as: the AUTHENTICATED caller, read off
 // the door's context and never off the request body.
 //
-// It is deliberately not Subject. Subject is who the run is ATTRIBUTED to — a
-// linked account id that arrives in the body and that the Slack adapter fills
-// from its own link table — and attribution is not entitlement. Using it to
-// authorize would let a caller name the person whose access it wants.
+// IT IS NEVER THE ID, and that is what this used to pass. X-User-Id is the
+// token's `sub` — a UUID — and Sudo takes a forge LOGIN, so the forge answered
+// "unknown actor" for every real caller and every coding run refused with a 400.
+// It had never heard of them, correctly.
+//
+// The login is DERIVED FROM THE EMAIL, because that is how this forge derives
+// it: registration runs through OIDC with oauth2_client.USERNAME set to `email`,
+// so a user's forge name is their address folded by the forge's own
+// NormalizeUserName. forge.Login reproduces exactly that (login.go). Deriving it
+// from the IAM username instead would agree for everyone whose username happens
+// to equal their email's local part and address the wrong account for the rest.
+//
+// The IAM username is the FALLBACK and only that: it is what an API-key
+// principal carries when there is no email claim to derive from, and it is a
+// different spelling of the same person rather than a different person — so
+// falling back cannot escalate. Both spellings are checked by the forge, which
+// either knows the login or refuses it.
+//
+// It is not Subject either. Subject is who the run is ATTRIBUTED to — a linked
+// account id that arrives in the body and that the Slack adapter fills from its
+// own link table — and attribution is not entitlement. Using it to authorize
+// would let a caller name the person whose access it wants.
 //
 // An empty actor is refused downstream rather than defaulted, and a login this
 // forge does not know is refused BY the forge. Both are the honest direction:
 // the alternative is minting on the machine's authority, and the machine is a
 // site administrator.
 func actorOf(ctx context.Context) string {
-	return strings.TrimSpace(cloud.Who(ctx).User)
+	c := cloud.Who(ctx)
+	if login := forge.Login(c.Email); login != "" {
+		return login
+	}
+	return strings.TrimSpace(c.Name)
 }
 
 // runContext is the context ONE coding run executes on: detached from the door's
