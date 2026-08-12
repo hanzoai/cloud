@@ -1,6 +1,6 @@
 {
-  "paths": 1798,
-  "operations": 2470,
+  "paths": 1805,
+  "operations": 2480,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -172,6 +172,7 @@
     "tags": 1,
     "tasks": 10,
     "team": 17,
+    "tel": 10,
     "templates": 5,
     "tokens": 1,
     "tools": 8,
