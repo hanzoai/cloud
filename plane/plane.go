@@ -132,6 +132,23 @@ const (
 	// never has to be handled, let alone forwarded.
 	IAMApproval = "iam_approval"
 
+	// IAMEmail answers what address IAM holds for the CALLER, and whether they
+	// have PROVED it.
+	//
+	// It is on the plane and not in the token because the token does not carry it:
+	// this deployment's JWT emits `email` and no `email_verified`
+	// (hanzoai/iam internal/oidc/jwt.go), while the identity store records the
+	// proof on the account (pkg/schema/user.go EmailVerified) and a direct
+	// password signup records it FALSE until the address is confirmed. Reading it
+	// here means every existing token gets a true answer immediately, where a new
+	// claim would answer only for tokens minted after it shipped — and would
+	// refuse everyone else in the meantime.
+	//
+	// The subject is the CALLER'S and can never be an argument, exactly as
+	// [IAMApproval] states: a caller able to name a subject could read another
+	// person's address, which is a leak on its own and an account oracle in bulk.
+	IAMEmail = "iam_email"
+
 	// IAMProjects lists the projects an org owns, from the store that owns them.
 	//
 	// A project is IAM's noun. Platform reads it because a PaaS app is scoped to
@@ -811,6 +828,23 @@ type Sent struct {
 }
 
 // ---- iam.approval ----------------------------------------------------------
+
+// Email is the address the identity store holds for the caller, and whether
+// they have proved it.
+//
+// Verified is the whole point. An address a person merely TYPED is not evidence
+// of anything: a self-serve signup can name any address, so a consumer keying
+// an identity on one is keying it on a claim. Only a confirmed address says the
+// person is reachable there — and therefore is who that address belongs to.
+type Email struct {
+	// Address is what the store holds, which is not necessarily what a token's
+	// `email` claim says — a caller that changed it since the token was minted
+	// would present the old one. Anything resolving an identity uses this.
+	Address string `json:"address,omitempty"`
+	// Verified is whether the person proved the address. False is a real answer
+	// and callers must refuse on it, never treat it as "probably fine".
+	Verified bool `json:"verified"`
+}
 
 // Approval is the caller's waitlist state, as the identity store holds it.
 //

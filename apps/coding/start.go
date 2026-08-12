@@ -217,7 +217,7 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 	// you cannot read was enough.
 	//
 	// So the actor is resolved ONCE, for every run, before either path.
-	actor, aerr := resolveActor(ctx, actorOf(ctx))
+	actor, aerr := resolveActor(ctx)
 	if aerr != nil {
 		_ = d.Sessions.Close(ctx, org, sessionID, statusError)
 		pool.release(org)
@@ -284,31 +284,6 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 		SessionID: sessionID, Branch: branch, Repo: repo,
 		Routed: req.TargetID != "", TargetID: req.TargetID,
 	}, nil
-}
-
-// actorOf is the address a run's forge identity is resolved FROM.
-//
-// IT IS NEVER THE ID. X-User-Id is the token's `sub` — a UUID — and Sudo takes a
-// forge LOGIN, so passing it made the forge answer "unknown actor" for every
-// real caller and every coding run refused with a 400. It had never heard of
-// them, correctly.
-//
-// It is the EMAIL, because that is what this forge names its users by
-// (oauth2_client.USERNAME=email), and because an address is the one thing about
-// a caller that the forge can independently CONFIRM — see forge.LoginFor, which
-// turns it from a guess into a proven identity. The IAM username is not used:
-// it derives a login just as well and there is nothing to check it against.
-//
-// It is not Subject either. Subject is who the run is ATTRIBUTED to — a linked
-// account id that arrives in the body and that the Slack adapter fills from its
-// own link table — and attribution is not entitlement. Using it to authorize
-// would let a caller name the person whose access it wants.
-//
-// Both headers it reads are in authorityHeaders: stripped on ingress and
-// re-minted only from validated claims (middleware_identity.go), so neither is
-// a value a caller can choose.
-func actorOf(ctx context.Context) string {
-	return strings.TrimSpace(cloud.Who(ctx).Email)
 }
 
 // runContext is the context ONE coding run executes on: detached from the door's
