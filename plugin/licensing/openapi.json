@@ -34,6 +34,14 @@
             }
           },
           {
+            "name": "X-License-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "token",
             "in": "query",
             "required": false,
@@ -47,7 +55,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleaseAsset"
+                  "$ref": "#/components/schemas/licensing.ReleaseAsset"
                 }
               }
             },
@@ -76,7 +84,7 @@
                 }
               },
               "schema": {
-                "$ref": "#/components/schemas/FingerprintRequest"
+                "$ref": "#/components/schemas/licensing.FingerprintRequest"
               }
             }
           },
@@ -87,7 +95,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FingerprintResponse"
+                  "$ref": "#/components/schemas/licensing.FingerprintResponse"
                 }
               }
             },
@@ -109,7 +117,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthView"
+                  "$ref": "#/components/schemas/licensing.HealthView"
                 }
               }
             },
@@ -137,7 +145,7 @@
                 }
               },
               "schema": {
-                "$ref": "#/components/schemas/IssueRequest"
+                "$ref": "#/components/schemas/licensing.IssueRequest"
               }
             }
           },
@@ -148,7 +156,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueResponse"
+                  "$ref": "#/components/schemas/licensing.IssueResponse"
                 }
               }
             },
@@ -170,7 +178,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PubkeyView"
+                  "$ref": "#/components/schemas/licensing.PubkeyView"
                 }
               }
             },
@@ -192,7 +200,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PubkeyView"
+                  "$ref": "#/components/schemas/licensing.PubkeyView"
                 }
               }
             },
@@ -214,7 +222,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleaseList"
+                  "$ref": "#/components/schemas/licensing.ReleaseList"
                 }
               }
             },
@@ -241,7 +249,7 @@
                 "version": "1.4.0"
               },
               "schema": {
-                "$ref": "#/components/schemas/Release"
+                "$ref": "#/components/schemas/licensing.Release"
               }
             }
           },
@@ -252,7 +260,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Release"
+                  "$ref": "#/components/schemas/licensing.Release"
                 }
               }
             },
@@ -284,7 +292,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Release"
+                  "$ref": "#/components/schemas/licensing.Release"
                 }
               }
             },
@@ -310,7 +318,7 @@
                 "value": "9f2c…"
               },
               "schema": {
-                "$ref": "#/components/schemas/RevokeRequest"
+                "$ref": "#/components/schemas/licensing.RevokeRequest"
               }
             }
           },
@@ -321,7 +329,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RevokeResponse"
+                  "$ref": "#/components/schemas/licensing.RevokeResponse"
                 }
               }
             },
@@ -345,7 +353,7 @@
                 "token": "eyJ2Ijox….Ab3…"
               },
               "schema": {
-                "$ref": "#/components/schemas/VerifyRequest"
+                "$ref": "#/components/schemas/licensing.VerifyRequest"
               }
             }
           },
@@ -356,7 +364,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VerifyResponse"
+                  "$ref": "#/components/schemas/licensing.VerifyResponse"
                 }
               }
             },
@@ -368,7 +376,7 @@
   },
   "components": {
     "schemas": {
-      "DeviceSignals": {
+      "licensing.DeviceSignals": {
         "properties": {
           "arch": {
             "type": "string"
@@ -407,16 +415,16 @@
         },
         "type": "object"
       },
-      "FingerprintRequest": {
+      "licensing.FingerprintRequest": {
         "properties": {
           "signals": {
-            "$ref": "#/components/schemas/DeviceSignals",
+            "$ref": "#/components/schemas/licensing.DeviceSignals",
             "description": "Signals is the host material the client agent collected. Which fields\nactually participate in the binding is deliberately unspecified — send\neverything available and let the server decide."
           }
         },
         "type": "object"
       },
-      "FingerprintResponse": {
+      "licensing.FingerprintResponse": {
         "properties": {
           "fingerprint": {
             "description": "Fingerprint is the OPAQUE binding value to pass to POST /v1/licensing/issue.\nIt is one-way: the raw signals cannot be recovered from it and are never\nechoed back.",
@@ -429,7 +437,7 @@
         },
         "type": "object"
       },
-      "HealthView": {
+      "licensing.HealthView": {
         "properties": {
           "env": {
             "description": "Env is the deployment environment (\"dev\" | \"staging\" | \"prod\").",
@@ -450,7 +458,7 @@
         },
         "type": "object"
       },
-      "IssueRequest": {
+      "licensing.IssueRequest": {
         "properties": {
           "fingerprint": {
             "description": "Fingerprint is a previously-registered device binding value, as returned by\nPOST /v1/licensing/fingerprint. Leave it empty and pass Signals to bind the\ndevice at issue time instead.",
@@ -469,7 +477,7 @@
             "type": "string"
           },
           "signals": {
-            "$ref": "#/components/schemas/DeviceSignals",
+            "$ref": "#/components/schemas/licensing.DeviceSignals",
             "description": "Signals binds the device at issue time, as an alternative to a\npre-registered fingerprint. The raw signals are never stored or echoed —\nthey are folded immediately into the one-way binding value."
           },
           "ttl_seconds": {
@@ -482,7 +490,7 @@
         ],
         "type": "object"
       },
-      "IssueResponse": {
+      "licensing.IssueResponse": {
         "properties": {
           "app_id": {
             "description": "AppID is the brand this token runs under (\"hanzo\" | \"lux\" | \"zoo\"). The\nengine refuses a token whose app_id is not the one it was built for.",
@@ -518,7 +526,7 @@
         },
         "type": "object"
       },
-      "JWK": {
+      "licensing.JWK": {
         "properties": {
           "crv": {
             "description": "Crv is always \"Ed25519\".",
@@ -539,7 +547,7 @@
         },
         "type": "object"
       },
-      "PubkeyView": {
+      "licensing.PubkeyView": {
         "properties": {
           "alg": {
             "description": "Alg is always \"Ed25519\".",
@@ -548,7 +556,7 @@
           "keys": {
             "description": "Keys is the same key as a single-entry JWKS (OKP/Ed25519), for JWKS-shaped\nconsumers.",
             "items": {
-              "$ref": "#/components/schemas/JWK"
+              "$ref": "#/components/schemas/licensing.JWK"
             },
             "type": "array"
           },
@@ -571,7 +579,7 @@
         },
         "type": "object"
       },
-      "Release": {
+      "licensing.Release": {
         "properties": {
           "app_id": {
             "description": "AppID scopes the release to an app build (\"hanzo\" | \"lux\" | \"zoo\").",
@@ -626,7 +634,7 @@
         },
         "type": "object"
       },
-      "ReleaseAsset": {
+      "licensing.ReleaseAsset": {
         "properties": {
           "cosign_cert": {
             "type": "string"
@@ -639,24 +647,24 @@
             "type": "string"
           },
           "release": {
-            "$ref": "#/components/schemas/Release"
+            "$ref": "#/components/schemas/licensing.Release"
           }
         },
         "type": "object"
       },
-      "ReleaseList": {
+      "licensing.ReleaseList": {
         "properties": {
           "releases": {
             "description": "Releases is the published releases, always an array and never null.",
             "items": {
-              "$ref": "#/components/schemas/Release"
+              "$ref": "#/components/schemas/licensing.Release"
             },
             "type": "array"
           }
         },
         "type": "object"
       },
-      "RevocationEntry": {
+      "licensing.RevocationEntry": {
         "properties": {
           "at": {
             "type": "integer"
@@ -676,7 +684,7 @@
         },
         "type": "object"
       },
-      "RevokeRequest": {
+      "licensing.RevokeRequest": {
         "properties": {
           "reason": {
             "description": "Reason is the operator's note, echoed back by verify so a support agent can\nexplain the refusal.",
@@ -697,10 +705,10 @@
         ],
         "type": "object"
       },
-      "RevokeResponse": {
+      "licensing.RevokeResponse": {
         "properties": {
           "entry": {
-            "$ref": "#/components/schemas/RevocationEntry",
+            "$ref": "#/components/schemas/licensing.RevocationEntry",
             "description": "Entry is the stored revocation, including who recorded it and when."
           },
           "revoked": {
@@ -710,7 +718,7 @@
         },
         "type": "object"
       },
-      "VerifyRequest": {
+      "licensing.VerifyRequest": {
         "properties": {
           "app": {
             "description": "App overrides the app_id the token is expected to carry. Leave it empty and\nthe token's own app_id is used — an online verify is informational, and it\nis the ENGINE that enforces the app at boot.",
@@ -726,7 +734,7 @@
         ],
         "type": "object"
       },
-      "VerifyResponse": {
+      "licensing.VerifyResponse": {
         "properties": {
           "app_id": {
             "description": "AppID is the brand the token runs under.",
