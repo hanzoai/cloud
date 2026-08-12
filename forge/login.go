@@ -25,6 +25,10 @@ package forge
 // run refuses — rather than wrong for a few people silently.
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"unicode"
@@ -72,4 +76,74 @@ func Login(email string) string {
 		return ""
 	}
 	return loginHyphen.ReplaceAllLiteralString(loginDrop.ReplaceAllLiteralString(folded, ""), "-")
+}
+
+// ErrNotYours means the login derived from a caller's address belongs to a
+// DIFFERENT person on the forge. It is the refusal that makes [Login] safe to
+// use as an identity.
+var ErrNotYours = errors.New("forge: that login belongs to someone else")
+
+// LoginFor is [Login] with the ownership PROVEN, and it is the only one a
+// caller should reach for.
+//
+// # Why deriving is not enough
+//
+// [Login] takes the local part of an address, so it maps MANY addresses onto ONE
+// login: z@hanzo.ai and z@anywhere.example both derive `z`. IAM's own uniqueness
+// does not help, because it is enforced on the whole address — the collision is
+// created here, by dropping the domain.
+//
+// That turns a guessable string into an identity. Anyone who can obtain an
+// account whose address begins with a colleague's local part derives that
+// colleague's login, and everything downstream — Sudo, the entitlement read, the
+// deploy key — is then performed AS THEM. On a shared signup org, where every
+// self-serve account lands beside the staff (account.SignupOrg), the person
+// obtaining that account can be a stranger.
+//
+// So the derived login is treated as a GUESS and checked against the forge:
+// the user it names must carry the caller's own address. A stranger deriving a
+// colleague's login is refused because the colleague's forge account holds the
+// colleague's address, not theirs.
+//
+// # What it rests on
+//
+// The forge answers a site administrator with the user's real email, and answers
+// everyone else with a placeholder (services/convert/user.go toUser: the address
+// is returned only when the doer is the user or an admin). The machine
+// credential is an administrator — Sudo requires it — so this reads the true
+// value, and a deployment where it somehow did not would compare against
+// `name@noreply.…` and refuse. It fails closed either way.
+//
+// # What it does not prove
+//
+// That the CALLER'S address is theirs. This deployment's tokens carry `email`
+// and no `email_verified`, and a direct password signup records the address
+// unverified, so an address nobody has registered in IAM yet can still be
+// claimed by whoever registers it first. Where that address already belongs to
+// somebody, IAM's uniqueness refuses the second registration; where it belongs
+// to a forge account with no IAM account beside it, this check can be satisfied
+// by claiming it. Closing that needs a verified-email claim in the token.
+func (c *Client) LoginFor(ctx context.Context, email string) (string, error) {
+	login := Login(email)
+	if login == "" {
+		return "", fmt.Errorf("forge: no login can be derived from %q", email)
+	}
+	var u struct {
+		Login string `json:"login"`
+		Email string `json:"email"`
+	}
+	err := c.Machine().do(ctx, "/users/"+url.PathEscape(login), nil, &u)
+	if isMissing(err) {
+		return "", fmt.Errorf("%w: %s", ErrUnknownActor, login)
+	}
+	if err != nil {
+		return "", err
+	}
+	// Case-insensitive: an address is not case-sensitive in its domain and is
+	// treated as insensitive throughout this estate. Both sides are trimmed
+	// because one comes off a header.
+	if !strings.EqualFold(strings.TrimSpace(u.Email), strings.TrimSpace(email)) {
+		return "", fmt.Errorf("%w: %s is not %s", ErrNotYours, login, email)
+	}
+	return login, nil
 }

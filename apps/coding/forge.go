@@ -137,6 +137,35 @@ func domain() string {
 	return brand.APIHost(b)
 }
 
+// resolveActor is the forge login this caller has PROVEN is theirs.
+//
+// It replaces a pure derivation, and the difference is a privilege escalation.
+// The login is the local part of an address, so many addresses derive one login
+// — and on this deployment every self-serve signup lands in the SAME org as the
+// staff (account.SignupOrg is "hanzo", which forge.Owner maps to the estate's
+// own namespace). A stranger signing up as `z@anywhere.example` therefore
+// derived a colleague's login `z`, and every later control asked about THEM:
+// the entitlement read, the deploy key, the push. Signup to a write key on the
+// estate's monorepo, through a public form.
+//
+// So the derivation is only a guess now, and forge.LoginFor makes the forge
+// confirm it: the account it names must carry this caller's own address.
+//
+// THERE IS NO FALLBACK. The IAM username used to stand in for a principal
+// carrying no address — an API key — but a username cannot be checked against
+// anything, so it would be exactly the unproven guess this removes. A principal
+// with no address gets no forge identity and the run refuses.
+func resolveActor(ctx context.Context, email string) (string, error) {
+	c, err := client(ctx)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(email) == "" {
+		return "", fmt.Errorf("coding: this caller has no verified address, so it has no forge identity")
+	}
+	return c.LoginFor(ctx, email)
+}
+
 // delegate gives ONE run push access to ONE repository, and hands back
 // everything the sandbox needs to use it.
 //
