@@ -27,7 +27,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/forge"
-	"github.com/hanzoai/cloud/plane/iam"
 )
 
 // credential holds the deployment's forge credential for this process, re-reading it
@@ -138,55 +137,23 @@ func domain() string {
 	return brand.APIHost(b)
 }
 
-// resolveActor is the forge login this caller has PROVEN is theirs.
+// resolveActor is the forge login this run acts as.
 //
-// TWO PROOFS, and each closes what the other leaves open.
-//
-// The address must be CONFIRMED. A login is the local part of an address, so
-// many addresses derive one login — and on this deployment every self-serve
-// signup lands in the same org as the staff (account.SignupOrg is "hanzo", which
-// forge.Owner maps to the estate's own namespace). An address a person merely
-// typed is not evidence of anything, so a stranger could sign up naming one that
-// begins with a colleague's local part and be handed that colleague's identity.
-// IAM records whether the address was confirmed (plane.IAMEmail); a direct
-// password signup records it FALSE until it is.
-//
-// The address must BE the forge account's. Confirming an address proves the
-// person holds it; it does not prove that the login it derives belongs to them —
-// an address nobody registered in IAM but that a forge account carries would
-// otherwise still collide. forge.LoginFor makes the forge settle that.
-//
-// Together: the only way to act as forge user z@hanzo.ai is to have proved
-// z@hanzo.ai, which is to be z.
-//
-// THE ADDRESS COMES FROM IAM, not from the request. The header would do — it is
-// minted from validated claims — but asking the store means the one input to
-// this whole chain is the caller's SUBJECT, which the plane carries and nothing
-// can forge, and the address is then read from the record that also says whether
-// it was proved. One source, one moment, no gap between the two facts.
-//
-// Fail closed at every step: an unreachable IAM, a principal it does not know,
-// and an unconfirmed address are each a refusal. Never an assumption.
+// The resolution itself is forge.Client.Caller — subject to confirmed address to
+// the login the forge agrees is theirs — and it lives there because the TRACKER
+// asks the same question of the same forge. Two spellings of "who is this
+// person here" is one of them drifting, and the one that drifted would be a
+// privilege escalation: this path spent four passes closing exactly that.
 func resolveActor(ctx context.Context) (string, error) {
-	who, err := iam.IAMEmail(ctx)
+	c, err := client(ctx)
 	if err != nil {
-		return "", fmt.Errorf("coding: could not establish who this run acts as: %w", err)
+		return "", err
 	}
-	if who == nil || strings.TrimSpace(who.Address) == "" {
-		return "", fmt.Errorf("coding: this caller has no address, so it has no forge identity")
+	login, err := c.Caller(ctx)
+	if err != nil {
+		return "", fmt.Errorf("coding: %w", err)
 	}
-	if !who.Verified {
-		// Said plainly, because it is the one refusal here a person can act on
-		// themselves — and because it is the intended behaviour rather than a
-		// fault: an unconfirmed address cannot be the basis of an identity.
-		return "", fmt.Errorf("coding: verify %s before starting a run — an unconfirmed address "+
-			"cannot be used to act as anyone on the forge", who.Address)
-	}
-	c, cerr := client(ctx)
-	if cerr != nil {
-		return "", cerr
-	}
-	return c.LoginFor(ctx, who.Address)
+	return login, nil
 }
 
 // delegate gives ONE run push access to ONE repository, and hands back
