@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/brand"
@@ -30,6 +31,84 @@ import (
 // credential holds the deployment's forge credential for this process, re-reading it
 // from KMS on its own schedule so a rotation is live without a restart.
 var credential forge.Source
+
+// live tracks the grants this process is holding right now, so a shutdown can
+// give them back instead of orphaning them.
+//
+// The forge expires nothing, so an in-flight run's key outlives the process that
+// minted it. A rolling deploy is therefore the ordinary way keys are abandoned —
+// not a rare crash — and this is the ordinary way they are not.
+var live struct {
+	sync.Mutex
+	m map[int64]forge.Grant
+}
+
+// hold records a grant for the duration of its run.
+func hold(g forge.Grant) {
+	live.Lock()
+	if live.m == nil {
+		live.m = map[int64]forge.Grant{}
+	}
+	live.m[g.ID] = g
+	live.Unlock()
+}
+
+// drop forgets a grant that has already been withdrawn.
+func drop(id int64) {
+	live.Lock()
+	delete(live.m, id)
+	live.Unlock()
+}
+
+// Drain withdraws every grant this process is still holding.
+//
+// The composition root calls it on shutdown. It is bounded by its own context
+// rather than the caller's, because the caller's is usually already cancelled by
+// the time a shutdown reaches here, and a withdrawal that does not happen is a
+// live push credential rather than an untidy log line.
+//
+// Best-effort: SweepOrg is the backstop for whatever this misses (a SIGKILL, a
+// forge that will not answer), so this only has to cover the common case.
+func Drain(ctx context.Context) int {
+	live.Lock()
+	held := make([]forge.Grant, 0, len(live.m))
+	for _, g := range live.m {
+		held = append(held, g)
+	}
+	live.m = nil
+	live.Unlock()
+
+	done := 0
+	for _, g := range held {
+		if err := withdraw(ctx, "", g); err == nil {
+			done++
+		}
+	}
+	return done
+}
+
+// Sweep withdraws run grants abandoned by an earlier process, across the whole
+// forge org this deployment works in.
+//
+// Startup is the right moment because a restart is what produces them: the run
+// that was in flight when the old process went away holds a key nobody will ever
+// withdraw. Called once, in the background, by the composition root — its
+// failure is a stale key, never a process that will not start.
+func Sweep(ctx context.Context, org string) (int, error) {
+	c, err := client(ctx)
+	if err != nil {
+		return 0, err
+	}
+	owner, err := forge.Owner(org)
+	if err != nil {
+		return 0, err
+	}
+	return c.Machine().SweepOrg(ctx, owner)
+}
+
+// Pinned reports whether the forge host key is configured rather than learned,
+// for a composition root to say once at startup.
+func Pinned() (bool, string) { return credential.Pinned() }
 
 // client is the process's forge client, UNSCOPED — the caller states who it acts
 // as. An unreachable KMS or an empty credential is an error and never a client:
@@ -119,6 +198,7 @@ func delegate(ctx context.Context, org, actor, repo, session string) (forge.Gran
 	if err != nil {
 		return forge.Grant{}, fmt.Errorf("coding: the forge would not delegate a push for %s: %w", repo, err)
 	}
+	hold(g)
 	return g, nil
 }
 
@@ -137,14 +217,22 @@ func withdraw(ctx context.Context, org string, g forge.Grant) error {
 	if err != nil {
 		return err
 	}
-	return c.Machine().Revoke(ctx, g.Owner, g.Repo, g.ID)
+	if err := c.Machine().Revoke(ctx, g.Owner, g.Repo, g.ID); err != nil {
+		return err
+	}
+	drop(g.ID)
+	return nil
 }
 
 // remote is the HTTPS address of a repository, for a run executing on a machine
 // the customer owns and that authenticates git with its own already-held
 // credentials. The sandbox path never uses it — that one clones the SSH remote
 // its grant names, which is the only address its key opens.
-func remote(ctx context.Context, org, repo string) string {
+//
+// The ACTOR is what decides whether there is an address at all, for the same
+// reason delegate asks as the human: the executing machine's reach is wider
+// than the caller's, and an address is the whole of what a routed run needs.
+func remote(ctx context.Context, org, actor, repo string) string {
 	c, err := client(ctx)
 	if err != nil {
 		return ""
@@ -153,7 +241,14 @@ func remote(ctx context.Context, org, repo string) string {
 	if err != nil {
 		return ""
 	}
-	r, err := c.Machine().Repo(ctx, owner, repo)
+	if strings.TrimSpace(actor) == "" {
+		return ""
+	}
+	// AS THE ACTOR, not the machine. This address is handed to a machine that
+	// holds the org's own credentials, so resolving it as a site administrator
+	// would let a caller reach a repository through that machine which they
+	// cannot open themselves. A repository the actor cannot see has no address.
+	r, err := c.As(actor).Repo(ctx, owner, repo)
 	if err != nil || strings.TrimSpace(r.FullName) == "" {
 		return ""
 	}
@@ -186,18 +281,13 @@ func landed(ctx context.Context, org, repo, branch string) (string, bool) {
 // propose offers the run's branch for merging and answers where a person reads
 // it.
 //
-// It is made as the MACHINE, and the reason is a fact about the data rather than
-// a preference: a run's subject is an OIDC SUBJECT (integrations.LinkedSubject
-// returns the account link's subject, an opaque id), and Sudo takes a forge
-// LOGIN. There is no person here to act as, and inventing one by guessing at a
-// username would attribute the work to whoever happens to hold that login on the
-// forge.
-//
-// Nothing is lost against what this replaces — that opened the pull request with
-// a GitHub App installation token, which is also a bot — and nothing is hidden:
-// the human is on the tracker work item this is filed beside, and the run that
-// produced the branch is named in the body.
-func propose(ctx context.Context, org, repo, base, head, title, body string) (string, error) {
+// It is made AS THE HUMAN the run acts for, so the forge records who asked for
+// the work rather than a shared bot. That became possible once every run had to
+// name a forge login it could act as: the same identity whose push right was
+// established before a key was ever minted opens the proposal, and a machine
+// that proposed on their behalf would be a second, wider authority for an act
+// they can already perform.
+func propose(ctx context.Context, org, actor, repo, base, head, title, body string) (string, error) {
 	c, err := client(ctx)
 	if err != nil {
 		return "", err
@@ -206,5 +296,8 @@ func propose(ctx context.Context, org, repo, base, head, title, body string) (st
 	if err != nil {
 		return "", err
 	}
-	return c.Machine().Propose(ctx, owner, repo, base, head, title, body)
+	if strings.TrimSpace(actor) == "" {
+		return "", fmt.Errorf("coding: a proposal needs the person it is for")
+	}
+	return c.As(actor).Propose(ctx, owner, repo, base, head, title, body)
 }

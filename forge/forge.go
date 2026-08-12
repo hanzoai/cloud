@@ -268,7 +268,15 @@ func (c *Client) Reuse(prev *Client) {
 // The ACTOR leads and the separator is a byte neither half can contain, so no
 // two (actor, org) pairs can spell one key. That is the whole tenancy argument
 // for the cache: see cache.go.
-func (c *Client) key(org string) string { return c.actor + "\x00" + org }
+func (c *Client) key(org string) string {
+	if c.machine {
+		// The machine is a distinct reader with a distinct visible set, and it must
+		// not share a cache entry with the user whose actor is empty — which is
+		// nobody, but would be spelled the same way.
+		return "\x00machine\x00" + org
+	}
+	return c.actor + "\x00" + org
+}
 
 // As returns a client that acts as the forge user `login`, dropping privilege to
 // that user's own permissions for every call made through it (see the package
@@ -512,7 +520,7 @@ func (c *Client) Repos(ctx context.Context, org string) ([]Repo, error) {
 	}
 	// Ahead of the cache, so an unscoped client refuses rather than taking a
 	// slot in it. Same refusal do() would make, made before anything is stored.
-	if c.actor == "" {
+	if c.actor == "" && !c.machine {
 		return nil, ErrNoActor
 	}
 	got, err := c.repos.do(ctx, c.key(org), func(ctx context.Context) ([]Repo, error) {

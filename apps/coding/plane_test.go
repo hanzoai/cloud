@@ -204,7 +204,7 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 		result: RunResult{Changed: true, OK: true, CommitSha: "deadbeef", Diffstat: " 1 file changed"},
 	}
 	res := planeDispatcher(run).Run(context.Background(), Req{
-		Org: "hanzo", UserID: "u_1", AgentRef: "hanzo", Repo: "api",
+		Org: "hanzo", UserID: "u_1", Actor: "zoe", AgentRef: "hanzo", Repo: "api",
 		Prompt: "fix the flake", Remote: "git@git.test:hanzoai/api.git",
 		Key:   "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----",
 		Known: "git.test ssh-ed25519 AAAAPIN",
@@ -278,7 +278,7 @@ func TestRun_OverThePlane_UnverifiedRefFilesNoPR(t *testing.T) {
 
 	run := &fakeRunner{result: RunResult{Changed: true, OK: true, CommitSha: "deadbeef"}}
 	res := planeDispatcher(run).Run(context.Background(), Req{
-		Org: "hanzo", UserID: "u_1", Repo: "api", Prompt: "fix",
+		Org: "hanzo", UserID: "u_1", Actor: "zoe", Repo: "api", Prompt: "fix",
 		Remote: "git@git.test:hanzoai/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",
 	})
 
@@ -298,7 +298,7 @@ func TestRun_OverThePlane_UnverifiedRefFilesNoPR(t *testing.T) {
 func TestRun_OverThePlane_MissingPeerFailsHonestly(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", socketDir(t)) // nothing listening at all
 	res := planeDispatcher(&fakeRunner{}).Run(context.Background(), Req{
-		Org: "hanzo", UserID: "u_1", Repo: "api", Prompt: "fix",
+		Org: "hanzo", UserID: "u_1", Actor: "zoe", Repo: "api", Prompt: "fix",
 		Remote: "git@git.test:hanzoai/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",
 	})
 	if res.OK {
