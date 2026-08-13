@@ -136,6 +136,40 @@ Same shape, one layer up: zsh was installed in every class and was the prompt of
 none, because the user's login shell stayed `/bin/bash` and tmux asks passwd what
 to run. Installed is not in use — for a shell, for a VNC server, for anything a
 supervisor stands in front of.
+## Issuing the token — the constraint that decides it
+
+VERIFIED, not assumed: **IAM never discloses an application's client secret.**
+`pkg/schema/mask.go:124` — `Application.Mask()` sets `ClientSecret = ""`, and
+BOTH `Create` and `Get` return `in.Mask()`. Not masked on read and returned once
+on create; never, on either.
+
+So the obvious implementation does not exist. Cloud cannot create `<org>-agent`,
+read its secret back, and exchange it for a client_credentials token, because
+there is no moment at which it is handed the secret.
+
+Two shapes remain, and this IS a real decision rather than a thing to look up:
+
+  a. **Cloud supplies the secret at creation.** `Create` takes a whole
+     `*schema.Application`, so a caller-provided `ClientSecret` is stored. Cloud
+     would generate it, seal it in KMS, and exchange it later. Standard OAuth
+     client registration — but it means cloud generating credential material,
+     which sits close to the line "never build custom auth" draws.
+  b. **IAM issues the token for an app it owns**, without the secret leaving.
+     IAM mints, cloud receives — which is exactly what the rule asks for, and it
+     is a small addition on IAM's side rather than a new authority on cloud's.
+
+(b) is the one that needs nothing bent. It also matches every other credential
+here: `cred.go` reads what an issuing service already made and mints nothing.
+
+What is NOT in doubt any more, and cost this session to establish:
+- the identity exists and is provisioned per org (`apps/account/iam.go`)
+- a client_credentials token of that class is ALREADY denied platform sudo,
+  structurally, by `isClientCredentialsPrincipal` — including in the reserved
+  `admin` org, which is the escalation attempt #1 was reverted for. There is a
+  test for it. No suffix list, no allowlist, nothing to maintain.
+- delivery belongs in `cred.go`, beside the SuperAdmin delivery, under that
+  file's existing rule
+- `apps/sandbox` is a different PROCESS, so it asks over the plane
 
 ## The harness
 
