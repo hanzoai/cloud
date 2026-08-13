@@ -67,7 +67,13 @@ var unextracted = []string{
 	"referrals", "registry", "risk", "rollingcap", "s3admin",
 	"samples", "sandbox", "sbom", "search", "security", "settings", "share",
 	"sites",
-	"storage", "sync", "templates", "tenant", "tools", "tracker", "translate",
+	"storage", "sync",
+	// tel is numbers, calls and messages: it holds a carrier relationship and the
+	// org-scoped records of what was bought, dialled and sent. It imports only
+	// hanzoai/cloud, and no hanzoai/tel exists to mount — so the functionality
+	// lives here and nowhere else, which is what this bucket means.
+	"tel",
+	"templates", "tenant", "tools", "tracker", "translate",
 	"treasury", "validators", "venue", "wallets", "webhooks", "websearch",
 	// web3 is the chain-access surface. It REPLACES the api/ half of
 	// hanzoai/bootnode rather than extracting from it — that half was Python
