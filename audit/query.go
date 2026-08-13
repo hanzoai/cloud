@@ -18,23 +18,23 @@ import (
 // and compared against the RFC3339Nano ts column lexicographically (RFC3339 is
 // order-preserving as text, so a string range is a correct time range).
 type Filter struct {
-	Org        string    // actor_org exact match (the org acted IN)
-	Sub        string    // actor_sub exact match (a specific user)
-	Home       string    // actor_home exact match — the org the actor came FROM.
+	Org  string // actor_org exact match (the org acted IN)
+	Sub  string // actor_sub exact match (a specific user)
+	Home string // actor_home exact match — the org the actor came FROM.
 	// Impersonated restricts to CROSS-ORG actions only (actor_home <> ''), which
 	// is the question this control exists to answer: "show me every time a
 	// platform admin acted inside a tenant that was not their own." Without it an
 	// auditor would have to scan the whole trail to find the events that matter
 	// most.
 	Impersonated bool
-	Action     string    // action exact match
-	Resource   string    // res_type exact match
-	ResourceID string    // res_id exact match (a specific resource instance)
-	Result     string    // outcome result: success|deny|error
-	Since      time.Time // ts >= Since (UTC)
-	Until      time.Time // ts <= Until (UTC)
-	Limit      int       // max rows (default 100, cap 1000)
-	Offset     int       // pagination offset
+	Action       string    // action exact match
+	Resource     string    // res_type exact match
+	ResourceID   string    // res_id exact match (a specific resource instance)
+	Result       string    // outcome result: success|deny|error
+	Since        time.Time // ts >= Since (UTC)
+	Until        time.Time // ts <= Until (UTC)
+	Limit        int       // max rows (default 100, cap 1000)
+	Offset       int       // pagination offset
 }
 
 // Query returns records matching f, newest first, and the total count matching
