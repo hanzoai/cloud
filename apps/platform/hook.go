@@ -86,6 +86,13 @@ const (
 	// forge's own redelivery of a request it could not complete — which is the
 	// only way one push arrives twice.
 	hookWindow = 30 * time.Minute
+	// hookRead bounds one KMS read of the verifying secret. The read runs on a
+	// context detached from the request (fetch), so this is the only thing that
+	// stops a hung read from pinning the refresh open and answering errUnread for
+	// every delivery behind it. Generous on purpose: a false timeout is cached as
+	// failure for hookFresh, so the bound must clear a live-but-slow KMS, not a
+	// fast one — a read past this is a degraded KMS the door is right to refuse.
+	hookRead = 10 * time.Second
 	// zeroSHA is git's all-zero object id: the `after` of a deleted ref.
 	zeroSHA = "0000000000000000000000000000000000000000"
 )
