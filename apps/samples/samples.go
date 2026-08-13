@@ -42,6 +42,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // Sources — the CLOSED vocabulary of compute planes that feed the series. Closed
@@ -366,11 +367,7 @@ func Record(ctx context.Context, s Sample) error {
 // ── bounds (total functions; mirrors clients/agents.Spec/Metrics Sanitize) ───
 
 func clampStr(s string, n int) string {
-	s = strings.TrimSpace(s)
-	if len(s) > n {
-		return strings.ToValidUTF8(s[:n], "")
-	}
-	return s
+	return strings.ToValidUTF8(shorten.To(strings.TrimSpace(s), n), "")
 }
 
 func clampInt(i, hi int) int {

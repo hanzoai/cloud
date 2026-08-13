@@ -18,6 +18,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -551,11 +552,7 @@ func windowStart() string {
 }
 
 func clip(s string, max int) string {
-	s = strings.TrimSpace(s)
-	if len(s) > max {
-		return s[:max]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), max)
 }
 
 // newID mints a prefixed, collision-resistant id (128 random bits).

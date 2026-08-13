@@ -36,6 +36,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -533,11 +534,7 @@ func normalizePriority(p string) string {
 
 // clip trims and bounds a text field.
 func clip(s string, max int) string {
-	s = strings.TrimSpace(s)
-	if len(s) > max {
-		return s[:max]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), max)
 }
 
 // articleLimit bounds the public list size (?limit=, default 50, max 200). A
