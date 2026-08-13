@@ -21,9 +21,9 @@ var routed = manifest.OwnerOf
 // an operationId is not mistaken for prose.
 func TestCompleteAcceptsADocumentThatSaysSomething(t *testing.T) {
 	doc := &Document{Paths: map[string]PathItem{
-		"/v1/widgets": {"get": {OperationID: "get_v1_widgets", Summary: "List your org's widgets"}},
+		"/v1/widgets": {"get": {OperationID: "get_widgets", Summary: "List your org's widgets"}},
 		"/v1/widgets/{id}": {"delete": {
-			OperationID: "delete_v1_widgets_by_id",
+			OperationID: "delete_widgets_by_id",
 			Description: "Removes the addressed widget. Answers 204 once it is gone.",
 		}},
 	}}
@@ -37,8 +37,8 @@ func TestCompleteAcceptsADocumentThatSaysSomething(t *testing.T) {
 // not a sentence — it is the same mechanical string a fallback would print.
 func TestCompleteRefusesAnOperationThatSaysNothing(t *testing.T) {
 	doc := &Document{Paths: map[string]PathItem{
-		"/v1/widgets":      {"get": {OperationID: "get_v1_widgets", Summary: "List your org's widgets"}},
-		"/v1/widgets/{id}": {"delete": {OperationID: "delete_v1_widgets_by_id"}},
+		"/v1/widgets":      {"get": {OperationID: "get_widgets", Summary: "List your org's widgets"}},
+		"/v1/widgets/{id}": {"delete": {OperationID: "delete_widgets_by_id"}},
 	}}
 	err := Complete(doc, routed)
 	if err == nil {
@@ -62,7 +62,7 @@ func TestCompleteRefusesADescriptionThatNamesNoOperation(t *testing.T) {
 
 	doc := &Document{Paths: map[string]PathItem{
 		"/v1/store/storefront-token": {"post": {
-			OperationID: "post_v1_store_storefront-token",
+			OperationID: "post_store_storefront-token",
 			Summary:     "Mint your org's least-privilege storefront read key",
 			Tags:        []string{"store"},
 		}},
@@ -85,7 +85,7 @@ func TestCompleteIgnoresProseForAProductThisAppDoesNotPublish(t *testing.T) {
 	t.Cleanup(func() { unregister("/v1/metrics/query", "GET") })
 
 	doc := &Document{Paths: map[string]PathItem{
-		"/v1/widgets": {"get": {OperationID: "get_v1_widgets", Summary: "List your org's widgets"}},
+		"/v1/widgets": {"get": {OperationID: "get_widgets", Summary: "List your org's widgets"}},
 	}}
 	if err := Complete(doc, routed); err != nil {
 		t.Fatalf("another product's declaration was charged to this app: %v", err)
@@ -102,7 +102,7 @@ func TestCompleteReadsAWildcardDeclarationThroughTheSameTranslation(t *testing.T
 
 	doc := &Document{Paths: map[string]PathItem{
 		"/v1/kms/secrets/{wildcard1}": {"get": {
-			OperationID: "get_v1_kms_secrets_by_wildcard1",
+			OperationID: "get_kms_secrets_by_wildcard1",
 			Summary:     "Read one secret",
 			Tags:        []string{"kms"},
 		}},
@@ -130,8 +130,8 @@ func TestCompleteDoesNotChargeAnAppForASiblingSharingItsProduct(t *testing.T) {
 	t.Cleanup(func() { unregister("/v1/s3", "POST") })
 
 	storage := &Document{Paths: map[string]PathItem{
-		"/v1/s3/buckets": {"get": {OperationID: "get_v1_s3_buckets", Summary: "List your org's buckets"}},
-		"/v1/s3/health":  {"get": {OperationID: "get_v1_s3_health", Summary: "Report the object store's reachability"}},
+		"/v1/s3/buckets": {"get": {OperationID: "get_s3_buckets", Summary: "List your org's buckets"}},
+		"/v1/s3/health":  {"get": {OperationID: "get_s3_health", Summary: "Report the object store's reachability"}},
 	}}
 	if err := Complete(storage, routed); err != nil {
 		t.Fatalf("storage was charged with provisioning's declaration: %v", err)
@@ -157,9 +157,9 @@ func TestCompleteStillRefusesADeclarationMisfiledInsideTheAppsOwnPrefix(t *testi
 	t.Cleanup(func() { unregister(misfiled, "GET") })
 
 	storage := &Document{Paths: map[string]PathItem{
-		"/v1/s3/buckets": {"get": {OperationID: "get_v1_s3_buckets", Summary: "List your org's buckets"}},
+		"/v1/s3/buckets": {"get": {OperationID: "get_s3_buckets", Summary: "List your org's buckets"}},
 		"/v1/s3/buckets/{bucket}/objects": {"get": {
-			OperationID: "get_v1_s3_buckets_by_bucket_objects",
+			OperationID: "get_s3_buckets_by_bucket_objects",
 			Summary:     "List the objects in one bucket",
 		}},
 	}}
@@ -240,7 +240,7 @@ func TestNoAppIsChargedForASiblingSharingItsProduct(t *testing.T) {
 // forgets cannot ship an unchecked artifact.
 func TestCompleteRefusesToJudgeWithoutTheRoutingTable(t *testing.T) {
 	doc := &Document{Paths: map[string]PathItem{
-		"/v1/widgets": {"get": {OperationID: "get_v1_widgets", Summary: "List your org's widgets"}},
+		"/v1/widgets": {"get": {OperationID: "get_widgets", Summary: "List your org's widgets"}},
 	}}
 	err := Complete(doc, nil)
 	if err == nil {

@@ -60,7 +60,7 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 			"answer any question about what is happening now — the weather, an outage, a release"},
 		{"crawl", crawl.Mount, "read_page",
 			"read a page it was given the URL of"},
-		{"exec", exec.Mount, "post_v1_exec",
+		{"exec", exec.Mount, "post_exec",
 			"run a snippet and report what it printed"},
 		{"ask", ask.Mount, "research_web",
 			"research a question across many pages and answer it with sources cited"},

@@ -21,44 +21,44 @@ import (
 // fleet that has moved on.
 var readings = []struct{ id, want, route string }{
 	// The shape that made the surface unreadable, whole.
-	{"get_v1_projects", "list_projects", "GET /v1/projects"},
-	{"post_v1_projects", "create_project", "POST /v1/projects"},
-	{"get_v1_projects_by_slug", "get_project", "GET /v1/projects/{slug}"},
-	{"patch_v1_projects_by_slug", "update_project", "PATCH /v1/projects/{slug}"},
-	{"delete_v1_projects_by_slug", "delete_project", "DELETE /v1/projects/{slug}"},
-	{"get_v1_projects_by_slug_deployments", "list_project_deployments", "GET /v1/projects/{slug}/deployments"},
-	{"get_v1_projects_by_slug_deployments_by_id", "get_project_deployment", "GET /v1/projects/{slug}/deployments/{id}"},
-	{"delete_v1_projects_by_slug_domains_by_host", "delete_project_domain", "DELETE /v1/projects/{slug}/domains/{host}"},
+	{"get_projects", "list_projects", "GET /v1/projects"},
+	{"post_projects", "create_project", "POST /v1/projects"},
+	{"get_projects_by_slug", "get_project", "GET /v1/projects/{slug}"},
+	{"patch_projects_by_slug", "update_project", "PATCH /v1/projects/{slug}"},
+	{"delete_projects_by_slug", "delete_project", "DELETE /v1/projects/{slug}"},
+	{"get_projects_by_slug_deployments", "list_project_deployments", "GET /v1/projects/{slug}/deployments"},
+	{"get_projects_by_slug_deployments_by_id", "get_project_deployment", "GET /v1/projects/{slug}/deployments/{id}"},
+	{"delete_projects_by_slug_domains_by_host", "delete_project_domain", "DELETE /v1/projects/{slug}/domains/{host}"},
 
 	// .../{id}/ACTION — the author wrote the verb, so it leads.
-	{"post_v1_projects_by_slug_deploy", "deploy_project", "POST /v1/projects/{slug}/deploy"},
-	{"post_v1_projects_by_slug_purge", "purge_project", "POST /v1/projects/{slug}/purge"},
-	{"post_v1_projects_by_slug_domains_by_host_verify", "verify_project_domain", "POST /v1/projects/{slug}/domains/{host}/verify"},
-	{"post_v1_projects_by_slug_deployments_by_id_complete", "complete_project_deployment", "POST /v1/projects/{slug}/deployments/{id}/complete"},
-	{"post_v1_sites_by_slug_releases_by_release_activate", "activate_site_release", "POST /v1/sites/{slug}/releases/{release}/activate"},
+	{"post_projects_by_slug_deploy", "deploy_project", "POST /v1/projects/{slug}/deploy"},
+	{"post_projects_by_slug_purge", "purge_project", "POST /v1/projects/{slug}/purge"},
+	{"post_projects_by_slug_domains_by_host_verify", "verify_project_domain", "POST /v1/projects/{slug}/domains/{host}/verify"},
+	{"post_projects_by_slug_deployments_by_id_complete", "complete_project_deployment", "POST /v1/projects/{slug}/deployments/{id}/complete"},
+	{"post_sites_by_slug_releases_by_release_activate", "activate_site_release", "POST /v1/sites/{slug}/releases/{release}/activate"},
 
 	// A singular segment is only an action when a parameter put it after a ROW.
 	// `/v1/commerce/product` is a collection someone spelled singular, and reading
 	// it as a verb produced `product_commerce` — for four methods at once.
-	{"post_v1_commerce_product", "create_commerce_product", "POST /v1/commerce/product"},
-	{"patch_v1_commerce_product_by_productid", "update_commerce_product", "PATCH /v1/commerce/product/{productid}"},
-	{"delete_v1_commerce_product_by_productid", "delete_commerce_product", "DELETE /v1/commerce/product/{productid}"},
+	{"post_commerce_product", "create_commerce_product", "POST /v1/commerce/product"},
+	{"patch_commerce_product_by_productid", "update_commerce_product", "PATCH /v1/commerce/product/{productid}"},
+	{"delete_commerce_product_by_productid", "delete_commerce_product", "DELETE /v1/commerce/product/{productid}"},
 	// …nor when the row comes AFTER it: `listing` is what {key} indexes into.
-	{"put_v1_store_by_storeid_listing_by_key", "set_store_listing", "PUT /v1/store/{storeid}/listing/{key}"},
-	{"post_v1_store_by_storeid_listing_by_key", "create_store_listing", "POST /v1/store/{storeid}/listing/{key}"},
-	{"post_v1_sandboxes_by_id_exec", "exec_sandbox", "POST /v1/sandboxes/{id}/exec — the action shape again"},
+	{"put_store_by_storeid_listing_by_key", "set_store_listing", "PUT /v1/store/{storeid}/listing/{key}"},
+	{"post_store_by_storeid_listing_by_key", "create_store_listing", "POST /v1/store/{storeid}/listing/{key}"},
+	{"post_sandboxes_by_id_exec", "exec_sandbox", "POST /v1/sandboxes/{id}/exec — the action shape again"},
 
 	// The inference surface.
 	{"post_v1_chat_completions", "create_chat_completion", "POST /v1/chat/completions"},
-	{"get_v1_models", "list_models", "GET /v1/models"},
+	{"get_models", "list_models", "GET /v1/models"},
 	{"post_v1_embeddings", "create_embedding", "POST /v1/embeddings"},
 	{"post_v1_rerank", "create_rerank", "POST /v1/rerank — one singular segment is the thing, not a verb"},
 
 	// Spelling that a naive plural rule gets wrong in both directions.
-	{"get_v1_sandboxes", "list_sandboxes", "GET /v1/sandboxes — plural stays plural for a list"},
-	{"get_v1_sandboxes_by_id", "get_sandbox", "GET /v1/sandboxes/{id} — `xes` loses two letters"},
-	{"get_v1_platform_sites_by_slug_releases", "list_platform_site_releases", "GET /v1/platform/sites/{slug}/releases"},
-	{"post_v1_sites_by_slug_releases", "create_site_release", "POST /v1/sites/{slug}/releases — `releases` loses only one"},
+	{"get_sandboxes", "list_sandboxes", "GET /v1/sandboxes — plural stays plural for a list"},
+	{"get_sandboxes_by_id", "get_sandbox", "GET /v1/sandboxes/{id} — `xes` loses two letters"},
+	{"get_platform_sites_by_slug_releases", "list_platform_site_releases", "GET /v1/platform/sites/{slug}/releases"},
+	{"post_sites_by_slug_releases", "create_site_release", "POST /v1/sites/{slug}/releases — `releases` loses only one"},
 
 	// A DECLARED id is already a verb on an object and is left alone.
 	{"GetUserPreference", "GetUserPreference", "o11y declares its own ids"},
@@ -140,7 +140,7 @@ func TestEveryPublishedNameMeansExactlyOneOperation(t *testing.T) {
 	t.Logf("  %4d keep a route for a name (%.1f%%): the phrase would have been ambiguous, so it is not used.",
 		ambiguous, 100*float64(ambiguous)/float64(len(all)))
 	t.Logf("       These are overwhelmingly the fleet's own duplicates — one handler at /tasks and")
-	t.Logf("       /v1/tasks, or post_v1_agent in one subsystem beside post_v1_agents in another.")
+	t.Logf("       /v1/tasks, or post_agent in one subsystem beside post_agents in another.")
 }
 
 // TestTheGateStillJudgesTheROUTE is the security bar for this change, and it is
@@ -148,9 +148,9 @@ func TestEveryPublishedNameMeansExactlyOneOperation(t *testing.T) {
 // after it. So the refused set cannot have moved.
 //
 // It is checked rather than asserted from the code's shape, because the failure
-// it guards against is silent: an operation whose route says `post_v1_iam_users`
+// it guards against is silent: an operation whose route says `post_iam_users`
 // reads back as `create_iam_user`, which still trips clause 2 — but
-// `delete_v1_keys` reads back as `delete_key`, and a rule applied to THAT would
+// `delete_keys` reads back as `delete_key`, and a rule applied to THAT would
 // have to re-derive a decision it has already made correctly once.
 func TestTheGateStillJudgesTheROUTE(t *testing.T) {
 	var held, offered []string

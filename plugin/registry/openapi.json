@@ -18,7 +18,7 @@
   "paths": {
     "/v1/registry/images": {
       "get": {
-        "operationId": "get_v1_registry_images",
+        "operationId": "get_registry_images",
         "summary": "Images lists the org's container repositories, read live from the OCI catalog and filtered server-side to the org's namespace — the page can only ever hold the caller's own images.",
         "description": "Images lists the org's container repositories, read live from the OCI\ncatalog and filtered server-side to the org's namespace — the page can only\never hold the caller's own images.",
         "tags": [
@@ -40,7 +40,7 @@
     },
     "/v1/registry/packages": {
       "get": {
-        "operationId": "get_v1_registry_packages",
+        "operationId": "get_registry_packages",
         "summary": "Packages lists the org's npm packages — `\u003corg\u003e` and `@\u003corg\u003e/…` — from the npm registry's search index, optionally narrowed by a query within that scope.",
         "description": "Packages lists the org's npm packages — `\u003corg\u003e` and `@\u003corg\u003e/…` — from the\nnpm registry's search index, optionally narrowed by a query within that\nscope. The org boundary is applied server-side after the search, so a query\ncan never widen it.",
         "tags": [
@@ -73,7 +73,7 @@
     },
     "/v1/registry/projects": {
       "get": {
-        "operationId": "get_v1_registry_projects",
+        "operationId": "get_registry_projects",
         "summary": "Projects lists the namespaces the caller can see with what each holds: the org's slug, its repository count on the OCI catalog, and its package count on the npm registry.",
         "description": "Projects lists the namespaces the caller can see with what each holds: the\norg's slug, its repository count on the OCI catalog, and its package count\non the npm registry. Today that is exactly one row — the caller's org.",
         "tags": [
@@ -95,7 +95,7 @@
     },
     "/v1/registry/status": {
       "get": {
-        "operationId": "get_v1_registry_status",
+        "operationId": "get_registry_status",
         "summary": "Status reports whether the OCI and npm registries are reachable and, when the OCI half is auth-gated, which token realm its challenge advertises — an honest lens for \"is the registry plane up\", never a fabricated ok.",
         "description": "Status reports whether the OCI and npm registries are reachable and, when\nthe OCI half is auth-gated, which token realm its challenge advertises — an\nhonest lens for \"is the registry plane up\", never a fabricated ok.",
         "tags": [
@@ -117,7 +117,7 @@
     },
     "/v1/registry/tags": {
       "get": {
-        "operationId": "get_v1_registry_tags",
+        "operationId": "get_registry_tags",
         "summary": "Tags lists one org-owned repository's tags, read live from the OCI registry.",
         "description": "Tags lists one org-owned repository's tags, read live from the OCI registry.\nThe repository is addressed inside the org's namespace — a name outside it\ncannot be expressed, and an unknown one answers 404.",
         "tags": [
@@ -150,7 +150,7 @@
     },
     "/v1/registry/token": {
       "post": {
-        "operationId": "post_v1_registry_token",
+        "operationId": "post_registry_token",
         "summary": "Token mints a short-lived, pull-only registry token for exactly one of the org's images, through the same IAM realm the docker CLI authenticates against.",
         "description": "Token mints a short-lived, pull-only registry token for exactly one of the\norg's images, through the same IAM realm the docker CLI authenticates\nagainst. The scope is pinned server-side to `\u003corg\u003e/\u003cimage\u003e` with the `pull`\naction — no field exists to name another org's image or ask for push. Use it\nas `Authorization: Bearer …` on the OCI wire; it expires in minutes.",
         "tags": [

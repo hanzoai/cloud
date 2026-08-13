@@ -19,9 +19,86 @@
     }
   ],
   "paths": {
+    "/rest/v1/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_rest_v1_by_wildcard1",
+        "summary": "The Base content types, on the Supabase wire",
+        "description": "The same collections data plane as /v1/collections/*, at the address a Supabase client sends to. The managed Base mounts that wire at the ROOT rather than under /v1, so this address is carried here verbatim and forwarded unchanged.\n\nIt is one registration for every method, and the same admission applies: the path is bounded to the collections data plane before anything is forwarded.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_rest_v1_by_wildcard1",
+        "summary": "The Base content types, on the Supabase wire",
+        "description": "The same collections data plane as /v1/collections/*, at the address a Supabase client sends to. The managed Base mounts that wire at the ROOT rather than under /v1, so this address is carried here verbatim and forwarded unchanged.\n\nIt is one registration for every method, and the same admission applies: the path is bounded to the collections data plane before anything is forwarded.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_rest_v1_by_wildcard1",
+        "summary": "The Base content types, on the Supabase wire",
+        "description": "The same collections data plane as /v1/collections/*, at the address a Supabase client sends to. The managed Base mounts that wire at the ROOT rather than under /v1, so this address is carried here verbatim and forwarded unchanged.\n\nIt is one registration for every method, and the same admission applies: the path is bounded to the collections data plane before anything is forwarded.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_rest_v1_by_wildcard1",
+        "summary": "The Base content types, on the Supabase wire",
+        "description": "The same collections data plane as /v1/collections/*, at the address a Supabase client sends to. The managed Base mounts that wire at the ROOT rather than under /v1, so this address is carried here verbatim and forwarded unchanged.\n\nIt is one registration for every method, and the same admission applies: the path is bounded to the collections data plane before anything is forwarded.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_rest_v1_by_wildcard1",
+        "summary": "The Base content types, on the Supabase wire",
+        "description": "The same collections data plane as /v1/collections/*, at the address a Supabase client sends to. The managed Base mounts that wire at the ROOT rather than under /v1, so this address is carried here verbatim and forwarded unchanged.\n\nIt is one registration for every method, and the same admission applies: the path is bounded to the collections data plane before anything is forwarded.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/base/health": {
       "get": {
-        "operationId": "get_v1_base_health",
+        "operationId": "get_base_health",
         "summary": "Reports that the base subsystem is serving.",
         "description": "Reports that the base subsystem is serving.\n\nIt is deliberately INDEPENDENT of whether this deployment actually embeds the\nBase engine: the route answers before the CLOUD_BASE_EMBED gate and before the\n/v1/base/* wildcard, so a liveness probe measures the process rather than an\noptional feature, and the wildcard can never shadow it. It reads no tenant, so a\nprober that sends no principal is answered rather than refused.",
         "tags": [
@@ -43,7 +120,7 @@
     },
     "/v1/collections": {
       "delete": {
-        "operationId": "delete_v1_collections",
+        "operationId": "delete_collections",
         "summary": "The org's Base content types",
         "description": "Lists the content types in the org's managed Base, and creates one. This is what the console's Bases manager reads to render the schema.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
         "tags": [
@@ -51,7 +128,7 @@
         ]
       },
       "get": {
-        "operationId": "get_v1_collections",
+        "operationId": "get_collections",
         "summary": "The org's Base content types",
         "description": "Lists the content types in the org's managed Base, and creates one. This is what the console's Bases manager reads to render the schema.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
         "tags": [
@@ -59,7 +136,7 @@
         ]
       },
       "patch": {
-        "operationId": "patch_v1_collections",
+        "operationId": "patch_collections",
         "summary": "The org's Base content types",
         "description": "Lists the content types in the org's managed Base, and creates one. This is what the console's Bases manager reads to render the schema.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
         "tags": [
@@ -67,7 +144,7 @@
         ]
       },
       "post": {
-        "operationId": "post_v1_collections",
+        "operationId": "post_collections",
         "summary": "The org's Base content types",
         "description": "Lists the content types in the org's managed Base, and creates one. This is what the console's Bases manager reads to render the schema.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
         "tags": [
@@ -75,7 +152,7 @@
         ]
       },
       "put": {
-        "operationId": "put_v1_collections",
+        "operationId": "put_collections",
         "summary": "The org's Base content types",
         "description": "Lists the content types in the org's managed Base, and creates one. This is what the console's Bases manager reads to render the schema.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
         "tags": [
@@ -85,7 +162,7 @@
     },
     "/v1/collections/{wildcard1}": {
       "delete": {
-        "operationId": "delete_v1_collections_by_wildcard1",
+        "operationId": "delete_collections_by_wildcard1",
         "summary": "One Base content type, and its records",
         "description": "Reads and writes below the collections root: `meta/scaffolds` is the field-template palette a new content type is built from, `\u003cname\u003e` is one content type (view, update, delete), `\u003cname\u003e/records` is that type's rows (list, create) and `\u003cname\u003e/records/\u003cid\u003e` is one row (get, update, delete). This is the data plane behind the console's Records browser.\n\nAny other shape below /v1/collections is refused with 404 before it is forwarded, so the wildcard admits exactly those five addresses and nothing more.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
         "tags": [
@@ -103,7 +180,7 @@
         ]
       },
       "get": {
-        "operationId": "get_v1_collections_by_wildcard1",
+        "operationId": "get_collections_by_wildcard1",
         "summary": "One Base content type, and its records",
         "description": "Reads and writes below the collections root: `meta/scaffolds` is the field-template palette a new content type is built from, `\u003cname\u003e` is one content type (view, update, delete), `\u003cname\u003e/records` is that type's rows (list, create) and `\u003cname\u003e/records/\u003cid\u003e` is one row (get, update, delete). This is the data plane behind the console's Records browser.\n\nAny other shape below /v1/collections is refused with 404 before it is forwarded, so the wildcard admits exactly those five addresses and nothing more.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
         "tags": [
@@ -121,7 +198,7 @@
         ]
       },
       "patch": {
-        "operationId": "patch_v1_collections_by_wildcard1",
+        "operationId": "patch_collections_by_wildcard1",
         "summary": "One Base content type, and its records",
         "description": "Reads and writes below the collections root: `meta/scaffolds` is the field-template palette a new content type is built from, `\u003cname\u003e` is one content type (view, update, delete), `\u003cname\u003e/records` is that type's rows (list, create) and `\u003cname\u003e/records/\u003cid\u003e` is one row (get, update, delete). This is the data plane behind the console's Records browser.\n\nAny other shape below /v1/collections is refused with 404 before it is forwarded, so the wildcard admits exactly those five addresses and nothing more.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
         "tags": [
@@ -139,7 +216,7 @@
         ]
       },
       "post": {
-        "operationId": "post_v1_collections_by_wildcard1",
+        "operationId": "post_collections_by_wildcard1",
         "summary": "One Base content type, and its records",
         "description": "Reads and writes below the collections root: `meta/scaffolds` is the field-template palette a new content type is built from, `\u003cname\u003e` is one content type (view, update, delete), `\u003cname\u003e/records` is that type's rows (list, create) and `\u003cname\u003e/records/\u003cid\u003e` is one row (get, update, delete). This is the data plane behind the console's Records browser.\n\nAny other shape below /v1/collections is refused with 404 before it is forwarded, so the wildcard admits exactly those five addresses and nothing more.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
         "tags": [
@@ -157,7 +234,7 @@
         ]
       },
       "put": {
-        "operationId": "put_v1_collections_by_wildcard1",
+        "operationId": "put_collections_by_wildcard1",
         "summary": "One Base content type, and its records",
         "description": "Reads and writes below the collections root: `meta/scaffolds` is the field-template palette a new content type is built from, `\u003cname\u003e` is one content type (view, update, delete), `\u003cname\u003e/records` is that type's rows (list, create) and `\u003cname\u003e/records/\u003cid\u003e` is one row (get, update, delete). This is the data plane behind the console's Records browser.\n\nAny other shape below /v1/collections is refused with 404 before it is forwarded, so the wildcard admits exactly those five addresses and nothing more.\n\nThe path is forwarded to the managed Base unchanged and its answer comes back verbatim, so the schema, the records and every refusal are the managed Base's own.\n\nAUTH is one credential, forwarded and never minted: cloud validates the caller's hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each row by the token's own subject. A caller with no validated principal is refused here, before the request leaves the process, and the org header that rides along is the one cloud validated — a client-forged org was stripped upstream.\n\nThis is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is admitted, and everything else the managed Base mounts — settings, backups, logs — is 404 here whatever the caller's rights on that deployment are.\n\nOne registration owns this address for every method, so which methods answer is the managed Base's decision, not this edge's.",
         "tags": [

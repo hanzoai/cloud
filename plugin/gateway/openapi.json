@@ -18,7 +18,7 @@
   "paths": {
     "/v1/gateway/config": {
       "get": {
-        "operationId": "get_v1_gateway_config",
+        "operationId": "get_gateway_config",
         "summary": "Read returns the EFFECTIVE edge policy the caller is subject to: the platform CORS allowlist and pre-auth per-IP flood cap in force, plus the caller's own authenticated rate ceiling, edge-cache TTLs and accepted-method allowlist.",
         "description": "Read returns the EFFECTIVE edge policy the caller is subject to: the platform CORS\nallowlist and pre-auth per-IP flood cap in force, plus the caller's own authenticated\nrate ceiling, edge-cache TTLs and accepted-method allowlist. A SuperAdmin may inspect\na specific tenant's effective policy with ?org=\u003cslug\u003e.",
         "tags": [
@@ -38,7 +38,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_gateway_config",
+        "operationId": "put_gateway_config",
         "summary": "Write updates one policy scope and returns the policy in force after the write.",
         "description": "Write updates one policy scope and returns the policy in force after the write.\nA body carrying any PLATFORM field (cors_origins, per_ip_rpm, window_sec) is a\nplatform write and requires SuperAdmin; otherwise it is a per-org write (org_rpm,\ncache_ttl_sec, cache_paths, methods) scoped to the caller's own org — or, for a\nSuperAdmin, the tenant named by ?org=\u003cslug\u003e. A body that sets nothing is a 400.\nThe abuse gate's mode is an OPERATOR field: setting it requires SuperAdmin,\nwhichever organization it lands on. updated_at and updated_by are\nserver-stamped; a client-supplied value is ignored.",
         "tags": [

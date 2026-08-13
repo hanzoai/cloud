@@ -18,7 +18,7 @@
   "paths": {
     "/v1/flow/runs": {
       "get": {
-        "operationId": "get_v1_flow_runs",
+        "operationId": "get_flow_runs",
         "summary": "Runs reads one workflow's recorded runs: every component build with its result, keyed by component.",
         "description": "Runs reads one workflow's recorded runs: every component build with its\nresult, keyed by component. Ownership is verified first — run records never\ncross the org boundary.",
         "tags": [
@@ -47,7 +47,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_flow_runs",
+        "operationId": "post_flow_runs",
         "summary": "Run executes one of the caller's workflows synchronously: the graph runs in the flow service and the response carries the run's session and outputs.",
         "description": "Run executes one of the caller's workflows synchronously: the graph runs in\nthe flow service and the response carries the run's session and outputs. A\ngraph whose components fail reports the product's own error. Runs are\nbounded by the product's five-minute sync ceiling.",
         "tags": [
@@ -81,7 +81,7 @@
     },
     "/v1/flow/status": {
       "get": {
-        "operationId": "get_v1_flow_status",
+        "operationId": "get_flow_status",
         "summary": "Status reports whether the flow service is reachable and which version it runs.",
         "description": "Status reports whether the flow service is reachable and which version it\nruns. It is the product's own /health and /v1/version composed — an honest\nlens for \"is the workflow plane up\", never a fabricated ok.",
         "tags": [
@@ -103,7 +103,7 @@
     },
     "/v1/flow/workflows": {
       "get": {
-        "operationId": "get_v1_flow_workflows",
+        "operationId": "get_flow_workflows",
         "summary": "Workflows lists the caller's workflows, paged.",
         "description": "Workflows lists the caller's workflows, paged. The list is scoped\nserver-side to the org's project — the page can only ever hold the caller's\nown workflows.",
         "tags": [
@@ -141,7 +141,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_flow_workflows",
+        "operationId": "post_flow_workflows",
         "summary": "Creates a workflow in the caller's org.",
         "description": "Creates a workflow in the caller's org. The org's project id\nis pinned server-side from the validated principal — there is no field by\nwhich a caller could place a workflow in another org.",
         "tags": [
@@ -175,7 +175,7 @@
     },
     "/v1/flow/workflows/{workflow}": {
       "delete": {
-        "operationId": "delete_v1_flow_workflows_by_workflow",
+        "operationId": "delete_flow_workflows_by_workflow",
         "summary": "Deletes one of the caller's workflows and its runs.",
         "description": "Deletes one of the caller's workflows and its runs. Ownership\nis verified first; a foreign id answers 404 and deletes nothing.",
         "tags": [
@@ -204,7 +204,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_flow_workflows_by_workflow",
+        "operationId": "get_flow_workflows_by_workflow",
         "summary": "Workflow reads one of the caller's workflows — the full record, graph included.",
         "description": "Workflow reads one of the caller's workflows — the full record, graph\nincluded. A workflow outside the caller's org answers 404, indistinguishable\nfrom one that does not exist.",
         "tags": [
@@ -233,7 +233,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_flow_workflows_by_workflow",
+        "operationId": "patch_flow_workflows_by_workflow",
         "summary": "Patches one of the caller's workflows: name, description, graph, or the locked flag — only the stated fields move.",
         "description": "Patches one of the caller's workflows: name, description,\ngraph, or the locked flag — only the stated fields move. Ownership is\nverified before the patch reaches the product.",
         "tags": [

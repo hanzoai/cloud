@@ -162,7 +162,7 @@
     },
     "/v1/git/keys": {
       "get": {
-        "operationId": "get_v1_git_keys",
+        "operationId": "get_git_keys",
         "summary": "Returns the SSH public keys registered to the caller's org — the keys that authenticate `git clone git@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git`.",
         "description": "Returns the SSH public keys registered to the caller's org — the keys\nthat authenticate `git clone git@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git`. Keys are org-scoped\non read even though the fingerprint index is global, so one org never sees\nanother's.",
         "tags": [
@@ -193,7 +193,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_git_keys",
+        "operationId": "post_git_keys",
         "summary": "Registers an SSH public key so it can authenticate `git clone git@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git` for the caller's org.",
         "description": "Registers an SSH public key so it can authenticate `git clone\ngit@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git` for the caller's org. The key line is parsed and\ncanonicalized before storage, its SHA256 fingerprint becomes the auth lookup\nhandle, and the full public key round-trips (it is public). Answers 201.\nFingerprints are globally unique, so a key already registered — to this org or\nany other — is a 409: one key belongs to exactly one org.",
         "tags": [
@@ -229,7 +229,7 @@
     },
     "/v1/git/keys/{id}": {
       "delete": {
-        "operationId": "delete_v1_git_keys_by_id",
+        "operationId": "delete_git_keys_by_id",
         "summary": "Removes a registered SSH key, scoped to the caller's org: an org can only delete its own, and a key id it does not own is not found.",
         "description": "Removes a registered SSH key, scoped to the caller's org: an org can\nonly delete its own, and a key id it does not own is not found. Answers 204\nwith no body. Once removed the key no longer authenticates any SSH git access.",
         "tags": [
@@ -256,7 +256,7 @@
     },
     "/v1/git/repos": {
       "get": {
-        "operationId": "get_v1_git_repos",
+        "operationId": "get_git_repos",
         "summary": "Returns the repos in the caller's scope, most recently updated first.",
         "description": "Returns the repos in the caller's scope, most recently updated\nfirst. The scope is the request principal's — the gateway-minted org and its\noptional project — never anything off the wire, so a caller only ever sees its\nown. Rows carry no branches or HEAD; read one repo for those.",
         "tags": [
@@ -291,7 +291,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_git_repos",
+        "operationId": "post_git_repos",
         "summary": "Provisions an empty bare repository in the caller's scope and returns it with its clone URLs.",
         "description": "Provisions an empty bare repository in the caller's scope and\nreturns it with its clone URLs. Answers 201. The name must be unique within\nthe scope — a repeat is a 409, never a silent overwrite of an existing repo.\nThe org comes from the validated principal, so a repo is always born owned by\nthe caller's own tenant.",
         "tags": [
@@ -327,7 +327,7 @@
     },
     "/v1/git/repos/{name}": {
       "delete": {
-        "operationId": "delete_v1_git_repos_by_name",
+        "operationId": "delete_git_repos_by_name",
         "summary": "Removes a repo's metadata and purges its storage.",
         "description": "Removes a repo's metadata and purges its storage. Answers 204 with\nno body. The metadata row is the source of truth for existence, so a storage\npurge that fails is logged and the delete still succeeds — and a second call\nis a 404, not a second delete.",
         "tags": [
@@ -352,7 +352,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_git_repos_by_name",
+        "operationId": "get_git_repos_by_name",
         "summary": "Returns one repo with its live ref state: every branch name and the resolved HEAD commit.",
         "description": "Returns one repo with its live ref state: every branch name and the\nresolved HEAD commit. Both are read from the object store on each call, so an\nempty repo reports no branches and an empty head rather than failing. A repo\noutside the caller's scope is not found.",
         "tags": [
@@ -384,7 +384,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_git_repos_by_name",
+        "operationId": "patch_git_repos_by_name",
         "summary": "Flips a repo's public bit, the one mutable repo setting today.",
         "description": "Flips a repo's public bit, the one mutable repo setting today.\nPublic grants ANONYMOUS fetch only; push and the whole control plane stay\norg-authed. Returns the updated repo.",
         "tags": [
@@ -432,7 +432,7 @@
     },
     "/v1/git/repos/{name}/blob": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_blob",
+        "operationId": "get_git_repos_by_name_blob",
         "summary": "Returns one file's bytes at one revision.",
         "description": "Returns one file's bytes at one revision. Text comes back verbatim,\nbinary comes back base64, and a file past the 1 MiB view cap comes back marked\ntruncated with NO content — the client is expected to clone instead.",
         "tags": [
@@ -494,7 +494,7 @@
     },
     "/v1/git/repos/{name}/commits": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_commits",
+        "operationId": "get_git_repos_by_name_commits",
         "summary": "Walks a ref's history newest first, or one path's history when a path is given.",
         "description": "Walks a ref's history newest first, or one path's history when a\npath is given. There is no cursor: the page is the newest `limit` commits.",
         "tags": [
@@ -569,7 +569,7 @@
     },
     "/v1/git/repos/{name}/files": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_files",
+        "operationId": "get_git_repos_by_name_files",
         "summary": "Returns every file a glob selects at one revision, WITH its bytes and the revision they came from.",
         "description": "Returns every file a glob selects at one revision, WITH its bytes\nand the revision they came from. It is the read a delivery generator makes:\none call answers \"what is the inventory at this commit, and what does it say\",\nwhere listing and then fetching would be a request per file.\n\nReturning the resolved revision matters as much as the bytes. A generator that\nlists at `main` and then reads at `main` can straddle a push and assemble half\nits inventory from one commit and half from the next; resolving once makes the\nwhole read consistent by construction.\n\nA file past the read cap comes back Truncated with no content rather than\nbeing dropped. A caller building a desired set has to know the difference\nbetween \"this file is empty\" and \"this file was not read\" — silently omitting\nit is how a pruning reconcile deletes what the missing file declared.",
         "tags": [
@@ -623,7 +623,7 @@
     },
     "/v1/git/repos/{name}/gc": {
       "post": {
-        "operationId": "post_v1_git_repos_by_name_gc",
+        "operationId": "post_git_repos_by_name_gc",
         "summary": "Repacks a repo into one bitmapped pack and rewrites its commit-graph, so the next clone reuses the bitmap instead of walking the whole object graph.",
         "description": "Repacks a repo into one bitmapped pack and rewrites its commit-graph, so\nthe next clone reuses the bitmap instead of walking the whole object graph.\nIdempotent, and safe to interrupt — git swaps both artifacts atomically. It\nruns under one pack slot with the same memory bounds as a clone, so it can\nblock behind heavy pack traffic rather than compete with it. Storage usage is\nre-measured afterwards, since a repack reclaims space.",
         "tags": [
@@ -662,7 +662,7 @@
     },
     "/v1/git/repos/{name}/mirror": {
       "post": {
-        "operationId": "post_v1_git_repos_by_name_mirror",
+        "operationId": "post_git_repos_by_name_mirror",
         "summary": "Imports an external git repository into the caller's repo, provisioning it on first use.",
         "description": "Imports an external git repository into the caller's repo, provisioning\nit on first use. Fetch is FORCED and covers every ref, so a first call clones\nthe source and a repeat call re-syncs it — the endpoint is idempotent by mirror\nsemantics. Mirrored bytes are metered exactly like a push, and a push.landed\nevent is emitted for the default branch so the code index picks the repo up.",
         "tags": [
@@ -710,7 +710,7 @@
     },
     "/v1/git/repos/{name}/mirrors": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_mirrors",
+        "operationId": "get_git_repos_by_name_mirrors",
         "summary": "Returns a repo's outbound mirror targets — the downstream remotes the mirror reactor pushes to whenever a push lands here.",
         "description": "Returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
         "tags": [
@@ -753,7 +753,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_git_repos_by_name_mirrors",
+        "operationId": "post_git_repos_by_name_mirrors",
         "summary": "Registers a downstream remote the repo's advanced refs are pushed to whenever a push lands here.",
         "description": "Registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409.",
         "tags": [
@@ -801,7 +801,7 @@
     },
     "/v1/git/repos/{name}/mirrors/{id}": {
       "delete": {
-        "operationId": "delete_v1_git_repos_by_name_mirrors_by_id",
+        "operationId": "delete_git_repos_by_name_mirrors_by_id",
         "summary": "Removes one outbound mirror target; later pushes stop being forwarded to it.",
         "description": "Removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped.",
         "tags": [
@@ -838,7 +838,7 @@
     },
     "/v1/git/repos/{name}/pulls": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_pulls",
+        "operationId": "get_git_repos_by_name_pulls",
         "summary": "Returns a repo's pull requests, newest number first — what is waiting to be reviewed, and what has already landed.",
         "description": "Returns a repo's pull requests, newest number first — what is\nwaiting to be reviewed, and what has already landed. Narrow it with\n?state=open or ?state=merged; omit state for every proposal.",
         "tags": [
@@ -894,7 +894,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_git_repos_by_name_pulls",
+        "operationId": "post_git_repos_by_name_pulls",
         "summary": "Proposes a branch for merging and returns it with its number.",
         "description": "Proposes a branch for merging and returns it with its number. Answers\n201. Both branches must already exist — a proposal naming a branch nobody\npushed is a typo, not a plan — and base defaults to the repo's default branch.\n\nProposing the same head into the same base twice is a 409 while the first\nproposal is still open, so a retried agent run leaves ONE thing to review\nrather than a pile of identical ones. A repo outside the caller's scope is a\n404, exactly as reading it is.",
         "tags": [
@@ -944,7 +944,7 @@
     },
     "/v1/git/repos/{name}/pulls/{number}": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_pulls_by_number",
+        "operationId": "get_git_repos_by_name_pulls_by_number",
         "summary": "Returns one pull request by its per-repo number.",
         "description": "Returns one pull request by its per-repo number. A number belonging to\nanother tenant's repo is not found, exactly as the repo itself is not.",
         "tags": [
@@ -988,7 +988,7 @@
     },
     "/v1/git/repos/{name}/pulls/{number}/merge": {
       "post": {
-        "operationId": "post_v1_git_repos_by_name_pulls_by_number_merge",
+        "operationId": "post_git_repos_by_name_pulls_by_number_merge",
         "summary": "Merges an open pull request by FAST-FORWARDING base to head, and answers the proposal in its merged state with the revision base now points at.",
         "description": "Merges an open pull request by FAST-FORWARDING base to head, and\nanswers the proposal in its merged state with the revision base now points at.\n\nIt merges only when base is already an ancestor of head — the case where head\ncontains every commit base has, so moving the branch loses nothing and invents\nnothing. When base has moved on independently, this REFUSES with 409 and says\nso: a real three-way merge is not implemented here, and reporting one would\nclaim a result these bytes do not produce. Rebase head onto base and merge\nagain.\n\nThe move is judged by the same ref policy a `git push` of it would face, and\nfires the same build and notify reactions, so merging is not a way around\neither. Merging an already-merged proposal is a 409.",
         "tags": [
@@ -1032,7 +1032,7 @@
     },
     "/v1/git/repos/{name}/push": {
       "post": {
-        "operationId": "post_v1_git_repos_by_name_push",
+        "operationId": "post_git_repos_by_name_push",
         "summary": "Lands a set of files as one commit without a git client — the hanzo.app builder's push.",
         "description": "Lands a set of files as one commit without a git client — the\nhanzo.app builder's push. The repo is CREATED on first push, the files are\nmerged onto the branch tip (unlisted files survive), and the same\npush-to-deploy hook a real receive-pack fires is fired, so downstream this is\nindistinguishable from a `git push`.",
         "tags": [
@@ -1093,7 +1093,7 @@
     },
     "/v1/git/repos/{name}/readme": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_readme",
+        "operationId": "get_git_repos_by_name_readme",
         "summary": "Returns the README at the tree root as plain text — unrendered, so the caller decides how to present it.",
         "description": "Returns the README at the tree root as plain text — unrendered, so\nthe caller decides how to present it. A repo with no README is not found.",
         "tags": [
@@ -1142,7 +1142,7 @@
     },
     "/v1/git/repos/{name}/refs": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_refs",
+        "operationId": "get_git_repos_by_name_refs",
         "summary": "Lists a repo's branches, tags and default branch — what a branch picker needs in one call.",
         "description": "Lists a repo's branches, tags and default branch — what a branch\npicker needs in one call. Unlike the other read ops it tolerates a repo with no\ncommits: the ref sets come back empty and the default branch is still named.",
         "tags": [
@@ -1186,7 +1186,7 @@
     },
     "/v1/git/repos/{name}/subscriptions": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_subscriptions",
+        "operationId": "get_git_repos_by_name_subscriptions",
         "summary": "Returns a repo's Slack subscriptions — which channels the lifecycle notifier posts this repo's push and deploy events to.",
         "description": "Returns a repo's Slack subscriptions — which channels the\nlifecycle notifier posts this repo's push and deploy events to.",
         "tags": [
@@ -1231,7 +1231,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_git_repos_by_name_subscriptions",
+        "operationId": "post_git_repos_by_name_subscriptions",
         "summary": "Binds a Slack channel to a repo, so the lifecycle notifier posts that repo's push and deploy events there.",
         "description": "Binds a Slack channel to a repo, so the lifecycle notifier posts\nthat repo's push and deploy events there. Answers 201. The same channel twice\non one repo is a 409; a repo outside the caller's scope is a 404, exactly as\nreading it is.",
         "tags": [
@@ -1282,7 +1282,7 @@
     },
     "/v1/git/repos/{name}/subscriptions/{id}": {
       "delete": {
-        "operationId": "delete_v1_git_repos_by_name_subscriptions_by_id",
+        "operationId": "delete_git_repos_by_name_subscriptions_by_id",
         "summary": "Removes one Slack subscription from a repo; the notifier stops posting that repo's events to that channel.",
         "description": "Removes one Slack subscription from a repo; the notifier stops\nposting that repo's events to that channel. Answers 204 with no body. An id\nthat is not this repo's subscription is not found.",
         "tags": [
@@ -1319,7 +1319,7 @@
     },
     "/v1/git/repos/{name}/tree": {
       "get": {
-        "operationId": "get_v1_git_repos_by_name_tree",
+        "operationId": "get_git_repos_by_name_tree",
         "summary": "Lists the immediate children of one directory at one revision, directories before files.",
         "description": "Lists the immediate children of one directory at one revision,\ndirectories before files. It does not recurse — walk down a level at a time.",
         "tags": [
@@ -1384,7 +1384,7 @@
     },
     "/v1/git/usage": {
       "get": {
-        "operationId": "get_v1_git_usage",
+        "operationId": "get_git_usage",
         "summary": "Returns per-repo and total storage bytes for the caller's org — the queryable, per-tenant number commerce and o11y meter on.",
         "description": "Returns per-repo and total storage bytes for the caller's org — the\nqueryable, per-tenant number commerce and o11y meter on. It spans EVERY\nproject sub-scope, unlike the repo list, so a billing consumer sees the whole\ntenant footprint in one call. Sizes are last-measured values (create, push,\nmirror and gc each re-measure), not a live walk of the disk.",
         "tags": [
@@ -1421,7 +1421,7 @@
     },
     "/v1/git/webhook": {
       "post": {
-        "operationId": "post_v1_git_webhook",
+        "operationId": "post_git_webhook",
         "summary": "Retired — forge pushes build via platform.hanzo.ai",
         "description": "GONE (410). This was the canonical forge's push-to-deploy door, and it never dispatched a build in its life.\n\nIt handed each verified push to cloud.OnGitPush, a single-registrant seam whose only registrant lives in apps/platform. cloud runs each app as its own OS process, so in the git process that builder is nil forever — and this handler answered 204 either way. Delivered, signature valid, green on the forge's hook page, and nothing built.\n\nPush-to-deploy now belongs to POST https://platform.hanzo.ai/v1/git-webhook, which owns the build system-of-record and dispatches BuildKit Jobs. git.hanzo.ai delivers there through ONE forge-wide system webhook covering every repository; a repo opts in by committing hanzo.yml, not by owning a hook of its own.\n\nThe route is kept, and answers 410 naming that address, precisely so a misdirected delivery says what is wrong. Deleting it would 404, and a 404 here reads as 'the API is switched off' — the wrong conclusion this estate has already drawn twice.",
         "tags": [
@@ -1431,7 +1431,7 @@
     },
     "/v1/git/zap/createRepo": {
       "post": {
-        "operationId": "post_v1_git_zap_createrepo",
+        "operationId": "post_git_zap_createrepo",
         "summary": "Create a repository over the ZAP transport",
         "description": "Creates a repository in the caller's org and project scope and answers with its record. `name` is required and `description` is optional; `project` narrows the scope within the org. A name already taken in that scope is a 409 envelope and an invalid name a 400.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
@@ -1450,7 +1450,7 @@
     },
     "/v1/git/zap/deleteRepo": {
       "post": {
-        "operationId": "post_v1_git_zap_deleterepo",
+        "operationId": "post_git_zap_deleterepo",
         "summary": "Delete a repository over the ZAP transport",
         "description": "Deletes the repository named by `name` and answers with the deleted name. A repository outside the caller's org and project scope is a 404 envelope, so a delete can never reach another tenant's repository.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
@@ -1469,7 +1469,7 @@
     },
     "/v1/git/zap/getRepo": {
       "post": {
-        "operationId": "post_v1_git_zap_getrepo",
+        "operationId": "post_git_zap_getrepo",
         "summary": "Read one repository over the ZAP transport",
         "description": "Answers a single repository's record, named by `name`. A repository outside the caller's org and project scope is a 404 envelope, the same answer one that does not exist gets.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
@@ -1488,7 +1488,7 @@
     },
     "/v1/git/zap/listRepos": {
       "post": {
-        "operationId": "post_v1_git_zap_listrepos",
+        "operationId": "post_git_zap_listrepos",
         "summary": "List your repositories over the ZAP transport",
         "description": "Answers every repository in the caller's org and project scope. It reads NO body — the scope is entirely the caller's identity — so a request with an empty object is correct.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
@@ -1498,7 +1498,7 @@
     },
     "/v1/git/zap/usage": {
       "post": {
-        "operationId": "post_v1_git_zap_usage",
+        "operationId": "post_git_zap_usage",
         "summary": "Report your org's git storage footprint over the ZAP transport",
         "description": "Answers every repository in the caller's org with its size in bytes, plus the org's total — what git storage is actually being used, and by which repository. It reads NO body, and it is scoped to the caller's own org, so it is that org's footprint and never the fleet's.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
@@ -1508,7 +1508,7 @@
     },
     "/v1/git/{org}/{project}/{repo}/git-receive-pack": {
       "post": {
-        "operationId": "post_v1_git_by_org_by_project_by_repo_git-receive-pack",
+        "operationId": "post_git_by_org_by_project_by_repo_git-receive-pack",
         "summary": "Accept a push, and turn it into a build",
         "description": "The pack-transfer phase of a push, and the point at which a push becomes an EVENT. NEVER ANONYMOUS: a push always requires an authenticated org, and the org in the path must equal it.\n\nOnce the pack is on disk the repository's storage usage is metered and a build is fired for every branch whose tip actually moved, computed from the before/after branch diff rather than from what the client claimed. That runs on a cancel-immune context, so a client that hangs up the moment its push lands still gets its build, and it runs even when git itself exited non-zero — the refs on disk are the ground truth. Repacking housekeeping is detached and never blocks the response.\n\nA Content-Type other than `application/x-git-receive-pack-request` is 400. Addressed under the API prefix, with the PROJECT as a middle path segment: project scope otherwise rides a header a git client cannot send, so this path is the only usable remote for a project-scoped repository. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
@@ -1554,7 +1554,7 @@
     },
     "/v1/git/{org}/{project}/{repo}/git-upload-pack": {
       "post": {
-        "operationId": "post_v1_git_by_org_by_project_by_repo_git-upload-pack",
+        "operationId": "post_git_by_org_by_project_by_repo_git-upload-pack",
         "summary": "Serve a clone or fetch",
         "description": "The pack-transfer phase of a clone or fetch: the request and the response are git's binary pack protocol, streamed straight through git itself — request body to git's stdin, git's stdout to the response — so a multi-gigabyte clone never lands in this process's memory.\n\nA PUBLIC repository is fetched anonymously; a private one requires its own org, and a wrong or absent org is 404 rather than a hint that the repository exists. A Content-Type other than `application/x-git-upload-pack-request` is 400. Addressed under the API prefix, with the PROJECT as a middle path segment: project scope otherwise rides a header a git client cannot send, so this path is the only usable remote for a project-scoped repository. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
@@ -1600,7 +1600,7 @@
     },
     "/v1/git/{org}/{project}/{repo}/info/refs": {
       "get": {
-        "operationId": "get_v1_git_by_org_by_project_by_repo_info_refs",
+        "operationId": "get_git_by_org_by_project_by_repo_info_refs",
         "summary": "Advertise a repository's refs to a git client",
         "description": "The ref-advertisement phase of git's smart-HTTP protocol — the first request a clone, a fetch and a push all make. `?service=` selects which: `git-upload-pack` advertises for a fetch, `git-receive-pack` for a push, and any other value is 400.\n\nANONYMOUS ONLY FOR FETCH, AND ONLY ON A PUBLIC REPOSITORY. The push advertisement always requires an authenticated org, and where a path org is present it must equal the authenticated one. A private repository reached without its org is 404, indistinguishable from one that does not exist. Addressed under the API prefix, with the PROJECT as a middle path segment: project scope otherwise rides a header a git client cannot send, so this path is the only usable remote for a project-scoped repository. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
@@ -1636,7 +1636,7 @@
     },
     "/v1/git/{org}/{repo}/git-receive-pack": {
       "post": {
-        "operationId": "post_v1_git_by_org_by_repo_git-receive-pack",
+        "operationId": "post_git_by_org_by_repo_git-receive-pack",
         "summary": "Accept a push, and turn it into a build",
         "description": "The pack-transfer phase of a push, and the point at which a push becomes an EVENT. NEVER ANONYMOUS: a push always requires an authenticated org, and the org in the path must equal it.\n\nOnce the pack is on disk the repository's storage usage is metered and a build is fired for every branch whose tip actually moved, computed from the before/after branch diff rather than from what the client claimed. That runs on a cancel-immune context, so a client that hangs up the moment its push lands still gets its build, and it runs even when git itself exited non-zero — the refs on disk are the ground truth. Repacking housekeeping is detached and never blocks the response.\n\nA Content-Type other than `application/x-git-receive-pack-request` is 400. Addressed under the API prefix, so `git clone https://\u003chost\u003e/v1/git/\u003corg\u003e/\u003crepo\u003e.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
@@ -1674,7 +1674,7 @@
     },
     "/v1/git/{org}/{repo}/git-upload-pack": {
       "post": {
-        "operationId": "post_v1_git_by_org_by_repo_git-upload-pack",
+        "operationId": "post_git_by_org_by_repo_git-upload-pack",
         "summary": "Serve a clone or fetch",
         "description": "The pack-transfer phase of a clone or fetch: the request and the response are git's binary pack protocol, streamed straight through git itself — request body to git's stdin, git's stdout to the response — so a multi-gigabyte clone never lands in this process's memory.\n\nA PUBLIC repository is fetched anonymously; a private one requires its own org, and a wrong or absent org is 404 rather than a hint that the repository exists. A Content-Type other than `application/x-git-upload-pack-request` is 400. Addressed under the API prefix, so `git clone https://\u003chost\u003e/v1/git/\u003corg\u003e/\u003crepo\u003e.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
@@ -1712,7 +1712,7 @@
     },
     "/v1/git/{org}/{repo}/info/refs": {
       "get": {
-        "operationId": "get_v1_git_by_org_by_repo_info_refs",
+        "operationId": "get_git_by_org_by_repo_info_refs",
         "summary": "Advertise a repository's refs to a git client",
         "description": "The ref-advertisement phase of git's smart-HTTP protocol — the first request a clone, a fetch and a push all make. `?service=` selects which: `git-upload-pack` advertises for a fetch, `git-receive-pack` for a push, and any other value is 400.\n\nANONYMOUS ONLY FOR FETCH, AND ONLY ON A PUBLIC REPOSITORY. The push advertisement always requires an authenticated org, and where a path org is present it must equal the authenticated one. A private repository reached without its org is 404, indistinguishable from one that does not exist. Addressed under the API prefix, so `git clone https://\u003chost\u003e/v1/git/\u003corg\u003e/\u003crepo\u003e.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
