@@ -18,34 +18,34 @@
   "paths": {
     "/tracker": {
       "delete": {
-        "operationId": "delete_tracker",
+        "operationId": "delete_tracker_app",
         "summary": "Not served by the tracker board",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
       },
       "get": {
-        "operationId": "get_tracker",
+        "operationId": "get_tracker_app",
         "summary": "The tracker board",
         "description": "Serves the application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tracker/.\n\nThis is the tracker board itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request."
       },
       "patch": {
-        "operationId": "patch_tracker",
+        "operationId": "patch_tracker_app",
         "summary": "Not served by the tracker board",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
       },
       "post": {
-        "operationId": "post_tracker",
+        "operationId": "post_tracker_app",
         "summary": "Not served by the tracker board",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
       },
       "put": {
-        "operationId": "put_tracker",
+        "operationId": "put_tracker_app",
         "summary": "Not served by the tracker board",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
       }
     },
     "/tracker/{wildcard1}": {
       "delete": {
-        "operationId": "delete_tracker_by_wildcard1",
+        "operationId": "delete_tracker_app_assets",
         "summary": "Not served by the tracker board",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
         "parameters": [
@@ -60,7 +60,7 @@
         ]
       },
       "get": {
-        "operationId": "get_tracker_by_wildcard1",
+        "operationId": "get_tracker_app_assets",
         "summary": "The tracker board's assets and client-side routes",
         "description": "Serves the static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link is a shell load, not a 404.\n\nThe one exception is /tracker/assets/, which holds only content-addressed build output: a name that is not there is a purged chunk, never a route, and answers 404. Everywhere else a path that looks like a missing file answers 200 with the shell, so read the content type rather than the status when a resource seems to be missing.\n\nA bundle that was never built answers 503 under its own name on every path, which is a failed deploy rather than a missing page.\n\nThis is the tracker board itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request.",
         "parameters": [
@@ -75,7 +75,7 @@
         ]
       },
       "patch": {
-        "operationId": "patch_tracker_by_wildcard1",
+        "operationId": "patch_tracker_app_assets",
         "summary": "Not served by the tracker board",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
         "parameters": [
@@ -90,7 +90,7 @@
         ]
       },
       "post": {
-        "operationId": "post_tracker_by_wildcard1",
+        "operationId": "post_tracker_app_assets",
         "summary": "Not served by the tracker board",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
         "parameters": [
@@ -105,7 +105,7 @@
         ]
       },
       "put": {
-        "operationId": "put_tracker_by_wildcard1",
+        "operationId": "put_tracker_app_assets",
         "summary": "Not served by the tracker board",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
         "parameters": [
@@ -122,7 +122,7 @@
     },
     "/v1/tracker/issues": {
       "get": {
-        "operationId": "get_v1_tracker_issues",
+        "operationId": "get_tracker_issues",
         "summary": "Answers across every project in the org.",
         "description": "Answers across every project in the org.\n\nThe org comes from the validated principal and never from the request: a\ncaller able to name the org could read another tenant's backlog, and a search\nis exactly the shape that would quietly return it.",
         "tags": [
@@ -218,7 +218,7 @@
     },
     "/v1/tracker/milestones": {
       "get": {
-        "operationId": "get_v1_tracker_milestones",
+        "operationId": "get_tracker_milestones",
         "summary": "Returns every milestone across your org's repositories, each stamped with the repository it belongs to.",
         "description": "Returns every milestone across your org's repositories, each\nstamped with the repository it belongs to.\n\nThe forge scopes milestones to a repository and publishes no org-level list,\nso this is a server-side fan-out over the repositories you can see. It runs\nhere rather than in the browser because a client-side fan-out would need the\nforge reachable from the page and a credential held there.",
         "tags": [
@@ -243,7 +243,7 @@
     },
     "/v1/tracker/projects": {
       "get": {
-        "operationId": "get_v1_tracker_projects",
+        "operationId": "get_tracker_projects",
         "summary": "Returns the boards of your org — one per repository on the deployment's forge that you can see.",
         "description": "Returns the boards of your org — one per repository on the\ndeployment's forge that you can see. The key is the repository name, and it is\nwhat addresses the board's issues.\n\nArchived repositories are omitted: they are not live work. The set is the\nFORGE's answer for your own account, so two people in one org can legitimately\nsee different boards.",
         "tags": [
@@ -266,7 +266,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_tracker_projects",
+        "operationId": "post_tracker_projects",
         "summary": "Refused — a board is a repository on the forge",
         "description": "Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.\n\nOffering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: \"not this service's job\" and \"no such thing\" are different facts, and the body names the forge so a caller knows where the job IS done.\n\nWhat this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.",
         "tags": [
@@ -276,7 +276,7 @@
     },
     "/v1/tracker/projects/{key}": {
       "delete": {
-        "operationId": "delete_v1_tracker_projects_by_key",
+        "operationId": "delete_tracker_projects_by_key",
         "summary": "Refused — a board is a repository on the forge",
         "description": "Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.\n\nOffering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: \"not this service's job\" and \"no such thing\" are different facts, and the body names the forge so a caller knows where the job IS done.\n\nWhat this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.",
         "tags": [
@@ -294,7 +294,7 @@
         ]
       },
       "get": {
-        "operationId": "get_v1_tracker_projects_by_key",
+        "operationId": "get_tracker_projects_by_key",
         "summary": "Returns one board of your org by its key — the repository name.",
         "description": "Returns one board of your org by its key — the repository name.\n404 when your org has no repository under that key, or when your own forge\naccount cannot see it.",
         "tags": [
@@ -325,7 +325,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_tracker_projects_by_key",
+        "operationId": "patch_tracker_projects_by_key",
         "summary": "Refused — a board is a repository on the forge",
         "description": "Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.\n\nOffering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: \"not this service's job\" and \"no such thing\" are different facts, and the body names the forge so a caller knows where the job IS done.\n\nWhat this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.",
         "tags": [
@@ -345,7 +345,7 @@
     },
     "/v1/tracker/projects/{key}/issues": {
       "get": {
-        "operationId": "get_v1_tracker_projects_by_key_issues",
+        "operationId": "get_tracker_projects_by_key_issues",
         "summary": "Returns one board's issues — the work items of that repository on the forge, with their column, priority, assignee and labels.",
         "description": "Returns one board's issues — the work items of that repository on\nthe forge, with their column, priority, assignee and labels.\n\nThe column is a LABEL on the forge, so the board and the forge web UI are the\nsame object seen twice: relabelling in either moves the card in both. A closed\nissue reads as done whatever its labels say.",
         "tags": [
@@ -424,7 +424,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_tracker_projects_by_key_issues",
+        "operationId": "post_tracker_projects_by_key_issues",
         "summary": "Opens a work item on the board — an issue on that repository on the deployment's forge, filed as YOU.",
         "description": "Opens a work item on the board — an issue on that repository on\nthe deployment's forge, filed as YOU.\n\nThe column and priority are written as LABELS, which is what makes the card\nand the forge issue the same object: someone relabelling in the forge web UI\nhas moved your card.",
         "tags": [
@@ -467,7 +467,7 @@
     },
     "/v1/tracker/projects/{key}/issues/{num}": {
       "patch": {
-        "operationId": "patch_v1_tracker_projects_by_key_issues_by_num",
+        "operationId": "patch_tracker_projects_by_key_issues_by_num",
         "summary": "Edits a work item — rename it, rewrite it, move it to another column, or re-prioritise it.",
         "description": "Edits a work item — rename it, rewrite it, move it to another\ncolumn, or re-prioritise it. Absent fields are left alone.\n\nMOVING A CARD IS A RELABEL. The column lives in the forge's label set, so the\nmove replaces that set rather than writing a status column here that a\nforge-side change could contradict. Moving to `done` also CLOSES the issue on\nthe forge, because a done card and an open issue are a contradiction.",
         "tags": [
@@ -519,7 +519,7 @@
     },
     "/v1/tracker/projects/{key}/issues/{num}/claim": {
       "post": {
-        "operationId": "post_v1_tracker_projects_by_key_issues_by_num_claim",
+        "operationId": "post_tracker_projects_by_key_issues_by_num_claim",
         "summary": "Takes an issue: it becomes yours and it moves to in_progress.",
         "description": "Takes an issue: it becomes yours and it moves to in_progress.\n\nThe holder is the CALLER, never an argument. \"Assign this to someone else\" is\na different act with different authority, and it already exists as a PATCH;\nconflating them would let anyone hand work to anyone by naming them.\n\nClaiming something already held by someone else is refused rather than\nsilently taken — two agents on one issue is the failure this prevents, and a\nclaim that quietly wins a race is worse than one that says no.",
         "tags": [

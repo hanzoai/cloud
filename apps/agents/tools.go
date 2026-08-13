@@ -220,8 +220,13 @@ func (registryTools) call(ctx context.Context, org, actor, name, args string) (s
 //
 // The fleet door groups one tool per subsystem and carries the operation names in
 // its `op` enum (fleet/grouped.go), and those names are spelled
-// <method>_v1_<subsystem>_<rest> — so the owner is a fact the name already
-// states. Deriving it here keeps this a pure function of the value: it answers
+// <method>_<subsystem>_<rest> — so the owner is a fact the name already states.
+//
+// THE METHOD IS WHAT SAYS THE NAME IS IN THAT SHAPE. It used to be the literal
+// "v1" between the method and the subsystem, and that segment is gone: an id no
+// longer spells the version every address shares (zip.ID). Reading the second
+// word unconditionally would answer "web" for a registry-local "search_web", so
+// the leading word must first be a method for the one after it to be an owner. Deriving it here keeps this a pure function of the value: it answers
 // the same way in the fused binary and in a single-app plugin process, whereas
 // cloud.SubsystemOf reads a boot-time mount index that in a plugin knows only
 // that plugin's own routes and would answer "" for every sibling's tool.
@@ -230,12 +235,20 @@ func (registryTools) call(ctx context.Context, org, actor, name, args string) (s
 // subsystem and says so with "", rather than with a guess.
 func toolSubsystem(op string) string {
 	parts := strings.Split(op, "_")
-	for i, p := range parts {
-		if p == "v1" && i+1 < len(parts) {
-			return parts[i+1]
-		}
+	if len(parts) < 2 || !httpMethodWord(parts[0]) {
+		return ""
 	}
-	return ""
+	return parts[1]
+}
+
+// httpMethodWord reports whether a word is a method as [zip.ID] spells one: the
+// lowercase name, leading an operation id.
+func httpMethodWord(s string) bool {
+	switch s {
+	case "get", "post", "put", "patch", "delete", "head", "options":
+		return true
+	}
+	return false
 }
 
 // actorSub reads the user subject back out of the run's "org/sub" billing actor,

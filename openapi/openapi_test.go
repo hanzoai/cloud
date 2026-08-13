@@ -195,7 +195,7 @@ func TestLiveDropsUnrepresentableMethods(t *testing.T) {
 func TestFromRejectsDuplicateOperationID(t *testing.T) {
 	rs := []Route{
 		{Method: "GET", Path: "/v1/a/b_c"},
-		{Method: "GET", Path: "/v1/a/b/c"}, // both → get_v1_a_b_c
+		{Method: "GET", Path: "/v1/a/b/c"}, // both → get_a_b_c
 	}
 	if _, err := From(rs, Info{Title: "t", Version: "v1"}); err == nil {
 		t.Fatal("From() accepted two routes with the same derived operationId; it must refuse")
@@ -224,8 +224,8 @@ func TestOperationIDKeepsHyphenDistinctFromPathSeparator(t *testing.T) {
 	if got[0] == got[1] {
 		t.Fatalf("both routes derived operationId %q", got[0])
 	}
-	if got[0] != "get_v1_pricing-policy" || got[1] != "get_v1_pricing_policy" {
-		t.Errorf("ids = %v, want [get_v1_pricing-policy get_v1_pricing_policy]", got)
+	if got[0] != "get_pricing-policy" || got[1] != "get_pricing_policy" {
+		t.Errorf("ids = %v, want [get_pricing-policy get_pricing_policy]", got)
 	}
 }
 

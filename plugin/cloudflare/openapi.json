@@ -18,7 +18,7 @@
   "paths": {
     "/v1/cloudflare/ai/run/{wildcard1}": {
       "post": {
-        "operationId": "post_v1_cloudflare_ai_run_by_wildcard1",
+        "operationId": "post_cloudflare_ai_run_by_wildcard1",
         "summary": "Run a Cloudflare Workers AI model and get its output back",
         "description": "Runs a Workers AI model — the model id is the rest of the path, e.g. `@cf/meta/llama-3.1-8b-instruct` — on the org's OWN Cloudflare account and relays the model's output. The request body is whatever the chosen model takes (a prompt, chat messages, a base64 audio clip) and is forwarded unchanged; the response is the model's own, which for an image or audio model is BYTES under Cloudflare's content type rather than JSON. Both halves are why this is not a typed op.\n\nIt is the ONE PRICED route on this plane, because a run is inference rather than passthrough. The org's own token already paid Cloudflare for the compute, so Hanzo debits only the thin BYO routing fee — never the full inference cost — and meters it on the SAME `ai` product axis and per-project caps as every other model call, so Workers AI spend sums with LLM spend. The fee has a floor, so every run leaves a usage row even for a modality that reports no tokens, and it emits one gen_ai span with `gen_ai.system = cloudflare`.\n\nGated by BALANCE, not by the admin bit that guards the destructive verbs here: a validated org is enough, and a frozen, broke or over-cap org is refused with the fleet-wide 402/503 billing contract BEFORE any byte reaches Cloudflare — no run, and no account discovery either. An empty or oversized body is 400, as is a model id that is not a plain Cloudflare model path; 503 if the org has never connected a Cloudflare token.",
         "tags": [
@@ -38,7 +38,7 @@
     },
     "/v1/cloudflare/d1/databases": {
       "get": {
-        "operationId": "get_v1_cloudflare_d1_databases",
+        "operationId": "get_cloudflare_d1_databases",
         "summary": "Lists the D1 databases on the org's Cloudflare account.",
         "description": "Lists the D1 databases on the org's Cloudflare account. Any org\nmember may read.",
         "tags": [
@@ -85,7 +85,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_cloudflare_d1_databases",
+        "operationId": "post_cloudflare_d1_databases",
         "summary": "Creates a D1 database on the org's Cloudflare account.",
         "description": "Creates a D1 database on the org's Cloudflare account.\nRequires org admin.",
         "tags": [
@@ -118,7 +118,7 @@
     },
     "/v1/cloudflare/d1/databases/{database}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_d1_databases_by_database",
+        "operationId": "delete_cloudflare_d1_databases_by_database",
         "summary": "Deletes a D1 database and everything stored in it.",
         "description": "Deletes a D1 database and everything stored in it. Requires\norg admin.",
         "tags": [
@@ -150,7 +150,7 @@
     },
     "/v1/cloudflare/d1/databases/{database}/query": {
       "post": {
-        "operationId": "post_v1_cloudflare_d1_databases_by_database_query",
+        "operationId": "post_cloudflare_d1_databases_by_database_query",
         "summary": "Run a SQL statement against a D1 database",
         "description": "Executes a statement on one D1 database on the org's OWN Cloudflare account and relays D1's result set. `sql` is required and `params` carries the bound values in placeholder order — use them rather than interpolating values into the statement.\n\nThe body is checked for a non-empty `sql` and then forwarded VERBATIM, so every field D1 accepts reaches D1 even though only two are named here; the declared schema is open for that reason. That verbatim forward is why this is not a typed op — decoding and re-encoding the body would drop `params`, where the query's bound values live. Requires ORG ADMIN (403 otherwise); a malformed body or missing `sql` is 400; 503 if the org has never connected a Cloudflare token.",
         "tags": [
@@ -189,7 +189,7 @@
     },
     "/v1/cloudflare/kv/namespaces": {
       "get": {
-        "operationId": "get_v1_cloudflare_kv_namespaces",
+        "operationId": "get_cloudflare_kv_namespaces",
         "summary": "KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare account.",
         "description": "KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare\naccount. Any org member may read.",
         "tags": [
@@ -244,7 +244,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_cloudflare_kv_namespaces",
+        "operationId": "post_cloudflare_kv_namespaces",
         "summary": "KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare account.",
         "description": "KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare\naccount. Requires org admin. Cloudflare mints the namespace id the value routes\naddress.",
         "tags": [
@@ -277,7 +277,7 @@
     },
     "/v1/cloudflare/kv/namespaces/{namespace}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_kv_namespaces_by_namespace",
+        "operationId": "delete_cloudflare_kv_namespaces_by_namespace",
         "summary": "KVNamespaceDelete deletes a Workers KV namespace and every key in it.",
         "description": "KVNamespaceDelete deletes a Workers KV namespace and every key in it. Requires\norg admin.",
         "tags": [
@@ -309,7 +309,7 @@
     },
     "/v1/cloudflare/kv/namespaces/{namespace}/values/{key}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_kv_namespaces_by_namespace_values_by_key",
+        "operationId": "delete_cloudflare_kv_namespaces_by_namespace_values_by_key",
         "summary": "KVValueDelete removes one key from a Workers KV namespace.",
         "description": "KVValueDelete removes one key from a Workers KV namespace. Requires org admin.",
         "tags": [
@@ -349,7 +349,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_cloudflare_kv_namespaces_by_namespace_values_by_key",
+        "operationId": "get_cloudflare_kv_namespaces_by_namespace_values_by_key",
         "summary": "Read a Workers KV value as its stored bytes",
         "description": "Answers one KV key's value from the org's OWN Cloudflare account as RAW BYTES under the content type it was written with — not wrapped in a JSON envelope, which is why this is not a typed op. Any org member may read. A key that does not exist is Cloudflare's own 404; an invalid namespace, or a key that is empty, over 512 bytes, not valid UTF-8, or carries a control character, is 400; 503 if the org has never connected a Cloudflare token.",
         "tags": [
@@ -375,7 +375,7 @@
         ]
       },
       "put": {
-        "operationId": "put_v1_cloudflare_kv_namespaces_by_namespace_values_by_key",
+        "operationId": "put_cloudflare_kv_namespaces_by_namespace_values_by_key",
         "summary": "Write a Workers KV value from the request body",
         "description": "Stores one KV key on the org's OWN Cloudflare account. The REQUEST BODY IS THE VALUE, forwarded verbatim under the caller's own Content-Type (`text/plain` when none is sent), so a value is never re-encoded on the way in — which is why this is not a typed op. `expiration` and `expiration_ttl` may ride the query string and are passed through to Cloudflare. Requires ORG ADMIN (403 otherwise); the same namespace and key validation as the read answers 400; 503 if the org has never connected a Cloudflare token.",
         "tags": [
@@ -403,7 +403,7 @@
     },
     "/v1/cloudflare/pages/projects": {
       "get": {
-        "operationId": "get_v1_cloudflare_pages_projects",
+        "operationId": "get_cloudflare_pages_projects",
         "summary": "Lists the org's Cloudflare Pages projects.",
         "description": "Lists the org's Cloudflare Pages projects. Any org member may read.",
         "tags": [
@@ -421,7 +421,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_cloudflare_pages_projects",
+        "operationId": "post_cloudflare_pages_projects",
         "summary": "Creates a Cloudflare Pages project on the org's account.",
         "description": "Creates a Cloudflare Pages project on the org's account. Requires\norg admin. Only the modeled fields reach Cloudflare, so an unmodeled key in the\nrequest is dropped rather than forwarded.",
         "tags": [
@@ -455,7 +455,7 @@
     },
     "/v1/cloudflare/pages/projects/{project}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_pages_projects_by_project",
+        "operationId": "delete_cloudflare_pages_projects_by_project",
         "summary": "Deletes a Cloudflare Pages project, and with it every deployment it has ever made.",
         "description": "Deletes a Cloudflare Pages project, and with it every deployment it\nhas ever made. Requires org admin.",
         "tags": [
@@ -485,7 +485,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_cloudflare_pages_projects_by_project",
+        "operationId": "get_cloudflare_pages_projects_by_project",
         "summary": "Reads one Cloudflare Pages project — its build config, deployment configs and latest deployment.",
         "description": "Reads one Cloudflare Pages project — its build config, deployment\nconfigs and latest deployment. Any org member may read.",
         "tags": [
@@ -517,7 +517,7 @@
     },
     "/v1/cloudflare/pages/projects/{project}/deployments": {
       "post": {
-        "operationId": "post_v1_cloudflare_pages_projects_by_project_deployments",
+        "operationId": "post_cloudflare_pages_projects_by_project_deployments",
         "summary": "Trigger a new Pages deployment for a project",
         "description": "Starts a build and deployment of one Cloudflare Pages project on the org's OWN Cloudflare account, and relays Cloudflare's deployment record back. `branch` picks what to build; OMITTING it builds the project's production branch.\n\nA body it cannot parse is IGNORED rather than refused — the deployment falls back to the production branch — which is the one rule to get right here and the reason this is not a typed op: a typed request would answer 400 where this deploys. Requires ORG ADMIN (403 otherwise), and 503 if the org has never connected a Cloudflare token.",
         "tags": [
@@ -556,7 +556,7 @@
     },
     "/v1/cloudflare/pages/projects/{project}/domains": {
       "post": {
-        "operationId": "post_v1_cloudflare_pages_projects_by_project_domains",
+        "operationId": "post_cloudflare_pages_projects_by_project_domains",
         "summary": "Attaches a custom domain to a Cloudflare Pages project.",
         "description": "Attaches a custom domain to a Cloudflare Pages project. Requires\norg admin. Cloudflare owns validation and certificate issuance from here on.",
         "tags": [
@@ -602,7 +602,7 @@
     },
     "/v1/cloudflare/pages/projects/{project}/domains/{domain}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_pages_projects_by_project_domains_by_domain",
+        "operationId": "delete_cloudflare_pages_projects_by_project_domains_by_domain",
         "summary": "Detaches a custom domain from a Cloudflare Pages project.",
         "description": "Detaches a custom domain from a Cloudflare Pages project.\nRequires org admin.",
         "tags": [
@@ -644,7 +644,7 @@
     },
     "/v1/cloudflare/r2/buckets": {
       "get": {
-        "operationId": "get_v1_cloudflare_r2_buckets",
+        "operationId": "get_cloudflare_r2_buckets",
         "summary": "Lists the R2 buckets on the org's Cloudflare account.",
         "description": "Lists the R2 buckets on the org's Cloudflare account. Any org\nmember may read.",
         "tags": [
@@ -708,7 +708,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_cloudflare_r2_buckets",
+        "operationId": "post_cloudflare_r2_buckets",
         "summary": "Creates an R2 bucket on the org's Cloudflare account.",
         "description": "Creates an R2 bucket on the org's Cloudflare account. Requires\norg admin.",
         "tags": [
@@ -741,7 +741,7 @@
     },
     "/v1/cloudflare/r2/buckets/{bucket}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_r2_buckets_by_bucket",
+        "operationId": "delete_cloudflare_r2_buckets_by_bucket",
         "summary": "Deletes an R2 bucket.",
         "description": "Deletes an R2 bucket. Requires org admin. Cloudflare refuses a\nbucket that still holds objects, and that refusal is relayed.",
         "tags": [
@@ -773,7 +773,7 @@
     },
     "/v1/cloudflare/workers/scripts": {
       "get": {
-        "operationId": "get_v1_cloudflare_workers_scripts",
+        "operationId": "get_cloudflare_workers_scripts",
         "summary": "Lists the Worker scripts on the org's Cloudflare account.",
         "description": "Lists the Worker scripts on the org's Cloudflare account. Any\norg member may read.",
         "tags": [
@@ -793,7 +793,7 @@
     },
     "/v1/cloudflare/workers/scripts/{script}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_workers_scripts_by_script",
+        "operationId": "delete_cloudflare_workers_scripts_by_script",
         "summary": "Removes a Worker script from the org's Cloudflare account.",
         "description": "Removes a Worker script from the org's Cloudflare account.\nRequires org admin. Routes bound to the script stop serving it.",
         "tags": [
@@ -823,7 +823,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_cloudflare_workers_scripts_by_script",
+        "operationId": "put_cloudflare_workers_scripts_by_script",
         "summary": "Upload or replace a module Worker script",
         "description": "Publishes a module Worker to the org's OWN Cloudflare account under the name in the path, replacing whatever was there, and relays Cloudflare's result. `script` carries the module SOURCE; the optional compatibility date, compatibility flags and bindings are packed into the multipart upload Cloudflare expects.\n\nThe path names the script and the body field named `script` is its source — two different things that share a name, which is exactly why this cannot be a typed op: a binder that gives the URL the last word would overwrite the source with the script's name. Requires ORG ADMIN (403 otherwise); an unparseable body or empty source is 400; 503 if the org has never connected a Cloudflare token.",
         "tags": [
@@ -862,7 +862,7 @@
     },
     "/v1/cloudflare/workers/scripts/{script}/subdomain": {
       "post": {
-        "operationId": "post_v1_cloudflare_workers_scripts_by_script_subdomain",
+        "operationId": "post_cloudflare_workers_scripts_by_script_subdomain",
         "summary": "Publishes or withdraws one Worker script on the account's workers.dev subdomain.",
         "description": "Publishes or withdraws one Worker script on the\naccount's workers.dev subdomain. Requires org admin.",
         "tags": [
@@ -908,7 +908,7 @@
     },
     "/v1/cloudflare/workers/subdomain": {
       "get": {
-        "operationId": "get_v1_cloudflare_workers_subdomain",
+        "operationId": "get_cloudflare_workers_subdomain",
         "summary": "Reads the org account's workers.dev subdomain — the name under which every subdomain-enabled script is served.",
         "description": "Reads the org account's workers.dev subdomain — the name\nunder which every subdomain-enabled script is served. Any org member may read.",
         "tags": [
@@ -928,7 +928,7 @@
     },
     "/v1/cloudflare/workers/zones/{zone}/routes": {
       "get": {
-        "operationId": "get_v1_cloudflare_workers_zones_by_zone_routes",
+        "operationId": "get_cloudflare_workers_zones_by_zone_routes",
         "summary": "Lists the Worker routes bound within one zone — the URL patterns that dispatch to a script.",
         "description": "Lists the Worker routes bound within one zone — the URL\npatterns that dispatch to a script. Any org member may read. Routes are\nzone-scoped, so no account is resolved.",
         "tags": [
@@ -958,7 +958,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_cloudflare_workers_zones_by_zone_routes",
+        "operationId": "post_cloudflare_workers_zones_by_zone_routes",
         "summary": "Binds a URL pattern in a zone to a Worker script.",
         "description": "Binds a URL pattern in a zone to a Worker script. Requires\norg admin — a route is what puts a script in front of live traffic.",
         "tags": [
@@ -1005,7 +1005,7 @@
     },
     "/v1/cloudflare/workers/zones/{zone}/routes/{route}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_workers_zones_by_zone_routes_by_route",
+        "operationId": "delete_cloudflare_workers_zones_by_zone_routes_by_route",
         "summary": "Unbinds a Worker route, so its pattern stops dispatching to a script.",
         "description": "Unbinds a Worker route, so its pattern stops dispatching to a\nscript. Requires org admin.",
         "tags": [
@@ -1047,7 +1047,7 @@
     },
     "/v1/cloudflare/zones": {
       "get": {
-        "operationId": "get_v1_cloudflare_zones",
+        "operationId": "get_cloudflare_zones",
         "summary": "Lists the Cloudflare zones the org's connected API token can see, paged and filtered by the query parameters Cloudflare itself accepts.",
         "description": "Lists the Cloudflare zones the org's connected API token can see,\npaged and filtered by the query parameters Cloudflare itself accepts. Zones are\ntoken-scoped by Cloudflare, so no account is resolved. Any org member may read.\n\nZone and DNS-record MANAGEMENT is not here: it stays on the Hanzo DNS plane\n(/v1/dns). This only surfaces the Cloudflare zone objects the asset plane needs\n— a zone id is what addresses a Worker route or an analytics read.",
         "tags": [
@@ -1122,7 +1122,7 @@
     },
     "/v1/cloudflare/zones/{zone}": {
       "get": {
-        "operationId": "get_v1_cloudflare_zones_by_zone",
+        "operationId": "get_cloudflare_zones_by_zone",
         "summary": "Reads one Cloudflare zone the org's token can see.",
         "description": "Reads one Cloudflare zone the org's token can see. Any org member may\nread. A zone id the token cannot see is Cloudflare's own not-found, relayed.",
         "tags": [
@@ -1154,7 +1154,7 @@
     },
     "/v1/cloudflare/zones/{zone}/analytics": {
       "get": {
-        "operationId": "get_v1_cloudflare_zones_by_zone_analytics",
+        "operationId": "get_cloudflare_zones_by_zone_analytics",
         "summary": "Reads a zone's Cloudflare traffic dashboard — requests, bandwidth, threats and pageviews over the since/until window.",
         "description": "Reads a zone's Cloudflare traffic dashboard — requests, bandwidth,\nthreats and pageviews over the since/until window. Any org member may read.\n\nA zone whose Cloudflare plan does not serve this endpoint yields Cloudflare's\nOWN error, never a fabricated success.",
         "tags": [
@@ -1214,7 +1214,7 @@
     },
     "/v1/cloudflare/zones/{zone}/purge": {
       "post": {
-        "operationId": "post_v1_cloudflare_zones_by_zone_purge",
+        "operationId": "post_cloudflare_zones_by_zone_purge",
         "summary": "Drops a zone's Cloudflare edge cache — either the whole zone (purge_everything) or exactly the listed file URLs.",
         "description": "Drops a zone's Cloudflare edge cache — either the whole zone\n(purge_everything) or exactly the listed file URLs. Requires org admin.\n\nPurging is the one zone-scoped WRITE this plane owns. It is not DNS — no record\nchanges — so it does not belong on /v1/dns, and it is not a connection, so it does\nnot belong on the integrations plane. It is a cache operation on a zone, which is\nwhat this asset plane is for. It takes the admin gate because dropping a zone's\ncache sends every subsequent request to the origin: on a site fronting a small\norigin that is a self-inflicted load spike, so it is a change, not a look.\n\nExactly one selector is required. Cloudflare treats a body with neither as a\nno-op and answers 200, which reads as \"purged\" to a caller that never purged\nanything — the failure we refuse to pass through.",
         "tags": [

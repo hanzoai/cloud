@@ -18,7 +18,7 @@
   "paths": {
     "/v1/code/ask": {
       "get": {
-        "operationId": "get_v1_code_ask",
+        "operationId": "get_code_ask",
         "summary": "Answers a question about the caller org's code with a CITED answer: retrieval packs grounding context, then the synthesizer writes the answer over exactly those spans, which come back alongside it.",
         "description": "Answers a question about the caller org's code with a CITED answer:\nretrieval packs grounding context, then the synthesizer writes the answer over\nexactly those spans, which come back alongside it. It never answers without\ngrounding — with no matched code the answer is empty and says so, and with no\nsynthesizer available the citations still come back with \"degraded\": true so\nthe caller can reason over the spans itself.",
         "tags": [
@@ -60,7 +60,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_code_ask",
+        "operationId": "post_code_ask",
         "summary": "Is askGet with the question in the request BODY, for a question too long or too awkward to put in a URL.",
         "description": "Is askGet with the question in the request BODY, for a question too\nlong or too awkward to put in a URL. `query` and `repo` in the body take\nprecedence over `?q=` and `?repo=`; either source works alone.",
         "tags": [
@@ -96,7 +96,7 @@
     },
     "/v1/code/context": {
       "post": {
-        "operationId": "post_v1_code_context",
+        "operationId": "post_code_context",
         "summary": "Packs the most relevant code for a query into a token budget — THE primitive for a coding agent that has to decide what to put in a prompt.",
         "description": "Packs the most relevant code for a query into a token budget — THE\nprimitive for a coding agent that has to decide what to put in a prompt. It\nretrieves seed spans, expands each with the definitions it calls and its key\ncallers, then greedily fills the budget, so the answer is a coherent slice of\nthe codebase rather than a list of disconnected matches. The top match is\nalways included, truncated if it alone overflows, so a matched query never\ncomes back empty. A retrieval outage answers 200 with an empty bundle rather\nthan a 5xx.",
         "tags": [
@@ -133,7 +133,7 @@
     },
     "/v1/code/file": {
       "get": {
-        "operationId": "get_v1_code_file",
+        "operationId": "get_code_file",
         "summary": "Returns the INDEXED content of one file — read_file over the chunks the search tiers hold, for pulling up code an agent just found.",
         "description": "Returns the INDEXED content of one file — read_file over the chunks the\nsearch tiers hold, for pulling up code an agent just found. It is NOT\nbyte-verbatim: the git object plane is the source of record for exact bytes,\nhistory and blame. A file absent from the index is a 404, so an agent can tell\n\"not indexed\" from \"empty file\".",
         "tags": [
@@ -177,7 +177,7 @@
     },
     "/v1/code/index": {
       "post": {
-        "operationId": "post_v1_code_index",
+        "operationId": "post_code_index",
         "summary": "(re)indexes a repository for the caller's org, incrementally: files whose content hash is unchanged are skipped, so re-sending a whole tree is cheap.",
         "description": "(re)indexes a repository for the caller's org, incrementally: files whose\ncontent hash is unchanged are skipped, so re-sending a whole tree is cheap.\nEach file is parsed for symbols, split at AST boundaries and — when the\nsemantic tier is available — embedded, which is what makes it searchable across\nall three retrieval tiers. Pass `prune` to also DELETE indexed files absent\nfrom the request, which turns the call into a full sync; without it the call is\nan upsert. The index is written to the caller org's own physically separate\ndatabase.",
         "tags": [
@@ -219,7 +219,7 @@
     },
     "/v1/code/search": {
       "get": {
-        "operationId": "get_v1_code_search",
+        "operationId": "get_code_search",
         "summary": "Finds code in the caller org's index across three orthogonal retrieval tiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over code-tokenized text), symbolic (real definition and reference edges), and semantic (embedding cosine over AST-boundary chunks).",
         "description": "Finds code in the caller org's index across three orthogonal retrieval\ntiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over\ncode-tokenized text), symbolic (real definition and reference edges), and\nsemantic (embedding cosine over AST-boundary chunks). Pick one tier with\n`type`, or leave it to run all three as hybrid, which is what a coding agent\nusually wants. It is FAIL-HONEST: a retrieval outage answers 200 with an empty\nresult set and \"degraded\": true rather than a 5xx, so an agent degrades instead\nof stalling. A malformed regex is a 400.",
         "tags": [
@@ -283,7 +283,7 @@
     },
     "/v1/code/tree": {
       "get": {
-        "operationId": "get_v1_code_tree",
+        "operationId": "get_code_tree",
         "summary": "Returns one repository's file structure with a per-file symbol count — get_repo_structure over the org's own index, with no git checkout involved.",
         "description": "Returns one repository's file structure with a per-file symbol count —\nget_repo_structure over the org's own index, with no git checkout involved. A\nrepository that has not been indexed answers an empty tree rather than an\nerror, so an agent can tell \"nothing here\" without handling a failure.",
         "tags": [

@@ -308,10 +308,10 @@ func TestBlueprintPathIsSlashless(t *testing.T) {
 	//
 	// The match is on "blueprint" rather than on a whole name, and that is the
 	// point: this test is about the SUBJECT, not about how ids are spelled. It
-	// once pinned the whole prefix "get_v1_guide_blueprint" and then zip spelled
+	// once pinned the whole prefix "get_guide_blueprint" and then zip spelled
 	// composed ops dotted (v1.guide.get_blueprint), so the prefix selected NOTHING
 	// and the assertion passed vacuously. The spelling has since moved back — one
-	// rule, derived from the absolute path, so it is "get_v1_guide_blueprint"
+	// rule, derived from the absolute path, so it is "get_guide_blueprint"
 	// again — but a test that has to be edited every time a naming rule moves is
 	// pinned to the wrong thing. Matching the subject survives both.
 	var names []string

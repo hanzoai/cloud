@@ -123,7 +123,7 @@ func TestTheSpecDoorIsTheHostsNotACatchAlls(t *testing.T) {
 // it there, of openapi.Door, for both doors at once. The full-fleet version
 // belongs here beside TestTheSpecDoorIsTheHostsNotACatchAlls and cannot be
 // written yet: that test is red on this tree because openapi.Fleet refuses the
-// whole weave over a duplicate operationId (get_v1_billing_portal_methods, two
+// whole weave over a duplicate operationId (get_billing_portal_methods, two
 // billing routes), so the host answers 500 on BOTH doors. Add it in the commit
 // that fixes the weave.
 func TestTheCommandDoorOpensOnTheHostsOwnMount(t *testing.T) {

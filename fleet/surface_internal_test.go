@@ -31,12 +31,12 @@ var refusals = []struct{ name, why string }{
 	{"addToken", "POST /v1/iam/tokens"},
 	{"listTokens", "GET /v1/iam/tokens"},
 	{"getWebauthnCredential", "POST /v1/iam/webauthn-credentials/get"},
-	{"post_v1_iam_oauth_token", "the OAuth token endpoint"},
-	{"post_v1_iam_registry_token", "a registry pull credential"},
-	{"post_v1_iam_mint-user-keys", "mints keys for a user"},
-	{"get_v1_kms_secrets", "the secret store, read"},
-	{"delete_v1_kms_secrets_by_wildcard1", "the secret store, written"},
-	{"get_v1_functions_secrets", "a function's environment secrets"},
+	{"post_iam_oauth_token", "the OAuth token endpoint"},
+	{"post_iam_registry_token", "a registry pull credential"},
+	{"post_iam_mint-user-keys", "mints keys for a user"},
+	{"get_kms_secrets", "the secret store, read"},
+	{"delete_kms_secrets_by_wildcard1", "the secret store, written"},
+	{"get_functions_secrets", "a function's environment secrets"},
 	// Sessions that nothing owns are identity sessions — read or write.
 	{"getSession", "POST /v1/iam/sessions/get — the session object IS the credential"},
 	{"listSessions", "GET /v1/iam/sessions"},
@@ -44,7 +44,7 @@ var refusals = []struct{ name, why string }{
 	{"DeleteSession", "DELETE /v1/o11y/sessions"},
 	{"RotateSession", "POST /v1/o11y/sessions/rotate"},
 	{"post_v1_ai_signin-sessions", "explicitly a sign-in session"},
-	{"get_v1_ai_signin-sessions", "…and reading one hands back what it holds"},
+	{"get_ai_signin-sessions", "…and reading one hands back what it holds"},
 
 	// --- clause 2, authority mutation: the verb changes who may do what. ---
 	{"CreateUser", "POST /v1/o11y/users"},
@@ -63,13 +63,13 @@ var refusals = []struct{ name, why string }{
 	{"CreateBulkInvite", "POST /v1/o11y/invite/bulk"},
 	{"CreateIngestionKey", "POST /v1/o11y/gateway/ingestion_keys"},
 	{"CreateRoutePolicy", "POST /v1/o11y/route_policies"},
-	{"post_v1_iam_add-user", "POST /v1/iam/add-user"},
-	{"post_v1_iam_scim_v2_users", "SCIM user provisioning"},
-	{"delete_v1_framework_roles_user_role", "DELETE /v1/framework/roles/{user}/{role}"},
-	{"post_v1_git_keys", "POST /v1/git/keys — an SSH key is a credential even on the git surface"},
-	{"delete_v1_git_keys_id", "and removing one is still key management"},
-	{"post_v1_agents_targets_id_key", "POST /v1/agents/targets/{id}/key — enrols a machine agent"},
-	{"delete_v1_keys", "DELETE /v1/keys — the head resource, so no store owns it"},
+	{"post_iam_add-user", "POST /v1/iam/add-user"},
+	{"post_iam_scim_v2_users", "SCIM user provisioning"},
+	{"delete_framework_roles_user_role", "DELETE /v1/framework/roles/{user}/{role}"},
+	{"post_git_keys", "POST /v1/git/keys — an SSH key is a credential even on the git surface"},
+	{"delete_git_keys_id", "and removing one is still key management"},
+	{"post_agents_targets_id_key", "POST /v1/agents/targets/{id}/key — enrols a machine agent"},
+	{"delete_keys", "DELETE /v1/keys — the head resource, so no store owns it"},
 }
 
 // survivors is the useful half: what an agent is FOR. Several of these are here
@@ -83,34 +83,34 @@ var survivors = []struct{ name, why string }{
 	{"post_v1_rerank", "POST /v1/rerank"},
 	{"get_v1_models", "GET /v1/models"},
 	{"post_v1_messages_count_tokens", "POST /v1/messages/count_tokens — `token` is a UNIT here; the counting neighbour says so"},
-	{"get_v1_validators_tokenId", "a chain token id, not a bearer token"},
+	{"get_validators_tokenId", "a chain token id, not a bearer token"},
 
 	// The agent loop. Every one of these was refused while `session` was an
 	// unqualified authority noun.
-	{"post_v1_agents_sessions", "POST /v1/agents/sessions — an agent session is a unit of WORK"},
-	{"post_v1_agents_sessions_by_id_message", "the turn itself"},
-	{"post_v1_agents_sessions_by_id_stop", "…and stopping it"},
-	{"patch_v1_agents_sessions_id", "…and steering it"},
-	{"get_v1_agents_sessions_stream", "…and watching it"},
-	{"post_v1_agents_by_ref_run", "POST /v1/agents/{ref}/run"},
-	{"post_v1_agents_targets_id_claim", "claiming a target is not minting its key"},
+	{"post_agents_sessions", "POST /v1/agents/sessions — an agent session is a unit of WORK"},
+	{"post_agents_sessions_by_id_message", "the turn itself"},
+	{"post_agents_sessions_by_id_stop", "…and stopping it"},
+	{"patch_agents_sessions_id", "…and steering it"},
+	{"get_agents_sessions_stream", "…and watching it"},
+	{"post_agents_by_ref_run", "POST /v1/agents/{ref}/run"},
+	{"post_agents_targets_id_claim", "claiming a target is not minting its key"},
 
 	// Code, search, git, deploy, exec.
-	{"post_v1_code_ask", "POST /v1/code/ask"},
-	{"post_v1_code_index", "POST /v1/code/index"},
-	{"get_v1_code_search", "GET /v1/code/search"},
-	{"post_v1_search", "POST /v1/search"},
-	{"post_v1_git_repos", "POST /v1/git/repos — repos are not credentials"},
-	{"post_v1_git_repos_name_push", "POST /v1/git/repos/{name}/push"},
-	{"post_v1_deploy_applications_by_name_sync", "POST /v1/deploy/applications/{name}/sync"},
-	{"post_v1_exec", "POST /v1/exec"},
+	{"post_code_ask", "POST /v1/code/ask"},
+	{"post_code_index", "POST /v1/code/index"},
+	{"get_code_search", "GET /v1/code/search"},
+	{"post_search", "POST /v1/search"},
+	{"post_git_repos", "POST /v1/git/repos — repos are not credentials"},
+	{"post_git_repos_name_push", "POST /v1/git/repos/{name}/push"},
+	{"post_deploy_applications_by_name_sync", "POST /v1/deploy/applications/{name}/sync"},
+	{"post_exec", "POST /v1/exec"},
 
 	// The fleet's path to the live internet. These names have to be checked
 	// against the rule rather than assumed past it: the rule reads the NAME, so
 	// whether a capability projects is a property of what its operation is
 	// CALLED. Both are mutating verbs over nouns that confer no authority.
 	{"search_web", "POST /v1/websearch — searching the web grants nothing"},
-	{"post_v1_crawl", "POST /v1/crawl — reading a page grants nothing"},
+	{"post_crawl", "POST /v1/crawl — reading a page grants nothing"},
 
 	// Reads of the identity surface survive: knowing who holds a role is not
 	// granting one, and an agent that cannot see the org cannot reason about it.
@@ -122,13 +122,13 @@ var survivors = []struct{ name, why string }{
 
 	// Words that LOOK dangerous and are not. Each names a store entry or a
 	// schema name, not a credential — see keyOfAStore.
-	{"get_v1_o11y_deployments_attribute_keys", "metric label names"},
-	{"delete_v1_pubsub_kv_bucket_key", "DELETE /v1/pubsub/kv/{bucket}/{key}"},
-	{"delete_v1_flags_defs_key", "a feature-flag key"},
-	{"delete_v1_tracker_projects_key", "a tracker project key, e.g. CLOUD-1"},
-	{"patch_v1_tracker_projects_key_issues_num", "…and an issue under it"},
-	{"delete_v1_store_by_storeid_listing_by_key", "the `by_` filler must not become the key's context"},
-	{"delete_v1_cloudflare_kv_namespaces_namespace_values_key", "a KV value"},
+	{"get_o11y_deployments_attribute_keys", "metric label names"},
+	{"delete_pubsub_kv_bucket_key", "DELETE /v1/pubsub/kv/{bucket}/{key}"},
+	{"delete_flags_defs_key", "a feature-flag key"},
+	{"delete_tracker_projects_key", "a tracker project key, e.g. CLOUD-1"},
+	{"patch_tracker_projects_key_issues_num", "…and an issue under it"},
+	{"delete_store_by_storeid_listing_by_key", "the `by_` filler must not become the key's context"},
+	{"delete_cloudflare_kv_namespaces_namespace_values_key", "a KV value"},
 
 	// The whole ai CRUD surface, which zip names `by_owner_by_name`. All 45 of
 	// these were refused while `owner` was an authority noun.
@@ -138,7 +138,7 @@ var survivors = []struct{ name, why string }{
 
 	// Money is a different boundary and this rule does not claim it. Named here
 	// so the scope is a decision on the record rather than an oversight.
-	{"post_v1_research_grants", "a research grant is money, not authority"},
+	{"post_research_grants", "a research grant is money, not authority"},
 }
 
 func TestRefuse_DangerousOpsAreNotProjected(t *testing.T) {
@@ -199,17 +199,17 @@ func TestRefuse_ClassifiesNamesItHasNeverSeen(t *testing.T) {
 	// Shapes that do not exist in this fleet today. If someone adds them
 	// tomorrow, they are already classified.
 	for _, n := range []string{
-		"CreateOrganizationApiKey", "post_v1_iam_users_by_id_impersonate",
-		"MintDelegatedCredential", "put_v1_billing_saml_metadata",
-		"RotateSigningKey", "post_v1_notify_channels_by_id_oauth_authorize",
+		"CreateOrganizationApiKey", "post_iam_users_by_id_impersonate",
+		"MintDelegatedCredential", "put_billing_saml_metadata",
+		"RotateSigningKey", "post_notify_channels_by_id_oauth_authorize",
 	} {
 		if !refuse(n) {
 			t.Errorf("refuse(%q) = false — a NEW dangerous op slipped through; words: %v", n, words(n))
 		}
 	}
 	for _, n := range []string{
-		"post_v1_chat_conversations", "get_v1_zen_models", "post_v1_code_review",
-		"get_v1_agents_sessions_by_id_diff", "post_v1_search_reindex",
+		"post_chat_conversations", "get_zen_models", "post_code_review",
+		"get_agents_sessions_by_id_diff", "post_search_reindex",
 	} {
 		if refuse(n) {
 			t.Errorf("refuse(%q) = true — a NEW product op was eaten; words: %v", n, words(n))
@@ -236,11 +236,11 @@ func TestRank_PutsTheProductSurfaceInFrontOfTheConsole(t *testing.T) {
 	}
 	// Stem matching is on a '_' boundary, so a longer name under the prefix is
 	// promoted and an unrelated one that merely starts with the same letters is not.
-	if got := rank("get_v1_agents_sessions_stream"); got == len(productStems) {
+	if got := rank("get_agents_sessions_stream"); got == len(productStems) {
 		t.Error("a route UNDER a product stem must inherit its rank")
 	}
-	if got := rank("get_v1_agentsomething"); got != len(productStems) {
-		t.Errorf("rank(get_v1_agentsomething) = %d — `v1_agent` must not match across a word boundary", got)
+	if got := rank("get_agentsomething"); got != len(productStems) {
+		t.Errorf("rank(get_agentsomething) = %d — `v1_agent` must not match across a word boundary", got)
 	}
 	if got := rank("CreateUserFromGit"); got != len(productStems) {
 		t.Errorf("rank(%q) = %d — a name with no HTTP-method word has no path to rank by", "CreateUserFromGit", got)
@@ -252,21 +252,21 @@ func TestRank_PutsTheProductSurfaceInFrontOfTheConsole(t *testing.T) {
 // Ordering only helps if the promoted set is SMALLER than the window. Measured
 // against the fleet's own document, the stems through `v1_exec` promote 126 ops
 // — so a client that keeps 128 keeps chat, models, the agent loop, code, search,
-// git, deploy and exec. `v1_projects` and `v1_websearch` are last precisely
+// git, deploy and exec. `projects` and `websearch` are last precisely
 // because they are the two that spill.
 func TestRank_TheProductSurfaceFitsATruncatingClient(t *testing.T) {
 	const window = 128
 	head := 0
 	for i, stem := range productStems {
-		if stem == "v1_projects" {
+		if stem == "projects" {
 			head = i
 		}
 	}
 	if head == 0 {
-		t.Fatal("v1_projects left the surface; this test's premise is stale")
+		t.Fatal("projects left the surface; this test's premise is stale")
 	}
 	if head >= len(productStems) {
-		t.Fatal("v1_projects is last; nothing is being kept inside the window")
+		t.Fatal("projects is last; nothing is being kept inside the window")
 	}
 	// The claim is about counts measured elsewhere (see the doc comment); what
 	// is checkable HERE is that the spill-over stems really are at the end.

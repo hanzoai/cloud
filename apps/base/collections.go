@@ -87,6 +87,19 @@ func init() {
 			"behind the console's Records browser.\n\n"+
 			"Any other shape below /v1/collections is refused with 404 before it is forwarded, "+
 			"so the wildcard admits exactly those five addresses and nothing more.\n\n"+shared)
+
+	// The same data plane under the name a Supabase client already sends. It is
+	// registered rather than left to fall through because this app answers an
+	// unclaimed address with a PAGE — a request that looks like it worked and
+	// returns markup is worse than a 404, and a client that never reads this
+	// document still has to meet the right answer.
+	describeCollections("/rest/v1/*",
+		"The Base content types, on the Supabase wire",
+		"The same collections data plane as /v1/collections/*, at the address a Supabase "+
+			"client sends to. The managed Base mounts that wire at the ROOT rather than under "+
+			"/v1, so this address is carried here verbatim and forwarded unchanged.\n\n"+
+			"It is one registration for every method, and the same admission applies: the path "+
+			"is bounded to the collections data plane before anything is forwarded.\n\n"+shared)
 }
 
 // describeCollections states one path's prose at every method the document

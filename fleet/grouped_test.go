@@ -124,7 +124,7 @@ func declaring(t *testing.T, by map[string][]string) *zip.App {
 func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
 	h := declaring(t, map[string][]string{
 		"ai":    {"post_v1_chat_completions", "get_v1_models"},
-		"git":   {"post_v1_git_repos", "get_v1_git_repos"},
+		"git":   {"post_git_repos", "get_git_repos"},
 		"iam":   {"CreateUser", "DeleteUser"}, // every op refused: no tool at all
 		"quiet": {},                           // nothing to offer: no tool at all
 	})
@@ -311,7 +311,7 @@ func textOf(t *testing.T, res map[string]any) string {
 }
 
 // routed brings up a child whose operation ids zip DERIVES from its routes,
-// which is where `post_v1_projects_by_slug_deploy` comes from in the first place
+// which is where `post_projects_by_slug_deploy` comes from in the first place
 // — every fixture above declares its ids, and a declared id is never renamed, so
 // nothing above exercises this at all.
 func routed(t *testing.T, name string, routes ...string) *child {
@@ -335,7 +335,7 @@ func routed(t *testing.T, name string, routes ...string) *child {
 //
 // The door publishes `deploy_project`. A model reads that in the enum and sends
 // it back, and what has to happen is that the child's own
-// `post_v1_projects_by_slug_deploy` handler runs, with the model's arguments,
+// `post_projects_by_slug_deploy` handler runs, with the model's arguments,
 // and answers what it would have answered anyway. So the two spellings are
 // compared to EACH OTHER — a change that broke either path by breaking both
 // would still fail here, because the third assertion is that the handler was
@@ -349,7 +349,7 @@ func TestACallByThePUBLISHEDNameReachesTheSameHandler(t *testing.T) {
 	for _, tl := range kid.app.MCPTools() {
 		served[tl["name"].(string)] = true
 	}
-	if !served["post_v1_projects_by_slug_deploy"] {
+	if !served["post_projects_by_slug_deploy"] {
 		t.Fatalf("fixture is wrong: the child derived %v, not the route id this renames", served)
 	}
 
@@ -363,11 +363,11 @@ func TestACallByThePUBLISHEDNameReachesTheSameHandler(t *testing.T) {
 	as := rpc(t, h, `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"projects",`+
 		`"arguments":{"op":"deploy_project","input":{"which":"ship-it"}}}}`)
 	id := rpc(t, h, `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"projects",`+
-		`"arguments":{"op":"post_v1_projects_by_slug_deploy","input":{"which":"ship-it"}}}}`)
+		`"arguments":{"op":"post_projects_by_slug_deploy","input":{"which":"ship-it"}}}}`)
 	byName, _ := json.Marshal(as)
 	byID, _ := json.Marshal(id)
 	if string(byName) != string(byID) {
-		t.Fatalf("deploy_project answered\n  %s\nand post_v1_projects_by_slug_deploy answered\n  %s", byName, byID)
+		t.Fatalf("deploy_project answered\n  %s\nand post_projects_by_slug_deploy answered\n  %s", byName, byID)
 	}
 
 	// 3. …and that one handler is the child's, with the model's own argument in
@@ -384,7 +384,7 @@ func TestACallByThePUBLISHEDNameReachesTheSameHandler(t *testing.T) {
 	//    has to keep working.
 	desc := rpc(t, h, `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"`+fleet.Describe+
 		`","arguments":{"op":"deploy_project"}}}`)
-	if text := textOf(t, desc); !strings.Contains(text, `"name":"post_v1_projects_by_slug_deploy"`) ||
+	if text := textOf(t, desc); !strings.Contains(text, `"name":"post_projects_by_slug_deploy"`) ||
 		!strings.Contains(text, `"which"`) {
 		t.Fatalf("describe deploy_project returned %q", text)
 	}

@@ -318,7 +318,7 @@ func TestSendIsCallableByName(t *testing.T) {
 	// A background caller states who it acts for; the callee's identity chain
 	// parks it exactly as it parks a gateway assertion.
 	ctx := zip.WithCaller(context.Background(), zip.Caller{Org: "acme", User: "u_acme"})
-	out, err := zip.Call[notifySend, notifyDelivery](ctx, conn, "post_v1_notify_send", &notifySend{
+	out, err := zip.Call[notifySend, notifyDelivery](ctx, conn, "post_notify_send", &notifySend{
 		To: []string{"+15550001"}, Channel: "sms", Body: "hi",
 		TemplateVars: json.RawMessage(`{"code":"123456"}`), Sync: "true",
 	})

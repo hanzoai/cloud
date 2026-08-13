@@ -247,7 +247,7 @@ func TestAnonymousDoorIsTheFleetsOwn(t *testing.T) {
 	if names["stripe_charge"] {
 		t.Fatalf("an anonymous list must carry no tenant's tools: %v", names)
 	}
-	if !names["post_v1_tools_call"] {
+	if !names["post_tools_call"] {
 		t.Fatalf("the projected ops must still be listed: %v", names)
 	}
 }

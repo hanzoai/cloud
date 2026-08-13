@@ -18,7 +18,7 @@
   "paths": {
     "/v1/automations/connectors": {
       "get": {
-        "operationId": "get_v1_automations_connectors",
+        "operationId": "get_automations_connectors",
         "summary": "Connectors returns the connector catalogue.",
         "description": "Connectors returns the connector catalogue. Each entry is an external service a\nflow step can invoke, carrying its auth descriptor and the input properties of its\nactions and triggers. The catalogue is the same for every tenant, so the gate is a\nvalidated principal rather than a per-org view.",
         "tags": [
@@ -40,7 +40,7 @@
     },
     "/v1/automations/connectors/{id}/run": {
       "post": {
-        "operationId": "post_v1_automations_connectors_by_id_run",
+        "operationId": "post_automations_connectors_by_id_run",
         "summary": "Run executes one connector action in-process and answers the outcome.",
         "description": "Run executes one connector action in-process and answers the outcome. The\ncaller's resolved credential travels in `auth`, delivered to the action\nverbatim — the runtime resolves no credential itself. An action that ran and\nfailed (or an action name the connector does not have) answers ok:false with\nthe failure message, not an HTTP error; an unknown connector is 404 and a\nmissing action 422.",
         "tags": [
@@ -92,7 +92,7 @@
     },
     "/v1/automations/flows": {
       "get": {
-        "operationId": "get_v1_automations_flows",
+        "operationId": "get_automations_flows",
         "summary": "Returns the caller org's automations, most-recently-updated first.",
         "description": "Returns the caller org's automations, most-recently-updated first. The\noptional `limit` query bounds the page.",
         "tags": [
@@ -123,7 +123,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_automations_flows",
+        "operationId": "post_automations_flows",
         "summary": "Creates an automation and its initial DRAFT version in one call.",
         "description": "Creates an automation and its initial DRAFT version in one call. The\nnew flow is DISABLED — creating it does not arm its trigger; POST\n/v1/automations/flows/{id}/enable does that.",
         "tags": [
@@ -168,7 +168,7 @@
     },
     "/v1/automations/flows/{id}": {
       "delete": {
-        "operationId": "delete_v1_automations_flows_by_id",
+        "operationId": "delete_automations_flows_by_id",
         "summary": "Deletes one automation, its versions and its run history.",
         "description": "Deletes one automation, its versions and its run history. It answers\nno content, and a flow of another org answers not-found.",
         "tags": [
@@ -193,7 +193,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_automations_flows_by_id",
+        "operationId": "get_automations_flows_by_id",
         "summary": "Returns one automation and its latest version.",
         "description": "Returns one automation and its latest version. That is the flow record\nplus the step tree the builder edits; a flow of another org answers not-found.",
         "tags": [
@@ -225,7 +225,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_automations_flows_by_id",
+        "operationId": "patch_automations_flows_by_id",
         "summary": "Updates one automation's metadata in place.",
         "description": "Updates one automation's metadata in place. Every field is optional; a\nfield the request omits is left alone. Publishing a version pins which one runs,\nand is refused unless that version belongs to this flow.",
         "tags": [
@@ -273,7 +273,7 @@
     },
     "/v1/automations/flows/{id}/disable": {
       "post": {
-        "operationId": "post_v1_automations_flows_by_id_disable",
+        "operationId": "post_automations_flows_by_id_disable",
         "summary": "Disarms a flow's trigger and marks it DISABLED.",
         "description": "Disarms a flow's trigger and marks it DISABLED. Its schedule and its\nevent subscriptions are dropped, so a disabled flow is never a live target; runs\nalready in flight are unaffected, and it can still be started on demand.",
         "tags": [
@@ -307,7 +307,7 @@
     },
     "/v1/automations/flows/{id}/enable": {
       "post": {
-        "operationId": "post_v1_automations_flows_by_id_enable",
+        "operationId": "post_automations_flows_by_id_enable",
         "summary": "Arms a flow's trigger and marks it ENABLED.",
         "description": "Arms a flow's trigger and marks it ENABLED. A POLLING trigger gets a\ncron schedule on the durable engine; a WEBHOOK trigger gets a subscription in the\nrouting index, so an inbound event starts it; a MANUAL trigger arms nothing and\nstill runs on demand.",
         "tags": [
@@ -341,7 +341,7 @@
     },
     "/v1/automations/flows/{id}/operations": {
       "post": {
-        "operationId": "post_v1_automations_flows_by_id_operations",
+        "operationId": "post_automations_flows_by_id_operations",
         "summary": "Edit a flow — rename it, retarget its trigger, or add, move and delete steps",
         "description": "Applies ONE flow operation and answers the thing it changed. The operation is named by `type`, with its arguments under `request`: `CHANGE_NAME`, `UPDATE_TRIGGER`, `ADD_ACTION`, `UPDATE_ACTION`, `MOVE_ACTION`, `DELETE_ACTION` edit the flow's LATEST version and answer with that version, and `CHANGE_STATUS` instead enables or disables the flow and answers with the FLOW. Two response shapes on one address is the rule a reader would otherwise get wrong, and it is why this route is not a typed op.\n\nEdits land on the latest version only — the published version a run executes is untouched until it is republished — and the whole resulting step tree is re-validated against the step-count and size caps after every operation, so a long sequence of `ADD_ACTION` calls cannot grow a flow past a bound one step at a time (422 when it would). Org-scoped and fails closed: a validated principal is required (403 without one), the flow and its version are read under the caller's OWN org so another tenant's id is a 404, and an operation whose `request` does not decode is a 400.",
         "tags": [
@@ -361,7 +361,7 @@
     },
     "/v1/automations/flows/{id}/run": {
       "post": {
-        "operationId": "post_v1_automations_flows_by_id_run",
+        "operationId": "post_automations_flows_by_id_run",
         "summary": "Starts one durable run of a flow now.",
         "description": "Starts one durable run of a flow now. It runs the flow's published\nversion if one is pinned, else its latest, and answers the run record it created.\nThe run is bounded by the org's per-minute run-start budget and its in-flight\nconcurrency ceiling; over either, or with the engine not ready, no run is started\nand no run id is burned.",
         "tags": [
@@ -395,7 +395,7 @@
     },
     "/v1/automations/flows/{id}/versions": {
       "get": {
-        "operationId": "get_v1_automations_flows_by_id_versions",
+        "operationId": "get_automations_flows_by_id_versions",
         "summary": "Returns one flow's versions, newest first.",
         "description": "Returns one flow's versions, newest first. The optional `limit`\nquery bounds the page.",
         "tags": [
@@ -436,7 +436,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_automations_flows_by_id_versions",
+        "operationId": "post_automations_flows_by_id_versions",
         "summary": "Adds a new DRAFT version to a flow.",
         "description": "Adds a new DRAFT version to a flow. The version is created invalid\nunless it carries a trigger, and it does not become the running version until it\nis published (PATCH the flow's publishedVersionId) or becomes the latest.",
         "tags": [
@@ -484,7 +484,7 @@
     },
     "/v1/automations/hooks/{source}/{event}": {
       "post": {
-        "operationId": "post_v1_automations_hooks_by_source_by_event",
+        "operationId": "post_automations_hooks_by_source_by_event",
         "summary": "Fire an event that starts every enabled flow subscribed to it",
         "description": "Delivers one event to the org's automation triggers and answers `{matched:n}` — how many enabled flows had a webhook trigger on this `(source, event)` key and were started by it. A zero match is a success, not an error: nothing was subscribed.\n\nThe path is the trigger key and the JSON object body is the event payload, threaded into each started run as `{{trigger.*}}` with all of its keys intact — which is why this is not a typed op, since a declared input struct would silently DISCARD every payload key it had no field for. Re-delivery is a no-op: an `X-Idempotency-Key` header dedupes, and with none the body is content-hashed instead, so a hammer of identical posts collapses to ONE run rather than minting a fresh one per post. An in-platform producer may propagate `X-Causation-Depth` so a firing that a flow caused is bounded against a loop; an absent or invalid header reads as depth 0, an external origin.\n\nAuthenticated and org-scoped, unlike a provider's public webhook URL: a validated principal is required (403 without one) and the org is that principal's, never the body's, so a producer can only fire into its own tenant's flows. Both path segments are required (400) and a payload over the size limit is a 413.",
         "tags": [
@@ -512,7 +512,7 @@
     },
     "/v1/automations/pieces": {
       "get": {
-        "operationId": "get_v1_automations_pieces",
+        "operationId": "get_automations_pieces",
         "summary": "Pieces is the retired-name alias of the connector catalogue.",
         "description": "Pieces is the retired-name alias of the connector catalogue. It serves exactly\nwhat GET /v1/automations/connectors serves, under the name this surface used\nbefore \"piece\" (the ActivePieces term) became \"connector\", and stays valid for\nclients pinned to the old path. Prefer /connectors.",
         "tags": [
@@ -534,7 +534,7 @@
     },
     "/v1/automations/runs": {
       "get": {
-        "operationId": "get_v1_automations_runs",
+        "operationId": "get_automations_runs",
         "summary": "Returns the caller org's run history, newest first.",
         "description": "Returns the caller org's run history, newest first. The optional\n`flowId` query narrows it to one flow and `limit` bounds the page.",
         "tags": [
@@ -576,7 +576,7 @@
     },
     "/v1/automations/runs/{id}": {
       "get": {
-        "operationId": "get_v1_automations_runs_by_id",
+        "operationId": "get_automations_runs_by_id",
         "summary": "Returns one run.",
         "description": "Returns one run. A run that has not reached a terminal status is refreshed\nfrom the durable engine first — scoped to the org's own namespace — so the caller\nsees live progress rather than the last status that happened to be persisted.",
         "tags": [
@@ -610,7 +610,7 @@
     },
     "/v1/automations/runs/{id}/resume": {
       "post": {
-        "operationId": "post_v1_automations_runs_by_id_resume",
+        "operationId": "post_automations_runs_by_id_resume",
         "summary": "Release a run waiting at an approval step, with the approval payload",
         "description": "Delivers the durable `resume` signal to a run parked on a `wait_for_approval` waitpoint and answers `{resumed:true}` once the engine has taken it.\n\nThe body is an ARBITRARY JSON value — object, array, string, number — delivered VERBATIM into the workflow as that waitpoint's output, so it is what the steps after the approval read as their input. An empty body resumes with no payload. That open shape is why this route is not a typed op: an operation's input can carry the payload or the run address, never both.\n\nOrg-scoped and fails closed: a validated principal is required (403 without one), the run is read under the caller's OWN org so another tenant's run id is a 404, a body that is not JSON is a 400, and a payload over the size limit is a 413 — it becomes durable engine state, so it is bounded here rather than after it lands. The resume is audited as `automations.run.resume`.",
         "tags": [

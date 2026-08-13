@@ -180,7 +180,7 @@ paths:
         Removing that gate discloses nothing new: the catalogue was already reachable by
         anyone willing to type three characters, so there is no confidentiality delta, only
         an honesty one.
-      operationId: get_v1_models
+      operationId: get_models
       summary: Returns the list of available models from the routing table.
       tags:
       - models
@@ -193,7 +193,7 @@ paths:
         GET /v1/models lists — the same source, projected. Safe unauthenticated: no
         keys, URLs, or config are returned, and it reports a SET of names, never
         which provider serves which model.
-      operationId: get_v1_models_providers
+      operationId: get_models_providers
       summary: Public, secret-free list of the providers serving the models that GET
         /v1/models lists — the same source, projected.
       tags:
