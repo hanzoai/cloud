@@ -56,6 +56,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -101,14 +102,25 @@ var sigHeaders = []string{"X-Forgejo-Signature", "X-Gitea-Signature", "X-Hub-Sig
 // push is the subset of the forge's push payload this door acts on. Owner and
 // pusher each carry both spellings the payload has used across forge versions
 // (login vs username); first non-empty wins.
+//
+// The payload's own clone_url is deliberately NOT among these. It would be a
+// third-party string reaching the build path — the value buildFromPush matches an
+// application's RepoURL against, and the one isReleasePush compares to cloud's own
+// upstream — and it carries nothing this door does not already know: the host is
+// ours, and the path is the owner and name it has read and vetted anyway. So the
+// clone URL is DERIVED, and a delivery cannot aim a build at a repository the
+// forge does not serve.
+//
+// The decoded strings are safe to hand to the detached reactors without cloning,
+// unlike the path parameters apps/git clones: encoding/json allocates a fresh
+// string per field rather than sub-slicing the request buffer fiber reuses.
 type push struct {
 	Ref        string `json:"ref"`
 	Before     string `json:"before"`
 	After      string `json:"after"`
 	Repository struct {
-		Name     string `json:"name"`
-		CloneURL string `json:"clone_url"`
-		Owner    struct {
+		Name  string `json:"name"`
+		Owner struct {
 			Login    string `json:"login"`
 			Username string `json:"username"`
 		} `json:"owner"`
@@ -241,6 +253,34 @@ func (k *seen) first(key string, now time.Time) bool {
 	return true
 }
 
+// What a delivery may name, as the forge itself spells it.
+//
+// These three leave this door and are used as more than text: the namespace and
+// the name build the clone URL a build Job is handed, the name is the key a
+// lifecycle reactor resolves a directory by, and the commit is a git argument. A
+// separator, a leading dash or a dot-dot in any of them is a traversal or a flag
+// in a position that expects a value — so the shape is checked once, here, at the
+// boundary, rather than in each of the places it arrives.
+//
+// It is the FORGE's naming rule and deliberately not platform's slugRE: a forge
+// repository may be Mixed.Case where a platform app slug may not, so borrowing
+// that value would refuse legitimate repositories in order to reuse a regexp.
+var (
+	nameRE   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
+	refRE    = regexp.MustCompile(`^refs/(heads|tags)/[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$`)
+	commitRE = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
+)
+
+// coordinate reports whether a delivery names a repository, a ref and a commit
+// this door can act on. The dot-dot is refused separately because the character
+// classes above admit each dot on its own, and git's own ref rules refuse the
+// pair for the same reason a path does.
+func coordinate(owner, repo, ref, commit string) bool {
+	return nameRE.MatchString(owner) && nameRE.MatchString(repo) &&
+		refRE.MatchString(ref) && !strings.Contains(ref, "..") &&
+		commitRE.MatchString(commit)
+}
+
 // signed reports whether any of sigs carries the hex HMAC-SHA256 of body under
 // secret, compared in constant time.
 //
@@ -286,6 +326,16 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(body) > maxHookBody {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "payload too large")
 	}
+	// The forge this deployment owns, resolved once: the delivery's clone URL is
+	// built from it, and the lifecycle origin IS it. A deployment that cannot name
+	// its own forge refuses rather than continues, because the value it would carry
+	// on is the empty origin — which every mirror reads as "a native push, send it
+	// on" and is the one loop this door has to not start.
+	host := forge.Host(s.Domain)
+	if host == "" {
+		s.Log.Error("forge hook: this deployment names no forge", "domain", s.Domain)
+		return zip.Errorf(http.StatusServiceUnavailable, "no forge host for this deployment")
+	}
 	key, err := s.State.hook.read(s, c.Context())
 	if err != nil {
 		// 503 and not 401. A deployment that cannot read its own secret has not been
@@ -321,6 +371,11 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 	if ev.After == "" || ev.After == zeroSHA {
 		return ignored(c, "ref deleted")
 	}
+	if !coordinate(owner, ev.Repository.Name, ev.Ref, ev.After) {
+		s.Log.Warn("forge hook: a delivery named a coordinate the forge cannot hold",
+			"owner", owner, "repo", ev.Repository.Name, "ref", ev.Ref)
+		return ignored(c, "malformed coordinate")
+	}
 	// Our own release and mirror automation pushes as the forge's Actions user, so
 	// without this a release's own commit triggers the next release, forever. The
 	// ONE bot predicate every push transport shares.
@@ -342,21 +397,17 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 		return ignored(c, "already landed")
 	}
 
-	// The forge's own clone URL when it sent one, since that is the string a user
-	// copied into the application they want rebuilt and the one buildFromPush
-	// matches against. Derived from the host this deployment knows otherwise, so a
-	// forge with no root URL configured still resolves to its own repositories
-	// rather than to none.
-	clone := cmp.Or(strings.TrimSpace(ev.Repository.CloneURL),
-		"https://"+forge.Host(s.Domain)+"/"+owner+"/"+ev.Repository.Name+".git")
-
 	// SEAM ONE: the deploy trigger. Single-registrant and synchronous, dispatching
 	// in THIS process to buildFromPush. Best-effort by the seam's contract — the
 	// push already landed on the forge, so a trigger failure is logged rather than
 	// returned as an error the forge would redeliver against us.
+	//
+	// The clone URL is derived from the forge that delivered and the repository it
+	// named — the spelling the forge itself publishes, and the one an application's
+	// RepoURL normalises to (sameRepo drops the ".git" and the case).
 	if err := cloud.OnGitPush(c.Context(), cloud.GitPushEvent{
-		Org: org, Repo: ev.Repository.Name, Ref: ev.Ref,
-		Commit: ev.After, CloneURL: clone,
+		Org: org, Repo: ev.Repository.Name, Ref: ev.Ref, Commit: ev.After,
+		CloneURL: "https://" + host + "/" + owner + "/" + ev.Repository.Name + ".git",
 	}); err != nil {
 		s.Log.Warn("forge hook: build trigger failed",
 			"org", org, "repo", ev.Repository.Name, "ref", ev.Ref, "err", err)
@@ -381,7 +432,7 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 	cloud.EmitLifecycle(c.Context(), cloud.LifecycleEvent{
 		Kind: cloud.LifecyclePushLanded, Org: org, Repo: ev.Repository.Name,
 		Branch: branch, Before: ev.Before, After: ev.After, Pusher: pusher,
-		Origin: forge.Host(s.Domain),
+		Origin: host,
 	})
 
 	s.Log.Info("forge push landed", "org", org, "repo", ev.Repository.Name,
