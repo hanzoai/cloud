@@ -90,10 +90,31 @@ APP_BINS := $(addprefix bin/,$(APPS))
 # gate (check) sat behind a door with no handle.
 include mk/fleet.mk
 
-.PHONY: help deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe ramfs ramfs-check run dev smoke zipdoc-check closure closure-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
+.PHONY: help setup deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe ramfs ramfs-check run dev smoke zipdoc-check closure closure-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+setup: ## One-time dev setup: make the hanzoai/* Go modules resolvable.
+	@# The hanzoai/* modules are NAMED github.com/hanzoai/... and do not live there —
+	@# github.com/hanzoai/s3-go is "Repository not found" over both HTTPS and a dev's
+	@# SSH key. They live on git.hanzo.ai. A fresh clone therefore fails at
+	@# `go mod download` with an error that reads like a deleted repo rather than a
+	@# missing route, and the only reason existing machines work is a warm module
+	@# cache from before the move. One rewrite, set once, fixes every hanzoai module
+	@# in every repo — it is git-global on purpose, because the module path is wrong
+	@# everywhere, not just here.
+	@git config --global url."https://git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
+	@echo "  rewrote github.com/hanzoai/ -> git.hanzo.ai/hanzoai/"
+	@if git ls-remote https://git.hanzo.ai/hanzoai/s3-go >/dev/null 2>&1; then \
+	  echo "  forge reachable — go mod download will work"; \
+	else \
+	  echo "  forge needs credentials. Sign in once at https://git.hanzo.ai/user/oauth2/hanzo"; \
+	  echo "  (your Hanzo account), then let git store the credential:"; \
+	  echo "      git config --global credential.helper store"; \
+	  echo "      git ls-remote https://git.hanzo.ai/hanzoai/s3-go"; \
+	fi
+
 
 # THERE IS NO `webui` TARGET, and its absence is the change.
 #
