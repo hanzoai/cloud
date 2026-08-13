@@ -996,6 +996,8 @@ github.com/hanzoai/authz v1.10.29 h1:b4vWtI9g4Mvay1zizW7cwly/hDk06r+oAdA/y+317Do
 github.com/hanzoai/authz v1.10.29/go.mod h1:xkzFdiIFx4UQMlU0NkmSRz0dgRQYqSXpKgVjn8ijn3E=
 github.com/hanzoai/base v1.5.18 h1:vYM9dxbl/ChMD+s19JTONG0cL3B437EZbbA9HolkAjo=
 github.com/hanzoai/base v1.5.18/go.mod h1:YhQQ8lFwGzla14dM9TMTczfCjVKMDIrRpMNkeY2fFS8=
+github.com/hanzoai/base v1.5.25 h1:DEjmpTl9YBBjdIkBA4BP83t9eRNLkrilWAW9ZuiJMMo=
+github.com/hanzoai/base v1.5.25/go.mod h1:S2nvk9y1yxnRxqyV3xuu3Uq93yeZzPkPj3aGtO/z3dM=
 github.com/hanzoai/captable v1.0.0 h1:utXPsOaPL+QV0rJaoNDFHvWFv7etf2kfm1bsFh6JRD0=
 github.com/hanzoai/captable v1.0.0/go.mod h1:czdMnzEvb8FWNKCzmh+z8PmwYeQp4MGyTPgo+Q5O+mk=
 github.com/hanzoai/cd/gitops-engine v0.7.3 h1:NmPf8v3Ti8ejSI8M96wFmzOchQ2fgxZHhVA7F9RgAyI=
@@ -1058,6 +1060,8 @@ github.com/hanzoai/o11y v1.5.63 h1:/kr51yCV3UaXT1tvb/KI57twgN/OE1z5AcZ/D7ObSNU=
 github.com/hanzoai/o11y v1.5.63/go.mod h1:ZFtyB6TjUGWJPdO689dvqk2ZaBu+WMqEvMRxP2Jb8tc=
 github.com/hanzoai/orm v0.6.21 h1:iqH7h8eUD3uDRKuga5jQJqAC+6oQRxXoApUJFQd+i38=
 github.com/hanzoai/orm v0.6.21/go.mod h1:mnnchBPY8Z0gEsI0qzBWQnFKj3LerqHOk7wfoOn6MNA=
+github.com/hanzoai/orm v0.6.24 h1:vRKUbg3zdF6cW8O0bwLC2M3DIdhmpvt4bOID1x19EKE=
+github.com/hanzoai/orm v0.6.24/go.mod h1:mnnchBPY8Z0gEsI0qzBWQnFKj3LerqHOk7wfoOn6MNA=
 github.com/hanzoai/otel-collector v1.2.0 h1:lBDL5lKotq89JaqchcM+/oxEnjrjazEI2JJfDhotudc=
 github.com/hanzoai/otel-collector v1.2.0/go.mod h1:rNCSDd4fw23kCi5UQ4u2IGhSYifYMex5O6SwZGHtIPE=
 github.com/hanzoai/pdf v1.2.0 h1:3/zYs4estaf6hpa3Ug/NgfYEQpmkmMClmRcREAP8KUo=
