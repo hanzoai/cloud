@@ -49,10 +49,10 @@ var readings = []struct{ id, want, route string }{
 	{"post_sandboxes_by_id_exec", "exec_sandbox", "POST /v1/sandboxes/{id}/exec — the action shape again"},
 
 	// The inference surface.
-	{"post_v1_chat_completions", "create_chat_completion", "POST /v1/chat/completions"},
+	{"post_chat_completions", "create_chat_completion", "POST /v1/chat/completions"},
 	{"get_models", "list_models", "GET /v1/models"},
-	{"post_v1_embeddings", "create_embedding", "POST /v1/embeddings"},
-	{"post_v1_rerank", "create_rerank", "POST /v1/rerank — one singular segment is the thing, not a verb"},
+	{"post_embeddings", "create_embedding", "POST /v1/embeddings"},
+	{"post_rerank", "create_rerank", "POST /v1/rerank — one singular segment is the thing, not a verb"},
 
 	// Spelling that a naive plural rule gets wrong in both directions.
 	{"get_sandboxes", "list_sandboxes", "GET /v1/sandboxes — plural stays plural for a list"},

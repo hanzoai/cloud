@@ -14,7 +14,7 @@ paths:
         /foley — that the Zen family serves natively. It resolves the SKU and, for a Zen
         model, forwards to zen's matching verb billed per call at the discovered price.
         These verbs are Zen-native; a non-Zen model is rejected.
-      operationId: post_v1_audio_foley
+      operationId: post_audio_foley
       summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
         /foley — that the Zen family serves natively.
       tags:
@@ -28,7 +28,7 @@ paths:
         /foley — that the Zen family serves natively. It resolves the SKU and, for a Zen
         model, forwards to zen's matching verb billed per call at the discovered price.
         These verbs are Zen-native; a non-Zen model is rejected.
-      operationId: post_v1_audio_music
+      operationId: post_audio_music
       summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
         /foley — that the Zen family serves natively.
       tags:
@@ -44,7 +44,7 @@ paths:
         provider works transparently), synthesizes the audio, and streams the bytes back.
         One code path, OpenAI-shaped, no store/message coupling (unlike the legacy
         /v1/generate-text-to-speech-audio which is bound to a chat store).
-      operationId: post_v1_audio_speech
+      operationId: post_audio_speech
       summary: The OpenAI-compatible TTS endpoint (POST /v1/audio/speech).
       tags:
       - audio
@@ -61,7 +61,7 @@ paths:
         provider — works transparently), transcribe, and return the OpenAI body.
         One code path, OpenAI-shaped, no store coupling (unlike the legacy
         /v1/process-speech-to-text, which is bound to a chat store).
-      operationId: post_v1_audio_transcriptions
+      operationId: post_audio_transcriptions
       summary: 'The OpenAI-compatible STT endpoint (POST /v1/audio/transcriptions,
         multipart: file + model [+ language + response_format]).'
       tags:
@@ -75,7 +75,7 @@ paths:
         /foley — that the Zen family serves natively. It resolves the SKU and, for a Zen
         model, forwards to zen's matching verb billed per call at the discovered price.
         These verbs are Zen-native; a non-Zen model is rejected.
-      operationId: post_v1_audio_voice
+      operationId: post_audio_voice
       summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
         /foley — that the Zen family serves natively.
       tags:
@@ -85,7 +85,7 @@ paths:
   /v1/chat/completions:
     post:
       description: Implements the OpenAI-compatible chat completions API
-      operationId: post_v1_chat_completions
+      operationId: post_chat_completions
       summary: Implements the OpenAI-compatible chat completions API
       tags:
       - chat
@@ -94,7 +94,7 @@ paths:
   /v1/completions:
     post:
       description: Implements the OpenAI-compatible chat completions API
-      operationId: post_v1_completions
+      operationId: post_completions
       summary: Implements the OpenAI-compatible chat completions API
       tags:
       - completions
@@ -109,7 +109,7 @@ paths:
         It authenticates the caller, resolves the model to its upstream provider via
         the shared routing table, rewrites the user-facing model name to the upstream
         id, and proxies the request to the provider's /embeddings endpoint verbatim.
-      operationId: post_v1_embeddings
+      operationId: post_embeddings
       summary: Implements POST /v1/embeddings (OpenAI-compatible).
       tags:
       - embeddings
@@ -124,7 +124,7 @@ paths:
         diffusion), reserves the\nper-image budget, generates the image(s) through
         the do-ai async image\nclient, records usage for billing, and returns the
         OpenAI images response."
-      operationId: post_v1_images_generations
+      operationId: post_images_generations
       summary: Implements POST /v1/images/generations (OpenAI-compatible).
       tags:
       - images
@@ -133,7 +133,7 @@ paths:
   /v1/messages:
     post:
       description: Implements the Anthropic Messages API.
-      operationId: post_v1_messages
+      operationId: post_messages
       summary: Implements the Anthropic Messages API.
       tags:
       - messages
@@ -145,7 +145,7 @@ paths:
         Implements POST /v1/messages/count_tokens. Claude Code
         calls it before a request; it returns {"input_tokens": N} for the given
         model + messages + tools.
-      operationId: post_v1_messages_count_tokens
+      operationId: post_messages_count_tokens
       summary: Implements POST /v1/messages/count_tokens.
       tags:
       - messages
@@ -211,7 +211,7 @@ paths:
         as a real bi-encoder ranking: embed the\n    query and documents through the
         resolved embedding model and rank by\n    cosine similarity. No rerank-specific
         key required."
-      operationId: post_v1_rerank
+      operationId: post_rerank
       summary: Implements POST /v1/rerank (Cohere/Jina-compatible).
       tags:
       - rerank
@@ -223,7 +223,7 @@ paths:
         Implements POST /v1/responses. The converted request is passed to
         ChatCompletions and an installed ResponseWriter converts its OpenAI chat JSON
         or SSE back into Responses JSON/SSE on the fly.
-      operationId: post_v1_responses
+      operationId: post_responses
       summary: Implements POST /v1/responses.
       tags:
       - responses
@@ -239,7 +239,7 @@ paths:
         first time the job is observed completed — settles the reservation with the
         actual cost and records the billable usage event (exactly once). Returns the
         OpenAI-shaped video object.
-      operationId: get_v1_videos_by_id
+      operationId: get_videos_by_id
       summary: Implements GET /v1/videos/{id} — poll a job's status.
       tags:
       - videos
@@ -255,7 +255,7 @@ paths:
         raw video bytes back inline. A successful download also bills the job once (for
         the client that downloads without first polling to completion) — idempotent
         with the poll path via job.markCompleted.
-      operationId: get_v1_videos_by_id_content
+      operationId: get_videos_by_id_content
       summary: Implements GET /v1/videos/{id}/content — download the finished MP4.
       tags:
       - videos
@@ -275,7 +275,7 @@ paths:
         video object with status "queued" IMMEDIATELY. The client then polls
         GET /v1/videos/{id} and downloads GET /v1/videos/{id}/content. Nothing is
         billed here — the debit lands on completion.
-      operationId: post_v1_videos_generations
+      operationId: post_videos_generations
       summary: Implements POST /v1/videos/generations — the ASYNC create.
       tags:
       - videos
