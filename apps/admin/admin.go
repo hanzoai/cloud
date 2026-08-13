@@ -243,21 +243,29 @@ func (o ops) orgs(ctx context.Context, _ *core.None) (*orgsOut, error) {
 	if err != nil {
 		return &orgsOut{Status: core.Err, Msg: err.Error()}, nil
 	}
+	// The whole directory's AI usage in ONE read, keyed by org — the spend and token
+	// columns for every row. Per-org it would be a query per tenant, and this fleet has
+	// eighty-one; a directory that costs O(orgs) round-trips gets slower every signup.
+	// A tenant with no rows in the window is absent from the map and reads a true zero.
+	ledger, _ := foldLedgerByOrg(ctx, ledgerScope{Since: computeSince(usageRange)})
+	money := core.Delegate(ctx)
+
 	rows := make([]orgRow, 0, len(orgs))
 	for _, row := range orgs {
 		users := orgUserCount(o.s, ctx, cr, row.Name)
 		// orgs is a per-ROW panel (orgRow[]; it carries NO sources[] channel):
 		// a failed read degrades THAT org's row to an honest zero, never a fleet total that
 		// falsely reads healthy. The aggregate-freshness signal lives on /overview.
-		spend, credits, _ := core.OrgMoney(o.s, ctx, row.Name)
+		_, credits, _ := core.OrgMoney(o.s, money, row.Name)
+		used := ledger[row.Name]
 		rows = append(rows, orgRow{
 			Org:          row.Name,
 			Display:      core.Display(row.DisplayName, row.Name),
 			Users:        users,
 			Products:     0, // workload registry feed pending (platform apps table)
-			SpendCents:   spend,
+			SpendCents:   used.CostCents,
 			CreditsCents: credits,
-			Tokens:       0, // fleet token counters pending (insights/datastore)
+			Tokens:       used.Tokens,
 			Created:      row.CreatedTime,
 		})
 	}
@@ -400,23 +408,26 @@ func (o ops) iamPassthrough(ctx context.Context, in *iamPageIn, path string) (*i
 
 // ── /v1/admin/usage — fleet usage roll-up (UsageData) ────────────────────────
 
-// usage returns the month-to-date money totals: one org's when org names one, else the
-// fleet sum across every org a SuperAdmin can see.
+// usage returns the trailing 30 days of AI usage: one org's when org names one, else the
+// whole fleet's — the spend, the tokens and the requests, the daily curve behind them,
+// and the split by model.
 //
-// series and byProduct are ALWAYS empty. A daily trend and a per-product split are not
-// derivable from the commerce billing API — they live in insights/datastore — so this
-// answers with the honest empty arrays rather than fabricating a shape the console would
-// then chart. Same reason tokens and requests are 0: there is no fleet counter to read.
+// It reads the AI ledger (ledger.go), which is the plane that owns this question. It used
+// to ask the commerce billing API instead, once per org, and answer with a hardcoded
+// empty series, zero tokens and zero requests, on the reasoning that a trend and a split
+// were "not derivable from the commerce billing API". They are not — but the question was
+// never commerce's. hanzo.cloud_usage carries a row per served request, so all three fall
+// out of the same window the totals do.
 //
 // Example: {"org":"acme"}
-// Response: {"status":"ok","msg":"","data":{"totals":{"spendCents":12500,"tokens":0,"requests":0},
-// "series":[],"byProduct":[]}}
+// Response: {"status":"ok","msg":"","data":{"totals":{"spendCents":12500,"tokens":170000,"requests":42},
+// "series":[{"date":"2026-08-13","spendCents":900,"tokens":12000,"requests":3}],
+// "byModel":[{"model":"claude-opus-4-8","spendCents":9000,"tokens":80000}]}}
 func (o ops) usage(ctx context.Context, in *usageIn) (*usageOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	cr := core.CallerCreds(c)
 	sc := core.ResolveScope(o.s, c)
 	org := strings.TrimSpace(in.Org)
 	if !sc.Super {
@@ -428,29 +439,60 @@ func (o ops) usage(ctx context.Context, in *usageIn) (*usageOut, error) {
 		}
 	}
 
-	var spend int64
-	switch {
-	case org != "":
-		if sp, err := o.s.State.Commerce.Spend(ctx, org); err == nil {
-			spend = int64(sp.Consumed)
-		}
-	case sc.Super:
-		// Fleet: sum month-to-date consumption across every org.
-		orgs, err := core.ListOrgs(o.s, ctx, cr)
-		if err == nil {
-			for _, row := range orgs {
-				if sp, e := o.s.State.Commerce.Spend(ctx, row.Name); e == nil {
-					spend += int64(sp.Consumed)
-				}
-			}
-		}
-	}
+	// ONE scope, four reads: the totals, the daily curve and the model split all describe
+	// the same window of the same rows, so they cannot disagree about which window it was.
+	scope := ledgerScope{Since: computeSince(usageRange), Org: org}
+	totals := foldOf(firstRowOr(ledgerRows(ctx, ledgerTotals(scope))))
 
 	return &usageOut{Status: core.OK, Data: &usageData{
-		Totals:    usageTotals{SpendCents: spend, Tokens: 0, Requests: 0},
-		Series:    []usagePoint{},
-		ByProduct: []usageByProduct{},
+		Totals: usageTotals{
+			SpendCents: totals.CostCents,
+			Tokens:     totals.Tokens,
+			Requests:   totals.Requests,
+		},
+		Series:  usagePointsFrom(ledgerRows(ctx, ledgerSeries(scope, usageBucket))),
+		ByModel: usageByModelFrom(ledgerRows(ctx, ledgerByModel(scope, usageModelCap))),
 	}}, nil
+}
+
+// The usage board's window and shape. The console renders a month of daily points and a
+// donut that shows its top six, so a cap of ten leaves the ranking honest without paying
+// for a tail nothing draws.
+const (
+	usageRange    = "30d"
+	usageBucket   = "1 DAY"
+	usageModelCap = 10
+)
+
+// usagePointsFrom projects the ledger's daily buckets onto the board's points. The bucket
+// key is a DAY, not an instant — see chDate.
+func usagePointsFrom(rows []map[string]any) []usagePoint {
+	out := make([]usagePoint, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, usagePoint{
+			Date:       chDate(r["ts"]),
+			SpendCents: chInt64(r["cost_cents"]),
+			Tokens:     chInt64(r["tokens"]),
+			Requests:   chInt64(r["requests"]),
+		})
+	}
+	return out
+}
+
+// usageByModelFrom projects the ledger's model split. The model is the unit the fleet
+// actually sells, so it is what this split names — the field used to be called `product`
+// and was never populated, which read as "there are no products" rather than "nobody
+// asked the ledger".
+func usageByModelFrom(rows []map[string]any) []usageByModel {
+	out := make([]usageByModel, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, usageByModel{
+			Model:      chStr(r["model"]),
+			SpendCents: chInt64(r["cost_cents"]),
+			Tokens:     chInt64(r["tokens"]),
+		})
+	}
+	return out
 }
 
 // ── /v1/admin/products — workload registry (ProductRow[]) ────────────────────
@@ -467,8 +509,11 @@ func (o ops) usage(ctx context.Context, in *usageIn) (*usageOut, error) {
 // not-configured. A commerce read that failed for ANY org marks that source degraded,
 // because the spend/credits totals are then an undercount and must not read healthy.
 //
-// tokens30d is 0 for the same reason /usage has no series: there is no fleet token
-// counter to read yet.
+// The AI tiles — 30-day spend and tokens — come from the AI ledger (ledger.go), the
+// plane that owns "what was served". They used to come from the money plane with the
+// token counter hardcoded to zero, so the board read $0.00 and 0 tokens over a month in
+// which the fleet served fifteen thousand requests. Credits still come from commerce,
+// which owns the wallet.
 //
 // Response: {"status":"ok","msg":"","data":{"orgs":2,"users":14,"products":31,
 // "activeProducts":29,"drift":1,"spendCents30d":250000,"tokens30d":0,"creditsCents":10000,
@@ -483,11 +528,13 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	var sources []core.SourceStatus
-	orgCount, userCount, spend, credits := 0, 0, int64(0), int64(0)
+	orgCount, userCount, credits := 0, 0, int64(0)
 
 	orgs, orgErr := core.ScopedOrgs(o.s, ctx, c, cr)
 	sources = append(sources, core.SrcOf("iam", orgErr, len(orgs), now))
-	commercePartial := false
+	// commerceLedger records that a ledger ANSWERED at all — the router's word, not an
+	// env var. commercePartial records that one that answered, failed.
+	commercePartial, commerceLedger := false, false
 	if orgErr == nil {
 		orgCount = len(orgs)
 		// FAN OUT. Each org costs two independent reads (users, money), so doing this
@@ -496,6 +543,9 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 		// tenant signs up. The reads do not depend on each other, so they run
 		// concurrently under a fixed ceiling — bounded so a large fleet cannot stampede
 		// the finance ledger or the IAM store.
+		// ONE delegation for the whole fan-out (core.Delegate) — building it per
+		// goroutine would have every one of them reading the same request.
+		money := core.Delegate(ctx)
 		const maxParallelOrgReads = 12
 		var (
 			mu  sync.Mutex
@@ -509,17 +559,19 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 				sem <- struct{}{}
 				defer func() { <-sem }()
 				uc := orgUserCount(o.s, ctx, cr, org)
-				sp, cr2, ok := core.OrgMoney(o.s, ctx, org)
+				_, cr2, mErr := core.OrgMoney(o.s, money, org)
 				mu.Lock()
 				defer mu.Unlock()
 				userCount += uc
-				spend += sp
 				credits += cr2
-				if !ok {
-					// This org's money did not read — the fleet spend/credits totals are
-					// now an UNDERCOUNT, so the commerce source must report degraded,
-					// not healthy.
+				switch {
+				case core.MoneyFailed(mErr):
+					// This org's money did not read — the fleet credits total is now an
+					// UNDERCOUNT, so the commerce source must report degraded, not healthy.
 					commercePartial = true
+					commerceLedger = true
+				case mErr == nil:
+					commerceLedger = true
 				}
 			}(row.Name)
 		}
@@ -533,8 +585,8 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 	var commerceErr error
 	commerceRows := 0
 	switch {
-	case !o.s.State.Commerce.Ready():
-		commerceErr = fmt.Errorf("commerce endpoint not configured")
+	case orgCount > 0 && !commerceLedger:
+		commerceErr = core.ErrNoLedger
 	case commercePartial:
 		commerceErr = core.ErrPartialRevenue
 		commerceRows = orgCount
@@ -542,6 +594,12 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 		commerceRows = orgCount
 	}
 	sources = append(sources, core.SrcOf("commerce", commerceErr, commerceRows, now))
+
+	// The AI usage ledger — the 30-day spend + token tiles, from ONE fold of the window
+	// the tiles name. It reports itself like every other upstream: a warehouse that is
+	// not connected is a source that is DOWN, never a fleet that served nothing.
+	aiSpend, aiErr := foldLedger(ctx, ledgerScope{Since: computeSince(usageRange)})
+	sources = append(sources, core.SrcOf("usage", aiErr, int(aiSpend.Requests), now))
 
 	// o11y System Health.
 	o11yRows := 0
@@ -563,8 +621,8 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 		Products:       fleetRoll.Total,
 		ActiveProducts: fleetRoll.Active,
 		Drift:          fleetRoll.Drift,
-		SpendCents30d:  spend,
-		Tokens30d:      0, // fleet token counters pending (insights/datastore)
+		SpendCents30d:  aiSpend.CostCents,
+		Tokens30d:      aiSpend.Tokens,
 		CreditsCents:   credits,
 		LastSync:       now,
 		Sources:        sources,

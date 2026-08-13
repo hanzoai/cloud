@@ -69,7 +69,6 @@ import (
 // to the table name; attribute values are Map strings, so numeric ones read
 // through toFloat64OrZero.
 const (
-	o11yUsageTable = "hanzo.cloud_usage"
 	o11yTraceTable = "event.span"
 	o11yLogTable   = "event.log"
 
@@ -227,11 +226,12 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 	// column — a single DateTime literal binds against all three.
 	sinceTS := chTS(since)
 	interval := o11yBucket(rangeLabel)
+	// The ledger reads share ONE scope value (ledger.go) — this board is fleet-wide,
+	// so it names no tenant.
+	fleet := ledgerScope{Since: since}
 
-	// LLM usage totals (all orgs).
-	if rows, err := datastore.Query(ctx, o11yUsageTotalsSQL(), sinceTS); err == nil {
-		fillUsageTotals(&payload.Totals, firstRowOr(rows))
-	}
+	// LLM usage totals (all orgs) — the shared ledger reads live in ledger.go.
+	fillUsageTotals(&payload.Totals, firstRowOr(ledgerRows(ctx, ledgerTotals(fleet))))
 	// Trace RED metrics (all services).
 	if rows, err := datastore.Query(ctx, o11yTraceTotalsSQL(), sinceTS); err == nil {
 		fillTraceTotals(&payload.Totals, firstRowOr(rows))
@@ -241,21 +241,15 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 		payload.Totals.LogVolume = chInt64(firstRowOr(rows)["c"])
 	}
 	// Usage time-series (fleet).
-	if rows, err := datastore.Query(ctx, o11yUsageSeriesSQL(interval), sinceTS); err == nil {
-		payload.Series = usageSeriesFromRows(rows)
-	}
+	payload.Series = usageSeriesFromRows(ledgerRows(ctx, ledgerSeries(fleet, interval)))
 	// Log-volume time-series (fleet).
 	if rows, err := datastore.Query(ctx, o11yLogSeriesSQL(interval), sinceTS); err == nil {
 		payload.LogSeries = logSeriesFromRows(rows)
 	}
 	// Top orgs by usage.
-	if rows, err := datastore.Query(ctx, o11yTopOrgsSQL(), sinceTS); err == nil {
-		payload.TopOrgs = topOrgsFromRows(rows)
-	}
+	payload.TopOrgs = topOrgsFromRows(ledgerRows(ctx, ledgerByOrg(fleet, o11yTopN)))
 	// Top models by usage.
-	if rows, err := datastore.Query(ctx, o11yTopModelsSQL(), sinceTS); err == nil {
-		payload.TopModels = topModelsFromRows(rows)
-	}
+	payload.TopModels = topModelsFromRows(ledgerRows(ctx, ledgerByModel(fleet, o11yTopN)))
 	// Top services by trace volume.
 	if rows, err := datastore.Query(ctx, o11yTopServicesSQL(), sinceTS); err == nil {
 		payload.TopServices = topServicesFromRows(rows)
@@ -278,14 +272,6 @@ type o11yOut struct {
 
 // ── pure SQL builders (static SQL + one positional time bound; unit-tested) ──
 
-func o11yUsageTotalsSQL() string {
-	return "SELECT count() AS requests, sum(total_tokens) AS tokens, " +
-		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
-		"sum(cost_cents) AS cost_cents, countIf(status = 'error') AS errors, " +
-		"uniqExact(organization) AS orgs, uniqExact(model) AS models " +
-		"FROM " + o11yUsageTable + " WHERE timestamp >= ?"
-}
-
 func o11yTraceTotalsSQL() string {
 	return "SELECT count() AS traces, " +
 		"round(quantile(0.5)(" + o11yDurationCol + ") / 1e6, 2) AS p50, " +
@@ -300,28 +286,9 @@ func o11yLogVolumeSQL() string {
 	return "SELECT count() AS c FROM " + o11yLogTable + " WHERE time >= ?"
 }
 
-func o11yUsageSeriesSQL(interval string) string {
-	return "SELECT toStartOfInterval(timestamp, INTERVAL " + interval + ") AS ts, " +
-		"count() AS requests, sum(total_tokens) AS tokens, sum(cost_cents) AS cost_cents, " +
-		"countIf(status = 'error') AS errors " +
-		"FROM " + o11yUsageTable + " WHERE timestamp >= ? GROUP BY ts ORDER BY ts"
-}
-
 func o11yLogSeriesSQL(interval string) string {
 	return "SELECT toStartOfInterval(time, INTERVAL " + interval + ") AS ts, " +
 		"count() AS c FROM " + o11yLogTable + " WHERE time >= ? GROUP BY ts ORDER BY ts"
-}
-
-func o11yTopOrgsSQL() string {
-	return "SELECT organization AS org, count() AS requests, sum(total_tokens) AS tokens, " +
-		"sum(cost_cents) AS cost_cents FROM " + o11yUsageTable +
-		" WHERE timestamp >= ? GROUP BY org ORDER BY requests DESC LIMIT " + strconv.Itoa(o11yTopN)
-}
-
-func o11yTopModelsSQL() string {
-	return "SELECT model, count() AS requests, sum(total_tokens) AS tokens, " +
-		"sum(cost_cents) AS cost_cents FROM " + o11yUsageTable +
-		" WHERE timestamp >= ? AND model != '' GROUP BY model ORDER BY requests DESC LIMIT " + strconv.Itoa(o11yTopN)
 }
 
 func o11yTopServicesSQL() string {
