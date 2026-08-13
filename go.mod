@@ -442,7 +442,7 @@ require (
 	github.com/hanzoai/go-openrouter v1.0.0 // indirect
 	github.com/hanzoai/goauthorizenet v1.0.0 // indirect
 	github.com/hanzoai/gochimp3 v1.0.0 // indirect
-	github.com/hanzoai/orm v0.6.21
+	github.com/hanzoai/orm v0.6.24
 	github.com/hanzoai/pdf v1.2.0 // indirect
 	github.com/hanzoai/pubsub-go v1.53.0
 	github.com/hanzoai/search-go v0.36.0 // indirect
@@ -693,7 +693,7 @@ require (
 	github.com/hanzoai/agent v1.0.5
 	github.com/hanzoai/ai v1.833.16
 	github.com/hanzoai/authz v1.10.29
-	github.com/hanzoai/base v1.5.18
+	github.com/hanzoai/base v1.5.25
 	github.com/hanzoai/licensing v0.1.15
 	github.com/hanzoai/metrics v1.110.6
 	github.com/hanzoai/o11y v1.5.63
