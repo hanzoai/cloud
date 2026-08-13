@@ -46197,6 +46197,22 @@ components:
           items:
             $ref: '#/components/schemas/usagePoint'
           type: array
+        sources:
+          description: |-
+            Sources names a money read that did NOT answer, on the SAME core.SourceStatus
+            channel /overview, /revenue and /finance already report freshness on — one
+            vocabulary for one fact, rather than a second spelling invented here.
+
+            It is ADDITIVE and absent when every read answered, so a healthy response is
+            byte-identical to what this endpoint has always sent and no consumer changes to
+            keep working. What changes is that `spendCents: 0` is now a REAL zero unless
+            this says otherwise: a fleet that spent nothing and a fleet whose ledger could
+            not be reached were the same three bytes on the wire, and the second is what
+            production was sending. Rows counts the orgs that DID answer, so the reader can
+            see how much of the fleet the total actually covers.
+          items:
+            $ref: '#/components/schemas/SourceStatus'
+          type: array
         totals:
           $ref: '#/components/schemas/usageTotals'
       type: object
@@ -51277,13 +51293,30 @@ paths:
   /v1/admin/usage:
     get:
       description: |-
-        Returns the month-to-date money totals: one org's when org names one, else the
-        fleet sum across every org a SuperAdmin can see.
+        Returns the metered spend over the trailing 30 days: one org's when org names
+        one, else the fleet sum across every org a SuperAdmin can see.
 
-        series and byProduct are ALWAYS empty. A daily trend and a per-product split are not
-        derivable from the commerce billing API — they live in insights/datastore — so this
-        answers with the honest empty arrays rather than fabricating a shape the console would
-        then chart. Same reason tokens and requests are 0: there is no fleet counter to read.
+        The figure comes from core.OrgMoney — the ONE per-org money read /overview, /orgs,
+        /revenue and /customers all fold — so every panel of the cockpit answers with the same
+        number from the same source. It used to be its own read, a service-token GET to
+        commerce's /v1/billing/usage/rollup, and that route is registered in no binary we ship:
+        the error was dropped and the total stayed 0, so this endpoint reported an empty fleet
+        while /v1/usage/summary showed the same customers being debited. Reading through the
+        shared seam is what stops one surface having its own answer to a question another
+        surface already answers.
+
+        The window moved with the seam, from the calendar month to the trailing 30 days, which
+        is what OrgMoney reads and what the overview tile beside it has always rendered.
+
+        series and byProduct are STILL always empty, and tokens and requests are still 0. A
+        daily trend, a per-product split and fleet token counters live in insights/datastore
+        and are not derivable from the ledger, so this answers with honest empties rather than
+        fabricating a shape the console would then chart. Nothing here derives them; the money
+        total is the only thing this fix touched.
+
+        A read that did not answer is named in sources[] and never folded into a silent zero;
+        a directory that cannot be listed has no fleet to sum at all, so it answers status
+        error with no data rather than a number with nothing behind it.
       operationId: adminUsage
       parameters:
       - description: |-
@@ -51312,8 +51345,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/usageOut'
           description: ok
-      summary: 'Returns the month-to-date money totals: one org''s when org names
-        one, else the fleet sum across every org a SuperAdmin can see.'
+      summary: 'Returns the metered spend over the trailing 30 days: one org''s when
+        org names one, else the fleet sum across every org a SuperAdmin can see.'
       tags:
       - admin
       x-app: admin

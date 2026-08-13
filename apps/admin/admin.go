@@ -400,13 +400,30 @@ func (o ops) iamPassthrough(ctx context.Context, in *iamPageIn, path string) (*i
 
 // ── /v1/admin/usage — fleet usage roll-up (UsageData) ────────────────────────
 
-// usage returns the month-to-date money totals: one org's when org names one, else the
-// fleet sum across every org a SuperAdmin can see.
+// usage returns the metered spend over the trailing 30 days: one org's when org names
+// one, else the fleet sum across every org a SuperAdmin can see.
 //
-// series and byProduct are ALWAYS empty. A daily trend and a per-product split are not
-// derivable from the commerce billing API — they live in insights/datastore — so this
-// answers with the honest empty arrays rather than fabricating a shape the console would
-// then chart. Same reason tokens and requests are 0: there is no fleet counter to read.
+// The figure comes from core.OrgMoney — the ONE per-org money read /overview, /orgs,
+// /revenue and /customers all fold — so every panel of the cockpit answers with the same
+// number from the same source. It used to be its own read, a service-token GET to
+// commerce's /v1/billing/usage/rollup, and that route is registered in no binary we ship:
+// the error was dropped and the total stayed 0, so this endpoint reported an empty fleet
+// while /v1/usage/summary showed the same customers being debited. Reading through the
+// shared seam is what stops one surface having its own answer to a question another
+// surface already answers.
+//
+// The window moved with the seam, from the calendar month to the trailing 30 days, which
+// is what OrgMoney reads and what the overview tile beside it has always rendered.
+//
+// series and byProduct are STILL always empty, and tokens and requests are still 0. A
+// daily trend, a per-product split and fleet token counters live in insights/datastore
+// and are not derivable from the ledger, so this answers with honest empties rather than
+// fabricating a shape the console would then chart. Nothing here derives them; the money
+// total is the only thing this fix touched.
+//
+// A read that did not answer is named in sources[] and never folded into a silent zero;
+// a directory that cannot be listed has no fleet to sum at all, so it answers status
+// error with no data rather than a number with nothing behind it.
 //
 // Example: {"org":"acme"}
 // Response: {"status":"ok","msg":"","data":{"totals":{"spendCents":12500,"tokens":0,"requests":0},
@@ -428,29 +445,49 @@ func (o ops) usage(ctx context.Context, in *usageIn) (*usageOut, error) {
 		}
 	}
 
+	// answered/silent count the orgs whose money read did and did not come back, so the
+	// total can say how much of the fleet it covers instead of implying all of it.
 	var spend int64
+	answered, silent := 0, 0
+	fold := func(name string) {
+		sp, _, ok := core.OrgMoney(o.s, ctx, name)
+		spend += sp
+		if ok {
+			answered++
+			return
+		}
+		silent++
+	}
+
 	switch {
 	case org != "":
-		if sp, err := o.s.State.Commerce.Spend(ctx, org); err == nil {
-			spend = int64(sp.Consumed)
-		}
+		fold(org)
 	case sc.Super:
-		// Fleet: sum month-to-date consumption across every org.
 		orgs, err := core.ListOrgs(o.s, ctx, cr)
-		if err == nil {
-			for _, row := range orgs {
-				if sp, e := o.s.State.Commerce.Spend(ctx, row.Name); e == nil {
-					spend += int64(sp.Consumed)
-				}
-			}
+		if err != nil {
+			// No directory, no fleet to sum. Every other failure here yields a real
+			// partial total worth showing; this one yields nothing, and 0 would be a
+			// number the caller could not tell from a fleet that spent nothing.
+			return &usageOut{Status: core.Err, Msg: err.Error()}, nil
+		}
+		for _, row := range orgs {
+			fold(row.Name)
 		}
 	}
 
-	return &usageOut{Status: core.OK, Data: &usageData{
+	data := &usageData{
 		Totals:    usageTotals{SpendCents: spend, Tokens: 0, Requests: 0},
 		Series:    []usagePoint{},
 		ByProduct: []usageByProduct{},
-	}}, nil
+	}
+	if silent > 0 {
+		// The ONE sentinel /overview, /revenue and /finance already report a partial
+		// money fold with, so the console reads one degraded state everywhere.
+		data.Sources = []core.SourceStatus{
+			core.SrcOf("commerce", core.ErrPartialRevenue, answered, time.Now().UTC().Format(time.RFC3339)),
+		}
+	}
+	return &usageOut{Status: core.OK, Data: data}, nil
 }
 
 // ── /v1/admin/products — workload registry (ProductRow[]) ────────────────────

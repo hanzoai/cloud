@@ -51,9 +51,21 @@ func ListOrgs(s *cloud.Service[State], ctx context.Context, cr iam.Creds) ([]iam
 // co-resident ledger. So — exactly as clients/billing.balance()/usage() and
 // core.grantDeposit already resolve it — prefer the co-resident finance ledger
 // (finance.Current()); the commerce S2S read stays only as the split-deploy fallback.
+//
+// NO LEDGER AND NO ENDPOINT IS NO READ, not a zero. Commerce.Spend/Credits answer
+// (0, nil) when the endpoint is unwired — deliberately, so a partial deploy degrades
+// quietly — and quiet is exactly the failure this signature exists to end. Apps are
+// their own binaries now, so the process serving /v1/admin/* publishes no finance
+// ledger and, with commerce not co-resident, resolves no base either: BOTH sources are
+// absent at once, and without the refusal below that pair reads as a clean, confident
+// (0, 0, true) for every org in the fleet. Told apart HERE, once, so no caller has to
+// hold a second copy of "can money be read at all".
 func OrgMoney(s *cloud.Service[State], ctx context.Context, org string) (spend, credits int64, ok bool) {
 	if fin := finance.Current(); fin != nil {
 		return orgMoneyFromFinance(ctx, fin, org)
+	}
+	if !s.State.Commerce.Ready() {
+		return 0, 0, false
 	}
 	ok = true
 	if sp, err := s.State.Commerce.Spend(ctx, org); err == nil {
