@@ -146,3 +146,26 @@ func TestTheAssistantKnowsWhatItIs(t *testing.T) {
 		t.Error("the cloud is one of its abilities, never the subject of the conversation")
 	}
 }
+
+// WHERE THE ISSUES ARE. Asked which issues someone had filed on our
+// repositories, the deployed assistant searched the WEB for a GitHub profile,
+// met the login wall every logged-out scrape meets, and reported that absence as
+// a fact about the person — while holding `tracker`, whose issues are GitHub's,
+// mirrored in by the App.
+//
+// The tool was there; the sentence connecting the question to it was not, and no
+// model can infer from "GitHub" that our copy of it is a subsystem here. So the
+// persona states it, and this keeps it stated.
+func TestTheAssistantKnowsWhereIssuesLive(t *testing.T) {
+	p := builtinAgentInstructions
+	for _, phrase := range []string{
+		"tracker",            // the subsystem that answers
+		"get_tracker_issues", // the op, named so it does not have to be found
+		"mirrored in",        // why GitHub's issues are there at all
+		"never",              // …and that a web search is not the way to them
+	} {
+		if !strings.Contains(p, phrase) {
+			t.Errorf("the persona must say %q — without it the assistant web-searches for issues it holds a tool for", phrase)
+		}
+	}
+}
