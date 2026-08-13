@@ -162,6 +162,25 @@ type ChatRequest struct {
 	// this org spend". The metered client copies it to metering.Usage.RequestID,
 	// which is the field whose stated job is exactly this.
 	RunID string
+
+	// Actor names WHO this completion is for — "<org>/<sub>", the same audit
+	// identity metering.Usage.Actor and an agent run's actor already spell this
+	// way. It is ATTRIBUTION and nothing else: it never chooses the credential,
+	// the balance (BillingOrg does), or the data scope (Org does), so a caller
+	// cannot move a debit by naming someone.
+	//
+	// It exists because a run acts FOR a person the request could not otherwise
+	// state. A Slack turn reaches the runner on a detached context long after
+	// the asker's own request is gone, and the only identity left on the model
+	// call was the deployment's own IAM application — so the gateway recorded
+	// the application as the spender and the person had no row anywhere. A run
+	// therefore states its actor; a live caller has theirs read off the
+	// validated identity the boundary already minted (cloud.named).
+	//
+	// The org half is a separate question and does not move with this: a run
+	// bills the org that owns the agent, so a row may name a person in one org
+	// while the ledger names the org that paid for them.
+	Actor string
 }
 
 // Chat roles — the OpenAI-compatible vocabulary the gateway speaks.
