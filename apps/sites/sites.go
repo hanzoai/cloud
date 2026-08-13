@@ -67,6 +67,13 @@ type Site struct {
 	// NEVER global. Server-owned like every other field: the resolver sets it (from
 	// the project's declared WebGL game-engine framework), never the request.
 	CrossOriginIsolation bool
+	// CacheControl is the site's own Cache-Control policy for its DOCUMENTS, or
+	// empty for the default. It is the htmlOverride argument of CacheControlFor,
+	// carried here so the serving path composes the override with the class policy
+	// itself instead of reading a header back off the object — which is what let a
+	// client that wrote the bytes decide how the edge caches them. Server-owned:
+	// the resolver reads it from the project row, never from the request.
+	CacheControl string
 }
 
 // Resolver maps a validated subdomain slug to its authoritative Site. It is the
@@ -630,14 +637,30 @@ func (s *Server) streamSite(c *zip.Ctx, cli *s3.Client, site Site) error {
 		if !ok {
 			continue
 		}
-		// The per-project cache override lives on the stored object's Cache-Control
-		// (set at deploy); honor it so the site-server path and the direct-S3 path
-		// return the same TTL. Fall back to the computed policy when the object
-		// carries none.
-		cc := info.Metadata.Get("Cache-Control")
-		if cc == "" {
-			cc = CacheControlFor(key, "")
-		}
+		// ONE cache policy, computed HERE, because here is what serves. The stored
+		// object's own Cache-Control is deliberately NOT read.
+		//
+		// It used to be read first, with the computed policy only as a fallback,
+		// and that made the STORED header authoritative — so whoever wrote the
+		// object decided how the edge cached it. That is fine for the two paths the
+		// server writes itself (uploadSite, copyRelease: both stamp
+		// CacheControlFor). It is not fine for the third: a build writing its own
+		// files against a presigned grant stamps whatever IT computed, and a client
+		// re-implementation of this rule is a second copy that drifts. It had
+		// drifted — measured on the same asset in the same request,
+		// `_next/static/chunk.js` stored `max-age=3600` while this rule says
+		// `max-age=31536000, immutable`, because isFingerprinted also matches the
+		// build-output PREFIXES (`_next/static/`, `assets/`) and the client copy
+		// only matched hashed BASENAMES. Every unhashed-but-immutable asset in
+		// every Next export was being re-fetched hourly forever.
+		//
+		// The per-project override is not lost, it is passed properly: it is the
+		// htmlOverride argument this function has always taken, carried on the Site
+		// the resolver builds from the project row. So the override is an INPUT to
+		// the one rule rather than a value smuggled through object metadata, and
+		// changing it takes effect on the next request instead of on the next
+		// redeploy.
+		cc := CacheControlFor(key, site.CacheControl)
 		ct := contentType(key)
 		if ct == "" {
 			ct = info.ContentType
