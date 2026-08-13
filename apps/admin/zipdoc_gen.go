@@ -126,7 +126,7 @@ func init() {
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","display":"Acme","users":7,"products":0,"spendCents":12500,"creditsCents":5000,"tokens":0,"created":"2026-01-04T00:00:00Z"}],"total":1}`),
 	})
 	zip.Describe("GET /v1/admin/overview", zip.Doc{
-		Description: "Is the Platform Overview tiles: how many orgs and users are in the caller's\ntenant window, the fleet workload counts, and month-to-date spend and credits.\n\nIt ALWAYS answers 200 — a tile board that fails as a whole because one upstream is\ndown is useless. Instead every upstream reports itself in sources[]: ok, degraded, or\nnot-configured. A commerce read that failed for ANY org marks that source degraded,\nbecause the spend/credits totals are then an undercount and must not read healthy.\n\ntokens30d is 0 for the same reason /usage has no series: there is no fleet token\ncounter to read yet.",
+		Description: "Is the Platform Overview tiles: how many orgs and users are in the caller's\ntenant window, the fleet workload counts, and month-to-date spend and credits.\n\nIt ALWAYS answers 200 — a tile board that fails as a whole because one upstream is\ndown is useless. Instead every upstream reports itself in sources[]: ok, degraded, or\nnot-configured. A commerce read that failed for ANY org marks that source degraded,\nbecause the spend/credits totals are then an undercount and must not read healthy.\n\nThe AI tiles — 30-day spend and tokens — come from the AI ledger (ledger.go), the\nplane that owns \"what was served\". They used to come from the money plane with the\ntoken counter hardcoded to zero, so the board read $0.00 and 0 tokens over a month in\nwhich the fleet served fifteen thousand requests. Credits still come from commerce,\nwhich owns the wallet.",
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"orgs":2,"users":14,"products":31,"activeProducts":29,"drift":1,"spendCents30d":250000,"tokens30d":0,"creditsCents":10000,"lastSync":"2026-07-27T00:00:00Z","sources":[{"name":"iam","ok":true,"rows":2,"lastSync":"2026-07-27T00:00:00Z"}]}}`),
 	})
 	zip.Describe("GET /v1/admin/products", zip.Doc{
@@ -184,12 +184,12 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/admin/usage", zip.Doc{
-		Description: "Returns the month-to-date money totals: one org's when org names one, else the\nfleet sum across every org a SuperAdmin can see.\n\nseries and byProduct are ALWAYS empty. A daily trend and a per-product split are not\nderivable from the commerce billing API — they live in insights/datastore — so this\nanswers with the honest empty arrays rather than fabricating a shape the console would\nthen chart. Same reason tokens and requests are 0: there is no fleet counter to read.",
+		Description: "Returns the trailing 30 days of AI usage: one org's when org names one, else the\nwhole fleet's — the spend, the tokens and the requests, the daily curve behind them,\nand the split by model.\n\nIt reads the AI ledger (ledger.go), which is the plane that owns this question. It used\nto ask the commerce billing API instead, once per org, and answer with a hardcoded\nempty series, zero tokens and zero requests, on the reasoning that a trend and a split\nwere \"not derivable from the commerce billing API\". They are not — but the question was\nnever commerce's. hanzo.cloud_usage carries a row per served request, so all three fall\nout of the same window the totals do.",
 		Fields: map[string]string{
 			"usageIn.org": "Org reads ONE tenant's month-to-date total instead of the fleet sum. Honoured\nfor a SuperAdmin only — a white-label admin always reads their own org.",
 		},
 		Example:  json.RawMessage(`{"org":"acme"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"totals":{"spendCents":12500,"tokens":0,"requests":0},"series":[],"byProduct":[]}}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"totals":{"spendCents":12500,"tokens":170000,"requests":42},"series":[{"date":"2026-08-13","spendCents":900,"tokens":12000,"requests":3}],"byModel":[{"model":"claude-opus-4-8","spendCents":9000,"tokens":80000}]}}`),
 	})
 	zip.Describe("GET /v1/admin/users", zip.Doc{
 		Description: "Lists the user directory across the caller's tenant window, one page at a time.\ntotal is IAM's REAL total, so the console can page through it.\n\nA SuperAdmin may aim the read at one tenant with org; a white-label admin cannot — for\nthem the owner is hard-pinned to their own org and org is ignored, which is what keeps\nthe directory from becoming a cross-tenant read.",

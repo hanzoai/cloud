@@ -266,21 +266,29 @@ func Compute(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds) Fi
 	cost.DigitalOcean = do
 
 	// ── Revenue: commerce (fleet-wide) ────────────────────────────────────
+	// Consumption comes from the ONE per-org money read (core.OrgMoney), which asks the
+	// process that owns the ledger. This board used to carry its own copy of that read
+	// against commerce's HTTP /v1/billing/usage/rollup — a route registered in no binary
+	// here, so it answered 404 for every org and the margin was computed from a revenue
+	// of zero. MRR stays a subscriptions read; its absence degrades the row, never the
+	// money source.
 	rev := FinanceRevenue{}
-	if !s.State.Commerce.Ready() {
-		sources = append(sources, core.SrcOf("commerce", errUnconfigured, 0, now))
-	} else if orgs, orgErr := core.ListOrgs(s, ctx, cr); orgErr != nil {
-		// The revenue source is unreadable → honest not-configured, never a zero that
-		// would flip the margin negative on an upstream hiccup.
+	if orgs, orgErr := core.ListOrgs(s, ctx, cr); orgErr != nil {
+		// The revenue source is unreadable → say so, never a zero that would flip the
+		// margin negative on an upstream hiccup.
 		sources = append(sources, core.SrcOf("commerce", orgErr, 0, now))
 	} else {
 		var totalRev, mrr int64
-		partial := false
+		var partial, ledger bool
+		money := core.Delegate(ctx)
 		for _, o := range orgs {
-			if sp, e := s.State.Commerce.Spend(ctx, o.Name); e == nil {
-				totalRev += int64(sp.Consumed)
-			} else {
-				partial = true
+			spend, _, e := core.OrgMoney(s, money, o.Name)
+			switch {
+			case core.MoneyFailed(e):
+				partial, ledger = true, true
+			case e == nil:
+				totalRev += spend
+				ledger = true
 			}
 			if pl, e := s.State.Commerce.Plan(ctx, o.Name); e == nil {
 				mrr += int64(pl.MRR)
@@ -288,15 +296,19 @@ func Compute(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds) Fi
 				partial = true
 			}
 		}
-		rev.Configured = true
+		switch {
+		case len(orgs) > 0 && !ledger:
+			sources = append(sources, core.SrcOf("commerce", core.ErrNoLedger, 0, now))
+		case partial:
+			rev.Configured = true
+			sources = append(sources, core.SrcOf("commerce", core.ErrPartialRevenue, len(orgs), now))
+		default:
+			rev.Configured = true
+			sources = append(sources, core.SrcOf("commerce", nil, len(orgs), now))
+		}
 		rev.TotalRevenueCents = totalRev
 		rev.CreditsConsumedCents = totalRev
 		rev.MRRCents = mrr
-		if partial {
-			sources = append(sources, core.SrcOf("commerce", core.ErrPartialRevenue, len(orgs), now))
-		} else {
-			sources = append(sources, core.SrcOf("commerce", nil, len(orgs), now))
-		}
 	}
 
 	return ComputeFinance(FinanceInput{
