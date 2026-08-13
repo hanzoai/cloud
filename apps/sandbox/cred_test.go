@@ -94,7 +94,7 @@ func TestOnlyASuperAdminsDevSandboxIsAdmin(t *testing.T) {
 // because a present key is a place for a value to appear later without anyone
 // editing this test.
 func TestAnOrdinarySandboxIsHandedNothing(t *testing.T) {
-	for _, class := range []string{"exec", "dev", "desktop"} {
+	for _, class := range []string{"exec", "dev", "desktop", "android"} {
 		_, c := podWith(t, class, cred{})
 		if env, stated := c["env"]; stated {
 			t.Fatalf("%s: an ordinary sandbox states env %v — every sandbox but a "+
@@ -112,7 +112,7 @@ func TestAnOrdinarySandboxIsHandedNothing(t *testing.T) {
 // hurt is one of them saying yes while the others say no.
 func TestNoCredentialSurvivesAFalseSuper(t *testing.T) {
 	r := &runtime{ns: "hanzo-sandboxes", image: "oci.hanzo.ai/hanzoai/sandbox", tag: "1.1.0"}
-	for _, class := range []string{"exec", "dev", "desktop"} {
+	for _, class := range []string{"exec", "dev", "desktop", "android"} {
 		if admin(class, false) {
 			t.Fatalf("%s: admin(super=false) is true", class)
 		}
