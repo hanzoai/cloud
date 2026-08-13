@@ -40,10 +40,10 @@ func init() {
 		Example: json.RawMessage(`{"name":"widgets","id":"sub_7c2e"}`),
 	})
 	zip.Describe("GET /v1/git/:org/:project/:repo/info/refs", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Serves GET /info/refs — the ref-advertisement phase. The service is\nselected by the ?service= query param; both upload-pack (fetch) and\nreceive-pack (push) advertise here.",
 	})
 	zip.Describe("GET /v1/git/:org/:repo/info/refs", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Serves GET /info/refs — the ref-advertisement phase. The service is\nselected by the ?service= query param; both upload-pack (fetch) and\nreceive-pack (push) advertise here.",
 	})
 	zip.Describe("GET /v1/git/keys", zip.Doc{
 		Description: "Returns the SSH public keys registered to the caller's org — the keys\nthat authenticate `git clone git@<host>:<org>/<repo>.git`. Keys are org-scoped\non read even though the fingerprint index is global, so one org never sees\nanother's.",
@@ -301,18 +301,6 @@ func init() {
 	zip.Describe("POST /git/files", zip.Doc{
 		Description: "Reads the glob-selected files of one of the caller's repos at one\nrevision, returning the resolved commit and each file's path and contents.\nThe org is the CALLER's plane identity, never the argument — an anonymous\ncaller is refused — and the whole reply is read at one resolved commit, so a\ncaller can never assemble half an inventory from each side of a push. A named\nhandler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /git/grant", zip.Doc{
-		Description: "Mints a push grant for the CALLER's org.\n\nThe org is the caller's plane identity and never an argument, so an app acting\nfor one tenant cannot delegate a write into another's repository — the same\nrule planeImport and planeInbound state, for the same reason.\n\nThe ref is checked against the agent namespace HERE as well as at the pack\ndoor. Not as a second line of defence but because it is a different sentence:\nthe door says \"this push may only write the ref its grant names\", and this\nsays \"the only ref the forge will ever delegate is a machine ref\". A grant for\nrefs/heads/main would satisfy the door and must therefore never be minted.",
-		Fields: map[string]string{
-			"GrantIn.project":    "Project is the repository's sub-scope; empty is the org's default scope.",
-			"GrantIn.ref":        "Ref is the FULL ref the grant may create, and the only one. The forge\ndelegates the machine namespace and nothing else.",
-			"GrantIn.repo":       "Repo is the repository the grant addresses, and the only one it opens.",
-			"GrantIn.ttlSeconds": "TTLSeconds bounds the grant. Absent, or longer than the forge's cap, gets\nthe cap — a grant is never open-ended.",
-			"Granted.expiresAt":  "ExpiresAt is the unix second the grant stops working regardless.",
-			"Granted.handle":     "Handle revokes the grant. It is the token's digest, so carrying it back\nnever means presenting the secret twice.",
-			"Granted.token":      "Token is the bearer. It authenticates nobody and opens nothing but the pack\nprotocol on the repository named in the request — never a log line.",
-		},
-	})
 	zip.Describe("POST /git/import", zip.Doc{
 		Description: "Creates the repo and mirrors the upstream, for the CALLER's org.\n\nThe org is never read off the argument: it is the identity the edge minted and\nthe plane carried, so a caller holding one org's context cannot create a repo\nin another's namespace. Project carries the provider-side account, which is\nwhat keeps two upstreams of the same name — hanzoai/ai and hanzo-apps/ai —\ndistinct repos rather than one overwriting the other.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
@@ -353,12 +341,6 @@ func init() {
 	zip.Describe("POST /git/rev", zip.Doc{
 		Description: "Resolves one of the caller's repos at one ref to the commit it names,\nreturning that commit and the branch or tag label it was reached by. The org is\nthe CALLER's plane identity, never the argument — an anonymous caller is\nrefused. A named handler, not a closure, so zipdoc can lift this prose into the\nregistry.",
 	})
-	zip.Describe("POST /git/revoke", zip.Doc{
-		Description: "Drops a grant the caller's org holds, so a grant's life is the\nRUN's life rather than its TTL. The TTL is the backstop for a run that dies\nwithout saying so; this is the ordinary path.",
-		Fields: map[string]string{
-			"RevokeIn.handle": "Handle is what Granted returned. An unknown handle, or one belonging to\nanother org, is a no-op rather than an error: revoking is idempotent.",
-		},
-	})
 	zip.Describe("POST /git/status", zip.Doc{
 		Description: "Reports which of the named repos the CALLER's org has imported and\nwhich a prior inbound sync left in conflict.\n\nThe app that DRAWS the repo list is integrations (it has the provider's\ncatalogue of what could be imported); the app that knows what WAS is this one.\nIn a split fleet the in-process importer is nil over there, so the list\nrendered every repo as never-imported — a wrong answer delivered confidently,\nwhich is worse than the import failure the same split caused, because nothing\nerrored.\n\nThe reply is a SLICE, not a map: a map cannot cross this wire, so each row\ncarries the name it answers for. A name git holds nothing under is ABSENT\nrather than a false row — the caller reads absence as not-imported, which is\nthe same value the in-process leg's zero entry yields, so neither leg can be\ntold from the other by its result.\n\nIt calls the in-process implementation directly rather than\ncloud.GitRepoStatuses: the package func dispatches to whatever is registered,\nand in THIS process that resolution would come back around through the plane\nto this same handler.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
@@ -370,16 +352,16 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/git/:org/:project/:repo/git-receive-pack", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Serves POST /git-receive-pack — the push phase. The heavy data is\nthe INBOUND pack (request body → `git receive-pack --stateless-rpc` stdin →\nindex-pack to disk); the RESPONSE is only the small report-status, so it runs\nSYNCHRONOUSLY: apply the pack, then re-meter storage and fire push-to-deploy\nfor every branch the push advanced (branch-tip diff), then return the report —\nthe SAME side effects an SSH push produces, deterministic before the client's\npush returns. Memory stays bounded: the pack streams to disk, only the tiny\nreport is buffered.",
 	})
 	zip.Describe("POST /v1/git/:org/:project/:repo/git-upload-pack", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Serves POST /git-upload-pack — the clone/fetch phase. The RESPONSE\nis the packfile (potentially multi-GB), so it STREAMS: the request body feeds\n`git upload-pack --stateless-rpc` stdin and git's stdout is handed to fasthttp\nas the response body — no pack bytes are buffered in this process.",
 	})
 	zip.Describe("POST /v1/git/:org/:repo/git-receive-pack", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Serves POST /git-receive-pack — the push phase. The heavy data is\nthe INBOUND pack (request body → `git receive-pack --stateless-rpc` stdin →\nindex-pack to disk); the RESPONSE is only the small report-status, so it runs\nSYNCHRONOUSLY: apply the pack, then re-meter storage and fire push-to-deploy\nfor every branch the push advanced (branch-tip diff), then return the report —\nthe SAME side effects an SSH push produces, deterministic before the client's\npush returns. Memory stays bounded: the pack streams to disk, only the tiny\nreport is buffered.",
 	})
 	zip.Describe("POST /v1/git/:org/:repo/git-upload-pack", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Serves POST /git-upload-pack — the clone/fetch phase. The RESPONSE\nis the packfile (potentially multi-GB), so it STREAMS: the request body feeds\n`git upload-pack --stateless-rpc` stdin and git's stdout is handed to fasthttp\nas the response body — no pack bytes are buffered in this process.",
 	})
 	zip.Describe("POST /v1/git/keys", zip.Doc{
 		Description: "Registers an SSH public key so it can authenticate `git clone\ngit@<host>:<org>/<repo>.git` for the caller's org. The key line is parsed and\ncanonicalized before storage, its SHA256 fingerprint becomes the auth lookup\nhandle, and the full public key round-trips (it is public). Answers 201.\nFingerprints are globally unique, so a key already registered — to this org or\nany other — is a 409: one key belongs to exactly one org.",
@@ -540,21 +522,6 @@ func init() {
 		Example: json.RawMessage(`{"name":"widgets","channel":"#builds","events":["push.landed"]}`),
 	})
 	zip.Describe("POST /v1/git/webhook", zip.Doc{
-		Description: "Wraps a handler so a returned *zip.HTTPError is written in-band (its\nstatus + the {status,code,error} JSON zip's default errorHandler would emit)\nand nil is returned, instead of propagating the error up the middleware chain.\n\nIt exists for routes mounted UNDER an outer error-flattening filter. The\ncommerce embed installs one: mountCommerce (apps) registers ErrorHandlerJSON on\nan app.Group(\"/v1\") whose middleware rewrites ANY error a downstream /v1 handler\nPROPAGATES into a hardcoded HTTP 500 — so a reject that returns zip.ErrUnauthorized\n(401) or zip.ErrBadRequest (400) up the chain surfaces to the client as 500. A\nsubsystem mounted after commerce (git, sync, integrations, …) whose reject path\nmust keep its real 4xx wraps its handler here: the status is written before the\nfilter runs, so the filter's c.Next() sees nil and has nothing to flatten. A\nnon-HTTPError (a genuine unexpected failure) passes through unchanged — those are\n500s regardless. Compose with Handle: cloud.Terminal(cloud.Handle(s, fn)).",
-	})
-	zip.Describe("POST /v1/git/zap/createRepo", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("POST /v1/git/zap/deleteRepo", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("POST /v1/git/zap/getRepo", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("POST /v1/git/zap/listRepos", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("POST /v1/git/zap/usage", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Answers every delivery 410 Gone, naming the door that builds. It reads\nno body: there is nothing here to authenticate and nothing to parse.\n\n410, not 404: the address was real and its meaning moved, which is exactly the\ndistinction 410 carries. 404 would say \"no such route\" about a route this\nbinary still serves, and would be indistinguishable from the /api/v1 prefix\nmistake that has already sent two investigations after a switched-off API.\n\ncloud.Terminal (git.go) writes this in-band so the co-mounted /v1\nErrorHandlerJSON cannot flatten it to a 500 — the same reject-parity the\nbad-signature 401 needed when this door still verified one.",
 	})
 }
