@@ -102,7 +102,7 @@
   "paths": {
     "/v1/ai/account": {
       "get": {
-        "operationId": "get_v1_ai_account",
+        "operationId": "get_ai_account",
         "summary": "Account",
         "tags": [
           "ai"
@@ -130,7 +130,7 @@
     },
     "/v1/ai/activities": {
       "get": {
-        "operationId": "get_v1_ai_activities",
+        "operationId": "get_ai_activities",
         "summary": "List activities",
         "description": "List the caller's activities.",
         "tags": [
@@ -174,7 +174,7 @@
     },
     "/v1/ai/answer": {
       "get": {
-        "operationId": "get_v1_ai_answer",
+        "operationId": "get_ai_answer",
         "summary": "Answer",
         "tags": [
           "ai"
@@ -202,7 +202,7 @@
     },
     "/v1/ai/articles": {
       "get": {
-        "operationId": "get_v1_ai_articles",
+        "operationId": "get_ai_articles",
         "summary": "List articles",
         "description": "List the caller's articles.",
         "tags": [
@@ -244,7 +244,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_articles",
+        "operationId": "post_ai_articles",
         "summary": "Create a article",
         "description": "Create one article.",
         "tags": [
@@ -295,7 +295,7 @@
     },
     "/v1/ai/articles/global": {
       "get": {
-        "operationId": "get_v1_ai_articles_global",
+        "operationId": "get_ai_articles_global",
         "summary": "List articles across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -339,7 +339,7 @@
     },
     "/v1/ai/articles/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_articles_by_owner_by_name",
+        "operationId": "delete_ai_articles_by_owner_by_name",
         "summary": "Delete a article",
         "description": "Delete one article.",
         "tags": [
@@ -398,7 +398,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_articles_by_owner_by_name",
+        "operationId": "get_ai_articles_by_owner_by_name",
         "summary": "Retrieve a article",
         "description": "Read one article by its (owner, name) key.",
         "tags": [
@@ -457,7 +457,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_articles_by_owner_by_name",
+        "operationId": "patch_ai_articles_by_owner_by_name",
         "summary": "Update a article",
         "description": "Update one article. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -526,7 +526,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_articles_by_owner_by_name",
+        "operationId": "put_ai_articles_by_owner_by_name",
         "summary": "Replace a article",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -597,7 +597,7 @@
     },
     "/v1/ai/assets": {
       "get": {
-        "operationId": "get_v1_ai_assets",
+        "operationId": "get_ai_assets",
         "summary": "List assets",
         "description": "List the caller's assets.",
         "tags": [
@@ -639,7 +639,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_assets",
+        "operationId": "post_ai_assets",
         "summary": "Create a asset",
         "description": "Create one asset.",
         "tags": [
@@ -690,7 +690,7 @@
     },
     "/v1/ai/assets/scan": {
       "post": {
-        "operationId": "post_v1_ai_assets_scan",
+        "operationId": "post_ai_assets_scan",
         "summary": "Scan (asset)",
         "tags": [
           "ai"
@@ -728,7 +728,7 @@
     },
     "/v1/ai/assets/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_assets_by_owner_by_name",
+        "operationId": "delete_ai_assets_by_owner_by_name",
         "summary": "Delete a asset",
         "description": "Delete one asset.",
         "tags": [
@@ -787,7 +787,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_assets_by_owner_by_name",
+        "operationId": "get_ai_assets_by_owner_by_name",
         "summary": "Retrieve a asset",
         "description": "Read one asset by its (owner, name) key.",
         "tags": [
@@ -846,7 +846,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_assets_by_owner_by_name",
+        "operationId": "patch_ai_assets_by_owner_by_name",
         "summary": "Update a asset",
         "description": "Update one asset. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -915,7 +915,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_assets_by_owner_by_name",
+        "operationId": "put_ai_assets_by_owner_by_name",
         "summary": "Replace a asset",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -986,7 +986,7 @@
     },
     "/v1/ai/assets/{owner}/{name}/scan": {
       "post": {
-        "operationId": "post_v1_ai_assets_by_owner_by_name_scan",
+        "operationId": "post_ai_assets_by_owner_by_name_scan",
         "summary": "Scan (asset)",
         "tags": [
           "ai"
@@ -1044,7 +1044,7 @@
     },
     "/v1/ai/chats": {
       "get": {
-        "operationId": "get_v1_ai_chats",
+        "operationId": "get_ai_chats",
         "summary": "List chats",
         "description": "List the caller's chats.",
         "tags": [
@@ -1086,7 +1086,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_chats",
+        "operationId": "post_ai_chats",
         "summary": "Create a chat",
         "description": "Create one chat.",
         "tags": [
@@ -1137,7 +1137,7 @@
     },
     "/v1/ai/chats/global": {
       "get": {
-        "operationId": "get_v1_ai_chats_global",
+        "operationId": "get_ai_chats_global",
         "summary": "List chats across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -1181,7 +1181,7 @@
     },
     "/v1/ai/chats/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_chats_by_owner_by_name",
+        "operationId": "delete_ai_chats_by_owner_by_name",
         "summary": "Delete a chat",
         "description": "Delete one chat.",
         "tags": [
@@ -1240,7 +1240,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_chats_by_owner_by_name",
+        "operationId": "get_ai_chats_by_owner_by_name",
         "summary": "Retrieve a chat",
         "description": "Read one chat by its (owner, name) key.",
         "tags": [
@@ -1299,7 +1299,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_chats_by_owner_by_name",
+        "operationId": "patch_ai_chats_by_owner_by_name",
         "summary": "Update a chat",
         "description": "Update one chat. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -1368,7 +1368,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_chats_by_owner_by_name",
+        "operationId": "put_ai_chats_by_owner_by_name",
         "summary": "Replace a chat",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -1439,7 +1439,7 @@
     },
     "/v1/ai/connections": {
       "get": {
-        "operationId": "get_v1_ai_connections",
+        "operationId": "get_ai_connections",
         "summary": "Lists the org's connectable AI accounts and whether each is currently connected.",
         "description": "Lists the org's connectable AI accounts and whether each is\ncurrently connected. Never returns a key or a kms:// reference.",
         "tags": [
@@ -1448,7 +1448,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_connections",
+        "operationId": "post_ai_connections",
         "summary": "Connects (or reconnects) a third-party AI account for the org by sealing the supplied key into KMS and upserting the org's provider row.",
         "description": "Connects (or reconnects) a third-party AI account for the org by\nsealing the supplied key into KMS and upserting the org's provider row. The raw\nkey is sealed BEFORE the row is built and is never persisted or echoed.",
         "tags": [
@@ -1459,7 +1459,7 @@
     },
     "/v1/ai/connections/{provider}": {
       "delete": {
-        "operationId": "delete_v1_ai_connections_by_provider",
+        "operationId": "delete_ai_connections_by_provider",
         "summary": "Disconnects a third-party AI account: it deactivates the org's row so completion resolution falls back to the global Hanzo account (no BYO), and best-effort tombstones the sealed secret.",
         "description": "Disconnects a third-party AI account: it deactivates the org's\nrow so completion resolution falls back to the global Hanzo account (no BYO), and\nbest-effort tombstones the sealed secret. Idempotent.",
         "tags": [
@@ -1468,7 +1468,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_connections_by_provider",
+        "operationId": "post_ai_connections_by_provider",
         "summary": "Disconnects a third-party AI account: it deactivates the org's row so completion resolution falls back to the global Hanzo account (no BYO), and best-effort tombstones the sealed secret.",
         "description": "Disconnects a third-party AI account: it deactivates the org's\nrow so completion resolution falls back to the global Hanzo account (no BYO), and\nbest-effort tombstones the sealed secret. Idempotent.",
         "tags": [
@@ -1479,7 +1479,7 @@
     },
     "/v1/ai/connections/{provider}/authorize": {
       "get": {
-        "operationId": "get_v1_ai_connections_by_provider_authorize",
+        "operationId": "get_ai_connections_by_provider_authorize",
         "summary": "Begins an OAuth connection for the caller's org: it binds the org into a signed state and sends the caller to the provider's authorize URL.",
         "description": "Begins an OAuth connection for the caller's org: it binds the\norg into a signed state and sends the caller to the provider's authorize URL. By\ndefault it 302-redirects (a top-level browser \"connect your login\" click); a\nSPA/BFF that needs to drive the redirect itself passes ?format=json and gets\n{authorizeUrl} in the standard envelope. The org is the VERIFIED principal, so\nonly the caller's own connection can result.",
         "tags": [
@@ -1490,7 +1490,7 @@
     },
     "/v1/ai/connections/{provider}/callback": {
       "get": {
-        "operationId": "get_v1_ai_connections_by_provider_callback",
+        "operationId": "get_ai_connections_by_provider_callback",
         "summary": "Completes OAuth: the org is recovered from the SIGNED state (not a header), the code is exchanged for a token, the token is SEALED into KMS (never the row/logs) through the same path as a BYOK key, and the org's provider row is upserted to \"connected\".",
         "description": "Completes OAuth: the org is recovered from the SIGNED state\n(not a header), the code is exchanged for a token, the token is SEALED into KMS\n(never the row/logs) through the same path as a BYOK key, and the org's provider\nrow is upserted to \"connected\". The browser is then redirected back to the console\nwith ?ai_connected=\u003cprovider\u003e (or ?ai_connect_error=\u003cprovider\u003e on failure). Because\nthe org comes from the state THIS server signed, an attacker cannot land their\ntoken in a victim org — which is why this endpoint is state-authenticated rather\nthan credential-gated.",
         "tags": [
@@ -1501,7 +1501,7 @@
     },
     "/v1/ai/connections/{provider}/usage": {
       "get": {
-        "operationId": "get_v1_ai_connections_by_provider_usage",
+        "operationId": "get_ai_connections_by_provider_usage",
         "summary": "Imports the caller org's usage for a connected third-party account.",
         "description": "Imports the caller org's usage for a connected third-party\naccount. The org is resolved from the VERIFIED principal (requireConnectionOrg), so a\ntenant reads only its own connection. The key is unsealed SERVER-SIDE and never\nreturned. An unconnected account, a missing importer, or a scope-denied provider all\nreturn a 200 ProviderUsage with connected/available flags + a human note — the UI's\nhonest-empty states — never a fabricated figure.",
         "tags": [
@@ -1512,7 +1512,7 @@
     },
     "/v1/ai/dashboards/agents": {
       "get": {
-        "operationId": "get_v1_ai_dashboards_agents",
+        "operationId": "get_ai_dashboards_agents",
         "summary": "Dashboards Agents",
         "tags": [
           "ai"
@@ -1540,7 +1540,7 @@
     },
     "/v1/ai/dashboards/vm": {
       "get": {
-        "operationId": "get_v1_ai_dashboards_vm",
+        "operationId": "get_ai_dashboards_vm",
         "summary": "Dashboards Vm",
         "tags": [
           "ai"
@@ -1568,7 +1568,7 @@
     },
     "/v1/ai/deployments": {
       "get": {
-        "operationId": "get_v1_ai_deployments",
+        "operationId": "get_ai_deployments",
         "summary": "List deployments",
         "description": "List the caller's deployments.",
         "tags": [
@@ -1610,7 +1610,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_deployments",
+        "operationId": "post_ai_deployments",
         "summary": "Create a application",
         "description": "Create one application.",
         "tags": [
@@ -1661,7 +1661,7 @@
     },
     "/v1/ai/deployments/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_deployments_by_owner_by_name",
+        "operationId": "delete_ai_deployments_by_owner_by_name",
         "summary": "Delete a application",
         "description": "Delete one application.",
         "tags": [
@@ -1720,7 +1720,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_deployments_by_owner_by_name",
+        "operationId": "get_ai_deployments_by_owner_by_name",
         "summary": "Retrieve a application",
         "description": "Read one application by its (owner, name) key.",
         "tags": [
@@ -1779,7 +1779,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_deployments_by_owner_by_name",
+        "operationId": "patch_ai_deployments_by_owner_by_name",
         "summary": "Update a application",
         "description": "Update one application. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -1848,7 +1848,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_deployments_by_owner_by_name",
+        "operationId": "put_ai_deployments_by_owner_by_name",
         "summary": "Replace a application",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -1919,7 +1919,7 @@
     },
     "/v1/ai/deployments/{owner}/{name}/deploy": {
       "post": {
-        "operationId": "post_v1_ai_deployments_by_owner_by_name_deploy",
+        "operationId": "post_ai_deployments_by_owner_by_name_deploy",
         "summary": "Deploy (application)",
         "tags": [
           "ai"
@@ -1977,7 +1977,7 @@
     },
     "/v1/ai/deployments/{owner}/{name}/undeploy": {
       "post": {
-        "operationId": "post_v1_ai_deployments_by_owner_by_name_undeploy",
+        "operationId": "post_ai_deployments_by_owner_by_name_undeploy",
         "summary": "Undeploy (application)",
         "tags": [
           "ai"
@@ -2035,7 +2035,7 @@
     },
     "/v1/ai/files": {
       "get": {
-        "operationId": "get_v1_ai_files",
+        "operationId": "get_ai_files",
         "summary": "List files",
         "description": "List the caller's files.",
         "tags": [
@@ -2077,7 +2077,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_files",
+        "operationId": "post_ai_files",
         "summary": "Create a file",
         "description": "Create one file.",
         "tags": [
@@ -2128,7 +2128,7 @@
     },
     "/v1/ai/files/activate": {
       "post": {
-        "operationId": "post_v1_ai_files_activate",
+        "operationId": "post_ai_files_activate",
         "summary": "Activate (file)",
         "tags": [
           "ai"
@@ -2166,7 +2166,7 @@
     },
     "/v1/ai/files/active": {
       "get": {
-        "operationId": "get_v1_ai_files_active",
+        "operationId": "get_ai_files_active",
         "summary": "Active (file)",
         "tags": [
           "ai"
@@ -2194,7 +2194,7 @@
     },
     "/v1/ai/files/global": {
       "get": {
-        "operationId": "get_v1_ai_files_global",
+        "operationId": "get_ai_files_global",
         "summary": "List files across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -2238,7 +2238,7 @@
     },
     "/v1/ai/files/upload": {
       "post": {
-        "operationId": "post_v1_ai_files_upload",
+        "operationId": "post_ai_files_upload",
         "summary": "Upload (file)",
         "tags": [
           "ai"
@@ -2276,7 +2276,7 @@
     },
     "/v1/ai/files/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_files_by_owner_by_name",
+        "operationId": "delete_ai_files_by_owner_by_name",
         "summary": "Delete a file",
         "description": "Delete one file.",
         "tags": [
@@ -2335,7 +2335,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_files_by_owner_by_name",
+        "operationId": "get_ai_files_by_owner_by_name",
         "summary": "Retrieve a file",
         "description": "Read one file by its (owner, name) key.",
         "tags": [
@@ -2394,7 +2394,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_files_by_owner_by_name",
+        "operationId": "patch_ai_files_by_owner_by_name",
         "summary": "Update a file",
         "description": "Update one file. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -2463,7 +2463,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_files_by_owner_by_name",
+        "operationId": "put_ai_files_by_owner_by_name",
         "summary": "Replace a file",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -2534,7 +2534,7 @@
     },
     "/v1/ai/files/{owner}/{name}/vectors": {
       "post": {
-        "operationId": "post_v1_ai_files_by_owner_by_name_vectors",
+        "operationId": "post_ai_files_by_owner_by_name_vectors",
         "summary": "Vectors (file)",
         "tags": [
           "ai"
@@ -2592,7 +2592,7 @@
     },
     "/v1/ai/forms": {
       "get": {
-        "operationId": "get_v1_ai_forms",
+        "operationId": "get_ai_forms",
         "summary": "List forms",
         "description": "List the caller's forms.",
         "tags": [
@@ -2634,7 +2634,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_forms",
+        "operationId": "post_ai_forms",
         "summary": "Create a form",
         "description": "Create one form.",
         "tags": [
@@ -2685,7 +2685,7 @@
     },
     "/v1/ai/forms/data": {
       "get": {
-        "operationId": "get_v1_ai_forms_data",
+        "operationId": "get_ai_forms_data",
         "summary": "Data (form)",
         "tags": [
           "ai"
@@ -2713,7 +2713,7 @@
     },
     "/v1/ai/forms/global": {
       "get": {
-        "operationId": "get_v1_ai_forms_global",
+        "operationId": "get_ai_forms_global",
         "summary": "List forms across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -2757,7 +2757,7 @@
     },
     "/v1/ai/forms/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_forms_by_owner_by_name",
+        "operationId": "delete_ai_forms_by_owner_by_name",
         "summary": "Delete a form",
         "description": "Delete one form.",
         "tags": [
@@ -2816,7 +2816,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_forms_by_owner_by_name",
+        "operationId": "get_ai_forms_by_owner_by_name",
         "summary": "Retrieve a form",
         "description": "Read one form by its (owner, name) key.",
         "tags": [
@@ -2875,7 +2875,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_forms_by_owner_by_name",
+        "operationId": "patch_ai_forms_by_owner_by_name",
         "summary": "Update a form",
         "description": "Update one form. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -2944,7 +2944,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_forms_by_owner_by_name",
+        "operationId": "put_ai_forms_by_owner_by_name",
         "summary": "Replace a form",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -3015,7 +3015,7 @@
     },
     "/v1/ai/graphs": {
       "get": {
-        "operationId": "get_v1_ai_graphs",
+        "operationId": "get_ai_graphs",
         "summary": "List graphs",
         "description": "List the caller's graphs.",
         "tags": [
@@ -3057,7 +3057,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_graphs",
+        "operationId": "post_ai_graphs",
         "summary": "Create a graph",
         "description": "Create one graph.",
         "tags": [
@@ -3108,7 +3108,7 @@
     },
     "/v1/ai/graphs/global": {
       "get": {
-        "operationId": "get_v1_ai_graphs_global",
+        "operationId": "get_ai_graphs_global",
         "summary": "List graphs across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -3152,7 +3152,7 @@
     },
     "/v1/ai/graphs/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_graphs_by_owner_by_name",
+        "operationId": "delete_ai_graphs_by_owner_by_name",
         "summary": "Delete a graph",
         "description": "Delete one graph.",
         "tags": [
@@ -3211,7 +3211,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_graphs_by_owner_by_name",
+        "operationId": "get_ai_graphs_by_owner_by_name",
         "summary": "Retrieve a graph",
         "description": "Read one graph by its (owner, name) key.",
         "tags": [
@@ -3270,7 +3270,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_graphs_by_owner_by_name",
+        "operationId": "patch_ai_graphs_by_owner_by_name",
         "summary": "Update a graph",
         "description": "Update one graph. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -3339,7 +3339,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_graphs_by_owner_by_name",
+        "operationId": "put_ai_graphs_by_owner_by_name",
         "summary": "Replace a graph",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -3410,7 +3410,7 @@
     },
     "/v1/ai/k8s-status": {
       "get": {
-        "operationId": "get_v1_ai_k8s-status",
+        "operationId": "get_ai_k8s-status",
         "summary": "K8s Status",
         "tags": [
           "ai"
@@ -3471,7 +3471,7 @@
     },
     "/v1/ai/messages": {
       "get": {
-        "operationId": "get_v1_ai_messages",
+        "operationId": "get_ai_messages",
         "summary": "List messages",
         "description": "List the caller's messages.",
         "tags": [
@@ -3513,7 +3513,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_messages",
+        "operationId": "post_ai_messages",
         "summary": "Create a message",
         "description": "Create one message.",
         "tags": [
@@ -3564,7 +3564,7 @@
     },
     "/v1/ai/messages/global": {
       "get": {
-        "operationId": "get_v1_ai_messages_global",
+        "operationId": "get_ai_messages_global",
         "summary": "List messages across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -3608,7 +3608,7 @@
     },
     "/v1/ai/messages/welcome": {
       "delete": {
-        "operationId": "delete_v1_ai_messages_welcome",
+        "operationId": "delete_ai_messages_welcome",
         "summary": "Welcome (message)",
         "tags": [
           "ai"
@@ -3636,7 +3636,7 @@
     },
     "/v1/ai/messages/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_messages_by_owner_by_name",
+        "operationId": "delete_ai_messages_by_owner_by_name",
         "summary": "Delete a message",
         "description": "Delete one message.",
         "tags": [
@@ -3695,7 +3695,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_messages_by_owner_by_name",
+        "operationId": "get_ai_messages_by_owner_by_name",
         "summary": "Retrieve a message",
         "description": "Read one message by its (owner, name) key.",
         "tags": [
@@ -3754,7 +3754,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_messages_by_owner_by_name",
+        "operationId": "patch_ai_messages_by_owner_by_name",
         "summary": "Update a message",
         "description": "Update one message. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -3823,7 +3823,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_messages_by_owner_by_name",
+        "operationId": "put_ai_messages_by_owner_by_name",
         "summary": "Replace a message",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -3894,7 +3894,7 @@
     },
     "/v1/ai/messages/{owner}/{name}/answer": {
       "get": {
-        "operationId": "get_v1_ai_messages_by_owner_by_name_answer",
+        "operationId": "get_ai_messages_by_owner_by_name_answer",
         "summary": "Answer (message)",
         "tags": [
           "ai"
@@ -3942,7 +3942,7 @@
     },
     "/v1/ai/nodes": {
       "get": {
-        "operationId": "get_v1_ai_nodes",
+        "operationId": "get_ai_nodes",
         "summary": "List nodes",
         "description": "List the caller's nodes.",
         "tags": [
@@ -3984,7 +3984,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_nodes",
+        "operationId": "post_ai_nodes",
         "summary": "Create a node",
         "description": "Create one node.",
         "tags": [
@@ -4035,7 +4035,7 @@
     },
     "/v1/ai/nodes/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_nodes_by_owner_by_name",
+        "operationId": "delete_ai_nodes_by_owner_by_name",
         "summary": "Delete a node",
         "description": "Delete one node.",
         "tags": [
@@ -4094,7 +4094,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_nodes_by_owner_by_name",
+        "operationId": "get_ai_nodes_by_owner_by_name",
         "summary": "Retrieve a node",
         "description": "Read one node by its (owner, name) key.",
         "tags": [
@@ -4153,7 +4153,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_nodes_by_owner_by_name",
+        "operationId": "patch_ai_nodes_by_owner_by_name",
         "summary": "Update a node",
         "description": "Update one node. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -4222,7 +4222,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_nodes_by_owner_by_name",
+        "operationId": "put_ai_nodes_by_owner_by_name",
         "summary": "Replace a node",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -4293,7 +4293,7 @@
     },
     "/v1/ai/nodes/{owner}/{name}/tunnel": {
       "get": {
-        "operationId": "get_v1_ai_nodes_by_owner_by_name_tunnel",
+        "operationId": "get_ai_nodes_by_owner_by_name_tunnel",
         "summary": "Tunnel (node)",
         "tags": [
           "ai"
@@ -4339,7 +4339,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_nodes_by_owner_by_name_tunnel",
+        "operationId": "post_ai_nodes_by_owner_by_name_tunnel",
         "summary": "Tunnel (node)",
         "tags": [
           "ai"
@@ -4397,7 +4397,7 @@
     },
     "/v1/ai/preferences": {
       "patch": {
-        "operationId": "patch_v1_ai_preferences",
+        "operationId": "patch_ai_preferences",
         "summary": "Preferences",
         "tags": [
           "ai"
@@ -4433,7 +4433,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_preferences",
+        "operationId": "put_ai_preferences",
         "summary": "Preferences",
         "tags": [
           "ai"
@@ -4471,7 +4471,7 @@
     },
     "/v1/ai/prometheus": {
       "get": {
-        "operationId": "get_v1_ai_prometheus",
+        "operationId": "get_ai_prometheus",
         "summary": "Prometheus",
         "tags": [
           "ai"
@@ -4499,7 +4499,7 @@
     },
     "/v1/ai/providers": {
       "get": {
-        "operationId": "get_v1_ai_providers",
+        "operationId": "get_ai_providers",
         "summary": "List providers",
         "description": "List the caller's providers.",
         "tags": [
@@ -4541,7 +4541,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_providers",
+        "operationId": "post_ai_providers",
         "summary": "Create a provider",
         "description": "Create one provider.",
         "tags": [
@@ -4592,7 +4592,7 @@
     },
     "/v1/ai/providers/global": {
       "get": {
-        "operationId": "get_v1_ai_providers_global",
+        "operationId": "get_ai_providers_global",
         "summary": "List providers across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -4636,7 +4636,7 @@
     },
     "/v1/ai/providers/mcp-tools": {
       "post": {
-        "operationId": "post_v1_ai_providers_mcp-tools",
+        "operationId": "post_ai_providers_mcp-tools",
         "summary": "Mcp Tools (provider)",
         "tags": [
           "ai"
@@ -4674,7 +4674,7 @@
     },
     "/v1/ai/providers/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_providers_by_owner_by_name",
+        "operationId": "delete_ai_providers_by_owner_by_name",
         "summary": "Delete a provider",
         "description": "Delete one provider.",
         "tags": [
@@ -4733,7 +4733,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_providers_by_owner_by_name",
+        "operationId": "get_ai_providers_by_owner_by_name",
         "summary": "Retrieve a provider",
         "description": "Read one provider by its (owner, name) key.",
         "tags": [
@@ -4792,7 +4792,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_providers_by_owner_by_name",
+        "operationId": "patch_ai_providers_by_owner_by_name",
         "summary": "Update a provider",
         "description": "Update one provider. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -4861,7 +4861,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_providers_by_owner_by_name",
+        "operationId": "put_ai_providers_by_owner_by_name",
         "summary": "Replace a provider",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -4932,7 +4932,7 @@
     },
     "/v1/ai/records": {
       "get": {
-        "operationId": "get_v1_ai_records",
+        "operationId": "get_ai_records",
         "summary": "List records",
         "description": "List the caller's records.",
         "tags": [
@@ -4974,7 +4974,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_records",
+        "operationId": "post_ai_records",
         "summary": "Create a record",
         "description": "Create one record.",
         "tags": [
@@ -5025,7 +5025,7 @@
     },
     "/v1/ai/records/batch": {
       "post": {
-        "operationId": "post_v1_ai_records_batch",
+        "operationId": "post_ai_records_batch",
         "summary": "Batch (record)",
         "tags": [
           "ai"
@@ -5063,7 +5063,7 @@
     },
     "/v1/ai/records/commit": {
       "post": {
-        "operationId": "post_v1_ai_records_commit",
+        "operationId": "post_ai_records_commit",
         "summary": "Commit (record)",
         "tags": [
           "ai"
@@ -5101,7 +5101,7 @@
     },
     "/v1/ai/records/commit-second": {
       "post": {
-        "operationId": "post_v1_ai_records_commit-second",
+        "operationId": "post_ai_records_commit-second",
         "summary": "Commit Second (record)",
         "tags": [
           "ai"
@@ -5139,7 +5139,7 @@
     },
     "/v1/ai/records/query": {
       "get": {
-        "operationId": "get_v1_ai_records_query",
+        "operationId": "get_ai_records_query",
         "summary": "Query (record)",
         "tags": [
           "ai"
@@ -5167,7 +5167,7 @@
     },
     "/v1/ai/records/query-second": {
       "get": {
-        "operationId": "get_v1_ai_records_query-second",
+        "operationId": "get_ai_records_query-second",
         "summary": "Query Second (record)",
         "tags": [
           "ai"
@@ -5195,7 +5195,7 @@
     },
     "/v1/ai/records/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_records_by_owner_by_name",
+        "operationId": "delete_ai_records_by_owner_by_name",
         "summary": "Delete a record",
         "description": "Delete one record.",
         "tags": [
@@ -5254,7 +5254,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_records_by_owner_by_name",
+        "operationId": "get_ai_records_by_owner_by_name",
         "summary": "Retrieve a record",
         "description": "Read one record by its (owner, name) key.",
         "tags": [
@@ -5313,7 +5313,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_records_by_owner_by_name",
+        "operationId": "patch_ai_records_by_owner_by_name",
         "summary": "Update a record",
         "description": "Update one record. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -5382,7 +5382,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_records_by_owner_by_name",
+        "operationId": "put_ai_records_by_owner_by_name",
         "summary": "Replace a record",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -5453,7 +5453,7 @@
     },
     "/v1/ai/remote-connections": {
       "get": {
-        "operationId": "get_v1_ai_remote-connections",
+        "operationId": "get_ai_remote-connections",
         "summary": "List remote-connections",
         "description": "List the caller's remote-connections.",
         "tags": [
@@ -5495,7 +5495,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_remote-connections",
+        "operationId": "post_ai_remote-connections",
         "summary": "Create a connection",
         "description": "Create one connection.",
         "tags": [
@@ -5546,7 +5546,7 @@
     },
     "/v1/ai/remote-connections/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_remote-connections_by_owner_by_name",
+        "operationId": "delete_ai_remote-connections_by_owner_by_name",
         "summary": "Delete a connection",
         "description": "Delete one connection.",
         "tags": [
@@ -5605,7 +5605,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_remote-connections_by_owner_by_name",
+        "operationId": "get_ai_remote-connections_by_owner_by_name",
         "summary": "Retrieve a connection",
         "description": "Read one connection by its (owner, name) key.",
         "tags": [
@@ -5664,7 +5664,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_remote-connections_by_owner_by_name",
+        "operationId": "patch_ai_remote-connections_by_owner_by_name",
         "summary": "Update a connection",
         "description": "Update one connection. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -5733,7 +5733,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_remote-connections_by_owner_by_name",
+        "operationId": "put_ai_remote-connections_by_owner_by_name",
         "summary": "Replace a connection",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -5804,7 +5804,7 @@
     },
     "/v1/ai/remote-connections/{owner}/{name}/start": {
       "post": {
-        "operationId": "post_v1_ai_remote-connections_by_owner_by_name_start",
+        "operationId": "post_ai_remote-connections_by_owner_by_name_start",
         "summary": "Start (connection)",
         "tags": [
           "ai"
@@ -5862,7 +5862,7 @@
     },
     "/v1/ai/remote-connections/{owner}/{name}/stop": {
       "post": {
-        "operationId": "post_v1_ai_remote-connections_by_owner_by_name_stop",
+        "operationId": "post_ai_remote-connections_by_owner_by_name_stop",
         "summary": "Stop (connection)",
         "tags": [
           "ai"
@@ -5920,7 +5920,7 @@
     },
     "/v1/ai/routes": {
       "get": {
-        "operationId": "get_v1_ai_routes",
+        "operationId": "get_ai_routes",
         "summary": "List routes",
         "description": "List the caller's routes.",
         "tags": [
@@ -5962,7 +5962,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_routes",
+        "operationId": "post_ai_routes",
         "summary": "Create a model-route",
         "description": "Create one model-route.",
         "tags": [
@@ -6013,7 +6013,7 @@
     },
     "/v1/ai/routes/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_routes_by_owner_by_name",
+        "operationId": "delete_ai_routes_by_owner_by_name",
         "summary": "Delete a model-route",
         "description": "Delete one model-route.",
         "tags": [
@@ -6072,7 +6072,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_routes_by_owner_by_name",
+        "operationId": "get_ai_routes_by_owner_by_name",
         "summary": "Retrieve a model-route",
         "description": "Read one model-route by its (owner, name) key.",
         "tags": [
@@ -6131,7 +6131,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_routes_by_owner_by_name",
+        "operationId": "patch_ai_routes_by_owner_by_name",
         "summary": "Update a model-route",
         "description": "Update one model-route. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -6200,7 +6200,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_routes_by_owner_by_name",
+        "operationId": "put_ai_routes_by_owner_by_name",
         "summary": "Replace a model-route",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -6271,7 +6271,7 @@
     },
     "/v1/ai/scales": {
       "get": {
-        "operationId": "get_v1_ai_scales",
+        "operationId": "get_ai_scales",
         "summary": "List scales",
         "description": "List the caller's scales.",
         "tags": [
@@ -6313,7 +6313,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_scales",
+        "operationId": "post_ai_scales",
         "summary": "Create a scale",
         "description": "Create one scale.",
         "tags": [
@@ -6364,7 +6364,7 @@
     },
     "/v1/ai/scales/global": {
       "get": {
-        "operationId": "get_v1_ai_scales_global",
+        "operationId": "get_ai_scales_global",
         "summary": "List scales across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -6408,7 +6408,7 @@
     },
     "/v1/ai/scales/public": {
       "get": {
-        "operationId": "get_v1_ai_scales_public",
+        "operationId": "get_ai_scales_public",
         "summary": "Public (scale)",
         "tags": [
           "ai"
@@ -6436,7 +6436,7 @@
     },
     "/v1/ai/scales/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_scales_by_owner_by_name",
+        "operationId": "delete_ai_scales_by_owner_by_name",
         "summary": "Delete a scale",
         "description": "Delete one scale.",
         "tags": [
@@ -6495,7 +6495,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_scales_by_owner_by_name",
+        "operationId": "get_ai_scales_by_owner_by_name",
         "summary": "Retrieve a scale",
         "description": "Read one scale by its (owner, name) key.",
         "tags": [
@@ -6554,7 +6554,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_scales_by_owner_by_name",
+        "operationId": "patch_ai_scales_by_owner_by_name",
         "summary": "Update a scale",
         "description": "Update one scale. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -6623,7 +6623,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_scales_by_owner_by_name",
+        "operationId": "put_ai_scales_by_owner_by_name",
         "summary": "Replace a scale",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -6694,7 +6694,7 @@
     },
     "/v1/ai/scans": {
       "get": {
-        "operationId": "get_v1_ai_scans",
+        "operationId": "get_ai_scans",
         "summary": "List scans",
         "description": "List the caller's scans.",
         "tags": [
@@ -6736,7 +6736,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_scans",
+        "operationId": "post_ai_scans",
         "summary": "Create a scan",
         "description": "Create one scan.",
         "tags": [
@@ -6787,7 +6787,7 @@
     },
     "/v1/ai/scans/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_scans_by_owner_by_name",
+        "operationId": "delete_ai_scans_by_owner_by_name",
         "summary": "Delete a scan",
         "description": "Delete one scan.",
         "tags": [
@@ -6846,7 +6846,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_scans_by_owner_by_name",
+        "operationId": "get_ai_scans_by_owner_by_name",
         "summary": "Retrieve a scan",
         "description": "Read one scan by its (owner, name) key.",
         "tags": [
@@ -6905,7 +6905,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_scans_by_owner_by_name",
+        "operationId": "patch_ai_scans_by_owner_by_name",
         "summary": "Update a scan",
         "description": "Update one scan. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -6974,7 +6974,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_scans_by_owner_by_name",
+        "operationId": "put_ai_scans_by_owner_by_name",
         "summary": "Replace a scan",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -7045,7 +7045,7 @@
     },
     "/v1/ai/signin": {
       "post": {
-        "operationId": "post_v1_ai_signin",
+        "operationId": "post_ai_signin",
         "summary": "Signin",
         "tags": [
           "ai"
@@ -7083,7 +7083,7 @@
     },
     "/v1/ai/signin-sessions": {
       "get": {
-        "operationId": "get_v1_ai_signin-sessions",
+        "operationId": "get_ai_signin-sessions",
         "summary": "List signin-sessions",
         "description": "List the caller's signin-sessions.",
         "tags": [
@@ -7125,7 +7125,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_signin-sessions",
+        "operationId": "post_ai_signin-sessions",
         "summary": "Create a session",
         "description": "Create one session.",
         "tags": [
@@ -7176,7 +7176,7 @@
     },
     "/v1/ai/signin-sessions/duplicated": {
       "get": {
-        "operationId": "get_v1_ai_signin-sessions_duplicated",
+        "operationId": "get_ai_signin-sessions_duplicated",
         "summary": "Duplicated (session)",
         "tags": [
           "ai"
@@ -7204,7 +7204,7 @@
     },
     "/v1/ai/signin-sessions/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_signin-sessions_by_owner_by_name",
+        "operationId": "delete_ai_signin-sessions_by_owner_by_name",
         "summary": "Delete a session",
         "description": "Delete one session.",
         "tags": [
@@ -7263,7 +7263,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_signin-sessions_by_owner_by_name",
+        "operationId": "get_ai_signin-sessions_by_owner_by_name",
         "summary": "Retrieve a session",
         "description": "Read one session by its (owner, name) key.",
         "tags": [
@@ -7322,7 +7322,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_signin-sessions_by_owner_by_name",
+        "operationId": "patch_ai_signin-sessions_by_owner_by_name",
         "summary": "Update a session",
         "description": "Update one session. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -7391,7 +7391,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_signin-sessions_by_owner_by_name",
+        "operationId": "put_ai_signin-sessions_by_owner_by_name",
         "summary": "Replace a session",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -7462,7 +7462,7 @@
     },
     "/v1/ai/signout": {
       "post": {
-        "operationId": "post_v1_ai_signout",
+        "operationId": "post_ai_signout",
         "summary": "Signout",
         "tags": [
           "ai"
@@ -7500,7 +7500,7 @@
     },
     "/v1/ai/stores": {
       "get": {
-        "operationId": "get_v1_ai_stores",
+        "operationId": "get_ai_stores",
         "summary": "List stores",
         "description": "List the caller's stores.",
         "tags": [
@@ -7542,7 +7542,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_stores",
+        "operationId": "post_ai_stores",
         "summary": "Create a store",
         "description": "Create one store.",
         "tags": [
@@ -7593,7 +7593,7 @@
     },
     "/v1/ai/stores/global": {
       "get": {
-        "operationId": "get_v1_ai_stores_global",
+        "operationId": "get_ai_stores_global",
         "summary": "List stores across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -7637,7 +7637,7 @@
     },
     "/v1/ai/stores/names": {
       "get": {
-        "operationId": "get_v1_ai_stores_names",
+        "operationId": "get_ai_stores_names",
         "summary": "Names (store)",
         "tags": [
           "ai"
@@ -7665,7 +7665,7 @@
     },
     "/v1/ai/stores/providers": {
       "get": {
-        "operationId": "get_v1_ai_stores_providers",
+        "operationId": "get_ai_stores_providers",
         "summary": "Providers (store)",
         "tags": [
           "ai"
@@ -7693,7 +7693,7 @@
     },
     "/v1/ai/stores/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_stores_by_owner_by_name",
+        "operationId": "delete_ai_stores_by_owner_by_name",
         "summary": "Delete a store",
         "description": "Delete one store.",
         "tags": [
@@ -7752,7 +7752,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_stores_by_owner_by_name",
+        "operationId": "get_ai_stores_by_owner_by_name",
         "summary": "Retrieve a store",
         "description": "Read one store by its (owner, name) key.",
         "tags": [
@@ -7811,7 +7811,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_stores_by_owner_by_name",
+        "operationId": "patch_ai_stores_by_owner_by_name",
         "summary": "Update a store",
         "description": "Update one store. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -7880,7 +7880,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_stores_by_owner_by_name",
+        "operationId": "put_ai_stores_by_owner_by_name",
         "summary": "Replace a store",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -7951,7 +7951,7 @@
     },
     "/v1/ai/stores/{owner}/{name}/vectors": {
       "post": {
-        "operationId": "post_v1_ai_stores_by_owner_by_name_vectors",
+        "operationId": "post_ai_stores_by_owner_by_name_vectors",
         "summary": "Vectors (store)",
         "tags": [
           "ai"
@@ -8009,7 +8009,7 @@
     },
     "/v1/ai/system": {
       "get": {
-        "operationId": "get_v1_ai_system",
+        "operationId": "get_ai_system",
         "summary": "System",
         "tags": [
           "ai"
@@ -8037,7 +8037,7 @@
     },
     "/v1/ai/tasks": {
       "get": {
-        "operationId": "get_v1_ai_tasks",
+        "operationId": "get_ai_tasks",
         "summary": "List tasks",
         "description": "List the caller's tasks.",
         "tags": [
@@ -8079,7 +8079,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_tasks",
+        "operationId": "post_ai_tasks",
         "summary": "Create a task",
         "description": "Create one task.",
         "tags": [
@@ -8130,7 +8130,7 @@
     },
     "/v1/ai/tasks/global": {
       "get": {
-        "operationId": "get_v1_ai_tasks_global",
+        "operationId": "get_ai_tasks_global",
         "summary": "List tasks across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -8174,7 +8174,7 @@
     },
     "/v1/ai/tasks/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_tasks_by_owner_by_name",
+        "operationId": "delete_ai_tasks_by_owner_by_name",
         "summary": "Delete a task",
         "description": "Delete one task.",
         "tags": [
@@ -8233,7 +8233,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_tasks_by_owner_by_name",
+        "operationId": "get_ai_tasks_by_owner_by_name",
         "summary": "Retrieve a task",
         "description": "Read one task by its (owner, name) key.",
         "tags": [
@@ -8292,7 +8292,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_tasks_by_owner_by_name",
+        "operationId": "patch_ai_tasks_by_owner_by_name",
         "summary": "Update a task",
         "description": "Update one task. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -8361,7 +8361,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_tasks_by_owner_by_name",
+        "operationId": "put_ai_tasks_by_owner_by_name",
         "summary": "Replace a task",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -8432,7 +8432,7 @@
     },
     "/v1/ai/tasks/{owner}/{name}/analyze": {
       "post": {
-        "operationId": "post_v1_ai_tasks_by_owner_by_name_analyze",
+        "operationId": "post_ai_tasks_by_owner_by_name_analyze",
         "summary": "Analyze (task)",
         "tags": [
           "ai"
@@ -8490,7 +8490,7 @@
     },
     "/v1/ai/tasks/{owner}/{name}/document": {
       "post": {
-        "operationId": "post_v1_ai_tasks_by_owner_by_name_document",
+        "operationId": "post_ai_tasks_by_owner_by_name_document",
         "summary": "Document (task)",
         "tags": [
           "ai"
@@ -8548,7 +8548,7 @@
     },
     "/v1/ai/templates": {
       "get": {
-        "operationId": "get_v1_ai_templates",
+        "operationId": "get_ai_templates",
         "summary": "List templates",
         "description": "List the caller's templates.",
         "tags": [
@@ -8590,7 +8590,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_templates",
+        "operationId": "post_ai_templates",
         "summary": "Create a template",
         "description": "Create one template.",
         "tags": [
@@ -8641,7 +8641,7 @@
     },
     "/v1/ai/templates/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_templates_by_owner_by_name",
+        "operationId": "delete_ai_templates_by_owner_by_name",
         "summary": "Delete a template",
         "description": "Delete one template.",
         "tags": [
@@ -8700,7 +8700,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_templates_by_owner_by_name",
+        "operationId": "get_ai_templates_by_owner_by_name",
         "summary": "Retrieve a template",
         "description": "Read one template by its (owner, name) key.",
         "tags": [
@@ -8759,7 +8759,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_templates_by_owner_by_name",
+        "operationId": "patch_ai_templates_by_owner_by_name",
         "summary": "Update a template",
         "description": "Update one template. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -8828,7 +8828,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_templates_by_owner_by_name",
+        "operationId": "put_ai_templates_by_owner_by_name",
         "summary": "Replace a template",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -8899,7 +8899,7 @@
     },
     "/v1/ai/training-contribution": {
       "get": {
-        "operationId": "get_v1_ai_training-contribution",
+        "operationId": "get_ai_training-contribution",
         "summary": "Training Contribution",
         "tags": [
           "ai"
@@ -8925,7 +8925,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_training-contribution",
+        "operationId": "patch_ai_training-contribution",
         "summary": "Training Contribution",
         "tags": [
           "ai"
@@ -8961,7 +8961,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_training-contribution",
+        "operationId": "put_ai_training-contribution",
         "summary": "Training Contribution",
         "tags": [
           "ai"
@@ -8999,7 +8999,7 @@
     },
     "/v1/ai/tree-files": {
       "post": {
-        "operationId": "post_v1_ai_tree-files",
+        "operationId": "post_ai_tree-files",
         "summary": "Create a tree-file",
         "description": "Create one tree-file.",
         "tags": [
@@ -9050,7 +9050,7 @@
     },
     "/v1/ai/tree-files/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_tree-files_by_owner_by_name",
+        "operationId": "delete_ai_tree-files_by_owner_by_name",
         "summary": "Delete a tree-file",
         "description": "Delete one tree-file.",
         "tags": [
@@ -9109,7 +9109,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_tree-files_by_owner_by_name",
+        "operationId": "patch_ai_tree-files_by_owner_by_name",
         "summary": "Update a tree-file",
         "description": "Update one tree-file. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -9178,7 +9178,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_tree-files_by_owner_by_name",
+        "operationId": "put_ai_tree-files_by_owner_by_name",
         "summary": "Replace a tree-file",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -9249,7 +9249,7 @@
     },
     "/v1/ai/usages": {
       "get": {
-        "operationId": "get_v1_ai_usages",
+        "operationId": "get_ai_usages",
         "summary": "List usages",
         "description": "List the caller's usages.",
         "tags": [
@@ -9293,7 +9293,7 @@
     },
     "/v1/ai/usages/by-user": {
       "get": {
-        "operationId": "get_v1_ai_usages_by-user",
+        "operationId": "get_ai_usages_by-user",
         "summary": "By User (usage)",
         "tags": [
           "ai"
@@ -9321,7 +9321,7 @@
     },
     "/v1/ai/usages/cloud": {
       "get": {
-        "operationId": "get_v1_ai_usages_cloud",
+        "operationId": "get_ai_usages_cloud",
         "summary": "Cloud (usage)",
         "tags": [
           "ai"
@@ -9349,7 +9349,7 @@
     },
     "/v1/ai/usages/range": {
       "get": {
-        "operationId": "get_v1_ai_usages_range",
+        "operationId": "get_ai_usages_range",
         "summary": "Range (usage)",
         "tags": [
           "ai"
@@ -9377,7 +9377,7 @@
     },
     "/v1/ai/usages/user-names": {
       "get": {
-        "operationId": "get_v1_ai_usages_user-names",
+        "operationId": "get_ai_usages_user-names",
         "summary": "User Names (usage)",
         "tags": [
           "ai"
@@ -9405,7 +9405,7 @@
     },
     "/v1/ai/vectors": {
       "get": {
-        "operationId": "get_v1_ai_vectors",
+        "operationId": "get_ai_vectors",
         "summary": "List vectors",
         "description": "List the caller's vectors.",
         "tags": [
@@ -9447,7 +9447,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_vectors",
+        "operationId": "post_ai_vectors",
         "summary": "Create a vector",
         "description": "Create one vector.",
         "tags": [
@@ -9498,7 +9498,7 @@
     },
     "/v1/ai/vectors/all": {
       "delete": {
-        "operationId": "delete_v1_ai_vectors_all",
+        "operationId": "delete_ai_vectors_all",
         "summary": "All (vector)",
         "tags": [
           "ai"
@@ -9526,7 +9526,7 @@
     },
     "/v1/ai/vectors/global": {
       "get": {
-        "operationId": "get_v1_ai_vectors_global",
+        "operationId": "get_ai_vectors_global",
         "summary": "List vectors across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -9570,7 +9570,7 @@
     },
     "/v1/ai/vectors/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_vectors_by_owner_by_name",
+        "operationId": "delete_ai_vectors_by_owner_by_name",
         "summary": "Delete a vector",
         "description": "Delete one vector.",
         "tags": [
@@ -9629,7 +9629,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_vectors_by_owner_by_name",
+        "operationId": "get_ai_vectors_by_owner_by_name",
         "summary": "Retrieve a vector",
         "description": "Read one vector by its (owner, name) key.",
         "tags": [
@@ -9688,7 +9688,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_vectors_by_owner_by_name",
+        "operationId": "patch_ai_vectors_by_owner_by_name",
         "summary": "Update a vector",
         "description": "Update one vector. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -9757,7 +9757,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_vectors_by_owner_by_name",
+        "operationId": "put_ai_vectors_by_owner_by_name",
         "summary": "Replace a vector",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -9828,7 +9828,7 @@
     },
     "/v1/ai/version": {
       "get": {
-        "operationId": "get_v1_ai_version",
+        "operationId": "get_ai_version",
         "summary": "Version",
         "tags": [
           "ai"
@@ -9856,7 +9856,7 @@
     },
     "/v1/ai/videos": {
       "get": {
-        "operationId": "get_v1_ai_videos",
+        "operationId": "get_ai_videos",
         "summary": "List videos",
         "description": "List the caller's videos.",
         "tags": [
@@ -9898,7 +9898,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_videos",
+        "operationId": "post_ai_videos",
         "summary": "Create a video",
         "description": "Create one video.",
         "tags": [
@@ -9949,7 +9949,7 @@
     },
     "/v1/ai/videos/global": {
       "get": {
-        "operationId": "get_v1_ai_videos_global",
+        "operationId": "get_ai_videos_global",
         "summary": "List videos across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -9993,7 +9993,7 @@
     },
     "/v1/ai/videos/upload": {
       "post": {
-        "operationId": "post_v1_ai_videos_upload",
+        "operationId": "post_ai_videos_upload",
         "summary": "Upload (video)",
         "tags": [
           "ai"
@@ -10031,7 +10031,7 @@
     },
     "/v1/ai/videos/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_videos_by_owner_by_name",
+        "operationId": "delete_ai_videos_by_owner_by_name",
         "summary": "Delete a video",
         "description": "Delete one video.",
         "tags": [
@@ -10090,7 +10090,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_videos_by_owner_by_name",
+        "operationId": "get_ai_videos_by_owner_by_name",
         "summary": "Retrieve a video",
         "description": "Read one video by its (owner, name) key.",
         "tags": [
@@ -10149,7 +10149,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_videos_by_owner_by_name",
+        "operationId": "patch_ai_videos_by_owner_by_name",
         "summary": "Update a video",
         "description": "Update one video. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -10218,7 +10218,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_videos_by_owner_by_name",
+        "operationId": "put_ai_videos_by_owner_by_name",
         "summary": "Replace a video",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -10289,7 +10289,7 @@
     },
     "/v1/ai/workflows": {
       "get": {
-        "operationId": "get_v1_ai_workflows",
+        "operationId": "get_ai_workflows",
         "summary": "List workflows",
         "description": "List the caller's workflows.",
         "tags": [
@@ -10331,7 +10331,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_ai_workflows",
+        "operationId": "post_ai_workflows",
         "summary": "Create a workflow",
         "description": "Create one workflow.",
         "tags": [
@@ -10382,7 +10382,7 @@
     },
     "/v1/ai/workflows/global": {
       "get": {
-        "operationId": "get_v1_ai_workflows_global",
+        "operationId": "get_ai_workflows_global",
         "summary": "List workflows across tenants",
         "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
         "tags": [
@@ -10426,7 +10426,7 @@
     },
     "/v1/ai/workflows/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_ai_workflows_by_owner_by_name",
+        "operationId": "delete_ai_workflows_by_owner_by_name",
         "summary": "Delete a workflow",
         "description": "Delete one workflow.",
         "tags": [
@@ -10485,7 +10485,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_ai_workflows_by_owner_by_name",
+        "operationId": "get_ai_workflows_by_owner_by_name",
         "summary": "Retrieve a workflow",
         "description": "Read one workflow by its (owner, name) key.",
         "tags": [
@@ -10544,7 +10544,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_ai_workflows_by_owner_by_name",
+        "operationId": "patch_ai_workflows_by_owner_by_name",
         "summary": "Update a workflow",
         "description": "Update one workflow. PATCH and PUT reach the same handler, which has always taken a whole object.",
         "tags": [
@@ -10613,7 +10613,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_ai_workflows_by_owner_by_name",
+        "operationId": "put_ai_workflows_by_owner_by_name",
         "summary": "Replace a workflow",
         "description": "Identical to PATCH — the handler takes a whole object either way.",
         "tags": [
@@ -10684,7 +10684,7 @@
     },
     "/v1/audio/foley": {
       "post": {
-        "operationId": "post_v1_audio_foley",
+        "operationId": "post_audio_foley",
         "summary": "Serves the generative audio verbs — /v1/audio/voice (TTS), /music, /foley — that the Zen family serves natively.",
         "description": "Serves the generative audio verbs — /v1/audio/voice (TTS), /music,\n/foley — that the Zen family serves natively. It resolves the SKU and, for a Zen\nmodel, forwards to zen's matching verb billed per call at the discovered price.\nThese verbs are Zen-native; a non-Zen model is rejected.",
         "tags": [
@@ -10696,7 +10696,7 @@
     },
     "/v1/audio/music": {
       "post": {
-        "operationId": "post_v1_audio_music",
+        "operationId": "post_audio_music",
         "summary": "Serves the generative audio verbs — /v1/audio/voice (TTS), /music, /foley — that the Zen family serves natively.",
         "description": "Serves the generative audio verbs — /v1/audio/voice (TTS), /music,\n/foley — that the Zen family serves natively. It resolves the SKU and, for a Zen\nmodel, forwards to zen's matching verb billed per call at the discovered price.\nThese verbs are Zen-native; a non-Zen model is rejected.",
         "tags": [
@@ -10708,7 +10708,7 @@
     },
     "/v1/audio/speech": {
       "post": {
-        "operationId": "post_v1_audio_speech",
+        "operationId": "post_audio_speech",
         "summary": "The OpenAI-compatible TTS endpoint (POST /v1/audio/speech).",
         "description": "The OpenAI-compatible TTS endpoint (POST /v1/audio/speech). It\nauthenticates the caller, resolves `model` to its TTS provider (the SAME model-route\nresolution the chat/images/video endpoints use — so a BYO node registered as a TTS\nprovider works transparently), synthesizes the audio, and streams the bytes back.\nOne code path, OpenAI-shaped, no store/message coupling (unlike the legacy\n/v1/generate-text-to-speech-audio which is bound to a chat store).",
         "tags": [
@@ -10720,7 +10720,7 @@
     },
     "/v1/audio/transcriptions": {
       "post": {
-        "operationId": "post_v1_audio_transcriptions",
+        "operationId": "post_audio_transcriptions",
         "summary": "The OpenAI-compatible STT endpoint (POST /v1/audio/transcriptions, multipart: file + model [+ language + response_format]).",
         "description": "The OpenAI-compatible STT endpoint\n(POST /v1/audio/transcriptions, multipart: file + model [+ language +\nresponse_format]). It mirrors AudioSpeech exactly: authenticate the caller,\nresolve `model` to its STT provider through the SAME model-route resolution\n(so the in-cluster speech service — or any BYO node registered as an STT\nprovider — works transparently), transcribe, and return the OpenAI body.\nOne code path, OpenAI-shaped, no store coupling (unlike the legacy\n/v1/process-speech-to-text, which is bound to a chat store).",
         "tags": [
@@ -10732,7 +10732,7 @@
     },
     "/v1/audio/voice": {
       "post": {
-        "operationId": "post_v1_audio_voice",
+        "operationId": "post_audio_voice",
         "summary": "Serves the generative audio verbs — /v1/audio/voice (TTS), /music, /foley — that the Zen family serves natively.",
         "description": "Serves the generative audio verbs — /v1/audio/voice (TTS), /music,\n/foley — that the Zen family serves natively. It resolves the SKU and, for a Zen\nmodel, forwards to zen's matching verb billed per call at the discovered price.\nThese verbs are Zen-native; a non-Zen model is rejected.",
         "tags": [
@@ -10744,7 +10744,7 @@
     },
     "/v1/chat": {
       "post": {
-        "operationId": "post_v1_chat",
+        "operationId": "post_chat",
         "summary": "Implements the OpenAI-compatible chat completions API",
         "description": "Implements the OpenAI-compatible chat completions API",
         "tags": [
@@ -10755,7 +10755,7 @@
     },
     "/v1/chat/completions": {
       "post": {
-        "operationId": "post_v1_chat_completions",
+        "operationId": "post_chat_completions",
         "summary": "Implements the OpenAI-compatible chat completions API",
         "description": "Implements the OpenAI-compatible chat completions API",
         "tags": [
@@ -10767,7 +10767,7 @@
     },
     "/v1/completions": {
       "post": {
-        "operationId": "post_v1_completions",
+        "operationId": "post_completions",
         "summary": "Implements the OpenAI-compatible chat completions API",
         "description": "Implements the OpenAI-compatible chat completions API",
         "tags": [
@@ -10779,7 +10779,7 @@
     },
     "/v1/dev-bridge": {
       "get": {
-        "operationId": "get_v1_dev-bridge",
+        "operationId": "get_dev-bridge",
         "summary": "Upgrades to WebSocket and bridges JSON-RPC messages between the browser and a hanzo-app-server instance.",
         "description": "Upgrades to WebSocket and bridges JSON-RPC messages between\nthe browser and a hanzo-app-server instance.\n\nIn local mode (default): spawns hanzo-app-server as a child process.\nIn remote mode (?remote=host:port): proxies to a remote app-server via TCP.\n\nGET /api/dev-bridge?cwd=/path/to/project\nGET /api/dev-bridge?remote=host:port\u0026cwd=/path/to/project",
         "tags": [
@@ -10790,7 +10790,7 @@
     },
     "/v1/docs/ingest": {
       "post": {
-        "operationId": "post_v1_docs_ingest",
+        "operationId": "post_docs_ingest",
         "summary": "Unified RAG ingest: parse + chunk + embed documents and pipe them to BOTH Hanzo Vector (semantic) AND Hanzo Search (keyword) under the tenant index {owner}-{store}-docs — the same index /v1/chat retrieval reads.",
         "description": "Unified RAG ingest: parse + chunk + embed documents and pipe them\nto BOTH Hanzo Vector (semantic) AND Hanzo Search (keyword) under the tenant\nindex {owner}-{store}-docs — the same index /v1/chat retrieval reads. The\nsource is pluggable: \"upload\" (inline files/documents), \"github\" (index a\nrepo), \"crawl\" (web), or \"s3\" (the store's object-storage space). The owner\nis bound to the authenticated principal; the client-supplied owner is never\ntrusted.",
         "tags": [
@@ -10801,7 +10801,7 @@
     },
     "/v1/documents": {
       "delete": {
-        "operationId": "delete_v1_documents",
+        "operationId": "delete_documents",
         "summary": "Handles DELETE /v1/documents — a JSON array of file_ids.",
         "description": "Handles DELETE /v1/documents — a JSON array of file_ids.",
         "tags": [
@@ -10812,7 +10812,7 @@
     },
     "/v1/documents/{file_id}/context": {
       "get": {
-        "operationId": "get_v1_documents_by_file_id_context",
+        "operationId": "get_documents_by_file_id_context",
         "summary": "Handles GET /v1/documents/:file_id/context — every chunk of a file, as LangChain Documents (used when RAG_USE_FULL_CONTEXT is on).",
         "description": "Handles GET /v1/documents/:file_id/context — every chunk of\na file, as LangChain Documents (used when RAG_USE_FULL_CONTEXT is on).",
         "tags": [
@@ -10823,7 +10823,7 @@
     },
     "/v1/embeddings": {
       "post": {
-        "operationId": "post_v1_embeddings",
+        "operationId": "post_embeddings",
         "summary": "Implements POST /v1/embeddings (OpenAI-compatible).",
         "description": "Implements POST /v1/embeddings (OpenAI-compatible).\n\nBody: {\"model\": \"...\", \"input\": \"...\"|[\"...\", ...], \"encoding_format\"?, \"dimensions\"?}\nIt authenticates the caller, resolves the model to its upstream provider via\nthe shared routing table, rewrites the user-facing model name to the upstream\nid, and proxies the request to the provider's /embeddings endpoint verbatim.",
         "tags": [
@@ -10835,7 +10835,7 @@
     },
     "/v1/feedback": {
       "post": {
-        "operationId": "post_v1_feedback",
+        "operationId": "post_feedback",
         "summary": "Attaches a per-request outcome reward to the routing decision that served request_id — the enso training loop's quality signal.",
         "description": "Attaches a per-request outcome reward to the routing decision\nthat served request_id — the enso training loop's quality signal. Org-scoped via\nthe same session-OR-Bearer principal the usage read uses (RequirePrincipal): the\nreward lands only on the caller's OWN org's event, so a request_id from another\norg (or unknown) is a 404 — cross-org writes are impossible and unknown ids are\nindistinguishable from foreign ones. Idempotent: a repeat overwrites. The body\ncarries NO prompt text — only {request_id, reward|rating}.",
         "tags": [
@@ -10846,7 +10846,7 @@
     },
     "/v1/finetune/cancel": {
       "post": {
-        "operationId": "post_v1_finetune_cancel",
+        "operationId": "post_finetune_cancel",
         "summary": "Deletes the TrainJob CR, meters the GPU-hours used so far, and marks the job cancelled.",
         "description": "Deletes the TrainJob CR, meters the GPU-hours used so far, and\nmarks the job cancelled. ?id= or ?name=",
         "tags": [
@@ -10857,7 +10857,7 @@
     },
     "/v1/finetune/deploy": {
       "post": {
-        "operationId": "post_v1_finetune_deploy",
+        "operationId": "post_finetune_deploy",
         "summary": "Serves a completed job's checkpoints and registers the result as a routable model on api.hanzo.ai.",
         "description": "Serves a completed job's checkpoints and registers the result\nas a routable model on api.hanzo.ai. ?id= or ?name=",
         "tags": [
@@ -10868,7 +10868,7 @@
     },
     "/v1/finetune/hf/datasets": {
       "get": {
-        "operationId": "get_v1_finetune_hf_datasets",
+        "operationId": "get_finetune_hf_datasets",
         "summary": "Proxies a HuggingFace dataset search (dataset picker).",
         "description": "Proxies a HuggingFace dataset search (dataset picker).",
         "tags": [
@@ -10879,7 +10879,7 @@
     },
     "/v1/finetune/hf/models": {
       "get": {
-        "operationId": "get_v1_finetune_hf_models",
+        "operationId": "get_finetune_hf_models",
         "summary": "Proxies a HuggingFace model search (base-model picker).",
         "description": "Proxies a HuggingFace model search (base-model picker).",
         "tags": [
@@ -10890,7 +10890,7 @@
     },
     "/v1/finetune/hf/repo": {
       "get": {
-        "operationId": "get_v1_finetune_hf_repo",
+        "operationId": "get_finetune_hf_repo",
         "summary": "Returns a repo's detail (files, gated/private state).",
         "description": "Returns a repo's detail (files, gated/private state). ?id=\u0026kind=model|dataset",
         "tags": [
@@ -10901,7 +10901,7 @@
     },
     "/v1/finetune/job": {
       "get": {
-        "operationId": "get_v1_finetune_job",
+        "operationId": "get_finetune_job",
         "summary": "Returns one job with refreshed live status.",
         "description": "Returns one job with refreshed live status. ?id=owner/name or ?name=",
         "tags": [
@@ -10912,7 +10912,7 @@
     },
     "/v1/finetune/jobs": {
       "get": {
-        "operationId": "get_v1_finetune_jobs",
+        "operationId": "get_finetune_jobs",
         "summary": "Returns the org's jobs, refreshing live status for active ones.",
         "description": "Returns the org's jobs, refreshing live status for active ones.",
         "tags": [
@@ -10921,7 +10921,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_finetune_jobs",
+        "operationId": "post_finetune_jobs",
         "summary": "Validates the request, resolves efficient defaults, persists the job, and submits a real TrainJob CR.",
         "description": "Validates the request, resolves efficient defaults, persists the\njob, and submits a real TrainJob CR. A submit failure (e.g. no cluster wired) is\nsurfaced honestly: the job is saved with status \"failed\" + the reason, never faked.",
         "tags": [
@@ -10932,7 +10932,7 @@
     },
     "/v1/finetune/presets": {
       "get": {
-        "operationId": "get_v1_finetune_presets",
+        "operationId": "get_finetune_presets",
         "summary": "Returns the new-job catalog plus, when a selection is passed (?baseModel\u0026method\u0026task\u0026preset[\u0026datasetExamples]), the recommended config so the console can render \"Recommended\" as a one-click, ready-to-run default.",
         "description": "Returns the new-job catalog plus, when a selection is passed\n(?baseModel\u0026method\u0026task\u0026preset[\u0026datasetExamples]), the recommended config so the\nconsole can render \"Recommended\" as a one-click, ready-to-run default.",
         "tags": [
@@ -10943,7 +10943,7 @@
     },
     "/v1/generate-text-to-speech-audio": {
       "post": {
-        "operationId": "post_v1_generate-text-to-speech-audio",
+        "operationId": "post_generate-text-to-speech-audio",
         "summary": "Convert text to speech",
         "description": "Convert text to speech",
         "tags": [
@@ -10954,7 +10954,7 @@
     },
     "/v1/generate-text-to-speech-audio-stream": {
       "get": {
-        "operationId": "get_v1_generate-text-to-speech-audio-stream",
+        "operationId": "get_generate-text-to-speech-audio-stream",
         "summary": "Convert text to speech with streaming",
         "description": "Convert text to speech with streaming",
         "tags": [
@@ -10965,7 +10965,7 @@
     },
     "/v1/health": {
       "get": {
-        "operationId": "get_v1_health",
+        "operationId": "get_health",
         "summary": "Check if the system is live",
         "description": "Check if the system is live",
         "tags": [
@@ -10976,7 +10976,7 @@
     },
     "/v1/images/generations": {
       "post": {
-        "operationId": "post_v1_images_generations",
+        "operationId": "post_images_generations",
         "summary": "Implements POST /v1/images/generations (OpenAI-compatible).",
         "description": "Implements POST /v1/images/generations (OpenAI-compatible).\n\nBody: {\"model\": \"...\", \"prompt\": \"...\", \"n\"?: int, \"size\"?: \"1024x1024\",\n\n\t\"response_format\"?: \"url\"|\"b64_json\"}\n\nIt authenticates the caller, resolves the model to its upstream provider via\nthe shared routing table (zen3-image* → do-ai fal diffusion), reserves the\nper-image budget, generates the image(s) through the do-ai async image\nclient, records usage for billing, and returns the OpenAI images response.",
         "tags": [
@@ -10988,7 +10988,7 @@
     },
     "/v1/install-patch": {
       "post": {
-        "operationId": "post_v1_install-patch",
+        "operationId": "post_install-patch",
         "summary": "Install an OS patch by patch ID (KB number or title) asynchronously",
         "description": "Install an OS patch by patch ID (KB number or title) asynchronously",
         "tags": [
@@ -10999,7 +10999,7 @@
     },
     "/v1/memory/delete": {
       "post": {
-        "operationId": "post_v1_memory_delete",
+        "operationId": "post_memory_delete",
         "summary": "Delete one of the authenticated user's memories",
         "description": "Delete one of the authenticated user's memories",
         "tags": [
@@ -11010,7 +11010,7 @@
     },
     "/v1/memory/facts": {
       "get": {
-        "operationId": "get_v1_memory_facts",
+        "operationId": "get_memory_facts",
         "summary": "List the authenticated user's stored facts",
         "description": "List the authenticated user's stored facts",
         "tags": [
@@ -11021,7 +11021,7 @@
     },
     "/v1/memory/list": {
       "get": {
-        "operationId": "get_v1_memory_list",
+        "operationId": "get_memory_list",
         "summary": "List the authenticated user's memories, newest first",
         "description": "List the authenticated user's memories, newest first",
         "tags": [
@@ -11032,7 +11032,7 @@
     },
     "/v1/memory/recall": {
       "get": {
-        "operationId": "get_v1_memory_recall",
+        "operationId": "get_memory_recall",
         "summary": "Recall recent/relevant memories for context injection; with q it",
         "description": "Recall recent/relevant memories for context injection; with q it\nranks semantically, without q it returns the most recent",
         "tags": [
@@ -11043,7 +11043,7 @@
     },
     "/v1/memory/remember": {
       "post": {
-        "operationId": "post_v1_memory_remember",
+        "operationId": "post_memory_remember",
         "summary": "Store a memory for the authenticated user",
         "description": "Store a memory for the authenticated user",
         "tags": [
@@ -11054,7 +11054,7 @@
     },
     "/v1/memory/search": {
       "get": {
-        "operationId": "get_v1_memory_search",
+        "operationId": "get_memory_search",
         "summary": "Search the authenticated user's memories (semantic, text fallback)",
         "description": "Search the authenticated user's memories (semantic, text fallback)",
         "tags": [
@@ -11065,7 +11065,7 @@
     },
     "/v1/memory/update": {
       "post": {
-        "operationId": "post_v1_memory_update",
+        "operationId": "post_memory_update",
         "summary": "Update one of the authenticated user's memories",
         "description": "Update one of the authenticated user's memories",
         "tags": [
@@ -11076,7 +11076,7 @@
     },
     "/v1/messages": {
       "post": {
-        "operationId": "post_v1_messages",
+        "operationId": "post_messages",
         "summary": "Implements the Anthropic Messages API.",
         "description": "Implements the Anthropic Messages API.",
         "tags": [
@@ -11088,7 +11088,7 @@
     },
     "/v1/messages/count_tokens": {
       "post": {
-        "operationId": "post_v1_messages_count_tokens",
+        "operationId": "post_messages_count_tokens",
         "summary": "Implements POST /v1/messages/count_tokens.",
         "description": "Implements POST /v1/messages/count_tokens. Claude Code\ncalls it before a request; it returns {\"input_tokens\": N} for the given\nmodel + messages + tools.",
         "tags": [
@@ -11160,7 +11160,7 @@
     },
     "/v1/org/settings": {
       "delete": {
-        "operationId": "delete_v1_org_settings",
+        "operationId": "delete_org_settings",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11169,7 +11169,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_org_settings",
+        "operationId": "get_org_settings",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11178,7 +11178,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_org_settings",
+        "operationId": "patch_org_settings",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11187,7 +11187,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_org_settings",
+        "operationId": "post_org_settings",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11196,7 +11196,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_org_settings",
+        "operationId": "put_org_settings",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11207,7 +11207,7 @@
     },
     "/v1/org/settings/list": {
       "delete": {
-        "operationId": "delete_v1_org_settings_list",
+        "operationId": "delete_org_settings_list",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11216,7 +11216,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_org_settings_list",
+        "operationId": "get_org_settings_list",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11225,7 +11225,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_org_settings_list",
+        "operationId": "patch_org_settings_list",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11234,7 +11234,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_org_settings_list",
+        "operationId": "post_org_settings_list",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11243,7 +11243,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_org_settings_list",
+        "operationId": "put_org_settings_list",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11254,7 +11254,7 @@
     },
     "/v1/process-speech-to-text": {
       "post": {
-        "operationId": "post_v1_process-speech-to-text",
+        "operationId": "post_process-speech-to-text",
         "summary": "Convert speech to text",
         "description": "Convert speech to text",
         "tags": [
@@ -11265,7 +11265,7 @@
     },
     "/v1/query": {
       "post": {
-        "operationId": "post_v1_query",
+        "operationId": "post_query",
         "summary": "Handles POST /v1/query — {file_id,query,k}.",
         "description": "Handles POST /v1/query — {file_id,query,k}. Returns LangChain\n(document,score) tuples.",
         "tags": [
@@ -11276,7 +11276,7 @@
     },
     "/v1/query_multiple": {
       "post": {
-        "operationId": "post_v1_query_multiple",
+        "operationId": "post_query_multiple",
         "summary": "Handles POST /v1/query_multiple — {file_ids,query,k}.",
         "description": "Handles POST /v1/query_multiple — {file_ids,query,k}.",
         "tags": [
@@ -11287,7 +11287,7 @@
     },
     "/v1/rag/context": {
       "get": {
-        "operationId": "get_v1_rag_context",
+        "operationId": "get_rag_context",
         "summary": "Return every stored chunk of one file_id (full document context).",
         "description": "Return every stored chunk of one file_id (full document context).\nConsolidates the retired chat-rag-api GET /documents/{id}/context.",
         "tags": [
@@ -11298,7 +11298,7 @@
     },
     "/v1/rag/delete": {
       "post": {
-        "operationId": "post_v1_rag_delete",
+        "operationId": "post_rag_delete",
         "summary": "Delete all chunks of one or more uploaded files (by file_id) from the owner's Search+Vector index.",
         "description": "Delete all chunks of one or more uploaded files (by file_id) from\nthe owner's Search+Vector index. Consolidates the retired chat-rag-api\nDELETE /documents.",
         "tags": [
@@ -11309,7 +11309,7 @@
     },
     "/v1/rag/embed": {
       "post": {
-        "operationId": "post_v1_rag_embed",
+        "operationId": "post_rag_embed",
         "summary": "Parse, chunk, and embed one uploaded file under its file_id into the unified Search+Vector index, scoped to the authenticated owner.",
         "description": "Parse, chunk, and embed one uploaded file under its file_id into\nthe unified Search+Vector index, scoped to the authenticated owner. Provide\ninline `content` or a `url` to fetch+parse (PDF/CSV/XLSX/PPTX/…). Re-embedding\nthe same file_id replaces its chunks. Consolidates the retired chat-rag-api\nPOST /embed and /local/embed.",
         "tags": [
@@ -11320,7 +11320,7 @@
     },
     "/v1/rag/query": {
       "post": {
-        "operationId": "post_v1_rag_query",
+        "operationId": "post_rag_query",
         "summary": "Retrieve the top-K chunks relevant to a query, scoped to a single uploaded file (`file_id`).",
         "description": "Retrieve the top-K chunks relevant to a query, scoped to a single\nuploaded file (`file_id`). Hybrid keyword+vector retrieval over the same\nindex. Consolidates the retired chat-rag-api POST /query.",
         "tags": [
@@ -11331,7 +11331,7 @@
     },
     "/v1/rag/query-multiple": {
       "post": {
-        "operationId": "post_v1_rag_query-multiple",
+        "operationId": "post_rag_query-multiple",
         "summary": "Retrieve the top-K chunks relevant to a query, scoped to a SET of uploaded files (`file_ids`).",
         "description": "Retrieve the top-K chunks relevant to a query, scoped to a SET of\nuploaded files (`file_ids`). Consolidates the retired chat-rag-api POST\n/query_multiple. Shares one retrieval path with /rag/query.",
         "tags": [
@@ -11342,7 +11342,7 @@
     },
     "/v1/rerank": {
       "post": {
-        "operationId": "post_v1_rerank",
+        "operationId": "post_rerank",
         "summary": "Implements POST /v1/rerank (Cohere/Jina-compatible).",
         "description": "Implements POST /v1/rerank (Cohere/Jina-compatible).\n\nBody: {\"model\": \"...\", \"query\": \"...\", \"documents\": [\"...\", ...]|[{\"text\":\"...\"}],\n\n\t\"top_n\"?: int, \"return_documents\"?: bool}\n\nResponse: {\"object\":\"list\",\"model\":...,\"results\":[{\"index\",\"relevance_score\",\"document\"?}],\"usage\":{...}}\n\nBackend selection is provider-driven (one endpoint, one contract):\n  - If the model routes to a native rerank provider (Jina/Cohere/Voyage) the\n    request is proxied to that provider's /rerank endpoint.\n  - Otherwise scores are computed as a real bi-encoder ranking: embed the\n    query and documents through the resolved embedding model and rank by\n    cosine similarity. No rerank-specific key required.",
         "tags": [
@@ -11354,7 +11354,7 @@
     },
     "/v1/responses": {
       "post": {
-        "operationId": "post_v1_responses",
+        "operationId": "post_responses",
         "summary": "Implements POST /v1/responses.",
         "description": "Implements POST /v1/responses. The converted request is passed to\nChatCompletions and an installed ResponseWriter converts its OpenAI chat JSON\nor SSE back into Responses JSON/SSE on the fly.",
         "tags": [
@@ -11366,7 +11366,7 @@
     },
     "/v1/router/artifact-meta": {
       "delete": {
-        "operationId": "delete_v1_router_artifact-meta",
+        "operationId": "delete_router_artifact-meta",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11375,7 +11375,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_router_artifact-meta",
+        "operationId": "get_router_artifact-meta",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11384,7 +11384,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_router_artifact-meta",
+        "operationId": "patch_router_artifact-meta",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11393,7 +11393,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_router_artifact-meta",
+        "operationId": "post_router_artifact-meta",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11402,7 +11402,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_router_artifact-meta",
+        "operationId": "put_router_artifact-meta",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11413,7 +11413,7 @@
     },
     "/v1/router/data": {
       "delete": {
-        "operationId": "delete_v1_router_data",
+        "operationId": "delete_router_data",
         "summary": "Data",
         "tags": [
           "router"
@@ -11439,7 +11439,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_router_data",
+        "operationId": "get_router_data",
         "summary": "Data",
         "tags": [
           "router"
@@ -11467,7 +11467,7 @@
     },
     "/v1/router/defaults": {
       "delete": {
-        "operationId": "delete_v1_router_defaults",
+        "operationId": "delete_router_defaults",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11476,7 +11476,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_router_defaults",
+        "operationId": "get_router_defaults",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11485,7 +11485,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_router_defaults",
+        "operationId": "patch_router_defaults",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11494,7 +11494,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_router_defaults",
+        "operationId": "post_router_defaults",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11503,7 +11503,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_router_defaults",
+        "operationId": "put_router_defaults",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11514,7 +11514,7 @@
     },
     "/v1/router/history": {
       "get": {
-        "operationId": "get_v1_router_history",
+        "operationId": "get_router_history",
         "summary": "Returns the router-improvement time-series.",
         "description": "Returns the router-improvement time-series. Two scopes, one route,\nmirroring /v1/router/stats:\n\n  - ?scope=platform — PUBLIC-safe aggregate over ALL orgs, no authentication. Emits\n    the daily reward/cost-saved/adoption series (task mix included, model ids NOT)\n    and the retrain timeline. This is what world.hanzo.ai polls.\n  - default (org scope) — requires a signed-in principal, scoped to the caller's OWN\n    org (a super admin may pass ?org= to target another or \"\" for all).\n\nWindow: ?days=N (default 30, capped at 90). Aggregates only.",
         "tags": [
@@ -11525,7 +11525,7 @@
     },
     "/v1/router/judge-panel": {
       "get": {
-        "operationId": "get_v1_router_judge-panel",
+        "operationId": "get_router_judge-panel",
         "summary": "Returns the LIVE Mean-Field Judge Panel state: the configured panel + dynamic judge posture (enabled/sample) resolved from the \"*\" GlobalDefaultOwner row, the live in-process per-judge calibration (weight/mean/n), and the static published benchmark.",
         "description": "Returns the LIVE Mean-Field Judge Panel state: the configured\npanel + dynamic judge posture (enabled/sample) resolved from the \"*\"\nGlobalDefaultOwner row, the live in-process per-judge calibration (weight/mean/n),\nand the static published benchmark. PUBLIC-safe and platform-global (model ids +\nscalars only), so it rides the same unauthenticated, balance-exempt class as\n/v1/router/stats?scope=platform — the world widget polls it with no auth. The judge\nstate is a single in-process population (not per-org), so there is nothing to scope;\n?scope=platform is accepted for symmetry with router-stats.",
         "tags": [
@@ -11536,7 +11536,7 @@
     },
     "/v1/router/ledger": {
       "delete": {
-        "operationId": "delete_v1_router_ledger",
+        "operationId": "delete_router_ledger",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11545,7 +11545,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_router_ledger",
+        "operationId": "get_router_ledger",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11554,7 +11554,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_router_ledger",
+        "operationId": "patch_router_ledger",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11563,7 +11563,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_router_ledger",
+        "operationId": "post_router_ledger",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11572,7 +11572,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_router_ledger",
+        "operationId": "put_router_ledger",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11583,7 +11583,7 @@
     },
     "/v1/router/policy": {
       "delete": {
-        "operationId": "delete_v1_router_policy",
+        "operationId": "delete_router_policy",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11592,7 +11592,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_router_policy",
+        "operationId": "get_router_policy",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11601,7 +11601,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_router_policy",
+        "operationId": "patch_router_policy",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11610,7 +11610,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_router_policy",
+        "operationId": "post_router_policy",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11619,7 +11619,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_router_policy",
+        "operationId": "put_router_policy",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11630,7 +11630,7 @@
     },
     "/v1/router/rewards": {
       "delete": {
-        "operationId": "delete_v1_router_rewards",
+        "operationId": "delete_router_rewards",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11639,7 +11639,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "get": {
-        "operationId": "get_v1_router_rewards",
+        "operationId": "get_router_rewards",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11648,7 +11648,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "patch": {
-        "operationId": "patch_v1_router_rewards",
+        "operationId": "patch_router_rewards",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11657,7 +11657,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_router_rewards",
+        "operationId": "post_router_rewards",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11666,7 +11666,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "put": {
-        "operationId": "put_v1_router_rewards",
+        "operationId": "put_router_rewards",
         "summary": "The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/org/settings[/list]).",
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
@@ -11677,7 +11677,7 @@
     },
     "/v1/router/stats": {
       "get": {
-        "operationId": "get_v1_router_stats",
+        "operationId": "get_router_stats",
         "summary": "Returns the router observability aggregate.",
         "description": "Returns the router observability aggregate. Two scopes, one route:\n\n  - ?scope=platform — PUBLIC-safe aggregate over ALL orgs, no authentication.\n    Emits rates, shares, per-task/per-model counts, throughput, and the cost\n    RATIO (saved_pct) + counterfactual model id, but NEVER absolute $ levels,\n    org identity, raw events, or feature vectors. This is what world.hanzo.ai\n    polls.\n  - default (org scope) — requires a signed-in principal; scoped to the caller's\n    OWN org (a super admin may pass ?org= to target another org or \"\" for all).\n    Carries the absolute $/MTok indices for the admin savings panel.\n\nWindow: ?since= (RFC3339) or ?hours= (default 24, capped). Aggregates only.",
         "tags": [
@@ -11688,7 +11688,7 @@
     },
     "/v1/traffic/globe": {
       "get": {
-        "operationId": "get_v1_traffic_globe",
+        "operationId": "get_traffic_globe",
         "summary": "Returns the PUBLIC live request-geo aggregate for the world.hanzo.ai \"Hanzo mode\" globe: WHERE requests to api.hanzo.ai are coming from, as country/region points with per-service-class counts, plus headline throughput rates.",
         "description": "Returns the PUBLIC live request-geo aggregate for the\nworld.hanzo.ai \"Hanzo mode\" globe: WHERE requests to api.hanzo.ai are coming from,\nas country/region points with per-service-class counts, plus headline throughput\nrates.\n\nIt is AUTH-exempt and BALANCE-exempt exactly like /v1/router/stats?scope=platform:\n  - auth: the controller name \"traffic/globe\" is neither a get-/update- CRUD name\n    nor a super-admin/present-credential endpoint, so the authz filter passes it\n    through, and this handler requires no principal.\n  - balance: isBalanceExempt(\"/v1/traffic/...\") returns true.\n\nIt exposes ONLY aggregates — counts, rates, and country/region centroids — and\nNEVER any IP, per-request row, org, or user dimension (see object/traffic.go).\nMarketing telemetry; nothing sensitive.",
         "tags": [
@@ -11699,7 +11699,7 @@
     },
     "/v1/videos/generations": {
       "post": {
-        "operationId": "post_v1_videos_generations",
+        "operationId": "post_videos_generations",
         "summary": "Implements POST /v1/videos/generations — the ASYNC create.",
         "description": "Implements POST /v1/videos/generations — the ASYNC create.\n\nBody: {\"model\": \"...\", \"prompt\": \"...\", \"size\"?: \"1280x720\", \"seconds\"?: int}\n\nIt authenticates the caller, resolves the model to its upstream provider via\nthe shared routing table (zen3-video* / wan2-2-t2v-a14b → the spark-video\nbackend), reserves the per-video budget (the balance gate), creates ONE\nupstream job, registers it in the in-pod store, and returns the OpenAI-shaped\nvideo object with status \"queued\" IMMEDIATELY. The client then polls\nGET /v1/videos/{id} and downloads GET /v1/videos/{id}/content. Nothing is\nbilled here — the debit lands on completion.",
         "tags": [
@@ -11711,7 +11711,7 @@
     },
     "/v1/videos/{id}": {
       "get": {
-        "operationId": "get_v1_videos_by_id",
+        "operationId": "get_videos_by_id",
         "summary": "Implements GET /v1/videos/{id} — poll a job's status.",
         "description": "Implements GET /v1/videos/{id} — poll a job's status.\n\nIt authenticates the caller, verifies they OWN the job (the caller's billing\nsubject must equal the job's), performs ONE upstream status poll, and — the\nfirst time the job is observed completed — settles the reservation with the\nactual cost and records the billable usage event (exactly once). Returns the\nOpenAI-shaped video object.",
         "tags": [
@@ -11723,7 +11723,7 @@
     },
     "/v1/videos/{id}/content": {
       "get": {
-        "operationId": "get_v1_videos_by_id_content",
+        "operationId": "get_videos_by_id_content",
         "summary": "Implements GET /v1/videos/{id}/content — download the finished MP4.",
         "description": "Implements GET /v1/videos/{id}/content — download the finished MP4.\n\nIt authenticates + ownership-checks the caller, then proxies the upstream\n/content endpoint (bounded by the download concurrency ceiling) and streams the\nraw video bytes back inline. A successful download also bills the job once (for\nthe client that downloads without first polling to completion) — idempotent\nwith the poll path via job.markCompleted.",
         "tags": [
@@ -11735,7 +11735,7 @@
     },
     "/v1/wecom-bot/callback/{botId}": {
       "get": {
-        "operationId": "get_v1_wecom-bot_callback_by_botid",
+        "operationId": "get_wecom-bot_callback_by_botid",
         "summary": "Verify WeChat work bot callback URL",
         "description": "Verify WeChat work bot callback URL",
         "tags": [
@@ -11744,7 +11744,7 @@
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
-        "operationId": "post_v1_wecom-bot_callback_by_botid",
+        "operationId": "post_wecom-bot_callback_by_botid",
         "summary": "Process WeChat work bot messages",
         "description": "Process WeChat work bot messages",
         "tags": [
