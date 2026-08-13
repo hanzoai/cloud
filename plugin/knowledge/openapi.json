@@ -18,7 +18,7 @@
   "paths": {
     "/v1/kb/connectors": {
       "get": {
-        "operationId": "get_v1_kb_connectors",
+        "operationId": "get_kb_connectors",
         "summary": "Returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store.",
         "description": "Returns every supported knowledge connector with THIS org's\nconnection state and the REAL number of documents each has ingested into the\norg's store. A provider that is configured for the deployment but not yet\nconnected appears as disconnected, so the console can offer a Connect button.\nNo secret is ever returned.",
         "tags": [
@@ -40,7 +40,7 @@
     },
     "/v1/kb/connectors/catalog": {
       "get": {
-        "operationId": "get_v1_kb_connectors_catalog",
+        "operationId": "get_kb_connectors_catalog",
         "summary": "Returns the ONE catalog of everything a caller can connect: every first-party connector and every long-tail one, in a single list sorted by provider.",
         "description": "Returns the ONE catalog of everything a caller can\nconnect: every first-party connector and every long-tail one, in a single list\nsorted by provider. `configured` reports whether this deployment holds OAuth\ncredentials for a source, so the console can show Connect rather than a dead\nbutton, and `kind` is a badge only — the connect and sync lifecycle is\nidentical for both. The catalog itself is org-independent; a validated\nprincipal is still required. It is metadata only: no secret is ever returned.",
         "tags": [
@@ -73,7 +73,7 @@
     },
     "/v1/kb/connectors/{provider}": {
       "delete": {
-        "operationId": "delete_v1_kb_connectors_by_provider",
+        "operationId": "delete_kb_connectors_by_provider",
         "summary": "Revokes a connection: it tombstones the stored credential so a later sync cannot reuse it, purges this provider's points from the org's vector namespace, and marks the connector disconnected.",
         "description": "Revokes a connection: it tombstones the stored credential\nso a later sync cannot reuse it, purges this provider's points from the org's\nvector namespace, and marks the connector disconnected. The documents already\ningested stay in the org's store — they are the org's own data — but stop being\nretrievable by search; a caller deletes them through the document surface.",
         "tags": [
@@ -106,7 +106,7 @@
     },
     "/v1/kb/connectors/{provider}/callback": {
       "get": {
-        "operationId": "get_v1_kb_connectors_by_provider_callback",
+        "operationId": "get_kb_connectors_by_provider_callback",
         "summary": "CompleteConnectorOAuth finishes an OAuth connection: it exchanges the provider's code for a token, seals that token in KMS, and records the connection.",
         "description": "CompleteConnectorOAuth finishes an OAuth connection: it exchanges the\nprovider's code for a token, seals that token in KMS, and records the\nconnection. THE ORG COMES FROM THE SIGNED STATE, not from a header and not from\nthe provider, so an attacker cannot bind their own account to someone else's\norg — a tampered, expired or foreign-provider state is refused outright. The\ntoken itself is never returned, never written into the document, and never\nlogged; the document holds only its KMS path.",
         "tags": [
@@ -166,7 +166,7 @@
     },
     "/v1/kb/connectors/{provider}/connect": {
       "get": {
-        "operationId": "get_v1_kb_connectors_by_provider_connect",
+        "operationId": "get_kb_connectors_by_provider_connect",
         "summary": "StartConnectorOAuth returns the provider authorize URL the console opens to connect this org's account.",
         "description": "StartConnectorOAuth returns the provider authorize URL the console opens to\nconnect this org's account. There is no server-side redirect — the console\nstays in control of the navigation. The URL carries a state this server SIGNED\nover the caller's validated org, so the connection the callback completes can\nonly ever land in that org.",
         "tags": [
@@ -199,7 +199,7 @@
     },
     "/v1/kb/connectors/{provider}/sync": {
       "post": {
-        "operationId": "post_v1_kb_connectors_by_provider_sync",
+        "operationId": "post_kb_connectors_by_provider_sync",
         "summary": "Pulls the provider's documents for the caller's org and files them as knowledge sources, which the store's own hook then indexes — so a synced document is retrievable exactly like a hand-written page.",
         "description": "Pulls the provider's documents for the caller's org and files\nthem as knowledge sources, which the store's own hook then indexes — so a\nsynced document is retrievable exactly like a hand-written page. The org is the\nvalidated tenant and the credential is read from KMS, so an org can only ever\nsync its own connection. A provider failure is reported honestly (502) and\nrecorded on the connector rather than silently swallowed.",
         "tags": [
@@ -232,7 +232,7 @@
     },
     "/v1/kb/graph": {
       "get": {
-        "operationId": "get_v1_kb_graph",
+        "operationId": "get_kb_graph",
         "summary": "Returns the caller org's knowledge as a node/edge graph shaped for a force-directed renderer: pages, memories and synced sources as nodes; the page parent tree, the wikilinks between pages, and each source's connector provenance as edges.",
         "description": "Returns the caller org's knowledge as a node/edge graph\nshaped for a force-directed renderer: pages, memories and synced sources as\nnodes; the page parent tree, the wikilinks between pages, and each source's\nconnector provenance as edges. Wikilink targets are resolved HERE by title or\nslug, so a rename never needs an edge rewrite and a link that matches no page\nrenders as its own \"unresolved\" node instead of vanishing. ?project= narrows\nit. A store outage degrades to an honest empty graph, never a 5xx.",
         "tags": [
@@ -265,7 +265,7 @@
     },
     "/v1/kb/import": {
       "post": {
-        "operationId": "post_v1_kb_import",
+        "operationId": "post_kb_import",
         "summary": "Import an Obsidian, Notion, Roam or Evernote export into the org's knowledge base",
         "description": "Ingests an uploaded export as a tree of kb-page documents with its link structure intact. `?format=` picks the normalizer — obsidian, notion, roam or evernote — and the export arrives as a multipart `file` part, or as the raw request body when there is no multipart part: an Obsidian or Notion vault zip, a Roam JSON (raw or inside the zip Roam downloads), or an Evernote .enex.\n\nThe pages are filed through the SAME ingest path a connector sync uses, so the kb-page hook indexes each one for retrieval AND extracts its `[[wikilinks]]` into kb-link edges — the imported vault is searchable and its graph is navigable without a second pass. Parents are filed before their children, and each page takes a slug unique within the org (suffixed -2, -3, … on collision), so a re-import adds pages rather than overwriting the ones already there.\n\nScoped to the caller's validated org; `?project=` narrows every imported page to one project. No validated principal is 403, and an org that has not installed the kb module is refused with the install call to make first. The bounds are 64 MB per upload, 5000 pages and 8 MB per archive entry: pages past the five-thousandth are dropped and a larger entry is truncated at its bound, and a page the store rejects is skipped — so the answer's `imported` count is what was actually filed, not what was sent.",
         "tags": [
@@ -275,7 +275,7 @@
     },
     "/v1/kb/search": {
       "post": {
-        "operationId": "post_v1_kb_search",
+        "operationId": "post_kb_search",
         "summary": "Runs a semantic search over the caller org's own knowledge — its wiki pages, its agent memories and everything its connectors have synced — and returns the matching passages.",
         "description": "Runs a semantic search over the caller org's own knowledge —\nits wiki pages, its agent memories and everything its connectors have synced —\nand returns the matching passages. This is the RAG entry point: an agent asks\n\"what does this org know about X\" and the org's OWN vector namespace answers.\nThe org comes from the validated principal, and both the collection and the\npayload filter are pinned to it, so cross-tenant retrieval is impossible. An\nunreachable index returns an honest empty result set with degraded=true, never\na 5xx.",
         "tags": [

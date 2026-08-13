@@ -18,7 +18,7 @@
   "paths": {
     "/v1/captable/classes": {
       "get": {
-        "operationId": "get_v1_captable_classes",
+        "operationId": "get_captable_classes",
         "summary": "Returns the caller org's share classes, in creation order.",
         "description": "Returns the caller org's share classes, in creation order. A\nshare class is what a certificate is issued in, and every class the company\nhas authorized appears. The response is a bare JSON array, not an envelope.",
         "tags": [
@@ -41,7 +41,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_captable_classes",
+        "operationId": "post_captable_classes",
         "summary": "Define a share class",
         "description": "Creates a class of stock — its authorized share count, votes per share, par and issue price, seniority, conversion rights and liquidation/participation multiples — which is what shares, priced rounds and equity plans are then issued against.\n\nTwo fields are the company's to assign, not the caller's: the class index auto-increments per company, and the certificate prefix is DERIVED from the class type (CS for COMMON, PS for anything else), so a prefix in the body is ignored.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
@@ -51,7 +51,7 @@
     },
     "/v1/captable/classes/{id}": {
       "patch": {
-        "operationId": "patch_v1_captable_classes_by_id",
+        "operationId": "patch_captable_classes_by_id",
         "summary": "Amend a share class",
         "description": "Rewrites one share class — the amendment path for a class whose authorized count, price, seniority or preference terms have changed.\n\nIt REPLACES the class rather than merging into it: every field is taken from this body, so an omitted field resets to the create-time default instead of keeping its current value. Send the full class. The index and the derived prefix are unchanged by an amendment. An id that is not this company's is not found.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
@@ -71,7 +71,7 @@
     },
     "/v1/captable/company": {
       "get": {
-        "operationId": "get_v1_captable_company",
+        "operationId": "get_captable_company",
         "summary": "Returns the caller org's cap-table company record.",
         "description": "Returns the caller org's cap-table company record. The row is\nseeded when the tenant's store first opens, so it always exists; its name and\nincorporation details are set with PUT /v1/captable/company.",
         "tags": [
@@ -91,7 +91,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_captable_company",
+        "operationId": "put_captable_company",
         "summary": "Sets the caller org's company name and incorporation details.",
         "description": "Sets the caller org's company name and incorporation details.\nThe name is required; the three incorporation fields are optional and each is\nstored as empty when omitted, so a call that sends only a name CLEARS them.\nThe company row itself is seeded when the tenant's store first opens, so this\nnever creates one.",
         "tags": [
@@ -123,7 +123,7 @@
     },
     "/v1/captable/convertibles": {
       "get": {
-        "operationId": "get_v1_captable_convertibles",
+        "operationId": "get_captable_convertibles",
         "summary": "Returns the caller org's convertible notes, newest first.",
         "description": "Returns the caller org's convertible notes, newest first. A\nnote's principal sits OUTSIDE issued equity until it converts, so it is not\npart of the share counts.",
         "tags": [
@@ -143,7 +143,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_captable_convertibles",
+        "operationId": "post_captable_convertibles",
         "summary": "Record a convertible note",
         "description": "Records a convertible note held by a stakeholder: the principal, the conversion cap, discount and interest rate, MFN, and the issue and board-approval dates.\n\nThe stakeholder must already exist in this company, and the note's public id must be unused there — a reused id is a conflict rather than an overwrite. Like a SAFE, this records the instrument only; conversion is not performed here.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
@@ -153,7 +153,7 @@
     },
     "/v1/captable/convertibles/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_convertibles_by_id",
+        "operationId": "delete_captable_convertibles_by_id",
         "summary": "Removes one of the caller org's convertible notes, taking its principal out of the cap table's unconverted-instrument totals.",
         "description": "Removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals. An id this org\ndoes not hold is not found.",
         "tags": [
@@ -186,7 +186,7 @@
     },
     "/v1/captable/investments": {
       "get": {
-        "operationId": "get_v1_captable_investments",
+        "operationId": "get_captable_investments",
         "summary": "Returns the caller org's investments, newest first.",
         "description": "Returns the caller org's investments, newest first. It spans\nevery round, so it is the flat ledger of cheques written into the company,\neach naming its investor and the round it went into.",
         "tags": [
@@ -208,7 +208,7 @@
     },
     "/v1/captable/options": {
       "get": {
-        "operationId": "get_v1_captable_options",
+        "operationId": "get_captable_options",
         "summary": "Returns the caller org's option grants, newest first.",
         "description": "Returns the caller org's option grants, newest first. Each row is\njoined to its grantee and its equity plan. Grants that are EXERCISED, EXPIRED\nor CANCELLED are listed here but do not dilute the cap table.",
         "tags": [
@@ -228,7 +228,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_captable_options",
+        "operationId": "post_captable_options",
         "summary": "Grant options from an equity plan",
         "description": "Records an option grant to a stakeholder under an equity plan — quantity, exercise price, ISO/NSO type, cliff and vesting years, and the issue, expiration, vesting-start, board-approval and Rule 144 dates.\n\nThe stakeholder and the equity plan must both already exist in this company, and the grant id must be unused there — a reused grant id is a conflict, so a grant can never be overwritten by a later one carrying the same number.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
@@ -238,7 +238,7 @@
     },
     "/v1/captable/options/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_options_by_id",
+        "operationId": "delete_captable_options_by_id",
         "summary": "Removes one of the caller org's option grants, taking its shares out of the cap table's granted-options and fully-diluted counts.",
         "description": "Removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts. An id this org\ndoes not hold is not found.",
         "tags": [
@@ -271,7 +271,7 @@
     },
     "/v1/captable/plans": {
       "get": {
-        "operationId": "get_v1_captable_plans",
+        "operationId": "get_captable_plans",
         "summary": "Returns the caller org's equity plans, newest first.",
         "description": "Returns the caller org's equity plans, newest first. An equity\nplan is an option pool: a reserve of shares, drawn from one share class, that\noption grants are written against.",
         "tags": [
@@ -291,7 +291,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_captable_plans",
+        "operationId": "post_captable_plans",
         "summary": "Open an equity incentive plan",
         "description": "Reserves a pool of shares out of a share class for option grants, with the board approval and effective dates and what happens to cancelled options.\n\nThe share class must already exist in this company — a plan cannot reserve out of nothing. Note the field name the bundle reads for the cancellation behaviour is `defaultCancellatonBehavior`; that spelling is the wire, and a correctly spelled key is simply not seen.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
@@ -301,7 +301,7 @@
     },
     "/v1/captable/rounds": {
       "get": {
-        "operationId": "get_v1_captable_rounds",
+        "operationId": "get_captable_rounds",
         "summary": "Returns the caller org's fundraising rounds, newest first.",
         "description": "Returns the caller org's fundraising rounds, newest first. A round\ngroups a fundraising event; a PRICED round also carries the share class and\nprice per share it issues at.",
         "tags": [
@@ -321,7 +321,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_captable_rounds",
+        "operationId": "post_captable_rounds",
         "summary": "Open a funding round",
         "description": "Opens a round with its name, type and target amount. It starts OPEN with nothing raised; investments are then added to it, and closing it is its own call.\n\nA PRICED round is the constrained case: it requires a share class that exists in this company and a price per share above zero, because that price is what converts each investment into issued shares. Its pre-money valuation is optional. A non-priced round carries none of the three.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
@@ -331,7 +331,7 @@
     },
     "/v1/captable/rounds/{id}": {
       "get": {
-        "operationId": "get_v1_captable_rounds_by_id",
+        "operationId": "get_captable_rounds_by_id",
         "summary": "Returns one of the caller org's fundraising rounds together with every investment written into it, oldest first.",
         "description": "Returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first. A round id that does not exist in the\ncaller's org is not found — including one that exists in another tenant, since\nthe org comes from the caller's principal and is part of the lookup.",
         "tags": [
@@ -364,7 +364,7 @@
     },
     "/v1/captable/rounds/{id}/close": {
       "post": {
-        "operationId": "post_v1_captable_rounds_by_id_close",
+        "operationId": "post_captable_rounds_by_id_close",
         "summary": "Closes one of the caller org's fundraising rounds, recording the close date and moving its status to CLOSED.",
         "description": "Closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED. Only an OPEN round can be closed:\na round that is already closed — like an id this org does not hold — is not\nfound. Closing a round does not change what was invested in it.",
         "tags": [
@@ -407,7 +407,7 @@
     },
     "/v1/captable/rounds/{id}/investments": {
       "post": {
-        "operationId": "post_v1_captable_rounds_by_id_investments",
+        "operationId": "post_captable_rounds_by_id_investments",
         "summary": "Record an investment into a round",
         "description": "Records what a stakeholder put into a round and adds it to the round's raised total.\n\nOn a PRICED round this ISSUES SHARES as well as recording the money: the amount is divided by the round's price per share, rounded DOWN to whole shares, and a new certificate for them is issued to the investor in the round's share class — so an amount too small to buy one whole share is refused rather than recorded as a zero-share investment. On a non-priced round the money is recorded and no shares are issued.\n\nThe round must exist in this company and still be OPEN — a closed round refuses further investment — and the investor must already be a stakeholder here. The date defaults to today when omitted.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
@@ -427,7 +427,7 @@
     },
     "/v1/captable/safes": {
       "get": {
-        "operationId": "get_v1_captable_safes",
+        "operationId": "get_captable_safes",
         "summary": "Returns the caller org's SAFEs, newest first.",
         "description": "Returns the caller org's SAFEs, newest first. A SAFE is a simple\nagreement for future equity: its capital sits OUTSIDE issued equity until it\nconverts, so it is not part of the share counts.",
         "tags": [
@@ -447,7 +447,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_captable_safes",
+        "operationId": "post_captable_safes",
         "summary": "Record a SAFE",
         "description": "Records a Simple Agreement for Future Equity held by a stakeholder: the capital in, the valuation cap and discount, MFN and pro-rata rights, pre- or post-money type, and the issue and board-approval dates.\n\nThe stakeholder must already exist in this company, and the SAFE's public id must be unused there — a reused id is a conflict rather than an overwrite. This records the instrument; it does not convert it, so nothing is issued against a share class until a round does that.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
@@ -457,7 +457,7 @@
     },
     "/v1/captable/safes/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_safes_by_id",
+        "operationId": "delete_captable_safes_by_id",
         "summary": "Removes one of the caller org's SAFEs, taking its capital out of the cap table's unconverted-instrument totals.",
         "description": "Removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals. An id this org does not hold is not\nfound.",
         "tags": [
@@ -490,7 +490,7 @@
     },
     "/v1/captable/shares": {
       "get": {
-        "operationId": "get_v1_captable_shares",
+        "operationId": "get_captable_shares",
         "summary": "Returns the caller org's share certificates, newest first.",
         "description": "Returns the caller org's share certificates, newest first. Each row\nis joined to its holder and its share class, so a certificate names who holds\nit and what class it is in without a second call.",
         "tags": [
@@ -510,7 +510,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_captable_shares",
+        "operationId": "post_captable_shares",
         "summary": "Issue a share certificate",
         "description": "Issues shares of a class to a stakeholder as a certificate: quantity, price and capital contributed, the vesting cliff and term, the legends on the certificate, and the issue, Rule 144, vesting-start and board-approval dates.\n\nBoth the stakeholder and the share class must already exist in this company, and the certificate id must be unused there — a reused id is a conflict, never a silent overwrite of an existing certificate.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
@@ -520,7 +520,7 @@
     },
     "/v1/captable/shares/transfer": {
       "post": {
-        "operationId": "post_v1_captable_shares_transfer",
+        "operationId": "post_captable_shares_transfer",
         "summary": "Transfer shares to another stakeholder",
         "description": "Moves shares from one certificate to another stakeholder, in one atomic step.\n\nOMITTING `quantity` transfers the WHOLE certificate, which simply reassigns it and answers newShareId null — that is the difference between a full and a partial transfer, and it is why quantity is absent rather than zero. A partial transfer shrinks the source certificate and issues a NEW one to the recipient, so it requires a `certificateId` for that new certificate and refuses a reused one. The quantity must be between 1 and what the source certificate actually holds; the recipient must be a stakeholder of this same company.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
@@ -530,7 +530,7 @@
     },
     "/v1/captable/shares/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_shares_by_id",
+        "operationId": "delete_captable_shares_by_id",
         "summary": "Removes one of the caller org's share certificates, taking its shares out of the cap table's outstanding and fully-diluted counts.",
         "description": "Removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts. An id this\norg does not hold is not found.",
         "tags": [
@@ -563,7 +563,7 @@
     },
     "/v1/captable/stakeholders": {
       "get": {
-        "operationId": "get_v1_captable_stakeholders",
+        "operationId": "get_captable_stakeholders",
         "summary": "Returns the caller org's stakeholders, newest first.",
         "description": "Returns the caller org's stakeholders, newest first. The\nresponse is a bare JSON array, not an envelope. Each row carries the holder's\ncontact and address fields alongside the company's name.",
         "tags": [
@@ -586,7 +586,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_captable_stakeholders",
+        "operationId": "post_captable_stakeholders",
         "summary": "Add stakeholders to the cap table",
         "description": "Records the people and institutions that can hold equity — the rows every share, option, SAFE, note and investment is issued to.\n\nThe body is ONE stakeholder object or an ARRAY of them, and the array is the point: a whole roster loads in a single call. Email is the identity within the company, so a stakeholder whose email is already on the table is SKIPPED rather than duplicated or rejected — the 201 reports how many rows were actually inserted, which is what makes re-running an import safe. Validation is all-or-nothing across the batch: one bad entry refuses the whole array.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
@@ -596,7 +596,7 @@
     },
     "/v1/captable/stakeholders/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_stakeholders_by_id",
+        "operationId": "delete_captable_stakeholders_by_id",
         "summary": "Removes one of the caller org's stakeholders.",
         "description": "Removes one of the caller org's stakeholders. It REFUSES to\norphan issued equity: a holder that still holds share certificates or option\ngrants cannot be deleted, and answers 400 saying so — release or transfer the\nholdings first. An id this org does not hold is not found.",
         "tags": [
@@ -627,7 +627,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_captable_stakeholders_by_id",
+        "operationId": "patch_captable_stakeholders_by_id",
         "summary": "Changes one of the caller org's stakeholders.",
         "description": "Changes one of the caller org's stakeholders. It is a\nPARTIAL update: only the fields the request names are written, and a field\nsent as null clears that column. A request that names no updatable field is\nrefused, and an id this org does not hold is not found.\n\nThe values are stored as sent. Unlike adding a stakeholder, this route does\nnot check the email's shape or the type and relationship vocabularies, so it\ncan record a value that adding one would have rejected.",
         "tags": [
@@ -670,7 +670,7 @@
     },
     "/v1/captable/summary": {
       "get": {
-        "operationId": "get_v1_captable_summary",
+        "operationId": "get_captable_summary",
         "summary": "Computes the caller org's cap table.",
         "description": "Computes the caller org's cap table. It answers who owns what on a\nfully-diluted basis: outstanding shares, granted options, per-stakeholder\nownership percentages, each share class's authorized versus issued position,\nand the capital sitting on SAFEs and convertible notes that have not yet\nconverted. Only non-terminal option grants dilute — EXERCISED, EXPIRED and\nCANCELLED grants are excluded, so equity issued through an exercised option is\nnever counted twice.",
         "tags": [

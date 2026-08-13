@@ -18,7 +18,7 @@
   "paths": {
     "/v1/tel/calls": {
       "get": {
-        "operationId": "get_v1_tel_calls",
+        "operationId": "get_tel_calls",
         "summary": "Lists the calls this org has placed or received, newest first.",
         "description": "Lists the calls this org has placed or received, newest first. Like the\nmessage list beside it, these are our own records rather than the carrier's.",
         "tags": [
@@ -38,7 +38,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_tel_calls",
+        "operationId": "post_tel_calls",
         "summary": "Dials.",
         "description": "Dials. An `agent` names a Hanzo assistant to answer it; the call is\nrefused up front when no assistant plane is configured, because a call that\nconnects to silence has already cost the person who answered it.",
         "tags": [
@@ -70,7 +70,7 @@
     },
     "/v1/tel/calls/{id}": {
       "delete": {
-        "operationId": "delete_v1_tel_calls_by_id",
+        "operationId": "delete_tel_calls_by_id",
         "summary": "Ends a call this org placed.",
         "description": "Ends a call this org placed. The holding is read for THIS org before the\ncarrier is asked, for the reason releaseNumber gives one surface up: an id\nbelonging to another tenant would otherwise be hung up by whoever guessed it.",
         "tags": [
@@ -102,7 +102,7 @@
     },
     "/v1/tel/messages": {
       "get": {
-        "operationId": "get_v1_tel_messages",
+        "operationId": "get_tel_messages",
         "summary": "Lists the messages this org has sent or received, newest first.",
         "description": "Lists the messages this org has sent or received, newest first. Records from\nour own store, not the carrier's — so it is what this platform did on the\norg's behalf, which is the set an audit or a bill has to agree with.",
         "tags": [
@@ -122,7 +122,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_tel_messages",
+        "operationId": "post_tel_messages",
         "summary": "Sends a message from one of this org's own numbers.",
         "description": "Sends a message from one of this org's own numbers.\n\n`from` must be a number the org HOLDS, checked against the store rather than\ntaken on trust — a caller that could send from any number could impersonate\none, and the carrier would deliver it. `to` is required, and the body needs\ntext or media, because a message with neither is delivered as nothing and\nbilled as something.",
         "tags": [
@@ -154,7 +154,7 @@
     },
     "/v1/tel/numbers": {
       "get": {
-        "operationId": "get_v1_tel_numbers",
+        "operationId": "get_tel_numbers",
         "summary": "Lists the phone numbers this org HOLDS — the ones it has bought and not released.",
         "description": "Lists the phone numbers this org HOLDS — the ones it has bought and not\nreleased. Distinct from the availability search one path down\n(`/numbers/available`), which asks the carrier what could be bought: this\nanswers only from our own store, so it is what an org owns rather than what\nit could own.",
         "tags": [
@@ -174,7 +174,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_tel_numbers",
+        "operationId": "post_tel_numbers",
         "summary": "Provisions with the carrier FIRST and records second.",
         "description": "Provisions with the carrier FIRST and records second. The other order\nrecords a holding that may not exist, and a number the platform believes it owns\nbut cannot use is worse than one it failed to buy.",
         "tags": [
@@ -206,7 +206,7 @@
     },
     "/v1/tel/numbers/available": {
       "get": {
-        "operationId": "get_v1_tel_numbers_available",
+        "operationId": "get_tel_numbers_available",
         "summary": "Asks the carrier what is available to buy.",
         "description": "Asks the carrier what is available to buy. Nothing is recorded —\na search is not a holding, and treating it as one is how inventory leaks.",
         "tags": [
@@ -262,7 +262,7 @@
     },
     "/v1/tel/numbers/{id}": {
       "delete": {
-        "operationId": "delete_v1_tel_numbers_by_id",
+        "operationId": "delete_tel_numbers_by_id",
         "summary": "Checks the holding is THIS org's before it reaches the carrier.",
         "description": "Checks the holding is THIS org's before it reaches the carrier.\nWithout that read, an id belonging to another tenant would be released by\nwhoever guessed it.",
         "tags": [
@@ -294,7 +294,7 @@
     },
     "/v1/tel/summary": {
       "get": {
-        "operationId": "get_v1_tel_summary",
+        "operationId": "get_tel_summary",
         "summary": "Counts what this org holds on the telephony plane: its numbers, its calls and its messages.",
         "description": "Counts what this org holds on the telephony plane: its numbers, its calls and\nits messages. The one read a dashboard makes before it asks for any list, so\nit answers three totals and no rows.",
         "tags": [

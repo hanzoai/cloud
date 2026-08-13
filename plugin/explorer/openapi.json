@@ -21,7 +21,7 @@
   "paths": {
     "/v1/indexers": {
       "get": {
-        "operationId": "get_v1_indexers",
+        "operationId": "get_indexers",
         "summary": "Reports the deployment's chain indexer(s) and how far each has indexed.",
         "description": "Reports the deployment's chain indexer(s) and how far each has\nindexed. Identity and health come from the indexer's /health; the latest indexed\nblock (height + time) from its /v1/explorer/blocks. The row EXISTS if EITHER call\nreaches the indexer; when the indexer is entirely unreachable the answer degrades\nto an honest-EMPTY list at 200, not a 502. No chain HEAD is exposed by the indexer\nREST, so `lag` is honestly omitted rather than fabricated.",
         "tags": [
@@ -43,7 +43,7 @@
     },
     "/v1/oracles": {
       "get": {
-        "operationId": "get_v1_oracles",
+        "operationId": "get_oracles",
         "summary": "Reports the on-chain price/data oracles from the graph's O-Chain PriceFeed registry.",
         "description": "Reports the on-chain price/data oracles from the graph's O-Chain\nPriceFeed registry. A reachable graph with no feeds answers an honest empty list;\nan unreachable or erroring graph likewise degrades to an empty list at 200 rather\nthan a 502, so the console never error-toasts. No feed is ever fabricated.",
         "tags": [

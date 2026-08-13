@@ -36,7 +36,7 @@
   "paths": {
     "/v1/builds": {
       "get": {
-        "operationId": "get_v1_builds",
+        "operationId": "get_builds",
         "summary": "Returns real build records for your org.",
         "description": "Returns real build records for your org.\n\nIt lists the org's BuildKit build records — the git build step behind a deploy —\neach with the repo it built, the short commit, its status, when it started and\nhow long it took. These are real records or an honest empty list; a build appears\nhere because one ran, never because a page needed a row. Builds are created only\nby /deploy and the push-to-deploy hook. Requires a validated principal; 403\nwithout one.",
         "tags": [
@@ -58,7 +58,7 @@
     },
     "/v1/environments": {
       "get": {
-        "operationId": "get_v1_environments",
+        "operationId": "get_environments",
         "summary": "Returns your deploy targets, and what is running on each.",
         "description": "Returns your deploy targets, and what is running on each.\n\nIt returns the org's environments — the distinct deploy targets its applications\nname, `production` for anything that names none — each aggregating the apps that\ntarget it, a rolled-up status and when it last changed.\n\nAn environment is DERIVED, not stored: there is nothing to create or delete here,\nand an environment exists exactly as long as an app points at it. Requires a\nvalidated principal; 403 without one.",
         "tags": [
@@ -80,7 +80,7 @@
     },
     "/v1/pipelines": {
       "get": {
-        "operationId": "get_v1_pipelines",
+        "operationId": "get_pipelines",
         "summary": "Returns one build-and-deploy pipeline per app, with its latest run.",
         "description": "Returns one build-and-deploy pipeline per app, with its latest run.\n\nIt returns one pipeline per application in the caller's org — its repo or image\nsource, its current status, and when its most recent deployment ran and how long\nit took. A pipeline is a PROJECTION of an app plus its newest deployment, not a\nseparate record: it comes into existence with the app and is triggered only\nthrough /deploy, never here. Requires a validated principal; 403 without one.",
         "tags": [
@@ -102,7 +102,7 @@
     },
     "/v1/platform/apps": {
       "get": {
-        "operationId": "get_v1_platform_apps",
+        "operationId": "get_platform_apps",
         "summary": "What this organization has declared, and what CD did with it",
         "description": "Returns the declarations in the caller's own org directory, each joined with the Hanzo CD Application reconciling it — sync verdict, health, the universe commit last applied. `cd` is null for a declaration the delivery plane has no Application for, which is the normal state of one that exists only on a branch.\n\nIf the delivery plane cannot be read, the declarations are still returned and `cdUnavailable` says why. An unreadable plane never renders as \"nothing has been reconciled\".",
         "tags": [
@@ -110,7 +110,7 @@
         ]
       },
       "post": {
-        "operationId": "post_v1_platform_apps",
+        "operationId": "post_platform_apps",
         "summary": "Deploy an app through cd.hanzo.ai",
         "description": "Builds a git repository into an image and writes the declaration that names it — a values file in `hanzoai/universe` under `charts/app/values/\u003cnamespace\u003e/\u003cname\u003e.yaml`, which the `fleet` ApplicationSet renders as one Application. That file IS the deployment: nothing else has to be applied.\n\n`mode` decides whether anything can go live. The default, `branch`, pushes to `deploy/\u003cnamespace\u003e/\u003cname\u003e/\u003ctag\u003e` and returns a review URL; the generator reads main, so a branch declaration deploys NOTHING and merging the review is the deliberate act. `commit` writes main, and proves the image is pullable first — a declaration naming an image the registry cannot serve is an ImagePullBackOff with no rollback path.\n\nOmit `tag` to build; give it to declare an image an earlier call already built, which is how a green build is released without rebuilding it.\n\nAn org is its name: the values DIRECTORY, the destination NAMESPACE and the AppProject FENCE are all `\u003corg\u003e`, and the image is `\u003cregistry\u003e/\u003corg\u003e/\u003capp\u003e`. None of them is a request field — the directory decides what CD admits the sync under and the repository decides what the cluster pulls, so a caller who could name either could reach outside its own org.\n\n`org` is an ACT-AS, not a placement field: it defaults to the caller's own, and naming another requires SuperAdmin. So does naming a RESERVED org — the platform's own namespace family (the brands and their environments, the control and delivery planes, `admin`) — even when it is the caller's own, because an IAM org named `kube-system` does not own Kubernetes. Both refuse rather than downgrade, so an escape attempt is never indistinguishable from a normal request.\n\nA host outside the caller's org subtree is refused: claim and verify a custom domain first.",
         "tags": [
@@ -120,7 +120,7 @@
     },
     "/v1/platform/apps/{app}": {
       "get": {
-        "operationId": "get_v1_platform_apps_by_app",
+        "operationId": "get_platform_apps_by_app",
         "summary": "One declaration",
         "description": "The values file for one app as git declares it: image repository and tag, hosts, replicas, and whether CD is automated on it. 404 when this organization declares no such app.",
         "tags": [
@@ -140,7 +140,7 @@
     },
     "/v1/platform/apps/{app}/cd": {
       "get": {
-        "operationId": "get_v1_platform_apps_by_app_cd",
+        "operationId": "get_platform_apps_by_app_cd",
         "summary": "One app's reconciliation",
         "description": "The Hanzo CD Application for one declaration, on its own — the poll a deploy view makes while it waits, without re-reading the whole inventory. 404 while the declaration exists only on a branch, because the generator reads main.",
         "tags": [
@@ -160,7 +160,7 @@
     },
     "/v1/platform/cd": {
       "get": {
-        "operationId": "get_v1_platform_cd",
+        "operationId": "get_platform_cd",
         "summary": "The delivery plane",
         "description": "Every Hanzo CD Application this caller may observe, with its sync verdict, health, the universe revision last applied, and whether automation and self-heal are on. A SuperAdmin sees the fleet; an org admin sees only Applications whose destination namespace IS its own organization, and never a reserved one.\n\nA cluster with no CD installed answers an empty plane. A plane that cannot be READ answers 503 and says why — the two are opposite facts and never share a shape.",
         "tags": [
@@ -170,7 +170,7 @@
     },
     "/v1/platform/ci": {
       "get": {
-        "operationId": "get_v1_platform_ci",
+        "operationId": "get_platform_ci",
         "summary": "Continuous integration (not wired)",
         "description": "Answers 501. The forge's Actions runs need a Forgejo API client and this deployment has none; an empty run list would be indistinguishable from a forge with no runs.",
         "tags": [
@@ -180,7 +180,7 @@
     },
     "/v1/platform/fleet": {
       "get": {
-        "operationId": "get_v1_platform_fleet",
+        "operationId": "get_platform_fleet",
         "summary": "Returns the platform's own service tier, and where it has drifted.",
         "description": "Returns the platform's own service tier, and where it has drifted.\n\nIt returns the board for the services the PLATFORM itself runs — iam, kms,\ngateway and the rest — as `{apps, summary}`: per service its environment, health,\nphase, the image tag its CR DECLARES, the tag actually running, and the drift\nbetween them, plus a summary counting the board green, yellow and red.\n\nThis is not a customer surface. `/v1/platform/projects/:project/apps` is a\ntenant's apps; this is the tier those tenants run ON, which is why the two are\nnamed differently rather than sharing a prefix.\n\nAdmission is scoped at the SCAN, before any CR is read: a platform SuperAdmin\nobserves the whole fleet, an org admin observes only their own org's namespaces,\nand an org that owns none gets an empty board — a non-super caller never even\nlists another org's services. Narrow further with `env`, `health`, `org`, or\n`drift=1` for only what has drifted.\n\nIt degrades honestly rather than failing whole: a namespace that does not exist\nis skipped, and a running-state read the caller cannot make leaves the running\ntag empty — an unknown, never a guess — while the declared, health and phase\ncolumns still render.",
         "tags": [
@@ -240,7 +240,7 @@
     },
     "/v1/platform/fleet/{app}": {
       "get": {
-        "operationId": "get_v1_platform_fleet_by_app",
+        "operationId": "get_platform_fleet_by_app",
         "summary": "Returns one platform service, resolved to production by default.",
         "description": "Returns one platform service, resolved to production by default.\n\nIt returns a single platform service by its CR name, with the same\ndeclared-versus-running and drift facts the board carries. The name must be a\nDNS-1123 label; anything else is 400.\n\nNamespaces are scanned in lifecycle order — main, then test, then dev — and the\nfirst match wins, so a bare name resolves to PRODUCTION. The scan covers only the\nnamespaces the caller is authorized for, so an org admin can never read a service\noutside their own org, and a name found in none of them is 404 rather than a leak.",
         "tags": [
@@ -282,7 +282,7 @@
     },
     "/v1/platform/fleet/{app}/deploy": {
       "post": {
-        "operationId": "post_v1_platform_fleet_by_app_deploy",
+        "operationId": "post_platform_fleet_by_app_deploy",
         "summary": "Rolls a platform service's pods, in a named environment.",
         "description": "Rolls a platform service's pods, in a named environment.\n\nIt triggers a rolling restart of one platform service's Deployment by stamping a\nfresh restart annotation, and answers 202 with the app, the namespace, the\nenvironment and the timestamp. It restarts pods; it does NOT change the image — a\nversion change is the release path, not this.\n\nSuperAdmin ONLY, and deliberately narrower than the read gate beside it. The only\nnamespaces this board touches are the platform's own tier, so a restart here\nrecycles a SHARED service every tenant depends on. A brand-org admin is a\ncustomer-org admin, not a platform operator: observing the board is bounded and\naudited, and restarting production identity is not.\n\n`?env=main|test|dev` is REQUIRED — a bare call does not default to production,\nwhich is what closes the fat-finger and confused-deputy hazard — and any other\nvalue is 400. A service with no Deployment to restart in that environment is 404.",
         "tags": [
@@ -325,7 +325,7 @@
     },
     "/v1/platform/health": {
       "get": {
-        "operationId": "get_v1_platform_health",
+        "operationId": "get_platform_health",
         "summary": "Reports whether this control plane can actually deploy anything.",
         "description": "Reports whether this control plane can actually deploy anything.\n\nA real probe, not a status page. It answers 200 only when the metadata store is\nopen AND the cluster is genuinely reachable — proved by LISTING the operator App\nCRD, which settles reachability and CRD presence in one bounded call, and which\nis the exact question every deploy depends on. Anything else is 503 carrying the\nreal reason and whether the CRD was found.\n\nA constructed cluster client proves nothing — it is built from a kubeconfig, not\nfrom a reachable apiserver — so this deliberately spends a round trip rather than\nreporting `ok` while every deploy fails. Not admin-gated: liveness has to be\nprobe-able without a credential.",
         "tags": [
@@ -357,7 +357,7 @@
     },
     "/v1/platform/projects": {
       "get": {
-        "operationId": "get_v1_platform_projects",
+        "operationId": "get_platform_projects",
         "summary": "Returns your org's projects, each with how many apps live under it.",
         "description": "Returns your org's projects, each with how many apps live under it.\n\nIt lists the caller org's projects with the number of platform applications in\neach. A project is IAM's resource — it is created and deleted at\n/v1/iam/projects, never here — so this is the ONE projection IAM cannot serve:\nthe project plus what the platform has put under it.\n\nRequires a validated principal; 403 without one, and the org comes from that\nvalidated identity rather than a request header. This is the console's first\nauthenticated read, so a project store that is not yet initialised degrades to\nan EMPTY list rather than a 500 — a new org genuinely has zero projects — and\nthe real cause is surfaced to operators instead of to the caller.",
         "tags": [
@@ -382,7 +382,7 @@
     },
     "/v1/platform/projects/{project}": {
       "get": {
-        "operationId": "get_v1_platform_projects_by_project",
+        "operationId": "get_platform_projects_by_project",
         "summary": "Returns one project and its app count.",
         "description": "Returns one project and its app count.\n\nIt returns a single project of the caller's org with the number of platform\napplications under it. A project this org does not have is 404, which is also\nwhat another tenant's project looks like from here. Requires a validated\nprincipal; 403 without one.",
         "tags": [
@@ -415,7 +415,7 @@
     },
     "/v1/platform/projects/{project}/apps": {
       "get": {
-        "operationId": "get_v1_platform_projects_by_project_apps",
+        "operationId": "get_platform_projects_by_project_apps",
         "summary": "Returns the applications in one project, with what the cluster says about them.",
         "description": "Returns the applications in one project, with what the cluster says\nabout them.\n\nIt lists the caller org's applications under one project. Each row carries the\nstored record and, for an app that is live or deploying, the LIVE phase and\nhealth read from its operator Service CR; an app with sealed env also carries\nits secret-sync state. Those cluster reads are best-effort — an unreachable\ncluster leaves those fields empty and never blocks the listing.\n\nThe project must exist in IAM for this org, or the answer is 404; the `default`\nproject is implicit and always accepted, because it is part of what an org IS.\nRequires a validated principal; 403 without one.",
         "tags": [
@@ -449,7 +449,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_platform_projects_by_project_apps",
+        "operationId": "post_platform_projects_by_project_apps",
         "summary": "Creates an application from a git repo or a container image.",
         "description": "Creates an application from a git repo or a container image.\n\nIt registers a new application under one of the caller org's projects and\nanswers 201 with it. Creating does NOT deploy: the app lands in `draft` and\nnothing reaches the cluster until /deploy.\n\n`source` is `git` — which requires `repo.url` — or `image`, which requires\n`image.repository`; anything else is 400. A git app builds with zero-config\n`pack` by default and may opt into `dockerfile`; an image app never builds. The\nrepo URL and Dockerfile path are validated here against the SAME allowlist the\nprivileged build enforces, so an unsafe source is refused before it is ever\npersisted.\n\nThe `slug` is the app's identity in the cluster: given or derived from `name`,\nit must match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, and a slug already used in\nthis project is 409. `replicas` and `storageGb` are clamped to the deployment's\nlimits rather than refused.\n\nEnv keys must match `^[A-Za-z_][A-Za-z0-9_]*$`. A variable marked `secret: true`\nis SEALED into KMS and its plaintext is never written to the database — and if\nKMS is unavailable the create fails 503 rather than falling back to storing a\nsecret in the clear.\n\nThe app is seeded with its canonical default host, so it has a working HTTPS URL\nthe moment it deploys. A bare custom domain cannot be attached here — it has to\ngo through add-domain and DNS verification first. Requires a validated\nprincipal; 403 without one, and every cluster object it will later create lands\nin that org's own `tenant-\u003corg\u003e` namespace.",
         "tags": [
@@ -492,7 +492,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}": {
       "delete": {
-        "operationId": "delete_v1_platform_projects_by_project_apps_by_app",
+        "operationId": "delete_platform_projects_by_project_apps_by_app",
         "summary": "Deletes an application and tears down what it runs.",
         "description": "Deletes an application and tears down what it runs.\n\nIt removes the application record and tears down what it owns in the org's\ntenant namespace — its operator Service CR and its KMSSecret — then answers 204.\nAn app this org and project do not have is 404, never a silent success.\n\nTeardown is best-effort by design: a cluster that refuses or is unreachable does\nnot block the delete, so the record cannot be left orphaned behind a broken\ncluster; the failure is logged for operators and the orphan reaper reconciles\nit. Requires a validated principal; 403 without one.",
         "tags": [
@@ -525,7 +525,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_platform_projects_by_project_apps_by_app",
+        "operationId": "get_platform_projects_by_project_apps_by_app",
         "summary": "Returns one application, with its live phase, health and secret sync.",
         "description": "Returns one application, with its live phase, health and secret sync.\n\nIt returns a single application of the caller's org together with what the\ncluster currently reports for it: the operator Service CR's phase and health,\nand whether its sealed env has synced. An app this org and project do not have\nis 404. Requires a validated principal; 403 without one.",
         "tags": [
@@ -567,7 +567,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/deploy": {
       "post": {
-        "operationId": "post_v1_platform_projects_by_project_apps_by_app_deploy",
+        "operationId": "post_platform_projects_by_project_apps_by_app_deploy",
         "summary": "Deploys the app — building it first if it comes from git.",
         "description": "Deploys the app — building it first if it comes from git.\n\nIt starts a new, monotonically versioned deployment of the app and answers 202\nwith the deployment record. A 202 is an ACCEPTED deployment, not a live one.\n\nAn IMAGE app deploys the tag you name (falling back to the app's tag, then\n`latest`) by writing its operator Service CR; the operator reconciles it to\nrunning. A GIT app launches an in-cluster BuildKit Job at `commit` — or the app's\nbranch — and comes back in `building`; the Service CR is applied later, by the\nreconciler, once the Job succeeds. The reconciler is restart-safe, so a build in\nflight survives a cloud restart.\n\nDeploys are bounded per org: over the concurrent-deploy cap is 429 and NOTHING is\nrecorded, so a rejected deploy leaves no phantom in the history. An unreachable\ncluster is 503 but still records an honest `error` deployment, because a deploy\nthat was attempted and failed must not be indistinguishable from one never made.\nEvery other failure is likewise recorded in its real terminal state.\n\nThis is metered work: a git build is billed to the org's ledger in wall-clock\nbuild minutes once the Job finishes, and the running deployment is billed for its\ncompute per tick for as long as it stays live. Requires a validated principal; 403\nwithout one, and everything is written into that org's own `tenant-\u003corg\u003e`\nnamespace.",
         "tags": [
@@ -619,7 +619,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/deployments": {
       "get": {
-        "operationId": "get_v1_platform_projects_by_project_apps_by_app_deployments",
+        "operationId": "get_platform_projects_by_project_apps_by_app_deployments",
         "summary": "Returns an app's deployment history.",
         "description": "Returns an app's deployment history.\n\nIt lists every deployment recorded for one of the caller org's applications,\nnewest version first, each with its version, status, source, commit and image.\nFailed and superseded attempts are included — that is the point of a history.\nRequires a validated principal; 403 without one.",
         "tags": [
@@ -664,7 +664,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/deployments/{id}": {
       "get": {
-        "operationId": "get_v1_platform_projects_by_project_apps_by_app_deployments_by_id",
+        "operationId": "get_platform_projects_by_project_apps_by_app_deployments_by_id",
         "summary": "Returns one deployment of one app.",
         "description": "Returns one deployment of one app.\n\nIt returns a single deployment by id, scoped to the named application of the\ncaller's org — so an id belonging to another app or another tenant is 404, not a\nread. Requires a validated principal; 403 without one.",
         "tags": [
@@ -715,7 +715,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/deployments/{id}/logs": {
       "get": {
-        "operationId": "get_v1_platform_projects_by_project_apps_by_app_deployments_by_id_logs",
+        "operationId": "get_platform_projects_by_project_apps_by_app_deployments_by_id_logs",
         "summary": "Returns real logs for a deployment — the build's, then the app's.",
         "description": "Returns real logs for a deployment — the build's, then the app's.\n\nIt returns the deployment's recorded status timeline together with LIVE pod logs\npulled from the cluster: the build pod's output while a git build is running, and\nthe running app's output once it is deployed. The `source` field says which of\nthe two the body is — `build`, `app` or `none` — so a console can label the pane\nhonestly.\n\nIt never fabricates log content. When no pod exists yet, or the cluster is\nunreachable, it degrades to the recorded timeline and says so. Every cluster read\nis confined to the caller org's own namespaces and time-boxed. Requires a\nvalidated principal; 403 without one.",
         "tags": [
@@ -766,7 +766,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/domains": {
       "get": {
-        "operationId": "get_v1_platform_projects_by_project_apps_by_app_domains",
+        "operationId": "get_platform_projects_by_project_apps_by_app_domains",
         "summary": "Returns every hostname this app answers on.",
         "description": "Returns every hostname this app answers on.\n\nIt lists the app's hosts: the permanent default host it was born with, any\norg-subtree hosts attached to it, and every custom host claimed for it with its\nverification state and, while pending, the DNS challenge records to publish. Live\nendpoint status for each host is observed from the cluster. Requires a validated\nprincipal; 403 without one.",
         "tags": [
@@ -809,7 +809,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_platform_projects_by_project_apps_by_app_domains",
+        "operationId": "post_platform_projects_by_project_apps_by_app_domains",
         "summary": "Attaches a hostname — instantly if you already own it, otherwise with a DNS challenge.",
         "description": "Attaches a hostname — instantly if you already own it, otherwise with a\nDNS challenge.\n\nIt attaches `host` to the app, and which of two things happens depends on who\nowns the name. A host inside the caller org's own subtree is structurally owned,\nso it goes ACTIVE immediately and answers 201. A bring-your-own host is claimed\nas PENDING and answers the DNS challenge records to publish; it is NOT rendered\ninto the app's ingress until /verify passes.\n\nClaims are globally unique. A host already claimed by another organization is\n409, and so is one claimed by a different app in your own; re-adding this app's\nOWN claim is idempotent and answers its current state at 200. The default host is\nalways attached and re-adding it is 409. A host under the platform's shared apex\nthat is not the caller's own subtree is 403 — it belongs to whoever owns that\nsubtree and can never be grabbed through the custom path.\n\n`host` must be a valid DNS hostname; anything else is 400. Requires a validated\nprincipal; 403 without one.",
         "tags": [
@@ -871,7 +871,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/domains/{host}": {
       "delete": {
-        "operationId": "delete_v1_platform_projects_by_project_apps_by_app_domains_by_host",
+        "operationId": "delete_platform_projects_by_project_apps_by_app_domains_by_host",
         "summary": "Detaches a hostname and releases the claim.",
         "description": "Detaches a hostname and releases the claim.\n\nIt drops the host from the app's ingress and releases any custom claim on it, so\nthe name becomes claimable again — by this org or any other. Answers 204.\n\nThe default host is permanent and cannot be removed: that is 400, not 404. A host\nthat is neither attached nor claimed here is 404. Requires a validated principal;\n403 without one.",
         "tags": [
@@ -915,7 +915,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/domains/{host}/verify": {
       "post": {
-        "operationId": "post_v1_platform_projects_by_project_apps_by_app_domains_by_host_verify",
+        "operationId": "post_platform_projects_by_project_apps_by_app_domains_by_host_verify",
         "summary": "Checks a custom domain's DNS and turns it on if it passes.",
         "description": "Checks a custom domain's DNS and turns it on if it passes.\n\nIt runs the DNS challenge check for a pending custom host and, when it passes,\nmarks the host verified and renders it into the app's ingress so it starts\nserving.\n\nA check that RAN and did not pass is not an error: it answers 200 with the host\nstill pending and the reason in `detail`, so a console can show the operator what\nDNS is actually returning. An already-verified host answers as-is without\nre-checking. A host not claimed by this app is 404. Requires a validated\nprincipal; 403 without one.",
         "tags": [
@@ -966,7 +966,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/env": {
       "put": {
-        "operationId": "put_v1_platform_projects_by_project_apps_by_app_env",
+        "operationId": "put_platform_projects_by_project_apps_by_app_env",
         "summary": "Replaces an app's environment variables.",
         "description": "Replaces an app's environment variables.\n\nIt writes the app's whole environment set and answers the updated application.\nThis is the one post-create write path for env, and it REPLACES rather than\nmerges: a variable absent from the body is gone, and a secret dropped from the\nset leaves the app's Secret on its next deploy.\n\nKeys must match `^[A-Za-z_][A-Za-z0-9_]*$`. A value marked `secret: true` is\nsealed into KMS and blanked in the database, so plaintext is never persisted —\nand the write fails 503 if KMS is unavailable rather than storing one in the\nclear.\n\nThe rule worth knowing: this does not restart anything. Once the app has been\ndeployed the secret sync is re-declared immediately so the operator\nre-materialises the Secret, but RUNNING pods keep the environment they started\nwith until their next deploy or restart. Requires a validated principal; 403\nwithout one.",
         "tags": [
@@ -1018,7 +1018,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/preview": {
       "post": {
-        "operationId": "post_v1_platform_projects_by_project_apps_by_app_preview",
+        "operationId": "post_platform_projects_by_project_apps_by_app_preview",
         "summary": "Puts a branch on its own URL.",
         "description": "Puts a branch on its own URL.\n\nIt deploys an already-built `image` to a per-branch preview and answers its URL,\nthe branch, the preview's slug and the deployment. The preview is a FIRST-CLASS\napplication named `\u003capp\u003e-\u003cbranch\u003e` in the same project and tenant namespace, with\nits own default host — so it is completely isolated from production while reusing\nthe same deploy mechanic. Re-previewing a branch converges that same target in\nplace rather than stacking another one.\n\nIt carries NO environment variables, deliberately: a preview never inherits\nproduction's secrets. It also does not build — `image` is required and must\nalready exist, and `branch` defaults to the parent app's. A branch that does not\nresolve to a valid slug distinct from the parent's is 400. Requires a validated\nprincipal; 403 without one.",
         "tags": [
@@ -1070,7 +1070,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/promote": {
       "post": {
-        "operationId": "post_v1_platform_projects_by_project_apps_by_app_promote",
+        "operationId": "post_platform_projects_by_project_apps_by_app_promote",
         "summary": "Promotes an already-built release to the app.",
         "description": "Promotes an already-built release to the app.\n\nIt redeploys an image that already exists — named either by `deploymentId`, which\npromotes that deployment's exact built image, or by `tag`, resolved the same way\na deploy resolves one. One of the two is required; neither is 400.\n\nPromotion never builds. A deployment that carries no built image cannot be\npromoted and is 400, and a deployment id outside this app is 404. It runs through\nthe same deploy core as everything else, so it takes a NEW version number and is\nsubject to the same per-org concurrency cap. Requires a validated principal; 403\nwithout one.",
         "tags": [
@@ -1122,7 +1122,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/rollback": {
       "post": {
-        "operationId": "post_v1_platform_projects_by_project_apps_by_app_rollback",
+        "operationId": "post_platform_projects_by_project_apps_by_app_rollback",
         "summary": "Goes back to the previous release.",
         "description": "Goes back to the previous release.\n\nIt redeploys a prior image: the one named by `deploymentId`, or — with no body —\nthe newest earlier deployment that carries a real built image and did not error,\nskipping the release currently live. An app with nothing earlier to return to is\n400.\n\nA rollback is a deploy of an old image, not a rewind: it takes a NEW version\nnumber and appends to the history rather than erasing what came after. Both\nlookups are scoped to this app and org, so another tenant's image can never be\nrolled in. Requires a validated principal; 403 without one.",
         "tags": [
@@ -1174,7 +1174,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/start": {
       "post": {
-        "operationId": "post_v1_platform_projects_by_project_apps_by_app_start",
+        "operationId": "post_platform_projects_by_project_apps_by_app_start",
         "summary": "Starts a stopped app back up.",
         "description": "Starts a stopped app back up.\n\nIt scales the app's Service back to its configured replica count and marks it\nlive, answering the updated application. It does not redeploy: the image already\non the Service CR is what comes back.\n\nThe billing watermark is reset to now as part of starting, so the org is charged\nfor THIS live span and never for the gap the app spent stopped. An app with no\nService CR is 404, an unreachable cluster is 503, and a cluster that refuses the\nscale is 502. Requires a validated principal; 403 without one.",
         "tags": [
@@ -1216,7 +1216,7 @@
     },
     "/v1/platform/projects/{project}/apps/{app}/stop": {
       "post": {
-        "operationId": "post_v1_platform_projects_by_project_apps_by_app_stop",
+        "operationId": "post_platform_projects_by_project_apps_by_app_stop",
         "summary": "Stops an app without deleting it.",
         "description": "Stops an app without deleting it.\n\nIt scales the app's Service to zero replicas and marks it stopped, answering the\nupdated application. Nothing else is removed — the record, its env, its domains\nand its deployment history all survive, and /start brings it back at the same\nreplica count.\n\nAn app that is not deployed has no Service CR to scale and is 404. An\nunreachable cluster is 503 and a cluster that refuses the scale is 502. Because\nthe pods stop, so does the compute metering. Requires a validated principal; 403\nwithout one.",
         "tags": [
@@ -1258,7 +1258,7 @@
     },
     "/v1/releases": {
       "get": {
-        "operationId": "get_v1_releases",
+        "operationId": "get_releases",
         "summary": "Returns the versions that actually reached the cluster.",
         "description": "Returns the versions that actually reached the cluster.\n\nIt lists the org's releases: the deployments that were genuinely applied to the\ncluster, with the app they belong to, their version, environment, status and when\nthey were released. A deployment that failed or is still building is NOT a\nrelease and is excluded — reaching the cluster is what makes one. Requires a\nvalidated principal; 403 without one.",
         "tags": [
@@ -1280,7 +1280,7 @@
     },
     "/v1/run": {
       "post": {
-        "operationId": "post_v1_run",
+        "operationId": "post_run",
         "summary": "Runs a container image and gives back a URL.",
         "description": "Runs a container image and gives back a URL.\n\nThe one-call shortcut over project → app → deploy: give it a `name` and an\n`image` and it creates or updates an image-source application in your org's\nDEFAULT project, deploys it through the same operator Service-CR writer\neverything else uses, and answers its id, name, live URL, status and shape.\nRe-running the same name UPDATES it in place, so the call is idempotent by name.\n\nWhat it produces is a first-class application, not a special object: it is\nlistable, stoppable and redeployable through the /v1/platform routes like any\nother app.\n\n`minScale` is the replica floor. `maxScale` above it declares an autoscaling\nceiling; `maxScale: 0` means no autoscaler at all — a fixed run at the floor.\nBoth are clamped to the deployment's limits. `runtime` and `shape` are accepted\nfor the client contract and echoed back: the image is the runtime unit and sizing\nis the operator's default.\n\nIt is BILLING-GATED before it touches the cluster: a flat per-run fee is\nauthorized against the org's own prepaid balance first, so an org that cannot pay\nis refused without anything being created. An unreachable cluster is 503 — a run\nnever reports a URL it did not create. Secret env is sealed into KMS and fails\nclosed without it.\n\nRequires a validated principal; 403 without one. The org is resolved from that\nvalidated identity and is what both pays and owns the namespace — it is never\nread from the body.",
         "tags": [
@@ -1312,7 +1312,7 @@
     },
     "/v1/runner": {
       "post": {
-        "operationId": "post_v1_runner",
+        "operationId": "post_runner",
         "summary": "Triggers a native build — an image, or the binaries a repo declares.",
         "description": "Triggers a native build — an image, or the binaries a repo declares.\n\nThe fabric's own build trigger, and what `hanzo build`, git-push-to-deploy and\ncloud's own self-release all call. It answers 202 with the build job id: a queued\nbuild, not a pushed artifact.\n\nTwo lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and\nthe output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane\ntakes `binaries` — the same recipe the repo's hanzo.yml declares — and publishes\nto object storage instead; it must carry no `image`, because a build produces\nbinaries or an image, never both. `release: true` is the third mode: cloud\nself-publishing its own image, version computed, built, smoke-tested, tagged and\nannounced.\n\nPRIVILEGED, with exactly two credentials and never a third: the shared\nbuild-callback token compared in constant time — the machine path, which a user\nnever holds — or a validated IAM principal who is an ADMIN of their org, which is\nthe `hanzo build` user path and means one IAM login authorizes a build with no\nseparate build token. A plain member is refused.\n\nBoth paths are bounded the same way: the output must push to a registry the\nfabric owns, and on the IAM path the image's registry namespace must MATCH the\ncaller's own validated org — so an org admin can only publish into their own\nbrand and can never overwrite another's through the shared push credential. The\nsame confinement applies to the artifact lane's repo owner.\n\n`release: true` is the exception, and takes SUPERADMIN. It publishes the\nplatform's own image — the binary the whole fleet runs — so what it lands reaches\nevery org at the next reconcile, and no role inside the caller's own org can\nauthorize that. An org admin is refused however the registry namespace lines up,\nand the build token, which carries no identity at all, may enqueue an ordinary\nbuild but never a release.\n\nThe output image is parsed and validated as a single well-formed OCI ref before\nany authorization decision reads it, so a crafted ref cannot smuggle a\nbuild-exporter attribute past the check.",
         "tags": [
@@ -1344,7 +1344,7 @@
     },
     "/v1/runner/releases": {
       "get": {
-        "operationId": "get_v1_runner_releases",
+        "operationId": "get_runner_releases",
         "summary": "Lists the self-publish releases this process has run.",
         "description": "Lists the self-publish releases this process has run.\n\nIt lists the platform's own release runs with their current state, so a release\nthat answered 202 with an id can be followed to its end. SuperAdmin only — this\nis the platform's own publishing record, not a tenant surface.\n\nThe record lives in THIS process's memory, so it covers the releases this\ninstance started and does not survive a restart.",
         "tags": [
@@ -1366,7 +1366,7 @@
     },
     "/v1/runner/releases/{id}": {
       "get": {
-        "operationId": "get_v1_runner_releases_by_id",
+        "operationId": "get_runner_releases_by_id",
         "summary": "Returns one self-publish release by the id its 202 returned.",
         "description": "Returns one self-publish release by the id its 202 returned.\n\nIt returns the state of one release run — which is the whole reason the trigger\nanswers with an id, because without this a release that died in the detached\npipeline would look exactly like one still in flight. SuperAdmin only.\n\nA 404 means the id is unknown OR has aged out of this process's in-memory record.\nThat is the honest answer either way: the process genuinely cannot tell the two\napart.",
         "tags": [

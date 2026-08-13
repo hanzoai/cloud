@@ -18,7 +18,7 @@
   "paths": {
     "/v1/framework/doctypes": {
       "get": {
-        "operationId": "get_v1_framework_doctypes",
+        "operationId": "get_framework_doctypes",
         "summary": "Returns every DocType defined in the caller's org.",
         "description": "Returns every DocType defined in the caller's org. Another\ntenant's definitions are never included: the org is part of the store key.",
         "tags": [
@@ -38,7 +38,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_framework_doctypes",
+        "operationId": "post_framework_doctypes",
         "summary": "Defines a DocType in the caller's org: the metadata that gives a document surface its fields, its naming rule, whether it has a submit/cancel lifecycle, and which role may do what to it.",
         "description": "Defines a DocType in the caller's org: the metadata that gives a\ndocument surface its fields, its naming rule, whether it has a submit/cancel\nlifecycle, and which role may do what to it. Manager-only — on a fresh org the\nfirst caller to administer it is seeded as its System Manager, after which\nonly a System Manager (or a platform admin) may define. Answers 201.",
         "tags": [
@@ -81,7 +81,7 @@
     },
     "/v1/framework/doctypes/{name}": {
       "delete": {
-        "operationId": "delete_v1_framework_doctypes_by_name",
+        "operationId": "delete_framework_doctypes_by_name",
         "summary": "Removes a DocType and every document stored under it.",
         "description": "Removes a DocType and every document stored under it. The\ndefinition and its data go together — a document with no schema can be neither\nvalidated nor read back — so there is no undo. Manager-only. Answers 204.",
         "tags": [
@@ -106,7 +106,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_framework_doctypes_by_name",
+        "operationId": "get_framework_doctypes_by_name",
         "summary": "Returns one DocType definition — its fields, naming rule, permissions and lifecycle flags.",
         "description": "Returns one DocType definition — its fields, naming rule,\npermissions and lifecycle flags. Scoped to the caller's org, so another\ntenant's DocType of the same name is simply not found.",
         "tags": [
@@ -138,7 +138,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_framework_doctypes_by_name",
+        "operationId": "put_framework_doctypes_by_name",
         "summary": "Replaces a DocType definition wholesale (PUT semantics): the stored definition becomes the body.",
         "description": "Replaces a DocType definition wholesale (PUT semantics): the\nstored definition becomes the body. The name in the URL is authoritative over\nthe body's, and documents already stored under the DocType are left intact.\nManager-only.",
         "tags": [
@@ -190,7 +190,7 @@
     },
     "/v1/framework/modules": {
       "get": {
-        "operationId": "get_v1_framework_modules",
+        "operationId": "get_framework_modules",
         "summary": "Returns every app lane compiled into this deployment and the DocTypes each one installs.",
         "description": "Returns every app lane compiled into this deployment and the\nDocTypes each one installs. It describes the BINARY, not the org: what a given\norg has actually installed is the per-module state below.",
         "tags": [
@@ -212,7 +212,7 @@
     },
     "/v1/framework/modules/{module}": {
       "get": {
-        "operationId": "get_v1_framework_modules_by_module",
+        "operationId": "get_framework_modules_by_module",
         "summary": "Returns one app lane's install state for the caller's org: the DocTypes the lane declares, and which of them already exist in the org.",
         "description": "Returns one app lane's install state for the caller's org: the\nDocTypes the lane declares, and which of them already exist in the org. That\nis the honest \"set up\" versus \"installed\" answer a console renders.",
         "tags": [
@@ -246,7 +246,7 @@
     },
     "/v1/framework/modules/{module}/install": {
       "post": {
-        "operationId": "post_v1_framework_modules_by_module_install",
+        "operationId": "post_framework_modules_by_module_install",
         "summary": "Creates an app lane's DocTypes in the caller's org.",
         "description": "Creates an app lane's DocTypes in the caller's org. Idempotent\nand create-if-absent: a DocType the org already has is reported as existing\nand never replaced, so re-installing cannot clobber a definition the org has\nsince edited. Manager-only.",
         "tags": [
@@ -280,7 +280,7 @@
     },
     "/v1/framework/roles": {
       "get": {
-        "operationId": "get_v1_framework_roles",
+        "operationId": "get_framework_roles",
         "summary": "Returns every (user, role) assignment in the caller's org.",
         "description": "Returns every (user, role) assignment in the caller's org. Roles are\nwhat DocType permissions are written against, so this is the grant table the\npermission calculus resolves a member's rights from.",
         "tags": [
@@ -300,7 +300,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_framework_roles",
+        "operationId": "post_framework_roles",
         "summary": "Grants one user one role in the caller's org — how a member gains rights on a DocType, since permissions name roles and never users.",
         "description": "Grants one user one role in the caller's org — how a member gains\nrights on a DocType, since permissions name roles and never users.\nManager-only. Answers 201.",
         "tags": [
@@ -336,7 +336,7 @@
     },
     "/v1/framework/roles/{user}/{role}": {
       "delete": {
-        "operationId": "delete_v1_framework_roles_by_user_by_role",
+        "operationId": "delete_framework_roles_by_user_by_role",
         "summary": "Removes one (user, role) grant in the caller's org.",
         "description": "Removes one (user, role) grant in the caller's org. Manager-only.\nAnswers 204; a grant that does not exist is not found.",
         "tags": [
@@ -373,7 +373,7 @@
     },
     "/v1/framework/summary": {
       "get": {
-        "operationId": "get_v1_framework_summary",
+        "operationId": "get_framework_summary",
         "summary": "Reports how much of the DocType surface the caller's org uses: how many DocTypes it has defined, and how many documents exist across them.",
         "description": "Reports how much of the DocType surface the caller's org uses: how\nmany DocTypes it has defined, and how many documents exist across them.",
         "tags": [
@@ -395,7 +395,7 @@
     },
     "/v1/framework/{doctype}": {
       "get": {
-        "operationId": "get_v1_framework_by_doctype",
+        "operationId": "get_framework_by_doctype",
         "summary": "Returns the caller org's documents of one DocType, filtered, ordered and projected by the query.",
         "description": "Returns the caller org's documents of one DocType, filtered,\nordered and projected by the query. The DocType is resolved FIRST — through\nthe same permission gate the list itself uses — because the query is validated\nagainst its schema: a filter, sort or field name the DocType does not declare\nis refused rather than reaching the store.",
         "tags": [
@@ -466,7 +466,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_framework_by_doctype",
+        "operationId": "post_framework_by_doctype",
         "summary": "Create one document of a DocType, from that DocType's own fields.",
         "description": "The body is the DOCUMENT'S field data: a flat JSON object whose properties are the fieldnames the DocType declares, not a fixed envelope. That is why this operation publishes no request schema — the shape is metadata the DocType defines at run time, and no Go struct both accepts it verbatim and describes it, so nothing is asserted rather than something false.\n\nThe engine validates and coerces every field against the DocType, runs the before_insert and before_save hooks (either may reject the write), stores the document, then runs the after hooks. It answers 201 with the stored document: the field data plus the managed envelope — `name`, `doctype`, `docstatus`, `createdAt`, `updatedAt`. A Password field comes back as a fixed redaction marker and is dropped when empty; its stored value is never returned by this or any other read on this surface.\n\n`name` in the body is the REQUESTED DOCUMENT NAME, not a data field. A DocType with an autoname rule names the document itself and ignores it; a prompt-named DocType takes it. This collision is also why the two path segments cannot be folded into the body, and so why the route stays untyped.\n\nScoped to the org of the validated principal, and the engine's own permission calculus decides the rest: the caller needs create rights on this DocType through a role it holds, or a platform admin bit. A caller with no validated principal reaches the engine as the zero Caller and is refused before any store is opened — a forged org header alone buys nothing.\n\nA DocType declared Single has exactly ONE document per org, so this writes that one instance instead of adding a row. The body is size-bounded by the engine, the same bound on every host.",
         "tags": [
@@ -486,7 +486,7 @@
     },
     "/v1/framework/{doctype}/{name}": {
       "delete": {
-        "operationId": "delete_v1_framework_by_doctype_by_name",
+        "operationId": "delete_framework_by_doctype_by_name",
         "summary": "Removes one document, after its on_trash hooks agree.",
         "description": "Removes one document, after its on_trash hooks agree. A\nSUBMITTED document cannot be deleted — cancel it first. Answers 204.",
         "tags": [
@@ -521,7 +521,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_framework_by_doctype_by_name",
+        "operationId": "get_framework_by_doctype_by_name",
         "summary": "Returns one document by name, with Password fields redacted.",
         "description": "Returns one document by name, with Password fields redacted.",
         "tags": [
@@ -566,7 +566,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_framework_by_doctype_by_name",
+        "operationId": "put_framework_by_doctype_by_name",
         "summary": "Replace a draft document's field data wholesale.",
         "description": "PUT semantics: the stored field data BECOMES the body, so a field the body omits is not left at its previous value. The body is the document's own field data — the same metadata-defined open object the create takes, and the same reason this operation publishes no request schema.\n\nOnly a DRAFT can be edited. A document that has been submitted or cancelled is immutable and the write is refused as a conflict, so the submit lifecycle cannot be bypassed by a plain update — cancel it first, and note that a cancelled document can be deleted but never re-submitted or re-edited. The engine validates the new data against the DocType, runs before_save (which may reject), writes, then runs the after hooks, and answers 200 with the stored document plus its managed envelope, Password fields redacted.\n\nThe document name in the path is percent-decoded before it is matched, so a name containing a space is addressed as it is stored. An unknown DocType or document is not found, and the same answer covers a document that exists in another tenant: the org comes from the validated principal and is part of the store key, so a caller cannot learn that another org's document exists. Write rights on the DocType are required, decided by the engine's permission calculus.\n\nFor a Single DocType the path name is ignored — there is one instance per org and this writes it.",
         "tags": [
@@ -594,7 +594,7 @@
     },
     "/v1/framework/{doctype}/{name}/cancel": {
       "post": {
-        "operationId": "post_v1_framework_by_doctype_by_name_cancel",
+        "operationId": "post_framework_by_doctype_by_name_cancel",
         "summary": "Moves a submitted document to cancelled (docstatus 1 → 2) after its on_cancel hooks agree.",
         "description": "Moves a submitted document to cancelled (docstatus 1 → 2) after\nits on_cancel hooks agree. Cancelling is terminal — a cancelled document\ncannot be re-submitted — but it CAN then be deleted.",
         "tags": [
@@ -641,7 +641,7 @@
     },
     "/v1/framework/{doctype}/{name}/submit": {
       "post": {
-        "operationId": "post_v1_framework_by_doctype_by_name_submit",
+        "operationId": "post_framework_by_doctype_by_name_submit",
         "summary": "Moves a draft to submitted (docstatus 0 → 1) after its on_submit hooks agree.",
         "description": "Moves a draft to submitted (docstatus 0 → 1) after its\non_submit hooks agree. A submitted document is IMMUTABLE: further writes and\ndeletes are refused until it is cancelled. Only a submittable DocType has this\nlifecycle; any other docstatus is an illegal transition.",
         "tags": [

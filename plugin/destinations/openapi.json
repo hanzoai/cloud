@@ -18,7 +18,7 @@
   "paths": {
     "/v1/destinations": {
       "get": {
-        "operationId": "get_v1_destinations",
+        "operationId": "get_destinations",
         "summary": "Reports every destination this deployment can forward to, each with the caller org's connection state: whether it is connected, whether it is enabled, whether a credential resolves right now, and the config fields the console renders for it.",
         "description": "Reports every destination this deployment can forward to, each with the\ncaller org's connection state: whether it is connected, whether it is enabled,\nwhether a credential resolves right now, and the config fields the console\nrenders for it.",
         "tags": [
@@ -40,7 +40,7 @@
     },
     "/v1/destinations/{platform}": {
       "delete": {
-        "operationId": "delete_v1_destinations_by_platform",
+        "operationId": "delete_destinations_by_platform",
         "summary": "Forgets a destination for the caller's org: every credential held in KMS, then the stored config.",
         "description": "Forgets a destination for the caller's org: every credential held in\nKMS, then the stored config. Idempotent, and it requires org admin.",
         "tags": [
@@ -72,7 +72,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_destinations_by_platform",
+        "operationId": "get_destinations_by_platform",
         "summary": "Reports one destination's card for the caller's org — its config fields, its connection state, and whether a credential resolves right now.",
         "description": "Reports one destination's card for the caller's org — its config fields,\nits connection state, and whether a credential resolves right now. A platform\nthis deployment does not carry is not found.",
         "tags": [
@@ -104,7 +104,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_destinations_by_platform",
+        "operationId": "post_destinations_by_platform",
         "summary": "Connect one conversion destination for your org, or update the one you have",
         "description": "Stores the addressed platform's non-secret ids (its measurement, pixel or dataset ids) and seals its API credential into KMS under a path scoped to the caller's own org, then answers the same status card the read routes do — with live telling you whether the credential actually resolves right now. The body's property NAMES are the platform's own: each field the platform declares, plus each secret under its camelCase name, so the accepted keys differ per platform and a missing REQUIRED field is refused. Connecting is an ORG ADMIN action — a validated member without the admin bit gets 403 — and it fails closed with 503 when the KMS master key is unavailable rather than persisting a destination whose secret was never sealed. The secret itself never appears in the response, in the store, or in a log line; only its NAME is ever published. Set enabled to false to keep the connection but stop the analytics fan-out to it.",
         "tags": [
@@ -146,7 +146,7 @@
     },
     "/v1/destinations/{platform}/test": {
       "post": {
-        "operationId": "post_v1_destinations_by_platform_test",
+        "operationId": "post_destinations_by_platform_test",
         "summary": "Sends ONE synthetic pageview through the connected destination end to end and reports what the platform said.",
         "description": "Sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",
         "tags": [
