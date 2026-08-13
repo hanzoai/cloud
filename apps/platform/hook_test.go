@@ -96,6 +96,13 @@ func (f *fired) settle(t *testing.T, pushes, events int) {
 // own state. A version of it that grew a read would stop building here.
 func hookApp(t *testing.T, key string) (*zip.App, *fired) {
 	t.Helper()
+	return hookAppOn(t, key, "api.hanzo.ai")
+}
+
+// hookAppOn is hookApp for a deployment on a given API host — the one thing the
+// forge host is derived from, so an empty one is a deployment that names no forge.
+func hookAppOn(t *testing.T, key, domain string) (*zip.App, *fired) {
+	t.Helper()
 	kms := newFakeKMS()
 	if key != "" {
 		if err := kms.PutSecret(context.Background(), forge.WebhookRef, []byte(key)); err != nil {
@@ -103,7 +110,7 @@ func hookApp(t *testing.T, key string) (*zip.App, *fired) {
 		}
 	}
 	s := &cloud.Service[state]{
-		Base: cloud.Base{KMS: kms, Log: luxlog.New("test"), Brand: "hanzo", Domain: "api.hanzo.ai"},
+		Base: cloud.Base{KMS: kms, Log: luxlog.New("test"), Brand: "hanzo", Domain: domain},
 	}
 
 	f := &fired{}
@@ -343,24 +350,51 @@ func TestHook_ATagBuildsAndNamesNoBranch(t *testing.T) {
 	}
 }
 
-// A payload with no clone URL still resolves to this deployment's own forge,
-// rather than to a repository nothing can match.
-func TestHook_DerivesTheCloneURLWhenThePayloadOmitsIt(t *testing.T) {
-	app, f := hookApp(t, hookSecret)
-	body, err := json.Marshal(map[string]any{
-		"ref": "refs/heads/main", "before": hookBefore, "after": hookCommit,
-		"repository": map[string]any{"name": "cloud", "owner": map[string]any{"login": hookOwner}},
-		"pusher":     map[string]any{"login": "z"},
-	})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+// THE CLONE URL IS DERIVED, NEVER READ. It is what buildFromPush matches an
+// application's RepoURL against and what isReleasePush compares to cloud's own
+// upstream, so a delivery that could name it could aim a build at a repository
+// this forge does not serve. A payload naming one is ignored, whatever it says.
+func TestHook_DerivesTheCloneURLAndIgnoresThePayloadsOwn(t *testing.T) {
+	const want = "https://git.hanzo.ai/hanzoai/cloud.git"
+	for _, claimed := range []string{
+		"",                                 // the shape a forge with no root URL sends
+		"https://github.com/hanzoai/cloud", // cloud's own upstream: the release trigger
+		"https://evil.example/hanzoai/cloud.git",
+	} {
+		app, f := hookApp(t, hookSecret)
+		body, err := json.Marshal(map[string]any{
+			"ref": "refs/heads/main", "before": hookBefore, "after": hookCommit,
+			"repository": map[string]any{
+				"name": "cloud", "clone_url": claimed,
+				"owner": map[string]any{"login": hookOwner},
+			},
+			"pusher": map[string]any{"login": "z"},
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if code, v := signedDelivery(t, app, body); code != http.StatusOK || !v.Fired {
+			t.Fatalf("clone_url %q: want 200 fired, got %d %+v", claimed, code, v)
+		}
+		f.settle(t, 1, 1)
+		if got := f.pushes[0].CloneURL; got != want {
+			t.Fatalf("clone_url %q reached the build path as %q, want the derived %q", claimed, got, want)
+		}
 	}
-	if code, v := signedDelivery(t, app, body); code != http.StatusOK || !v.Fired {
-		t.Fatalf("want 200 fired, got %d %+v", code, v)
+}
+
+// A deployment that cannot name its own forge refuses. The value it would carry on
+// is the empty origin, which every mirror reads as "a native push, send it on" —
+// the one loop this door must not start.
+func TestHook_RefusesWhenTheDeploymentNamesNoForge(t *testing.T) {
+	app, f := hookAppOn(t, hookSecret, "")
+	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
+
+	if code, _ := signedDelivery(t, app, body); code != http.StatusServiceUnavailable {
+		t.Fatalf("no-forge deployment: want 503, got %d", code)
 	}
-	f.settle(t, 1, 1)
-	if got := f.pushes[0].CloneURL; got != "https://git.hanzo.ai/hanzoai/cloud.git" {
-		t.Fatalf("derived clone URL = %q", got)
+	if p, e := f.counts(); p != 0 || e != 0 {
+		t.Fatalf("a deployment with no forge dispatched %d push / %d lifecycle", p, e)
 	}
 }
 
@@ -412,6 +446,27 @@ func TestHook_DeclinesWithAReason(t *testing.T) {
 		}},
 		{"another event", "not a push", func(t *testing.T) []byte {
 			return []byte(`{"action":"opened","issue":{"number":7}}`)
+		}},
+		// The coordinate leaves this door as a clone URL, a directory key and a git
+		// argument. A separator, a leading dash or a dot-dot in any part of it is
+		// refused at the boundary rather than in each place it would arrive.
+		{"traversal in the name", "malformed coordinate", func(t *testing.T) []byte {
+			return pushBody(t, hookOwner, "../../etc", "refs/heads/main", hookBefore, hookCommit, "z")
+		}},
+		{"separator in the namespace", "malformed coordinate", func(t *testing.T) []byte {
+			return pushBody(t, hookOwner+"/x", "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
+		}},
+		{"flag-shaped branch", "malformed coordinate", func(t *testing.T) []byte {
+			return pushBody(t, hookOwner, "cloud", "refs/heads/--upload-pack=sh", hookBefore, hookCommit, "z")
+		}},
+		{"dot-dot in the ref", "malformed coordinate", func(t *testing.T) []byte {
+			return pushBody(t, hookOwner, "cloud", "refs/heads/a../b", hookBefore, hookCommit, "z")
+		}},
+		{"a ref that is neither", "malformed coordinate", func(t *testing.T) []byte {
+			return pushBody(t, hookOwner, "cloud", "refs/pull/7/head", hookBefore, hookCommit, "z")
+		}},
+		{"a commit that is not one", "malformed coordinate", func(t *testing.T) []byte {
+			return pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, "HEAD;curl evil", "z")
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
