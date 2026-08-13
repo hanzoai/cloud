@@ -104,7 +104,13 @@ setup: ## One-time dev setup: make the hanzoai/* Go modules resolvable.
 	@# cache from before the move. One rewrite, set once, fixes every hanzoai module
 	@# in every repo — it is git-global on purpose, because the module path is wrong
 	@# everywhere, not just here.
-	@git config --global url."https://git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
+	@# --replace-all, because a machine may already carry a rewrite for this exact
+	@# prefix (an SSH one to github, from before the move). Two insteadOf keys with
+	@# the same alias make git warn and pick one, so adding would leave resolution
+	@# ambiguous — and the stale one points at a repository that no longer exists.
+	@git config --global --replace-all url."https://git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
+	@git config --global --unset-all url."git@github-zeekay:hanzoai/".insteadOf 2>/dev/null || true
+	@git config --global --unset-all url."git@github.com:hanzoai/".insteadOf 2>/dev/null || true
 	@echo "  rewrote github.com/hanzoai/ -> git.hanzo.ai/hanzoai/"
 	@if git ls-remote https://git.hanzo.ai/hanzoai/s3-go >/dev/null 2>&1; then \
 	  echo "  forge reachable — go mod download will work"; \
