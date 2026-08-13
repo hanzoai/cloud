@@ -136,6 +136,72 @@ Same shape, one layer up: zsh was installed in every class and was the prompt of
 none, because the user's login shell stayed `/bin/bash` and tmux asks passwd what
 to run. Installed is not in use — for a shell, for a VNC server, for anything a
 supervisor stands in front of.
+
+## `android` — a phone is a WINDOW, and that is the whole design
+
+An Android emulator is qemu drawing an ordinary X window. The desktop class
+already runs an X server and already has that display carried out through the
+exec channel, so looking at a phone needs no port, no socket, no client and no
+second streaming path — it needs an SDK on the display that exists. That is what
+the class is: `FROM desktop AS android`, plus an AVD, plus one argument.
+
+`sandbox-desktop` now takes a command. The desktop script's last line was `exec
+sleep`; it is `exec "$@"` when it is given something, so `CMD ["sandbox-desktop",
+"avd"]` is one screen with the class's own program on it. The alternative — a
+second script that starts a second X stack — is how two copies of the same four
+processes come to drift, and only one of them gets the next fix.
+
+**A class is now ONE ROW, and adding one is filling in a struct.** `classes` was
+a `map[string]bool` here, `defaultTTL` was a second map in runtime.go, and the
+pod's command was a third fact spelled `m.Class != "desktop"`. Each was a place a
+new class was silently half-added, and both silent failures are real: a class
+missing from the TTL map leases for zero seconds and is reaped before its caller
+reads the reply, and a class missing from that comparison has its image's CMD
+replaced by `sleep infinity` — so the one thing it exists to run never runs and
+the pod looks perfectly healthy. The row carries ttl, the resource envelope,
+`screen` and `kvm`; `desktop_test.go` quantifies over the table rather than
+naming a class, so an assertion cannot be right about the old set and wrong about
+the new one.
+
+**The resource envelope existed only as a comment.** `classes`' own doc said
+"each is one image tag and one resource envelope" while the envelope half had
+never been built — resources were `MACHINE_*`, fleet-wide, one size for every
+sandbox. An emulator holds a whole guest machine's RAM before it draws a pixel
+and would have been handed 512Mi. A class's row wins where it states a value and
+the fleet default stands where it is silent, so the other three are unchanged.
+
+**/dev/kvm is a DEVICE PLUGIN and the reason is EPERM, not EACCES.** Measured on
+do-sfo3-hanzo-k8s, worker-pool, 2026-08-13: a privileged pod gets
+`KVM_GET_API_VERSION → 12` and `KVM_CREATE_VM → ok`, so the nodes can do it — DO
+droplets expose the virtualisation flag, which is also why kata-fc works here. An
+unprivileged pod with a `hostPath` mount of `/dev/kvm` sees the file, `ls -l`
+shows it, and every `open()` returns EPERM: the container's device cgroup, which
+a volume does not touch and a supplementalGroup does not fix. The kubelet adds a
+device to that allowlist only when a device plugin hands it over, so the pod asks
+for `devices.kubevirt.io/kvm` and a node without the plugin never receives the
+class. Pending naming a resource is the honest failure; the alternative is qemu
+interpreting the guest CPU, where a cold Android boot does not finish in any time
+a person waits.
+
+So the premise "the cloud pool has no /dev/kvm" is wrong in a way worth writing
+down: the pool has the CPU and lacks the PLUGIN. `hanzoai/universe
+infra/k8s/kvm/` is that DaemonSet, unwired until the android image is published.
+
+**Proven end to end on 2026-08-13, off-cluster, because the image is not built
+yet.** On evo (x86_64, KVM): the SDK, `sandbox-desktop avd` verbatim from
+hanzoai/bot, `Boot completed in 24655 ms`, `adb devices` → `emulator-5554`, one X
+window titled `Android Emulator - hanzo:5554`, `127.0.0.1:5900` and
+`127.0.0.1:6080` LISTENing on loopback only, `socat -u TCP:127.0.0.1:5900`
+answering `RFB 003.008` — the exact bytes `screen()` carries — and a booted
+Pixel 6 rendered in Chromium over noVNC. Driving the phone with `adb shell am
+start` changed the browser's frame, so the stream is live rather than a still.
+What is NOT proven is the pod: no android image exists, and no cluster node runs
+the device plugin.
+
+**amd64 only, and this time it is the image's limit rather than the fleet's.**
+Google publishes no linux-aarch64 emulator, so the arm64 answer is Cuttlefish,
+which is a different program and would be a different stage.
+
 ## Issuing the token — the constraint that decides it
 
 VERIFIED, not assumed: **IAM never discloses an application's client secret.**
