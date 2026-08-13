@@ -4864,6 +4864,27 @@ join plus a policy about who may pull which rung.
 
 ### Provenance — which tree each claim was verified against
 
+**CORRECTION (2026-08-13): the paragraph below is STALE and inverted. THE FORGE
+LINE IS WHAT SHIPS.** Do not follow it — it sends you to hand-build an image for a
+line production does not run. Measured against the live deployment:
+
+    v1.801.512 is an ancestor of forge/main       (git merge-base --is-ancestor)
+    api.hanzo.ai  x-api-version: v1.801.512
+    api.hanzo.ai  /v1/health revision: 28debd429… == v1.801.512's own commit
+    tags v1.801.509 … .512 all sit on the forge line
+
+So the release train is green and running, and the gate it fails on below
+(`closure-check`) is passing: `GOWORK=off make -f mk/fleet.mk check` regenerates
+all 122 app documents and reports `openapi.yaml … unchanged`. Push cloud to
+`forge`, run that gate first (~5 min — a red push blocks the train for everyone),
+and on a collision REBASE AND REGENERATE rather than hand-merging `openapi.yaml`.
+A change pushed this way went out the same day (`c828d7160`).
+
+What is still true below: the three heads genuinely diverge, so `git merge-base
+HEAD forge/main` is worth checking before writing anything. What is not: which one
+production builds. The rest of this section is kept because it records how the
+inc-line lineage was verified, not because it describes today's route.
+
 **THE FORGE LINE SHIPS NOTHING, AND THE ROUTE TO PRODUCTION IS NOT CI.** Measured
 2026-08-10, and it is the fact every "I fixed it" claim about this repo depends on:
 
