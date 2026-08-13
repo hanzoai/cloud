@@ -1,5 +1,5 @@
 // Package codec answers whether a test may stand down because this build links no
-// SQLCipher codec.
+// SQLCipher C codec.
 package codec
 
 import (
@@ -8,20 +8,22 @@ import (
 	sqlitedrv "github.com/hanzoai/sqlite"
 )
 
-// Require skips the test when no codec is linked, naming why in the caller's own
-// words.
+// Require skips the test when the C codec is absent, naming why in the caller's
+// own words.
 //
-// The condition is one decision in one place because four tests make it, and it is
-// the same decision each time: cek converts a plaintext store in place with
-// SQLCipher's sqlcipher_export, a SQL function only the C engine has, so on a build
-// without it there is no encrypted store to exercise.
+// ENCRYPTION IS NOT THE REASON. A keyed store is ciphertext on every build —
+// hanzoai/sqlite encrypts through the pure-Go SQLCipher codec envelope, and a
+// database written by either engine reads back under the other. What the envelope
+// does differently is share: it decrypts to a plaintext copy PRIVATE to the handle
+// and seals it on close, so a second opener sees the last sealed state rather than
+// the live writer, and durability is per-checkpoint rather than per-commit.
 //
-// That is a gap in cek, not a property of the code under test — hanzoai/sqlcipher
-// encrypts a file in pure Go (EncryptFile), which is what cek should convert with.
-// When it does, this helper has nothing left to skip and goes away.
+// So this is for tests whose subject is that sharing — two openers of one store,
+// or a reload observing another handle's write. Those properties belong to the C
+// codec, which encrypts pages in place inside the pager.
 func Require(t *testing.T, why string) {
 	t.Helper()
 	if !sqlitedrv.CodecLinked() {
-		t.Skip("no codec linked: " + why)
+		t.Skip("no C codec linked: " + why)
 	}
 }
