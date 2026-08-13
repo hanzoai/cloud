@@ -215,17 +215,17 @@ func toolGateway(t *testing.T, ask []string) *httptest.Server {
 func TestOneRunIsObservableEndToEnd(t *testing.T) {
 	sink := traced(t)
 
-	plane := &stubPlane{offer: []string{"post_v1_search_query"}}
+	plane := &stubPlane{offer: []string{"post_search_query"}}
 	old := runTools
 	runTools = plane
 	t.Cleanup(func() { runTools = old })
 
-	gw := toolGateway(t, []string{"post_v1_search_query"})
+	gw := toolGateway(t, []string{"post_search_query"})
 	defer gw.Close()
 
 	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
 	do(t, app, http.MethodPost, "/v1/agents", "acme", map[string]any{
-		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_v1_search_query"}})
+		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}})
 	code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
@@ -286,7 +286,7 @@ func TestOneRunIsObservableEndToEnd(t *testing.T) {
 
 	// EVERY span the run produced names the run, so attribution never depends on
 	// walking a parent chain that sampling or a truncated batch may have broken.
-	for _, name := range []string{"agent.step", "agent.tool post_v1_search_query", "chat gpt-4o-mini"} {
+	for _, name := range []string{"agent.step", "agent.tool post_search_query", "chat gpt-4o-mini"} {
 		sp, ok := sink.find(name)
 		if !ok {
 			t.Fatalf("no %q span was exported", name)
@@ -308,7 +308,7 @@ func TestOneRunIsObservableEndToEnd(t *testing.T) {
 
 	// The tool dispatch is readable as a dispatch: which tool, whose, which
 	// subsystem answers for it, and how it turned out.
-	tool, _ := sink.find("agent.tool post_v1_search_query")
+	tool, _ := sink.find("agent.tool post_search_query")
 	if got := attr(tool, "hanzo.agent.tool_subsystem"); got != "search" {
 		t.Fatalf("tool span must name the owning subsystem, got %q", got)
 	}
@@ -328,10 +328,10 @@ func TestFailedToolIsReadableAsSuchOnItsRun(t *testing.T) {
 	sink := traced(t)
 
 	names := []string{
-		"post_v1_search_query", "get_v1_git_repos", "post_v1_exec_run",
-		"get_v1_kms_secrets", "post_v1_notify_send", "get_v1_index_docs",
+		"post_search_query", "get_git_repos", "post_exec_run",
+		"get_kms_secrets", "post_notify_send", "get_index_docs",
 	}
-	plane := &stubPlane{offer: names, fail: map[string]bool{"get_v1_kms_secrets": true}}
+	plane := &stubPlane{offer: names, fail: map[string]bool{"get_kms_secrets": true}}
 	old := runTools
 	runTools = plane
 	t.Cleanup(func() { runTools = old })
@@ -357,7 +357,7 @@ func TestFailedToolIsReadableAsSuchOnItsRun(t *testing.T) {
 	}
 
 	// The one that failed says so, names itself, and is attributable to this run.
-	bad, ok := sink.find("agent.tool get_v1_kms_secrets")
+	bad, ok := sink.find("agent.tool get_kms_secrets")
 	if !ok {
 		t.Fatal("the failing tool produced no span")
 	}
@@ -404,14 +404,14 @@ func TestFailedToolIsReadableAsSuchOnItsRun(t *testing.T) {
 // of "what did this run cost".
 func TestRunIDReachesTheModelCall(t *testing.T) {
 	rec := &runIDRecorder{}
-	plane := &stubPlane{offer: []string{"post_v1_search_query"}}
+	plane := &stubPlane{offer: []string{"post_search_query"}}
 	old := runTools
 	runTools = plane
 	t.Cleanup(func() { runTools = old })
 
 	app := mountApp(t, rec)
 	do(t, app, http.MethodPost, "/v1/agents", "acme", map[string]any{
-		"name": "a", "model": "m", "instructions": "x", "tools": []string{"post_v1_search_query"}})
+		"name": "a", "model": "m", "instructions": "x", "tools": []string{"post_search_query"}})
 	code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"})
 	if code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
@@ -449,7 +449,7 @@ func (r *runIDRecorder) ChatCompletion(_ context.Context, req *types.ChatRequest
 	r.rounds++
 	if r.rounds == 1 {
 		return &types.ChatResponse{
-			ToolCalls:    []types.ToolCall{{ID: "tc0", Name: "post_v1_search_query", Arguments: "{}"}},
+			ToolCalls:    []types.ToolCall{{ID: "tc0", Name: "post_search_query", Arguments: "{}"}},
 			PromptTokens: 5, CompletionTokens: 6, TotalTokens: 11,
 		}, nil
 	}
@@ -466,13 +466,13 @@ func (r *runIDRecorder) Embed(context.Context, *types.EmbedRequest) ([][]float32
 // every sibling's tool.
 func TestToolSubsystemReadsTheNameNotAnIndex(t *testing.T) {
 	cases := map[string]string{
-		"post_v1_search_query":   "search",
-		"get_v1_git_repos":       "git",
-		"delete_v1_kms_secrets":  "kms",
-		"get_v1_agents_sessions": "agents",
-		"http":                   "", // a registry-local tool owns no subsystem
-		"":                       "",
-		"v1":                     "", // "v1" with nothing after it names nothing
+		"post_search_query":   "search",
+		"get_git_repos":       "git",
+		"delete_kms_secrets":  "kms",
+		"get_agents_sessions": "agents",
+		"http":                "", // a registry-local tool owns no subsystem
+		"":                    "",
+		"v1":                  "", // "v1" with nothing after it names nothing
 	}
 	for in, want := range cases {
 		if got := toolSubsystem(in); got != want {
@@ -486,7 +486,7 @@ func TestToolSubsystemReadsTheNameNotAnIndex(t *testing.T) {
 // security right are the same edit.
 //
 // A dispatch used to record WHICH tool ran and nothing about what it ran WITH, so
-// a trace could say an agent called post_v1_exec_run six times and never say what
+// a trace could say an agent called post_exec_run six times and never say what
 // it executed. Recording the arguments closes that. But a tool argument routinely
 // carries a live credential — a clone URL with a token in its userinfo is the
 // ordinary shape apps/coding builds — and a span store is built to be queried and
@@ -503,24 +503,24 @@ func TestToolCallRecordsWhatItDidWithoutItsCredential(t *testing.T) {
 
 	// The tool hands back a credential too — a result is as capable of carrying one
 	// as an argument, and it is recorded on the same span.
-	plane := &stubPlane{offer: []string{"post_v1_exec_run"}, result: map[string]string{
-		"post_v1_exec_run": `{"ok":true,"remote":"https://deploy:s3cr3t@git.example.com/x"}`,
+	plane := &stubPlane{offer: []string{"post_exec_run"}, result: map[string]string{
+		"post_exec_run": `{"ok":true,"remote":"https://deploy:s3cr3t@git.example.com/x"}`,
 	}}
 	old := runTools
 	runTools = plane
 	t.Cleanup(func() { runTools = old })
 
-	gw := toolGatewayArgs(t, "post_v1_exec_run", args)
+	gw := toolGatewayArgs(t, "post_exec_run", args)
 	defer gw.Close()
 
 	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
 	do(t, app, http.MethodPost, "/v1/agents", "acme", map[string]any{
-		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_v1_exec_run"}})
+		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_exec_run"}})
 	if code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "go"}); code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
 	}
 
-	sp, ok := sink.find("agent.tool post_v1_exec_run")
+	sp, ok := sink.find("agent.tool post_exec_run")
 	if !ok {
 		t.Fatal("the dispatch produced no span")
 	}
@@ -595,24 +595,24 @@ func TestRecordedValueIsCutAndSaysSo(t *testing.T) {
 func TestEverySpanOfARunIsFiledUnderItsTenant(t *testing.T) {
 	sink := traced(t)
 
-	plane := &stubPlane{offer: []string{"post_v1_search_query"}}
+	plane := &stubPlane{offer: []string{"post_search_query"}}
 	old := runTools
 	runTools = plane
 	t.Cleanup(func() { runTools = old })
 
-	gw := toolGateway(t, []string{"post_v1_search_query"})
+	gw := toolGateway(t, []string{"post_search_query"})
 	defer gw.Close()
 
 	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
 	do(t, app, http.MethodPost, "/v1/agents", "acme", map[string]any{
-		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_v1_search_query"}})
+		"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}})
 	if code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"}); code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
 	}
 
 	// The spans a run IS. Named explicitly so a span that stops being produced
 	// fails here rather than silently shrinking the set under assertion.
-	want := []string{"agent.run a", "agent.step", "agent.tool post_v1_search_query", "chat gpt-4o-mini"}
+	want := []string{"agent.run a", "agent.step", "agent.tool post_search_query", "chat gpt-4o-mini"}
 	for _, name := range want {
 		spans := sink.all(name)
 		if len(spans) == 0 {
@@ -639,18 +639,18 @@ func TestEverySpanOfARunIsFiledUnderItsTenant(t *testing.T) {
 func TestOneOrgsRunNeverCarriesAnothersTenant(t *testing.T) {
 	sink := traced(t)
 
-	plane := &stubPlane{offer: []string{"post_v1_search_query"}}
+	plane := &stubPlane{offer: []string{"post_search_query"}}
 	old := runTools
 	runTools = plane
 	t.Cleanup(func() { runTools = old })
 
-	gw := toolGateway(t, []string{"post_v1_search_query"})
+	gw := toolGateway(t, []string{"post_search_query"})
 	defer gw.Close()
 
 	app := mountApp(t, clients.AIHTTPAt(gw.URL+"/v1", "k", "gpt-4o-mini"))
 	for _, org := range []string{"acme", "globex"} {
 		do(t, app, http.MethodPost, "/v1/agents", org, map[string]any{
-			"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_v1_search_query"}})
+			"name": "a", "model": "gpt-4o-mini", "instructions": "x", "tools": []string{"post_search_query"}})
 		if code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", org, map[string]any{"input": "hi"}); code != http.StatusOK {
 			t.Fatalf("%s run want 200, got %d (%s)", org, code, body)
 		}
@@ -660,7 +660,7 @@ func TestOneOrgsRunNeverCarriesAnothersTenant(t *testing.T) {
 	// names is that tenant's own. A span filed under the platform default is
 	// counted as neither and fails the total below.
 	seen := map[string]int{}
-	for _, name := range []string{"agent.run a", "agent.step", "agent.tool post_v1_search_query", "chat gpt-4o-mini"} {
+	for _, name := range []string{"agent.run a", "agent.step", "agent.tool post_search_query", "chat gpt-4o-mini"} {
 		for _, sp := range sink.all(name) {
 			org := attr(sp, "hanzo.org")
 			seen[org]++

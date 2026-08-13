@@ -18,7 +18,7 @@
   "paths": {
     "/v1/marketplace": {
       "get": {
-        "operationId": "get_v1_marketplace",
+        "operationId": "get_marketplace",
         "summary": "Discover lists every tool and agent the caller can reach in their own org and project, enriched with any public listing's title, category and price, and with installed=true on the ones already activated for that scope.",
         "description": "Discover lists every tool and agent the caller can reach in their own org and\nproject, enriched with any public listing's title, category and price, and with\ninstalled=true on the ones already activated for that scope. It is the shop\nwindow: one read that answers what exists, what it costs and what is already on.",
         "tags": [
@@ -40,7 +40,7 @@
     },
     "/v1/marketplace/install": {
       "post": {
-        "operationId": "post_v1_marketplace_install",
+        "operationId": "post_marketplace_install",
         "summary": "Install activates one tool for the caller's own org and project.",
         "description": "Install activates one tool for the caller's own org and project. A marketplace\ninstall IS the tool plane's activation write — one store, one truth — so an\ninstalled capability is immediately dispatchable and a monetized one is priced\nfrom its listing at every call. The tool must resolve in the caller's scope, so\ninstalling something that does not exist is refused rather than recorded.",
         "tags": [
@@ -75,7 +75,7 @@
     },
     "/v1/marketplace/listings": {
       "get": {
-        "operationId": "get_v1_marketplace_listings",
+        "operationId": "get_marketplace_listings",
         "summary": "Returns the listings the caller's own org has published — what this org is offering, not what it can buy.",
         "description": "Returns the listings the caller's own org has published — what this\norg is offering, not what it can buy. A publisher only ever sees its own rows.",
         "tags": [
@@ -95,7 +95,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_marketplace_listings",
+        "operationId": "post_marketplace_listings",
         "summary": "Publish offers one tool on the marketplace, optionally monetized.",
         "description": "Publish offers one tool on the marketplace, optionally monetized. The tool must\nalready resolve in the publisher's own scope, so a listing can never advertise a\ncapability that does not exist; a listing with a price must name the payout wallet\nthe x402 seam settles to, so a monetized offer is never unpayable. The price is\nexact to 18 decimal places, so a per-call price below a cent is a real price and\nnot a rounded-away zero. The listing is owned by the publishing org, paid into a\nwallet of that same org, and answers 201 with the created row.",
         "tags": [
@@ -134,7 +134,7 @@
     },
     "/v1/marketplace/listings/{id}": {
       "delete": {
-        "operationId": "delete_v1_marketplace_listings_by_id",
+        "operationId": "delete_marketplace_listings_by_id",
         "summary": "Unpublish withdraws one of the caller org's listings from the marketplace and answers 204.",
         "description": "Unpublish withdraws one of the caller org's listings from the marketplace and\nanswers 204. Only the publishing org can remove its own listing; an id that is\nunknown, or belongs to another org, is the same 404, so a probe learns nothing\nabout what exists. Removing a listing removes its price from per-call enforcement;\nit does not uninstall the tool for anyone who already installed it.",
         "tags": [
@@ -161,7 +161,7 @@
     },
     "/v1/marketplace/uninstall": {
       "post": {
-        "operationId": "post_v1_marketplace_uninstall",
+        "operationId": "post_marketplace_uninstall",
         "summary": "Uninstall deactivates one tool for the caller's own org and project, so it stops being dispatchable there.",
         "description": "Uninstall deactivates one tool for the caller's own org and project, so it stops\nbeing dispatchable there. It is the exact inverse of install and touches the same\nactivation record; deactivating something that was never active is not an error.\nThe listing itself is untouched — this withdraws the caller's use of a capability,\nnot anyone's offer of it.",
         "tags": [

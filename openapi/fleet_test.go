@@ -95,7 +95,7 @@ func TestSubsetsRefuseAnAppThatPublishedNothing(t *testing.T) {
 // assumption rather than a check. It was wrong about a committed file, because a
 // file can be edited: /v1/billing/methods was written into commerce's subset by
 // copying the /v1/billing/portal/methods block, operationId and prose together,
-// and two paths then claimed get_v1_billing_portal_methods. Nothing could be
+// and two paths then claimed get_billing_portal_methods. Nothing could be
 // regenerated until it was fixed — the weave is the sole writer of openapi.yaml,
 // so the CLI, the SDKs, MCP and the docs were all frozen behind it.
 //
@@ -106,8 +106,8 @@ func TestSubsetsRefuseAnAppThatPublishedNothing(t *testing.T) {
 func TestSubsetsRefusesAnAppWhoseOwnIDsCollide(t *testing.T) {
 	// The real shape of the defect: a second path carrying the first one's id.
 	collide, err := json.Marshal(openapi.Document{OpenAPI: "3.1.0", Paths: map[string]openapi.PathItem{
-		"/v1/billing/methods":        {"get": {OperationID: "get_v1_billing_portal_methods"}},
-		"/v1/billing/portal/methods": {"get": {OperationID: "get_v1_billing_portal_methods"}},
+		"/v1/billing/methods":        {"get": {OperationID: "get_billing_portal_methods"}},
+		"/v1/billing/portal/methods": {"get": {OperationID: "get_billing_portal_methods"}},
 	}})
 	if err != nil {
 		t.Fatal(err)

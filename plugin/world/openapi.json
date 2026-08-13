@@ -18,7 +18,7 @@
   "paths": {
     "/v1/world": {
       "get": {
-        "operationId": "get_v1_world",
+        "operationId": "get_world",
         "summary": "Answers GET /v1/world — the product's front door, naming every wire this surface answers on.",
         "description": "Answers GET /v1/world — the product's front door, naming every wire this\nsurface answers on.\n\nIt exists because two of those wires are INVISIBLE to the generated document.\n/v1/world/mcp and /v1/world/zap are carved off the cloud catch-all by the\ningress and answered by world-gw, so the cloud router never serves them — and\nopenapi.Describe renders prose only for a route the router actually serves,\nwhich is the very property that keeps the document from being able to claim an\noperation nothing answers. Both addresses are real and public, so without this\nop the only way to learn they exist is to read the ingress config. This is\nwhere that fact lives, in the product's own surface.\n\nPublic on purpose: discovery precedes credentials. It reports addresses and\nprotocols only — never feed data, and never the caller's plan, which\nGET /v1/world/limits owns — so there is nothing here to leak.",
         "tags": [
@@ -40,7 +40,7 @@
     },
     "/v1/world/limits": {
       "get": {
-        "operationId": "get_v1_world_limits",
+        "operationId": "get_world_limits",
         "summary": "Echoes a World plan's rate limits, alert quota and model-API grant, read straight from the live @hanzo/plans catalog, so agents and dashboards configure themselves against the catalog instead of hardcoding tier numbers.",
         "description": "Echoes a World plan's rate limits, alert quota and model-API grant, read\nstraight from the live @hanzo/plans catalog, so agents and dashboards configure\nthemselves against the catalog instead of hardcoding tier numbers.\n\nAn empty or unknown plan resolves world-free, and a catalog failure serves that\nsame free floor rather than erroring — so this always answers 200, and it can only\never under-grant. It reports the contract; it does not enforce it.",
         "tags": [
@@ -73,7 +73,7 @@
     },
     "/v1/world/news": {
       "get": {
-        "operationId": "get_v1_world_news",
+        "operationId": "get_world_news",
         "summary": "Returns the caller's merged world-news feed: every source their project's pipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed — fetched concurrently, narrowed by the pipeline's keyword/region/source filters, deduplicated by link and sorted freshest first, capped at 50 items.",
         "description": "Returns the caller's merged world-news feed: every source their project's\npipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed —\nfetched concurrently, narrowed by the pipeline's keyword/region/source filters,\ndeduplicated by link and sorted freshest first, capped at 50 items.\n\nA project with no stored pipeline gets a sensible default set of world feeds\nrather than an empty answer. A source that fails or times out is SKIPPED: the feed\ndegrades to honest partial results and never 5xxs because one outlet was down.\nReading also publishes the result to the /v1/world/stream subscribers of the same\n(org, project), so a dashboard's own refresh updates every open tab.",
         "tags": [
@@ -95,7 +95,7 @@
     },
     "/v1/world/pipeline": {
       "get": {
-        "operationId": "get_v1_world_pipeline",
+        "operationId": "get_world_pipeline",
         "summary": "Returns the caller project's news pipeline: which feeds it reads and how the merged result is filtered.",
         "description": "Returns the caller project's news pipeline: which feeds it reads and how\nthe merged result is filtered. A project that has never written one is answered\nwith the built-in world feeds and `default: true`, so a fresh project sees the\nsame feed /v1/world/news would actually serve rather than an empty configuration.",
         "tags": [
@@ -115,7 +115,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_world_pipeline",
+        "operationId": "put_world_pipeline",
         "summary": "Replaces the caller project's news pipeline and returns what was stored.",
         "description": "Replaces the caller project's news pipeline and returns what was\nstored. It is a WHOLE replacement, not a patch: a field the request leaves out is\nstored empty, so sending only feeds clears the filters.\n\nEvery feed URL is validated HERE, at the write boundary — http(s) only, and the\nhost must be on the server's allowlist — so a stored pipeline can never name a\nhost the fetcher would later refuse, and the allowlist is one decision in one\nplace rather than a check at each fetch.",
         "tags": [
@@ -147,7 +147,7 @@
     },
     "/v1/world/stream": {
       "get": {
-        "operationId": "get_v1_world_stream",
+        "operationId": "get_world_stream",
         "summary": "Live news refreshes for the caller's org and project, as Server-Sent Events.",
         "description": "Holds the connection open as text/event-stream and pushes a `news` event — the same {items:[…]} body GET /v1/world/news answers — each time the caller's (org, project) feed refreshes, with a `: ping` heartbeat comment every 25s. Delivery is best-effort: a slow consumer is dropped on buffer overrun and reconnects, re-fetching GET /v1/world/news, which stays the source of truth. Requires a validated principal; 403 without one.",
         "tags": [

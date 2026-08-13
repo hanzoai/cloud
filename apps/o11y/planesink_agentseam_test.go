@@ -45,9 +45,9 @@ func TestAgentRunSpansAreFiledUnderTheirTenant(t *testing.T) {
 		attribute.String("hanzo.agent.run_id", "run_123"),
 		attribute.String("hanzo.org", "acme"),
 	)
-	_, tool := tr.Start(ctx, "agent.tool post_v1_search_query", trace.WithSpanKind(trace.SpanKindInternal))
+	_, tool := tr.Start(ctx, "agent.tool post_search_query", trace.WithSpanKind(trace.SpanKindInternal))
 	tool.SetAttributes(
-		attribute.String("gen_ai.tool.name", "post_v1_search_query"),
+		attribute.String("gen_ai.tool.name", "post_search_query"),
 		attribute.String("hanzo.org", "acme"),
 		attribute.String("hanzo.agent.run_id", "run_123"),
 	)

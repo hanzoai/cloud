@@ -18,7 +18,7 @@
   "paths": {
     "/v1/company": {
       "get": {
-        "operationId": "get_v1_company",
+        "operationId": "get_company",
         "summary": "Get returns the caller org's formation and the stages reachable from it, or 404 when the org has not begun one.",
         "description": "Get returns the caller org's formation and the stages reachable from it, or 404\nwhen the org has not begun one.",
         "tags": [
@@ -38,7 +38,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_company",
+        "operationId": "post_company",
         "summary": "Begin starts the org's one formation and returns it with the stages reachable from it.",
         "description": "Begin starts the org's one formation and returns it with the stages reachable\nfrom it. It is idempotent: an org that already has a formation gets that one\nback with 200, while a first call creates it and answers 201.",
         "tags": [
@@ -75,7 +75,7 @@
     },
     "/v1/company/advance": {
       "post": {
-        "operationId": "post_v1_company_advance",
+        "operationId": "post_company_advance",
         "summary": "Advance runs the ONE guarded transition of the formation machine.",
         "description": "Advance runs the ONE guarded transition of the formation machine. It is the\nonly door between stages: the actions populate data, this decides ordering.\n\nAn edge the machine does not define answers 409; an edge whose guard is not yet\nsatisfied answers 422 naming what is missing. Reaching the terminal `company`\nstage also records the incorporation on the canonical cap table, and that must\nsucceed before the transition is persisted.",
         "tags": [
@@ -110,7 +110,7 @@
     },
     "/v1/company/documents": {
       "post": {
-        "operationId": "post_v1_company_documents",
+        "operationId": "post_company_documents",
         "summary": "Renders the formation documents for the chosen structure and jurisdiction, ingests each into the org's data room, and submits the state filing through the filing seam.",
         "description": "Renders the formation documents for the chosen structure and\njurisdiction, ingests each into the org's data room, and submits the state\nfiling through the filing seam.\n\nWith no filing partner wired the filing is recorded honestly as \"manual\" — no\nfiling id is fabricated. Available only at the documents stage.",
         "tags": [
@@ -132,7 +132,7 @@
     },
     "/v1/company/esign": {
       "post": {
-        "operationId": "post_v1_company_esign",
+        "operationId": "post_company_esign",
         "summary": "Sends the generated formation documents for signature by every founder and records the provider's reference on the formation.",
         "description": "Sends the generated formation documents for signature by every\nfounder and records the provider's reference on the formation. Available only\nat the esign stage.",
         "tags": [
@@ -154,7 +154,7 @@
     },
     "/v1/company/esign/complete": {
       "post": {
-        "operationId": "post_v1_company_esign_complete",
+        "operationId": "post_company_esign_complete",
         "summary": "Records whether the formation documents have been signed.",
         "description": "Records whether the formation documents have been signed. It\nconsults the e-signature provider, which a real provider's webhook drives; the\nsignal is idempotent.\n\nAn explicit `signed` in the request overrides the provider's answer, which is\nthe manual path for the stub provider that never self-completes.",
         "tags": [
@@ -189,7 +189,7 @@
     },
     "/v1/company/founders": {
       "post": {
-        "operationId": "post_v1_company_founders",
+        "operationId": "post_company_founders",
         "summary": "Replaces the formation's founders.",
         "description": "Replaces the formation's founders. Each founder needs a name, an\nemail and an equity share in basis points; every founder is (re)set to pending\nKYC, so a previously settled decision does not survive a change of the list.",
         "tags": [
@@ -230,7 +230,7 @@
     },
     "/v1/company/fundraise/deck": {
       "post": {
-        "operationId": "post_v1_company_fundraise_deck",
+        "operationId": "post_company_fundraise_deck",
         "summary": "Share a pitch deck in the org's data room",
         "description": "Stores the request body as a document in the caller org's data room and answers with the data room id to reference it by. The deck is RAW BYTES of whatever content type is sent — a PDF, a slide export — not a JSON document: the Content-Type header is carried through to the data room as given, and `?name=` names the document, defaulting to `pitch-deck`.\n\nScoped to the caller's validated org, and only after incorporation: a formation still short of stage `company` is refused 409 and an org that never began one is 404. The route is registered AHEAD of the surface's JSON body cap deliberately, so a deck's size ceiling is the edge's rather than the cap meant for small structured records. An empty body is 400; a data room that will not take the bytes is 502.",
         "tags": [
@@ -262,7 +262,7 @@
     },
     "/v1/company/fundraise/round": {
       "post": {
-        "operationId": "post_v1_company_fundraise_round",
+        "operationId": "post_company_fundraise_round",
         "summary": "Records a fundraising round on the org's canonical cap table.",
         "description": "Records a fundraising round on the org's canonical cap table.\nAvailable only after incorporation (stage company); roundType defaults to\nPRICED.",
         "tags": [
@@ -299,7 +299,7 @@
     },
     "/v1/company/fundraise/safe": {
       "post": {
-        "operationId": "post_v1_company_fundraise_safe",
+        "operationId": "post_company_fundraise_safe",
         "summary": "Raises an e-signature request over documents already in the org's data room — a SAFE, a convertible note, or any other fundraising paper.",
         "description": "Raises an e-signature request over documents already in the org's\ndata room — a SAFE, a convertible note, or any other fundraising paper.\nAvailable only after incorporation (stage company).",
         "tags": [
@@ -342,7 +342,7 @@
     },
     "/v1/company/genesis": {
       "post": {
-        "operationId": "post_v1_company_genesis",
+        "operationId": "post_company_genesis",
         "summary": "Seeds the canonical cap table with the founding allocation (stakeholders, a common share class, issued shares) and anchors the deterministic equity-genesis root on-chain.",
         "description": "Seeds the canonical cap table with the founding allocation\n(stakeholders, a common share class, issued shares) and anchors the\ndeterministic equity-genesis root on-chain.\n\nIt is idempotent: once a root is recorded the cap table is NOT re-seeded, which\nwould double-issue founder share certificates. The root is persisted even when\nthe on-chain submit fails, because the root is the tamper-evident witness and\nmust not be recomputed on retry. Available only at the genesis stage.",
         "tags": [
@@ -364,7 +364,7 @@
     },
     "/v1/company/import/captable": {
       "post": {
-        "operationId": "post_v1_company_import_captable",
+        "operationId": "post_company_import_captable",
         "summary": "Reads an existing company's cap table from a Google Sheet and adds its stakeholders to the canonical cap table.",
         "description": "Reads an existing company's cap table from a Google Sheet and\nadds its stakeholders to the canonical cap table.\n\nThe first row is a header and columns are matched by name (case-insensitive):\nname and email are required, type/relationship/institution optional. A sheet\nwithout name and email columns, or with no usable data rows, is refused with\n400. Available only at the import stage.",
         "tags": [
@@ -400,7 +400,7 @@
     },
     "/v1/company/import/documents": {
       "post": {
-        "operationId": "post_v1_company_import_documents",
+        "operationId": "post_company_import_documents",
         "summary": "Ingests an existing company's corporate documents from a Google Drive folder into the org's data room.",
         "description": "Ingests an existing company's corporate documents from a Google\nDrive folder into the org's data room. The import is shallow — sub-folders are\nskipped, not walked — and available only at the import stage.",
         "tags": [
@@ -435,7 +435,7 @@
     },
     "/v1/company/kyc": {
       "post": {
-        "operationId": "post_v1_company_kyc",
+        "operationId": "post_company_kyc",
         "summary": "StartKYC opens an identity-verification session for every founder with the wired provider and records each session's reference on the formation.",
         "description": "StartKYC opens an identity-verification session for every founder with the\nwired provider and records each session's reference on the formation.\n\nA start is never a decision: any terminal status the provider reports at\ninquiry time is clamped back to pending, so the payment gate can never open\nhere. A terminal status arrives only from POST /v1/company/kyc/refresh (the\nprovider) or POST /v1/company/kyc/decision (a Hanzo platform reviewer).",
         "tags": [
@@ -457,7 +457,7 @@
     },
     "/v1/company/kyc/decision": {
       "post": {
-        "operationId": "post_v1_company_kyc_decision",
+        "operationId": "post_company_kyc_decision",
         "summary": "DecideKYC records a privileged reviewer's MANUAL decision on a founder's KYC — the human-in-the-loop path, and the ONLY route to a pass when no real provider is wired.",
         "description": "DecideKYC records a privileged reviewer's MANUAL decision on a founder's KYC —\nthe human-in-the-loop path, and the ONLY route to a pass when no real provider\nis wired. It produces a DISTINCT reviewer_confirmed, never a provider\n\"verified\".\n\nBecause Hanzo forms the entity and carries the formation KYC/AML obligation,\nthe reviewer is a HANZO platform reviewer (SuperAdmin), and the decision is\nATTRIBUTED to them.",
         "tags": [
@@ -493,7 +493,7 @@
     },
     "/v1/company/kyc/refresh": {
       "post": {
-        "operationId": "post_v1_company_kyc_refresh",
+        "operationId": "post_company_kyc_refresh",
         "summary": "RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the PULL path to a provider-reported terminal status.",
         "description": "RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the\nPULL path to a provider-reported terminal status. For the manual provider the\ncheck stays pending; for a real provider it reflects the settled decision,\nATTRIBUTED to the provider.\n\nIt NEVER trusts a client-asserted status — the status comes from the provider\nseam — so a client cannot force a pass here, and an already-passing founder\n(e.g. a reviewer confirmation) is left untouched.",
         "tags": [
@@ -515,7 +515,7 @@
     },
     "/v1/company/payment": {
       "post": {
-        "operationId": "post_v1_company_payment",
+        "operationId": "post_company_payment",
         "summary": "Charge the one-time formation fee and mark the formation paid",
         "description": "Bills the caller's own org the one-time Hanzo Company formation fee — $999 unless the deployment sets another — and answers with the formation record carrying its paid flag and the charge reference. Takes no body: the org is the validated tenant and the amount is the platform's, never the caller's to assert.\n\nIDEMPOTENT on the formation rather than on the request: an already-paid formation answers 200 with the same record and is not charged again, so a retry or a double-clicked button costs nothing. Available only at the `payment` stage (409 anywhere else) and only for an org that has begun a formation (404 otherwise).\n\nA refused charge answers the fleet-wide billing contract, not a formation error — 402 when the org cannot pay, 503 when metering is unavailable — which is exactly why this route is not a typed op.",
         "tags": [
@@ -537,7 +537,7 @@
     },
     "/v1/company/register": {
       "get": {
-        "operationId": "get_v1_company_register",
+        "operationId": "get_company_register",
         "summary": "Returns the platform's whole formation register, newest activity first — every org's formation, not the caller's.",
         "description": "Returns the platform's whole formation register, newest activity\nfirst — every org's formation, not the caller's. It is a Hanzo platform\noperation: a caller who is not a platform reviewer gets 403.\n\nFilter by stage and structure, page with limit and offset. An unknown stage is\nrefused with 400 rather than returning a silently empty page.",
         "tags": [
@@ -599,7 +599,7 @@
     },
     "/v1/company/register/summary": {
       "get": {
-        "operationId": "get_v1_company_register_summary",
+        "operationId": "get_company_register_summary",
         "summary": "Counts the platform's formations by stage — the register's shape in one read, so a queue that is growing is visible as a number rather than inferred by paging the list.",
         "description": "Counts the platform's formations by stage — the register's\nshape in one read, so a queue that is growing is visible as a number rather\nthan inferred by paging the list. A Hanzo platform operation: a caller who is\nnot a platform reviewer gets 403.",
         "tags": [
@@ -621,7 +621,7 @@
     },
     "/v1/company/review": {
       "get": {
-        "operationId": "get_v1_company_review",
+        "operationId": "get_company_review",
         "summary": "Reports the founders whose KYC is not yet settled, oldest formation first, so the queue drains in the order founders have been waiting.",
         "description": "Reports the founders whose KYC is not yet settled, oldest formation\nfirst, so the queue drains in the order founders have been waiting. A Hanzo\nplatform operation: a caller who is not a platform reviewer gets 403.\n\nIt only says who is waiting; the decision itself is POST\n/v1/company/kyc/decision.",
         "tags": [
@@ -655,7 +655,7 @@
     },
     "/v1/company/skip": {
       "post": {
-        "operationId": "post_v1_company_skip",
+        "operationId": "post_company_skip",
         "summary": "Skip marks the org as already incorporated and moves it onto the import path, so an existing company brings its documents and cap table in instead of forming a new entity.",
         "description": "Skip marks the org as already incorporated and moves it onto the import path,\nso an existing company brings its documents and cap table in instead of forming\na new entity. Available only at the structure stage.",
         "tags": [
@@ -677,7 +677,7 @@
     },
     "/v1/company/structure": {
       "put": {
-        "operationId": "put_v1_company_structure",
+        "operationId": "put_company_structure",
         "summary": "Records the entity kind, the state of formation and the proposed name.",
         "description": "Records the entity kind, the state of formation and the proposed\nname. Available only at the structure stage; an unknown structure or\njurisdiction, or an empty name, is refused with 400.",
         "tags": [

@@ -18,7 +18,7 @@
   "paths": {
     "/v1/code/lsp/complete": {
       "post": {
-        "operationId": "post_v1_code_lsp_complete",
+        "operationId": "post_code_lsp_complete",
         "summary": "Offers the candidates a language server has at a position, typed and resolved through the repository's dependencies rather than guessed from text.",
         "description": "Offers the candidates a language server has at a position, typed and\nresolved through the repository's dependencies rather than guessed from text.",
         "tags": [
@@ -56,7 +56,7 @@
     },
     "/v1/code/lsp/diagnostics": {
       "post": {
-        "operationId": "post_v1_code_lsp_diagnostics",
+        "operationId": "post_code_lsp_diagnostics",
         "summary": "Reports every problem the language server finds in one file — compile errors, type errors and lints, each with its span and its severity (1 error, 2 warning, 3 information, 4 hint).",
         "description": "Reports every problem the language server finds in one file —\ncompile errors, type errors and lints, each with its span and its severity (1\nerror, 2 warning, 3 information, 4 hint). The position is ignored.",
         "tags": [
@@ -92,7 +92,7 @@
     },
     "/v1/code/lsp/hover": {
       "post": {
-        "operationId": "post_v1_code_lsp_hover",
+        "operationId": "post_code_lsp_hover",
         "summary": "Renders the type and documentation of the symbol at a position, as the language server itself renders it.",
         "description": "Renders the type and documentation of the symbol at a position, as the\nlanguage server itself renders it.\n\nPositions are the LSP's: line and character are 0-BASED and character counts\nUTF-16 code units, so an editor's 1-based line must have 1 subtracted before it\nis sent. The repository is named by slug and is always one in the caller's own\norg; rev pins a branch, tag or commit sha, and empty means the default branch.",
         "tags": [
@@ -130,7 +130,7 @@
     },
     "/v1/code/lsp/locate": {
       "post": {
-        "operationId": "post_v1_code_lsp_locate",
+        "operationId": "post_code_lsp_locate",
         "summary": "Finds where a symbol lives: its definition, its references, its type or its implementations, chosen by relation (definition, reference, type, implementation — empty means definition).",
         "description": "Finds where a symbol lives: its definition, its references, its type or\nits implementations, chosen by relation (definition, reference, type,\nimplementation — empty means definition).\n\nIt resolves THROUGH dependencies. An answer whose external flag is set left the\nrepository, and its path is then the module coordinate it landed in — which is\nthe question a static index cannot answer and this service exists for.",
         "tags": [
@@ -169,7 +169,7 @@
     },
     "/v1/code/lsp/symbols": {
       "post": {
-        "operationId": "post_v1_code_lsp_symbols",
+        "operationId": "post_code_lsp_symbols",
         "summary": "Outlines one file: every declaration in it, with its kind and its span.",
         "description": "Outlines one file: every declaration in it, with its kind and its span.\nThe position is ignored — the answer is the whole file.",
         "tags": [

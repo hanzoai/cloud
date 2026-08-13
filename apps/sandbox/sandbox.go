@@ -572,4 +572,5 @@ func init() {
 			"plain shell again when the image has no tmux. Every step is a preference and none "+
 			"is a requirement: whatever else the image carries — the hanzo CLI included — is a "+
 			"command to type, never a condition for getting a prompt.")
+
 }
