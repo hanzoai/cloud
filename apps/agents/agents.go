@@ -1095,8 +1095,15 @@ func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Age
 	if len(defs) > 0 {
 		resp, used, aiErr, tools = completeWithTools(ctx, ai, org, actor, msgs, a.Model, fallback, defs, runID)
 	} else {
+		// Actor is the person this run acts for, and it has to be STATED here:
+		// a run executes on a detached context, so there is no live request for
+		// the metering wrapper to read one off. Without it the gateway saw only
+		// the deployment's own IAM application and recorded the application as
+		// the spender — a usage row with no human owner. Same value the tool
+		// plane below already runs as, so a run's spend and its tool calls name
+		// one principal.
 		resp, used, aiErr = completeWithFailover(ctx, ai,
-			&types.ChatRequest{Model: a.Model, Org: org, Messages: msgs, RunID: runID}, fallback)
+			&types.ChatRequest{Model: a.Model, Org: org, Messages: msgs, RunID: runID, Actor: actor}, fallback)
 	}
 	dur := time.Since(start).Milliseconds()
 	r := Run{
