@@ -315,6 +315,66 @@
         ]
       }
     },
+    "/v1/sandboxes/{id}/screen": {
+      "get": {
+        "operationId": "get_sandboxes_by_id_screen",
+        "summary": "The screen, as a page",
+        "description": "A complete, self-contained desktop — noVNC inline, no other origin — that opens its own socket and draws this sandbox's display. Embed it in an iframe and there is nothing else to build.\n\n`ticket` is the credential from the POST above, carried through to the socket. As with the terminal the page is NOT gated: it is inert markup and does not redeem the ticket, because a ticket is spent once and a page that spent it would hold a credential that no longer opens anything.\n\nThe view SCALES what it is given rather than resizing the display — a browser pane's size is not the X server's, and the image runs no RandR — so the window is deliberately not negotiated.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandboxes/{id}/screen/ticket": {
+      "post": {
+        "operationId": "post_sandboxes_by_id_screen_ticket",
+        "summary": "Open a screen",
+        "description": "Mints a SINGLE-USE ticket for one view of this sandbox's display and returns `{ticket, expiresIn, url}`, where url is the screen PAGE with the ticket already on it.\n\nIt is the terminal's ticket exactly — bound to this org and this sandbox, valid for thirty seconds, gone the first time it is presented — for the same reason: a browser carries no Authorization header into a WebSocket or an iframe, and a long-lived bearer in a query string would be written into every access log on the path.\n\nMint one per view, and mint a fresh one to reconnect.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandboxes/{id}/screen/ws": {
+      "get": {
+        "operationId": "get_sandboxes_by_id_screen_ws",
+        "summary": "The screen, as a socket",
+        "description": "Upgrades to a WebSocket carrying the RFB stream of this sandbox's display — for a host that brings its own VNC client. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.\n\nTHE PIXELS COME OUT THROUGH THE EXEC CHANNEL. The desktop image serves RFB on 127.0.0.1:5900 and binds nothing else — a screen reachable from the pod network is a screen whose only defence is a NetworkPolicy — so there is no address to dial. `socat` joins stdin and stdout to that loopback port over the same Kubernetes exec subresource every other call into a sandbox uses, and the stream IS the transport: one way in, one thing to authorize, nothing new exposed.\n\nIt is registered for EVERY class rather than for `desktop` alone, because the class is a fact about the image and the failure is already exact: a sandbox with no VNC server refuses the socat connection and the page says the connection failed. A check here would be a second opinion about what is running inside a pod, formed from a label rather than from the pod.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/sandboxes/{id}/terminal": {
       "get": {
         "operationId": "get_sandboxes_by_id_terminal",
