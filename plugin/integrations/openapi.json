@@ -24,7 +24,7 @@
   "paths": {
     "/v1/connector/github/webhook": {
       "post": {
-        "operationId": "post_v1_connector_github_webhook",
+        "operationId": "post_connector_github_webhook",
         "summary": "GitHub App webhook",
         "description": "The address the GitHub App delivers events to. A push is handed to the repository sync engine, and an issue or issue-comment event is mirrored into the native tracker — idempotently, so the same issue re-syncs to one row however many times it is edited, closed or reopened.\n\nIt answers a benign 200 for everything it does not act on — the ping, other event types, an unknown installation — deliberately, so GitHub does not enter a retry storm over events that were never going to do anything. Only a bad signature and a genuine sync failure are non-200, and an oversized payload is refused outright.\n\nTwo sync rules are worth stating because neither is guessable. EVERY ref syncs, tags as well as branches, because releases are cut by tag and filtering them would stop publishing with nothing reporting a failure. And a delete is NEVER propagated: the native side is canonical, so an inbound delete never removes a native ref.\n\nThe payload is verified by HMAC against the webhook secret before it is parsed.\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.",
         "tags": [
@@ -34,7 +34,7 @@
     },
     "/v1/connectors": {
       "get": {
-        "operationId": "get_v1_connectors",
+        "operationId": "get_connectors",
         "summary": "Lists the caller's OWN connectors across every provider — the set `hanzo connector ls` prints.",
         "description": "Lists the caller's OWN connectors across every provider — the set\n`hanzo connector ls` prints. Rows are keyed (org,user), so this can never\nsurface another user's connector, and no secret is in the view.",
         "tags": [
@@ -72,7 +72,7 @@
     },
     "/v1/connectors/providers": {
       "get": {
-        "operationId": "get_v1_connectors_providers",
+        "operationId": "get_connectors_providers",
         "summary": "Lists the user-scoped provider cards — the catalog of what a user can connect, and how.",
         "description": "Lists the user-scoped provider cards — the catalog of what a\nuser can connect, and how. Methods derive from capabilities (Device/Adopt/Verify\n— Mount asserts at least one), never from a parallel kind enum.",
         "tags": [
@@ -111,7 +111,7 @@
     },
     "/v1/connectors/{id}": {
       "delete": {
-        "operationId": "delete_v1_connectors_by_id",
+        "operationId": "delete_connectors_by_id",
         "summary": "Forgets a connector: every custodied secret, then the row.",
         "description": "Forgets a connector: every custodied secret, then the row.\nIdempotent — dropping a never-connected id still answers {disconnected:true}\n(disconnect() parity). No provider Revoke: none of the user-plane providers\nexposes a revoke endpoint.",
         "tags": [
@@ -148,7 +148,7 @@
     },
     "/v1/connectors/{id}/refresh": {
       "post": {
-        "operationId": "post_v1_connectors_by_id_refresh",
+        "operationId": "post_connectors_by_id_refresh",
         "summary": "Forces a token rotation for a connected connector, ahead of the automatic rotation a token read would do inside the expiry window.",
         "description": "Forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it.",
         "tags": [
@@ -197,7 +197,7 @@
     },
     "/v1/connectors/{id}/token": {
       "get": {
-        "operationId": "get_v1_connectors_by_id_token",
+        "operationId": "get_connectors_by_id_token",
         "summary": "Hands the custodied access token to its owner — the ONE place custody exits.",
         "description": "Hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
         "tags": [
@@ -237,7 +237,7 @@
     },
     "/v1/connectors/{provider}/credential": {
       "post": {
-        "operationId": "post_v1_connectors_by_provider_credential",
+        "operationId": "post_connectors_by_provider_credential",
         "summary": "Is the direct intake path: a customer-held token/setup-token (Verify) or an externally obtained OAuth bundle from the CLI's local PKCE (Adopt).",
         "description": "Is the direct intake path: a customer-held token/setup-token\n(Verify) or an externally obtained OAuth bundle from the CLI's local PKCE\n(Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING\nis persisted (connectByCredential's fail-closed order).",
         "tags": [
@@ -301,7 +301,7 @@
     },
     "/v1/connectors/{provider}/device": {
       "post": {
-        "operationId": "post_v1_connectors_by_provider_device",
+        "operationId": "post_connectors_by_provider_device",
         "summary": "Begins a device sign-in and returns the code to show the user plus how to poll for completion.",
         "description": "Begins a device sign-in and returns the code to show the user plus\nhow to poll for completion. KMS readiness is checked NOW rather than dead-ending\nthe user at poll-done (connect() parity), and the per-provider connector cap is\nchecked before the provider is called. The provider's device code is persisted\nonly in the encrypted grants table and is NEVER returned.",
         "tags": [
@@ -356,7 +356,7 @@
     },
     "/v1/connectors/{provider}/device/{flow}/poll": {
       "post": {
-        "operationId": "post_v1_connectors_by_provider_device_by_flow_poll",
+        "operationId": "post_connectors_by_provider_device_by_flow_poll",
         "summary": "Advances a device sign-in.",
         "description": "Advances a device sign-in. Terminal outcomes are DATA, not errors\n(verifyConn {active:false} discipline) — the status set is closed:\npending|connected|denied|expired. pollSlow collapses to \"pending\" on the\nwire; the raised cadence rides interval.",
         "tags": [
@@ -415,7 +415,7 @@
     },
     "/v1/integrations": {
       "get": {
-        "operationId": "get_v1_integrations",
+        "operationId": "get_integrations",
         "summary": "Returns every registered integration provider together with THIS org's connection status for it — the catalog the console's Integrations page renders.",
         "description": "Returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/connectors\nsurface) are omitted; the two planes are disjoint.",
         "tags": [
@@ -457,7 +457,7 @@
     },
     "/v1/integrations/discord/interactions": {
       "post": {
-        "operationId": "post_v1_integrations_discord_interactions",
+        "operationId": "post_integrations_discord_interactions",
         "summary": "Discord interactions endpoint",
         "description": "The Interactions Endpoint URL for the Discord app. It answers Discord's PING with a PONG, and handles the `/hanzo` slash command by acknowledging with a deferred ephemeral reply and editing that reply with the answer once the agent has run. Any other interaction is acknowledged and ignored.\n\nRequests are verified by ED25519 SIGNATURE over the timestamp and body against the app's public key — not by HMAC, unlike the Slack webhooks. Interactions work over plain HTTP, so no gateway connection and no message-content intent is involved.\n\nDiscord does not retry, so this is the one channel where being at capacity is shown to the user as an ephemeral ask-to-run-it-again rather than answered as a retriable failure — nothing is recorded either way, so the next attempt is clean.\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.",
         "tags": [
@@ -467,7 +467,7 @@
     },
     "/v1/integrations/discord/link": {
       "get": {
-        "operationId": "get_v1_integrations_discord_link",
+        "operationId": "get_integrations_discord_link",
         "summary": "Begin linking a Hanzo account from Discord",
         "description": "The entry point behind the connect prompt Hanzo shows in a Discord server. It starts a link session and redirects to Discord's OAuth `identify` consent — the narrowest scope that establishes which Discord user is asking, and nothing more.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -477,7 +477,7 @@
     },
     "/v1/integrations/discord/link/callback": {
       "get": {
-        "operationId": "get_v1_integrations_discord_link_callback",
+        "operationId": "get_integrations_discord_link_callback",
         "summary": "Complete the Discord account link",
         "description": "The final leg: it binds the verified Discord user to the Hanzo account that just signed in, and answers a short confirmation page telling them to return to Discord. The Hanzo credential is sealed into the connected org's KMS namespace rather than stored beside the link.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -487,7 +487,7 @@
     },
     "/v1/integrations/discord/link/discord": {
       "get": {
-        "operationId": "get_v1_integrations_discord_link_discord",
+        "operationId": "get_integrations_discord_link_discord",
         "summary": "Discord sign-in return leg",
         "description": "Where Discord returns the user after the identify consent. It resolves the verified Discord user, confirms the server is connected to an org, and hands the browser to the Hanzo sign-in that completes the link.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -497,7 +497,7 @@
     },
     "/v1/integrations/github/claim": {
       "post": {
-        "operationId": "post_v1_integrations_github_claim",
+        "operationId": "post_integrations_github_claim",
         "summary": "Binds installations the App ALREADY holds to the org the caller is acting in — the reconciliation for a grant that happened outside our connect flow.",
         "description": "Binds installations the App ALREADY holds to the org the caller is\nacting in — the reconciliation for a grant that happened outside our connect\nflow.\n\nAn installation IS the grant: GitHub recorded the consent when the App was\ninstalled, and our connection row is bookkeeping that never got written because\nnobody came through our callback. This writes that row from the App's own view,\nso 23 accounts granted straight from GitHub stop reading as nothing.\n\nThe org is taken from the VALIDATED PRINCIPAL and never from the body, because\nit is the one part GitHub cannot tell us. An installation carries an account\nlogin, a type and a repository selection — nothing that names a Hanzo org. So\nthe binding cannot be DERIVED, only asserted, and the only unforgeable assertion\navailable is the org the caller is already acting in. Inferring one from the\naccount name would be a guess the store cannot catch: its key is\n(org,provider,owner), so a wrong org is a valid row, and a valid row is a\nmirror pointed at the wrong tenant.\n\nSUPER ADMIN only, for that same reason. A tenant's proof that an account is\ntheirs is GitHub's own consent screen — the connect flow — and without it any\norg could claim any account the App holds. Platform sudo is already the scope\nthat reads the whole install list, so it is the scope that may bind from it;\ngiving a tenant this verb would hand it every other tenant's repositories.\n\nIdempotent: the row is keyed (org,provider,owner) and connected_at survives an\nupsert, so claiming twice rebinds the same account to the same org and reports\nit under `already`. Re-claiming also REFRESHES the installation id, so an\naccount reinstalled on GitHub — new id, same login — self-heals instead of\nminting tokens against a dead installation.\n\nClaiming an account another org holds ADDS this org's row and leaves theirs\nstanding, so no org loses an integration it is using.",
         "tags": [
@@ -538,7 +538,7 @@
     },
     "/v1/integrations/github/fork": {
       "post": {
-        "operationId": "post_v1_integrations_github_fork",
+        "operationId": "post_integrations_github_fork",
         "summary": "Forks a granted repository.",
         "description": "Forks a granted repository.\n\nGitHub's fork is ASYNCHRONOUS: it answers 202 with the target repo and\npopulates it in the background, and it answers the same 202 when the fork\nalready exists. So this reports what GitHub said rather than waiting — a call\nthat blocked until the clone finished would time out on a large repository and\ntell the caller nothing it does not already know.",
         "tags": [
@@ -580,7 +580,7 @@
     },
     "/v1/integrations/github/installations": {
       "get": {
-        "operationId": "get_v1_integrations_github_installations",
+        "operationId": "get_integrations_github_installations",
         "summary": "Lists the GitHub accounts the caller may see the App installed on, each confirmed against the App's own list, plus where to add another.",
         "description": "Lists the GitHub accounts the caller may see the App\ninstalled on, each confirmed against the App's own list, plus where to add\nanother.\n\nThe confirmation is the point. A connection row holds an installation id, and\nan id whose installation was since removed on GitHub is a row that mints\nnothing — every list and import against it fails with a token error, which\nreads as \"our git integration is broken\" rather than \"that install is gone\".\nChecking the App's view turns that into a fact the caller can act on.\n\nORG-SCOPED for a tenant, deliberately. The App is installed across every\ncustomer, so the raw list is the customer list; a tenant sees only accounts its\nown org has bound. It discovers a NEW account by installing it (InstallURL),\nwhich is GitHub's own consent screen — not by reading ours.\n\nA SUPER ADMIN sees the App's whole install list, because that list is the\nplatform's own inventory rather than any one tenant's data, and platform sudo\nis the single cross-tenant scope this house has. Without it an App installed\nout-of-band — granted straight from GitHub, so no connect flow ever ran and no\nconnection row exists — is invisible to everyone: the console card reads \"not\nconnected\" and an operator asked \"which GitHub orgs do you see\" can only\nanswer for accounts already bound, which is precisely the accounts that were\nnever the question.",
         "tags": [
@@ -614,7 +614,7 @@
     },
     "/v1/integrations/github/issues/backfill": {
       "post": {
-        "operationId": "post_v1_integrations_github_issues_backfill",
+        "operationId": "post_integrations_github_issues_backfill",
         "summary": "Seeds the native tracker with the EXISTING issues across the org's granted repos (default state=open); the webhook keeps them live thereafter.",
         "description": "Seeds the native tracker with the EXISTING issues across the\norg's granted repos (default state=open); the webhook keeps them live thereafter.\nOrg-scoped by the validated principal — a caller only ever backfills its OWN org.\nSynchronous + bounded (a total time budget and an issue cap) so it returns the\ncounts directly; idempotent by ExtRef, so a re-run continues where a truncated\npass left off and never duplicates.",
         "tags": [
@@ -656,7 +656,7 @@
     },
     "/v1/integrations/github/repos": {
       "get": {
-        "operationId": "get_v1_integrations_github_repos",
+        "operationId": "get_integrations_github_repos",
         "summary": "Lists the org's granted GitHub repositories, each annotated with its native import + sync status from the git object plane.",
         "description": "Lists the org's granted GitHub repositories, each annotated with its\nnative import + sync status from the git object plane. Org-authed: the org comes\nfrom the validated principal, and the granted set is bounded to THAT org's\ninstallation token — an org can never enumerate another org's repos. The console\npolls it to watch an import flip a repo to imported.",
         "tags": [
@@ -692,7 +692,7 @@
     },
     "/v1/integrations/github/repos/import": {
       "post": {
-        "operationId": "post_v1_integrations_github_repos_import",
+        "operationId": "post_integrations_github_repos_import",
         "summary": "Imports the selected (or all) granted repos into git.hanzo.ai.",
         "description": "Imports the selected (or all) granted repos into git.hanzo.ai. The\nselection is intersected with the installation's GRANTED set, so a client can\nnever import a repo the App was not granted (org isolation + a grant check). The\nimport runs in a bounded background worker (don't block the request), so the\nanswer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo\nstatus to flip to imported.",
         "tags": [
@@ -735,7 +735,7 @@
     },
     "/v1/integrations/github/repos/{repo}/pages": {
       "delete": {
-        "operationId": "delete_v1_integrations_github_repos_by_repo_pages",
+        "operationId": "delete_integrations_github_repos_by_repo_pages",
         "summary": "Deletes the repo's Pages site.",
         "description": "Deletes the repo's Pages site. 404 when there is none, so a\ncaller can tell \"turned it off\" from \"there was nothing on\".",
         "tags": [
@@ -771,7 +771,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_integrations_github_repos_by_repo_pages",
+        "operationId": "get_integrations_github_repos_by_repo_pages",
         "summary": "Returns the repo's Pages status, live URL, custom domain and build source.",
         "description": "Returns the repo's Pages status, live URL, custom domain and build\nsource. The repo is resolved against the org installation's GRANTED set, so a\ncaller can never address a repo the App was not granted; 404 when the repo has no\nPages site.",
         "tags": [
@@ -816,7 +816,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_integrations_github_repos_by_repo_pages",
+        "operationId": "post_integrations_github_repos_by_repo_pages",
         "summary": "Creates the repo's Pages site and answers 201 Created with it.",
         "description": "Creates the repo's Pages site and answers 201 Created with it.\nWith buildType \"workflow\" the site builds via GitHub Actions; otherwise it builds\nfrom a branch source, defaulting to the repo's own default branch when none is\ngiven. Only \"/\" and \"/docs\" are legal source paths (GitHub's rule).",
         "tags": [
@@ -875,7 +875,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_integrations_github_repos_by_repo_pages",
+        "operationId": "put_integrations_github_repos_by_repo_pages",
         "summary": "Sets or clears the custom domain (cname) and updates HTTPS enforcement, build type, or source.",
         "description": "Sets or clears the custom domain (cname) and updates HTTPS\nenforcement, build type, or source. ONLY the provided fields are sent to GitHub,\nso an update never resets a setting the caller did not mention.",
         "tags": [
@@ -928,7 +928,7 @@
     },
     "/v1/integrations/github/repos/{repo}/pages/builds": {
       "post": {
-        "operationId": "post_v1_integrations_github_repos_by_repo_pages_builds",
+        "operationId": "post_integrations_github_repos_by_repo_pages_builds",
         "summary": "Requests a Pages rebuild and returns the queued build's status.",
         "description": "Requests a Pages rebuild and returns the queued build's status.\nThe build is queued AT GITHUB, not completed here, so the answer is 202 Accepted\nand its status is the one GitHub reported at queue time. 404 when the repository\nhas no Pages site, or when the org's installation was not granted it.",
         "tags": [
@@ -967,7 +967,7 @@
     },
     "/v1/integrations/github/search": {
       "post": {
-        "operationId": "post_v1_integrations_github_search",
+        "operationId": "post_integrations_github_search",
         "summary": "Finds repositories on GitHub.",
         "description": "Finds repositories on GitHub.\n\nThis reads the PUBLIC index and returns nothing an installation unlocks: it is\nhow you find a repository to fork, not a way to see inside one. The org's own\ntoken is used only so the query is rate-limited against the installation\nrather than anonymously — the results are the same ones anyone would get.",
         "tags": [
@@ -1013,7 +1013,7 @@
     },
     "/v1/integrations/slack/commands": {
       "post": {
-        "operationId": "post_v1_integrations_slack_commands",
+        "operationId": "post_integrations_slack_commands",
         "summary": "Slack slash command webhook",
         "description": "The address Slack posts a slash command to, form-encoded. It acknowledges inside Slack's three-second budget and posts the answer afterwards to the command's own response URL, which is why the immediate reply is empty.\n\nThe body is verified against the same app signing secret as the events webhook, and a repeat of the same command invocation is absorbed rather than answered twice.\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.\n\nThe answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.",
         "tags": [
@@ -1023,7 +1023,7 @@
     },
     "/v1/integrations/slack/events": {
       "post": {
-        "operationId": "post_v1_integrations_slack_events",
+        "operationId": "post_integrations_slack_events",
         "summary": "Slack Events API webhook",
         "description": "The address a Slack app posts workspace events to. It answers Slack's url_verification handshake with the challenge, and routes an @mention or a direct message to an agent turn that replies in the same thread. A prompt beginning with `code:` is routed to the coding flow instead, which runs under its own pool.\n\nThe raw body and its timestamp are verified against the app's signing secret before anything is read from them. Hanzo's own bot messages are dropped, so a reply cannot trigger another reply.\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.\n\nThe answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.",
         "tags": [
@@ -1033,7 +1033,7 @@
     },
     "/v1/integrations/slack/install": {
       "get": {
-        "operationId": "get_v1_integrations_slack_install",
+        "operationId": "get_integrations_slack_install",
         "summary": "Install the Hanzo app into a Slack workspace",
         "description": "The address behind Slack's \"Add to Slack\" and Marketplace Install buttons. It answers a 302 to Slack's own consent screen and does nothing else — it is a redirector by design.\n\nIt exists because Slack refuses a slack.com URL in that field and requires one of ours that redirects there, which makes the field an ATTRIBUTION hook: routing the click through our own address is what lets an install be counted, and always answering the redirect is what keeps the counter from becoming a detour that never reaches consent. The destination is the same consent URL every time, built from the same scopes the console's Connect button asks for, so a workspace is asked to grant one thing however the install began.\n\nIt is PUBLIC and carries no principal, because whoever clicks Install in Slack's directory has no Hanzo session yet. It binds no org either, and that is deliberate rather than missing: the org is resolved at the shared provider callback, from the signed state a console connect minted or from the workspace's existing connection. Minting an org for an anonymous click is the one thing that would break tenant isolation, so an install begun here finishes under exactly the rules every other install obeys.\n\nWhere the app is not configured it answers 503, rather than a consent URL carrying an empty client_id that Slack would render as its own dead-end error page.",
         "tags": [
@@ -1043,7 +1043,7 @@
     },
     "/v1/integrations/slack/link": {
       "get": {
-        "operationId": "get_v1_integrations_slack_link",
+        "operationId": "get_integrations_slack_link",
         "summary": "Begin linking a Hanzo account from Slack",
         "description": "The entry point behind the connect prompt Hanzo posts in Slack. It starts a link session in the browser and redirects to Slack's own sign-in, which is what proves which Slack user is asking.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -1053,7 +1053,7 @@
     },
     "/v1/integrations/slack/link/callback": {
       "get": {
-        "operationId": "get_v1_integrations_slack_link_callback",
+        "operationId": "get_integrations_slack_link_callback",
         "summary": "Complete the Slack account link",
         "description": "The final leg: the user has proved both who they are in Slack and who they are in Hanzo, and this binds the two. It answers a short confirmation page telling them to return to Slack.\n\nThe Hanzo credential obtained here is sealed into the connected workspace's own KMS namespace; it is never written to a database column and never logged. A deployment whose secret store is unavailable refuses the link rather than completing it without custody of the credential.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -1063,7 +1063,7 @@
     },
     "/v1/integrations/slack/link/slack": {
       "get": {
-        "operationId": "get_v1_integrations_slack_link_slack",
+        "operationId": "get_integrations_slack_link_slack",
         "summary": "Slack sign-in return leg",
         "description": "Where Slack returns the user after they sign in. It establishes the verified Slack workspace and user, confirms that workspace is connected to an org, and hands the browser on to the Hanzo sign-in that completes the link.\n\nThe verified pair is carried onward in a host-bound cookie rather than in the URL, so the identity being linked cannot be edited in transit.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -1073,7 +1073,7 @@
     },
     "/v1/integrations/teams/events": {
       "post": {
-        "operationId": "post_v1_integrations_teams_events",
+        "operationId": "post_integrations_teams_events",
         "summary": "Microsoft Teams Bot Framework webhook",
         "description": "The messaging endpoint for the Teams bot. A message activity is routed to an agent turn and answered proactively through the Bot Connection; anything that is not a message with text is acknowledged and ignored.\n\nAuthentication is the Bot Framework's RS256 JWT, verified against its published keys and bound BOTH to this deployment's app id and to the activity's own service URL. The service-URL binding is the part that matters: without it a token valid for one activity could point the outbound reply somewhere else.\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.\n\nThe answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.",
         "tags": [
@@ -1083,7 +1083,7 @@
     },
     "/v1/integrations/teams/link": {
       "get": {
-        "operationId": "get_v1_integrations_teams_link",
+        "operationId": "get_integrations_teams_link",
         "summary": "Begin linking a Hanzo account from Teams",
         "description": "The entry point behind the connect prompt Hanzo shows in Teams. It starts a link session and redirects to Microsoft sign-in addressed to the CHAT'S OWN tenant, not the common endpoint, so only a member of that tenant can complete it.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -1093,7 +1093,7 @@
     },
     "/v1/integrations/teams/link/aad": {
       "get": {
-        "operationId": "get_v1_integrations_teams_link_aad",
+        "operationId": "get_integrations_teams_link_aad",
         "summary": "Microsoft sign-in return leg",
         "description": "Where Microsoft returns the user after sign-in. It resolves the verified directory identity and then re-checks the tenant: the signed-in user's tenant must equal the tenant of the chat the link started from, so a valid Microsoft sign-in from a different organization is refused here rather than accepted.\n\nThis is the leg Teams has and the other platforms do not, which is why the Teams flow has an extra address.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -1103,7 +1103,7 @@
     },
     "/v1/integrations/teams/link/callback": {
       "get": {
-        "operationId": "get_v1_integrations_teams_link_callback",
+        "operationId": "get_integrations_teams_link_callback",
         "summary": "Complete the Teams account link",
         "description": "The final leg: it binds the verified directory identity to the Hanzo account that just signed in, and answers a short confirmation page telling them to return to Teams. The Hanzo credential is sealed into the connected org's KMS namespace.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -1113,7 +1113,7 @@
     },
     "/v1/integrations/telegram/connect": {
       "post": {
-        "operationId": "post_v1_integrations_telegram_connect",
+        "operationId": "post_integrations_telegram_connect",
         "summary": "Mints a short, single-use deep-link code bound to the caller's org and returns the t.me link the console navigates to.",
         "description": "Mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit.",
         "tags": [
@@ -1138,7 +1138,7 @@
     },
     "/v1/integrations/telegram/link": {
       "get": {
-        "operationId": "get_v1_integrations_telegram_link",
+        "operationId": "get_integrations_telegram_link",
         "summary": "Begin linking a Hanzo account from Telegram",
         "description": "The entry point behind the connect prompt Hanzo sends in Telegram. Unlike the other platforms it answers an HTML PAGE rather than a redirect: Telegram has no OAuth flow, so the page hosts Telegram's Login Widget, and the browser is sent onward only after the user signs in through it.\n\nThe widget only appears on the domain registered for the bot, so a deployment whose bot domain is unset renders a page with nothing on it.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -1148,7 +1148,7 @@
     },
     "/v1/integrations/telegram/link/auth": {
       "get": {
-        "operationId": "get_v1_integrations_telegram_link_auth",
+        "operationId": "get_integrations_telegram_link_auth",
         "summary": "Telegram Login Widget return leg",
         "description": "Where Telegram's Login Widget sends the user with its signed authentication data. That data is verified against the bot token — this is the identity source, and it is the widget's signature rather than a code exchange — and the chat is confirmed to be bound to an org before the browser is handed to the Hanzo sign-in.\n\nWidget data is only accepted while it is fresh, so a captured sign-in blob cannot be replayed later even though its signature stays valid.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -1158,7 +1158,7 @@
     },
     "/v1/integrations/telegram/link/callback": {
       "get": {
-        "operationId": "get_v1_integrations_telegram_link_callback",
+        "operationId": "get_integrations_telegram_link_callback",
         "summary": "Complete the Telegram account link",
         "description": "The final leg: it binds the verified Telegram user to the Hanzo account that just signed in, and answers a short confirmation page telling them to return to Telegram. The Hanzo credential is sealed into the connected org's KMS namespace.\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a browser is expected to arrive here only from the leg before it. The link URL's state proves the prompt was server-minted and carries the CHAT it started from — it is provenance only, and it never decides which account gets linked. The account identity always comes from the platform's own verified sign-in and a host-bound cookie, so forwarding a link to someone else cannot bind their account, and a session lifted into another browser is refused rather than completed. Each link is single-use, and a deployment without linking configured answers 503.",
         "tags": [
@@ -1168,7 +1168,7 @@
     },
     "/v1/integrations/telegram/webhook": {
       "post": {
-        "operationId": "post_v1_integrations_telegram_webhook",
+        "operationId": "post_integrations_telegram_webhook",
         "summary": "Telegram Bot API webhook",
         "description": "The update webhook for the Telegram bot. It does two jobs: `/start \u003ccode\u003e` or `/connect \u003ccode\u003e` binds the chat it was sent from to an org, idempotently; anything else is treated as a possible agent trigger.\n\nWhat counts as a trigger differs by chat type, and it is easy to get wrong: in a private chat every message is a trigger, while in a group the message must mention the bot or use the `/hanzo` command. Non-triggers and non-message updates are acknowledged and dropped.\n\nAuthentication is the secret token Telegram echoes on every update, compared in constant time. A message in a chat that has never been bound is dropped, which is why the bind command exists.\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.\n\nThe answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.",
         "tags": [
@@ -1178,7 +1178,7 @@
     },
     "/v1/integrations/{provider}": {
       "get": {
-        "operationId": "get_v1_integrations_by_provider",
+        "operationId": "get_integrations_by_provider",
         "summary": "Returns ONE provider with this org's connection status — the same view list carries, for a single id.",
         "description": "Returns ONE provider with this org's connection status — the same view list\ncarries, for a single id. An unknown id is 404, and so is a user-plane provider:\nthe org surface never resolves one.",
         "tags": [
@@ -1220,7 +1220,7 @@
     },
     "/v1/integrations/{provider}/callback": {
       "get": {
-        "operationId": "get_v1_integrations_by_provider_callback",
+        "operationId": "get_integrations_by_provider_callback",
         "summary": "OAuth return for any connector",
         "description": "The single address every connector's OAuth flow returns to. It exchanges the authorization the provider granted, records the connection, and ALWAYS redirects the browser back to the console — on success and on every labeled failure alike, so a user never lands on a raw JSON dead end.\n\nIt is public and carries no principal, so the org is taken ONLY from the signed state minted when the flow began; no header is trusted here. That state is single-use and is burned BEFORE the exchange, so one authorization is one attempt and a replayed return fails instead of exchanging twice.\n\nTokens are sealed into the org's KMS namespace BEFORE the connection row is written, so a failure of the secret store leaves no half-connected integration advertising a credential that was never stored. Token values never appear in the redirect, in a log line or in an error.\n\nOne generalization is worth knowing: a GitHub App installation returns an installation identifier instead of an OAuth code, and it is accepted in the code's place so the App model needs no second address.",
         "tags": [
@@ -1240,7 +1240,7 @@
     },
     "/v1/integrations/{provider}/connect": {
       "post": {
-        "operationId": "post_v1_integrations_by_provider_connect",
+        "operationId": "post_integrations_by_provider_connect",
         "summary": "Acquires the org's credential for one provider.",
         "description": "Acquires the org's credential for one provider. It has TWO paths and the\nREQUEST picks which: a \"token\" key in the body seals that credential directly\n(verify-before-store), and its absence begins the 3-legged OAuth flow — minting a\nsingle-use nonce plus an HMAC-signed state that binds this org to this provider,\nand answering with the provider's authorize URL for the caller to redirect to.\n\nFail-closed order, unchanged: no principal → 403; unknown provider → 404; an\nAdminOnly connector without the caller's own-org admin bit → 403; not configured\n→ 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now\nrather than dead-end at the callback).",
         "tags": [
@@ -1296,7 +1296,7 @@
     },
     "/v1/integrations/{provider}/disconnect": {
       "post": {
-        "operationId": "post_v1_integrations_by_provider_disconnect",
+        "operationId": "post_integrations_by_provider_disconnect",
         "summary": "Revokes (best-effort) and forgets an org's connection: it deletes every custodied KMS secret and the connection row.",
         "description": "Revokes (best-effort) and forgets an org's connection: it deletes\nevery custodied KMS secret and the connection row. Idempotent — disconnecting a\nprovider that was never connected still returns {disconnected:true}. Symmetric\nwith connect: an AdminOnly connector needs the caller's own-org admin bit.",
         "tags": [
@@ -1333,7 +1333,7 @@
     },
     "/v1/integrations/{provider}/verify": {
       "post": {
-        "operationId": "post_v1_integrations_by_provider_verify",
+        "operationId": "post_integrations_by_provider_verify",
         "summary": "Re-checks a CONNECTED apikey connector's stored credential against the provider, live (`hanzo connector verify`).",
         "description": "Re-checks a CONNECTED apikey connector's stored credential against the\nprovider, live (`hanzo connector verify`). Org-scoped (any member may check\nstatus); the credential is read from KMS, verified, and NEVER returned or logged.\nA verification failure is reported as {active:false}, not an error — the console/\nCLI renders it. Only apikey providers support verify (OAuth tokens are checked at\nuse, not re-verified here).",
         "tags": [

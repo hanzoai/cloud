@@ -21,7 +21,7 @@
   "paths": {
     "/v1/admin/authors": {
       "get": {
-        "operationId": "get_v1_admin_authors",
+        "operationId": "get_admin_authors",
         "summary": "Returns the platform's whole author program — every org's author record, not the caller's — with each one's repository and deploy counts and a fleet roll-up of the money accrued, pending and paid.",
         "description": "Returns the platform's whole author program — every org's author\nrecord, not the caller's — with each one's repository and deploy counts and a\nfleet roll-up of the money accrued, pending and paid.\n\nIt is a Hanzo platform operation: a caller who is not a SuperAdmin gets 403. It\nexposes the owning org of each author, which no tenant-facing read ever does.",
         "tags": [
@@ -54,7 +54,7 @@
     },
     "/v1/admin/authors/sweep": {
       "post": {
-        "operationId": "post_v1_admin_authors_sweep",
+        "operationId": "post_admin_authors_sweep",
         "summary": "Runs the accrual sweep across every approved author: for each of their deploying orgs it computes this period's royalty from that org's metered spend and latches it at most once per period.",
         "description": "Runs the accrual sweep across every approved author: for each of\ntheir deploying orgs it computes this period's royalty from that org's metered\nspend and latches it at most once per period.\n\nIt is an OVERRIDE, not the mechanism: a background scheduler runs the same sweep on\nits own, and every author's dashboard read sweeps their own accruals lazily. This\nis the manual trigger for an operator who needs the numbers now. It is idempotent —\nthe per-period latch means running it twice accrues nothing the second time.\n\nA Hanzo platform operation: a caller who is not a SuperAdmin gets 403.",
         "tags": [
@@ -76,7 +76,7 @@
     },
     "/v1/admin/authors/{id}/approve": {
       "post": {
-        "operationId": "post_v1_admin_authors_by_id_approve",
+        "operationId": "post_admin_authors_by_id_approve",
         "summary": "Admits one author to EARNING, optionally on a negotiated royalty share.",
         "description": "Admits one author to EARNING, optionally on a negotiated royalty\nshare. Until this runs, a connected author accrues nothing however many verified\nrepositories they have.\n\nA share override applies from here forward only — existing ledger rows keep the\nshare that was applied when they were written, because a rate change must never\nrewrite what was already owed.\n\nA Hanzo platform operation: a caller who is not a SuperAdmin gets 403.",
         "tags": [
@@ -124,7 +124,7 @@
     },
     "/v1/admin/authors/{id}/basis": {
       "get": {
-        "operationId": "get_v1_admin_authors_by_id_basis",
+        "operationId": "get_admin_authors_by_id_basis",
         "summary": "Returns the audit trail behind ONE author's royalty — the same payload the author reads at /v1/authors/basis, from the same builder, so support sees exactly what the author sees rather than a parallel view free to drift.",
         "description": "Returns the audit trail behind ONE author's royalty — the same\npayload the author reads at /v1/authors/basis, from the same builder, so support\nsees exactly what the author sees rather than a parallel view free to drift.\n\nThe data object carries: id, status, asOf, shareBps, platformShareBps,\ndefaultShareBps, shareSource, settlesTo, method (the formula, the rate card and the\nsizing), ledger (every row with its spend, the share applied then, the platform's\nmatching half, whether it satisfies the formula and the attribution edges that\nexplain it), reconciliation (does the ledger foot to the balance) and window (what\nslice was actually returned) — plus period when one was requested.\n\nA Hanzo platform operation: a caller who is not a SuperAdmin gets 403.",
         "tags": [
@@ -168,7 +168,7 @@
     },
     "/v1/admin/authors/{id}/payout": {
       "post": {
-        "operationId": "post_v1_admin_authors_by_id_payout",
+        "operationId": "post_admin_authors_by_id_payout",
         "summary": "Records a payout of accrued royalty and settles it.",
         "description": "Records a payout of accrued royalty and settles it.\n\nThe amount is RESERVED against the author's pending royalty atomically before\nanything is paid, so a payout can never exceed what is owed even under concurrent\ncalls. An external author's payout is then BACKED against the platform reserve\nfund — a second, independent guard — and refused with 402 if the reserve cannot\ncover it, with the reservation voided. A \"credits\" method issues the actual wallet\ngrant after both guards; a cash method is record-only. A first-party (treasury)\nauthor's royalty is realized into Hanzo's own reserve instead of an external\nwallet, and every payout row discloses which of the three it was.\n\nA Hanzo platform operation: a caller who is not a SuperAdmin gets 403.",
         "tags": [
@@ -217,7 +217,7 @@
     },
     "/v1/admin/authors/{id}/suspend": {
       "post": {
-        "operationId": "post_v1_admin_authors_by_id_suspend",
+        "operationId": "post_admin_authors_by_id_suspend",
         "summary": "Stops one author earning.",
         "description": "Stops one author earning. Their record, verified claims and ledger\nare untouched — suspension halts future accrual, it does not erase what was already\nowed, and it does not delete the evidence behind it.\n\nA Hanzo platform operation: a caller who is not a SuperAdmin gets 403.",
         "tags": [
@@ -250,7 +250,7 @@
     },
     "/v1/authors": {
       "get": {
-        "operationId": "get_v1_authors",
+        "operationId": "get_authors",
         "summary": "Returns the caller's author-program dashboard: enrolment status, linked forge login, verified repositories and owner-wide claims, recorded deploys, accrued / pending / paid royalty, and the payout history.",
         "description": "Returns the caller's author-program dashboard: enrolment status,\nlinked forge login, verified repositories and owner-wide claims, recorded deploys,\naccrued / pending / paid royalty, and the payout history.\n\nIt answers ONE OF TWO SHAPES from this address. An org that has never connected\ngets {\"isAuthor\": false, \"defaultShareBps\", \"badgeBase\"} — an honest \"not enrolled\"\nrather than a 404, so the console can render the connect form. An enrolled org gets\nthe dashboard: isAuthor, id, status, githubLogin, verified, verifyCode, verifyFile,\nverifySnippet, shareBps, badgeBase, repos, orgs, deploys, accruedCents,\npendingCents, paidCents, payouts and ledger.\n\nFor an APPROVED author this read ALSO runs the accrual sweep opportunistically, so\nthe dashboard is self-updating. That is why the royalty AUDIT lives at its own\naddress: an audit must not move the money it is auditing.",
         "tags": [
@@ -275,7 +275,7 @@
     },
     "/v1/authors/basis": {
       "get": {
-        "operationId": "get_v1_authors_basis",
+        "operationId": "get_authors_basis",
         "summary": "Returns the AUDIT TRAIL behind the caller's own royalty: every ledger row with the spend it was computed from, the share applied at the time, the platform's matching half, whether each row satisfies the formula, and the attribution edges that already existed when the row was written.",
         "description": "Returns the AUDIT TRAIL behind the caller's own royalty: every\nledger row with the spend it was computed from, the share applied at the time, the\nplatform's matching half, whether each row satisfies the formula, and the\nattribution edges that already existed when the row was written.\n\nIt answers ONE OF TWO SHAPES. An org that has never connected gets\n{\"isAuthor\": false, \"defaultShareBps\"} — never a 404, which would answer \"is this\norg an author?\" for anyone who asked. An enrolled org gets the basis: isAuthor, id,\nstatus, asOf, shareBps, platformShareBps, defaultShareBps, shareSource, settlesTo,\nmethod (the formula, the rate card and the sizing), ledger, reconciliation, window,\nand period when one was requested.\n\nThis read NEVER sweeps, and that is the point of it being a separate address from\nthe dashboard: an audit must not move the money it is auditing, so calling it N\ntimes leaves the balances and the ledger byte-identical.",
         "tags": [
@@ -312,7 +312,7 @@
     },
     "/v1/authors/connect": {
       "post": {
-        "operationId": "post_v1_authors_connect",
+        "operationId": "post_authors_connect",
         "summary": "Enrols the caller's org in the author program at status \"connected\" and returns its enrolment, including the verify code the file method needs.",
         "description": "Enrols the caller's org in the author program at status \"connected\"\nand returns its enrolment, including the verify code the file method needs. It is\nIDEMPOTENT: a second call returns the same enrolment rather than a conflict.\n\nThe forge login is taken from IAM's LINKED account for the provider when there is\none — that is identity proof, not a claim — and only otherwise from the login in\nthe body, which then has to be proven per repository. Connecting does not admit an\norg to earning: a platform reviewer approves that separately.\n\nAnswers 201 when it enrolled the org and 200 when it found an existing enrolment.",
         "tags": [
@@ -348,7 +348,7 @@
     },
     "/v1/authors/deploys/record": {
       "post": {
-        "operationId": "post_v1_authors_deploys_record",
+        "operationId": "post_authors_deploys_record",
         "summary": "Records that the caller's org deployed a project built from a source repository, which is the edge that makes an author's work earn royalty.",
         "description": "Records that the caller's org deployed a project built from a\nsource repository, which is the edge that makes an author's work earn royalty.\n\nIt is deliberately NOT an error for a deploy to attribute to nobody: a project\nbuilt from no repository, or from one no author has verified, answers\n{\"recorded\": false, \"reason\"} so a deploy pipeline can fire this on every deploy\nwithout branching. Attribution resolves per-repository first, then owner-wide, so a\nrepository with its own claim always earns for its own author.\n\nA deploy of a Hanzo-maintained template attributes to the platform treasury, and a\nself-deploy (the author's own org deploying its own repository) is recorded for\nprovenance but excluded from accrual. The edge is idempotent per\nrepository+project+org.\n\nAnswers 201 when it recorded a new edge and 200 otherwise.",
         "tags": [
@@ -384,7 +384,7 @@
     },
     "/v1/authors/repos/verify": {
       "post": {
-        "operationId": "post_v1_authors_repos_verify",
+        "operationId": "post_authors_repos_verify",
         "summary": "Proves that the caller owns a repository — or a whole OWNER — and records the claim, which is what makes deploys of that code earn royalty.",
         "description": "Proves that the caller owns a repository — or a whole OWNER — and\nrecords the claim, which is what makes deploys of that code earn royalty.\n\nOwnership is proven the SAME two ways in both cases, tried in order: an IAM-linked\nforge token with admin or push permission, or a hanzo.json on the default branch\ncarrying the author's verify code. Claiming an OWNER proves it against that\nowner's \".github\" control repository, and is exactly as strong as a per-repository\nclaim — an owner the caller cannot prove is refused with 422, never assumed.\n\nA per-repository claim wins over an owner-wide one, so a specifically-claimed\nrepository always earns for its own author. A repository another author has\nalready verified is a 409. The org must have connected first.\n\nAnswers 201 when it recorded a new claim and 200 when the claim already existed.",
         "tags": [
