@@ -32,7 +32,13 @@ import (
 // (mcpProtocolVersion) — the children answer initialize with the same string,
 // and a host that claimed a different one would be describing a protocol none of
 // its subsystems implement.
-const protocolVersion = "2025-06-18"
+// It moves with zip and only with zip. 2026-07-28 landed in zip v1.28.1, which
+// answers server/discover and declares the stateless revision this door has in
+// fact always served: nothing here is remembered between requests except how to
+// ROUTE a name, and tools/list has always answered without a preceding
+// initialize. Bumping this string ahead of the children is the exact lie the
+// paragraph above forbids.
+const protocolVersion = "2026-07-28"
 
 // Unavailable is the _meta key under which tools/list names the subsystems it
 // could not ask.
