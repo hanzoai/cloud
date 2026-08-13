@@ -181,14 +181,14 @@ func TestToolsCarryTheirProse(t *testing.T) {
 	// wire, so an empty schema is the truth for them. Every op that DOES take input
 	// must name what it takes: id from the URL, the object's own fields from the body.
 	for name, want := range map[string][]string{
-		"post_v1_ingress_routes":              {"host", "service", "tls"},
-		"put_v1_ingress_routes_by_id":         {"id", "host", "service"},
-		"delete_v1_ingress_routes_by_id":      {"id"},
-		"get_v1_ingress_routes_by_id":         {"id"},
-		"post_v1_ingress_services":            {"backends"},
-		"post_v1_ingress_middlewares":         {"type", "config"},
-		"delete_v1_ingress_middlewares_by_id": {"id"},
-		"put_v1_ingress_tls":                  {"extraHosts"},
+		"post_ingress_routes":              {"host", "service", "tls"},
+		"put_ingress_routes_by_id":         {"id", "host", "service"},
+		"delete_ingress_routes_by_id":      {"id"},
+		"get_ingress_routes_by_id":         {"id"},
+		"post_ingress_services":            {"backends"},
+		"post_ingress_middlewares":         {"type", "config"},
+		"delete_ingress_middlewares_by_id": {"id"},
+		"put_ingress_tls":                  {"extraHosts"},
 	} {
 		tool, ok := tools[name]
 		if !ok {
