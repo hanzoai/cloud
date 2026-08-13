@@ -9,6 +9,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // github_sink.go implements cloud.IssueSink: it mirrors an external work item (today
@@ -87,12 +89,8 @@ func upsertIssue(ctx context.Context, in cloud.IssueUpsert) (cloud.IssueUpsertRe
 	if !errors.Is(err, errNotFound) {
 		return cloud.IssueUpsertResult{}, err
 	}
-	id, err := genID("issue")
-	if err != nil {
-		return cloud.IssueUpsertResult{}, err
-	}
 	created, err := store.CreateIssue(ctx, Issue{
-		ID: id, ProjectID: p.ID, Org: org,
+		ID: mint.ID("issue"), ProjectID: p.ID, Org: org,
 		Kind: normKindDefault(in.Kind), Source: "git",
 		Repo: clampStr(strings.TrimSpace(in.Repo), maxField), ExtRef: extRef,
 		Title: title, Description: desc, Status: status, Priority: "none",
@@ -121,12 +119,8 @@ func ensureProject(ctx context.Context, store *Store, org, key, name string) (Pr
 	if name == "" {
 		name = "GitHub"
 	}
-	id, err := genID("prj")
-	if err != nil {
-		return Project{}, err
-	}
 	now := time.Now().Unix()
-	p := Project{ID: id, Org: org, Key: key, Name: clampStr(name, maxField),
+	p := Project{ID: mint.ID("prj"), Org: org, Key: key, Name: clampStr(name, maxField),
 		Description: "Mirrored external issues.", CreatedAt: now, UpdatedAt: now}
 	if err := store.CreateProject(ctx, p); err != nil {
 		if errors.Is(err, errConflict) {
@@ -156,10 +150,7 @@ func cleanLabels(in []string) []string {
 // clampStr caps s to n bytes, dropping any partial trailing rune so the result is
 // always valid UTF-8 (the DB stores TEXT).
 func clampStr(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return strings.ToValidUTF8(s[:n], "")
+	return strings.ToValidUTF8(shorten.To(s, n), "")
 }
 
 // normKindDefault clamps an external kind to the tracker's closed set, defaulting to

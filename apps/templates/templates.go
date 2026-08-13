@@ -244,18 +244,6 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 // — also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// tenant is the VALIDATED org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. Fails closed off the HTTP path.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	return org, nil
-}
-
 // noInput is the In of an op addressed entirely by the caller's principal: it
 // takes nothing off the wire.
 type noInput struct{}
@@ -428,7 +416,7 @@ func (o ops) replace(ctx context.Context, in *replaceKitIn) (*StarterKit, error)
 //
 // Example: {"slug": "acme-portal"}
 func (o ops) remove(ctx context.Context, in *kitRef) (*noContent, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +434,7 @@ func (o ops) remove(ctx context.Context, in *kitRef) (*noContent, error) {
 // create=true inserts (409 on a slug the org already holds), create=false
 // replaces (404 when they hold none).
 func (o ops) write(ctx context.Context, t StarterKit, create bool) (*StarterKit, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}

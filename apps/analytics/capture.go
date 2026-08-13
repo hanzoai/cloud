@@ -477,13 +477,6 @@ func deny(key string) bool {
 
 func trim(s string) string { return strings.TrimSpace(s) }
 
-func firstNonEmptyStr(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
-}
-
 // hostOf extracts the bare host from a referrer URL (no scheme/path), for the
 // referrer_domain column the channel derivation and reports use. Best-effort; ""
 // on anything unparseable.

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // sessions_stop.go is the login-manager tie-in: the in-process action a link
@@ -136,15 +138,13 @@ func stopOne(ctx context.Context, sto *Store, x Session) error {
 		return nil
 	}
 	now := time.Now().Unix()
-	if evID, err := genID("evt"); err == nil {
-		payload, _ := json.Marshal(controlPayload{Command: CmdStop, Message: "account logged out via login manager"})
-		e, aerr := sto.AppendEvent(ctx, Event{
-			ID: evID, SessionID: x.ID, Org: x.Org, Kind: KindControl,
-			Actor: billingActor(x.Org, ""), Payload: string(payload), CreatedAt: now,
-		})
-		if aerr == nil {
-			publishEvent(mounted, x.Org, x.RootID, e)
-		}
+	payload, _ := json.Marshal(controlPayload{Command: CmdStop, Message: "account logged out via login manager"})
+	e, aerr := sto.AppendEvent(ctx, Event{
+		ID: mint.ID("evt"), SessionID: x.ID, Org: x.Org, Kind: KindControl,
+		Actor: billingActor(x.Org, ""), Payload: string(payload), CreatedAt: now,
+	})
+	if aerr == nil {
+		publishEvent(mounted, x.Org, x.RootID, e)
 	}
 	x.Status = StatusError
 	x.EndedAt = now

@@ -25,8 +25,9 @@ package sandbox
 
 import (
 	_ "embed"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -76,12 +77,7 @@ var framers = sync.OnceValue(func() string {
 			seen["https://*."+d] = true
 		}
 	}
-	out := make([]string, 0, len(seen))
-	for o := range seen {
-		out = append(out, o)
-	}
-	sort.Strings(out)
-	return "frame-ancestors 'self' " + strings.Join(out, " ")
+	return "frame-ancestors 'self' " + strings.Join(slices.Sorted(maps.Keys(seen)), " ")
 })
 
 // serve answers the terminal page.

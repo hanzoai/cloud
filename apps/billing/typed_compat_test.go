@@ -9,9 +9,10 @@ package billing
 import (
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/zap-proto/zip"
@@ -80,11 +81,7 @@ func TestFinanceTyped_ContractUnmoved(t *testing.T) {
 	if err := json.Unmarshal(body, &m); err != nil {
 		t.Fatalf("decode balance: %v (%s)", err, body)
 	}
-	got := make([]string, 0, len(m))
-	for k := range m {
-		got = append(got, k)
-	}
-	sort.Strings(got)
+	got := slices.Sorted(maps.Keys(m))
 	want := []string{"asOf", "availableCents", "currency", "dueCents", "pendingCents"}
 	if len(got) != len(want) {
 		t.Fatalf("balance keys = %v, want %v", got, want)

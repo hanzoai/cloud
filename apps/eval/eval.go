@@ -56,7 +56,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"regexp"
 	"slices"
 
@@ -66,6 +65,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -512,12 +513,8 @@ func (s *service) createDataset(ctx context.Context, in *datasetReq) (*datasetVi
 	if len(in.Description) > maxContent {
 		return nil, zip.ErrBadRequest("description too large")
 	}
-	id, err := genID("ds")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	d, err := s.store.UpsertDataset(ctx, Dataset{
-		ID: id, Org: org, Name: name, Description: in.Description, Metadata: meta,
+		ID: mint.ID("ds"), Org: org, Name: name, Description: in.Description, Metadata: meta,
 		UpdatedAt: time.Now().Unix(),
 	})
 	if err != nil {
@@ -674,9 +671,7 @@ func (s *service) createItem(ctx context.Context, in *itemReq) (*itemView, error
 	}
 	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		if id, err = genID("item"); err != nil {
-			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-		}
+		id = mint.ID("item")
 	} else if !nameRE.MatchString(id) {
 		return nil, zip.ErrBadRequest("id must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
@@ -757,12 +752,8 @@ func (s *service) createEvaluator(ctx context.Context, in *evaluatorReq) (*evalu
 	} else if !nameRE.MatchString(scoreName) {
 		return nil, zip.ErrBadRequest("scoreName must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
-	id, err := genID("eval")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	e, err := s.store.UpsertEvaluator(ctx, Evaluator{
-		ID: id, Org: org, Name: name, Model: strings.TrimSpace(in.Model),
+		ID: mint.ID("eval"), Org: org, Name: name, Model: strings.TrimSpace(in.Model),
 		Criteria: in.Criteria, ScoreName: scoreName, UpdatedAt: time.Now().Unix(),
 	})
 	if err != nil {
@@ -853,12 +844,8 @@ func (s *service) createScoreConfig(ctx context.Context, in *scoreConfigReq) (*s
 	if dt == "CATEGORICAL" && len(cats) == 0 {
 		return nil, zip.ErrBadRequest("CATEGORICAL config requires at least one category")
 	}
-	id, err := genID("sc")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	cfg, err := s.store.UpsertScoreConfig(ctx, ScoreConfig{
-		ID: id, Org: org, Name: name, DataType: dt,
+		ID: mint.ID("sc"), Org: org, Name: name, DataType: dt,
 		MinValue: in.MinValue, MaxValue: in.MaxValue, Categories: cats,
 		UpdatedAt: time.Now().Unix(),
 	})
@@ -986,13 +973,9 @@ func (s *service) validateScore(ctx context.Context, org, name string, body scor
 		Org: org, Name: name, DataType: dt,
 		TraceID: strings.TrimSpace(body.TraceID), RunName: strings.TrimSpace(body.RunName),
 		Dataset: strings.TrimSpace(body.Dataset), ItemID: strings.TrimSpace(body.ItemID),
-		Comment: truncate(body.Comment, maxComment),
+		Comment: shorten.To(body.Comment, maxComment),
 	}
-	id, err := genID("score")
-	if err != nil {
-		return ScoreEvent{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	ev.ID = id
+	ev.ID = mint.ID("score")
 
 	switch dt {
 	case "NUMERIC":
@@ -1352,14 +1335,12 @@ func (s *service) runHandler(ctx context.Context, in *runRequest) (*runSummary, 
 
 	// Persist the durable run record (metastore), best-effort — a metastore write
 	// failure is logged, never masks the run result.
-	if id, gerr := genID("run"); gerr == nil {
-		if _, uerr := s.store.UpsertRun(ctx, DatasetRun{
-			ID: id, Org: org, Dataset: in.Dataset, Name: runName, Model: in.Model,
-			JudgeModel: judge.Model, Items: summary.Items, Scored: summary.Scored,
-			AvgScore: summary.AvgScore, UpdatedAt: time.Now().Unix(),
-		}); uerr != nil {
-			s.log.Warn("run record not persisted", "run", runName, "err", uerr)
-		}
+	if _, uerr := s.store.UpsertRun(ctx, DatasetRun{
+		ID: mint.ID("run"), Org: org, Dataset: in.Dataset, Name: runName, Model: in.Model,
+		JudgeModel: judge.Model, Items: summary.Items, Scored: summary.Scored,
+		AvgScore: summary.AvgScore, UpdatedAt: time.Now().Unix(),
+	}); uerr != nil {
+		s.log.Warn("run record not persisted", "run", runName, "err", uerr)
 	}
 	return &summary, nil
 }
@@ -1388,7 +1369,7 @@ func (s *service) runItem(ctx context.Context, org, authz, runName, model string
 		res.Error = "model: " + err.Error()
 		return res
 	}
-	res.Output = truncate(output, maxComment)
+	res.Output = shorten.To(output, maxComment)
 
 	traceID := genUUID()
 	res.TraceID = traceID
@@ -1412,11 +1393,10 @@ func (s *service) runItem(ctx context.Context, org, authz, runName, model string
 	}
 	res.Score = score
 	if s.tel != nil {
-		id, _ := genID("score")
 		if err := s.tel.RecordScore(ctx, ScoreEvent{
-			ID: id, Org: org, Name: judge.Name, TraceID: traceID, RunName: runName,
+			ID: mint.ID("score"), Org: org, Name: judge.Name, TraceID: traceID, RunName: runName,
 			Dataset: it.Dataset, ItemID: it.ID, DataType: "NUMERIC", Value: score,
-			Comment: truncate(reasoning, maxComment), Timestamp: time.Now().UTC(),
+			Comment: shorten.To(reasoning, maxComment), Timestamp: time.Now().UTC(),
 		}); err != nil {
 			res.Error = "score: " + err.Error()
 			return res
@@ -1643,19 +1623,10 @@ func normalizeJudge(j *judgeSpec, model string) judgeSpec {
 			out.Name = v
 		}
 		if v := strings.TrimSpace(j.Criteria); v != "" {
-			out.Criteria = truncate(v, maxContent)
+			out.Criteria = shorten.To(v, maxContent)
 		}
 	}
 	return out
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // genUUID returns a v4 UUID (trace ids follow the OTel trace-id shape).
@@ -1673,12 +1644,3 @@ func rfc3339(unix int64) string {
 	}
 	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }
-
-func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
-}
-
-func getenv(key string) string { return strings.TrimSpace(os.Getenv(key)) }

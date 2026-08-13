@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -301,7 +302,8 @@ func (p *Purger) AssertHTMLPassthrough(ctx context.Context) {
 		p.log.Warn("cloudflare html-passthrough unchecked (CF_API_TOKEN/CF_ZONE_ID unset)")
 		return
 	}
-	for _, id := range sortedKeys(rewriters) {
+	// Sorted, so the settings are asserted — and logged — in the same order every run.
+	for _, id := range slices.Sorted(maps.Keys(rewriters)) {
 		want := rewriters[id]
 		got, err := p.zoneSetting(ctx, http.MethodGet, id, "")
 		if err != nil {
@@ -357,16 +359,6 @@ func (p *Purger) zoneSetting(ctx context.Context, method, id, value string) (str
 		return "", fmt.Errorf("cf setting %s: decode: %w", id, err)
 	}
 	return out.Result.Value, nil
-}
-
-// sortedKeys keeps the assertion order (and therefore the log) stable.
-func sortedKeys(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // CacheTag is the ONE canonical edge cache-tag for a project's site objects. The

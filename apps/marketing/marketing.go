@@ -63,8 +63,6 @@ package marketing
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -73,6 +71,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -238,39 +238,9 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 // reach the spec. ops therefore carries STATE and no logic.
 type ops struct{ s *cloud.Service[state] }
 
-// tenant resolves the org — the tenant-isolation KEY — for an org-scoped op. The
-// org is EXACTLY what SanitizeIdentity minted from the validated IAM owner claim
-// (HIP-0026), carried across the typed seam by cloud.Bridge: never lowercased,
-// stripped, truncated, or read from the input, because an input is what the
-// caller says about itself.
-//
-// It is the ONE gate. An op that cannot name its tenant refuses with 403 rather
-// than reading across orgs — which is also what makes the auto-published MCP
-// projection safe, since POST /mcp carries no principal at all.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("org scope required")
-	}
-	return org, nil
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}
-
 // clip trims and bounds a text field to maxField.
 func clip(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > maxField {
-		return s[:maxField]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), maxField)
 }
 
 // limitOf bounds a caller's page size: absent, unparseable or non-positive means
@@ -391,7 +361,7 @@ type Summary struct {
 //
 // Example: {"name": "Spring Launch", "channel": "meta", "objective": "signups", "budget": 50000, "scheduledAt": 1780000000}
 func (o ops) createCampaign(ctx context.Context, in *Campaign) (*Campaign, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -407,10 +377,7 @@ func (o ops) createCampaign(ctx context.Context, in *Campaign) (*Campaign, error
 	if !okSt {
 		return nil, zip.ErrBadRequest("status must be one of draft, active, paused, completed")
 	}
-	id, err := genID("camp")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("camp")
 	// A future send time implies the "scheduled" state unless the caller pinned
 	// another status explicitly.
 	if in.ScheduledAt > 0 && strings.TrimSpace(in.Status) == "" {
@@ -434,7 +401,7 @@ func (o ops) createCampaign(ctx context.Context, in *Campaign) (*Campaign, error
 //
 // Example: {"status": "active", "limit": 25}
 func (o ops) listCampaigns(ctx context.Context, in *CampaignQuery) (*CampaignList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -450,7 +417,7 @@ func (o ops) listCampaigns(ctx context.Context, in *CampaignQuery) (*CampaignLis
 //
 // Example: {"id": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
 func (o ops) getCampaign(ctx context.Context, in *CampaignRef) (*Campaign, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -468,7 +435,7 @@ func (o ops) getCampaign(ctx context.Context, in *CampaignRef) (*Campaign, error
 //
 // Example: {"name": "Spring Launch", "channel": "meta", "status": "active", "objective": "signups", "budget": 50000, "spend": 12500}
 func (o ops) updateCampaign(ctx context.Context, in *Campaign) (*Campaign, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -500,7 +467,7 @@ func (o ops) updateCampaign(ctx context.Context, in *Campaign) (*Campaign, error
 //
 // Example: {"id": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
 func (o ops) deleteCampaign(ctx context.Context, in *CampaignRef) (*struct{}, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -519,7 +486,7 @@ func (o ops) deleteCampaign(ctx context.Context, in *CampaignRef) (*struct{}, er
 //
 // Example: {"id": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60", "scheduledAt": 1780000000}
 func (o ops) scheduleCampaign(ctx context.Context, in *ScheduleInput) (*Campaign, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -548,7 +515,7 @@ func (o ops) scheduleCampaign(ctx context.Context, in *ScheduleInput) (*Campaign
 //
 // Response: {"campaigns": 12, "active": 3, "budget": 500000, "spend": 128400}
 func (o ops) summary(ctx context.Context, _ *struct{}) (*Summary, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}

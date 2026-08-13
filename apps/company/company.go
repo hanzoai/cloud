@@ -2,8 +2,6 @@ package company
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -288,15 +286,6 @@ func Shutdown(context.Context) error {
 // arrives as a RECEIVER and every op is a method value (o.begin), which is also
 // the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}
 
 // feeCents is the formation fee, overridable by ops via CLOUD_COMPANY_FEE_CENTS.
 func feeCents() int64 {

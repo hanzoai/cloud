@@ -43,6 +43,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/luxfi/crypto"
 	ethereum "github.com/luxfi/geth"
 	"github.com/luxfi/geth/common"
@@ -80,10 +81,10 @@ func cmd() string {
 // commit. This is the exact on-chain path apps/treasury/anchor_evm.go uses when
 // TREASURY_ANCHOR_CONTRACT is set (same selector, same DynamicFeeTx fee strategy).
 func anchorRoot(ctx context.Context) error {
-	rpc := env("RPC_URL", "")
-	sk := strings.TrimSpace(env("SIGNER_KEY", ""))
-	contractHex := strings.TrimSpace(env("CONTRACT", ""))
-	rootHex := strings.TrimSpace(env("ANCHOR_ROOT", ""))
+	rpc := environ.Or("RPC_URL", "")
+	sk := environ.Or("SIGNER_KEY", "")
+	contractHex := environ.Or("CONTRACT", "")
+	rootHex := environ.Or("ANCHOR_ROOT", "")
 	if rpc == "" || sk == "" || contractHex == "" || rootHex == "" {
 		return fmt.Errorf("anchor requires RPC_URL, SIGNER_KEY, CONTRACT, ANCHOR_ROOT")
 	}
@@ -154,7 +155,7 @@ type result struct {
 }
 
 func bootstrap(ctx context.Context) error {
-	rpc := env("RPC_URL", "")
+	rpc := environ.Or("RPC_URL", "")
 	if rpc == "" {
 		return fmt.Errorf("RPC_URL required")
 	}
@@ -172,7 +173,7 @@ func bootstrap(ctx context.Context) error {
 	// 1) Signer key: reuse SIGNER_KEY or generate a fresh one.
 	var priv *ecdsa.PrivateKey
 	generated := false
-	if sk := strings.TrimSpace(env("SIGNER_KEY", "")); sk != "" {
+	if sk := environ.Or("SIGNER_KEY", ""); sk != "" {
 		if priv, err = crypto.HexToECDSA(trim0x(sk)); err != nil {
 			return fmt.Errorf("parse SIGNER_KEY: %w", err)
 		}
@@ -186,10 +187,10 @@ func bootstrap(ctx context.Context) error {
 	res.SignerAddr = signer.Hex()
 
 	// 2) Store the private key in KMS (never printed, never on disk).
-	kmsPath := env("KMS_PATH", "treasury-anchor")
-	kmsKey := env("KMS_KEY", "TREASURY_ANCHOR_SIGNER_KEY")
-	res.SignerKMSRef = fmt.Sprintf("%s/%s/%s", env("KMS_ORG", "hanzo"), kmsPath, kmsKey)
-	if env("KMS_CLIENT_ID", "") != "" {
+	kmsPath := environ.Or("KMS_PATH", "treasury-anchor")
+	kmsKey := environ.Or("KMS_KEY", "TREASURY_ANCHOR_SIGNER_KEY")
+	res.SignerKMSRef = fmt.Sprintf("%s/%s/%s", environ.Or("KMS_ORG", "hanzo"), kmsPath, kmsKey)
+	if environ.Or("KMS_CLIENT_ID", "") != "" {
 		privHex := hex.EncodeToString(crypto.FromECDSA(priv))
 		if err := kmsPut(ctx, kmsPath, kmsKey, privHex); err != nil {
 			return fmt.Errorf("kms put %s: %w", res.SignerKMSRef, err)
@@ -200,14 +201,14 @@ func bootstrap(ctx context.Context) error {
 	}
 
 	// 3) Fund the signer from a funded genesis account (only if short).
-	fundEth := env("FUND_ETH", "10")
+	fundEth := environ.Or("FUND_ETH", "10")
 	want := new(big.Int).Mul(etherToWei(fundEth), big.NewInt(1))
 	bal, err := cl.BalanceAt(ctx, signer, nil)
 	if err != nil {
 		return fmt.Errorf("balance: %w", err)
 	}
 	if bal.Cmp(want) < 0 {
-		anvil := strings.TrimSpace(env("ANVIL_KEY", ""))
+		anvil := environ.Or("ANVIL_KEY", "")
 		if anvil == "" {
 			return fmt.Errorf("signer underfunded (%s wei) and ANVIL_KEY unset — fund %s with >= %s wei", bal, signer.Hex(), want)
 		}
@@ -228,7 +229,7 @@ func bootstrap(ctx context.Context) error {
 	res.SignerBalWei = bal.String()
 
 	// 4) Deploy TreasuryAnchor (constructor sets owner = signer) unless one was given.
-	contract := strings.TrimSpace(env("CONTRACT", ""))
+	contract := environ.Or("CONTRACT", "")
 	if contract == "" {
 		code, err := loadBytecode()
 		if err != nil {
@@ -355,14 +356,14 @@ func callOwner(ctx context.Context, cl *ethclient.Client, contract common.Addres
 // kmsPut stores value at org/path/name over the KMS HTTP API (token via IAM
 // client_credentials). Mirrors kms/sdk/go/kmsclient Put — no SDK dep pulled in.
 func kmsPut(ctx context.Context, path, name, value string) error {
-	kms := strings.TrimRight(env("KMS_ADDR", "http://kms.hanzo.svc"), "/")
-	iam := strings.TrimRight(env("IAM_ADDR", "http://iam.hanzo.svc"), "/")
-	org := env("KMS_ORG", "hanzo")
+	kms := strings.TrimRight(environ.Or("KMS_ADDR", "http://kms.hanzo.svc"), "/")
+	iam := strings.TrimRight(environ.Or("IAM_ADDR", "http://iam.hanzo.svc"), "/")
+	org := environ.Or("KMS_ORG", "hanzo")
 
 	form := url.Values{
 		"grant_type":    {"client_credentials"},
-		"client_id":     {env("KMS_CLIENT_ID", "")},
-		"client_secret": {env("KMS_CLIENT_SECRET", "")},
+		"client_id":     {environ.Or("KMS_CLIENT_ID", "")},
+		"client_secret": {environ.Or("KMS_CLIENT_SECRET", "")},
 	}
 	tReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, iam+"/v1/iam/oauth/token", strings.NewReader(form.Encode()))
 	tReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -384,7 +385,7 @@ func kmsPut(ctx context.Context, path, name, value string) error {
 	// env=prod: the KMSSecret operator reads storage keyed by {path}/{env}/{name}
 	// (kms/secrets layout). Omitting env lands the key at "default", where the
 	// operator's prod-scoped sync can't see it.
-	payload, _ := json.Marshal(map[string]string{"path": path, "name": name, "env": env("KMS_ENV", "prod"), "value": value})
+	payload, _ := json.Marshal(map[string]string{"path": path, "name": name, "env": environ.Or("KMS_ENV", "prod"), "value": value})
 	pReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, kms+"/v1/kms/orgs/"+url.PathEscape(org)+"/secrets", bytes.NewReader(payload))
 	pReq.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 	pReq.Header.Set("Content-Type", "application/json")
@@ -401,9 +402,9 @@ func kmsPut(ctx context.Context, path, name, value string) error {
 }
 
 func loadBytecode() ([]byte, error) {
-	hexStr := strings.TrimSpace(env("ANCHOR_BYTECODE", ""))
+	hexStr := environ.Or("ANCHOR_BYTECODE", "")
 	if hexStr == "" {
-		if f := strings.TrimSpace(env("ANCHOR_BYTECODE_FILE", "")); f != "" {
+		if f := environ.Or("ANCHOR_BYTECODE_FILE", ""); f != "" {
 			b, err := os.ReadFile(f)
 			if err != nil {
 				return nil, fmt.Errorf("read ANCHOR_BYTECODE_FILE: %w", err)
@@ -435,11 +436,4 @@ func trim0x(s string) string {
 		return s[2:]
 	}
 	return s
-}
-
-func env(k, def string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return def
 }

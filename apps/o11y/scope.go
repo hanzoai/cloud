@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -117,7 +118,7 @@ type statusIn struct {
 //
 // Example: {"product": "kms", "range": 3600}
 func handleMetrics(ctx context.Context, in *metricsIn) (*metricsResponse, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
