@@ -199,6 +199,11 @@ func run(write bool, describable []string) error {
 	if err != nil {
 		return err
 	}
+	// BEFORE EITHER MODE, because a closure resolved from an incomplete graph is
+	// the wrong answer to write as much as it is to compare against.
+	if err := placed(pkgs); err != nil {
+		return err
+	}
 	have, err := snapshot(root, pkgs, describable)
 	if err != nil {
 		return err
@@ -238,6 +243,8 @@ func repoRoot() (string, error) {
 // packages in under two seconds. -e so a package that does not build is reported
 // rather than aborting the walk — a broken app is app-contract's to fail, and this
 // gate going red for it would be the masking this whole change exists to remove.
+// -e also swallows an import that resolves to NOTHING, which is a different fact
+// and not one this gate may swallow: placed below is the other half of the flag.
 func list(root string) ([]pkg, error) {
 	cmd := exec.Command("go", "list", "-e", "-deps",
 		"-json=ImportPath,Dir,GoFiles,CgoFiles,Imports,Module", rootPattern)
@@ -259,6 +266,52 @@ func list(root string) ([]pkg, error) {
 		pkgs = append(pkgs, p)
 	}
 	return pkgs, nil
+}
+
+// placed refuses a closure the toolchain could not fully resolve.
+//
+// THE THIRD SHAPE OF THE DEFECT THIS FILE ALREADY CARRIES TWO PARAGRAPHS ABOUT,
+// and the one that stopped the release train. The other two are above: an empty
+// hash that compares equal whatever the source did, and an empty comparison set
+// that reports zero and exits green. This is the same mistake at the graph:
+// `go list -e` reports an import it CANNOT PLACE as a package with no module and
+// no directory, witnessed() then drops it for having no module, and every app
+// that links it gets a digest over a SMALLER closure. Silently, and in the
+// direction that reads as real work — every document stale, no module moved.
+//
+// That is not a hypothetical either. github.com/hanzoai/orm v0.6.24 was tagged on
+// one of that repo's two homes and not the other. The runner resolves
+// github.com/hanzoai/* from the forge, found no such revision there, and placed
+// five orm packages nowhere; 116 of 116 apps link one of them, so the gate
+// reported the whole fleet stale and could name no module that had moved —
+// correctly, because none had. It never once passed in CI, and cloud shipped on
+// hand-pinned digests instead of the train for as long as that lasted.
+//
+// DIR IS THE WHOLE TEST, and it is the toolchain's own answer rather than a
+// heuristic about import paths: stdlib carries no module either and has a Dir
+// under GOROOT, a package that fails to COMPILE has a Dir, and only an import
+// that resolves to no source at all has none. So this stays orthogonal to
+// app-contract — it fires on a dependency that is not THERE, never on one that is
+// there and broken. It is asked of every listed package, before the witness is
+// built, because the packages that go missing are precisely the ones witnessed()
+// filters out before anything gets hashed.
+func placed(pkgs []pkg) error {
+	var lost []string
+	for i := range pkgs {
+		if pkgs[i].Dir == "" {
+			lost = append(lost, pkgs[i].ImportPath)
+		}
+	}
+	if len(lost) == 0 {
+		return nil
+	}
+	sort.Strings(lost)
+	return fmt.Errorf("the toolchain could not place %d package(s), so this closure witnesses nothing:\n    %s\n\n"+
+		"  Each is an import that resolves to no source in this environment. The usual\n"+
+		"  cause is a version go.mod names that is published to only one of a module's\n"+
+		"  homes, since github.com/hanzoai/* resolves from the forge here. `go mod\n"+
+		"  download <module>` names the module and the failure in one line.",
+		len(lost), strings.Join(lost, "\n    "))
 }
 
 // snapshot reduces the package graph to the witness: one digest per app that has
@@ -378,17 +431,11 @@ func hashAll(pkgs []pkg) (map[string]string, error) {
 	return hash, nil
 }
 
+// hashPkg is reached only for a package placed() has already seen a directory
+// for. It carried that check itself, one package at a time, which is why the
+// check never fired for the case that mattered: witnessed() drops an unplaceable
+// package before hashing ever asks. One definition, over the whole graph, above.
 func hashPkg(p *pkg) (string, error) {
-	// A package the toolchain could not place has no source to hash, and hashing
-	// nothing yields a CONSTANT — the same digest for every unresolved package, and a
-	// witness that silently compares equal or silently compares stale depending on
-	// which side of the run it happened on. `-e` above is what allows a broken
-	// package through (deliberately: a build error is app-contract's to report, not
-	// this gate's), so the missing directory has to be caught here instead.
-	if p.Dir == "" {
-		return "", fmt.Errorf("%s: the toolchain could not locate this package — run `go mod download` (a missing module cannot be witnessed, and hashing nothing would compare equal)", p.ImportPath)
-	}
-
 	files := append(append([]string{}, p.GoFiles...), p.CgoFiles...)
 	sort.Strings(files)
 
