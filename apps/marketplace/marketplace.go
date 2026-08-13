@@ -63,6 +63,7 @@ import (
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/apps/x402"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/money"
 	"github.com/zap-proto/zip"
 )
@@ -442,10 +443,7 @@ func (o marketOps) uninstall(ctx context.Context, in *installReq) (*installState
 // ── helpers ─────────────────────────────────────────────────────────────────────
 
 func clip(s string) string {
-	if len(s) > maxText {
-		return s[:maxText]
-	}
-	return strings.TrimSpace(s)
+	return strings.TrimSpace(shorten.To(s, maxText))
 }
 
 // callerOf is the validated principal behind the request — the actor an activation

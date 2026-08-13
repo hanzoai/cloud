@@ -15,6 +15,7 @@ import (
 	"github.com/hanzoai/cloud/apps/analytics"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -446,11 +447,7 @@ func validOrg(org string) bool {
 
 // clip trims + bounds a non-secret text field.
 func clip(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > maxField {
-		return s[:maxField]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), maxField)
 }
 
 // toStr coerces a decoded JSON value to a trimmed string (numbers → their literal;

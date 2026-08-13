@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/integrations"
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // google.go is the import bridge: it reads an org's Google Drive folder and Google
@@ -188,8 +189,5 @@ func (g *httpGoogle) getBytes(ctx context.Context, u, tok string) ([]byte, error
 const maxImportBytes = 64 << 20 // 64 MiB
 
 func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
+	return shorten.To(s, n)
 }

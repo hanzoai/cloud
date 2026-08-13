@@ -42,6 +42,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/o11y/pkg/modules/errortracking/implerrortracking"
 	"github.com/hanzoai/o11y/pkg/modules/sentry"
 	"github.com/hanzoai/o11y/pkg/types/errortrackingtypes"
@@ -316,8 +317,5 @@ func buildTags(e analytics.ErrorEvent) json.RawMessage {
 
 // capString bounds a descriptive tag value.
 func capString(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max]
+	return shorten.To(s, max)
 }
