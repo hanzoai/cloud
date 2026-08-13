@@ -3,7 +3,7 @@ package team
 import (
 	"testing"
 
-	sqlitedrv "github.com/hanzoai/sqlite"
+	"github.com/hanzoai/cloud/internal/codec"
 )
 
 // requireSharedStore skips a test that opens a SECOND handle on a workspace store
@@ -20,7 +20,5 @@ import (
 // target that exercises it.
 func requireSharedStore(t *testing.T) {
 	t.Helper()
-	if !sqlitedrv.CodecLinked() {
-		t.Skip("pure-Go envelope: a second handle sees the last sealed state, not the live writer; reconnect/reload is a property of the codec-linked build")
-	}
+	codec.Require(t, "under the pure-Go envelope a second handle sees the last sealed state, not the live writer; reconnect/reload is a property of the codec-linked build")
 }
