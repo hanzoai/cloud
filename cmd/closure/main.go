@@ -199,11 +199,6 @@ func run(write bool, describable []string) error {
 	if err != nil {
 		return err
 	}
-	// BEFORE EITHER MODE, because a closure resolved from an incomplete graph is
-	// the wrong answer to write as much as it is to compare against.
-	if err := placed(pkgs); err != nil {
-		return err
-	}
 	have, err := snapshot(root, pkgs, describable)
 	if err != nil {
 		return err
@@ -292,9 +287,13 @@ func list(root string) ([]pkg, error) {
 // under GOROOT, a package that fails to COMPILE has a Dir, and only an import
 // that resolves to no source at all has none. So this stays orthogonal to
 // app-contract — it fires on a dependency that is not THERE, never on one that is
-// there and broken. It is asked of every listed package, before the witness is
-// built, because the packages that go missing are precisely the ones witnessed()
-// filters out before anything gets hashed.
+// there and broken.
+//
+// IT IS ASKED BY snapshot, over every listed package, which is both call sites at
+// once: recording from an incomplete graph is how a wrong witness gets committed,
+// and comparing against one is how a right witness gets called stale. Asking it
+// there rather than in run() is what makes it structural — no witness can be
+// built from a graph with a hole in it, whoever does the building.
 func placed(pkgs []pkg) error {
 	var lost []string
 	for i := range pkgs {
@@ -309,14 +308,17 @@ func placed(pkgs []pkg) error {
 	return fmt.Errorf("the toolchain could not place %d package(s), so this closure witnesses nothing:\n    %s\n\n"+
 		"  Each is an import that resolves to no source in this environment. The usual\n"+
 		"  cause is a version go.mod names that is published to only one of a module's\n"+
-		"  homes, since github.com/hanzoai/* resolves from the forge here. `go mod\n"+
-		"  download <module>` names the module and the failure in one line.",
+		"  homes — github.com/hanzoai/* resolves from the forge here. Ask the toolchain\n"+
+		"  which one and why: `go mod download <module>` says both in one line.",
 		len(lost), strings.Join(lost, "\n    "))
 }
 
 // snapshot reduces the package graph to the witness: one digest per app that has
 // a document, plus the module versions its closure reached.
 func snapshot(root string, pkgs []pkg, describable []string) (witness, error) {
+	if err := placed(pkgs); err != nil {
+		return witness{}, err
+	}
 	can := make(map[string]bool, len(describable))
 	for _, app := range describable {
 		can[app] = true
