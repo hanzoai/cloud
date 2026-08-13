@@ -109,13 +109,14 @@ func exposePush() {
 			if s == nil {
 				return nil, zip.Errorf(503, "platform push: platform not mounted")
 			}
-			if err := buildFromPush(s, ctx, cloud.GitPushEvent{
+			launched, err := buildFromPush(s, ctx, cloud.GitPushEvent{
 				Org: who.Org, Project: in.Project, Repo: in.Repo,
 				Ref: in.Ref, Commit: in.Commit, CloneURL: in.CloneURL,
-			}); err != nil {
+			})
+			if err != nil {
 				return nil, err
 			}
-			return &plane.Built{Repo: in.Repo}, nil
+			return &plane.Built{Repo: in.Repo, Builds: launched}, nil
 		},
 		zip.WithOperationID(plane.PlatformPush),
 		zip.WithSummary("Turn a landed push into a build for every app tracking it"))
