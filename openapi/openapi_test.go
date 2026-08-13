@@ -224,8 +224,11 @@ func TestOperationIDKeepsHyphenDistinctFromPathSeparator(t *testing.T) {
 	if got[0] == got[1] {
 		t.Fatalf("both routes derived operationId %q", got[0])
 	}
-	if got[0] != "get_v1_pricing-policy" || got[1] != "get_v1_pricing_policy" {
-		t.Errorf("ids = %v, want [get_v1_pricing-policy get_v1_pricing_policy]", got)
+	// The leading /v1 is not in an id — it names nothing that every address does
+	// not already carry — so what distinguishes these two is the hyphen alone,
+	// which is the whole point of the pair.
+	if got[0] != "get_pricing-policy" || got[1] != "get_pricing_policy" {
+		t.Errorf("ids = %v, want [get_pricing-policy get_pricing_policy]", got)
 	}
 }
 

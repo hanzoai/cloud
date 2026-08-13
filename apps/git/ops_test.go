@@ -76,7 +76,7 @@ func TestTypedOpRefusesAnonymousMCP(t *testing.T) {
 
 	code, body := do(t, app, http.MethodPost, "/mcp", "", map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-		"params": map[string]any{"name": "get_v1_git_repos", "arguments": map[string]any{}},
+		"params": map[string]any{"name": "get_git_repos", "arguments": map[string]any{}},
 	})
 	if code != http.StatusOK {
 		t.Fatalf("mcp want 200 (a refusal rides in the result), got %d (%s)", code, body)

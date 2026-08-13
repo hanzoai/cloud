@@ -46,26 +46,26 @@ type booksOp struct {
 
 // typedBooksOps is every /v1/books route declared as a typed op — the 20 that project.
 var typedBooksOps = []booksOp{
-	{http.MethodGet, "/v1/books/accounts", "get_v1_books_accounts", "accounts-list"},
-	{http.MethodGet, "/v1/books/gl", "get_v1_books_gl", "gl-get"},
-	{http.MethodGet, "/v1/books/trial", "get_v1_books_trial", "trial-get"},
-	{http.MethodGet, "/v1/books/pnl", "get_v1_books_pnl", "pnl-get"},
-	{http.MethodGet, "/v1/books/position", "get_v1_books_position", "position-get"},
-	{http.MethodGet, "/v1/books/export", "get_v1_books_export", "export-get"},
-	{http.MethodGet, "/v1/books/questions", "get_v1_books_questions", "questions-list"},
-	{http.MethodGet, "/v1/books/metrics", "get_v1_books_metrics", "metrics-list"},
-	{http.MethodGet, "/v1/books/inbox", "get_v1_books_inbox", "inbox-get"},
-	{http.MethodGet, "/v1/books/vendors", "get_v1_books_vendors", "vendors-list"},
-	{http.MethodGet, "/v1/books/rules", "get_v1_books_rules", "rules-list"},
-	{http.MethodGet, "/v1/books/transactions", "get_v1_books_transactions", "transactions-list"},
-	{http.MethodGet, "/v1/books/bank/transactions", "get_v1_books_bank_transactions", "bank-transactions-list"},
-	{http.MethodGet, "/v1/books/bank/unreconciled", "get_v1_books_bank_unreconciled", "bank-unreconciled-get"},
-	{http.MethodPost, "/v1/books/sync", "post_v1_books_sync", "sync-create"},
-	{http.MethodPost, "/v1/books/ask", "post_v1_books_ask", "ask-create"},
-	{http.MethodPost, "/v1/books/scan/book", "post_v1_books_scan_book", "scan-book-create"},
-	{http.MethodPost, "/v1/books/vendors", "post_v1_books_vendors", "vendors-create"},
-	{http.MethodPost, "/v1/books/rules", "post_v1_books_rules", "rules-create"},
-	{http.MethodPost, "/v1/books/bank/sync", "post_v1_books_bank_sync", "bank-sync-create"},
+	{http.MethodGet, "/v1/books/accounts", "get_books_accounts", "accounts-list"},
+	{http.MethodGet, "/v1/books/gl", "get_books_gl", "gl-get"},
+	{http.MethodGet, "/v1/books/trial", "get_books_trial", "trial-get"},
+	{http.MethodGet, "/v1/books/pnl", "get_books_pnl", "pnl-get"},
+	{http.MethodGet, "/v1/books/position", "get_books_position", "position-get"},
+	{http.MethodGet, "/v1/books/export", "get_books_export", "export-get"},
+	{http.MethodGet, "/v1/books/questions", "get_books_questions", "questions-list"},
+	{http.MethodGet, "/v1/books/metrics", "get_books_metrics", "metrics-list"},
+	{http.MethodGet, "/v1/books/inbox", "get_books_inbox", "inbox-get"},
+	{http.MethodGet, "/v1/books/vendors", "get_books_vendors", "vendors-list"},
+	{http.MethodGet, "/v1/books/rules", "get_books_rules", "rules-list"},
+	{http.MethodGet, "/v1/books/transactions", "get_books_transactions", "transactions-list"},
+	{http.MethodGet, "/v1/books/bank/transactions", "get_books_bank_transactions", "bank-transactions-list"},
+	{http.MethodGet, "/v1/books/bank/unreconciled", "get_books_bank_unreconciled", "bank-unreconciled-get"},
+	{http.MethodPost, "/v1/books/sync", "post_books_sync", "sync-create"},
+	{http.MethodPost, "/v1/books/ask", "post_books_ask", "ask-create"},
+	{http.MethodPost, "/v1/books/scan/book", "post_books_scan_book", "scan-book-create"},
+	{http.MethodPost, "/v1/books/vendors", "post_books_vendors", "vendors-create"},
+	{http.MethodPost, "/v1/books/rules", "post_books_rules", "rules-create"},
+	{http.MethodPost, "/v1/books/bank/sync", "post_books_bank_sync", "bank-sync-create"},
 }
 
 // untypedBooksRoutes is the EXEMPTION LEDGER: the five routes that are still raw
@@ -425,12 +425,12 @@ func TestBookScanCarriesItsSchemaProseAndExample(t *testing.T) {
 	// The MCP tool an agent sees names the In's fields, which is how it fills them.
 	var in map[string]any
 	for _, x := range app.MCPTools() {
-		if x["name"] == "post_v1_books_scan_book" {
+		if x["name"] == "post_books_scan_book" {
 			in, _ = x["inputSchema"].(map[string]any)
 		}
 	}
 	if in == nil {
-		t.Fatal("no MCP tool post_v1_books_scan_book")
+		t.Fatal("no MCP tool post_books_scan_book")
 	}
 	props, _ := in["properties"].(map[string]any)
 	for _, f := range []string{"scanId", "voucher", "override"} {
