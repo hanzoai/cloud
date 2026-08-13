@@ -187,7 +187,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// git-push-to-deploy: a push landed on the embedded git server (clients/git)
 	// triggers a build for every app tracking that repo+branch. Inverted so git
 	// never imports platform — build.go RegisterPushBuilder ⇄ OnGitPush (push.go).
-	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) error { return buildFromPush(mounted, ctx, ev) })
+	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) error {
+		_, err := buildFromPush(mounted, ctx, ev)
+		return err
+	})
 
 	// The same trigger on the plane. git and platform are separate processes, so
 	// the registration above is nil in the process where pushes actually land —
@@ -1125,6 +1128,18 @@ func genID(prefix string) string {
 // Shutdown closes the platform store. Idempotent. Mirrors the projects
 // Shutdown contract so the serve layer releases subsystem resources uniformly.
 func Shutdown() error {
+	// UNREGISTER FIRST, because the registration outlives the thing it reaches.
+	// The push builder is a closure over `mounted`, which the last line of this
+	// function sets to nil — so a push arriving after a shutdown (a co-resident git
+	// server draining, a rolling deploy) dispatched buildFromPush(nil, …) and
+	// dereferenced a nil Service. A self-inflicted panic in the process that owns
+	// builds, on the one path that is meant to be best-effort.
+	//
+	// Unregistered, OnGitPush falls to the plane and gets an honest failure from a
+	// platform that is going away, which is what a caller can act on. Before the
+	// guard below: an unregistration is correct whether or not a store was ever
+	// opened, and Register is the one thing Mount does that has no other undo.
+	cloud.RegisterPushBuilder(nil)
 	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}

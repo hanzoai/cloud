@@ -21,7 +21,15 @@ import (
 // matches the pushed ref, reusing the ONE build-launch core (startGitBuild). It is
 // the registered cloud.PushBuilder. A push that maps to no app is the common case
 // and returns nil; an error is returned only for a store read the caller may log.
-func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPushEvent) error {
+//
+// It RETURNS THE NUMBER OF BUILDS IT LAUNCHED, because a caller that cannot tell
+// "built" from "did nothing" has to guess, and the guess is always the optimistic
+// one: the forge shows a delivery green whenever the receiver answered 2xx, so a
+// push that matched no application looked exactly like a push that built. That is
+// the same shape as the 204 this whole path was rebuilt to end, one layer up. The
+// plane leg carries it too (plane.Built.Builds), which is what that type's comment
+// was waiting for — "the day something needs the count".
+func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPushEvent) (int, error) {
 	// Cloud's own upstream is not an Application — no row tracks it — so the
 	// self-release is dispatched from the same event, before the app scan. This is
 	// what makes a merge to main produce an image: the ONE image owner
@@ -39,7 +47,7 @@ func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPus
 
 	apps, err := s.State.store.ListAllApplications(ctx, ev.Org)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	// Detach from the push request's lifetime — the git handler returns as soon as
 	// the ref lands, but the build must outlive it. Bounded (per-org build cap in
@@ -52,12 +60,17 @@ func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPus
 	// never rebuilds an app.
 	branch, isBranch := strings.CutPrefix(ev.Ref, "refs/heads/")
 
-	n := 0
+	// Two counts, because they answer different questions and one number cannot
+	// carry both: matched is how many applications TRACK this repo+ref, launched is
+	// how many builds actually STARTED. They used to be one variable incremented on
+	// the match, which reported an app whose build failed to start as an app that
+	// built — the smaller version of the same lie the caller was told.
+	matched, launched := 0, 0
 	for _, a := range apps {
 		if a.Source != "git" || !sameRepo(a.RepoURL, ev.CloneURL) || !isBranch || !tracksBranch(a, branch) {
 			continue
 		}
-		n++
+		matched++
 		now := time.Now().Unix()
 		version, verr := s.State.store.NextVersion(ctx, a.ID)
 		if verr != nil {
@@ -70,13 +83,27 @@ func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPus
 			s.Log.Warn("push build failed", "org", ev.Org, "app", a.Slug, "err", berr)
 			continue
 		}
+		launched++
 		s.Log.Info("build launched (git push)", "org", ev.Org, "app", a.Slug, "job", jobName,
 			"repo", ev.Repo, "ref", ev.Ref, "commit", shortTag(ev.Commit))
 	}
-	if n == 0 {
-		s.Log.Debug("git push: no app tracks this repo+ref", "org", ev.Org, "repo", ev.Repo, "ref", ev.Ref)
+	switch {
+	case matched == 0:
+		// WARN, not Debug. A push that reaches here and matches nothing is the fleet's
+		// commonest real defect and its quietest: an application's RepoURL is free
+		// text a person typed, and the estate's habitual spelling names github.com
+		// while a forge delivery derives git.hanzo.ai — so the two never compare equal
+		// and every push builds nothing while the forge shows the delivery green. At
+		// Debug that line is off in production, which is the same as not having it.
+		s.Log.Warn("git push: no app tracks this repo+ref — nothing was built",
+			"org", ev.Org, "repo", ev.Repo, "ref", ev.Ref, "cloneUrl", ev.CloneURL)
+	case launched == 0:
+		// Worse, and distinct: applications DO track this ref and not one build
+		// started. That is an outage in the build path, not a mismatch in a URL.
+		s.Log.Error("git push: every matching app failed to start a build",
+			"org", ev.Org, "repo", ev.Repo, "ref", ev.Ref, "matched", matched)
 	}
-	return nil
+	return launched, nil
 }
 
 // sameRepo compares two repo URLs ignoring a trailing ".git" and slash. The app's
