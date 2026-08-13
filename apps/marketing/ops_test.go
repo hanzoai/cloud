@@ -98,7 +98,7 @@ func TestTypedOpRefusesAnonymousMCP(t *testing.T) {
 	app, _ := mountRoutes(t)
 
 	code, body := raw(t, app, http.MethodPost, "/mcp",
-		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_v1_marketing_campaigns","arguments":{}}}`)
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_marketing_campaigns","arguments":{}}}`)
 	if code != http.StatusOK {
 		t.Fatalf("mcp want 200 (a refusal rides in the result), got %d (%s)", code, body)
 	}

@@ -7,7 +7,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	iamclient "github.com/hanzoai/cloud/apps/iam"
-	"github.com/hanzoai/cloud/internal/codec"
 	model "github.com/hanzoai/iam/pkg/model"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	"github.com/hanzoai/orm"
@@ -35,17 +34,6 @@ func TestRosterReadsTheRealEmbeddedIAM(t *testing.T) {
 	if _, err := iamRoster("hanzo"); !errors.Is(err, errIAMUnavailable) {
 		t.Fatalf("unmounted iam must fail closed, got %v", err)
 	}
-
-	// PAST HERE THE TEST NEEDS A STORE, WHICH NEEDS THE CODEC.
-	//
-	// apps/iam opens the identity store through cek, which encrypts a plaintext one
-	// in place on the way — and that conversion is SQLCipher's sqlcipher_export, a
-	// function only the codec-linked engine has. Without it Mount cannot open a
-	// store, publishes none, and the assertion below reads "the seam is dead" when
-	// what is actually missing is the engine (make test-codec, or the image's
-	// -tags libsqlite3). Skipping says which, the way every other store test here
-	// does.
-	codec.Require(t, "cek cannot convert a plaintext store without sqlcipher_export, so iam publishes none and the roster seam cannot be reached")
 
 	// THE STORE HAS TO EXIST FIRST. The co-resident IAM refuses to CREATE one —
 	// an absent store there is a mounting fault, and minting a fresh empty
