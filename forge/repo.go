@@ -133,25 +133,18 @@ func (c *Client) Tip(ctx context.Context, owner, repo, branch string) (sha strin
 	if strings.TrimSpace(branch) == "" {
 		return "", false, fmt.Errorf("forge: empty branch")
 	}
-	var b struct {
-		Name   string `json:"name"`
-		Commit struct {
-			ID string `json:"id"`
-		} `json:"commit"`
-	}
-	// The branch travels UNESCAPED after /branches/ because the route is a
-	// wildcard (routers/api/v1/api.go registers "/branches/*"), so a slashed name
-	// like agent/x reaches the handler whole. Escaping it would send "agent%2Fx",
-	// which is a branch nobody has.
-	err = c.Machine().do(ctx, "/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(repo)+
-		"/branches/"+branch, nil, &b)
+	// The wire is [Client.branch], which [Client.Resolve] also reads — one
+	// spelling of the branch route, and the only difference between the two
+	// callers is the POLICY stated here: this one is the machine's, and it reads
+	// an absent branch as an answer rather than as a failure.
+	id, err := c.Machine().branch(ctx, owner, repo, branch)
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return "", false, nil // a real answer: the branch is not there
 	case err != nil:
 		return "", false, err
-	case strings.TrimSpace(b.Commit.ID) == "":
+	case id == "":
 		return "", false, nil
 	}
-	return b.Commit.ID, true, nil
+	return id, true, nil
 }

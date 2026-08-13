@@ -20,18 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/forge"
 )
-
-// credential holds the deployment's forge credential for this process, re-reading it
-// from KMS on its own schedule so a rotation is live without a restart.
-var credential forge.Source
 
 // live tracks the grants this process is holding right now, so a shutdown can
 // give them back instead of orphaning them.
@@ -109,32 +103,18 @@ func Sweep(ctx context.Context, org string) (int, error) {
 
 // Pinned reports whether the forge host key is configured rather than learned,
 // for a composition root to say once at startup.
-func Pinned() (bool, string) { return credential.Pinned() }
+func Pinned() (bool, string) { return forge.Pinned() }
 
 // client is the process's forge client, UNSCOPED — the caller states who it acts
 // as. An unreachable KMS or an empty credential is an error and never a client:
 // a run that proceeded without one would fail at the clone, minutes later, with
 // a sandbox already leased and a session already open.
 func client(ctx context.Context) (*forge.Client, error) {
-	c, err := credential.Client(ctx, cloud.KMSPeer{}, domain())
+	c, err := forge.Dial(ctx, cloud.KMSPeer{})
 	if err != nil {
 		return nil, fmt.Errorf("coding: the forge is unreachable: %w", err)
 	}
 	return c, nil
-}
-
-// domain is this deployment's own public host, from which the forge host is
-// derived. Same resolution apps/sites uses, so a white-labelled deployment reads
-// its OWN forge rather than another brand's.
-func domain() string {
-	if d := strings.TrimSpace(os.Getenv("CLOUD_DOMAIN")); d != "" {
-		return d
-	}
-	b := strings.TrimSpace(os.Getenv("CLOUD_BRAND"))
-	if b == "" {
-		b = brand.Default
-	}
-	return brand.APIHost(b)
 }
 
 // resolveActor is the forge login this run acts as.
