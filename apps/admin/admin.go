@@ -250,25 +250,38 @@ func (o ops) orgs(ctx context.Context, _ *core.None) (*orgsOut, error) {
 	ledger, _ := foldLedgerByOrg(ctx, ledgerScope{Since: computeSince(usageRange)})
 	money := core.Delegate(ctx)
 
-	rows := make([]orgRow, 0, len(orgs))
-	for _, row := range orgs {
-		users := orgUserCount(o.s, ctx, cr, row.Name)
-		// orgs is a per-ROW panel (orgRow[]; it carries NO sources[] channel):
-		// a failed read degrades THAT org's row to an honest zero, never a fleet total that
-		// falsely reads healthy. The aggregate-freshness signal lives on /overview.
-		_, credits, _ := core.OrgMoney(o.s, money, row.Name)
-		used := ledger[row.Name]
-		rows = append(rows, orgRow{
-			Org:          row.Name,
-			Display:      core.Display(row.DisplayName, row.Name),
-			Users:        users,
-			Products:     0, // workload registry feed pending (platform apps table)
-			SpendCents:   used.CostCents,
-			CreditsCents: credits,
-			Tokens:       used.Tokens,
-			Created:      row.CreatedTime,
-		})
+	// FAN OUT, for the reason the overview already does: each row costs two independent
+	// reads (members, wallet) and this fleet has eighty-one tenants, so serially that is
+	// 162 blocking round trips before the first row renders — and it grows with every
+	// signup. It matters MORE now than it did: the wallet read used to 404 immediately,
+	// which is fast in the way that a read returning nothing is fast.
+	rows := make([]orgRow, len(orgs))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, core.MaxCustomerConcurrency)
+	for i, row := range orgs {
+		wg.Add(1)
+		go func(i int, row iam.Org) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			// orgs is a per-ROW panel (orgRow[]; it carries NO sources[] channel):
+			// a failed read degrades THAT org's row to an honest zero, never a fleet total
+			// that falsely reads healthy. The aggregate-freshness signal lives on /overview.
+			_, credits, _ := core.OrgMoney(o.s, money, row.Name)
+			used := ledger[row.Name]
+			rows[i] = orgRow{
+				Org:          row.Name,
+				Display:      core.Display(row.DisplayName, row.Name),
+				Users:        orgUserCount(o.s, ctx, cr, row.Name),
+				Products:     0, // workload registry feed pending (platform apps table)
+				SpendCents:   used.CostCents,
+				CreditsCents: credits,
+				Tokens:       used.Tokens,
+				Created:      row.CreatedTime,
+			}
+		}(i, row)
 	}
+	wg.Wait()
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Org < rows[j].Org })
 	return &orgsOut{Status: core.OK, Data: rows, Total: core.Total(len(rows))}, nil
 }
