@@ -3,7 +3,7 @@ package audit
 import (
 	"testing"
 
-	sqlitedrv "github.com/hanzoai/sqlite"
+	"github.com/hanzoai/cloud/internal/codec"
 )
 
 // requireSharedStore skips a test that needs a SECOND opener to observe the same
@@ -21,7 +21,5 @@ import (
 // that `make test` runs CGO_ENABLED=0, so nothing in CI exercises that path today.
 func requireSharedStore(t *testing.T) {
 	t.Helper()
-	if !sqlitedrv.CodecLinked() {
-		t.Skip("pure-Go envelope: a store is single-writer (handle-private RAM copy, sealed on close), so a second opener cannot observe it; this property belongs to the codec-linked build")
-	}
+	codec.Require(t, "under the pure-Go envelope a store is single-writer (handle-private RAM copy, sealed on close), so a second opener cannot observe it")
 }
