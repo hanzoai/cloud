@@ -38077,6 +38077,8 @@ components:
           description: ID is the sync to update, from the path.
           type: string
         kind:
+          description: Kind names a different kind of sync, and is refused, for the
+            same reason.
           type: string
         source:
           $ref: '#/components/schemas/endpointReq'
@@ -38093,8 +38095,12 @@ components:
             to hanzo-inc/cloud failed every reconcile with "Repository not found", and the
             PATCH that appeared to fix it did nothing at all. Declaring the fields is what
             lets the documented immutability actually answer.
+            Source names a new upstream, and is refused. Delete this sync and create the
+            one you want.
         target:
           $ref: '#/components/schemas/endpointReq'
+          description: Target names a new native repository, and is refused, for the
+            same reason.
         trigger:
           description: Trigger is webhook, poll or manual. Omitted, the stored trigger
             stands.
