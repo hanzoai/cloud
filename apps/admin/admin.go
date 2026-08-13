@@ -468,7 +468,14 @@ func (o ops) usage(ctx context.Context, in *usageIn) (*usageOut, error) {
 			// No directory, no fleet to sum. Every other failure here yields a real
 			// partial total worth showing; this one yields nothing, and 0 would be a
 			// number the caller could not tell from a fleet that spent nothing.
-			return &usageOut{Status: core.Err, Msg: err.Error()}, nil
+			// Generic on the wire. err.Error() here carries the internal IAM host and
+			// the pod IP, and this body renders straight onto three admin screens, so
+			// returning it publishes infrastructure detail to answer a question the
+			// logs already answer: the directory call logs its own refusal at the
+			// source (`[iam] GET /v1/iam/get-organizations -> 403`), and the request
+			// carries a trace id. A second log line here would restate that, so the
+			// reason is not lost — only the disclosure is.
+			return &usageOut{Status: core.Err, Msg: "the org directory is unavailable"}, nil
 		}
 		for _, row := range orgs {
 			fold(row.Name)
