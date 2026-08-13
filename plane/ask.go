@@ -32,6 +32,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -47,12 +48,24 @@ const RunDirEnv = "CLOUD_RUN_DIR"
 // how the tests point a run at their own directory — would be read once and then
 // ignored. An operator's own ZIP_RUNTIME_DIR still always wins, because it is the
 // one value this never wrote.
-var bound string
+//
+// It is GUARDED because Ask calls Bind and a fleet read is a fan-out: the admin
+// boards ask eighty-one tenants for their money at once, and every one of those
+// goroutines enters here. Unguarded, they write this string concurrently — a real
+// race, and one that only appears where ZIP_RUNTIME_DIR is unset, because a
+// deployment that sets it takes the early return and never writes at all. So the
+// fleet that runs it never saw it and the tests that fan out do.
+var (
+	boundMu sync.Mutex
+	bound   string
+)
 
 // Bind points zip's runtime dir at cloud's, before anything serves or dials. It
 // is cloud's deployment convention expressed in zip's ONE scheme, rather than a
 // second scheme that has to agree with it.
 func Bind() {
+	boundMu.Lock()
+	defer boundMu.Unlock()
 	if cur := strings.TrimSpace(os.Getenv("ZIP_RUNTIME_DIR")); cur != "" && cur != bound {
 		return // set by someone other than us: always wins, for both halves alike
 	}
@@ -67,7 +80,11 @@ func Bind() {
 // It is the test seam, and it exists for the same reason ResetPlane does: a
 // process binds once, so nothing in production calls this, but a test that points
 // a run at its own directory has to be able to say the previous answer is stale.
-func Unbind() { bound = "" }
+func Unbind() {
+	boundMu.Lock()
+	defer boundMu.Unlock()
+	bound = ""
+}
 
 // ErrNoPeer reports that an app is NOT PART OF THIS DEPLOYMENT: its socket is
 // unbound and the router either is not here or does not know the name.
