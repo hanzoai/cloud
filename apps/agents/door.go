@@ -57,6 +57,7 @@ import (
 	"sync"
 
 	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
@@ -281,7 +282,7 @@ func clip(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return shorten.To(s, n) + "…"
 }
 
 // call runs one tool through the door's own dispatch: the door names the app

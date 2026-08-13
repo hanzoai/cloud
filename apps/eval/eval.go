@@ -67,6 +67,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -1651,10 +1652,7 @@ func rfc3339(unix int64) string {
 }
 
 func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
+	return shorten.To(s, n)
 }
 
 func getenv(key string) string { return strings.TrimSpace(os.Getenv(key)) }

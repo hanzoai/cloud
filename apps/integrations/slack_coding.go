@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -305,7 +306,7 @@ func codingCallContext(org string) (context.Context, context.CancelFunc) {
 
 func truncate(s string, n int) string {
 	if len(s) > n {
-		return s[:n] + "…"
+		return shorten.To(s, n) + "…"
 	}
 	return s
 }

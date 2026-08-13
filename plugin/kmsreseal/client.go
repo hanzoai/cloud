@@ -28,6 +28,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // doer is the transport seam. Production is *http.Client; tests inject an adapter
@@ -291,9 +293,5 @@ func decodeSecretValue(raw []byte) ([]byte, error) {
 // snippet returns a short, value-free hint from an error body for a failure log
 // (status text only; a secret value is never in an error body from either face).
 func snippet(raw []byte) string {
-	s := strings.TrimSpace(string(raw))
-	if len(s) > 200 {
-		s = s[:200]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(string(raw)), 200)
 }

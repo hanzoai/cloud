@@ -48,6 +48,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -316,9 +317,5 @@ func ztErrMsg(raw []byte) string {
 	if json.Unmarshal(raw, &e) == nil && strings.TrimSpace(e.Error.Message) != "" {
 		return e.Error.Message
 	}
-	s := strings.TrimSpace(string(raw))
-	if len(s) > 200 {
-		return s[:200]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(string(raw)), 200)
 }

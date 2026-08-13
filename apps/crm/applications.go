@@ -11,6 +11,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
@@ -641,11 +642,7 @@ func clipSlice(in []string) []string {
 }
 
 func clipTo(s string, n int) string {
-	s = strings.TrimSpace(s)
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), n)
 }
 
 func domainOf(website string) string {

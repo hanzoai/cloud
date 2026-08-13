@@ -49,6 +49,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -57,6 +58,7 @@ import (
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -1389,20 +1391,7 @@ func boundLimit(n int) int {
 
 // clip trims and bounds a text field.
 func clip(s string) string {
-	if len(s) > maxField {
-		s = s[:maxField]
-	}
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t' || s[0] == '\n' || s[0] == '\r') {
-		s = s[1:]
-	}
-	for len(s) > 0 {
-		last := s[len(s)-1]
-		if last != ' ' && last != '\t' && last != '\n' && last != '\r' {
-			break
-		}
-		s = s[:len(s)-1]
-	}
-	return s
+	return strings.TrimSpace(shorten.To(s, maxField))
 }
 
 func terminal(s FlowRunStatus) bool {

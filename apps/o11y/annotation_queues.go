@@ -11,6 +11,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -696,11 +697,7 @@ func resolveObject(in itemInput) (string, string, error) {
 }
 
 func boundedID(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > maxAnnFieldLen {
-		return s[:maxAnnFieldLen]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), maxAnnFieldLen)
 }
 
 // cleanScoreConfigIDs trims, drops blanks/dupes, and bounds the set. Each id is a
