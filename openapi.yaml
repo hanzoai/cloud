@@ -53187,7 +53187,7 @@ paths:
       x-app: agents
   /v1/ai/account:
     get:
-      operationId: get_v1_ai_account
+      operationId: get_ai_account
       responses:
         "200":
           content:
@@ -53207,7 +53207,7 @@ paths:
   /v1/ai/activities:
     get:
       description: List the caller's activities.
-      operationId: get_v1_ai_activities
+      operationId: get_ai_activities
       responses:
         "200":
           content:
@@ -53233,7 +53233,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/answer:
     get:
-      operationId: get_v1_ai_answer
+      operationId: get_ai_answer
       responses:
         "200":
           content:
@@ -53253,7 +53253,7 @@ paths:
   /v1/ai/articles:
     get:
       description: List the caller's articles.
-      operationId: get_v1_ai_articles
+      operationId: get_ai_articles
       responses:
         "200":
           content:
@@ -53279,7 +53279,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one article.
-      operationId: post_v1_ai_articles
+      operationId: post_ai_articles
       requestBody:
         content:
           application/json:
@@ -53310,7 +53310,7 @@ paths:
   /v1/ai/articles/{owner}/{name}:
     delete:
       description: Delete one article.
-      operationId: delete_v1_ai_articles_by_owner_by_name
+      operationId: delete_ai_articles_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -53347,7 +53347,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one article by its (owner, name) key.
-      operationId: get_v1_ai_articles_by_owner_by_name
+      operationId: get_ai_articles_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -53385,7 +53385,7 @@ paths:
     patch:
       description: Update one article. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_articles_by_owner_by_name
+      operationId: patch_ai_articles_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -53428,7 +53428,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_articles_by_owner_by_name
+      operationId: put_ai_articles_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -53472,7 +53472,7 @@ paths:
   /v1/ai/articles/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_articles_global
+      operationId: get_ai_articles_global
       responses:
         "200":
           content:
@@ -53499,7 +53499,7 @@ paths:
   /v1/ai/assets:
     get:
       description: List the caller's assets.
-      operationId: get_v1_ai_assets
+      operationId: get_ai_assets
       responses:
         "200":
           content:
@@ -53525,7 +53525,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one asset.
-      operationId: post_v1_ai_assets
+      operationId: post_ai_assets
       requestBody:
         content:
           application/json:
@@ -53556,7 +53556,7 @@ paths:
   /v1/ai/assets/{owner}/{name}:
     delete:
       description: Delete one asset.
-      operationId: delete_v1_ai_assets_by_owner_by_name
+      operationId: delete_ai_assets_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -53593,7 +53593,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one asset by its (owner, name) key.
-      operationId: get_v1_ai_assets_by_owner_by_name
+      operationId: get_ai_assets_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -53631,7 +53631,7 @@ paths:
     patch:
       description: Update one asset. PATCH and PUT reach the same handler, which has
         always taken a whole object.
-      operationId: patch_v1_ai_assets_by_owner_by_name
+      operationId: patch_ai_assets_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -53674,7 +53674,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_assets_by_owner_by_name
+      operationId: put_ai_assets_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -53717,7 +53717,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/assets/{owner}/{name}/scan:
     post:
-      operationId: post_v1_ai_assets_by_owner_by_name_scan
+      operationId: post_ai_assets_by_owner_by_name_scan
       parameters:
       - description: Owning organization.
         in: path
@@ -53755,7 +53755,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/assets/scan:
     post:
-      operationId: post_v1_ai_assets_scan
+      operationId: post_ai_assets_scan
       requestBody:
         content:
           application/json:
@@ -53781,7 +53781,7 @@ paths:
   /v1/ai/chats:
     get:
       description: List the caller's chats.
-      operationId: get_v1_ai_chats
+      operationId: get_ai_chats
       responses:
         "200":
           content:
@@ -53807,7 +53807,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one chat.
-      operationId: post_v1_ai_chats
+      operationId: post_ai_chats
       requestBody:
         content:
           application/json:
@@ -53838,7 +53838,7 @@ paths:
   /v1/ai/chats/{owner}/{name}:
     delete:
       description: Delete one chat.
-      operationId: delete_v1_ai_chats_by_owner_by_name
+      operationId: delete_ai_chats_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -53875,7 +53875,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one chat by its (owner, name) key.
-      operationId: get_v1_ai_chats_by_owner_by_name
+      operationId: get_ai_chats_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -53913,7 +53913,7 @@ paths:
     patch:
       description: Update one chat. PATCH and PUT reach the same handler, which has
         always taken a whole object.
-      operationId: patch_v1_ai_chats_by_owner_by_name
+      operationId: patch_ai_chats_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -53956,7 +53956,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_chats_by_owner_by_name
+      operationId: put_ai_chats_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54000,7 +54000,7 @@ paths:
   /v1/ai/chats/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_chats_global
+      operationId: get_ai_chats_global
       responses:
         "200":
           content:
@@ -54029,7 +54029,7 @@ paths:
       description: |-
         Lists the org's connectable AI accounts and whether each is
         currently connected. Never returns a key or a kms:// reference.
-      operationId: get_v1_ai_connections
+      operationId: get_ai_connections
       summary: Lists the org's connectable AI accounts and whether each is currently
         connected.
       tags:
@@ -54040,7 +54040,7 @@ paths:
         Connects (or reconnects) a third-party AI account for the org by
         sealing the supplied key into KMS and upserting the org's provider row. The raw
         key is sealed BEFORE the row is built and is never persisted or echoed.
-      operationId: post_v1_ai_connections
+      operationId: post_ai_connections
       summary: Connects (or reconnects) a third-party AI account for the org by sealing
         the supplied key into KMS and upserting the org's provider row.
       tags:
@@ -54052,7 +54052,7 @@ paths:
         Disconnects a third-party AI account: it deactivates the org's
         row so completion resolution falls back to the global Hanzo account (no BYO), and
         best-effort tombstones the sealed secret. Idempotent.
-      operationId: delete_v1_ai_connections_by_provider
+      operationId: delete_ai_connections_by_provider
       summary: 'Disconnects a third-party AI account: it deactivates the org''s row
         so completion resolution falls back to the global Hanzo account (no BYO),
         and best-effort tombstones the sealed secret.'
@@ -54064,7 +54064,7 @@ paths:
         Disconnects a third-party AI account: it deactivates the org's
         row so completion resolution falls back to the global Hanzo account (no BYO), and
         best-effort tombstones the sealed secret. Idempotent.
-      operationId: post_v1_ai_connections_by_provider
+      operationId: post_ai_connections_by_provider
       summary: 'Disconnects a third-party AI account: it deactivates the org''s row
         so completion resolution falls back to the global Hanzo account (no BYO),
         and best-effort tombstones the sealed secret.'
@@ -54080,7 +54080,7 @@ paths:
         SPA/BFF that needs to drive the redirect itself passes ?format=json and gets
         {authorizeUrl} in the standard envelope. The org is the VERIFIED principal, so
         only the caller's own connection can result.
-      operationId: get_v1_ai_connections_by_provider_authorize
+      operationId: get_ai_connections_by_provider_authorize
       summary: 'Begins an OAuth connection for the caller''s org: it binds the org
         into a signed state and sends the caller to the provider''s authorize URL.'
       tags:
@@ -54097,7 +54097,7 @@ paths:
         the org comes from the state THIS server signed, an attacker cannot land their
         token in a victim org — which is why this endpoint is state-authenticated rather
         than credential-gated.
-      operationId: get_v1_ai_connections_by_provider_callback
+      operationId: get_ai_connections_by_provider_callback
       summary: 'Completes OAuth: the org is recovered from the SIGNED state (not a
         header), the code is exchanged for a token, the token is SEALED into KMS (never
         the row/logs) through the same path as a BYOK key, and the org''s provider
@@ -54114,14 +54114,14 @@ paths:
         returned. An unconnected account, a missing importer, or a scope-denied provider all
         return a 200 ProviderUsage with connected/available flags + a human note — the UI's
         honest-empty states — never a fabricated figure.
-      operationId: get_v1_ai_connections_by_provider_usage
+      operationId: get_ai_connections_by_provider_usage
       summary: Imports the caller org's usage for a connected third-party account.
       tags:
       - ai
       x-app: github.com/hanzoai/ai
   /v1/ai/dashboards/agents:
     get:
-      operationId: get_v1_ai_dashboards_agents
+      operationId: get_ai_dashboards_agents
       responses:
         "200":
           content:
@@ -54140,7 +54140,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/dashboards/vm:
     get:
-      operationId: get_v1_ai_dashboards_vm
+      operationId: get_ai_dashboards_vm
       responses:
         "200":
           content:
@@ -54160,7 +54160,7 @@ paths:
   /v1/ai/deployments:
     get:
       description: List the caller's deployments.
-      operationId: get_v1_ai_deployments
+      operationId: get_ai_deployments
       responses:
         "200":
           content:
@@ -54186,7 +54186,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one application.
-      operationId: post_v1_ai_deployments
+      operationId: post_ai_deployments
       requestBody:
         content:
           application/json:
@@ -54217,7 +54217,7 @@ paths:
   /v1/ai/deployments/{owner}/{name}:
     delete:
       description: Delete one application.
-      operationId: delete_v1_ai_deployments_by_owner_by_name
+      operationId: delete_ai_deployments_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54254,7 +54254,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one application by its (owner, name) key.
-      operationId: get_v1_ai_deployments_by_owner_by_name
+      operationId: get_ai_deployments_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54292,7 +54292,7 @@ paths:
     patch:
       description: Update one application. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_deployments_by_owner_by_name
+      operationId: patch_ai_deployments_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54335,7 +54335,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_deployments_by_owner_by_name
+      operationId: put_ai_deployments_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54378,7 +54378,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/deployments/{owner}/{name}/deploy:
     post:
-      operationId: post_v1_ai_deployments_by_owner_by_name_deploy
+      operationId: post_ai_deployments_by_owner_by_name_deploy
       parameters:
       - description: Owning organization.
         in: path
@@ -54416,7 +54416,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/deployments/{owner}/{name}/undeploy:
     post:
-      operationId: post_v1_ai_deployments_by_owner_by_name_undeploy
+      operationId: post_ai_deployments_by_owner_by_name_undeploy
       parameters:
       - description: Owning organization.
         in: path
@@ -54455,7 +54455,7 @@ paths:
   /v1/ai/files:
     get:
       description: List the caller's files.
-      operationId: get_v1_ai_files
+      operationId: get_ai_files
       responses:
         "200":
           content:
@@ -54481,7 +54481,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one file.
-      operationId: post_v1_ai_files
+      operationId: post_ai_files
       requestBody:
         content:
           application/json:
@@ -54512,7 +54512,7 @@ paths:
   /v1/ai/files/{owner}/{name}:
     delete:
       description: Delete one file.
-      operationId: delete_v1_ai_files_by_owner_by_name
+      operationId: delete_ai_files_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54549,7 +54549,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one file by its (owner, name) key.
-      operationId: get_v1_ai_files_by_owner_by_name
+      operationId: get_ai_files_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54587,7 +54587,7 @@ paths:
     patch:
       description: Update one file. PATCH and PUT reach the same handler, which has
         always taken a whole object.
-      operationId: patch_v1_ai_files_by_owner_by_name
+      operationId: patch_ai_files_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54630,7 +54630,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_files_by_owner_by_name
+      operationId: put_ai_files_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54673,7 +54673,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/files/{owner}/{name}/vectors:
     post:
-      operationId: post_v1_ai_files_by_owner_by_name_vectors
+      operationId: post_ai_files_by_owner_by_name_vectors
       parameters:
       - description: Owning organization.
         in: path
@@ -54711,7 +54711,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/files/activate:
     post:
-      operationId: post_v1_ai_files_activate
+      operationId: post_ai_files_activate
       requestBody:
         content:
           application/json:
@@ -54736,7 +54736,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/files/active:
     get:
-      operationId: get_v1_ai_files_active
+      operationId: get_ai_files_active
       responses:
         "200":
           content:
@@ -54756,7 +54756,7 @@ paths:
   /v1/ai/files/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_files_global
+      operationId: get_ai_files_global
       responses:
         "200":
           content:
@@ -54782,7 +54782,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/files/upload:
     post:
-      operationId: post_v1_ai_files_upload
+      operationId: post_ai_files_upload
       requestBody:
         content:
           application/json:
@@ -54808,7 +54808,7 @@ paths:
   /v1/ai/forms:
     get:
       description: List the caller's forms.
-      operationId: get_v1_ai_forms
+      operationId: get_ai_forms
       responses:
         "200":
           content:
@@ -54834,7 +54834,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one form.
-      operationId: post_v1_ai_forms
+      operationId: post_ai_forms
       requestBody:
         content:
           application/json:
@@ -54865,7 +54865,7 @@ paths:
   /v1/ai/forms/{owner}/{name}:
     delete:
       description: Delete one form.
-      operationId: delete_v1_ai_forms_by_owner_by_name
+      operationId: delete_ai_forms_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54902,7 +54902,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one form by its (owner, name) key.
-      operationId: get_v1_ai_forms_by_owner_by_name
+      operationId: get_ai_forms_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54940,7 +54940,7 @@ paths:
     patch:
       description: Update one form. PATCH and PUT reach the same handler, which has
         always taken a whole object.
-      operationId: patch_v1_ai_forms_by_owner_by_name
+      operationId: patch_ai_forms_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -54983,7 +54983,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_forms_by_owner_by_name
+      operationId: put_ai_forms_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55026,7 +55026,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/forms/data:
     get:
-      operationId: get_v1_ai_forms_data
+      operationId: get_ai_forms_data
       responses:
         "200":
           content:
@@ -55046,7 +55046,7 @@ paths:
   /v1/ai/forms/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_forms_global
+      operationId: get_ai_forms_global
       responses:
         "200":
           content:
@@ -55073,7 +55073,7 @@ paths:
   /v1/ai/graphs:
     get:
       description: List the caller's graphs.
-      operationId: get_v1_ai_graphs
+      operationId: get_ai_graphs
       responses:
         "200":
           content:
@@ -55099,7 +55099,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one graph.
-      operationId: post_v1_ai_graphs
+      operationId: post_ai_graphs
       requestBody:
         content:
           application/json:
@@ -55130,7 +55130,7 @@ paths:
   /v1/ai/graphs/{owner}/{name}:
     delete:
       description: Delete one graph.
-      operationId: delete_v1_ai_graphs_by_owner_by_name
+      operationId: delete_ai_graphs_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55167,7 +55167,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one graph by its (owner, name) key.
-      operationId: get_v1_ai_graphs_by_owner_by_name
+      operationId: get_ai_graphs_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55205,7 +55205,7 @@ paths:
     patch:
       description: Update one graph. PATCH and PUT reach the same handler, which has
         always taken a whole object.
-      operationId: patch_v1_ai_graphs_by_owner_by_name
+      operationId: patch_ai_graphs_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55248,7 +55248,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_graphs_by_owner_by_name
+      operationId: put_ai_graphs_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55292,7 +55292,7 @@ paths:
   /v1/ai/graphs/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_graphs_global
+      operationId: get_ai_graphs_global
       responses:
         "200":
           content:
@@ -55318,7 +55318,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/k8s-status:
     get:
-      operationId: get_v1_ai_k8s-status
+      operationId: get_ai_k8s-status
       responses:
         "200":
           content:
@@ -55373,7 +55373,7 @@ paths:
   /v1/ai/messages:
     get:
       description: List the caller's messages.
-      operationId: get_v1_ai_messages
+      operationId: get_ai_messages
       responses:
         "200":
           content:
@@ -55399,7 +55399,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one message.
-      operationId: post_v1_ai_messages
+      operationId: post_ai_messages
       requestBody:
         content:
           application/json:
@@ -55430,7 +55430,7 @@ paths:
   /v1/ai/messages/{owner}/{name}:
     delete:
       description: Delete one message.
-      operationId: delete_v1_ai_messages_by_owner_by_name
+      operationId: delete_ai_messages_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55467,7 +55467,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one message by its (owner, name) key.
-      operationId: get_v1_ai_messages_by_owner_by_name
+      operationId: get_ai_messages_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55505,7 +55505,7 @@ paths:
     patch:
       description: Update one message. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_messages_by_owner_by_name
+      operationId: patch_ai_messages_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55548,7 +55548,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_messages_by_owner_by_name
+      operationId: put_ai_messages_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55591,7 +55591,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/messages/{owner}/{name}/answer:
     get:
-      operationId: get_v1_ai_messages_by_owner_by_name_answer
+      operationId: get_ai_messages_by_owner_by_name_answer
       parameters:
       - description: Owning organization.
         in: path
@@ -55624,7 +55624,7 @@ paths:
   /v1/ai/messages/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_messages_global
+      operationId: get_ai_messages_global
       responses:
         "200":
           content:
@@ -55650,7 +55650,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/messages/welcome:
     delete:
-      operationId: delete_v1_ai_messages_welcome
+      operationId: delete_ai_messages_welcome
       responses:
         "200":
           content:
@@ -55670,7 +55670,7 @@ paths:
   /v1/ai/nodes:
     get:
       description: List the caller's nodes.
-      operationId: get_v1_ai_nodes
+      operationId: get_ai_nodes
       responses:
         "200":
           content:
@@ -55696,7 +55696,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one node.
-      operationId: post_v1_ai_nodes
+      operationId: post_ai_nodes
       requestBody:
         content:
           application/json:
@@ -55727,7 +55727,7 @@ paths:
   /v1/ai/nodes/{owner}/{name}:
     delete:
       description: Delete one node.
-      operationId: delete_v1_ai_nodes_by_owner_by_name
+      operationId: delete_ai_nodes_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55764,7 +55764,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one node by its (owner, name) key.
-      operationId: get_v1_ai_nodes_by_owner_by_name
+      operationId: get_ai_nodes_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55802,7 +55802,7 @@ paths:
     patch:
       description: Update one node. PATCH and PUT reach the same handler, which has
         always taken a whole object.
-      operationId: patch_v1_ai_nodes_by_owner_by_name
+      operationId: patch_ai_nodes_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55845,7 +55845,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_nodes_by_owner_by_name
+      operationId: put_ai_nodes_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -55888,7 +55888,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/nodes/{owner}/{name}/tunnel:
     get:
-      operationId: get_v1_ai_nodes_by_owner_by_name_tunnel
+      operationId: get_ai_nodes_by_owner_by_name_tunnel
       parameters:
       - description: Owning organization.
         in: path
@@ -55919,7 +55919,7 @@ paths:
       - ai
       x-app: github.com/hanzoai/ai
     post:
-      operationId: post_v1_ai_nodes_by_owner_by_name_tunnel
+      operationId: post_ai_nodes_by_owner_by_name_tunnel
       parameters:
       - description: Owning organization.
         in: path
@@ -55957,7 +55957,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/preferences:
     patch:
-      operationId: patch_v1_ai_preferences
+      operationId: patch_ai_preferences
       requestBody:
         content:
           application/json:
@@ -55981,7 +55981,7 @@ paths:
       - ai
       x-app: github.com/hanzoai/ai
     put:
-      operationId: put_v1_ai_preferences
+      operationId: put_ai_preferences
       requestBody:
         content:
           application/json:
@@ -56006,7 +56006,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/prometheus:
     get:
-      operationId: get_v1_ai_prometheus
+      operationId: get_ai_prometheus
       responses:
         "200":
           content:
@@ -56026,7 +56026,7 @@ paths:
   /v1/ai/providers:
     get:
       description: List the caller's providers.
-      operationId: get_v1_ai_providers
+      operationId: get_ai_providers
       responses:
         "200":
           content:
@@ -56052,7 +56052,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one provider.
-      operationId: post_v1_ai_providers
+      operationId: post_ai_providers
       requestBody:
         content:
           application/json:
@@ -56083,7 +56083,7 @@ paths:
   /v1/ai/providers/{owner}/{name}:
     delete:
       description: Delete one provider.
-      operationId: delete_v1_ai_providers_by_owner_by_name
+      operationId: delete_ai_providers_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56120,7 +56120,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one provider by its (owner, name) key.
-      operationId: get_v1_ai_providers_by_owner_by_name
+      operationId: get_ai_providers_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56158,7 +56158,7 @@ paths:
     patch:
       description: Update one provider. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_providers_by_owner_by_name
+      operationId: patch_ai_providers_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56201,7 +56201,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_providers_by_owner_by_name
+      operationId: put_ai_providers_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56245,7 +56245,7 @@ paths:
   /v1/ai/providers/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_providers_global
+      operationId: get_ai_providers_global
       responses:
         "200":
           content:
@@ -56271,7 +56271,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/providers/mcp-tools:
     post:
-      operationId: post_v1_ai_providers_mcp-tools
+      operationId: post_ai_providers_mcp-tools
       requestBody:
         content:
           application/json:
@@ -56297,7 +56297,7 @@ paths:
   /v1/ai/records:
     get:
       description: List the caller's records.
-      operationId: get_v1_ai_records
+      operationId: get_ai_records
       responses:
         "200":
           content:
@@ -56323,7 +56323,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one record.
-      operationId: post_v1_ai_records
+      operationId: post_ai_records
       requestBody:
         content:
           application/json:
@@ -56354,7 +56354,7 @@ paths:
   /v1/ai/records/{owner}/{name}:
     delete:
       description: Delete one record.
-      operationId: delete_v1_ai_records_by_owner_by_name
+      operationId: delete_ai_records_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56391,7 +56391,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one record by its (owner, name) key.
-      operationId: get_v1_ai_records_by_owner_by_name
+      operationId: get_ai_records_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56429,7 +56429,7 @@ paths:
     patch:
       description: Update one record. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_records_by_owner_by_name
+      operationId: patch_ai_records_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56472,7 +56472,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_records_by_owner_by_name
+      operationId: put_ai_records_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56515,7 +56515,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/records/batch:
     post:
-      operationId: post_v1_ai_records_batch
+      operationId: post_ai_records_batch
       requestBody:
         content:
           application/json:
@@ -56540,7 +56540,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/records/commit:
     post:
-      operationId: post_v1_ai_records_commit
+      operationId: post_ai_records_commit
       requestBody:
         content:
           application/json:
@@ -56565,7 +56565,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/records/commit-second:
     post:
-      operationId: post_v1_ai_records_commit-second
+      operationId: post_ai_records_commit-second
       requestBody:
         content:
           application/json:
@@ -56590,7 +56590,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/records/query:
     get:
-      operationId: get_v1_ai_records_query
+      operationId: get_ai_records_query
       responses:
         "200":
           content:
@@ -56609,7 +56609,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/records/query-second:
     get:
-      operationId: get_v1_ai_records_query-second
+      operationId: get_ai_records_query-second
       responses:
         "200":
           content:
@@ -56629,7 +56629,7 @@ paths:
   /v1/ai/remote-connections:
     get:
       description: List the caller's remote-connections.
-      operationId: get_v1_ai_remote-connections
+      operationId: get_ai_remote-connections
       responses:
         "200":
           content:
@@ -56655,7 +56655,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one connection.
-      operationId: post_v1_ai_remote-connections
+      operationId: post_ai_remote-connections
       requestBody:
         content:
           application/json:
@@ -56686,7 +56686,7 @@ paths:
   /v1/ai/remote-connections/{owner}/{name}:
     delete:
       description: Delete one connection.
-      operationId: delete_v1_ai_remote-connections_by_owner_by_name
+      operationId: delete_ai_remote-connections_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56723,7 +56723,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one connection by its (owner, name) key.
-      operationId: get_v1_ai_remote-connections_by_owner_by_name
+      operationId: get_ai_remote-connections_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56761,7 +56761,7 @@ paths:
     patch:
       description: Update one connection. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_remote-connections_by_owner_by_name
+      operationId: patch_ai_remote-connections_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56804,7 +56804,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_remote-connections_by_owner_by_name
+      operationId: put_ai_remote-connections_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -56847,7 +56847,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/remote-connections/{owner}/{name}/start:
     post:
-      operationId: post_v1_ai_remote-connections_by_owner_by_name_start
+      operationId: post_ai_remote-connections_by_owner_by_name_start
       parameters:
       - description: Owning organization.
         in: path
@@ -56885,7 +56885,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/remote-connections/{owner}/{name}/stop:
     post:
-      operationId: post_v1_ai_remote-connections_by_owner_by_name_stop
+      operationId: post_ai_remote-connections_by_owner_by_name_stop
       parameters:
       - description: Owning organization.
         in: path
@@ -56924,7 +56924,7 @@ paths:
   /v1/ai/routes:
     get:
       description: List the caller's routes.
-      operationId: get_v1_ai_routes
+      operationId: get_ai_routes
       responses:
         "200":
           content:
@@ -56950,7 +56950,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one model-route.
-      operationId: post_v1_ai_routes
+      operationId: post_ai_routes
       requestBody:
         content:
           application/json:
@@ -56981,7 +56981,7 @@ paths:
   /v1/ai/routes/{owner}/{name}:
     delete:
       description: Delete one model-route.
-      operationId: delete_v1_ai_routes_by_owner_by_name
+      operationId: delete_ai_routes_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57018,7 +57018,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one model-route by its (owner, name) key.
-      operationId: get_v1_ai_routes_by_owner_by_name
+      operationId: get_ai_routes_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57056,7 +57056,7 @@ paths:
     patch:
       description: Update one model-route. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_routes_by_owner_by_name
+      operationId: patch_ai_routes_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57099,7 +57099,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_routes_by_owner_by_name
+      operationId: put_ai_routes_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57143,7 +57143,7 @@ paths:
   /v1/ai/scales:
     get:
       description: List the caller's scales.
-      operationId: get_v1_ai_scales
+      operationId: get_ai_scales
       responses:
         "200":
           content:
@@ -57169,7 +57169,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one scale.
-      operationId: post_v1_ai_scales
+      operationId: post_ai_scales
       requestBody:
         content:
           application/json:
@@ -57200,7 +57200,7 @@ paths:
   /v1/ai/scales/{owner}/{name}:
     delete:
       description: Delete one scale.
-      operationId: delete_v1_ai_scales_by_owner_by_name
+      operationId: delete_ai_scales_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57237,7 +57237,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one scale by its (owner, name) key.
-      operationId: get_v1_ai_scales_by_owner_by_name
+      operationId: get_ai_scales_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57275,7 +57275,7 @@ paths:
     patch:
       description: Update one scale. PATCH and PUT reach the same handler, which has
         always taken a whole object.
-      operationId: patch_v1_ai_scales_by_owner_by_name
+      operationId: patch_ai_scales_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57318,7 +57318,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_scales_by_owner_by_name
+      operationId: put_ai_scales_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57362,7 +57362,7 @@ paths:
   /v1/ai/scales/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_scales_global
+      operationId: get_ai_scales_global
       responses:
         "200":
           content:
@@ -57388,7 +57388,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/scales/public:
     get:
-      operationId: get_v1_ai_scales_public
+      operationId: get_ai_scales_public
       responses:
         "200":
           content:
@@ -57408,7 +57408,7 @@ paths:
   /v1/ai/scans:
     get:
       description: List the caller's scans.
-      operationId: get_v1_ai_scans
+      operationId: get_ai_scans
       responses:
         "200":
           content:
@@ -57434,7 +57434,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one scan.
-      operationId: post_v1_ai_scans
+      operationId: post_ai_scans
       requestBody:
         content:
           application/json:
@@ -57465,7 +57465,7 @@ paths:
   /v1/ai/scans/{owner}/{name}:
     delete:
       description: Delete one scan.
-      operationId: delete_v1_ai_scans_by_owner_by_name
+      operationId: delete_ai_scans_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57502,7 +57502,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one scan by its (owner, name) key.
-      operationId: get_v1_ai_scans_by_owner_by_name
+      operationId: get_ai_scans_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57540,7 +57540,7 @@ paths:
     patch:
       description: Update one scan. PATCH and PUT reach the same handler, which has
         always taken a whole object.
-      operationId: patch_v1_ai_scans_by_owner_by_name
+      operationId: patch_ai_scans_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57583,7 +57583,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_scans_by_owner_by_name
+      operationId: put_ai_scans_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57626,7 +57626,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/signin:
     post:
-      operationId: post_v1_ai_signin
+      operationId: post_ai_signin
       requestBody:
         content:
           application/json:
@@ -57652,7 +57652,7 @@ paths:
   /v1/ai/signin-sessions:
     get:
       description: List the caller's signin-sessions.
-      operationId: get_v1_ai_signin-sessions
+      operationId: get_ai_signin-sessions
       responses:
         "200":
           content:
@@ -57678,7 +57678,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one session.
-      operationId: post_v1_ai_signin-sessions
+      operationId: post_ai_signin-sessions
       requestBody:
         content:
           application/json:
@@ -57709,7 +57709,7 @@ paths:
   /v1/ai/signin-sessions/{owner}/{name}:
     delete:
       description: Delete one session.
-      operationId: delete_v1_ai_signin-sessions_by_owner_by_name
+      operationId: delete_ai_signin-sessions_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57746,7 +57746,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one session by its (owner, name) key.
-      operationId: get_v1_ai_signin-sessions_by_owner_by_name
+      operationId: get_ai_signin-sessions_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57784,7 +57784,7 @@ paths:
     patch:
       description: Update one session. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_signin-sessions_by_owner_by_name
+      operationId: patch_ai_signin-sessions_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57827,7 +57827,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_signin-sessions_by_owner_by_name
+      operationId: put_ai_signin-sessions_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -57870,7 +57870,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/signin-sessions/duplicated:
     get:
-      operationId: get_v1_ai_signin-sessions_duplicated
+      operationId: get_ai_signin-sessions_duplicated
       responses:
         "200":
           content:
@@ -57889,7 +57889,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/signout:
     post:
-      operationId: post_v1_ai_signout
+      operationId: post_ai_signout
       requestBody:
         content:
           application/json:
@@ -57915,7 +57915,7 @@ paths:
   /v1/ai/stores:
     get:
       description: List the caller's stores.
-      operationId: get_v1_ai_stores
+      operationId: get_ai_stores
       responses:
         "200":
           content:
@@ -57941,7 +57941,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one store.
-      operationId: post_v1_ai_stores
+      operationId: post_ai_stores
       requestBody:
         content:
           application/json:
@@ -57972,7 +57972,7 @@ paths:
   /v1/ai/stores/{owner}/{name}:
     delete:
       description: Delete one store.
-      operationId: delete_v1_ai_stores_by_owner_by_name
+      operationId: delete_ai_stores_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58009,7 +58009,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one store by its (owner, name) key.
-      operationId: get_v1_ai_stores_by_owner_by_name
+      operationId: get_ai_stores_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58047,7 +58047,7 @@ paths:
     patch:
       description: Update one store. PATCH and PUT reach the same handler, which has
         always taken a whole object.
-      operationId: patch_v1_ai_stores_by_owner_by_name
+      operationId: patch_ai_stores_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58090,7 +58090,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_stores_by_owner_by_name
+      operationId: put_ai_stores_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58133,7 +58133,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/stores/{owner}/{name}/vectors:
     post:
-      operationId: post_v1_ai_stores_by_owner_by_name_vectors
+      operationId: post_ai_stores_by_owner_by_name_vectors
       parameters:
       - description: Owning organization.
         in: path
@@ -58172,7 +58172,7 @@ paths:
   /v1/ai/stores/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_stores_global
+      operationId: get_ai_stores_global
       responses:
         "200":
           content:
@@ -58198,7 +58198,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/stores/names:
     get:
-      operationId: get_v1_ai_stores_names
+      operationId: get_ai_stores_names
       responses:
         "200":
           content:
@@ -58217,7 +58217,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/stores/providers:
     get:
-      operationId: get_v1_ai_stores_providers
+      operationId: get_ai_stores_providers
       responses:
         "200":
           content:
@@ -58236,7 +58236,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/system:
     get:
-      operationId: get_v1_ai_system
+      operationId: get_ai_system
       responses:
         "200":
           content:
@@ -58256,7 +58256,7 @@ paths:
   /v1/ai/tasks:
     get:
       description: List the caller's tasks.
-      operationId: get_v1_ai_tasks
+      operationId: get_ai_tasks
       responses:
         "200":
           content:
@@ -58282,7 +58282,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one task.
-      operationId: post_v1_ai_tasks
+      operationId: post_ai_tasks
       requestBody:
         content:
           application/json:
@@ -58313,7 +58313,7 @@ paths:
   /v1/ai/tasks/{owner}/{name}:
     delete:
       description: Delete one task.
-      operationId: delete_v1_ai_tasks_by_owner_by_name
+      operationId: delete_ai_tasks_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58350,7 +58350,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one task by its (owner, name) key.
-      operationId: get_v1_ai_tasks_by_owner_by_name
+      operationId: get_ai_tasks_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58388,7 +58388,7 @@ paths:
     patch:
       description: Update one task. PATCH and PUT reach the same handler, which has
         always taken a whole object.
-      operationId: patch_v1_ai_tasks_by_owner_by_name
+      operationId: patch_ai_tasks_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58431,7 +58431,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_tasks_by_owner_by_name
+      operationId: put_ai_tasks_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58474,7 +58474,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/tasks/{owner}/{name}/analyze:
     post:
-      operationId: post_v1_ai_tasks_by_owner_by_name_analyze
+      operationId: post_ai_tasks_by_owner_by_name_analyze
       parameters:
       - description: Owning organization.
         in: path
@@ -58512,7 +58512,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/tasks/{owner}/{name}/document:
     post:
-      operationId: post_v1_ai_tasks_by_owner_by_name_document
+      operationId: post_ai_tasks_by_owner_by_name_document
       parameters:
       - description: Owning organization.
         in: path
@@ -58551,7 +58551,7 @@ paths:
   /v1/ai/tasks/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_tasks_global
+      operationId: get_ai_tasks_global
       responses:
         "200":
           content:
@@ -58578,7 +58578,7 @@ paths:
   /v1/ai/templates:
     get:
       description: List the caller's templates.
-      operationId: get_v1_ai_templates
+      operationId: get_ai_templates
       responses:
         "200":
           content:
@@ -58604,7 +58604,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one template.
-      operationId: post_v1_ai_templates
+      operationId: post_ai_templates
       requestBody:
         content:
           application/json:
@@ -58635,7 +58635,7 @@ paths:
   /v1/ai/templates/{owner}/{name}:
     delete:
       description: Delete one template.
-      operationId: delete_v1_ai_templates_by_owner_by_name
+      operationId: delete_ai_templates_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58672,7 +58672,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one template by its (owner, name) key.
-      operationId: get_v1_ai_templates_by_owner_by_name
+      operationId: get_ai_templates_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58710,7 +58710,7 @@ paths:
     patch:
       description: Update one template. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_templates_by_owner_by_name
+      operationId: patch_ai_templates_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58753,7 +58753,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_templates_by_owner_by_name
+      operationId: put_ai_templates_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58796,7 +58796,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/training-contribution:
     get:
-      operationId: get_v1_ai_training-contribution
+      operationId: get_ai_training-contribution
       responses:
         "200":
           content:
@@ -58814,7 +58814,7 @@ paths:
       - ai
       x-app: github.com/hanzoai/ai
     patch:
-      operationId: patch_v1_ai_training-contribution
+      operationId: patch_ai_training-contribution
       requestBody:
         content:
           application/json:
@@ -58838,7 +58838,7 @@ paths:
       - ai
       x-app: github.com/hanzoai/ai
     put:
-      operationId: put_v1_ai_training-contribution
+      operationId: put_ai_training-contribution
       requestBody:
         content:
           application/json:
@@ -58864,7 +58864,7 @@ paths:
   /v1/ai/tree-files:
     post:
       description: Create one tree-file.
-      operationId: post_v1_ai_tree-files
+      operationId: post_ai_tree-files
       requestBody:
         content:
           application/json:
@@ -58895,7 +58895,7 @@ paths:
   /v1/ai/tree-files/{owner}/{name}:
     delete:
       description: Delete one tree-file.
-      operationId: delete_v1_ai_tree-files_by_owner_by_name
+      operationId: delete_ai_tree-files_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58933,7 +58933,7 @@ paths:
     patch:
       description: Update one tree-file. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_tree-files_by_owner_by_name
+      operationId: patch_ai_tree-files_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -58976,7 +58976,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_tree-files_by_owner_by_name
+      operationId: put_ai_tree-files_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59020,7 +59020,7 @@ paths:
   /v1/ai/usages:
     get:
       description: List the caller's usages.
-      operationId: get_v1_ai_usages
+      operationId: get_ai_usages
       responses:
         "200":
           content:
@@ -59046,7 +59046,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/usages/by-user:
     get:
-      operationId: get_v1_ai_usages_by-user
+      operationId: get_ai_usages_by-user
       responses:
         "200":
           content:
@@ -59065,7 +59065,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/usages/cloud:
     get:
-      operationId: get_v1_ai_usages_cloud
+      operationId: get_ai_usages_cloud
       responses:
         "200":
           content:
@@ -59084,7 +59084,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/usages/range:
     get:
-      operationId: get_v1_ai_usages_range
+      operationId: get_ai_usages_range
       responses:
         "200":
           content:
@@ -59103,7 +59103,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/usages/user-names:
     get:
-      operationId: get_v1_ai_usages_user-names
+      operationId: get_ai_usages_user-names
       responses:
         "200":
           content:
@@ -59123,7 +59123,7 @@ paths:
   /v1/ai/vectors:
     get:
       description: List the caller's vectors.
-      operationId: get_v1_ai_vectors
+      operationId: get_ai_vectors
       responses:
         "200":
           content:
@@ -59149,7 +59149,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one vector.
-      operationId: post_v1_ai_vectors
+      operationId: post_ai_vectors
       requestBody:
         content:
           application/json:
@@ -59180,7 +59180,7 @@ paths:
   /v1/ai/vectors/{owner}/{name}:
     delete:
       description: Delete one vector.
-      operationId: delete_v1_ai_vectors_by_owner_by_name
+      operationId: delete_ai_vectors_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59217,7 +59217,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one vector by its (owner, name) key.
-      operationId: get_v1_ai_vectors_by_owner_by_name
+      operationId: get_ai_vectors_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59255,7 +59255,7 @@ paths:
     patch:
       description: Update one vector. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_vectors_by_owner_by_name
+      operationId: patch_ai_vectors_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59298,7 +59298,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_vectors_by_owner_by_name
+      operationId: put_ai_vectors_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59341,7 +59341,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/vectors/all:
     delete:
-      operationId: delete_v1_ai_vectors_all
+      operationId: delete_ai_vectors_all
       responses:
         "200":
           content:
@@ -59361,7 +59361,7 @@ paths:
   /v1/ai/vectors/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_vectors_global
+      operationId: get_ai_vectors_global
       responses:
         "200":
           content:
@@ -59387,7 +59387,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/version:
     get:
-      operationId: get_v1_ai_version
+      operationId: get_ai_version
       responses:
         "200":
           content:
@@ -59407,7 +59407,7 @@ paths:
   /v1/ai/videos:
     get:
       description: List the caller's videos.
-      operationId: get_v1_ai_videos
+      operationId: get_ai_videos
       responses:
         "200":
           content:
@@ -59433,7 +59433,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one video.
-      operationId: post_v1_ai_videos
+      operationId: post_ai_videos
       requestBody:
         content:
           application/json:
@@ -59464,7 +59464,7 @@ paths:
   /v1/ai/videos/{owner}/{name}:
     delete:
       description: Delete one video.
-      operationId: delete_v1_ai_videos_by_owner_by_name
+      operationId: delete_ai_videos_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59501,7 +59501,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one video by its (owner, name) key.
-      operationId: get_v1_ai_videos_by_owner_by_name
+      operationId: get_ai_videos_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59539,7 +59539,7 @@ paths:
     patch:
       description: Update one video. PATCH and PUT reach the same handler, which has
         always taken a whole object.
-      operationId: patch_v1_ai_videos_by_owner_by_name
+      operationId: patch_ai_videos_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59582,7 +59582,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_videos_by_owner_by_name
+      operationId: put_ai_videos_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59626,7 +59626,7 @@ paths:
   /v1/ai/videos/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_videos_global
+      operationId: get_ai_videos_global
       responses:
         "200":
           content:
@@ -59652,7 +59652,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/ai/videos/upload:
     post:
-      operationId: post_v1_ai_videos_upload
+      operationId: post_ai_videos_upload
       requestBody:
         content:
           application/json:
@@ -59678,7 +59678,7 @@ paths:
   /v1/ai/workflows:
     get:
       description: List the caller's workflows.
-      operationId: get_v1_ai_workflows
+      operationId: get_ai_workflows
       responses:
         "200":
           content:
@@ -59704,7 +59704,7 @@ paths:
       x-app: github.com/hanzoai/ai
     post:
       description: Create one workflow.
-      operationId: post_v1_ai_workflows
+      operationId: post_ai_workflows
       requestBody:
         content:
           application/json:
@@ -59735,7 +59735,7 @@ paths:
   /v1/ai/workflows/{owner}/{name}:
     delete:
       description: Delete one workflow.
-      operationId: delete_v1_ai_workflows_by_owner_by_name
+      operationId: delete_ai_workflows_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59772,7 +59772,7 @@ paths:
       x-app: github.com/hanzoai/ai
     get:
       description: Read one workflow by its (owner, name) key.
-      operationId: get_v1_ai_workflows_by_owner_by_name
+      operationId: get_ai_workflows_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59810,7 +59810,7 @@ paths:
     patch:
       description: Update one workflow. PATCH and PUT reach the same handler, which
         has always taken a whole object.
-      operationId: patch_v1_ai_workflows_by_owner_by_name
+      operationId: patch_ai_workflows_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59853,7 +59853,7 @@ paths:
       x-app: github.com/hanzoai/ai
     put:
       description: Identical to PATCH — the handler takes a whole object either way.
-      operationId: put_v1_ai_workflows_by_owner_by_name
+      operationId: put_ai_workflows_by_owner_by_name
       parameters:
       - description: Owning organization.
         in: path
@@ -59897,7 +59897,7 @@ paths:
   /v1/ai/workflows/global:
     get:
       description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_v1_ai_workflows_global
+      operationId: get_ai_workflows_global
       responses:
         "200":
           content:
@@ -60260,7 +60260,7 @@ paths:
         /foley — that the Zen family serves natively. It resolves the SKU and, for a Zen
         model, forwards to zen's matching verb billed per call at the discovered price.
         These verbs are Zen-native; a non-Zen model is rejected.
-      operationId: post_v1_audio_foley
+      operationId: post_audio_foley
       summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
         /foley — that the Zen family serves natively.
       tags:
@@ -60274,7 +60274,7 @@ paths:
         /foley — that the Zen family serves natively. It resolves the SKU and, for a Zen
         model, forwards to zen's matching verb billed per call at the discovered price.
         These verbs are Zen-native; a non-Zen model is rejected.
-      operationId: post_v1_audio_music
+      operationId: post_audio_music
       summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
         /foley — that the Zen family serves natively.
       tags:
@@ -60290,7 +60290,7 @@ paths:
         provider works transparently), synthesizes the audio, and streams the bytes back.
         One code path, OpenAI-shaped, no store/message coupling (unlike the legacy
         /v1/generate-text-to-speech-audio which is bound to a chat store).
-      operationId: post_v1_audio_speech
+      operationId: post_audio_speech
       summary: The OpenAI-compatible TTS endpoint (POST /v1/audio/speech).
       tags:
       - audio
@@ -60307,7 +60307,7 @@ paths:
         provider — works transparently), transcribe, and return the OpenAI body.
         One code path, OpenAI-shaped, no store coupling (unlike the legacy
         /v1/process-speech-to-text, which is bound to a chat store).
-      operationId: post_v1_audio_transcriptions
+      operationId: post_audio_transcriptions
       summary: 'The OpenAI-compatible STT endpoint (POST /v1/audio/transcriptions,
         multipart: file + model [+ language + response_format]).'
       tags:
@@ -60321,7 +60321,7 @@ paths:
         /foley — that the Zen family serves natively. It resolves the SKU and, for a Zen
         model, forwards to zen's matching verb billed per call at the discovered price.
         These verbs are Zen-native; a non-Zen model is rejected.
-      operationId: post_v1_audio_voice
+      operationId: post_audio_voice
       summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
         /foley — that the Zen family serves natively.
       tags:
@@ -65289,7 +65289,7 @@ paths:
   /v1/chat:
     post:
       description: Implements the OpenAI-compatible chat completions API
-      operationId: post_v1_chat
+      operationId: post_chat
       summary: Implements the OpenAI-compatible chat completions API
       tags:
       - chat
@@ -65297,7 +65297,7 @@ paths:
   /v1/chat/completions:
     post:
       description: Implements the OpenAI-compatible chat completions API
-      operationId: post_v1_chat_completions
+      operationId: post_chat_completions
       summary: Implements the OpenAI-compatible chat completions API
       tags:
       - chat
@@ -67097,7 +67097,7 @@ paths:
         run's durable record and its live stream (/v1/agents/sessions/{id}/stream), so
         this door does not grow a progress endpoint, a status endpoint or a cancel
         endpoint of its own. One way to watch a run, whoever started it.
-      operationId: post_v1_coding
+      operationId: post_coding
       requestBody:
         content:
           application/json:
@@ -71141,7 +71141,7 @@ paths:
   /v1/completions:
     post:
       description: Implements the OpenAI-compatible chat completions API
-      operationId: post_v1_completions
+      operationId: post_completions
       summary: Implements the OpenAI-compatible chat completions API
       tags:
       - completions
@@ -74130,7 +74130,7 @@ paths:
 
         GET /api/dev-bridge?cwd=/path/to/project
         GET /api/dev-bridge?remote=host:port&cwd=/path/to/project
-      operationId: get_v1_dev-bridge
+      operationId: get_dev-bridge
       summary: Upgrades to WebSocket and bridges JSON-RPC messages between the browser
         and a hanzo-app-server instance.
       tags:
@@ -74339,7 +74339,7 @@ paths:
         repo), "crawl" (web), or "s3" (the store's object-storage space). The owner
         is bound to the authenticated principal; the client-supplied owner is never
         trusted.
-      operationId: post_v1_docs_ingest
+      operationId: post_docs_ingest
       summary: 'Unified RAG ingest: parse + chunk + embed documents and pipe them
         to BOTH Hanzo Vector (semantic) AND Hanzo Search (keyword) under the tenant
         index {owner}-{store}-docs — the same index /v1/chat retrieval reads.'
@@ -74349,7 +74349,7 @@ paths:
   /v1/documents:
     delete:
       description: Handles DELETE /v1/documents — a JSON array of file_ids.
-      operationId: delete_v1_documents
+      operationId: delete_documents
       summary: Handles DELETE /v1/documents — a JSON array of file_ids.
       tags:
       - documents
@@ -74359,7 +74359,7 @@ paths:
       description: |-
         Handles GET /v1/documents/:file_id/context — every chunk of
         a file, as LangChain Documents (used when RAG_USE_FULL_CONTEXT is on).
-      operationId: get_v1_documents_by_file_id_context
+      operationId: get_documents_by_file_id_context
       summary: Handles GET /v1/documents/:file_id/context — every chunk of a file,
         as LangChain Documents (used when RAG_USE_FULL_CONTEXT is on).
       tags:
@@ -74673,7 +74673,7 @@ paths:
         It authenticates the caller, resolves the model to its upstream provider via
         the shared routing table, rewrites the user-facing model name to the upstream
         id, and proxies the request to the provider's /embeddings endpoint verbatim.
-      operationId: post_v1_embeddings
+      operationId: post_embeddings
       summary: Implements POST /v1/embeddings (OpenAI-compatible).
       tags:
       - embeddings
@@ -76224,7 +76224,7 @@ paths:
         org (or unknown) is a 404 — cross-org writes are impossible and unknown ids are
         indistinguishable from foreign ones. Idempotent: a repeat overwrites. The body
         carries NO prompt text — only {request_id, reward|rating}.
-      operationId: post_v1_feedback
+      operationId: post_feedback
       summary: Attaches a per-request outcome reward to the routing decision that
         served request_id — the enso training loop's quality signal.
       tags:
@@ -76576,7 +76576,7 @@ paths:
       description: |-
         Deletes the TrainJob CR, meters the GPU-hours used so far, and
         marks the job cancelled. ?id= or ?name=
-      operationId: post_v1_finetune_cancel
+      operationId: post_finetune_cancel
       summary: Deletes the TrainJob CR, meters the GPU-hours used so far, and marks
         the job cancelled.
       tags:
@@ -76587,7 +76587,7 @@ paths:
       description: |-
         Serves a completed job's checkpoints and registers the result
         as a routable model on api.hanzo.ai. ?id= or ?name=
-      operationId: post_v1_finetune_deploy
+      operationId: post_finetune_deploy
       summary: Serves a completed job's checkpoints and registers the result as a
         routable model on api.hanzo.ai.
       tags:
@@ -76596,7 +76596,7 @@ paths:
   /v1/finetune/hf/datasets:
     get:
       description: Proxies a HuggingFace dataset search (dataset picker).
-      operationId: get_v1_finetune_hf_datasets
+      operationId: get_finetune_hf_datasets
       summary: Proxies a HuggingFace dataset search (dataset picker).
       tags:
       - finetune
@@ -76604,7 +76604,7 @@ paths:
   /v1/finetune/hf/models:
     get:
       description: Proxies a HuggingFace model search (base-model picker).
-      operationId: get_v1_finetune_hf_models
+      operationId: get_finetune_hf_models
       summary: Proxies a HuggingFace model search (base-model picker).
       tags:
       - finetune
@@ -76612,7 +76612,7 @@ paths:
   /v1/finetune/hf/repo:
     get:
       description: Returns a repo's detail (files, gated/private state). ?id=&kind=model|dataset
-      operationId: get_v1_finetune_hf_repo
+      operationId: get_finetune_hf_repo
       summary: Returns a repo's detail (files, gated/private state).
       tags:
       - finetune
@@ -76620,7 +76620,7 @@ paths:
   /v1/finetune/job:
     get:
       description: Returns one job with refreshed live status. ?id=owner/name or ?name=
-      operationId: get_v1_finetune_job
+      operationId: get_finetune_job
       summary: Returns one job with refreshed live status.
       tags:
       - finetune
@@ -76628,7 +76628,7 @@ paths:
   /v1/finetune/jobs:
     get:
       description: Returns the org's jobs, refreshing live status for active ones.
-      operationId: get_v1_finetune_jobs
+      operationId: get_finetune_jobs
       summary: Returns the org's jobs, refreshing live status for active ones.
       tags:
       - finetune
@@ -76638,7 +76638,7 @@ paths:
         Validates the request, resolves efficient defaults, persists the
         job, and submits a real TrainJob CR. A submit failure (e.g. no cluster wired) is
         surfaced honestly: the job is saved with status "failed" + the reason, never faked.
-      operationId: post_v1_finetune_jobs
+      operationId: post_finetune_jobs
       summary: Validates the request, resolves efficient defaults, persists the job,
         and submits a real TrainJob CR.
       tags:
@@ -76650,7 +76650,7 @@ paths:
         Returns the new-job catalog plus, when a selection is passed
         (?baseModel&method&task&preset[&datasetExamples]), the recommended config so the
         console can render "Recommended" as a one-click, ready-to-run default.
-      operationId: get_v1_finetune_presets
+      operationId: get_finetune_presets
       summary: Returns the new-job catalog plus, when a selection is passed (?baseModel&method&task&preset[&datasetExamples]),
         the recommended config so the console can render "Recommended" as a one-click,
         ready-to-run default.
@@ -78384,7 +78384,7 @@ paths:
   /v1/generate-text-to-speech-audio:
     post:
       description: Convert text to speech
-      operationId: post_v1_generate-text-to-speech-audio
+      operationId: post_generate-text-to-speech-audio
       summary: Convert text to speech
       tags:
       - generate-text-to-speech-audio
@@ -78392,7 +78392,7 @@ paths:
   /v1/generate-text-to-speech-audio-stream:
     get:
       description: Convert text to speech with streaming
-      operationId: get_v1_generate-text-to-speech-audio-stream
+      operationId: get_generate-text-to-speech-audio-stream
       summary: Convert text to speech with streaming
       tags:
       - generate-text-to-speech-audio-stream
@@ -80198,7 +80198,7 @@ paths:
   /v1/health:
     get:
       description: Check if the system is live
-      operationId: get_v1_health
+      operationId: get_health
       summary: Check if the system is live
       tags:
       - health
@@ -84932,7 +84932,7 @@ paths:
         diffusion), reserves the\nper-image budget, generates the image(s) through
         the do-ai async image\nclient, records usage for billing, and returns the
         OpenAI images response."
-      operationId: post_v1_images_generations
+      operationId: post_images_generations
       summary: Implements POST /v1/images/generations (OpenAI-compatible).
       tags:
       - images
@@ -85797,7 +85797,7 @@ paths:
   /v1/install-patch:
     post:
       description: Install an OS patch by patch ID (KB number or title) asynchronously
-      operationId: post_v1_install-patch
+      operationId: post_install-patch
       summary: Install an OS patch by patch ID (KB number or title) asynchronously
       tags:
       - install-patch
@@ -90195,7 +90195,7 @@ paths:
   /v1/memory/delete:
     post:
       description: Delete one of the authenticated user's memories
-      operationId: post_v1_memory_delete
+      operationId: post_memory_delete
       summary: Delete one of the authenticated user's memories
       tags:
       - memory
@@ -90203,7 +90203,7 @@ paths:
   /v1/memory/facts:
     get:
       description: List the authenticated user's stored facts
-      operationId: get_v1_memory_facts
+      operationId: get_memory_facts
       summary: List the authenticated user's stored facts
       tags:
       - memory
@@ -90211,7 +90211,7 @@ paths:
   /v1/memory/list:
     get:
       description: List the authenticated user's memories, newest first
-      operationId: get_v1_memory_list
+      operationId: get_memory_list
       summary: List the authenticated user's memories, newest first
       tags:
       - memory
@@ -90221,7 +90221,7 @@ paths:
       description: |-
         Recall recent/relevant memories for context injection; with q it
         ranks semantically, without q it returns the most recent
-      operationId: get_v1_memory_recall
+      operationId: get_memory_recall
       summary: Recall recent/relevant memories for context injection; with q it
       tags:
       - memory
@@ -90229,7 +90229,7 @@ paths:
   /v1/memory/remember:
     post:
       description: Store a memory for the authenticated user
-      operationId: post_v1_memory_remember
+      operationId: post_memory_remember
       summary: Store a memory for the authenticated user
       tags:
       - memory
@@ -90237,7 +90237,7 @@ paths:
   /v1/memory/search:
     get:
       description: Search the authenticated user's memories (semantic, text fallback)
-      operationId: get_v1_memory_search
+      operationId: get_memory_search
       summary: Search the authenticated user's memories (semantic, text fallback)
       tags:
       - memory
@@ -90245,7 +90245,7 @@ paths:
   /v1/memory/update:
     post:
       description: Update one of the authenticated user's memories
-      operationId: post_v1_memory_update
+      operationId: post_memory_update
       summary: Update one of the authenticated user's memories
       tags:
       - memory
@@ -90280,7 +90280,7 @@ paths:
   /v1/messages:
     post:
       description: Implements the Anthropic Messages API.
-      operationId: post_v1_messages
+      operationId: post_messages
       summary: Implements the Anthropic Messages API.
       tags:
       - messages
@@ -90292,7 +90292,7 @@ paths:
         Implements POST /v1/messages/count_tokens. Claude Code
         calls it before a request; it returns {"input_tokens": N} for the given
         model + messages + tools.
-      operationId: post_v1_messages_count_tokens
+      operationId: post_messages_count_tokens
       summary: Implements POST /v1/messages/count_tokens.
       tags:
       - messages
@@ -102217,7 +102217,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: delete_v1_org_settings
+      operationId: delete_org_settings
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -102248,7 +102248,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: get_v1_org_settings
+      operationId: get_org_settings
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -102279,7 +102279,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: patch_v1_org_settings
+      operationId: patch_org_settings
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -102310,7 +102310,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: post_v1_org_settings
+      operationId: post_org_settings
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -102341,7 +102341,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: put_v1_org_settings
+      operationId: put_org_settings
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -102373,7 +102373,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: delete_v1_org_settings_list
+      operationId: delete_org_settings_list
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -102404,7 +102404,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: get_v1_org_settings_list
+      operationId: get_org_settings_list
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -102435,7 +102435,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: patch_v1_org_settings_list
+      operationId: patch_org_settings_list
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -102466,7 +102466,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: post_v1_org_settings_list
+      operationId: post_org_settings_list
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -102497,7 +102497,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: put_v1_org_settings_list
+      operationId: put_org_settings_list
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -105557,7 +105557,7 @@ paths:
   /v1/process-speech-to-text:
     post:
       description: Convert speech to text
-      operationId: post_v1_process-speech-to-text
+      operationId: post_process-speech-to-text
       summary: Convert speech to text
       tags:
       - process-speech-to-text
@@ -106834,7 +106834,7 @@ paths:
       description: |-
         Handles POST /v1/query — {file_id,query,k}. Returns LangChain
         (document,score) tuples.
-      operationId: post_v1_query
+      operationId: post_query
       summary: Handles POST /v1/query — {file_id,query,k}.
       tags:
       - query
@@ -106842,7 +106842,7 @@ paths:
   /v1/query_multiple:
     post:
       description: Handles POST /v1/query_multiple — {file_ids,query,k}.
-      operationId: post_v1_query_multiple
+      operationId: post_query_multiple
       summary: Handles POST /v1/query_multiple — {file_ids,query,k}.
       tags:
       - query_multiple
@@ -106852,7 +106852,7 @@ paths:
       description: |-
         Return every stored chunk of one file_id (full document context).
         Consolidates the retired chat-rag-api GET /documents/{id}/context.
-      operationId: get_v1_rag_context
+      operationId: get_rag_context
       summary: Return every stored chunk of one file_id (full document context).
       tags:
       - rag
@@ -106863,7 +106863,7 @@ paths:
         Delete all chunks of one or more uploaded files (by file_id) from
         the owner's Search+Vector index. Consolidates the retired chat-rag-api
         DELETE /documents.
-      operationId: post_v1_rag_delete
+      operationId: post_rag_delete
       summary: Delete all chunks of one or more uploaded files (by file_id) from the
         owner's Search+Vector index.
       tags:
@@ -106877,7 +106877,7 @@ paths:
         inline `content` or a `url` to fetch+parse (PDF/CSV/XLSX/PPTX/…). Re-embedding
         the same file_id replaces its chunks. Consolidates the retired chat-rag-api
         POST /embed and /local/embed.
-      operationId: post_v1_rag_embed
+      operationId: post_rag_embed
       summary: Parse, chunk, and embed one uploaded file under its file_id into the
         unified Search+Vector index, scoped to the authenticated owner.
       tags:
@@ -106889,7 +106889,7 @@ paths:
         Retrieve the top-K chunks relevant to a query, scoped to a single
         uploaded file (`file_id`). Hybrid keyword+vector retrieval over the same
         index. Consolidates the retired chat-rag-api POST /query.
-      operationId: post_v1_rag_query
+      operationId: post_rag_query
       summary: Retrieve the top-K chunks relevant to a query, scoped to a single uploaded
         file (`file_id`).
       tags:
@@ -106901,7 +106901,7 @@ paths:
         Retrieve the top-K chunks relevant to a query, scoped to a SET of
         uploaded files (`file_ids`). Consolidates the retired chat-rag-api POST
         /query_multiple. Shares one retrieval path with /rag/query.
-      operationId: post_v1_rag_query-multiple
+      operationId: post_rag_query-multiple
       summary: Retrieve the top-K chunks relevant to a query, scoped to a SET of uploaded
         files (`file_ids`).
       tags:
@@ -107182,7 +107182,7 @@ paths:
         as a real bi-encoder ranking: embed the\n    query and documents through the
         resolved embedding model and rank by\n    cosine similarity. No rerank-specific
         key required."
-      operationId: post_v1_rerank
+      operationId: post_rerank
       summary: Implements POST /v1/rerank (Cohere/Jina-compatible).
       tags:
       - rerank
@@ -107447,7 +107447,7 @@ paths:
         Implements POST /v1/responses. The converted request is passed to
         ChatCompletions and an installed ResponseWriter converts its OpenAI chat JSON
         or SSE back into Responses JSON/SSE on the fly.
-      operationId: post_v1_responses
+      operationId: post_responses
       summary: Implements POST /v1/responses.
       tags:
       - responses
@@ -108639,7 +108639,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: delete_v1_router_artifact-meta
+      operationId: delete_router_artifact-meta
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -108670,7 +108670,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: get_v1_router_artifact-meta
+      operationId: get_router_artifact-meta
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -108701,7 +108701,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: patch_v1_router_artifact-meta
+      operationId: patch_router_artifact-meta
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -108732,7 +108732,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: post_v1_router_artifact-meta
+      operationId: post_router_artifact-meta
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -108763,7 +108763,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: put_v1_router_artifact-meta
+      operationId: put_router_artifact-meta
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -108771,7 +108771,7 @@ paths:
       x-app: github.com/hanzoai/ai
   /v1/router/data:
     delete:
-      operationId: delete_v1_router_data
+      operationId: delete_router_data
       responses:
         "200":
           content:
@@ -108789,7 +108789,7 @@ paths:
       - router
       x-app: github.com/hanzoai/ai
     get:
-      operationId: get_v1_router_data
+      operationId: get_router_data
       responses:
         "200":
           content:
@@ -108832,7 +108832,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: delete_v1_router_defaults
+      operationId: delete_router_defaults
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -108863,7 +108863,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: get_v1_router_defaults
+      operationId: get_router_defaults
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -108894,7 +108894,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: patch_v1_router_defaults
+      operationId: patch_router_defaults
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -108925,7 +108925,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: post_v1_router_defaults
+      operationId: post_router_defaults
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -108956,7 +108956,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: put_v1_router_defaults
+      operationId: put_router_defaults
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -108975,7 +108975,7 @@ paths:
             org (a super admin may pass ?org= to target another or "" for all).
 
         Window: ?days=N (default 30, capped at 90). Aggregates only.
-      operationId: get_v1_router_history
+      operationId: get_router_history
       summary: Returns the router-improvement time-series.
       tags:
       - router
@@ -108991,7 +108991,7 @@ paths:
         /v1/router/stats?scope=platform — the world widget polls it with no auth. The judge
         state is a single in-process population (not per-org), so there is nothing to scope;
         ?scope=platform is accepted for symmetry with router-stats.
-      operationId: get_v1_router_judge-panel
+      operationId: get_router_judge-panel
       summary: 'Returns the LIVE Mean-Field Judge Panel state: the configured panel
         + dynamic judge posture (enabled/sample) resolved from the "*" GlobalDefaultOwner
         row, the live in-process per-judge calibration (weight/mean/n), and the static
@@ -109025,7 +109025,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: delete_v1_router_ledger
+      operationId: delete_router_ledger
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109056,7 +109056,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: get_v1_router_ledger
+      operationId: get_router_ledger
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109087,7 +109087,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: patch_v1_router_ledger
+      operationId: patch_router_ledger
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109118,7 +109118,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: post_v1_router_ledger
+      operationId: post_router_ledger
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109149,7 +109149,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: put_v1_router_ledger
+      operationId: put_router_ledger
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109181,7 +109181,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: delete_v1_router_policy
+      operationId: delete_router_policy
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109212,7 +109212,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: get_v1_router_policy
+      operationId: get_router_policy
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109243,7 +109243,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: patch_v1_router_policy
+      operationId: patch_router_policy
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109274,7 +109274,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: post_v1_router_policy
+      operationId: post_router_policy
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109305,7 +109305,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: put_v1_router_policy
+      operationId: put_router_policy
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109337,7 +109337,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: delete_v1_router_rewards
+      operationId: delete_router_rewards
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109368,7 +109368,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: get_v1_router_rewards
+      operationId: get_router_rewards
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109399,7 +109399,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: patch_v1_router_rewards
+      operationId: patch_router_rewards
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109430,7 +109430,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: post_v1_router_rewards
+      operationId: post_router_rewards
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109461,7 +109461,7 @@ paths:
         "*" (any verb) because the native handler is method-aware: /v1/router/policy
         splits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns
         405 for a verb it does not own.
-      operationId: put_v1_router_rewards
+      operationId: put_router_rewards
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
@@ -109482,7 +109482,7 @@ paths:
             Carries the absolute $/MTok indices for the admin savings panel.
 
         Window: ?since= (RFC3339) or ?hours= (default 24, capped). Aggregates only.
-      operationId: get_v1_router_stats
+      operationId: get_router_stats
       summary: Returns the router observability aggregate.
       tags:
       - router
@@ -114806,7 +114806,7 @@ paths:
         It exposes ONLY aggregates — counts, rates, and country/region centroids — and
         NEVER any IP, per-request row, org, or user dimension (see object/traffic.go).
         Marketing telemetry; nothing sensitive.
-      operationId: get_v1_traffic_globe
+      operationId: get_traffic_globe
       summary: 'Returns the PUBLIC live request-geo aggregate for the world.hanzo.ai
         "Hanzo mode" globe: WHERE requests to api.hanzo.ai are coming from, as country/region
         points with per-service-class counts, plus headline throughput rates.'
@@ -115705,7 +115705,7 @@ paths:
         first time the job is observed completed — settles the reservation with the
         actual cost and records the billable usage event (exactly once). Returns the
         OpenAI-shaped video object.
-      operationId: get_v1_videos_by_id
+      operationId: get_videos_by_id
       summary: Implements GET /v1/videos/{id} — poll a job's status.
       tags:
       - videos
@@ -115721,7 +115721,7 @@ paths:
         raw video bytes back inline. A successful download also bills the job once (for
         the client that downloads without first polling to completion) — idempotent
         with the poll path via job.markCompleted.
-      operationId: get_v1_videos_by_id_content
+      operationId: get_videos_by_id_content
       summary: Implements GET /v1/videos/{id}/content — download the finished MP4.
       tags:
       - videos
@@ -115741,7 +115741,7 @@ paths:
         video object with status "queued" IMMEDIATELY. The client then polls
         GET /v1/videos/{id} and downloads GET /v1/videos/{id}/content. Nothing is
         billed here — the debit lands on completion.
-      operationId: post_v1_videos_generations
+      operationId: post_videos_generations
       summary: Implements POST /v1/videos/generations — the ASYNC create.
       tags:
       - videos
@@ -116489,14 +116489,14 @@ paths:
   /v1/wecom-bot/callback/{botId}:
     get:
       description: Verify WeChat work bot callback URL
-      operationId: get_v1_wecom-bot_callback_by_botid
+      operationId: get_wecom-bot_callback_by_botid
       summary: Verify WeChat work bot callback URL
       tags:
       - wecom-bot
       x-app: github.com/hanzoai/ai
     post:
       description: Process WeChat work bot messages
-      operationId: post_v1_wecom-bot_callback_by_botid
+      operationId: post_wecom-bot_callback_by_botid
       summary: Process WeChat work bot messages
       tags:
       - wecom-bot
