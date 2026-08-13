@@ -102,7 +102,7 @@ func TestOnlyASuperAdminIsHandedTheAdminImage(t *testing.T) {
 	t.Setenv("SANDBOX_IMAGE_TAG_ADMIN", "1.1.0")
 	t.Setenv("SANDBOX_IMAGE_DIGEST_ADMIN", "sha256:9c1d0f42")
 	for _, tag := range []string{"", "1.1.0"} {
-		for _, class := range []string{"exec", "dev", "desktop"} {
+		for _, class := range []string{"exec", "dev", "desktop", "android"} {
 			r := &runtime{image: repo, tag: tag}
 			if got := r.imageFor(class, false); strings.Contains(got, "admin") {
 				t.Fatalf("imageFor(%q, super=false) with tag %q = %q — an ordinary "+
@@ -134,7 +134,7 @@ func TestOnlyASuperAdminIsHandedTheAdminImage(t *testing.T) {
 func TestImageForNeverComposesTheBareClassTag(t *testing.T) {
 	const repo = "oci.hanzo.ai/hanzoai/sandbox"
 	for _, tag := range []string{"", "2026.6.7", "1.0.0"} {
-		for _, class := range []string{"exec", "dev", "desktop"} {
+		for _, class := range []string{"exec", "dev", "desktop", "android"} {
 			for _, super := range []bool{false, true} {
 				r := &runtime{image: repo, tag: tag}
 				got := r.imageFor(class, super)

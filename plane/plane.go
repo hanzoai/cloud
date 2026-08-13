@@ -2196,9 +2196,16 @@ type LeaseIn struct {
 	//	exec     a throwaway one that keeps nothing. Seconds to minutes.
 	//	dev      a coding one, with the project's own disk attached. Hours.
 	//	desktop  a dev one that also has a screen.
+	//	android  a desktop with a phone running on that screen.
 	//
 	// Empty leases an `exec`, which is the right answer for running a program and
 	// the wrong one for working on a repository, because it keeps nothing.
+	//
+	// An `android` needs a node that can virtualise a CPU, so it is the one class
+	// a deployment may not be able to place. Where the fleet has none, the lease
+	// succeeds and the pod stays Pending naming the device it is waiting for —
+	// which is the honest answer, because the alternative is an emulator running
+	// on an interpreted CPU and never finishing its boot.
 	Class string `json:"class,omitempty"`
 	// Project names the disk to attach, and is REQUIRED for every class but `exec`.
 	//
