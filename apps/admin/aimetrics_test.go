@@ -41,6 +41,7 @@ func TestAimSQL_ReadsCanonicalTables(t *testing.T) {
 		{"o11yAiModels", aimO11yAIModelsSQL(), "event.span", 1},
 		{"usageTotals", aimUsageTotalsSQL(), "hanzo.cloud_usage", 1},
 		{"topModels", aimTopModelsSQL(), "hanzo.cloud_usage", 1},
+		{"topActors", aimTopActorsSQL(), "hanzo.cloud_usage", 1},
 		{"evalTraces", aimEvalTracesSQL(), "hanzo.eval_traces", 1},
 		{"evalScores", aimEvalScoresSQL(), "hanzo.eval_scores", 1},
 		{"scoreNames", aimScoreNamesSQL(), "hanzo.eval_scores", 1},
