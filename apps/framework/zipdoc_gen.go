@@ -93,9 +93,6 @@ func init() {
 			"summaryView.documents": "Documents is how many documents exist across them.",
 		},
 	})
-	zip.Describe("POST /v1/framework/:doctype", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
 	zip.Describe("POST /v1/framework/:doctype/:name/cancel", zip.Doc{
 		Description: "Moves a submitted document to cancelled (docstatus 1 → 2) after\nits on_cancel hooks agree. Cancelling is terminal — a cancelled document\ncannot be re-submitted — but it CAN then be deleted.",
 		Fields: map[string]string{
@@ -130,9 +127,6 @@ func init() {
 			"RoleAssignment.user": "User is the member the role is granted to.",
 		},
 		Example: json.RawMessage(`{"user":"u_alice","role":"System Manager"}`),
-	})
-	zip.Describe("PUT /v1/framework/:doctype/:name", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 	zip.Describe("PUT /v1/framework/doctypes/:name", zip.Doc{
 		Description: "Replaces a DocType definition wholesale (PUT semantics): the\nstored definition becomes the body. The name in the URL is authoritative over\nthe body's, and documents already stored under the DocType are left intact.\nManager-only.",

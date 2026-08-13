@@ -24,6 +24,12 @@ func init() {
 		},
 		Example: json.RawMessage(`{"workspace":"6579…","file":"0d4f…"}`),
 	})
+	zip.Describe("GET /v1/team/account/auth/:provider", zip.Doc{
+		Description: "Redirects the browser into IAM's authorize endpoint. team is a\nconfidential client (client_secret), so no PKCE — the code is exchanged\nserver-side in authCallback. state is a RANDOM nonce bound to a short-lived\ncookie (never the bare navigateUrl): the callback only proceeds when the two\nmatch, so a cross-site-initiated or replayed callback is refused.",
+	})
+	zip.Describe("GET /v1/team/account/auth/:provider/callback", zip.Doc{
+		Description: "Verifies the state nonce against the flow cookie, exchanges the\nIAM code for the user, ensures the account has a workspace, mints the account\ntoken, and bounces the browser back to the SPA with ?token= (which Auth reads\nvia getLoginInfoFromQuery).",
+	})
 	zip.Describe("GET /v1/team/account/providers", zip.Doc{
 		Description: "Returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that door accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
 		Fields: map[string]string{
@@ -44,6 +50,12 @@ func init() {
 		},
 		Response: json.RawMessage(`{"plan":"pro","active":true,"seats":3,"guests":1,"guestLimit":3,"upgradeUrl":"https://billing.hanzo.ai"}`),
 	})
+	zip.Describe("GET /v1/team/billing/ui", zip.Doc{
+		Description: "Serves the embedded wallet page: the exact asset when it exists, else\nindex.html (the SPA shell). Session-gated — an anonymous caller gets 401,\nnever the page. Fingerprinted assets/ cache hard; the shell never caches.",
+	})
+	zip.Describe("GET /v1/team/billing/ui/*", zip.Doc{
+		Description: "Serves the embedded wallet page: the exact asset when it exists, else\nindex.html (the SPA shell). Session-gated — an anonymous caller gets 401,\nnever the page. Fingerprinted assets/ cache hard; the shell never caches.",
+	})
 	zip.Describe("GET /v1/team/bots", zip.Doc{
 		Description: "Returns the caller org's bot members — the org's agents projected as\nthe workspace Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
 		Fields: map[string]string{
@@ -54,6 +66,12 @@ func init() {
 			"botMember.userId":    "derived member account uuid (personUuid)",
 			"botRoster.bots":      "Bots is every agent of the caller's org, projected as a workspace member.",
 		},
+	})
+	zip.Describe("GET /v1/team/files/:workspace/:filename", zip.Doc{
+		Description: "Streams a blob by its client id (?file=). The served Content-Type is\nderived from the STORED BYTES via a strict image allow-list — NEVER from the\nclient :filename (Red F-B: a crafted .svg name would otherwise force\nimage/svg+xml → active XSS). Anything not a recognized raster image is served\ninert: application/octet-stream + attachment + nosniff.",
+	})
+	zip.Describe("GET /v1/team/transactor/:token", zip.Doc{
+		Description: "AUTHORIZES the caller BEFORE the WebSocket upgrade (fail-secure: a\nrefusal is a 401, never an upgraded-then-dropped socket), then upgrades and runs\nthe frame loop. The org is the VERIFIED tenant — the key for every store path —\nnever a client header.\n\nThe path segment carries whichever lane the caller is on, and a UUID is not a\nJWT so the two can never be read as each other:\n\nTHE PATH SEGMENT IS THE CREDENTIAL — the workspace token selectWorkspace minted,\nwhose signed claims name both the account and the workspace. Nothing ambient\nauthorizes this socket; see admitWS for why it must stay that way and what the\nIAM lane here will look like.",
 	})
 	zip.Describe("GET /v1/team/transactor/api/v1/statistics", zip.Doc{
 		Description: "Statistics returns the transactor's live sessions for the workspace the caller's\ncredential names — the endpoint the front's workspace switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a workspace UUID names the workspace and is authorized against the\nmembership rows, an HS256 workspace token names it in its signed claims.\nactiveSessions carries ONLY that one workspace, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
@@ -119,5 +137,8 @@ func init() {
 			"botSync.projected": "Projected is how many roster entries the reconcile touched.",
 			"botSync.synced":    "Synced is true when the reconcile ran.",
 		},
+	})
+	zip.Describe("POST /v1/team/files/:workspace", zip.Doc{
+		Description: "Stores the uploaded bytes under the CLIENT-supplied blob uuid (the\nmultipart file's filename). The server does NOT mint the id — the front owns it\n(front.ts: formData.append('file', file, uuid)). Response body is irrelevant\n(uploadFile discards it); we echo the id for curl/debug.",
 	})
 }

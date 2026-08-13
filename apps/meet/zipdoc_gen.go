@@ -16,9 +16,9 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/meet/session", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Answers GET /v1/meet/session. It admits on the SAME two lanes as mint\nand refuses on the same terms, so a caller that could not join anything is told\nso at the door rather than after composing a room name.\n\nIt answers OUTSIDE ready(), deliberately, and for the same reason the bundle is\nserved outside it: an unconfigured deployment should render a client that states\nthe problem, not a 404 and a blank page. So a deploy whose key file is bad —\nwhich drops the whole state, teamSecret included — still answers a lobby read on\nthe IAM lane (that lane never needed teamSecret) while every mint is 503. That\npair is honest rather than contradictory: the workspaces someone belongs to do\nnot stop being true because this binary cannot sign, and the refusal they get on\njoining names the real fault instead of hiding it behind an empty list.",
 	})
 	zip.Describe("POST /v1/meet/getToken", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Answers POST /v1/meet/getToken: verify the caller belongs to the room's\nworkspace, then hand back a join token for exactly that room.\n\nThe response is the RAW token as text/plain, not JSON. That is the caller's\ncontract — the office client reads it with res.text() — and it is also the honest\nshape: the body is one opaque string, so wrapping it in an object would add a\nenvelope neither side needs.",
 	})
 }
