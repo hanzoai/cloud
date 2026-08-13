@@ -4912,9 +4912,15 @@ components:
           description: "Class is what KIND of computer to lease, and the set is closed:\n\n\texec
             \    a throwaway one that keeps nothing. Seconds to minutes.\n\tdev      a
             coding one, with the project's own disk attached. Hours.\n\tdesktop  a
-            dev one that also has a screen.\n\nEmpty leases an `exec`, which is the
-            right answer for running a program and\nthe wrong one for working on a
-            repository, because it keeps nothing."
+            dev one that also has a screen.\n\tandroid  a desktop with a phone running
+            on that screen.\n\nEmpty leases an `exec`, which is the right answer for
+            running a program and\nthe wrong one for working on a repository, because
+            it keeps nothing.\n\nAn `android` needs a node that can virtualise a CPU,
+            so it is the one class\na deployment may not be able to place. Where the
+            fleet has none, the lease\nsucceeds and the pod stays Pending naming the
+            device it is waiting for —\nwhich is the honest answer, because the alternative
+            is an emulator running\non an interpreted CPU and never finishing its
+            boot."
           type: string
         id:
           description: |-
@@ -109607,7 +109613,7 @@ paths:
       x-app: sandboxes
     post:
       description: |-
-        Creates a sandbox and returns it. `class` is one of `exec`, `dev` or `desktop`; `dev` and `desktop` are attached to a `project`, which is required for them and names the volume the work persists on. `ttlSec` bounds the lease, and `image` overrides the class default.
+        Creates a sandbox and returns it. `class` is one of `exec`, `dev`, `desktop` or `android`; `dev` and `desktop` are attached to a `project`, which is required for them and names the volume the work persists on. `ttlSec` bounds the lease, and `image` overrides the class default.
 
         This is the ONLY path that creates cluster objects. The isolation boundary is the pod's runtime class, one field, so what a sandbox is confined by is a deployment decision rather than anything this operation negotiates.
       operationId: post_sandboxes
