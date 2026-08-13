@@ -6,11 +6,15 @@
 // kind is another Provider, with nothing in the engine to change.
 //
 // Shape (decomplected):
-//   - store.go        ONE table, syncs — the sync intent + engine cursor state.
+//   - store.go        the sync intent + engine cursor, and the two facts the
+//     forge cannot hold: what an advance did, and where a repo replicates to.
 //   - engine.go       the ONE place a sync happens: resolve → loop-guard → cursor
 //     dedupe → provider.Apply → chain (hop-bounded). Kind-agnostic.
 //   - provider.go     the engine↔provider contract (Plan/Apply per kind) + registry.
-//   - git_provider.go the git provider, composing the existing git object-plane seams.
+//   - git_provider.go the git provider, composing the git seams below.
+//   - advance.go      the fast-forward-ONLY ref advance — the safety property.
+//   - importer.go     those seams, answered against the forge (git.hanzo.ai).
+//   - gitexec.go      the hardened `git` subprocess every advance runs through.
 //   - sync_api.go     /v1/sync CRUD + /v1/sync/:id/run (manual).
 //
 // Triggers (GitHub App webhook, Hanzo Git push webhook) resolve to Syncs and call
@@ -23,12 +27,19 @@ import (
 	"sync/atomic"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/forge"
 	"github.com/zap-proto/zip"
 )
 
-// state is the subsystem's mounted state: the per-org syncs store cache.
+// state is the subsystem's mounted state: the per-org syncs store cache, and the
+// forge credential this process holds.
 type state struct {
 	stores *cloud.OrgStore[*store]
+	// forge resolves the deployment's forge client, re-reading the machine
+	// credential from KMS on its own schedule so a rotation is live without a
+	// restart. It is per-PROCESS state, not per-request: a client is an HTTP
+	// client and a token, and the thing worth not repeating is the KMS read.
+	forge *forge.Source
 }
 
 // mounted is the active service, read by the reconcile func (registered as the
@@ -74,6 +85,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "sync")
 	s := &cloud.Service[state]{Base: b, State: state{
 		stores: cloud.NewOrgStore(b, "sync", openStore),
+		forge:  &forge.Source{},
 	}}
 	mounted.Store(s)
 
@@ -82,9 +94,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	registerProvider(gitProvider{})
 	cloud.RegisterSync(reconcileEvent)
-	// The same reconcile, offered to the processes the triggers actually land in —
-	// integrations and git, neither of which is this one (run_plane.go).
+	// The git object seams, answered against the FORGE (importer.go). This app
+	// owns them now because it owns the one thing the forge cannot hold — the
+	// record of what an advance did — and because the forge itself is reachable
+	// from any process, so there is no store to be co-resident with any more.
+	cloud.RegisterGitImporter(importer{})
+	cloud.RegisterGitMirrorController(mirrorControl{})
+	// The same reconcile and the same git seams, offered to the processes the
+	// triggers actually land in — integrations and the webhook door, neither of
+	// which is this one (run_plane.go, import_plane.go).
 	exposeRun()
+	exposeImport()
+
 	schedStop = startScheduler(s) // freshness: periodic reconcile of every poll sync (env-gated)
 
 	b.Log.Info("sync mounted", "brand", deps.Brand, "providers", "git")
@@ -94,7 +115,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // Shutdown stops the reconcile scheduler (waiting for an in-flight sweep to drain) and
 // then closes every open per-org store — in THAT order, so a store is never closed out
 // from under a running reconcile. Idempotent.
+//
+// The git seams are withdrawn first, so a call arriving mid-shutdown gets the
+// fail-closed "not registered" rather than reaching a store that is about to
+// close under it.
 func Shutdown() error {
+	cloud.RegisterGitImporter(nil)
+	cloud.RegisterGitMirrorController(nil)
 	if schedStop != nil {
 		schedStop()
 		schedStop = nil
