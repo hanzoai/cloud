@@ -10,7 +10,7 @@ import (
 // WHOSE bill it is, so it ranks by cost — a chatty cheap caller is not who an
 // operator is looking for. Bounded like every other leaderboard on this board.
 func TestAimTopActors_RanksBySpend(t *testing.T) {
-	sql := aimTopActorsSQL()
+	sql := ledgerByActor(ledgerScope{}, aimTopN).SQL
 	if !strings.Contains(sql, "ORDER BY cost_cents DESC, requests DESC LIMIT 12") {
 		t.Errorf("topActors must order by cost desc, limit %d; got %q", aimTopN, sql)
 	}

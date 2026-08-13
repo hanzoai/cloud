@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,11 +21,32 @@ import (
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
 	"github.com/hanzoai/cloud/apps/admin/health"
 	"github.com/hanzoai/cloud/apps/admin/iam"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
+
+// TestMain pins ONE plane runtime directory for this whole binary, before any test runs.
+//
+// It has to happen here and not in a stand-in. The plane WRITES ZIP_RUNTIME_DIR itself on
+// its first call and an externally-set one always wins, so whichever test dials first
+// decides where every later socket is looked for — and since the fleet money read became
+// a plane call, that is now most of them. A stand-in that set the directory when it
+// started would be setting it after that race was already lost: the platform stand-in
+// began listening in a temp dir while the test looked for it under /run/hanzo.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "pl")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "plane runtime dir:", err)
+		os.Exit(1)
+	}
+	os.Setenv(zip.RuntimeDirEnv, dir)
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
 
 // mount builds a zip app with admin mounted against the given upstream bases,
 // and returns a `do` helper that issues test requests through the whole app.
@@ -300,6 +323,15 @@ type fakeCommerce struct {
 	balances        map[string]int64 // org slug -> availableCents (credits)
 	spend           map[string]int64 // org slug -> consumedCents (month-to-date)
 	sawIAMOrgHeader bool             // true if the stale X-IAM-Org-Id header was ever sent
+	mu              sync.Mutex
+	n               int // requests served, so a test can assert it was NOT asked
+}
+
+// calls reports how many requests this stand-in has served.
+func (f *fakeCommerce) calls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.n
 }
 
 func newFakeCommerce() *fakeCommerce {
@@ -309,6 +341,9 @@ func newFakeCommerce() *fakeCommerce {
 	}
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		f.mu.Lock()
+		f.n++
+		f.mu.Unlock()
 		if r.Header.Get("X-IAM-Org-Id") != "" {
 			f.sawIAMOrgHeader = true
 		}
@@ -335,22 +370,36 @@ func newFakeCommerce() *fakeCommerce {
 	return f
 }
 
-// TestCommerce_ReconcilesWithXOrgIdBareSlug pins the exact live-commerce contract
-// the admin money aggregation depends on: the org selector is the TRUSTED X-Org-Id
-// header and the wallet subject is the BARE org slug (user=<org>) — NOT
-// X-IAM-Org-Id and NOT "org/org". This is the regression guard for the $0-fleet-
-// revenue bug (commerce.go had X-IAM-Org-Id; admin.go orgSubject had "org/org", so
-// every real balance read $0). /v1/admin/orgs must surface acme's real $50.00.
-func TestCommerce_ReconcilesWithXOrgIdBareSlug(t *testing.T) {
-	// The billing subject is the bare org slug for BOTH the X-Org-Id header and the
-	// `user` param — commerce.Client bakes that in (one subject, no "org/org"). This
-	// test proves it end to end: /v1/admin/orgs must surface acme's real $50.00.
+// fleetMoney is the money peer the fan-out tests bill against: acme and hanzo each hold
+// $50.00 with $15.00 consumed. It also RECORDS which tenant each call named, which is the
+// property that replaced the old header contract — see TestMoney_NamesTheTenant.
+func fleetMoney(seen *[]string) func(string) (int64, int64, error) {
+	var mu sync.Mutex
+	return func(org string) (int64, int64, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		*seen = append(*seen, org)
+		switch org {
+		case "acme", "hanzo":
+			return 1500, 5000, nil
+		}
+		return 0, 0, nil
+	}
+}
+
+// TestMoney_NamesTheTenant pins the tenancy rule the fleet money read depends on: the org
+// travels ON THE CALL, so the ledger answers for the tenant that was named and one tenant
+// can never be shown another's books. It replaces a test that pinned the same property in
+// HTTP header terms (X-Org-Id, and the wallet subject as the bare slug) — the read is a
+// plane call now, and there is no header to get wrong. /v1/admin/orgs must still surface
+// acme's real $50.00.
+func TestMoney_NamesTheTenant(t *testing.T) {
+	var seen []string
+	serveCommerce(t, fleetMoney(&seen))
 	iam := newFakeIAM()
 	defer iam.server.Close()
-	commerce := newFakeCommerce()
-	defer commerce.server.Close()
 
-	do := mount(t, iam.server.URL, commerce.server.URL, "")
+	do := mount(t, iam.server.URL, "", "")
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
 	resp, body := do("GET", "/v1/admin/orgs", admin)
 	if resp.StatusCode != http.StatusOK {
@@ -372,12 +421,13 @@ func TestCommerce_ReconcilesWithXOrgIdBareSlug(t *testing.T) {
 	if acme == nil {
 		t.Fatalf("acme org missing from %+v", env.Data)
 	}
-	if acme.CreditsCents != 5000 || acme.SpendCents != 1500 {
-		t.Errorf("acme money = credits %d / spend %d, want 5000/1500 — the money did NOT reconcile (stale X-IAM-Org-Id or org/org subject reads $0)", acme.CreditsCents, acme.SpendCents)
+	if acme.CreditsCents != 5000 {
+		t.Errorf("acme credits = %d, want 5000 — the money did not reconcile", acme.CreditsCents)
 	}
-	// The stale header must NEVER be sent.
-	if commerce.sawIAMOrgHeader {
-		t.Error("admin sent the stale X-IAM-Org-Id header — commerce reads X-Org-Id only")
+	// Every org in the window was asked for BY NAME. An unnamed call would read the
+	// caller's own books and report them as the tenant's.
+	if len(seen) != 2 || !slices.Contains(seen, "acme") || !slices.Contains(seen, "hanzo") {
+		t.Errorf("money was asked for %v, want each tenant named once", seen)
 	}
 }
 
@@ -386,12 +436,12 @@ func TestCommerce_ReconcilesWithXOrgIdBareSlug(t *testing.T) {
 // total), the money (from commerce), and that the caller's credential is
 // replayed to IAM (admin never forges a service credential for the fan-out).
 func TestOrgs_RealAggregation(t *testing.T) {
+	var seen []string
+	serveCommerce(t, fleetMoney(&seen))
 	iam := newFakeIAM()
 	defer iam.server.Close()
-	commerce := newFakeCommerce()
-	defer commerce.server.Close()
 
-	do := mount(t, iam.server.URL, commerce.server.URL, "")
+	do := mount(t, iam.server.URL, "", "")
 	admin := map[string]string{
 		"X-User-IsAdmin": "true", "X-Org-Id": "admin",
 		"Authorization": "Bearer operator-jwt", "Cookie": "iam_access_token=operator-jwt",
@@ -419,8 +469,14 @@ func TestOrgs_RealAggregation(t *testing.T) {
 	if acme.Users != 7 {
 		t.Errorf("org acme users = %d, want 7 (IAM total)", acme.Users)
 	}
-	if acme.SpendCents != 1500 || acme.CreditsCents != 5000 {
-		t.Errorf("org acme money = spend %d credits %d, want 1500/5000", acme.SpendCents, acme.CreditsCents)
+	// Credits are the wallet, read from the money plane. Spend and tokens are the AI
+	// LEDGER — a different plane with a different owner — so with no warehouse wired
+	// they are a true zero here, and the money read cannot make them look otherwise.
+	if acme.CreditsCents != 5000 {
+		t.Errorf("org acme credits = %d, want 5000", acme.CreditsCents)
+	}
+	if acme.SpendCents != 0 || acme.Tokens != 0 {
+		t.Errorf("org acme usage = spend %d tokens %d, want 0/0 with no warehouse", acme.SpendCents, acme.Tokens)
 	}
 	// The operator's own credential MUST have been replayed to IAM.
 	if iam.gotAuth != "Bearer operator-jwt" {
@@ -523,12 +579,12 @@ func TestAudit_MapsRecords(t *testing.T) {
 // counts + money from the upstreams, and a per-source freshness row that reports
 // the honest state of each feed (iam ok, commerce ok, o11y not-configured here).
 func TestOverview_RealTilesAndSources(t *testing.T) {
+	var seen []string
+	serveCommerce(t, fleetMoney(&seen))
 	iam := newFakeIAM()
 	defer iam.server.Close()
-	commerce := newFakeCommerce()
-	defer commerce.server.Close()
 
-	do := mount(t, iam.server.URL, commerce.server.URL, "") // no o11y health → source not-ok
+	do := mount(t, iam.server.URL, "", "") // no o11y health → source not-ok
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
 
 	resp, body := do("GET", "/v1/admin/overview", admin)
@@ -548,10 +604,6 @@ func TestOverview_RealTilesAndSources(t *testing.T) {
 	// 2 orgs × 7 users each (both count probes return total=7).
 	if d.Users != 14 {
 		t.Errorf("overview users = %d, want 14", d.Users)
-	}
-	// 2 orgs × 1500 consumed cents.
-	if d.SpendCents30d != 3000 {
-		t.Errorf("overview spend = %d, want 3000", d.SpendCents30d)
 	}
 	if d.CreditsCents != 10000 {
 		t.Errorf("overview credits = %d, want 10000", d.CreditsCents)
@@ -573,6 +625,15 @@ func TestOverview_RealTilesAndSources(t *testing.T) {
 	if src["o11y"].OK || src["o11y"].Error == "" {
 		t.Errorf("o11y source must be not-ok with an error when unconfigured: %+v", src["o11y"])
 	}
+	// The AI tiles read the usage ledger, and an unwired warehouse is a source that is
+	// DOWN — not a fleet that served nothing. A zero tile beside a healthy source is the
+	// exact shape that let $0.00 and 0 tokens look like the truth for a month.
+	if src["usage"].OK || src["usage"].Error == "" {
+		t.Errorf("usage source must be not-ok with an error when no warehouse is wired: %+v", src["usage"])
+	}
+	if d.SpendCents30d != 0 || d.Tokens30d != 0 {
+		t.Errorf("no warehouse must read as zero AI spend/tokens, got %d/%d", d.SpendCents30d, d.Tokens30d)
+	}
 }
 
 // TestOverview_CommercePartialOnPerOrgError proves the decomplected freshness rule: the
@@ -581,27 +642,16 @@ func TestOverview_RealTilesAndSources(t *testing.T) {
 // the overview folds acme's failure into a not-ok commerce source (the SAME partial
 // pattern revenue/finance use) instead of the old single-probe that masked it.
 func TestOverview_CommercePartialOnPerOrgError(t *testing.T) {
+	serveCommerce(t, func(org string) (int64, int64, error) {
+		if org == "acme" {
+			return 0, 0, fmt.Errorf("ledger down for acme") // this tenant only
+		}
+		return 1500, 5000, nil
+	})
 	iam := newFakeIAM()
 	defer iam.server.Close()
-	commerce := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Header.Get("X-Org-Id") == "acme" {
-			w.WriteHeader(500) // commerce down for THIS org only
-			io.WriteString(w, `{"status":"error","msg":"commerce down for acme"}`)
-			return
-		}
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/usage/rollup"):
-			io.WriteString(w, `{"consumedCents":1500,"overageCents":0}`)
-		case strings.HasSuffix(r.URL.Path, "/balance"):
-			io.WriteString(w, `{"available":5000,"balance":5000}`)
-		default:
-			w.WriteHeader(404)
-		}
-	}))
-	defer commerce.Close()
 
-	do := mount(t, iam.server.URL, commerce.URL, "")
+	do := mount(t, iam.server.URL, "", "")
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
 	resp, body := do("GET", "/v1/admin/overview", admin)
 	if resp.StatusCode != http.StatusOK {
@@ -628,15 +678,18 @@ func TestOverview_CommercePartialOnPerOrgError(t *testing.T) {
 		t.Errorf("degraded commerce source must carry an error: %+v", c)
 	}
 	// The healthy org still contributes — an honest PARTIAL total, never a hard panel fail.
-	if env.Data.SpendCents30d != 1500 {
-		t.Errorf("spend = %d, want 1500 (only hanzo read; acme failed)", env.Data.SpendCents30d)
+	if env.Data.CreditsCents != 5000 {
+		t.Errorf("credits = %d, want 5000 (only hanzo read; acme failed)", env.Data.CreditsCents)
 	}
 }
 
-// TestUsage_RealTotalsHonestEmptySeries proves the usage roll-up returns the REAL
-// fleet spend from commerce but an HONEST empty series/byProduct — the timeseries
-// feed lives in insights/datastore, and admin must never fabricate a trend.
-func TestUsage_RealTotalsHonestEmptySeries(t *testing.T) {
+// TestUsage_ReadsTheLedgerNotCommerce proves the usage board asks the AI ledger. With no
+// warehouse wired it reports zeros and EMPTY arrays — never nil, which the console would
+// read as an absent field, and never a fabricated trend. The point of the test is the
+// second assertion: commerce is not consulted at all, because "what was served" was never
+// commerce's question. It used to fan out one HTTP read per org to answer it, against a
+// route that does not exist.
+func TestUsage_ReadsTheLedgerNotCommerce(t *testing.T) {
 	iam := newFakeIAM()
 	defer iam.server.Close()
 	commerce := newFakeCommerce()
@@ -645,6 +698,7 @@ func TestUsage_RealTotalsHonestEmptySeries(t *testing.T) {
 	do := mount(t, iam.server.URL, commerce.server.URL, "")
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
 
+	before := commerce.calls()
 	resp, body := do("GET", "/v1/admin/usage", admin)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("usage: got %d (body=%s)", resp.StatusCode, body)
@@ -655,16 +709,19 @@ func TestUsage_RealTotalsHonestEmptySeries(t *testing.T) {
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if env.Data.Totals.SpendCents != 3000 { // 2 orgs × 1500
-		t.Errorf("usage total spend = %d, want 3000", env.Data.Totals.SpendCents)
+	if n := commerce.calls() - before; n != 0 {
+		t.Errorf("usage made %d commerce calls; the ledger owns this question", n)
+	}
+	if env.Data.Totals != (usageTotals{}) {
+		t.Errorf("no warehouse must read as zeros, got %+v", env.Data.Totals)
 	}
 	// Honest empty — NOT nil (the JSON must be [], which the operator renders as
 	// an empty chart), and NEVER a fabricated point.
 	if env.Data.Series == nil || len(env.Data.Series) != 0 {
 		t.Errorf("usage series must be an empty array (no fabricated trend), got %v", env.Data.Series)
 	}
-	if env.Data.ByProduct == nil || len(env.Data.ByProduct) != 0 {
-		t.Errorf("usage byProduct must be an empty array, got %v", env.Data.ByProduct)
+	if env.Data.ByModel == nil || len(env.Data.ByModel) != 0 {
+		t.Errorf("usage byModel must be an empty array, got %v", env.Data.ByModel)
 	}
 }
 
@@ -734,6 +791,59 @@ func TestMount_NilGuards(t *testing.T) {
 	}
 }
 
+// serveCommerce stands up the commerce app answering plane.FinanceSpend, which is how
+// the fleet boards ask for money now. `by` decides each org's answer, so a test can make
+// ONE tenant fail and assert the fold reports a partial rather than an undercount that
+// reads healthy. Without a peer at all the router says ErrNoPeer, which is a different
+// and equally real fact — see TestOverview_HonestSources.
+func serveCommerce(t *testing.T, by func(org string) (int64, int64, error)) {
+	t.Helper()
+	// The plane's own runtime directory, resolved the way cloud resolves it, so this
+	// process's plane app IS the peer a money read reaches by name. Same three lines
+	// the cockpit's stand-in uses — the arrangement production has.
+	t.Setenv("ZIP_RUNTIME_DIR", "")
+	t.Setenv("CLOUD_RUN_DIR", planeRunDir(t))
+	cloud.ResetPlane()
+	t.Cleanup(cloud.ResetPlane)
+	zip.Post[plane.SpendIn, plane.Spend](cloud.Plane(), "/finance/spend",
+		func(ctx context.Context, _ *plane.SpendIn) (*plane.Spend, error) {
+			org := cloud.Who(ctx).Org
+			if org == "" {
+				return nil, zip.ErrForbidden("spend: no org on the call")
+			}
+			spend, balance, err := by(org)
+			if err != nil {
+				return nil, err
+			}
+			return &plane.Spend{
+				Consumed: plane.Amount(money.FromCents(spend).Unwrap()),
+				Balance:  plane.Amount(money.FromCents(balance).Unwrap()),
+			}, nil
+		}, zip.WithOperationID(plane.FinanceSpend))
+
+	// Bind the canonical socket for the name, so a read that asks for "commerce"
+	// reaches this process's plane. Without it the router answers ErrNoPeer, which
+	// the boards read — correctly — as "this deployment runs no commerce".
+	stop, err := cloud.ServePlane("commerce", luxlog.NewNoOpLogger())
+	if err != nil {
+		t.Fatalf("serve commerce plane: %v", err)
+	}
+	t.Cleanup(func() { _ = stop() })
+}
+
+// planeRunDir is a directory short enough to bind a socket in. t.TempDir cannot be
+// used: a unix socket address is 104 bytes and t.TempDir spends most of them on the
+// test's own name, so a descriptive test name fails to bind.
+func planeRunDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "pl")
+	if err != nil {
+		t.Fatalf("plane runtime dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 // servePlatformEmpty stands up the platform app answering an EMPTY fleet.
 //
 // The board reads the operator's view over the internal plane, so without a
@@ -743,7 +853,6 @@ func TestMount_NilGuards(t *testing.T) {
 // registry and never fabricate a row.
 func servePlatformEmpty(t *testing.T) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	app := zip.New(zip.Config{AppName: "platform"})
 	compose(app)
 	zip.Post[struct{}, plane.Fleet](app, "/platform/fleet",

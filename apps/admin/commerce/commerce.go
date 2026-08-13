@@ -66,48 +66,13 @@ func New(base, token string) *Client {
 func (c *Client) Ready() bool { return c != nil && c.base != "" }
 
 // Spend is a subject's month-to-date consumption.
-type Spend struct {
-	Consumed money.Cents `json:"consumedCents"`
-	Overage  money.Cents `json:"overageCents"`
-}
-
-// Spend reads a subject's month-to-date consumption (GET /v1/billing/usage/rollup).
-// Zero (not an error) when commerce is unwired, so a partial deploy degrades to
-// honest zeros.
-func (c *Client) Spend(ctx context.Context, subject string) (Spend, error) {
-	var out Spend
-	if !c.Ready() {
-		return out, nil
-	}
-	body, err := c.get(ctx, "/v1/billing/usage/rollup", url.Values{"user": {subject}}, subject)
-	if err != nil {
-		return out, err
-	}
-	if err := json.Unmarshal(body, &out); err != nil {
-		return out, fmt.Errorf("commerce spend decode: %w", err)
-	}
-	return out, nil
-}
-
-// Credits reads a subject's available prepaid credit (GET /v1/billing/balance).
-// Zero (not an error) when commerce is unwired.
-func (c *Client) Credits(ctx context.Context, subject string) (money.Cents, error) {
-	if !c.Ready() {
-		return 0, nil
-	}
-	q := url.Values{"user": {subject}, "currency": {"usd"}}
-	body, err := c.get(ctx, "/v1/billing/balance", q, subject)
-	if err != nil {
-		return 0, err
-	}
-	var b struct {
-		Available money.Cents `json:"available"`
-	}
-	if err := json.Unmarshal(body, &b); err != nil {
-		return 0, fmt.Errorf("commerce credits decode: %w", err)
-	}
-	return b.Available, nil
-}
+// The month-to-date read and the balance read used to live here, over commerce's own
+// HTTP /v1/billing/*. Neither reaches anything: those routes are behind `//go:build
+// cloud` and are compiled into no binary here, so usage/rollup was an unrouted 404 and
+// balance re-entered the CUSTOMER handler with no principal. The money question is asked
+// by name now (core.OrgMoney → plane.FinanceSpend), which answers both halves at once
+// from the process that owns the ledger. Nothing was left behind for the next reader to
+// call by mistake.
 
 // Plan is a subject's subscription: the active tier, the monthly-normalized
 // recurring revenue, and whether any subscription is active. Name is
