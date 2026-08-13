@@ -80,10 +80,11 @@ func TestPlainProjectGitDeployStampsBucket(t *testing.T) {
 		t.Fatalf("link repo: %d %s", code, b)
 	}
 
-	// Git deploy (application/json body → deployGit) → 202 queued deployment.
-	code, b := do(t, app, http.MethodPost, "/v1/projects/myblog/deploy", "acme", map[string]any{"source": "git"})
+	// Open a deployment → 202 queued deployment. This used to be the same address
+	// as the archive upload, chosen by Content-Type; it is its own typed op now.
+	code, b := do(t, app, http.MethodPost, "/v1/projects/myblog/deployments", "acme", map[string]any{})
 	if code != http.StatusAccepted {
-		t.Fatalf("git deploy must be 202, got %d %s", code, b)
+		t.Fatalf("start deployment must be 202, got %d %s", code, b)
 	}
 	var dep projectsDeployment
 	if err := json.Unmarshal(b, &dep); err != nil || dep.ID == "" {
