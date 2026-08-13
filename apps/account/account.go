@@ -480,7 +480,7 @@ func (o ops) getKey(ctx context.Context, _ *noInput) (*apiKeyList, error) {
 	out := apiKeyList{Keys: make([]apiKey, 0, len(rows))}
 	for _, r := range rows {
 		rec := apiKey{Type: keyTypeSecret, CreatedAt: r.UpdatedTime}
-		if r.Scope == iamScopePublish {
+		if publishable(r) {
 			// Publishable: hand back the whole value. It is the one a browser bundle
 			// carries, and there is no second chance to read it.
 			rec.Type, rec.Key, rec.Prefix = keyTypePublishable, r.AccessKey, prefixOf(r.AccessKey)
@@ -492,6 +492,31 @@ func (o ops) getKey(ctx context.Context, _ *noInput) (*apiKeyList, error) {
 		out.Keys = append(out.Keys, rec)
 	}
 	return &out, nil
+}
+
+// publishable answers what a key IS, and answers it from the PREFIX FIRST.
+//
+// Two things claim to say a key's type: IAM's stored scope, and the prefix the
+// key wears. Every door reads the prefix — cloud.IsPublishableKey decides whether
+// a key may become a principal at all — so when they disagree the prefix is the
+// fact and the scope is a label sitting on top of it.
+//
+// Reading the label alone told a holder their key was SECRET while every gate
+// treated it as publishable, and a pk- never authenticates: the console showed a
+// working credential that silently authenticated nothing. Measured on this
+// cluster: two rows scoped non-publish carrying pk- prefixes, one minted the same
+// day this was written.
+//
+// The scope stays as a second reason to say yes, not as a way to say no. An sk-
+// row that IAM has scoped publish is a different disagreement with the opposite
+// risk, and calling it publishable here would print a confidential key's value
+// into a listing — so a bare scope can promote nothing that the prefix has not
+// already shown to be safe.
+func publishable(r userKey) bool {
+	if cloud.IsPublishableKey(r.AccessKey) {
+		return true
+	}
+	return r.Scope == iamScopePublish && !strings.HasPrefix(r.AccessKey, "sk-")
 }
 
 // prefixOf is the recognizable, non-secret head of a key — enough for a holder to
