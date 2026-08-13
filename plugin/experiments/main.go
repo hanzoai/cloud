@@ -17,11 +17,11 @@ import (
 // `experiments openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:     "experiments",
+		Name:       "experiments",
 		OwnsHealth: true,
-		Price:    cloud.Free,
-		Mount:    experiments.Mount,
-		Shutdown: cloud.CtxShutdown(experiments.Shutdown),
+		Price:      cloud.Free,
+		Mount:      experiments.Mount,
+		Shutdown:   cloud.CtxShutdown(experiments.Shutdown),
 	}}, []string{"experiments"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

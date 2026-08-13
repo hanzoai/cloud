@@ -475,4 +475,3 @@ func balance(s *cloud.Service[state], c *zip.Ctx) error {
 		Account:   subject,
 	})
 }
-

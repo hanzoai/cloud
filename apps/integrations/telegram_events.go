@@ -178,7 +178,6 @@ func telegramBind(s *cloud.Service[state], c *zip.Ctx, m telegramMessage, code s
 	_ = telegramSend(c.Context(), m.ChatID, m.MessageID, "Connected to Hanzo. Mention @hanzo (or /hanzo) to chat.")
 }
 
-
 // telegramSend posts a message via the Bot API sendMessage, threaded under
 // replyTo. The bot token is a URL path segment and is never logged.
 func telegramSend(ctx context.Context, chatID, replyTo int64, text string) error {
