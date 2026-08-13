@@ -306,7 +306,7 @@ func inside(p string) bool {
 	if p == "" || strings.HasPrefix(p, "/") || strings.ContainsAny(p, "\\\x00") {
 		return false
 	}
-	return path.Clean(p) == p && !strings.HasPrefix(p, "../")
+	return p != ".." && path.Clean(p) == p && !strings.HasPrefix(p, "../")
 }
 
 // under reports whether p is at or beneath dir, where an empty dir is the whole
