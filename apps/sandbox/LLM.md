@@ -147,7 +147,54 @@ So the obvious implementation does not exist. Cloud cannot create `<org>-agent`,
 read its secret back, and exchange it for a client_credentials token, because
 there is no moment at which it is handed the secret.
 
-Two shapes remain, and this IS a real decision rather than a thing to look up:
+ANSWERED — and it is neither of the two shapes below, but the second one's
+mechanism, found by reading every route IAM registers:
+
+**`POST /v1/iam/admin/applications/upsert`** (`internal/bootstrap/bootstrap.go:62`)
+is authenticated by the SERVICE TOKEN (`HANZO_API_KEY`/`KMS_SERVICE_TOKEN`/
+`IAM_SERVICE_TOKEN`, `httpx.ServiceAuth`) and returns the app's clientSecret in
+cleartext — including the EXISTING secret when the app is already there
+(`resolveSecret`, bootstrap.go:456-467; emitted at :334-337). It is the one
+unmasked Application credential in the whole service, and it is deliberate: its
+own comment says "this is where it learns a secret it did not send". cloud
+already holds that token and already calls this endpoint for `<org>-platform-kms`.
+
+So the sequence is: upsert `<org>-agent` -> read the secret back -> exchange at
+`POST /v1/iam/oauth/token` `grant_type=client_credentials`. IAM mints, cloud
+delivers, nothing is invented here.
+
+**No route mints an app-subject token on any other authority.** `client_credentials`
+(token.go:213) requires that app's own secret, constant-time, with no bypass;
+`/v1/iam/tokens/issue` is user-only and refuses an application target
+(`mintTarget`, issuetoken.go:248-267); token-exchange yields a USER subject.
+Verified by enumerating every route and every `ClientSecret` reference.
+
+**THREE LANDMINES, and the first one means `ensureAgentApplication` is WRONG as
+written.** It creates via `POST /v1/iam/applications` with `owner=<org>`. The
+upsert looks up hard-pinned to owner `"admin"` (bootstrap.go:252, and sets
+`admin/<name>` at :315/:329), so it will not find that row — it will create a
+SECOND one. Worse, the bootstrap path does not enforce clientId uniqueness
+(`ensureClientIdUnique` is only on the typed CRUD path, applications.go:57-71),
+and resolution is admin-preferring (`morePreferredApp`, store.go:64-83), so the
+admin row silently wins at the token endpoint. Create it THROUGH the upsert.
+
+Second: an app created through `/v1/iam/applications` with no `clientSecret` is a
+PUBLIC client with no secret, which `clientCredentialsGrant` refuses outright
+(token.go:226) — and its secret can never be read back, so it is unusable and
+unrecoverable. Third: `publicTokenEndpointForbidden` (token.go:230, :776-778)
+refuses a name ending `-iam` or an app whose ORGANIZATION is reserved (admin,
+built-in, app). `Organization` must be the tenant org. Note it tests Organization
+and not Owner, so an admin-OWNED app serving a tenant org mints fine — which is
+exactly the shape the upsert produces.
+
+The rejected alternative, recorded so it is not re-proposed: cloud generating the
+secret itself and supplying it at create. `Create` does persist a caller-supplied
+`ClientSecret` verbatim (applications.go:202-206, no server-side generation on
+that path at all), so it WOULD work — and it makes cloud a minter of credential
+material, which "IAM is all auth and tokens, nothing else has that responsibility"
+forbids. The upsert costs nothing extra and keeps issuance IAM's.
+
+Superseded framing (kept so the reasoning is legible):
 
   a. **Cloud supplies the secret at creation.** `Create` takes a whole
      `*schema.Application`, so a caller-provided `ClientSecret` is stored. Cloud
