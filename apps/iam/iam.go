@@ -101,6 +101,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	luxlog "github.com/luxfi/log"
 
@@ -328,6 +329,42 @@ func openStore(dir string) (orm.DB, error) {
 	// path. A loud 503 is recoverable in a minute; a silently empty identity
 	// service is not recoverable at all, because by then clients have been told
 	// their accounts do not exist.
+
+	// WHICH BACKEND HOLDS IDENTITY. Empty or "sqlite" is the embedded file this
+	// has always been; "sql" is hanzoai/sql over ZAP, which is what production
+	// should run and what makes the paragraph above stop being true.
+	//
+	// It is a knob because there is no other way to say it — the backend cannot be
+	// derived from anything the process already knows — and it defaults to the
+	// behaviour that exists today, so a deployment that sets nothing is unchanged.
+	//
+	// On "sql" the identity store stops being a file on one volume: no path, no
+	// per-file key, and nothing a volume-wide encryption sweep can convert out
+	// from under a plain-SQLite opener. That is not a hypothetical — it is what
+	// took every brand's login down on 13 Aug, when this store was the one
+	// plaintext database on a volume where everything else was cek-encrypted, and
+	// a sweep did the obviously-right thing to it.
+	backend := strings.TrimSpace(os.Getenv("IAM_STORE_BACKEND"))
+
+	if backend != "" && backend != "sqlite" {
+		// NO PATH TO CHECK, and the invariant below still has to hold. The file
+		// stat was never about files: it was about refusing to serve an identity
+		// store this process did not find, because minting an empty one answers
+		// every account with "does not exist" and reports success.
+		//
+		// A remote backend gets the first half for free — an unreachable server
+		// fails the open, loudly. It does NOT get the second half: a reachable but
+		// EMPTY database opens fine and would be served. Closing that needs a
+		// populated-store check through the entity API, which is not written yet,
+		// so it is named here rather than assumed. Do not point this at an empty
+		// database and expect to be told.
+		db, err := iamstore.Open(backend, "")
+		if err != nil {
+			return nil, fmt.Errorf("iam: open the %s identity store: %w", backend, err)
+		}
+		return db, nil
+	}
+
 	path := StorePath(dir)
 	if _, err := os.Stat(path); err != nil {
 		return nil, fmt.Errorf("iam: the identity store is not at %s, so this process has nothing to serve — check that the volume holding it is mounted there: %w", path, err)
