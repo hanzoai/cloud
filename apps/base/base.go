@@ -4,8 +4,8 @@
 // Package base is managed Hanzo Base: a hosted backend for your app —
 // collections, records, access rules and sign-in.
 //
-// It serves that engine per org at /v1/base and /v1/collections, plus the
-// platform's public waitlist at /v1/waitlist.
+// It serves that engine per org at /v1/base, plus the platform's public
+// waitlist at /v1/waitlist.
 //
 // It is the in-binary replacement for the standalone `ghcr.io/hanzoai/superbase`
 // pod, whose whole job was `base.New()` + serve. cloud already links
@@ -28,12 +28,16 @@
 // The two lanes are deliberately NOT one app: the waitlist is a public, single,
 // brand-level instance; hosted Bases are private, per-org, and many.
 //
-// A THIRD prefix, /v1/collections, is served by neither engine above: it is a
-// principal-gated forward to the SEPARATE managed Base deployment that owns the
-// cross-instance `tenants` registry (collections.go). It answers the same
-// question the embed lane does — an org's collections and their records — from a
-// different store, so the two are not interchangeable and one of them is
-// eventually redundant.
+// There was a THIRD prefix, /v1/collections, forwarding to a SEPARATE managed
+// Base deployment for the sake of a cross-instance `tenants` registry — one row
+// per Base instance, each on its own subdomain. It is gone, and the registry is
+// why: it could only ever answer anonymously, because an authenticated request
+// is scoped to the caller's org and opens that org's own Base, which has no
+// `tenants` collection. So a registry of every org's Bases could not be read by
+// anyone who had signed in, and it held zero rows for its whole life. What
+// remained was two engines answering one question — an org's collections and
+// their records — from two disks, where a record written through one was
+// invisible through the other. LANE 2 below is the answer.
 //
 // MOUNT PREFIX. Base's REST router honours BASE_API_PREFIX (default /v1); this
 // package pins it to /v1/base so the per-org engine serves its collections API
@@ -174,14 +178,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// as clients/plan + clients/pricing).
 	zip.Get(zapp, "/v1/base/health", health)
 
-	// Base data-plane forward /v1/collections[/*] → the managed Base orchestrator
-	// (collections.go). Always on, BEFORE the embed gate: the console's Base product
-	// (Bases manager + Records) reaches its collections/records here regardless of
-	// whether this binary also hosts per-org Bases at /v1/base/*. This is the
-	// in-binary replacement for the go:embed-pruned console BFF (app/v1/superbase).
-	if err := mountCollections(app); err != nil {
-		return err
-	}
+	// There is no second door. /v1/collections used to reverse-proxy this same
+	// concept to a separate Base deployment, and its stated reason for existing was
+	// the cross-instance `tenants` registry that deployment held — one row per Base,
+	// each on its own subdomain. That registry cannot work: an authenticated request
+	// is scoped to the caller's org and opens THAT org's Base, which has no `tenants`
+	// collection, so the registry answered only anonymously and only ever held zero
+	// rows. What it left behind was two engines writing the same concept to two
+	// disks, where a record created through one was invisible through the other.
+	//
+	// An org HAS a Base, and it is the one below.
 
 	if !embedEnabled() {
 		log.Info("base embed disabled; /v1/base + /v1/waitlist off (set CLOUD_BASE_EMBED=1 to enable)")
