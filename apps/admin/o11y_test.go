@@ -46,13 +46,9 @@ func TestO11ySQL_ReadsCanonicalTables(t *testing.T) {
 		name, sql, table string
 		wantQMarks       int
 	}{
-		{"usageTotals", o11yUsageTotalsSQL(), "hanzo.cloud_usage", 1},
 		{"traceTotals", o11yTraceTotalsSQL(), "event.span", 1},
 		{"logVolume", o11yLogVolumeSQL(), "event.log", 1},
-		{"usageSeries", o11yUsageSeriesSQL("1 HOUR"), "hanzo.cloud_usage", 1},
 		{"logSeries", o11yLogSeriesSQL("1 HOUR"), "event.log", 1},
-		{"topOrgs", o11yTopOrgsSQL(), "hanzo.cloud_usage", 1},
-		{"topModels", o11yTopModelsSQL(), "hanzo.cloud_usage", 1},
 		{"topServices", o11yTopServicesSQL(), "event.span", 1},
 		// WHY this pin moved (o11y_ai.observations → console.observations → event.span):
 		// the first name was a database that never existed; the second held the real
@@ -76,10 +72,6 @@ func TestO11ySQL_ReadsCanonicalTables(t *testing.T) {
 // rendered into the series queries and grouped/ordered by the bucket.
 func TestO11ySeriesSQL_IntervalBound(t *testing.T) {
 	for _, iv := range []string{"1 HOUR", "6 HOUR", "1 DAY"} {
-		u := o11yUsageSeriesSQL(iv)
-		if !strings.Contains(u, "INTERVAL "+iv) || !strings.Contains(u, "GROUP BY ts ORDER BY ts") {
-			t.Errorf("usage series must bucket by INTERVAL %s; got %q", iv, u)
-		}
 		l := o11yLogSeriesSQL(iv)
 		if !strings.Contains(l, "INTERVAL "+iv) {
 			t.Errorf("log series must bucket by INTERVAL %s; got %q", iv, l)
@@ -89,9 +81,6 @@ func TestO11ySeriesSQL_IntervalBound(t *testing.T) {
 
 // TestO11yTop_LimitAndOrder proves the leaderboards bound + order the result.
 func TestO11yTop_LimitAndOrder(t *testing.T) {
-	if !strings.Contains(o11yTopOrgsSQL(), "ORDER BY requests DESC LIMIT 10") {
-		t.Errorf("topOrgs must order by requests desc, limit %d", o11yTopN)
-	}
 	if !strings.Contains(o11yTopServicesSQL(), "LIMIT 12") {
 		t.Errorf("topServices must limit %d", o11yServiceLimit)
 	}

@@ -46216,9 +46216,9 @@ components:
             clamp — so it may be later than the start that was asked for.
           type: string
       type: object
-    usageByProduct:
+    usageByModel:
       properties:
-        product:
+        model:
           type: string
         spendCents:
           type: integer
@@ -46227,9 +46227,9 @@ components:
       type: object
     usageData:
       properties:
-        byProduct:
+        byModel:
           items:
-            $ref: '#/components/schemas/usageByProduct'
+            $ref: '#/components/schemas/usageByModel'
           type: array
         series:
           items:
@@ -50369,8 +50369,11 @@ paths:
         not-configured. A commerce read that failed for ANY org marks that source degraded,
         because the spend/credits totals are then an undercount and must not read healthy.
 
-        tokens30d is 0 for the same reason /usage has no series: there is no fleet token
-        counter to read yet.
+        The AI tiles — 30-day spend and tokens — come from the AI ledger (ledger.go), the
+        plane that owns "what was served". They used to come from the money plane with the
+        token counter hardcoded to zero, so the board read $0.00 and 0 tokens over a month in
+        which the fleet served fifteen thousand requests. Credits still come from commerce,
+        which owns the wallet.
       operationId: adminOverview
       responses:
         "200":
@@ -51315,13 +51318,16 @@ paths:
   /v1/admin/usage:
     get:
       description: |-
-        Returns the month-to-date money totals: one org's when org names one, else the
-        fleet sum across every org a SuperAdmin can see.
+        Returns the trailing 30 days of AI usage: one org's when org names one, else the
+        whole fleet's — the spend, the tokens and the requests, the daily curve behind them,
+        and the split by model.
 
-        series and byProduct are ALWAYS empty. A daily trend and a per-product split are not
-        derivable from the commerce billing API — they live in insights/datastore — so this
-        answers with the honest empty arrays rather than fabricating a shape the console would
-        then chart. Same reason tokens and requests are 0: there is no fleet counter to read.
+        It reads the AI ledger (ledger.go), which is the plane that owns this question. It used
+        to ask the commerce billing API instead, once per org, and answer with a hardcoded
+        empty series, zero tokens and zero requests, on the reasoning that a trend and a split
+        were "not derivable from the commerce billing API". They are not — but the question was
+        never commerce's. hanzo.cloud_usage carries a row per served request, so all three fall
+        out of the same window the totals do.
       operationId: adminUsage
       parameters:
       - description: |-
@@ -51339,19 +51345,27 @@ paths:
             application/json:
               example:
                 data:
-                  byProduct: []
-                  series: []
+                  byModel:
+                  - model: claude-opus-4-8
+                    spendCents: 9000
+                    tokens: 80000
+                  series:
+                  - date: "2026-08-13"
+                    requests: 3
+                    spendCents: 900
+                    tokens: 12000
                   totals:
-                    requests: 0
+                    requests: 42
                     spendCents: 12500
-                    tokens: 0
+                    tokens: 170000
                 msg: ""
                 status: ok
               schema:
                 $ref: '#/components/schemas/usageOut'
           description: ok
-      summary: 'Returns the month-to-date money totals: one org''s when org names
-        one, else the fleet sum across every org a SuperAdmin can see.'
+      summary: 'Returns the trailing 30 days of AI usage: one org''s when org names
+        one, else the whole fleet''s — the spend, the tokens and the requests, the
+        daily curve behind them, and the split by model.'
       tags:
       - admin
       x-app: admin
