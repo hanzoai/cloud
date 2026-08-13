@@ -9,15 +9,15 @@ import "time"
 // the contract; both the admin god-view (/v1/admin/audit) and the org-scoped trail
 // (/v1/audit) serialize this ONE shape so a single console adapter reads either.
 type Wire struct {
-	Seq        uint64 `json:"seq"`
-	Time       string `json:"time"`
-	Org        string `json:"org"`
-	Sub        string `json:"sub"`
-	Email      string `json:"email,omitempty"`
+	Seq   uint64 `json:"seq"`
+	Time  string `json:"time"`
+	Org   string `json:"org"`
+	Sub   string `json:"sub"`
+	Email string `json:"email,omitempty"`
 	// Home is present ONLY on a cross-org action: the org the actor came FROM,
 	// while Org is the org they acted IN. A console row carrying `home` is a
 	// platform-admin impersonation and should be rendered as one.
-	Home string `json:"home,omitempty"`
+	Home       string `json:"home,omitempty"`
 	Action     string `json:"action"`
 	Resource   string `json:"resource"`
 	ResourceID string `json:"resourceId,omitempty"`
