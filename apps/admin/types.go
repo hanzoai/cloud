@@ -165,16 +165,19 @@ type usagePoint struct {
 	Requests   int64  `json:"requests"`
 }
 
-type usageByProduct struct {
-	Product    string `json:"product"`
+// usageByModel is one model's slice of the window. The ledger's revenue-bearing
+// dimension IS the model — there is no product column, and naming one implied a split
+// this plane cannot make.
+type usageByModel struct {
+	Model      string `json:"model"`
 	SpendCents int64  `json:"spendCents"`
 	Tokens     int64  `json:"tokens"`
 }
 
 type usageData struct {
-	Totals    usageTotals      `json:"totals"`
-	Series    []usagePoint     `json:"series"`
-	ByProduct []usageByProduct `json:"byProduct"`
+	Totals  usageTotals    `json:"totals"`
+	Series  []usagePoint   `json:"series"`
+	ByModel []usageByModel `json:"byModel"`
 }
 
 // usageIn is the GET /v1/admin/usage query.

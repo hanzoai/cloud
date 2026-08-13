@@ -123,6 +123,8 @@ func (o ops) Customers(ctx context.Context, _ *core.None) (*CustomersOut, error)
 		return &CustomersOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 
+	// ONE delegation for the whole fan-out — see core.Delegate.
+	money := core.Delegate(ctx)
 	rows := make([]CustomerRow, len(orgs))
 	sem := make(chan struct{}, core.MaxCustomerConcurrency)
 	var wg sync.WaitGroup
@@ -132,7 +134,7 @@ func (o ops) Customers(ctx context.Context, _ *core.None) (*CustomersOut, error)
 		go func(i int, o iam.Org) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			rows[i] = enrichCustomer(s, ctx, cr, o)
+			rows[i] = enrichCustomer(s, ctx, money, cr, o)
 		}(i, o)
 	}
 	wg.Wait()
@@ -144,9 +146,9 @@ func (o ops) Customers(ctx context.Context, _ *core.None) (*CustomersOut, error)
 // enrichCustomer folds one org's real IAM + commerce reads into a customer row. Each read
 // is best-effort: an upstream miss degrades that field to its honest zero/empty (never a
 // fabricated value), so one flaky org never fails the fleet.
-func enrichCustomer(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds, o iam.Org) CustomerRow {
+func enrichCustomer(s *cloud.Service[core.State], ctx context.Context, money core.Delegated, cr iam.Creds, o iam.Org) CustomerRow {
 	users, _ := orgUsers(s, ctx, cr, o.Name)
-	spend, credits, _ := core.OrgMoney(s, ctx, o.Name)
+	spend, credits, _ := core.OrgMoney(s, money, o.Name)
 	plan, _ := s.State.Commerce.Plan(ctx, o.Name)
 
 	return CustomerRow{
@@ -191,7 +193,7 @@ func (o ops) CustomerDetail(ctx context.Context, in *OrgIn) (*CustomerDetailOut,
 	}
 
 	users, _ := orgUsers(s, ctx, cr, org)
-	spend, credits, _ := core.OrgMoney(s, ctx, org)
+	spend, credits, _ := core.OrgMoney(s, core.Delegate(ctx), org)
 	plan, _ := s.State.Commerce.Plan(ctx, org)
 	ledgerEntries, _ := s.State.Commerce.Ledger(ctx, org, 50)
 

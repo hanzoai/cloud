@@ -39,9 +39,6 @@ func TestAimSQL_ReadsCanonicalTables(t *testing.T) {
 		{"o11yAiTotals", o11yLLMSQL(), "event.span", 1},
 		{"o11yAiLatency", aimO11yAILatencySQL(), "event.span", 1},
 		{"o11yAiModels", aimO11yAIModelsSQL(), "event.span", 1},
-		{"usageTotals", aimUsageTotalsSQL(), "hanzo.cloud_usage", 1},
-		{"topModels", aimTopModelsSQL(), "hanzo.cloud_usage", 1},
-		{"topActors", aimTopActorsSQL(), "hanzo.cloud_usage", 1},
 		{"evalTraces", aimEvalTracesSQL(), "hanzo.eval_traces", 1},
 		{"evalScores", aimEvalScoresSQL(), "hanzo.eval_scores", 1},
 		{"scoreNames", aimScoreNamesSQL(), "hanzo.eval_scores", 1},
@@ -74,7 +71,7 @@ func TestAimO11yAIScopedToGeneration(t *testing.T) {
 
 // TestAimTop_LimitAndOrder proves the leaderboards bound + order the result.
 func TestAimTop_LimitAndOrder(t *testing.T) {
-	if !strings.Contains(aimTopModelsSQL(), "ORDER BY requests DESC LIMIT 12") {
+	if !strings.Contains(ledgerByModel(ledgerScope{}, aimTopN).SQL, "ORDER BY requests DESC LIMIT 12") {
 		t.Errorf("topModels must order by requests desc, limit %d", aimTopN)
 	}
 	if !strings.Contains(aimScoreNamesSQL(), "GROUP BY name ORDER BY n DESC LIMIT 12") {
