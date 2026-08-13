@@ -63,6 +63,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -73,14 +74,68 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// classes is the CLOSED set of sandbox shapes. Each is one image tag and one
-// resource envelope; they are not independent, which is why this is one field
-// and not three.
+// class is what a sandbox class IS, in one row: how long its lease runs, how
+// much of a node it may hold, whether its image has a program of its own, and
+// whether it needs a CPU it can virtualise.
 //
 //	exec    — a chat or function code run. No volume, seconds to minutes.
 //	dev     — a coding sandbox. Project volume, a toolchain, hours.
 //	desktop — dev plus a virtual display for computer use.
-var classes = map[string]bool{"exec": true, "dev": true, "desktop": true}
+//	android — desktop plus an emulator drawing a phone on that display.
+//
+// THIS USED TO BE THREE TABLES IN TWO FILES and each of the three was a place a
+// new class could be half-added, silently. A class missing from the TTL map got
+// `ExpiresAt = now + 0` and was reaped before its caller finished reading the
+// reply. A class missing from the `!= "desktop"` test had its image's CMD
+// replaced by `sleep infinity`, so the one thing it exists to run never ran and
+// the pod looked perfectly healthy. Neither failure says anything at the point
+// it happens, which is the whole argument for one row: adding a class is filling
+// in a struct, and the compiler asks for every field.
+//
+// The comment this replaced already CLAIMED this shape — "each is one image tag
+// and one resource envelope" — while the envelope half had never been built.
+type class struct {
+	// ttl is the lease in seconds when the caller names none. Unbounded is not an
+	// option for a pod running submitted code on our nodes.
+	ttl int
+	// cpu, mem and disk are what the pod REQUESTS. Empty takes the fleet default,
+	// so a class says only what it needs differently — an android pod holds an
+	// entire emulated phone and cannot live inside `exec`'s 512Mi.
+	cpu, mem, disk string
+	// screen means the image brings up a display and its own program, so cloud
+	// must NOT state a command: doing so replaces the image's CMD outright.
+	screen bool
+	// kvm means the pod needs /dev/kvm. It is a SCHEDULING fact — the device
+	// reaches a pod as an extended resource, so a node without the plugin simply
+	// never receives this class rather than running it a thousand times slower.
+	kvm bool
+}
+
+// classes is the CLOSED set of sandbox shapes.
+var classes = map[string]class{
+	"exec":    {ttl: 900},
+	"dev":     {ttl: 14400},
+	"desktop": {ttl: 14400, screen: true},
+	// An emulator is a whole guest machine: 4Gi for the phone's own RAM plus the
+	// SDK, the emulator process and the X stack around it. Requesting the fleet
+	// default and using this much is the eviction bug written down elsewhere in
+	// this file — a pod that asks for less than it takes is permanently first in
+	// line when the node runs short.
+	"android": {ttl: 14400, screen: true, kvm: true, cpu: "2", mem: "6Gi", disk: "12Gi"},
+}
+
+// classNames lists the classes, sorted, for the messages that have to enumerate
+// them. Derived rather than written, so a refusal cannot name a set the code
+// does not serve — which it did: the 400 said "one of exec, dev, desktop" for as
+// long as the table held three, and would have gone on saying it.
+func classNames() []string {
+	out := make([]string, 0, len(classes))
+	for c := range classes {
+		out = append(out, c)
+	}
+	sort.Strings(out)
+	return out
+}
 
 // KindSandbox is the sandbox this package provisions: a gVisor pod in our own
 // cluster. It is a VALUE on the shared /v1/sandboxes resource, beside the kinds
@@ -486,7 +541,7 @@ func init() {
 			"from the list because the thing behind it fell over.")
 	openapi.Describe("/v1/sandboxes", http.MethodPost,
 		"Lease a sandbox",
-		"Creates a sandbox and returns it. `class` is one of `exec`, `dev` or `desktop`; "+
+		"Creates a sandbox and returns it. `class` is one of `exec`, `dev`, `desktop` or `android`; "+
 			"`dev` and `desktop` are attached to a `project`, which is required for them and "+
 			"names the volume the work persists on. `ttlSec` bounds the lease, and `image` "+
 			"overrides the class default.\n\n"+

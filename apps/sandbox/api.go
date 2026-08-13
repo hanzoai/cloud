@@ -165,8 +165,11 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, spec
 	if class == "" {
 		class = "exec"
 	}
-	if !classes[class] {
-		return Sandbox{}, zip.ErrBadRequest("class must be one of exec, dev, desktop")
+	// The refusal ENUMERATES from the table rather than repeating it. Written out,
+	// the message named three classes for as long as the table held three, and
+	// then went on naming three.
+	if _, ok := classes[class]; !ok {
+		return Sandbox{}, zip.ErrBadRequest("class must be one of " + strings.Join(classNames(), ", "))
 	}
 	// A caller-supplied image is spent against OUR pull secret, so the namespace
 	// is checked before it reaches a pod spec. See image.go — unchecked, this
@@ -289,7 +292,7 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, spec
 	// our nodes, so an unset ttl takes the class default rather than forever.
 	ttl := spec.TTLSec
 	if ttl <= 0 {
-		ttl = defaultTTL[class]
+		ttl = classes[class].ttl
 	}
 	if ttl > maxTTL {
 		ttl = maxTTL

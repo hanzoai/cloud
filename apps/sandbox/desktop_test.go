@@ -22,49 +22,105 @@ func podFor(t *testing.T, class string) map[string]any {
 	return c
 }
 
-func TestDesktopRunsItsImageAndTheOthersSleep(t *testing.T) {
-	// THE REGRESSION. A command here shadows the image's CMD, and the desktop
-	// entrypoint is the only thing that starts Xvfb. Its absence is not an error
-	// anywhere: the pod runs, exec answers, and the class is silently `dev`.
-	if cmd, stated := podFor(t, "desktop")["command"]; stated {
-		t.Errorf("desktop states a command (%v), which replaces the image CMD that starts its screen", cmd)
-	}
-	// The other two are a place to run commands, not a program. They must keep
-	// sleeping — deferring to the image would make the pod's lifetime depend on
-	// whatever CMD an operator-named image happens to carry.
-	for _, class := range []string{"exec", "dev"} {
-		cmd, stated := podFor(t, class)["command"]
+// Both cases below QUANTIFY OVER THE TABLE rather than naming desktop. They used
+// to say `"desktop"` and `[]string{"exec", "dev"}`, which is the same list of
+// classes written twice more — so `android`, which also runs its image, would
+// have been asserted to sleep and would have failed a test that was right about
+// the old set and wrong about the new one. Reading `classes[c].screen` makes the
+// assertion follow the fact it is guarding.
+func TestAScreenRunsItsImageAndTheRestSleep(t *testing.T) {
+	for name, k := range classes {
+		cmd, stated := podFor(t, name)["command"]
+		if k.screen {
+			// THE REGRESSION. A command here shadows the image's CMD, and that
+			// entrypoint is the only thing that starts Xvfb. Its absence is not an
+			// error anywhere: the pod runs, exec answers, and the class is silently
+			// `dev`.
+			if stated {
+				t.Errorf("%s states a command (%v), which replaces the image CMD that starts its screen", name, cmd)
+			}
+			continue
+		}
+		// A class with no screen is a place to run commands, not a program. It must
+		// keep sleeping — deferring to the image would make the pod's lifetime
+		// depend on whatever CMD an operator-named image happens to carry.
 		if !stated {
-			t.Errorf("%s: no command, so its lifetime is the image's to decide", class)
+			t.Errorf("%s: no command, so its lifetime is the image's to decide", name)
 			continue
 		}
 		got, ok := cmd.([]any)
 		if !ok || len(got) != 2 || got[0] != "sleep" || got[1] != "infinity" {
-			t.Errorf("%s: command = %v, want [sleep infinity]", class, cmd)
+			t.Errorf("%s: command = %v, want [sleep infinity]", name, cmd)
 		}
 	}
 }
 
-func TestOnlyADesktopDeclaresAScreen(t *testing.T) {
-	ports, stated := podFor(t, "desktop")["ports"]
-	if !stated {
-		t.Fatal("desktop declares no ports, so nothing names the screen it serves")
-	}
-	got := map[string]int64{}
-	for _, p := range ports.([]any) {
-		m := p.(map[string]any)
-		got[m["name"].(string)] = m["containerPort"].(int64)
-	}
-	for name, want := range map[string]int64{"vnc": 5900, "novnc": 6080} {
-		if got[name] != want {
-			t.Errorf("desktop port %q = %d, want %d", name, got[name], want)
+func TestOnlyAScreenDeclaresOne(t *testing.T) {
+	for name, k := range classes {
+		ports, stated := podFor(t, name)["ports"]
+		if !k.screen {
+			// A port on a class with nothing listening is a claim the image does not
+			// keep. exec and dev have no X server and no VNC bridge in them at all.
+			if stated {
+				t.Errorf("%s declares ports %v, but nothing in that image listens", name, ports)
+			}
+			continue
+		}
+		if !stated {
+			t.Errorf("%s declares no ports, so nothing names the screen it serves", name)
+			continue
+		}
+		got := map[string]int64{}
+		for _, p := range ports.([]any) {
+			m := p.(map[string]any)
+			got[m["name"].(string)] = m["containerPort"].(int64)
+		}
+		for port, want := range map[string]int64{"vnc": 5900, "novnc": 6080} {
+			if got[port] != want {
+				t.Errorf("%s port %q = %d, want %d", name, port, got[port], want)
+			}
 		}
 	}
-	// A port on a class with nothing listening is a claim the image does not
-	// keep. exec and dev have no X server and no VNC bridge in them at all.
-	for _, class := range []string{"exec", "dev"} {
-		if p, stated := podFor(t, class)["ports"]; stated {
-			t.Errorf("%s declares ports %v, but nothing in that image listens", class, p)
+}
+
+// A class that names a device gets it on BOTH sides, because Kubernetes admits
+// an extended resource only when request and limit agree — and a class that does
+// not name one must never be handed it, since asking for a device is also asking
+// to be scheduled where it exists.
+func TestOnlyAClassThatNeedsAMachineAsksForOne(t *testing.T) {
+	for name, k := range classes {
+		res := podFor(t, name)["resources"].(map[string]any)
+		for _, side := range []string{"requests", "limits"} {
+			got, asked := res[side].(map[string]any)[kvmResource]
+			switch {
+			case k.kvm && !asked:
+				t.Errorf("%s: no %s in %s, so it schedules onto a node that cannot run it", name, kvmResource, side)
+			case k.kvm && got != int64(1):
+				t.Errorf("%s: %s %s = %v, want 1", name, side, kvmResource, got)
+			case !k.kvm && asked:
+				t.Errorf("%s: asks for %s it does not need, which narrows where it may run", name, kvmResource)
+			}
+		}
+	}
+}
+
+// A class that states an envelope gets that envelope on both sides — which makes
+// it Guaranteed QoS, and for the one class holding a whole emulated machine that
+// is the point: node-pressure eviction takes the pod that asked for least first,
+// and it ignores PodDisruptionBudgets on the way past.
+func TestAStatedEnvelopeIsTheOneThePodGets(t *testing.T) {
+	for name, k := range classes {
+		if k.mem == "" {
+			continue
+		}
+		res := podFor(t, name)["resources"].(map[string]any)
+		for _, side := range []string{"requests", "limits"} {
+			m := res[side].(map[string]any)
+			for field, want := range map[string]string{"cpu": k.cpu, "memory": k.mem, "ephemeral-storage": k.disk} {
+				if m[field] != want {
+					t.Errorf("%s: %s.%s = %v, want %q", name, side, field, m[field], want)
+				}
+			}
 		}
 	}
 }
@@ -74,7 +130,7 @@ func TestEveryClassStillDropsEverythingAndRunsAsNobody(t *testing.T) {
 	// its own process is exactly the one somebody would be tempted to hand a
 	// capability or a root uid to, so the shared floor is asserted per class
 	// rather than assumed from the one that has no process of its own.
-	for _, class := range []string{"exec", "dev", "desktop"} {
+	for _, class := range []string{"exec", "dev", "desktop", "android"} {
 		sc, ok := podFor(t, class)["securityContext"].(map[string]any)
 		if !ok {
 			t.Fatalf("%s: no container securityContext", class)
