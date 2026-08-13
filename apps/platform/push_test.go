@@ -46,9 +46,12 @@ func TestBuildFromPush_LaunchesMatchingApp(t *testing.T) {
 
 	// CloneURL carries the ".git" suffix; the app RepoURL does not — sameRepo must
 	// still match after normalization.
-	err := buildFromPush(s, ctx, mkPushEvent("acme", "site", "main", "deadbeefcafe0123456789abcdef0123456789ab", clone))
+	n, err := buildFromPush(s, ctx, mkPushEvent("acme", "site", "main", "deadbeefcafe0123456789abcdef0123456789ab", clone))
 	if err != nil {
 		t.Fatalf("buildFromPush: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("matching app launched %d builds, want 1", n)
 	}
 	got, err := s.State.store.GetApplicationByID(ctx, "acme", a.ID)
 	if err != nil {
@@ -73,12 +76,16 @@ func TestBuildFromPush_NoMatchIsNoop(t *testing.T) {
 	a := seedGitApp(t, s, "acme", "site", "https://git.hanzo.ai/v1/git/acme/site", "main")
 
 	// Right repo, wrong branch.
-	if err := buildFromPush(s, ctx, mkPushEvent("acme", "site", "feature", "abc1230000000000000000000000000000000000", "https://git.hanzo.ai/v1/git/acme/site.git")); err != nil {
+	if n, err := buildFromPush(s, ctx, mkPushEvent("acme", "site", "feature", "abc1230000000000000000000000000000000000", "https://git.hanzo.ai/v1/git/acme/site.git")); err != nil {
 		t.Fatalf("buildFromPush (wrong branch): %v", err)
+	} else if n != 0 {
+		t.Fatalf("wrong branch launched %d builds, want 0", n)
 	}
 	// Right branch, different repo.
-	if err := buildFromPush(s, ctx, mkPushEvent("acme", "other", "main", "abc1230000000000000000000000000000000000", "https://git.hanzo.ai/v1/git/acme/other.git")); err != nil {
+	if n, err := buildFromPush(s, ctx, mkPushEvent("acme", "other", "main", "abc1230000000000000000000000000000000000", "https://git.hanzo.ai/v1/git/acme/other.git")); err != nil {
 		t.Fatalf("buildFromPush (other repo): %v", err)
+	} else if n != 0 {
+		t.Fatalf("other repo launched %d builds, want 0", n)
 	}
 	deps, err := s.State.store.ListDeployments(ctx, "acme", a.ID)
 	if err != nil {
@@ -101,8 +108,10 @@ func TestBuildFromPush_IgnoresImageApp(t *testing.T) {
 	if err := s.State.store.CreateApplication(ctx, img); err != nil {
 		t.Fatalf("seed image app: %v", err)
 	}
-	if err := buildFromPush(s, ctx, mkPushEvent("acme", "api", "main", "abc1230000000000000000000000000000000000", "https://git.hanzo.ai/v1/git/acme/api.git")); err != nil {
+	if n, err := buildFromPush(s, ctx, mkPushEvent("acme", "api", "main", "abc1230000000000000000000000000000000000", "https://git.hanzo.ai/v1/git/acme/api.git")); err != nil {
 		t.Fatalf("buildFromPush: %v", err)
+	} else if n != 0 {
+		t.Fatalf("image app launched %d builds, want 0", n)
 	}
 	deps, err := s.State.store.ListDeployments(ctx, "acme", img.ID)
 	if err != nil {
@@ -124,8 +133,10 @@ func TestBuildFromPush_TagDoesNotRebuildBranchApp(t *testing.T) {
 
 	ev := mkPushEvent("acme", "site", "main", "abc1230000000000000000000000000000000000", "https://git.hanzo.ai/v1/git/acme/site.git")
 	ev.Ref = "refs/tags/main"
-	if err := buildFromPush(s, ctx, ev); err != nil {
+	if n, err := buildFromPush(s, ctx, ev); err != nil {
 		t.Fatalf("buildFromPush (tag): %v", err)
+	} else if n != 0 {
+		t.Fatalf("tag push launched %d builds, want 0", n)
 	}
 	deps, err := s.State.store.ListDeployments(ctx, "acme", a.ID)
 	if err != nil {
