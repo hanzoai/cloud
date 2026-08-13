@@ -191,8 +191,15 @@ type usageData struct {
 
 // usageIn is the GET /v1/admin/usage query.
 type usageIn struct {
-	// Org reads ONE tenant's month-to-date total instead of the fleet sum. Honoured
+	// Org reads ONE tenant's trailing-30-day total instead of the fleet sum. Honoured
 	// for a SuperAdmin only — a white-label admin always reads their own org.
+	//
+	// The window is the one core.OrgMoney returns, and it is what the operator board
+	// beside this already labelled ("Daily, last 30 days"). The wire used to say
+	// month-to-date while that UI said 30 days; they agree now. This comment is
+	// REGENERATED into plugin/admin/openapi.json and openapi.yaml as the ?org
+	// parameter description, so a stale word here ships as a contradiction inside
+	// one spec file — which is the drift this whole change set exists to remove.
 	Org string `json:"org"`
 }
 
