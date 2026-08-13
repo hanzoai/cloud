@@ -352,10 +352,11 @@ func (o ops) modelList(ctx context.Context, route string) (*pricingModelList, er
 	return &pricingModelList{Models: gated, Total: len(gated), Updated: payload.Updated}, nil
 }
 
-// ListModels returns the whole model catalog — Hanzo's own Zen models and every
-// third-party model — filtered to what the caller's org may see. A model an
-// admin has disabled is absent; one in beta appears only for an org granted it.
-// A SuperAdmin sees every model, each annotated with its enablement state.
+// ListModels returns the whole model catalog — every model the gateway serves,
+// Zen and third-party alike — filtered to what the caller's org may see. A
+// model an admin has disabled is absent; one in beta appears only for an org
+// granted it. A SuperAdmin sees every model, each annotated with its
+// enablement state.
 func (o ops) listModels(ctx context.Context, _ *pricingNoInput) (*pricingModelList, error) {
 	return o.modelList(ctx, "models")
 }

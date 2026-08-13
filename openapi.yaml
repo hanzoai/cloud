@@ -105567,10 +105567,11 @@ paths:
   /v1/pricing/models:
     get:
       description: |-
-        Returns the whole model catalog — Hanzo's own Zen models and every
-        third-party model — filtered to what the caller's org may see. A model an
-        admin has disabled is absent; one in beta appears only for an org granted it.
-        A SuperAdmin sees every model, each annotated with its enablement state.
+        Returns the whole model catalog — every model the gateway serves,
+        Zen and third-party alike — filtered to what the caller's org may see. A
+        model an admin has disabled is absent; one in beta appears only for an org
+        granted it. A SuperAdmin sees every model, each annotated with its
+        enablement state.
       operationId: get_pricing_models
       responses:
         "200":
@@ -105579,8 +105580,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/pricingModelList'
           description: ok
-      summary: Returns the whole model catalog — Hanzo's own Zen models and every
-        third-party model — filtered to what the caller's org may see.
+      summary: Returns the whole model catalog — every model the gateway serves, Zen
+        and third-party alike — filtered to what the caller's org may see.
       tags:
       - pricing
       x-app: pricing
