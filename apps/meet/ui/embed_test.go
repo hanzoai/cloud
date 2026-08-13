@@ -141,6 +141,61 @@ func TestHandlerServesTheShellAndItsAssets(t *testing.T) {
 	}
 }
 
+// TestSignInStaysOnThisMount pins the two paths the sign-in round trip is made
+// of against the prefix this binary serves the bundle on.
+//
+// Both are absolute paths held as runtime strings, and a runtime string is the
+// one thing Vite's `base` cannot reach: it rewrites asset URLs and even the
+// root-relative hrefs in index.html, so everything else here tracks the mount by
+// construction and these two track it only if someone wrote them that way.
+//
+// One of them did not, and it took sign-in down. The bundle shipped a bare
+// "/login", which under this mount is not this app at all — it is cloud's own
+// console sign-in, a different application with its own IAM client and its own
+// storage keys. An unauthenticated visitor was handed off to it, it opened the
+// OIDC transaction and stored the PKCE verifier under keys it does not share,
+// IAM returned the code to /meet/callback, and the gate here had nothing to
+// redeem with. Measured in production: "Missing PKCE code verifier", on a screen
+// with no way off it.
+//
+// Nothing about that is visible in the source, where "/login" is a perfectly
+// ordinary path — it is wrong only RELATIVE TO THE MOUNT, which the source does
+// not know and this package does. So it is pinned on the bytes, like the
+// double-bundle below.
+//
+// (A bare "/login" also appears in the gate's own chunk as the default value of
+// a prop this app overrides. It is inert, and it is not what these assertions
+// are about: they name the app's own two constants, which carry the prefix or
+// the round trip breaks.)
+func TestSignInStaysOnThisMount(t *testing.T) {
+	var js strings.Builder
+	_ = fs.WalkDir(FS(), "assets", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".js") {
+			return nil
+		}
+		b, err := fs.ReadFile(FS(), p)
+		if err == nil {
+			js.Write(b)
+		}
+		return nil
+	})
+	bundle := js.String()
+	if bundle == "" {
+		t.Fatal("no javascript in the build")
+	}
+
+	// Where an unauthenticated visitor is sent. Its absence means the bundle is
+	// sending them to the ROOT of this host, which this app does not own.
+	if !strings.Contains(bundle, "/meet/login") {
+		t.Error("the bundle carries no /meet/login — sign-in is being handed to whatever answers /login on this host, which is a different application with a different IAM client, and the callback will have no PKCE verifier to redeem")
+	}
+	// Where IAM sends them back. This one is also the URI REGISTERED on the
+	// hanzo-cloud IAM app, so it is refused outright if it ever stops matching.
+	if !strings.Contains(bundle, "/meet/callback") {
+		t.Error("the bundle carries no /meet/callback — IAM refuses an authorize request naming any other redirect_uri, so sign-in cannot start at all")
+	}
+}
+
 // TestTheAuthModuleIsBundledOnce is a regression test for a bug that only exists
 // in the SHIPPED artifact, which is why it is asserted here and not in the SPA's
 // own suite.
