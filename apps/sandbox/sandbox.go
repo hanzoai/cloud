@@ -565,4 +565,48 @@ func init() {
 			"plain shell again when the image has no tmux. Every step is a preference and none "+
 			"is a requirement: whatever else the image carries — the hanzo CLI included — is a "+
 			"command to type, never a condition for getting a prompt.")
+
+	// The screen's three, beside the terminal's three. They were published with no
+	// prose at all — the sentence lives on each handler's doc comment, but those
+	// routes are registered on the GROUP (`/:id/screen/ws`) while this document
+	// addresses them as the fleet routes them, so the lift landed under a key
+	// nothing asks for. Stated here, at the address, exactly as the terminal's are.
+	openapi.Describe("/v1/sandboxes/:id/screen/ticket", http.MethodPost,
+		"Open a screen",
+		"Mints a SINGLE-USE ticket for this sandbox's DISPLAY and returns "+
+			"`{ticket, expiresIn, url}`, where url is the desktop PAGE with the ticket already "+
+			"on it. The same ticket as the terminal's, minted for a different door.\n\n"+
+			"A ticket says which org and which sandbox, and the terminal and the screen are two "+
+			"views of one machine: a caller who may type in a sandbox may look at it. What the "+
+			"door decides is the URL handed back, which is the only part that differs.\n\n"+
+			"Mint one per screen, and mint a fresh one to reconnect.")
+	openapi.Describe("/v1/sandboxes/:id/screen", http.MethodGet,
+		"The screen, as a page",
+		"A complete, self-contained desktop — noVNC inline, no other origin — that opens its "+
+			"own socket and draws this sandbox's display. Embed it in an iframe and there is "+
+			"nothing else to build.\n\n"+
+			"`ticket` is the credential from the POST above, carried through to the socket. The "+
+			"page is NOT gated: it is inert markup and does not redeem the ticket, because a "+
+			"ticket is spent once and a page that spent it would hold a credential that no "+
+			"longer opens anything. `frame-ancestors` admits our own brands' hosts and nothing "+
+			"further.\n\n"+
+			"It is served for every class, not only for `desktop`. The class is a fact about the "+
+			"image, and a sandbox with no VNC server already fails exactly — the connection is "+
+			"refused and the page says so — where a check here would be a second opinion about "+
+			"what is running inside a pod, formed from a label rather than from the pod.")
+	openapi.Describe("/v1/sandboxes/:id/screen/ws", http.MethodGet,
+		"The screen, as a socket",
+		"Upgrades to a WebSocket carrying RFB — the VNC wire protocol — from the sandbox's "+
+			"display, for a host that brings its own client. Requires `ticket`; a missing, "+
+			"expired or already-spent one answers 401 without upgrading.\n\n"+
+			"THE WIRE IS RFB, in BINARY frames both ways, and it is not interpreted here: this "+
+			"is a pipe between the caller's client and the server inside the pod.\n\n"+
+			"THE PIXELS COME OUT THROUGH THE EXEC CHANNEL. The display binds 127.0.0.1 only and "+
+			"deliberately nothing else, so there is no address to dial — `socat` joins the "+
+			"stream to that loopback port over the same Kubernetes exec subresource every other "+
+			"call into a sandbox uses. One way in, one thing to authorize, nothing further "+
+			"exposed.\n\n"+
+			"The window size is ignored. A browser pane is not the X server's geometry, and the "+
+			"client scales what it is given rather than asking a server with no RandR to resize "+
+			"itself.")
 }
