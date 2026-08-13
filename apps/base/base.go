@@ -93,6 +93,44 @@ const apiPrefix = "/v1/base"
 // with any org's per-org directory.
 const platformSeg = "_platform"
 
+// Placement answers where one Base keeps its data. A Base is embedded SQLite,
+// so the empty answer — which is also what no placement at all gives — is the
+// right one for every Base until a host says otherwise.
+//
+// cloud answers this because cloud is the host. Whether an org's Base belongs
+// on a server, and which one, follows from what cloud provisioned for that org
+// (apps/provisioning already mints exactly such a postgres:// DSN for its `sql`
+// add-on) and from who runs that server. Base cannot know either, which is why
+// it stopped reading the answer from the process environment: one Base per
+// tenant means the answer is per tenant, and only the host holds it.
+//
+// Asked with the org for a tenant's Base, and with the empty org for the
+// platform's own — the one Base here that belongs to no tenant. An empty org is
+// already refused wherever a tenant is expected (pool.acquire), so the two can
+// never be confused.
+type Placement func(org string) (dataDSN, auxDSN string)
+
+// placement is the host's answer, nil until a host gives one. Package-level
+// like sites.SetBaseHostHandler, because it is one deployment-wide policy
+// rather than a per-request choice.
+var placement Placement
+
+// SetPlacement binds the resolver consulted whenever a Base is opened. Call it
+// before Mount. Nil — the default — leaves every Base embedded, which is what
+// every Base is today.
+func SetPlacement(p Placement) { placement = p }
+
+// appConfig builds the config for one Base, asking the host where that Base
+// keeps its data. It is the ONE place this package constructs a baseapp.Config,
+// so no Base can be opened without the question being put.
+func appConfig(dir, org string) baseapp.Config {
+	cfg := baseapp.Config{DefaultDataDir: dir, HideStartBanner: true}
+	if placement != nil {
+		cfg.DataDSN, cfg.AuxDSN = placement(org)
+	}
+	return cfg
+}
+
 func embedEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(embedEnv))) {
 	case "1", "true", "yes":
@@ -254,7 +292,7 @@ func newPlatformApp(dir string) (*baseapp.Base, http.Handler, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	bapp := baseapp.NewWithConfig(baseapp.Config{DefaultDataDir: dir, HideStartBanner: true})
+	bapp := baseapp.NewWithConfig(appConfig(dir, ""))
 	waitlist.MustRegister(bapp, waitlist.Config{Enabled: true})
 	if err := bapp.Bootstrap(); err != nil {
 		return nil, nil, fmt.Errorf("bootstrap: %w", err)
