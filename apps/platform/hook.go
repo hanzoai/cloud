@@ -90,14 +90,23 @@ const (
 	zeroSHA = "0000000000000000000000000000000000000000"
 )
 
-// The forge has renamed its header family twice (X-Gogs-, X-Gitea-, X-Forgejo-)
-// and emits the GitHub spelling beside its own for receivers written against
-// that server. All of them carry the SAME hex HMAC-SHA256 of the body; the
-// GitHub one prefixes it. A receiver that knew one spelling would reject every
-// delivery the day the forge picked another, so the ONE verifier knows them all
-// — the same shape cloud.IsBotActor takes for the two wires that spell a bot
-// differently.
-var sigHeaders = []string{"X-Forgejo-Signature", "X-Gitea-Signature", "X-Hub-Signature-256"}
+// Every header this forge signs with, in the order it owns them. All carry the
+// SAME hex HMAC-SHA256 of the body; the GitHub one prefixes it with "sha256=".
+//
+// X-Git-Signature FIRST, because it is the one the forge itself minted: Hanzo Git
+// is a Gitea fork that rebranded the family, and its own delivery code emits this
+// spelling under its own test. X-Gitea-Signature is the inheritance it still
+// sends, and X-Hub-Signature-256 the GitHub-compatible alias it sends for
+// receivers written against that server.
+//
+// The list is the forge's ACTUAL wire and not a guess at it. An X-Forgejo-
+// spelling stood here and was removed: upstream Forgejo is not what this
+// deployment runs, and a header nobody sends is a line that reads like coverage
+// while providing none. If the fork completes its stated rename of the X-Gitea-
+// family to X-Webhook-, that spelling is added HERE, with a delivery to show for
+// it — the cost of a wrong guess in this list is that every push 401s and the
+// answer blames the secret.
+var sigHeaders = []string{"X-Git-Signature", "X-Gitea-Signature", "X-Hub-Signature-256"}
 
 // push is the subset of the forge's push payload this door acts on. Owner and
 // pusher each carry both spellings the payload has used across forge versions
@@ -179,31 +188,89 @@ func init() {
 			"already landed on the forge is not redelivered against us.")
 }
 
-// secret is the verifying key, held for [hookFresh].
+// errUnread is the answer while the very first read is still in flight: there is
+// no held outcome to serve and inventing one would be the bypass.
+var errUnread = fmt.Errorf("%s has not been read yet", forge.WebhookRef)
+
+// secret is the verifying key, and it holds the OUTCOME of the last read —
+// the value or the failure — for [hookFresh].
 //
-// The read is under the lock rather than around it, so a flood arriving on a cold
-// or expired key becomes ONE in-flight KMS read and not one per request — this
-// door is unauthenticated until the signature is checked, and the check is what
-// needs the key.
+// HOLDING THE FAILURE IS THE POINT, and it is what makes this door survivable
+// while it is unauthenticated. Verifying needs the key, so the key is read before
+// any caller has proved anything; and the state every deployment STARTS in is the
+// ref unprovisioned. Caching only success meant that state turned a flood of
+// anonymous POSTs into a flood of KMS reads, from the process that also owns
+// builds, deploys and the reconciler. The window now bounds the read whichever
+// way it goes: one per window, not one per request.
+//
+// THE KMS CALL IS OUTSIDE THE LOCK, and a caller arriving during a refresh is
+// answered from what is held rather than queued behind it. Holding the lock
+// across the call is a correct single-flight and the wrong one to ship here: it
+// costs one round trip per window instead of one per request, but every arrival
+// inside that trip is a goroutine parked in the build process — which is the
+// pile-up, not a fix for it.
 type secret struct {
-	mu    sync.Mutex
-	value string
-	when  time.Time
+	mu   sync.Mutex
+	v    string
+	err  error
+	when time.Time // zero until the first read has completed
+	busy bool      // a refresh is in flight; others read what is held
 }
 
-// read returns the forge's webhook secret. Fail-closed at every step: no KMS, a
-// KMS that cannot answer, or an empty secret each return an error and never a
-// value, because a door that starts builds must refuse rather than trust. The
-// error names the REF and never the value — a ref is a path and is safe to log.
+// read returns the forge's webhook secret, refreshing it at most once per
+// [hookFresh] however the last read turned out.
+//
+// Fail-closed at every step: no KMS, a KMS that cannot answer, an empty secret,
+// or a refresh still in flight with nothing held yet each return an error and
+// never a value, because a door that starts builds must refuse rather than trust.
+// The error names the REF and never the value — a ref is a path and is safe to log.
 func (k *secret) read(s *cloud.Service[state], ctx context.Context) (string, error) {
+	if v, err, mine := k.claim(); !mine {
+		return v, err
+	}
+	v, err := fetch(s, ctx)
+	k.settle(v, err)
+	return v, err
+}
+
+// claim answers from what is held, and reports whether THIS caller is the one that
+// must go and refresh it. Exactly one caller is, per window.
+func (k *secret) claim() (string, error, bool) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	if k.value != "" && time.Since(k.when) < hookFresh {
-		return k.value, nil
+	// Someone is already fetching, or what is held is still fresh: answer now,
+	// without a call and without waiting for one.
+	if k.busy || time.Since(k.when) < hookFresh {
+		if k.when.IsZero() {
+			return "", errUnread, false
+		}
+		return k.v, k.err, false
 	}
+	k.busy = true
+	return "", nil, true
+}
+
+// settle records an outcome and releases the refresh.
+func (k *secret) settle(v string, err error) {
+	k.mu.Lock()
+	k.v, k.err, k.when, k.busy = v, err, time.Now(), false
+	k.mu.Unlock()
+}
+
+// fetch is the KMS read itself.
+//
+// It runs on a context DETACHED from the request's, with its own bound. The
+// answer is shared process state, so a client that hangs up mid-read must not
+// cancel it — cancelled, that error is what gets held for the window, and one
+// disconnecting caller would 503 every legitimate delivery behind it. The bound
+// is there because a refresh nobody finishes leaves the door answering errUnread
+// forever.
+func fetch(s *cloud.Service[state], ctx context.Context) (string, error) {
 	if s.KMS == nil {
 		return "", fmt.Errorf("no KMS client mounted: cannot read %s", forge.WebhookRef)
 	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), hookRead)
+	defer cancel()
 	b, err := s.KMS.GetSecret(ctx, forge.WebhookRef)
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", forge.WebhookRef, err)
@@ -212,7 +279,6 @@ func (k *secret) read(s *cloud.Service[state], ctx context.Context) (string, err
 	if v == "" {
 		return "", fmt.Errorf("%s is empty", forge.WebhookRef)
 	}
-	k.value, k.when = v, time.Now()
 	return v, nil
 }
 
