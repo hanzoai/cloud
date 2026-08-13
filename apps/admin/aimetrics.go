@@ -84,13 +84,16 @@ const (
 
 // aiMetrics is the whole AI-metrics board payload.
 type aiMetrics struct {
-	Range        string           `json:"range"`
-	Start        string           `json:"start"`
-	End          string           `json:"end"`
-	O11yAI       aimO11yAI        `json:"o11yAi"`
-	Usage        aimUsage         `json:"usage"`
-	Evals        aimEvals         `json:"evals"`
-	TopModels    []aimModelStat   `json:"topModels"`    // cloud_usage per-model (populated today)
+	Range     string         `json:"range"`
+	Start     string         `json:"start"`
+	End       string         `json:"end"`
+	O11yAI    aimO11yAI      `json:"o11yAi"`
+	Usage     aimUsage       `json:"usage"`
+	Evals     aimEvals       `json:"evals"`
+	TopModels []aimModelStat `json:"topModels"` // cloud_usage per-model (populated today)
+	// TopActors is per-PRINCIPAL spend from the same ledger — whose bill it is,
+	// which the per-model board cannot answer.
+	TopActors    []aimActorStat   `json:"topActors"`
 	O11yAIModels []aimLfModelStat `json:"o11yAiModels"` // gen_ai spans per-model
 	ScoreNames   []aimScoreStat   `json:"scoreNames"`   // eval_scores per score-name
 	EvalRuns     []aimRunStat     `json:"evalRuns"`     // recent eval runs (progress)
@@ -136,6 +139,27 @@ type aimModelStat struct {
 	Requests  int64  `json:"requests"`
 	Tokens    int64  `json:"tokens"`
 	CostCents int64  `json:"costCents"`
+}
+
+// aimActorStat is one row of the per-actor spend leaderboard (cloud_usage) — the
+// answer to "whose spend is this", which the per-model board cannot give.
+//
+// Actor is the ledger's `user_id`, the "<org>/<sub>" the gateway recorded. A row
+// naming an APPLICATION rather than a person is not hidden here: it is the signal
+// worth reading, since an application is not somebody who can be asked about a
+// bill. It is fleet-wide and therefore SuperAdmin-only, like every other figure on
+// this board — the op's first line is core.Admit.
+type aimActorStat struct {
+	// Actor is the principal the ledger recorded, "<org>/<sub>". A value naming
+	// an IAM APPLICATION rather than a person means that spend has no human
+	// owner — which is the row to read first.
+	Actor string `json:"actor"`
+	// Requests is how many calls that principal made in the window.
+	Requests int64 `json:"requests"`
+	// Tokens is the total tokens those calls consumed.
+	Tokens int64 `json:"tokens"`
+	// CostCents is what they cost, in US cents, as the ledger recorded it.
+	CostCents int64 `json:"costCents"`
 }
 
 // aimLfModelStat is one row of the per-model gen_ai-span leaderboard.
@@ -195,6 +219,7 @@ func aimetrics(ctx context.Context, in *rangeIn) (*aimetricsOut, error) {
 		Start:        since.Format(time.RFC3339),
 		End:          time.Now().UTC().Format(time.RFC3339),
 		TopModels:    []aimModelStat{},
+		TopActors:    []aimActorStat{},
 		O11yAIModels: []aimLfModelStat{},
 		ScoreNames:   []aimScoreStat{},
 		EvalRuns:     []aimRunStat{},
@@ -235,6 +260,9 @@ func aimetrics(ctx context.Context, in *rangeIn) (*aimetricsOut, error) {
 	}
 	if rows, err := datastore.Query(ctx, aimTopModelsSQL(), sinceTS); err == nil {
 		payload.TopModels = aimModelsFromRows(rows)
+	}
+	if rows, err := datastore.Query(ctx, aimTopActorsSQL(), sinceTS); err == nil {
+		payload.TopActors = aimActorsFromRows(rows)
 	}
 
 	// ── Evals (fleet): traces + scores + progress ──
@@ -294,6 +322,18 @@ func aimTopModelsSQL() string {
 	return "SELECT model, count() AS requests, sum(total_tokens) AS tokens, " +
 		"sum(cost_cents) AS cost_cents FROM " + aimUsageTable +
 		" WHERE timestamp >= ? AND model != '' GROUP BY model ORDER BY requests DESC LIMIT " + strconv.Itoa(aimTopN)
+}
+
+// aimTopActorsSQL ranks the ledger by SPEND rather than by traffic, because the
+// question this row answers is whose bill it is — a cheap chatty caller is not
+// the one an operator is looking for. An unattributed row (empty user_id) names
+// nobody and is left out; a row naming an application is not, since that is the
+// finding.
+func aimTopActorsSQL() string {
+	return "SELECT user_id AS actor, count() AS requests, sum(total_tokens) AS tokens, " +
+		"sum(cost_cents) AS cost_cents FROM " + aimUsageTable +
+		" WHERE timestamp >= ? AND user_id != '' GROUP BY actor " +
+		"ORDER BY cost_cents DESC, requests DESC LIMIT " + strconv.Itoa(aimTopN)
 }
 
 func aimEvalTracesSQL() string {
@@ -356,6 +396,19 @@ func aimModelsFromRows(rows []map[string]any) []aimModelStat {
 	for _, r := range rows {
 		out = append(out, aimModelStat{
 			Model:     chStr(r["model"]),
+			Requests:  chInt64(r["requests"]),
+			Tokens:    chInt64(r["tokens"]),
+			CostCents: chInt64(r["cost_cents"]),
+		})
+	}
+	return out
+}
+
+func aimActorsFromRows(rows []map[string]any) []aimActorStat {
+	out := make([]aimActorStat, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, aimActorStat{
+			Actor:     chStr(r["actor"]),
 			Requests:  chInt64(r["requests"]),
 			Tokens:    chInt64(r["tokens"]),
 			CostCents: chInt64(r["cost_cents"]),
