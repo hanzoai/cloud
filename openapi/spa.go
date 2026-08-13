@@ -5,6 +5,11 @@
 
 package openapi
 
+import (
+	"fmt"
+	"strings"
+)
+
 // DescribeSPA declares the prose for the two addresses an embedded single-page
 // app serves: the prefix itself and everything under it.
 //
@@ -28,6 +33,7 @@ package openapi
 // reads directly after "The ".
 func DescribeSPA(prefix, name string) {
 	api := "/v1" + prefix
+	identify(prefix)
 
 	// The sentence the ten operations share. It states the policy spa.Handler
 	// implements, so a caller reading any one of them learns the whole contract.
@@ -74,3 +80,41 @@ func DescribeSPA(prefix, name string) {
 // GET and HEAD and refuses everything else 405, so those two carry the prose that
 // describes serving and the rest fall to the refusal above.
 func serves(method string) bool { return method == "GET" || method == "HEAD" }
+
+// identify names the UI's two addresses, because they are the one case where a
+// derived id is not unique.
+//
+// An embedded UI is served at the bare prefix and its API at "/v1"+prefix, and
+// zip.ID drops a leading version — it says nothing that every address carries.
+// That holds until something else claims the unversioned path, and here something
+// does: GET /tasks and GET /v1/tasks both derive "get_tasks", which is not a
+// document that can be generated. It stopped every app that embeds a UI from
+// describing itself at all.
+//
+// The UI is what moves, and the API keeps the plain name a caller expects,
+// because the API is what an SDK is cut from and a console is not. The suffix is
+// `ui` — what the handler is called at every one of these mounts, and true of a
+// console, a board and a call client alike.
+func identify(prefix string) {
+	stem := strings.ReplaceAll(strings.Trim(prefix, "/"), "/", "_") + "_ui"
+	for _, m := range Methods() {
+		setID(prefix, m, strings.ToLower(m)+"_"+stem)
+		setID(prefix+"/*", m, strings.ToLower(m)+"_"+stem+"_assets")
+	}
+}
+
+// setID declares the operation id for one route. Additive metadata on a route
+// the router carries, exactly like Describe: it cannot add an operation, and an
+// id whose route is not registered renders nowhere.
+func setID(path, method, id string) {
+	key := opKey{method: strings.ToUpper(method), path: path}
+	regMu.Lock()
+	defer regMu.Unlock()
+	reg := registry[key]
+	if reg.id != "" && reg.id != id {
+		panic(fmt.Sprintf("openapi: %s %s is already named %q, cannot also be %q",
+			key.method, key.path, reg.id, id))
+	}
+	reg.id = id
+	registry[key] = reg
+}
