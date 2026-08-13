@@ -258,15 +258,15 @@ func TestRank_TheProductSurfaceFitsATruncatingClient(t *testing.T) {
 	const window = 128
 	head := 0
 	for i, stem := range productStems {
-		if stem == "v1_projects" {
+		if stem == "projects" {
 			head = i
 		}
 	}
 	if head == 0 {
-		t.Fatal("v1_projects left the surface; this test's premise is stale")
+		t.Fatal("projects left the surface; this test's premise is stale")
 	}
 	if head >= len(productStems) {
-		t.Fatal("v1_projects is last; nothing is being kept inside the window")
+		t.Fatal("projects is last; nothing is being kept inside the window")
 	}
 	// The claim is about counts measured elsewhere (see the doc comment); what
 	// is checkable HERE is that the spill-over stems really are at the end.
