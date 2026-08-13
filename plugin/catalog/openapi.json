@@ -18,7 +18,7 @@
   "paths": {
     "/v1/catalog": {
       "get": {
-        "operationId": "get_v1_catalog",
+        "operationId": "get_catalog",
         "summary": "Browse searches AND browses the cross-org catalog: every project, app and site the fleet has built, whichever org built it.",
         "description": "Browse searches AND browses the cross-org catalog: every project, app and site\nthe fleet has built, whichever org built it.\n\nIt reads TWO corpora and returns them as one page — the published,\nworld-readable catalog that every caller sees, plus the caller's OWN org's\nprivate entries when the request carries a validated principal. Each row says\nwhich it came from in `scope`, so a client can warn before sharing a link. An\nanonymous caller simply gets the published one; no filter can ever widen a\ncaller into another tenant's corpus, because the query that would return it is\nnever run for them.\n\nA request with no q is a browse rather than a search, and both answer the same\nshape: the page, the total before paging, and the facet counts over the whole\nmatching set.",
         "tags": [

@@ -18,7 +18,7 @@
   "paths": {
     "/v1/crm/applications": {
       "get": {
-        "operationId": "get_v1_crm_applications",
+        "operationId": "get_crm_applications",
         "summary": "Returns the org's Startup Program applications, newest first.",
         "description": "Returns the org's Startup Program applications, newest first.\nEach carries its AI screen and its stage history; a stage narrows the page to\none pipeline stage.",
         "tags": [
@@ -58,7 +58,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_crm_applications",
+        "operationId": "post_crm_applications",
         "summary": "Apply to the Startup Program from the public form",
         "description": "Files an application to the Startup Program and answers the id and pipeline stage it landed at.\n\nThis is the ONE unauthenticated route in crm. It takes no principal and never reads a caller org: the application is filed against the DEPLOYMENT's own program org — the brand, hanzo unless white-labelled — so there is no tenant to name and none to leak. Reading the application back is staff-only and lives elsewhere.\n\ncompany, contactName and a parseable email are required; everything else is optional context. Re-submitting the same (email, company) REFRESHES the existing application instead of filing a second one, so an impatient applicant cannot duplicate their own lead — that is a 200 where a first submission is a 201. A filled `hp` honeypot field is answered exactly like a success and stored nowhere, so a bot cannot tell a drop from an accept.\n\nFiling is not screening: the application lands at stage `applied` with its AI screen still pending, and the screen runs afterwards on its own clock. A company and contact are also projected into the program org's ordinary CRM lists, best-effort — that projection failing does not fail the application. Bodies over 64 KiB are refused, and submissions are rate-limited.",
         "tags": [
@@ -68,7 +68,7 @@
     },
     "/v1/crm/applications/{id}": {
       "get": {
-        "operationId": "get_v1_crm_applications_by_id",
+        "operationId": "get_crm_applications_by_id",
         "summary": "Returns one Startup Program application with its AI screen and stage history.",
         "description": "Returns one Startup Program application with its AI screen and stage history.\nAn id belonging to another org reads as not found.",
         "tags": [
@@ -100,7 +100,7 @@
         }
       },
       "patch": {
-        "operationId": "patch_v1_crm_applications_by_id",
+        "operationId": "patch_crm_applications_by_id",
         "summary": "Moves one Startup Program application through the pipeline.",
         "description": "Moves one Startup Program application through the pipeline. The\nmove is recorded on the application's timeline, attributed to the calling\nstaff user: it may advance exactly one stage, go back to any earlier stage,\nreject from any non-rejected stage, or reopen a rejected application to\n`applied`; anything else is refused. Rejecting requires a reason. A note with\nno stage change is still recorded.",
         "tags": [
@@ -149,7 +149,7 @@
     },
     "/v1/crm/companies": {
       "get": {
-        "operationId": "get_v1_crm_companies",
+        "operationId": "get_crm_companies",
         "summary": "Returns the caller org's companies, most recently updated first.",
         "description": "Returns the caller org's companies, most recently updated first.",
         "tags": [
@@ -180,7 +180,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_crm_companies",
+        "operationId": "post_crm_companies",
         "summary": "Adds a company to the caller's org and answers 201 with the stored record.",
         "description": "Adds a company to the caller's org and answers 201 with the stored record.\nA name is required; an empty currency defaults to USD.",
         "tags": [
@@ -217,7 +217,7 @@
     },
     "/v1/crm/companies/{id}": {
       "delete": {
-        "operationId": "delete_v1_crm_companies_by_id",
+        "operationId": "delete_crm_companies_by_id",
         "summary": "Removes one of the caller org's companies and answers 204.",
         "description": "Removes one of the caller org's companies and answers 204. Any\ncontact or opportunity in the org that referenced it keeps existing with the\nreference cleared, so nothing is left pointing at a company that is gone.",
         "tags": [
@@ -242,7 +242,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_crm_companies_by_id",
+        "operationId": "get_crm_companies_by_id",
         "summary": "Returns one of the caller org's companies.",
         "description": "Returns one of the caller org's companies. An id belonging to\nanother org reads as not found.",
         "tags": [
@@ -274,7 +274,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_crm_companies_by_id",
+        "operationId": "put_crm_companies_by_id",
         "summary": "Replaces one of the caller org's companies.",
         "description": "Replaces one of the caller org's companies. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required.",
         "tags": [
@@ -323,7 +323,7 @@
     },
     "/v1/crm/contacts": {
       "get": {
-        "operationId": "get_v1_crm_contacts",
+        "operationId": "get_crm_contacts",
         "summary": "Returns the caller org's contacts, most recently updated first.",
         "description": "Returns the caller org's contacts, most recently updated first.\nA companyId narrows the page to the people at that company.",
         "tags": [
@@ -363,7 +363,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_crm_contacts",
+        "operationId": "post_crm_contacts",
         "summary": "Adds a person to the caller's org and answers 201 with the stored record.",
         "description": "Adds a person to the caller's org and answers 201 with the stored record.\nOne of firstName, lastName or email is required, and a companyId must name a\ncompany in the same org.",
         "tags": [
@@ -400,7 +400,7 @@
     },
     "/v1/crm/contacts/{id}": {
       "delete": {
-        "operationId": "delete_v1_crm_contacts_by_id",
+        "operationId": "delete_crm_contacts_by_id",
         "summary": "Removes one of the caller org's contacts and answers 204.",
         "description": "Removes one of the caller org's contacts and answers 204. Any\nopportunity in the org that named it point of contact keeps existing with\nthat reference cleared.",
         "tags": [
@@ -425,7 +425,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_crm_contacts_by_id",
+        "operationId": "get_crm_contacts_by_id",
         "summary": "Returns one of the caller org's contacts.",
         "description": "Returns one of the caller org's contacts. An id belonging to\nanother org reads as not found.",
         "tags": [
@@ -457,7 +457,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_crm_contacts_by_id",
+        "operationId": "put_crm_contacts_by_id",
         "summary": "Replaces one of the caller org's contacts.",
         "description": "Replaces one of the caller org's contacts. Every writable field\nis taken from the request, so a field the request omits is CLEARED — send the\nwhole record. One of firstName, lastName or email is required.",
         "tags": [
@@ -506,7 +506,7 @@
     },
     "/v1/crm/opportunities": {
       "get": {
-        "operationId": "get_v1_crm_opportunities",
+        "operationId": "get_crm_opportunities",
         "summary": "Returns the caller org's deals, most recently updated first.",
         "description": "Returns the caller org's deals, most recently updated first.\nA stage narrows the page to one pipeline stage.",
         "tags": [
@@ -546,7 +546,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_crm_opportunities",
+        "operationId": "post_crm_opportunities",
         "summary": "Adds a deal to the caller's org and answers 201 with the stored record.",
         "description": "Adds a deal to the caller's org and answers 201 with the stored record.\nA name is required; the stage defaults to NEW; companyId and pointOfContactId\nmust name records in the same org.",
         "tags": [
@@ -583,7 +583,7 @@
     },
     "/v1/crm/opportunities/{id}": {
       "delete": {
-        "operationId": "delete_v1_crm_opportunities_by_id",
+        "operationId": "delete_crm_opportunities_by_id",
         "summary": "Removes one of the caller org's deals and answers 204.",
         "description": "Removes one of the caller org's deals and answers 204.",
         "tags": [
@@ -608,7 +608,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_crm_opportunities_by_id",
+        "operationId": "get_crm_opportunities_by_id",
         "summary": "Returns one of the caller org's deals.",
         "description": "Returns one of the caller org's deals. An id belonging to\nanother org reads as not found.",
         "tags": [
@@ -640,7 +640,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_crm_opportunities_by_id",
+        "operationId": "put_crm_opportunities_by_id",
         "summary": "Replaces one of the caller org's deals.",
         "description": "Replaces one of the caller org's deals. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required and the stage must be a pipeline\nstage.",
         "tags": [
@@ -689,7 +689,7 @@
     },
     "/v1/crm/summary": {
       "get": {
-        "operationId": "get_v1_crm_summary",
+        "operationId": "get_crm_summary",
         "summary": "Summary counts the caller org's CRM records: companies, contacts, opportunities.",
         "description": "Summary counts the caller org's CRM records: companies, contacts, opportunities.",
         "tags": [

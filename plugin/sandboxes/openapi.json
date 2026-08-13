@@ -18,7 +18,7 @@
   "paths": {
     "/v1/sandboxes": {
       "get": {
-        "operationId": "get_v1_sandboxes",
+        "operationId": "get_sandboxes",
         "summary": "The sandboxes this org holds",
         "description": "Lists the caller org's sandboxes, newest first. `project` and `status` narrow it, and both are read from the QUERY STRING.\n\nIt answers from the org's own store rather than from the cluster, so a sandbox whose pod has since died still appears, carrying the status it was last known to have. That is deliberate: a lease you are being charged for should not vanish from the list because the thing behind it fell over.",
         "tags": [
@@ -26,7 +26,7 @@
         ]
       },
       "post": {
-        "operationId": "post_v1_sandboxes",
+        "operationId": "post_sandboxes",
         "summary": "Lease a sandbox",
         "description": "Creates a sandbox and returns it. `class` is one of `exec`, `dev` or `desktop`; `dev` and `desktop` are attached to a `project`, which is required for them and names the volume the work persists on. `ttlSec` bounds the lease, and `image` overrides the class default.\n\nThis is the ONLY path that creates cluster objects. The isolation boundary is the pod's runtime class, one field, so what a sandbox is confined by is a deployment decision rather than anything this operation negotiates.",
         "tags": [
@@ -221,7 +221,7 @@
     },
     "/v1/sandboxes/{id}": {
       "delete": {
-        "operationId": "delete_v1_sandboxes_by_id",
+        "operationId": "delete_sandboxes_by_id",
         "summary": "End a sandbox",
         "description": "Stops the sandbox's pod and drops the lease. The VOLUME survives by default, so a `dev` or `desktop` sandbox can be leased again over the same project and find its checkout where it left it.\n\n`purge=1` deletes the volume too. It is opt-in because it is the one part of this that cannot be undone.",
         "tags": [
@@ -239,7 +239,7 @@
         ]
       },
       "get": {
-        "operationId": "get_v1_sandboxes_by_id",
+        "operationId": "get_sandboxes_by_id",
         "summary": "One sandbox",
         "description": "Returns one of the caller org's sandboxes. An id belonging to another org answers 404 and not 403 — a 403 would confirm the id exists, and whether a given sandbox exists is itself a cross-tenant fact.",
         "tags": [
@@ -259,7 +259,7 @@
     },
     "/v1/sandboxes/{id}/exec": {
       "post": {
-        "operationId": "post_v1_sandboxes_by_id_exec",
+        "operationId": "post_sandboxes_by_id_exec",
         "summary": "Run a command in a sandbox",
         "description": "Runs a command inside the sandbox and returns its exit code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status stays 200, because \"the tests failed\" and \"the sandbox is broken\" are different facts.\n\nNOTHING RUNS IN cloud. The command is streamed to the Kubernetes exec subresource of the sandbox's pod, which runs under the gVisor runtime class. The sandbox is addressed by pod NAME through the apiserver, never by address.",
         "tags": [
@@ -279,7 +279,7 @@
     },
     "/v1/sandboxes/{id}/fs": {
       "get": {
-        "operationId": "get_v1_sandboxes_by_id_fs",
+        "operationId": "get_sandboxes_by_id_fs",
         "summary": "Read a file, or list a directory",
         "description": "Reads one file from the sandbox's project directory as text, or lists the entries when the path names a directory. Paths resolve under the project root and a path that climbs out is refused rather than rewritten.",
         "tags": [
@@ -297,7 +297,7 @@
         ]
       },
       "post": {
-        "operationId": "post_v1_sandboxes_by_id_fs",
+        "operationId": "post_sandboxes_by_id_fs",
         "summary": "Write a file",
         "description": "Writes the request body to one file in the sandbox's project directory, creating parent directories. Same confinement as the read above.",
         "tags": [
@@ -315,9 +315,69 @@
         ]
       }
     },
+    "/v1/sandboxes/{id}/screen": {
+      "get": {
+        "operationId": "get_sandboxes_by_id_screen",
+        "summary": "The screen, as a page",
+        "description": "A complete, self-contained desktop — noVNC inline, no other origin — that opens its own socket and draws this sandbox's display. Embed it in an iframe and there is nothing else to build.\n\n`ticket` is the credential from the POST above, carried through to the socket. The page is NOT gated: it is inert markup and does not redeem the ticket, because a ticket is spent once and a page that spent it would hold a credential that no longer opens anything. `frame-ancestors` admits our own brands' hosts and nothing further.\n\nIt is served for every class, not only for `desktop`. The class is a fact about the image, and a sandbox with no VNC server already fails exactly — the connection is refused and the page says so — where a check here would be a second opinion about what is running inside a pod, formed from a label rather than from the pod.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandboxes/{id}/screen/ticket": {
+      "post": {
+        "operationId": "post_sandboxes_by_id_screen_ticket",
+        "summary": "Open a screen",
+        "description": "Mints a SINGLE-USE ticket for this sandbox's DISPLAY and returns `{ticket, expiresIn, url}`, where url is the desktop PAGE with the ticket already on it. The same ticket as the terminal's, minted for a different door.\n\nA ticket says which org and which sandbox, and the terminal and the screen are two views of one machine: a caller who may type in a sandbox may look at it. What the door decides is the URL handed back, which is the only part that differs.\n\nMint one per screen, and mint a fresh one to reconnect.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandboxes/{id}/screen/ws": {
+      "get": {
+        "operationId": "get_sandboxes_by_id_screen_ws",
+        "summary": "The screen, as a socket",
+        "description": "Upgrades to a WebSocket carrying RFB — the VNC wire protocol — from the sandbox's display, for a host that brings its own client. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.\n\nTHE WIRE IS RFB, in BINARY frames both ways, and it is not interpreted here: this is a pipe between the caller's client and the server inside the pod.\n\nTHE PIXELS COME OUT THROUGH THE EXEC CHANNEL. The display binds 127.0.0.1 only and deliberately nothing else, so there is no address to dial — `socat` joins the stream to that loopback port over the same Kubernetes exec subresource every other call into a sandbox uses. One way in, one thing to authorize, nothing further exposed.\n\nThe window size is ignored. A browser pane is not the X server's geometry, and the client scales what it is given rather than asking a server with no RandR to resize itself.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/sandboxes/{id}/terminal": {
       "get": {
-        "operationId": "get_v1_sandboxes_by_id_terminal",
+        "operationId": "get_sandboxes_by_id_terminal",
         "summary": "The terminal, as a page",
         "description": "A complete, self-contained terminal — xterm inline, no other origin — that opens its own socket and runs a shell in this sandbox. Embed it in an iframe and there is nothing else to build.\n\n`ticket` is the credential from the POST above and `arg` names the session (see the socket below); both are simply carried through to the socket. The page is NOT gated — it is inert markup and does not redeem the ticket, because a ticket is spent once and a page that spent it would hold a credential that no longer opens anything.\n\nWhen the terminal is up it posts `{source:\"hanzo-term\", ready:true}` to its parent frame, so a host can tell a live terminal from a page that failed into something else. `frame-ancestors` admits our own brands' hosts and nothing further.",
         "tags": [
@@ -337,7 +397,7 @@
     },
     "/v1/sandboxes/{id}/terminal/ticket": {
       "post": {
-        "operationId": "post_v1_sandboxes_by_id_terminal_ticket",
+        "operationId": "post_sandboxes_by_id_terminal_ticket",
         "summary": "Open a terminal",
         "description": "Mints a SINGLE-USE ticket for one interactive terminal in this sandbox and returns `{ticket, expiresIn, url}`, where url is the terminal PAGE with the ticket already on it.\n\nIt exists because a browser carries no Authorization header into a WebSocket or an iframe, so a terminal cannot be authenticated the way every other route here is. The ticket is a credential MINTED for that one terminal: bound to this org and this sandbox, valid for thirty seconds, and gone the first time it is presented. A long-lived bearer in a query string would instead be written into every access log on the path.\n\nMint one per terminal, and mint a fresh one to reconnect.",
         "tags": [
@@ -357,7 +417,7 @@
     },
     "/v1/sandboxes/{id}/terminal/ws": {
       "get": {
-        "operationId": "get_v1_sandboxes_by_id_terminal_ws",
+        "operationId": "get_sandboxes_by_id_terminal_ws",
         "summary": "The terminal, as a socket",
         "description": "Upgrades to a WebSocket carrying a login shell on a pseudo-terminal inside the sandbox — for a host that brings its own emulator. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.\n\nTHE WIRE. A text frame is stdin, unless it is the one control object `{\"resize\":{\"cols\":N,\"rows\":M}}`; a binary frame is always stdin. Output comes back as BINARY frames, because a pty emits arbitrary bytes cut at arbitrary offsets and a text frame carrying half a rune is one the browser closes the connection over.\n\n`arg` names a SESSION: the shell runs under `tmux new -A -s \u003carg\u003e`, which attaches to that session if it exists and creates it if it does not — so one sandbox holds as many terminals as a caller has names for. It is 1-64 characters of letters, digits, `-` or `_` and may not begin with `-`; anything else is 400. Without `arg` the shell is unnamed and unmultiplexed.\n\nThe shell is `zsh -l`, falling back to `bash -l` and then to `sh -l`, and to the plain shell again when the image has no tmux. Every step is a preference and none is a requirement: whatever else the image carries — the hanzo CLI included — is a command to type, never a condition for getting a prompt.",
         "tags": [
@@ -489,6 +549,13 @@
         "properties": {
           "argv": {
             "description": "Argv is the program and its arguments, already split — the form no shell can\nmisread. Give this or Command, not both.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "blind": {
+            "description": "Blind is the set of secrets this command must never publish.\n\nIt exists because output is redacted where it is PRODUCED or not at all. A\ncaller that scrubbed the returned result would still have streamed the\nunredacted bytes into the session as they were written — to a durable event\nstore, an SSE feed and a chat thread — because the narration leaves the\nsandbox by a different door from the result. Nothing downstream can take a\nsecret back out of a message that has already been delivered.\n\nThe sandbox holds these only for the life of the one command, applies them\nto every stream leaving it, and never logs or stores them.",
             "items": {
               "type": "string"
             },

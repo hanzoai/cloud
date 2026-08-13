@@ -18,34 +18,34 @@
   "paths": {
     "/meet": {
       "delete": {
-        "operationId": "delete_meet",
+        "operationId": "delete_meet_ui",
         "summary": "Not served by the call client",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
       },
       "get": {
-        "operationId": "get_meet",
+        "operationId": "get_meet_ui",
         "summary": "The call client",
         "description": "Serves the application shell on GET, which is the entry point a browser loads before it calls anything under /v1/meet/.\n\nThis is the call client itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request."
       },
       "patch": {
-        "operationId": "patch_meet",
+        "operationId": "patch_meet_ui",
         "summary": "Not served by the call client",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
       },
       "post": {
-        "operationId": "post_meet",
+        "operationId": "post_meet_ui",
         "summary": "Not served by the call client",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
       },
       "put": {
-        "operationId": "put_meet",
+        "operationId": "put_meet_ui",
         "summary": "Not served by the call client",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed."
       }
     },
     "/meet/{wildcard1}": {
       "delete": {
-        "operationId": "delete_meet_by_wildcard1",
+        "operationId": "delete_meet_ui_assets",
         "summary": "Not served by the call client",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
         "parameters": [
@@ -60,7 +60,7 @@
         ]
       },
       "get": {
-        "operationId": "get_meet_by_wildcard1",
+        "operationId": "get_meet_ui_assets",
         "summary": "The call client's assets and client-side routes",
         "description": "Serves the static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link is a shell load, not a 404.\n\nThe one exception is /meet/assets/, which holds only content-addressed build output: a name that is not there is a purged chunk, never a route, and answers 404. Everywhere else a path that looks like a missing file answers 200 with the shell, so read the content type rather than the status when a resource seems to be missing.\n\nA bundle that was never built answers 503 under its own name on every path, which is a failed deploy rather than a missing page.\n\nThis is the call client itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request.",
         "parameters": [
@@ -75,7 +75,7 @@
         ]
       },
       "patch": {
-        "operationId": "patch_meet_by_wildcard1",
+        "operationId": "patch_meet_ui_assets",
         "summary": "Not served by the call client",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
         "parameters": [
@@ -90,7 +90,7 @@
         ]
       },
       "post": {
-        "operationId": "post_meet_by_wildcard1",
+        "operationId": "post_meet_ui_assets",
         "summary": "Not served by the call client",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
         "parameters": [
@@ -105,7 +105,7 @@
         ]
       },
       "put": {
-        "operationId": "put_meet_by_wildcard1",
+        "operationId": "put_meet_ui_assets",
         "summary": "Not served by the call client",
         "description": "Published because this address accepts every method, but a static bundle has no writes: the request is refused 405 and nothing is read or changed.",
         "parameters": [
@@ -122,7 +122,7 @@
     },
     "/v1/meet/getToken": {
       "post": {
-        "operationId": "post_v1_meet_gettoken",
+        "operationId": "post_meet_gettoken",
         "summary": "Mint a join token for one video room",
         "description": "Answers with a LiveKit join token for exactly the room named in the body. The body is the RAW token as text/plain — one opaque string, not JSON and not wrapped in an envelope, which is what the office client reads.\n\nThe caller presents its workspace session as a Bearer. Every clause is a refusal: the session must verify, its SIGNED workspace claim must equal the room's leading name segment — rooms are named `\u003cworkspace\u003e_\u003croom\u003e_\u003cid\u003e`, and that prefix is the only thing binding a room to a tenant — and the session must carry a privileged workspace role, so a guest is refused rather than seated.\n\nThe participant identity is the SESSION'S, never the body's. `_id` is accepted for compatibility with the published client bundle and deliberately ignored: LiveKit treats the identity as unique and ejects a duplicate, so honouring a caller-chosen one would let anyone in a workspace kick out a colleague and impersonate them. `participantName` is a display name only.\n\nAn unconfigured deployment answers 503 under its own name rather than 404, and the refusal states only that the office is unconfigured — the reason names key material and stays in the boot log.",
         "tags": [
@@ -132,7 +132,7 @@
     },
     "/v1/meet/health": {
       "get": {
-        "operationId": "get_v1_meet_health",
+        "operationId": "get_meet_health",
         "summary": "Health reports whether the office can mint join tokens.",
         "description": "Health reports whether the office can mint join tokens.\n\nIt reports whether this deployment holds the LiveKit key pair it needs:\nready:true with 200 when tokens can be minted, the SAME body with ready:false,\nstatus \"degraded\" and 503 when they cannot — so a probe and a dashboard both\nread the degraded state instead of someone grepping a boot log.\n\nIt takes no credential and is reachable on every public host, so it withholds\nboth the reason and the signing key's name on purpose: ready is the whole\ndashboard fact, and the reason — which names the key file and the Secret — is\nwritten to the boot log where an operator already is.",
         "tags": [
@@ -164,7 +164,7 @@
     },
     "/v1/meet/session": {
       "get": {
-        "operationId": "get_v1_meet_session",
+        "operationId": "get_meet_session",
         "summary": "What this caller may open a room in",
         "description": "Answers the three facts the native lobby cannot know on its own: the identity a seat would be taken under, the LiveKit address the browser dials, and the workspaces this caller may open a room in.\n\nIt is the SAME decision getToken makes, asked before the room exists rather than after it is named. A room is bound to its tenant by its name's leading workspace segment, and only a workspace this answer lists will be admitted — so the lobby offers exactly what the mint would grant, and a person is never shown a room they would then be refused. Workspaces the caller holds only a guest role in are omitted for that reason.\n\nAn empty list is a real answer, not a fault: an IAM identity with no workspace has no room to open, and the lobby says so instead of failing.\n\n`ws` is empty when this deployment has not been told where its media plane is (LIVEKIT_WS). Token minting is unaffected — the published office client supplies its own address — so this is a degraded native UI, not a degraded service, and the lobby refuses to dial rather than guessing a host.",
         "tags": [
