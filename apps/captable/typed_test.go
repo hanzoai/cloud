@@ -16,17 +16,17 @@ import (
 // It is the SAME pairing routes() declares; the tests below run both sides of
 // every pair, so a route added to one and not the other fails here.
 var typedReads = map[string]string{
-	"/v1/captable/company":       "company.get",
-	"/v1/captable/stakeholders":  "stakeholders.list",
+	"/v1/captable/company":      "company.get",
+	"/v1/captable/stakeholders": "stakeholders.list",
 	"/v1/captable/classes":      "shareClasses.list",
 	"/v1/captable/plans":        "equityPlans.list",
-	"/v1/captable/shares":        "shares.list",
-	"/v1/captable/options":       "options.list",
-	"/v1/captable/safes":         "safes.list",
-	"/v1/captable/convertibles":  "convertibles.list",
-	"/v1/captable/rounds":        "rounds.list",
-	"/v1/captable/investments":   "rounds.investments.list",
-	"/v1/captable/summary":       "captable",
+	"/v1/captable/shares":       "shares.list",
+	"/v1/captable/options":      "options.list",
+	"/v1/captable/safes":        "safes.list",
+	"/v1/captable/convertibles": "convertibles.list",
+	"/v1/captable/rounds":       "rounds.list",
+	"/v1/captable/investments":  "rounds.investments.list",
+	"/v1/captable/summary":      "captable",
 }
 
 // bundleBytes runs a bundle route straight on the tenant's store — the RELAY the

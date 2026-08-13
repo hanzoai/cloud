@@ -140,7 +140,6 @@ func discordDeferredEphemeral(c *zip.Ctx) error {
 	})
 }
 
-
 // discordEditOriginal edits the original (deferred) interaction response with the
 // answer. Content is capped at Discord's 2000-char limit.
 func discordEditOriginal(ctx context.Context, appID, token, text string) error {
