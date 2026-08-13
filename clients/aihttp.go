@@ -224,6 +224,11 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 		// Absent unless the caller offered tools, so a request that offers none
 		// is the same bytes on the wire it always was.
 		Tools: wireTools(req.Tools),
+		// WHO this completion is for. `user` is the OpenAI-compatible field for
+		// exactly that, so this invents no vocabulary and the gateway already
+		// parses it. Omitted when there is nobody to name (omitempty), which is
+		// how a system call stays a system call.
+		User: req.Actor,
 	})
 	if err != nil {
 		span.RecordError(err)
@@ -414,7 +419,10 @@ func (a *httpAI) ChatStream(ctx context.Context, req *types.ChatRequest, emit fu
 		Messages: wireMessages(req),
 		// Same ceiling the gate reserved — streaming must not be a way to buy
 		// more completion than was paid for.
-		MaxTokens:     req.MaxTokens,
+		MaxTokens: req.MaxTokens,
+		// Same person, same field: streaming must not be a way to buy inference
+		// nobody is named for.
+		User:          req.Actor,
 		StreamOptions: &openai.StreamOptions{IncludeUsage: true},
 	})
 	if err != nil {
