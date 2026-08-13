@@ -59,7 +59,7 @@ func init() {
 		Example: json.RawMessage(`{"platform":"ga4"}`),
 	})
 	zip.Describe("POST /v1/destinations/:platform", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Provisions (or updates) a destination: non-secret ids into the store, API\nsecret(s) sealed to KMS (fail-closed). Connecting an ad destination is an org-admin\naction (parity with the integrations AdminOnly discipline). The secret never\nappears in the response, the store, or a log line.",
 	})
 	zip.Describe("POST /v1/destinations/:platform/test", zip.Doc{
 		Description: "Sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",

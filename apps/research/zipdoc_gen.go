@@ -23,7 +23,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/research/artifacts/:sha256", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Serves one artifact's stored bytes, hash-addressed by :sha256 and\norg-scoped — the retrieval side of hash-addressing (the board fetches a snapshot by\nits content hash).\n\nIt is the ONE route on this surface that is not a typed op, and it cannot be one:\nit answers the artifact's RAW BYTES under the artifact's own Content-Type\n(image/png for a snapshot, application/octet-stream otherwise). A typed op\nserialises a Go value as application/json and has no vocabulary for a binary body,\nso typing this would change what every caller receives — a wire break, not a\ndescription. Its errors therefore stay in-band, as the rest of this file's did.",
 	})
 	zip.Describe("GET /v1/research/experiments", zip.Doc{
 		Description: "Returns the caller org's CANONICAL experiments — the deterministic\ndeduped view over the versioned history. With no ?project= it reads the org's\nwhole set across projects (the ops board's cross-project view, since a project is\na sub-scope of the one tenant); ?project= narrows to one and ?kind= to one\ndiscriminator.",
