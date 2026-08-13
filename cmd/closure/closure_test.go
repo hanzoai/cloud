@@ -19,6 +19,14 @@ import (
 //	the message names the REPAIR      — or knowing is not fixing
 
 // fakePkg builds a package for the graph tests. Nil module means stdlib.
+//
+// THE DIRECTORY IS ALWAYS MADE, and no files is not the same fact as no
+// directory. `go list` gives a Dir to every package it can PLACE, whatever is in
+// it, and reports an empty one only for an import that resolves to nothing —
+// which is why an empty one is now refused outright. A fixture that left Dir
+// empty for the packages it had no files for was inventing a shape the toolchain
+// does not emit, and a fixture that lies about its input can only test a
+// different program.
 func fakePkg(t *testing.T, dir, path, module, version string, files map[string]string, imports ...string) pkg {
 	t.Helper()
 	p := pkg{ImportPath: path, Imports: imports}
@@ -28,18 +36,16 @@ func fakePkg(t *testing.T, dir, path, module, version string, files map[string]s
 			Version string
 		}{Path: module, Version: version}
 	}
-	if files != nil {
-		d := filepath.Join(dir, strings.ReplaceAll(path, "/", "_"))
-		if err := os.MkdirAll(d, 0o755); err != nil {
+	d := filepath.Join(dir, strings.ReplaceAll(path, "/", "_"))
+	if err := os.MkdirAll(d, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p.Dir = d
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(d, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		p.Dir = d
-		for name, body := range files {
-			if err := os.WriteFile(filepath.Join(d, name), []byte(body), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			p.GoFiles = append(p.GoFiles, name)
-		}
+		p.GoFiles = append(p.GoFiles, name)
 	}
 	return p
 }
@@ -377,21 +383,38 @@ func TestAnEmptyComparisonIsNotAPass(t *testing.T) {
 }
 
 // A dependency the toolchain could not place must be an ERROR, never a digest.
-// `go list -e` lets a broken package through on purpose, and hashing a package with
-// no directory yields the same constant for every one of them — so the witness would
-// compare equal (missing on both sides) or stale (missing on one), and neither
-// answer has anything to do with whether a document is current.
+// `go list -e` lets a broken package through on purpose, and a package with no
+// directory has no source to hash — so the witness would compare equal (missing on
+// both sides) or stale (missing on one), and neither answer has anything to do
+// with whether a document is current.
+//
+// TWO SHAPES, AND THIS CARRIED ONLY THE ONE THAT NEVER HAPPENED. The guard it was
+// asserting lived inside hashPkg, which witnessed() never reaches for a package
+// with no MODULE — and no module is exactly what `go list -e` reports for one it
+// could not fetch. So the property held, this test passed, and the gate still
+// called all 116 documents stale on every run once hanzoai/orm v0.6.24 went
+// missing from the forge. The shape a test does not carry is the shape that ships.
 func TestAnUnresolvedDependencyIsAnErrorNotADigest(t *testing.T) {
-	root, pkgs := world(t, "package server")
-	for i := range pkgs {
-		if pkgs[i].ImportPath == "github.com/hanzoai/iam/server" {
-			pkgs[i].Dir = "" // what `go list -e` reports for a module it could not fetch
-		}
-	}
-	if _, err := snapshot(root, pkgs, []string{"iam", "wallets"}); err == nil {
-		t.Fatal("an unresolvable dependency must fail loudly, not hash to a constant")
-	} else if !strings.Contains(err.Error(), "go mod download") {
-		t.Errorf("the error must name the repair, got: %v", err)
+	for _, tc := range []struct {
+		name  string
+		strip func(*pkg)
+	}{
+		{"module attributed, source absent", func(p *pkg) { p.Dir = "" }},
+		{"no module either, which is what an unfetchable one reports", func(p *pkg) { p.Dir = ""; p.Module = nil }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, pkgs := world(t, "package server")
+			for i := range pkgs {
+				if pkgs[i].ImportPath == "github.com/hanzoai/iam/server" {
+					tc.strip(&pkgs[i])
+				}
+			}
+			if _, err := snapshot(root, pkgs, []string{"iam", "wallets"}); err == nil {
+				t.Fatal("an unresolvable dependency must fail loudly, not hash to a constant")
+			} else if !strings.Contains(err.Error(), "go mod download") {
+				t.Errorf("the error must name the repair, got: %v", err)
+			}
+		})
 	}
 }
 
