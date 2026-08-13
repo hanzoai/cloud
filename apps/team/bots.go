@@ -16,6 +16,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/agents"
+	"github.com/hanzoai/cloud/apps/principal"
 )
 
 // botsBridge holds the transactor + account stores the bots routes read/write.
@@ -79,7 +80,7 @@ func (b *botsBridge) listBots(ctx context.Context, _ *none) (*botRoster, error) 
 	if b.degraded {
 		return nil, unavailable()
 	}
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +108,7 @@ func (b *botsBridge) syncBots(ctx context.Context, _ *none) (*botSync, error) {
 	if b.degraded {
 		return nil, unavailable()
 	}
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}

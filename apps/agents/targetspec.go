@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"math"
 	"strings"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // targetspec.go is the machine-capability value plane for a run-target: two orthogonal
@@ -104,7 +106,7 @@ func (m Metrics) Sanitize() Metrics {
 func clampStr(s string, n int) string {
 	s = strings.TrimSpace(s)
 	if len(s) > n {
-		return strings.ToValidUTF8(s[:n], "")
+		return strings.ToValidUTF8(shorten.To(s, n), "")
 	}
 	return s
 }

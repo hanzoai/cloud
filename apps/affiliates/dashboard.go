@@ -20,6 +20,8 @@ import (
 	"unicode"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -142,7 +144,7 @@ type affiliateEarnings struct {
 // Scoped server-side to the validated caller's affiliate; a caller that is not
 // one gets `isAffiliate:false`.
 func (o ops) earnings(ctx context.Context, _ *noInput) (*affiliateEarnings, error) {
-	org, ok := tenant(ctx)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return nil, zip.ErrForbidden("sign in to view your affiliate earnings")
 	}
@@ -244,7 +246,7 @@ type affiliateLinks struct {
 // per click. Scoped to the validated caller's own affiliate; a non-affiliate
 // gets `isAffiliate:false` and the link cap.
 func (o ops) links(ctx context.Context, _ *noInput) (*affiliateLinks, error) {
-	org, ok := tenant(ctx)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return nil, zip.ErrForbidden("sign in to view your referral links")
 	}
@@ -321,7 +323,7 @@ type linkMint struct {
 //
 // Example: {"label": "twitter"}
 func (o ops) mintLink(ctx context.Context, in *createLinkRequest) (*linkMint, error) {
-	org, ok := tenant(ctx)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return nil, zip.ErrForbidden("sign in to create a referral link")
 	}
@@ -368,11 +370,7 @@ func (o ops) mintLink(ctx context.Context, in *createLinkRequest) (*linkMint, er
 }
 
 func newLink(s *cloud.Service[state], ctx context.Context, affiliateID, code, label string) (Link, error) {
-	id, err := genID("aln")
-	if err != nil {
-		return Link{}, err
-	}
-	return s.State.store.CreateLink(ctx, id, affiliateID, code, label, time.Now().Unix())
+	return s.State.store.CreateLink(ctx, mint.ID("aln"), affiliateID, code, label, time.Now().Unix())
 }
 
 // mintResult translates a store outcome into the mint's answer, keeping each
@@ -475,7 +473,7 @@ type handleSet struct {
 //
 // Example: {"handle": "acme partners"}
 func (o ops) setHandle(ctx context.Context, in *handleRequest) (*handleSet, error) {
-	org, ok := tenant(ctx)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return nil, zip.ErrForbidden("sign in to set your leaderboard handle")
 	}
@@ -551,7 +549,7 @@ type affiliateBoard struct {
 // principal; a signed-in non-affiliate may read the board but gets no personal
 // row.
 func (o ops) board(ctx context.Context, _ *noInput) (*affiliateBoard, error) {
-	org, ok := tenant(ctx)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return nil, zip.ErrForbidden("sign in to view the leaderboard")
 	}

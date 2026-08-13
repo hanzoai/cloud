@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -203,7 +204,7 @@ func slackExchange(ctx context.Context, creds OAuthConfig, redirectURI, code str
 		return nil, err
 	}
 	if !r.OK {
-		return nil, fmt.Errorf("slack oauth.v2.access error: %s", nonEmpty(r.Error, "unknown_error"))
+		return nil, fmt.Errorf("slack oauth.v2.access error: %s", cmp.Or(r.Error, "unknown_error"))
 	}
 	if r.AccessToken == "" {
 		return nil, fmt.Errorf("slack oauth.v2.access returned ok with no access_token")
@@ -234,7 +235,7 @@ func slackRevoke(ctx context.Context, _ OAuthConfig, token string) error {
 		return err
 	}
 	if !r.OK {
-		return fmt.Errorf("slack auth.revoke error: %s", nonEmpty(r.Error, "unknown_error"))
+		return fmt.Errorf("slack auth.revoke error: %s", cmp.Or(r.Error, "unknown_error"))
 	}
 	return nil
 }
@@ -288,11 +289,4 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
-}
-
-func nonEmpty(s, fallback string) string {
-	if strings.TrimSpace(s) == "" {
-		return fallback
-	}
-	return s
 }

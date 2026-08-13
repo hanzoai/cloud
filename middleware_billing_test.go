@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -488,16 +489,7 @@ func assertErrorCode(t *testing.T, resp *http.Response, want string) {
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	// Cheap substring assert avoids coupling to map ordering in the JSON.
-	if !containsSub(string(body), `"code":"`+want+`"`) {
+	if !strings.Contains(string(body), `"code":"`+want+`"`) {
 		t.Errorf("body %q missing error code %q", string(body), want)
 	}
-}
-
-func containsSub(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

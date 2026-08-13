@@ -169,7 +169,7 @@ func (c *inProcessClient) CheckEntitlement(ctx context.Context, orgID, productID
 			Apps:     row.Licensing.Apps,
 			Features: row.Licensing.Features,
 		})
-		if containsFeature(features, want) {
+		if slices.Contains(features, want) {
 			return &types.LicenseEntitlement{
 				ProductID:   productID,
 				Active:      true,
@@ -197,10 +197,6 @@ func tier(ctx context.Context, slug string) (*commerceplan.Plan, bool, error) {
 		return nil, false, err
 	}
 	return p, ok, nil
-}
-
-func containsFeature(features []string, want string) bool {
-	return slices.Contains(features, want)
 }
 
 func unixOrZero(t time.Time) int64 {

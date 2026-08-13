@@ -463,15 +463,6 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func firstNonEmpty(xs ...string) string {
-	for _, x := range xs {
-		if strings.TrimSpace(x) != "" {
-			return x
-		}
-	}
-	return ""
-}
-
 func atoiOr(s string, def int) int {
 	if v, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && v > 0 {
 		return v

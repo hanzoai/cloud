@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -130,10 +131,10 @@ func credsFromToken(tr *tokenResp) *Credentials {
 	c := &Credentials{
 		AccessToken:  tr.AccessToken,
 		RefreshToken: tr.RefreshToken,
-		TokenType:    firstNonEmpty(tr.TokenType, "Bearer"),
+		TokenType:    cmp.Or(tr.TokenType, "Bearer"),
 	}
 	if claims, err := decodeJWTClaims(tr.AccessToken); err == nil {
-		c.Subject = firstNonEmpty(claimString(claims, "email"), claimString(claims, "sub"))
+		c.Subject = cmp.Or(claimString(claims, "email"), claimString(claims, "sub"))
 		c.Owner = claimString(claims, "owner")
 		if exp, ok := claims["exp"].(float64); ok {
 			c.Expiry = int64(exp)
@@ -217,7 +218,7 @@ func runLogin(env *Env, lf *loginFlags, cmd *cobra.Command) error {
 	if err := store.Save(); err != nil {
 		return err
 	}
-	who := firstNonEmpty(creds.Subject, "(unknown)")
+	who := cmp.Or(creds.Subject, "(unknown)")
 	if creds.Owner != "" {
 		who += " @ " + creds.Owner
 	}
@@ -359,7 +360,7 @@ func newWhoamiCmd(envOf func() *Env) *cobra.Command {
 			}
 			return env.emit(claims, func(w io.Writer) {
 				fmt.Fprintf(w, "email:   %s\n", claimString(claims, "email"))
-				fmt.Fprintf(w, "name:    %s\n", firstNonEmpty(claimString(claims, "displayName"), claimString(claims, "name")))
+				fmt.Fprintf(w, "name:    %s\n", cmp.Or(claimString(claims, "displayName"), claimString(claims, "name")))
 				fmt.Fprintf(w, "org:     %s\n", claimString(claims, "owner"))
 				fmt.Fprintf(w, "subject: %s\n", claimString(claims, "sub"))
 				fmt.Fprintf(w, "issuer:  %s\n", claimString(claims, "iss"))
@@ -444,7 +445,7 @@ func newAuthCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 				return err
 			}
 			c := store.Identities[key]
-			who := firstNonEmpty(c.Subject, "(unknown)")
+			who := cmp.Or(c.Subject, "(unknown)")
 			if c.Owner != "" {
 				who += " @ " + c.Owner
 			}

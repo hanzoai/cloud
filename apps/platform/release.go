@@ -37,6 +37,7 @@ package platform
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -53,6 +54,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
@@ -212,7 +214,7 @@ func (p releasePlan) run(ctx context.Context) (releaseStep, error) {
 // buildFromPush). Because the tag is minted only after a proven image, a failure at
 // build or smoke leaves NO tag and universe is never told of a phantom version.
 func startRelease(s *cloud.Service[state], ctx context.Context, req runnerBuildReq) (*runnerBuildResp, error) {
-	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
+	ref := cmp.Or(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
 	// A repo is a CLONE URL, and an unparseable one is refused here rather than
 	// deep in the detached pipeline. Otherwise a bare name ("cloud" for
 	// "https://github.com/hanzoai/cloud") answers 202 with an image tag, launches
@@ -344,8 +346,8 @@ func launchRelease(s *cloud.Service[state], ctx context.Context, ref, repo, dock
 	if err != nil {
 		return "", "", zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	repoURL := firstNonEmpty(repo, releaseRepoURL)
-	plan := releaseFor(s, repoURL, sha, image, tag, firstNonEmpty(dockerfile, "Dockerfile"), bldID)
+	repoURL := cmp.Or(repo, releaseRepoURL)
+	plan := releaseFor(s, repoURL, sha, image, tag, cmp.Or(dockerfile, "Dockerfile"), bldID)
 
 	state := &ReleaseState{
 		ID: bldID, Image: image, Version: version, SHA: sha,
@@ -773,7 +775,7 @@ func tagRelease(s *cloud.Service[state], ctx context.Context, repo, sha, tag str
 // ghToken is the GitHub PAT for the release seams (list tags, resolve commit, mint
 // tag). GH_PAT — the admin:org + write:packages token release.yml uses — read from
 // env (KMS-provisioned). Empty ⇒ the dependent step fails closed.
-func ghToken() string { return getenv("GH_PAT", "") }
+func ghToken() string { return environ.Or("GH_PAT", "") }
 
 // releaseHTTP is the one client for the release seams — a bounded timeout so a hung
 // GitHub call can never wedge the pipeline goroutine.

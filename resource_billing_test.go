@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net"
 	"net/http"
@@ -25,6 +24,8 @@ import (
 	"testing"
 	"time"
 	"unsafe"
+
+	"github.com/hanzoai/cloud/internal/planetest"
 
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -472,7 +473,7 @@ func TestDenyResource(t *testing.T) {
 			t.Fatalf("%s status = %d, want %d", tc.path, resp.StatusCode, tc.code)
 		}
 		body, _ := io.ReadAll(resp.Body)
-		if !containsSub(string(body), tc.body) {
+		if !strings.Contains(string(body), tc.body) {
 			t.Fatalf("%s body %q missing %q", tc.path, body, tc.body)
 		}
 	}

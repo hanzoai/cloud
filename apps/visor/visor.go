@@ -36,6 +36,7 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -573,7 +574,7 @@ func launchMachine(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	if strings.TrimSpace(firstNonEmpty(body.Size, body.InstanceType)) == "" {
+	if cmp.Or(strings.TrimSpace(body.Size), strings.TrimSpace(body.InstanceType)) == "" {
 		return zip.ErrBadRequest("size is required")
 	}
 	var data json.RawMessage
@@ -764,7 +765,7 @@ func (o ops) createPool(ctx context.Context, in *poolCreate) (*nodePoolView, err
 		return nil, err
 	}
 	clusterID := strings.TrimSpace(in.ClusterID)
-	provider := firstNonEmpty(in.Provider)
+	provider := strings.TrimSpace(in.Provider)
 	if provider == "" {
 		return nil, zip.ErrBadRequest("provider is required")
 	}
@@ -811,7 +812,7 @@ func (o ops) scalePool(ctx context.Context, in *poolScale) (*nodePoolView, error
 	if poolID == "" {
 		return nil, zip.ErrBadRequest("poolId required")
 	}
-	provider := firstNonEmpty(in.Provider)
+	provider := strings.TrimSpace(in.Provider)
 	if provider == "" {
 		return nil, zip.ErrBadRequest("provider is required")
 	}
@@ -850,7 +851,7 @@ func (o ops) deletePool(ctx context.Context, in *poolRef) (*struct{}, error) {
 	if poolID == "" {
 		return nil, zip.ErrBadRequest("poolId required")
 	}
-	provider := firstNonEmpty(in.Provider)
+	provider := strings.TrimSpace(in.Provider)
 	if provider == "" {
 		return nil, zip.ErrBadRequest("provider is required")
 	}

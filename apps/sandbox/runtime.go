@@ -28,16 +28,19 @@ package sandbox
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/internal/environ"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -156,9 +159,9 @@ func newRuntime() *runtime {
 		// denies them the cluster — ingress from nothing, egress a whitelist —
 		// and a sandbox must not sit beside the datastores it is forbidden to
 		// reach. One namespace, one policy, everything that runs submitted code.
-		ns:           envOr("SANDBOX_NAMESPACE", "hanzo-sandboxes"),
-		image:        envOr("SANDBOX_IMAGE_REPO", "oci.hanzo.ai/hanzoai/sandbox"),
-		tag:          envOr("SANDBOX_IMAGE_TAG", ""),
+		ns:           environ.Or("SANDBOX_NAMESPACE", "hanzo-sandboxes"),
+		image:        environ.Or("SANDBOX_IMAGE_REPO", "oci.hanzo.ai/hanzoai/sandbox"),
+		tag:          environ.Or("SANDBOX_IMAGE_TAG", ""),
 		startTimeout: time.Duration(atoiOr(os.Getenv("SANDBOX_START_TIMEOUT_SEC"), 120)) * time.Second,
 		execTimeout:  time.Duration(atoiOr(os.Getenv("SANDBOX_EXEC_TIMEOUT_SEC"), 900)) * time.Second,
 	}
@@ -256,7 +259,7 @@ func (r *runtime) imageFor(class string, super bool) string {
 	}
 	tag := r.tag
 	if tag == "" {
-		tag = envOr("SANDBOX_IMAGE_TAG_"+strings.ToUpper(class), "")
+		tag = environ.Or("SANDBOX_IMAGE_TAG_"+strings.ToUpper(class), "")
 	}
 	if tag == "" {
 		// FALL BACK TO A NAME NOTHING PUBLISHES, on purpose.
@@ -478,14 +481,7 @@ func (r *runtime) runtimeFor(m Sandbox, want, fleet string) (string, error) {
 // sorted is the closed set, in one order. A Go map range would give a different
 // one every time, and both an error message and a derived choice that change on
 // their own are ones nobody can grep for or reproduce.
-func sorted() []string {
-	n := make([]string, 0, len(runtimes))
-	for k := range runtimes {
-		n = append(n, k)
-	}
-	sort.Strings(n)
-	return n
-}
+func sorted() []string { return slices.Sorted(maps.Keys(runtimes)) }
 
 func runtimeNames() string { return strings.Join(sorted(), ", ") }
 
@@ -679,10 +675,10 @@ func (r *runtime) ensureVolume(ctx context.Context, m Sandbox) error {
 		},
 		"spec": map[string]any{
 			"accessModes": []any{"ReadWriteOnce"},
-			"resources":   map[string]any{"requests": map[string]any{"storage": envOr("SANDBOX_VOLUME_SIZE", "20Gi")}},
+			"resources":   map[string]any{"requests": map[string]any{"storage": environ.Or("SANDBOX_VOLUME_SIZE", "20Gi")}},
 		},
 	}}
-	if sc := envOr("SANDBOX_STORAGE_CLASS", ""); sc != "" {
+	if sc := environ.Or("SANDBOX_STORAGE_CLASS", ""); sc != "" {
 		pvc.Object["spec"].(map[string]any)["storageClassName"] = sc
 	}
 	if _, err := vols.Create(ctx, pvc, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -706,14 +702,14 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 		// into DiskPressure and evict their own neighbours. Measured, not feared.
 		"resources": map[string]any{
 			"requests": map[string]any{
-				"cpu":               envOr("MACHINE_CPU_REQUEST", "250m"),
-				"memory":            envOr("MACHINE_MEM_REQUEST", "512Mi"),
-				"ephemeral-storage": envOr("MACHINE_DISK_REQUEST", "2Gi"),
+				"cpu":               environ.Or("MACHINE_CPU_REQUEST", "250m"),
+				"memory":            environ.Or("MACHINE_MEM_REQUEST", "512Mi"),
+				"ephemeral-storage": environ.Or("MACHINE_DISK_REQUEST", "2Gi"),
 			},
 			"limits": map[string]any{
-				"cpu":               envOr("MACHINE_CPU_LIMIT", "2"),
-				"memory":            envOr("MACHINE_MEM_LIMIT", "4Gi"),
-				"ephemeral-storage": envOr("MACHINE_DISK_LIMIT", "8Gi"),
+				"cpu":               environ.Or("MACHINE_CPU_LIMIT", "2"),
+				"memory":            environ.Or("MACHINE_MEM_LIMIT", "4Gi"),
+				"ephemeral-storage": environ.Or("MACHINE_DISK_LIMIT", "8Gi"),
 			},
 		},
 		"securityContext": map[string]any{
@@ -731,11 +727,7 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 	// Sorted, because a Go map ranges in random order and a pod spec that differs
 	// run to run is one nothing can diff.
 	if len(cr.env) > 0 {
-		names := make([]string, 0, len(cr.env))
-		for k := range cr.env {
-			names = append(names, k)
-		}
-		sort.Strings(names)
+		names := slices.Sorted(maps.Keys(cr.env))
 		env := make([]any, 0, len(names))
 		for _, k := range names {
 			env = append(env, map[string]any{"name": k, "value": cr.env[k]})
@@ -898,7 +890,7 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 			// runtime, so the volume states its own ceiling and the kubelet evicts
 			// the pod that exceeds it — which is the sandbox's problem to have,
 			// not the node's.
-			"emptyDir": map[string]any{"sizeLimit": envOr("SANDBOX_WORKDIR_SIZE", "2Gi")},
+			"emptyDir": map[string]any{"sizeLimit": environ.Or("SANDBOX_WORKDIR_SIZE", "2Gi")},
 		}}
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
@@ -1040,7 +1032,7 @@ func (r *runtime) exec(ctx context.Context, m Sandbox, argv []string, stdin io.R
 		return ExecResult{}, err
 	}
 	if m.Status != "running" || m.Pod == "" {
-		return ExecResult{}, fmt.Errorf("sandbox is %s", firstNonEmpty(m.Status, "unknown"))
+		return ExecResult{}, fmt.Errorf("sandbox is %s", cmp.Or(m.Status, "unknown"))
 	}
 	d := r.execTimeout
 	if timeoutSec > 0 && time.Duration(timeoutSec)*time.Second < d {
@@ -1090,7 +1082,7 @@ func (r *runtime) tty(ctx context.Context, m Sandbox, argv []string, stdin io.Re
 		return err
 	}
 	if m.Status != "running" || m.Pod == "" {
-		return fmt.Errorf("sandbox is %s", firstNonEmpty(m.Status, "unknown"))
+		return fmt.Errorf("sandbox is %s", cmp.Or(m.Status, "unknown"))
 	}
 	return r.str.tty(ctx, r.ns, m.Pod, argv, stdin, stdout, size)
 }
@@ -1195,11 +1187,4 @@ func coreConfig(in *rest.Config) *rest.Config {
 	out.APIPath = "/api"
 	out.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
 	return out
-}
-
-func envOr(k, def string) string {
-	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-		return v
-	}
-	return def
 }

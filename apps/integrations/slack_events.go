@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -537,7 +538,7 @@ func slackChatPostTS(ctx context.Context, botToken, method string, fields map[st
 	}
 	_ = json.Unmarshal(body, &data)
 	if !data.OK {
-		return "", fmt.Errorf("slack %s failed: %s", strings.TrimPrefix(method, "/"), nonEmpty(data.Error, "unknown"))
+		return "", fmt.Errorf("slack %s failed: %s", strings.TrimPrefix(method, "/"), cmp.Or(data.Error, "unknown"))
 	}
 	return data.TS, nil
 }

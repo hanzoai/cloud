@@ -27,6 +27,7 @@ package team
 // the button lands — no second path.
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -236,7 +237,7 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 	if inviteeAccount == "" {
 		return g.fail(c, statusInvite("invitee has no IAM subject"))
 	}
-	displayName := firstNonEmpty(u.DisplayName, u.Name, localPart(email))
+	displayName := cmp.Or(u.DisplayName, u.Name, localPart(email))
 	if err := g.accounts.AddMember(c.Context(), ws.ID, inviteeAccount, role, displayName); err != nil {
 		g.log.Error("team: invite — local member row write failed", "err", err)
 		return g.fail(c, statusInvite("could not add workspace member: "+err.Error()))

@@ -48,8 +48,6 @@ package crm
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
@@ -57,6 +55,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
@@ -236,22 +236,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 // ---- shared helpers ----
 
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}
-
 // clip trims and bounds a text field to maxField.
 func clip(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > maxField {
-		return s[:maxField]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), maxField)
 }
 
 // limitOf bounds a requested page size: absent, zero or negative asks for the
@@ -451,13 +438,9 @@ func (o ops) createCompany(ctx context.Context, in *companyReq) (*Company, error
 	if name == "" {
 		return nil, zip.ErrBadRequest("name is required")
 	}
-	id, err := genID("comp")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	now := time.Now().Unix()
 	comp := Company{
-		ID: id, Org: org, Name: name, DomainName: clip(in.DomainName),
+		ID: mint.ID("comp"), Org: org, Name: name, DomainName: clip(in.DomainName),
 		Employees: in.Employees, City: clip(in.City), Country: clip(in.Country),
 		ARR: in.ARR, Currency: defaultCurrency(in.Currency), ICP: in.ICP,
 		Linkedin: clip(in.Linkedin), XLink: clip(in.XLink), CreatedAt: now, UpdatedAt: now,
@@ -565,12 +548,8 @@ func (o ops) createContact(ctx context.Context, in *contactReq) (*Contact, error
 	if ct.FirstName == "" && ct.LastName == "" && ct.Email == "" {
 		return nil, zip.ErrBadRequest("one of firstName, lastName, or email is required")
 	}
-	id, err := genID("cont")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	now := time.Now().Unix()
-	ct.ID, ct.Org, ct.CreatedAt, ct.UpdatedAt = id, org, now, now
+	ct.ID, ct.Org, ct.CreatedAt, ct.UpdatedAt = mint.ID("cont"), org, now, now
 	saved, err := o.s.State.store.CreateContact(ctx, ct)
 	if err != nil {
 		return nil, mapErr(err, "")
@@ -683,13 +662,9 @@ func (o ops) createOpp(ctx context.Context, in *oppReq) (*Opportunity, error) {
 	if !valid {
 		return nil, zip.ErrBadRequest("stage must be one of NEW, SCREENING, MEETING, PROPOSAL, CUSTOMER")
 	}
-	id, err := genID("oppo")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	now := time.Now().Unix()
 	opp := Opportunity{
-		ID: id, Org: org, Name: name, Amount: in.Amount, Currency: defaultCurrency(in.Currency),
+		ID: mint.ID("oppo"), Org: org, Name: name, Amount: in.Amount, Currency: defaultCurrency(in.Currency),
 		Stage: stage, CloseDate: in.CloseDate, CompanyID: clip(in.CompanyID),
 		PointOfContact: clip(in.PointOfContact), CreatedAt: now, UpdatedAt: now,
 	}

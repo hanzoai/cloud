@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -34,13 +36,7 @@ func decodePolicy(t *testing.T, fields map[string]string) map[string]any {
 	return doc
 }
 
-func keysOf(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
+func keysOf(m map[string]string) []string { return slices.Collect(maps.Keys(m)) }
 
 // conditionsText flattens the policy conditions to a searchable string. The
 // document mixes arrays and objects, so comparing the rendered form is both

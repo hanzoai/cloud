@@ -33,6 +33,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
@@ -82,17 +83,10 @@ type daemon struct {
 // per-call bound, and no request that can outlive both.
 func newDaemon() *daemon {
 	return &daemon{
-		url:  env(upstreamEnv, upstreamDefault),
+		url:  environ.Or(upstreamEnv, upstreamDefault),
 		key:  strings.TrimSpace(os.Getenv(keyEnv)),
 		http: &http.Client{Timeout: prepareWait},
 	}
-}
-
-func env(key, def string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return def
 }
 
 // tree is the body of /root: a whole working tree, which only the caller can

@@ -13,6 +13,7 @@ package books
 // description). This turns the double-entry ledger into the single-line register a human reads.
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -232,7 +233,7 @@ func (s *store) bankMerchants(ctx context.Context) (map[string]string, error) {
 		if err := rows.Scan(&connector, &externalID, &merchant, &description); err != nil {
 			return nil, err
 		}
-		out[connector+":"+externalID] = firstNonEmpty(strings.TrimSpace(merchant), strings.TrimSpace(description))
+		out[connector+":"+externalID] = cmp.Or(strings.TrimSpace(merchant), strings.TrimSpace(description))
 	}
 	return out, rows.Err()
 }
