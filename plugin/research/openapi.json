@@ -18,7 +18,7 @@
   "paths": {
     "/v1/research/artifacts": {
       "get": {
-        "operationId": "get_v1_research_artifacts",
+        "operationId": "get_research_artifacts",
         "summary": "Returns the caller org's research-diary feed newest-first — the snapshots and reports tied to its runs, as metadata and content addresses; the bytes themselves are fetched by hash.",
         "description": "Returns the caller org's research-diary feed newest-first —\nthe snapshots and reports tied to its runs, as metadata and content addresses;\nthe bytes themselves are fetched by hash. ?run= narrows to one run, ?project=\nto one project (default the caller's project scope), and ?since= to a unix second.",
         "tags": [
@@ -67,7 +67,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_research_artifacts",
+        "operationId": "post_research_artifacts",
         "summary": "Records one research-diary artifact — a board snapshot or a generated report — CONTENT-ADDRESSED inside the trust boundary.",
         "description": "Records one research-diary artifact — a board snapshot or a\ngenerated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits\nthe bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity\nand the ref, so the address can never be poisoned by a client-asserted one. A\nclient-supplied sha256, if present, must match the bytes. The project is the\nSERVER's value and visibility is forced private. Re-posting the same bytes is a\nno-op that reports created=false.",
         "tags": [
@@ -104,7 +104,7 @@
     },
     "/v1/research/artifacts/{sha256}": {
       "get": {
-        "operationId": "get_v1_research_artifacts_by_sha256",
+        "operationId": "get_research_artifacts_by_sha256",
         "summary": "Fetch one recorded artifact's bytes by its content hash.",
         "description": "Streams the artifact's stored bytes — the retrieval half of hash-addressing, where the diary feed hands out hashes and this hands back what they name. The Content-Type is image/png when the artifact was recorded as a snapshot and application/octet-stream otherwise; it comes from the recorded KIND, not from sniffing the bytes, so an artifact filed as a report always arrives as opaque bytes.\n\nThe hash is an address, and the read is NOT global. The store file IS the org, so the same bytes recorded by two tenants are two artifacts, and a hash that exists but belongs to somebody else is a 404 exactly like one that was never recorded — knowing a content hash is never enough to read it. A caller with no validated org is refused 403 outright.\n\nProject narrows further INSIDE that org: the artifact's project must equal the caller's, which is `?project=` when given and otherwise the caller's own project scope, defaulting to the default project. So an artifact filed under a named project is not found until the caller names that project — a mismatch is the same 404 an unknown hash gets, never a distinguishable refusal.\n\nThe address can be trusted because the WRITE derived it: the server hashes the bytes it stores, inside the trust boundary, and refuses a client-supplied sha256 that disagrees with them, so poisoning a first write would take a preimage. This read does not re-hash — it looks the hash up as a key.\n\nOne shape to expect: this route writes its errors IN-BAND as {\"error\": …} at the real status code, not the {status, error} envelope the typed ops beside it return. It is mounted under an error-flattening filter that would otherwise rewrite its 4xx, so the body is written before that filter runs. A store that cannot be opened is a 500.",
         "tags": [
@@ -124,7 +124,7 @@
     },
     "/v1/research/experiments": {
       "get": {
-        "operationId": "get_v1_research_experiments",
+        "operationId": "get_research_experiments",
         "summary": "Returns the caller org's CANONICAL experiments — the deterministic deduped view over the versioned history.",
         "description": "Returns the caller org's CANONICAL experiments — the deterministic\ndeduped view over the versioned history. With no ?project= it reads the org's\nwhole set across projects (the ops board's cross-project view, since a project is\na sub-scope of the one tenant); ?project= narrows to one and ?kind= to one\ndiscriminator.",
         "tags": [
@@ -164,7 +164,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_research_experiments",
+        "operationId": "post_research_experiments",
         "summary": "Appends one batch of experiment and attempt versions to the caller org's evidence store, idempotently by content, then rolls it up to the analytics plane best-effort.",
         "description": "Appends one batch of experiment and attempt versions to the\ncaller org's evidence store, idempotently by content, then rolls it up to the\nanalytics plane best-effort. The project is the SERVER's value and visibility is\nforced private — an upload grants no training or publication right, which is a\nseparate call. A run carrying a BYO endpoint is SSRF-checked before the store is\ntouched. The answer carries BOTH the canonical (deduped) and retained (full\nhistory) counts, so a caller sees the versioned truth rather than a dedup that\nreads as loss.",
         "tags": [
@@ -209,7 +209,7 @@
     },
     "/v1/research/grants": {
       "post": {
-        "operationId": "post_v1_research_grants",
+        "operationId": "post_research_grants",
         "summary": "Records the SEPARATE authorization an upload never implies: a record's visibility (private, org or public) and, for a run, its training and commons-publication consent.",
         "description": "Records the SEPARATE authorization an upload never\nimplies: a record's visibility (private, org or public) and, for a run, its\ntraining and commons-publication consent. Address a run by its stable id or an\nartifact by its sha256; an artifact grant sets visibility only. The ORG is the\ntenant boundary and comes from the validated principal, so a caller can only ever\ngrant within its own org; `project` locates WHICH record inside it and defaults to\nthe caller's project scope.",
         "tags": [
@@ -246,7 +246,7 @@
     },
     "/v1/research/projects": {
       "get": {
-        "operationId": "get_v1_research_projects",
+        "operationId": "get_research_projects",
         "summary": "Returns every research project in the caller's org with its real totals — canonical and retained side by side — which is the ops board's \"every project + real totals\" view.",
         "description": "Returns every research project in the caller's org with its\nreal totals — canonical and retained side by side — which is the ops board's\n\"every project + real totals\" view.",
         "tags": [
@@ -268,7 +268,7 @@
     },
     "/v1/research/totals": {
       "get": {
-        "operationId": "get_v1_research_totals",
+        "operationId": "get_research_totals",
         "summary": "Returns the caller org's headline aggregate plus a per-kind breakdown — the observatory's poll target.",
         "description": "Returns the caller org's headline aggregate plus a per-kind\nbreakdown — the observatory's poll target. Canonical and retained counts travel\ntogether, so a deduped view never reads as loss. ?project= narrows to one project.",
         "tags": [
