@@ -156,7 +156,7 @@ func TestUnsetKeyFailsClosedOnEverySpelling(t *testing.T) {
 //
 // A typed op is ALSO an MCP tool and an op-plane op. MCP's tools/call invokes the
 // op directly (zip typed.go:474, registeredOp.direct) — no route, so no route
-// middleware, so no credential check ran and `tools/call name=post_v1_exec` with no
+// middleware, so no credential check ran and `tools/call name=post_exec` with no
 // key executed code.
 //
 // This calls the handler the way those doors do: straight, with a bare context. It

@@ -313,7 +313,7 @@ var filler = set("by", "the", "a", "an", "of", "for", "my", "me", "all", "and")
 //
 // The entries are ROUTE STEMS, not tool names, matched against a derived
 // operation id's path half on a '_' boundary. That is the whole reason the list
-// is short enough to read: `v1_git` covers all 32 git ops forever, including the
+// is short enough to read: `git` covers all 32 git ops forever, including the
 // ones written next year, and adding a route under an existing product prefix
 // promotes it with no edit here. A subsystem that declares its own PascalCase
 // ids carries no path in its names, so it can never match a stem — which is
@@ -323,22 +323,22 @@ var filler = set("by", "the", "a", "an", "of", "for", "my", "me", "all", "and")
 // The head of the list is deliberately the inference surface: a client with a
 // tiny window should get chat before it gets anything else.
 var productStems = []string{
-	"v1_chat",        // POST /v1/chat/completions — the flagship
-	"v1_completions", //
-	"v1_responses",   //
-	"v1_messages",    //
-	"v1_embeddings",  //
-	"v1_rerank",      //
-	"v1_models",      // what can it call
-	"v1_agent",       // the agent loop: conversations, presets
-	"v1_agents",      // …sessions, runs, targets
-	"v1_code",        // code intelligence: ask, context, index, search
-	"v1_search",      //
-	"v1_git",         // source control
-	"v1_deploy",      // ship it
-	"v1_exec",        // run it
-	"v1_projects",    // …and the things shipped
-	"v1_websearch",   //
+	"chat",        // POST /v1/chat/completions — the flagship
+	"completions", //
+	"responses",   //
+	"messages",    //
+	"embeddings",  //
+	"rerank",      //
+	"models",      // what can it call
+	"agent",       // the agent loop: conversations, presets
+	"agents",      // …sessions, runs, targets
+	"code",        // code intelligence: ask, context, index, search
+	"search",      //
+	"git",         // source control
+	"deploy",      // ship it
+	"exec",        // run it
+	"projects",    // …and the things shipped
+	"websearch",   //
 }
 
 // httpMethod is the leading word of a DERIVED operation id — the half [rank]
@@ -348,16 +348,26 @@ var httpMethod = set("get", "post", "put", "patch", "delete", "head", "options")
 // rank is the sort bucket for a tool: its index in [productStems], or the tail.
 //
 // A name is ranked by its PATH, which a derived id carries verbatim after the
-// method word. `post_v1_chat_completions` → "v1_chat_completions" → stem
-// "v1_chat" matches on the '_' boundary → bucket 0. A name with no method word
-// (`GetUserPreference`) has no path to match and takes the tail bucket, as does
-// any route under no product prefix.
+// method word. `post_chat_completions` → "chat_completions" → stem "chat" matches
+// on the '_' boundary → bucket 0. A name with no method word (`GetUserPreference`)
+// has no path to match and takes the tail bucket, as does any route under no
+// product prefix.
+//
+// A LEADING VERSION IS STEPPED OVER, the way [route] steps over it. zip stopped
+// emitting one — it names nothing every address does not already carry — and the
+// stems here spelled it, so for a while every product tool matched nothing and
+// fell to the tail: the console led the list, and a client that keeps only the
+// first few tools kept the console instead of chat. An id that still spells a
+// version (a declared one) ranks as the route it names.
 func rank(tool string) int {
 	head, tail, found := strings.Cut(tool, "_")
 	if !found || !httpMethod[strings.ToLower(head)] {
 		return len(productStems)
 	}
 	tail = strings.ToLower(tail)
+	if v, rest, ok := strings.Cut(tail, "_"); ok && isVersion(v) {
+		tail = rest
+	}
 	for i, stem := range productStems {
 		if tail == stem || strings.HasPrefix(tail, stem+"_") {
 			return i
