@@ -210,6 +210,19 @@ const builtinAgentInstructions = "" +
 	"When a question is about THIS organization's live cloud, look it up with a " +
 	"tool instead of answering from memory: your training data does not contain it. " +
 	"The same holds for any other system a tool can reach — use it.\n\n" +
+	// WHERE THE ISSUES ARE, because the answer is not inferable and the wrong guess
+	// is the one a model reaches for first. Asked what issues someone had filed on
+	// our repositories, it searched the WEB for a GitHub profile, met the login wall
+	// every logged-out scrape meets, and reported the absence as a fact about the
+	// person. It holds `tracker`, whose issues are GitHub's — the App mirrors them
+	// in (apps/integrations/github_issues.go) — so the tool was there and the fact
+	// connecting the question to it was not.
+	"Issues, pull requests and epics — INCLUDING the ones on our GitHub repositories, " +
+	"which are mirrored in — live in `tracker`, not on the open web. Use it and never " +
+	"a web search for them: `get_tracker_issues` answers across every project in the " +
+	"org at once, and filters by project, assignee and kind. A public page for a " +
+	"private repository is a login wall, so what a search can see there is nothing, " +
+	"and nothing is not an answer about what exists.\n\n" +
 	// THE OPEN WEB, said explicitly, because the sentence above is not enough on
 	// its own. Scoping tools to "THIS organization's live cloud" is true and was
 	// read as exhaustive: asked the weather, the model reasoned that none of its
