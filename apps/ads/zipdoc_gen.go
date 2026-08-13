@@ -57,7 +57,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"Spring Launch","platform":"meta","objective":"conversions","budget":50000}`),
 	})
 	zip.Describe("POST /v1/ads/campaigns/:id/launch", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Runs a stored ad campaign on its provider using the ORG'S\nconnected ad-account token. It is the standalone proof that /v1/ads consumes the\nconnector plane: no token is held here — LaunchPaid (provider.go) resolves it\nfrom KMS through integrations.TokenFor and FAILS CLOSED when the org has not\nconnected the platform (424), so a launch can never spend on a connection the\norg did not make. On success the provider campaign id is recorded (MarkLaunched)\nand the campaign goes active. An optional body {account} sets/overrides the\ntarget ad account when the stored campaign has none.",
 	})
 	zip.Describe("PUT /v1/ads/campaigns/:id", zip.Doc{
 		Description: "Replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution.",

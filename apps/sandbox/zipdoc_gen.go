@@ -7,23 +7,20 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/sandboxes/:id", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("GET /:id/terminal", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	zip.Describe("GET /:id/screen/ws", zip.Doc{
+		Description: "Serves one screen: RFB from the sandbox's display, as long as somebody\nis looking. The window is ignored — a browser pane's size is not the X\nserver's, and the page scales what it is given rather than asking a server\nwith no RandR to resize itself.",
 	})
 	zip.Describe("GET /:id/terminal/ws", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("GET /v1/sandboxes/:id", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Serves one terminal: a shell on a pseudo-terminal, for as long as\nsomebody is typing.",
 	})
 	zip.Describe("GET /v1/sandboxes/:id/fs", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Answers text, because this address always has: a file as its bytes, a\ndirectory as one entry per line. The typed Entry the core returns is what the\nplane carries; here it is rendered back to the one shape this route has served.",
+	})
+	zip.Describe("POST /:id/screen/ticket", zip.Doc{
+		Description: "Mints the ticket for one DOOR. Gated exactly like its siblings — a\nvalidated principal, resolved to the org whose sandboxes may be addressed —\nand it resolves the sandbox before minting, so a ticket never names a sandbox\nthe caller does not own or one that is not running.\n\nTHE DOOR IS THE ADDRESS AND NOT THE GRANT. A ticket says which org and which\nsandbox, and the terminal and the screen are two views of that one machine —\na caller holding the authority to type in a sandbox holds the authority to\nlook at it. Binding the door into the token would be a second gate answering\na question the first one already closed, and a gate that decides nothing is\none somebody later has to reason about anyway. What the door decides is the\nURL a caller is handed back, which is the only part that differs.",
 	})
 	zip.Describe("POST /:id/terminal/ticket", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Mints the ticket for one DOOR. Gated exactly like its siblings — a\nvalidated principal, resolved to the org whose sandboxes may be addressed —\nand it resolves the sandbox before minting, so a ticket never names a sandbox\nthe caller does not own or one that is not running.\n\nTHE DOOR IS THE ADDRESS AND NOT THE GRANT. A ticket says which org and which\nsandbox, and the terminal and the screen are two views of that one machine —\na caller holding the authority to type in a sandbox holds the authority to\nlook at it. Binding the door into the token would be a second gate answering\na question the first one already closed, and a gate that decides nothing is\none somebody later has to reason about anyway. What the door decides is the\nURL a caller is handed back, which is the only part that differs.",
 	})
 	zip.Describe("POST /sandbox/end", zip.Doc{
 		Description: "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too.",
@@ -54,6 +51,7 @@ func init() {
 		Description: "Runs one command inside the caller's sandbox and answers its exit code,\nstdout and stderr. A non-zero exit is a successful call carrying a failed\nprogram, so it comes back as data and not as an error.\n\nName a `session` and the command NARRATES INTO IT: its output is appended to\nthat session's live log as the program produces it, so anything watching the\nsession — GET /v1/agents/sessions/stream, scoped to one run with ?root= —\nwatches the work happen rather than waiting for the verdict. Without it the\ncall is what it always was: silent until it returns, which for an agentic run\nis twenty-five minutes of blank screen.\n\nThe session is named; the TENANT is not. It is the org the caller already\nproved, so a session belonging to somebody else is absent from the org this\ncall acts for and the append is refused there.",
 		Fields: map[string]string{
 			"RunIn.argv":       "Argv is the program and its arguments, already split — the form no shell can\nmisread. Give this or Command, not both.",
+			"RunIn.blind":      "Blind is the set of secrets this command must never publish.\n\nIt exists because output is redacted where it is PRODUCED or not at all. A\ncaller that scrubbed the returned result would still have streamed the\nunredacted bytes into the session as they were written — to a durable event\nstore, an SSE feed and a chat thread — because the narration leaves the\nsandbox by a different door from the result. Nothing downstream can take a\nsecret back out of a message that has already been delivered.\n\nThe sandbox holds these only for the life of the one command, applies them\nto every stream leaving it, and never logs or stores them.",
 			"RunIn.command":    "Command is a shell line, run by `sh -c`. Use it when a pipeline or a\nredirection is the point, and Argv when it is not.",
 			"RunIn.dir":        "Dir runs the command somewhere other than the sandbox's working directory,\nwhich Leased.Workdir names.",
 			"RunIn.id":         "ID is the sandbox to run in, from an earlier lease.",
@@ -72,12 +70,6 @@ func init() {
 			"WriteIn.id":   "ID is the sandbox to write into, from an earlier lease.",
 			"WriteIn.path": "Path is confined the same way PathIn.Path is. Missing parent directories are\ncreated.",
 		},
-	})
-	zip.Describe("POST /v1/sandboxes/:id/exec", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
-	})
-	zip.Describe("POST /v1/sandboxes/:id/fs", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 	zip.Describe("POST /v1/sandboxes/end", zip.Doc{
 		Description: "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too.",
@@ -108,6 +100,7 @@ func init() {
 		Description: "Runs one command inside the caller's sandbox and answers its exit code,\nstdout and stderr. A non-zero exit is a successful call carrying a failed\nprogram, so it comes back as data and not as an error.\n\nName a `session` and the command NARRATES INTO IT: its output is appended to\nthat session's live log as the program produces it, so anything watching the\nsession — GET /v1/agents/sessions/stream, scoped to one run with ?root= —\nwatches the work happen rather than waiting for the verdict. Without it the\ncall is what it always was: silent until it returns, which for an agentic run\nis twenty-five minutes of blank screen.\n\nThe session is named; the TENANT is not. It is the org the caller already\nproved, so a session belonging to somebody else is absent from the org this\ncall acts for and the append is refused there.",
 		Fields: map[string]string{
 			"RunIn.argv":       "Argv is the program and its arguments, already split — the form no shell can\nmisread. Give this or Command, not both.",
+			"RunIn.blind":      "Blind is the set of secrets this command must never publish.\n\nIt exists because output is redacted where it is PRODUCED or not at all. A\ncaller that scrubbed the returned result would still have streamed the\nunredacted bytes into the session as they were written — to a durable event\nstore, an SSE feed and a chat thread — because the narration leaves the\nsandbox by a different door from the result. Nothing downstream can take a\nsecret back out of a message that has already been delivered.\n\nThe sandbox holds these only for the life of the one command, applies them\nto every stream leaving it, and never logs or stores them.",
 			"RunIn.command":    "Command is a shell line, run by `sh -c`. Use it when a pipeline or a\nredirection is the point, and Argv when it is not.",
 			"RunIn.dir":        "Dir runs the command somewhere other than the sandbox's working directory,\nwhich Leased.Workdir names.",
 			"RunIn.id":         "ID is the sandbox to run in, from an earlier lease.",

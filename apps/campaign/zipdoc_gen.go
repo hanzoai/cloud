@@ -185,10 +185,10 @@ func init() {
 		Example: json.RawMessage(`{"id":"cmp_1f…","kind":"email","platform":"sendgrid","account":"list_42"}`),
 	})
 	zip.Describe("POST /v1/campaign/:id/launch", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Fans a campaign out to its channels. A campaign with no channels\nis a 400 (nothing to launch). After the fan-out the campaign is live when at\nleast one channel launched, else failed. The channel rows carry the honest\nper-channel status. Idempotency: a channel already live is not re-launched.",
 	})
 	zip.Describe("POST /v1/campaign/:id/pause", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Pauses every live channel on the provider and moves the campaign\nto paused. A channel whose executor is gone, or whose pause errors, is recorded\nhonestly; the campaign still reports paused (no live channel remains that this\nprocess will meter).",
 	})
 	zip.Describe("PUT /v1/campaign/:id", zip.Doc{
 		Description: "Rewrites a campaign's core fields — name, audience, creatives,\nschedule and budget — and returns the updated campaign.\n\nChannels are replaced ONLY while the campaign is still a draft. Once it is\nlaunched its channels carry provider state (an external id, a live status), so\nthey are added and removed explicitly through the channels sub-resource\ninstead; a whole-object write would silently orphan a running execution.",

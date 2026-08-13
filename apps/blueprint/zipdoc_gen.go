@@ -29,6 +29,6 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/blueprint/sbom", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Answers GET /v1/blueprint/sbom. With ?template=<id> it returns that\nblueprint's SBOM + cost (404 on an unknown id); with no template it returns the\nbatch of every blueprint's estimate for a gallery grid.",
 	})
 }

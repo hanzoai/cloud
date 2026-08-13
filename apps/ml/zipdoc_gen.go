@@ -41,6 +41,6 @@ func init() {
 		Example: json.RawMessage(`{"name":"sentiment"}`),
 	})
 	zip.Describe("POST /v1/ml/models/:name/predict", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Proxies the request body to the model's kserve v2 data plane. The v2\nmodel name defaults to the InferenceService name (kserve's single-model\nconvention) and may be overridden with ?model=. The predictor's status + body\nare returned verbatim so a model-side error surfaces honestly.",
 	})
 }

@@ -268,6 +268,6 @@ func init() {
 		Example: json.RawMessage(`{"id":"chk_1"}`),
 	})
 	zip.Describe("POST /v1/compliance/verifications/webhook", zip.Doc{
-		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+		Description: "Is the external PUSH reconcile: a provider (or a Hanzo relay)\nsignals that a verification settled. It authenticates by HMAC SIGNATURE (not an\ninternal principal — an external caller has no validated org), locates the check by\nthe provider reference the signed payload names, and RECONCILES the status from the\nprovider API. The body carries no trusted decision, so a valid signature cannot\nforce a status — the wired provider is the source of truth, and Manual stays\npending. Disabled (501) unless a webhook secret is configured.\n\nUNTYPED on purpose: the HMAC is computed over the RAW body bytes and verified\nBEFORE anything parses, and an unknown reference answers a benign 200 no-op whose\nshape differs from the reconciled check. A typed op would decode its In first —\nreordering the authentication — and cannot answer two 200 shapes.",
 	})
 }
