@@ -3,7 +3,7 @@ package kms
 import (
 	"testing"
 
-	sqlitedrv "github.com/hanzoai/sqlite"
+	"github.com/hanzoai/cloud/internal/codec"
 )
 
 // requireSharedStore skips a test that needs two handles on ONE store file to see
@@ -22,7 +22,5 @@ import (
 // `make test` runs CGO_ENABLED=0, so no CI job exercises that build today.
 func requireSharedStore(t *testing.T) {
 	t.Helper()
-	if !sqlitedrv.CodecLinked() {
-		t.Skip("pure-Go envelope: one store is single-writer (handle-private RAM copy, sealed on close); the no-exclusive-lock property belongs to the codec-linked build")
-	}
+	codec.Require(t, "one store is single-writer under the pure-Go envelope (handle-private RAM copy, sealed on close), so the no-exclusive-lock property belongs to the codec-linked build")
 }
