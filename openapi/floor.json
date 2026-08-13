@@ -1,6 +1,6 @@
 {
-  "paths": 1799,
-  "operations": 2473,
+  "paths": 1802,
+  "operations": 2476,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -151,7 +151,7 @@
     "run": 1,
     "runner": 3,
     "s3": 12,
-    "sandboxes": 16,
+    "sandboxes": 19,
     "sbom": 3,
     "scrape": 1,
     "search": 6,
