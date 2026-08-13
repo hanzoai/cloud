@@ -287,27 +287,11 @@ func StorePath(dir string) string { return filepath.Join(dir, "iam", "iam.db") }
 // mode, the same busy timeout, the same file. Opening it any other way makes a second
 // format for one database, and the second one only ever has the wrong rows in it.
 //
-// IT USED TO OPEN THROUGH cek, and the reason it stopped is worth keeping. cek gives a
-// keyed handle, which made this store encrypted at rest — a real property, and the
-// argument for it was sound: an identity graph and every credential record readable
-// from a lifted volume is exactly the exposure encryption exists to remove. What the
-// argument missed is that it was protecting the WRONG FILE. cek derives its own path,
-// so this opened {DataDir}/orgs/_platform/global.db while every identity in production
-// lives in a plain SQLite file the standalone iam wrote; the encrypted store held four
-// kilobytes and no users, and asking it for the signing keys returned {"keys":[]}. A
-// fully-mounted, completely empty identity service is not a security posture.
-//
-// cek cannot be pointed at the real file either — not "should not": it derives a key
-// unconditionally and refuses a plaintext database at open, which is measured, not
-// assumed. So the choice is between an encrypted store with no identities in it and
-// the store that has them. Encrypting the one that has them means re-keying an
-// existing file, which is a migration, and the directive here is forward-only: one
-// store, pointed at, never converted.
-//
-// SO THE IDENTITY STORE IS PLAINTEXT AT REST, exactly as it is today, and that is a
-// cost named rather than hidden. The only shape that changes it without a migration is
-// a NEW store born encrypted with the old one retired, and that is a separate decision
-// this open cannot smuggle in.
+// cloud's own keyed store helper is deliberately not one of the backends below.
+// It derives its own path from a namespace, so it addresses a different file than
+// the one IAM's serving binary and its migrator share — which is the property the
+// paragraph above exists to hold. Where identity lives is chosen by the backend,
+// not by the opener.
 //
 // cek keeps opening cloud's OWN stores. Each store is opened by whoever owns it.
 func openStore(dir string) (orm.DB, error) {
@@ -338,12 +322,8 @@ func openStore(dir string) (orm.DB, error) {
 	// derived from anything the process already knows — and it defaults to the
 	// behaviour that exists today, so a deployment that sets nothing is unchanged.
 	//
-	// On "sql" the identity store stops being a file on one volume: no path, no
-	// per-file key, and nothing a volume-wide encryption sweep can convert out
-	// from under a plain-SQLite opener. That is not a hypothetical — it is what
-	// took every brand's login down on 13 Aug, when this store was the one
-	// plaintext database on a volume where everything else was cek-encrypted, and
-	// a sweep did the obviously-right thing to it.
+	// On "sql" the identity store is not a file on a volume at all: no path and no
+	// per-file key, reached identically from every replica.
 	backend := strings.TrimSpace(os.Getenv("IAM_STORE_BACKEND"))
 
 	if backend != "" && backend != "sqlite" {
