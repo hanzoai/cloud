@@ -220,22 +220,34 @@ func (registryTools) call(ctx context.Context, org, actor, name, args string) (s
 //
 // The fleet door groups one tool per subsystem and carries the operation names in
 // its `op` enum (fleet/grouped.go), and those names are spelled
-// <method>_v1_<subsystem>_<rest> — so the owner is a fact the name already
-// states. Deriving it here keeps this a pure function of the value: it answers
-// the same way in the fused binary and in a single-app plugin process, whereas
+// <method>_<subsystem>_<rest> — so the owner is a fact the name already states.
+// Deriving it here keeps this a pure function of the value: it answers the same
+// way in the fused binary and in a single-app plugin process, whereas
 // cloud.SubsystemOf reads a boot-time mount index that in a plugin knows only
 // that plugin's own routes and would answer "" for every sibling's tool.
+//
+// THE SUBSYSTEM IS THE SECOND WORD, because the first is the method and the
+// version is not in the name: zip.ID drops a leading /v1 as saying nothing that
+// every address does not already carry. This used to read whatever followed a "v1"
+// word, so once the names lost it every tool answered "" and every tool span lost
+// the app it addressed. An op that declares its own id may still spell the version
+// (plugin/agents declares post_v1_coding), so a second word of "v1" is stepped
+// over rather than returned.
 //
 // A name that is not in that shape (a registry-local tool like "http") owns no
 // subsystem and says so with "", rather than with a guess.
 func toolSubsystem(op string) string {
 	parts := strings.Split(op, "_")
-	for i, p := range parts {
-		if p == "v1" && i+1 < len(parts) {
-			return parts[i+1]
-		}
+	if len(parts) < 2 {
+		return ""
 	}
-	return ""
+	if parts[1] == "v1" {
+		if len(parts) < 3 {
+			return ""
+		}
+		return parts[2]
+	}
+	return parts[1]
 }
 
 // actorSub reads the user subject back out of the run's "org/sub" billing actor,

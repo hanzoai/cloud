@@ -19,7 +19,7 @@ import (
 func TestTargetOpsProjectEverywhere(t *testing.T) {
 	app := mountApp(t, nil)
 
-	const opID = "post_v1_agents_targets"
+	const opID = "post_agents_targets"
 	const path = "/v1/agents/targets"
 
 	// ---- 1. OpenAPI: the document the SDK repos generate from -------------
