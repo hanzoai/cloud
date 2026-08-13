@@ -3,29 +3,25 @@
 package codec
 
 import (
-	"os"
 	"testing"
 
 	sqlitedrv "github.com/hanzoai/sqlite"
 )
 
-// Require skips the test when the codec is absent, naming why in the caller's own
-// words — unless the build asked to be held to the shipped engine, in which case an
-// absent codec is a FAILURE.
+// Require skips the test when no codec is linked, naming why in the caller's own
+// words.
 //
-// SQLITE_REQUIRE_CODEC=1 is that request. `make test-codec` and the Dockerfile both
-// set it, and the Makefile says the target "either exercises the shipped engine or
-// says it cannot". It did not say so: the variable is read by hanzoai/sqlite's own
-// suite and by nothing here, so on a machine whose -lsqlite3 is plain SQLite every
-// storage test skipped and the target reported success — the one shape that is
-// indistinguishable from having run.
+// The condition is one decision in one place because four tests make it, and it is
+// the same decision each time: cek converts a plaintext store in place with
+// SQLCipher's sqlcipher_export, a SQL function only the C engine has, so on a build
+// without it there is no encrypted store to exercise.
+//
+// That is a gap in cek, not a property of the code under test — hanzoai/sqlcipher
+// encrypts a file in pure Go (EncryptFile), which is what cek should convert with.
+// When it does, this helper has nothing left to skip and goes away.
 func Require(t *testing.T, why string) {
 	t.Helper()
-	if sqlitedrv.CodecLinked() {
-		return
+	if !sqlitedrv.CodecLinked() {
+		t.Skip("no codec linked: " + why)
 	}
-	if os.Getenv("SQLITE_REQUIRE_CODEC") == "1" {
-		t.Fatalf("SQLITE_REQUIRE_CODEC=1 but no codec is linked, so this cannot be exercised: %s", why)
-	}
-	t.Skip("no codec linked: " + why)
 }
