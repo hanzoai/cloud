@@ -103,7 +103,6 @@ func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.NoContent(http.StatusOK)
 }
 
-
 // ── Bot Connection reply (serviceUrl + AAD app token) ────────────────────────
 
 var (

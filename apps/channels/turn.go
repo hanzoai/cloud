@@ -25,8 +25,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 

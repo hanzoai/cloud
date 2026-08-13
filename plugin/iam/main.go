@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/apps/iam"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the iam app.
