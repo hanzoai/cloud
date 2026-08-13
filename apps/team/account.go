@@ -32,6 +32,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/agents"
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 	model "github.com/hanzoai/iam/pkg/model"
@@ -214,7 +215,7 @@ func trunc(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return shorten.To(s, n) + "…"
 }
 func statusError(msg string) Status {
 	return Status{Severity: "ERROR", Code: "account:status:InternalServerError", Params: map[string]any{"message": msg}}

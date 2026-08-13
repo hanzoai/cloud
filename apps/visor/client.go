@@ -42,6 +42,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -238,9 +239,5 @@ func q(pairs ...string) string {
 }
 
 func snippet(b []byte) string {
-	s := strings.TrimSpace(string(b))
-	if len(s) > 200 {
-		return s[:200]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(string(b)), 200)
 }

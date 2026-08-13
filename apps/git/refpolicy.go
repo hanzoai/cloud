@@ -80,7 +80,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"unicode/utf8"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // # Every writer, and where each states its intent
@@ -485,13 +486,7 @@ const maxPktPayload = 65520 - 4
 // clip bounds one report line so it always fits a frame, cutting on a rune
 // boundary so a truncated line stays valid UTF-8 for whatever prints it.
 func clip(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	for max > 0 && !utf8.RuneStart(s[max]) {
-		max--
-	}
-	return s[:max]
+	return shorten.To(s, max)
 }
 
 // hasCap reports whether the client offered a capability. Exact token match on
