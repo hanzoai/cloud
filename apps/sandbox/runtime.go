@@ -100,9 +100,20 @@ const (
 // nothing.
 const annLeased = "hanzo.ai/sandbox-leased"
 
-// defaultTTL is the lease a class gets when the caller names none. Unbounded is
-// not an option for a pod running submitted code on our nodes.
-var defaultTTL = map[string]int{"exec": 900, "dev": 14400, "desktop": 14400}
+// kvmResource is the extended resource an android pod asks for, and it is the
+// ONE name for the device.
+//
+// A hostPath mount of /dev/kvm does NOT work and the way it fails is the reason
+// this is a device plugin. The file appears in the container, `ls -l` shows it,
+// and every open returns EPERM — the container's device cgroup, which a volume
+// does not touch. Measured on a worker node: the same probe answered
+// `PermissionError: [Errno 1] Operation not permitted` unprivileged and
+// `KVM_API_VERSION 12` privileged. A device plugin is what makes the kubelet add
+// the device to that allowlist, so the pod can open what it was given.
+//
+// The name is KubeVirt's because every KVM device plugin advertises it; a name
+// of our own would be a second vocabulary for one device.
+const kvmResource = "devices.kubevirt.io/kvm"
 
 // maxLiveExec is how many `exec` sandboxes ONE org may hold at once.
 //
@@ -690,6 +701,7 @@ func (r *runtime) ensureVolume(ctx context.Context, m Sandbox) error {
 
 // podSpec is the sandbox, stated once.
 func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
+	k := classes[m.Class]
 	c := map[string]any{
 		"name":       container,
 		"image":      m.Image,
@@ -701,16 +713,23 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 		// container rootfs, which on our nodes shares one disk with every image
 		// layer and every build; a handful of unbounded sandbox take the node
 		// into DiskPressure and evict their own neighbours. Measured, not feared.
+		//
+		// A CLASS MAY ASK FOR MORE, and until now none could. These three env vars
+		// are the FLEET's envelope, one size for every sandbox, so an emulator —
+		// which holds a whole guest machine's RAM before it has drawn a pixel —
+		// would have been given 512Mi and killed. The class's own row wins where it
+		// states a value; where it is silent the fleet default stands, so exec, dev
+		// and desktop are byte-identical to what they were.
 		"resources": map[string]any{
 			"requests": map[string]any{
-				"cpu":               environ.Or("MACHINE_CPU_REQUEST", "250m"),
-				"memory":            environ.Or("MACHINE_MEM_REQUEST", "512Mi"),
-				"ephemeral-storage": environ.Or("MACHINE_DISK_REQUEST", "2Gi"),
+				"cpu":               cmp.Or(k.cpu, environ.Or("MACHINE_CPU_REQUEST", "250m")),
+				"memory":            cmp.Or(k.mem, environ.Or("MACHINE_MEM_REQUEST", "512Mi")),
+				"ephemeral-storage": cmp.Or(k.disk, environ.Or("MACHINE_DISK_REQUEST", "2Gi")),
 			},
 			"limits": map[string]any{
-				"cpu":               environ.Or("MACHINE_CPU_LIMIT", "2"),
-				"memory":            environ.Or("MACHINE_MEM_LIMIT", "4Gi"),
-				"ephemeral-storage": environ.Or("MACHINE_DISK_LIMIT", "8Gi"),
+				"cpu":               cmp.Or(k.cpu, environ.Or("MACHINE_CPU_LIMIT", "2")),
+				"memory":            cmp.Or(k.mem, environ.Or("MACHINE_MEM_LIMIT", "4Gi")),
+				"ephemeral-storage": cmp.Or(k.disk, environ.Or("MACHINE_DISK_LIMIT", "8Gi")),
 			},
 		},
 		"securityContext": map[string]any{
@@ -739,27 +758,43 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 	// a program. Every lifetime, from a one-shot invoke to a week-long session, is
 	// the same pod entered through the same channel.
 	//
-	// EXCEPT A DESKTOP, WHOSE SCREEN IS ITS PROCESS. The desktop image's CMD
-	// starts Xvfb, a window manager and the VNC/noVNC pair and only then becomes
-	// the same `sleep infinity`; stating a command here replaced that script
-	// outright, so the class that exists to have a display came up with no X
-	// server at all — byte-identical to `dev` but for a label, and silent about
+	// EXCEPT A CLASS WITH A SCREEN, WHOSE DISPLAY IS ITS PROCESS. The desktop
+	// image's CMD starts Xvfb, a window manager and the VNC/noVNC pair and only
+	// then becomes the same `sleep infinity`; stating a command here replaced that
+	// script outright, so the class that exists to have a display came up with no
+	// X server at all — byte-identical to `dev` but for a label, and silent about
 	// it, because a pod that sleeps looks perfectly healthy.
 	//
+	// It reads the class's own row rather than testing `!= "desktop"`, because
+	// that test is a list of one written as a comparison: android has a screen
+	// too, and adding it by hand here is the half of a new class it is easiest to
+	// forget — with exactly the failure above as the symptom.
+	//
 	// Deferring to the image is not a second way to start a sandbox. Work still
-	// arrives only through the exec subresource, for all three classes; the
-	// desktop simply also has something of its own to run first.
-	if m.Class != "desktop" {
+	// arrives only through the exec subresource, for every class; a screen simply
+	// also has something of its own to run first.
+	if !k.screen {
 		c["command"] = []any{"sleep", "infinity"}
 	} else {
 		// Declared so the screen is addressable by name rather than by a number
-		// somebody has to look up. Ports are how a reader learns a desktop has a
+		// somebody has to look up. Ports are how a reader learns a class has a
 		// display; they do not open anything the entrypoint has not bound, and it
 		// binds loopback.
 		c["ports"] = []any{
 			map[string]any{"name": "vnc", "containerPort": int64(rfb)},
 			map[string]any{"name": "novnc", "containerPort": int64(6080)},
 		}
+	}
+	// THE DEVICE IS A RESOURCE, ASKED FOR ON BOTH SIDES. Kubernetes admits an
+	// extended resource only when request and limit agree, so it is stated twice
+	// and cannot be stated once by mistake. Asking for it is also what SCHEDULES
+	// the pod: a node with no plugin advertises none, so an android sandbox stays
+	// Pending with a message naming the resource — which is the honest outcome,
+	// against a pod that starts and emulates the CPU in software and never boots.
+	if k.kvm {
+		res := c["resources"].(map[string]any)
+		res["requests"].(map[string]any)[kvmResource] = int64(1)
+		res["limits"].(map[string]any)[kvmResource] = int64(1)
 	}
 	spec := map[string]any{
 		// No token, ever. A sandbox runs somebody else's code; a projected
