@@ -553,19 +553,27 @@ func slackLinkSlackURI(s *cloud.Service[state]) string {
 // rather than a raw JSON dead end. Minting a principal here would be inventing an
 // org for an anonymous click, which is the one thing the isolation bar forbids.
 func slackInstall(s *cloud.Service[state], c *zip.Ctx) error {
-	if !slackConfigured() {
-		// Honest 503 over a consent URL with an empty client_id, which Slack answers
-		// with its own error page and no way back.
-		return zip.Errorf(http.StatusServiceUnavailable,
-			"slack install is not configured on this deployment (SLACK_CLIENT_ID unset)")
-	}
-	u, err := slackAuthorize(slackCreds(), "https://"+s.Domain+callbackPath("slack"), "")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "authorize: %v", err)
-	}
-	// The install click, counted. The span this rides already ships to the
-	// datastore, so "how many installs did the Marketplace listing drive" is
-	// answerable without a second metrics path — the referrer is the listing.
+	// SEND THEM TO THE CONSOLE, not to Slack.
+	//
+	// This used to 302 straight to Slack's consent screen carrying NO state, on
+	// the reasoning that the callback would resolve the org another way. It does
+	// not: the callback's first act is `verify(state)` and its own comment says
+	// "the org comes ONLY from the signed, single-use state". So every click from
+	// Slack's directory — the whole point of this route — landed on
+	// /integrations?error=slack&reason=invalid+state. A marketplace entry point
+	// that cannot complete is worse than none, because it fails after the person
+	// has already approved the scopes.
+	//
+	// Minting a state here is not the fix either, and that is what the comment
+	// was groping at: a state binds an ORG, and this route is deliberately
+	// ungated because someone arriving from the directory has no Hanzo session.
+	// Inventing an org for an anonymous click is the one thing the isolation bar
+	// forbids.
+	//
+	// So the honest answer is the console: sign in, pick the org, press Connect.
+	// That flow mints the state, and the install completes under exactly the
+	// rules every other install obeys. One connect path, and this is a signpost
+	// to it rather than a second one that dead-ends.
 	s.Log.Info("slack install click", "referer", c.Header("Referer"))
-	return redirect(c, u)
+	return redirect(c, consoleRedirectURL(s.State.consoleURL, "connect", "slack", "from", "install"))
 }
