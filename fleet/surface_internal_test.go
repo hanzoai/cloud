@@ -31,12 +31,12 @@ var refusals = []struct{ name, why string }{
 	{"addToken", "POST /v1/iam/tokens"},
 	{"listTokens", "GET /v1/iam/tokens"},
 	{"getWebauthnCredential", "POST /v1/iam/webauthn-credentials/get"},
-	{"post_v1_iam_oauth_token", "the OAuth token endpoint"},
-	{"post_v1_iam_registry_token", "a registry pull credential"},
-	{"post_v1_iam_mint-user-keys", "mints keys for a user"},
-	{"get_v1_kms_secrets", "the secret store, read"},
-	{"delete_v1_kms_secrets_by_wildcard1", "the secret store, written"},
-	{"get_v1_functions_secrets", "a function's environment secrets"},
+	{"post_iam_oauth_token", "the OAuth token endpoint"},
+	{"post_iam_registry_token", "a registry pull credential"},
+	{"post_iam_mint-user-keys", "mints keys for a user"},
+	{"get_kms_secrets", "the secret store, read"},
+	{"delete_kms_secrets_by_wildcard1", "the secret store, written"},
+	{"get_functions_secrets", "a function's environment secrets"},
 	// Sessions that nothing owns are identity sessions — read or write.
 	{"getSession", "POST /v1/iam/sessions/get — the session object IS the credential"},
 	{"listSessions", "GET /v1/iam/sessions"},
@@ -63,13 +63,13 @@ var refusals = []struct{ name, why string }{
 	{"CreateBulkInvite", "POST /v1/o11y/invite/bulk"},
 	{"CreateIngestionKey", "POST /v1/o11y/gateway/ingestion_keys"},
 	{"CreateRoutePolicy", "POST /v1/o11y/route_policies"},
-	{"post_v1_iam_add-user", "POST /v1/iam/add-user"},
-	{"post_v1_iam_scim_v2_users", "SCIM user provisioning"},
+	{"post_iam_add-user", "POST /v1/iam/add-user"},
+	{"post_iam_scim_v2_users", "SCIM user provisioning"},
 	{"delete_v1_framework_roles_user_role", "DELETE /v1/framework/roles/{user}/{role}"},
-	{"post_v1_git_keys", "POST /v1/git/keys — an SSH key is a credential even on the git surface"},
+	{"post_git_keys", "POST /v1/git/keys — an SSH key is a credential even on the git surface"},
 	{"delete_v1_git_keys_id", "and removing one is still key management"},
 	{"post_v1_agents_targets_id_key", "POST /v1/agents/targets/{id}/key — enrols a machine agent"},
-	{"delete_v1_keys", "DELETE /v1/keys — the head resource, so no store owns it"},
+	{"delete_keys", "DELETE /v1/keys — the head resource, so no store owns it"},
 }
 
 // survivors is the useful half: what an agent is FOR. Several of these are here
@@ -81,29 +81,29 @@ var survivors = []struct{ name, why string }{
 	{"post_v1_responses", "POST /v1/responses"},
 	{"post_v1_embeddings", "POST /v1/embeddings"},
 	{"post_v1_rerank", "POST /v1/rerank"},
-	{"get_v1_models", "GET /v1/models"},
+	{"get_models", "GET /v1/models"},
 	{"post_v1_messages_count_tokens", "POST /v1/messages/count_tokens — `token` is a UNIT here; the counting neighbour says so"},
 	{"get_v1_validators_tokenId", "a chain token id, not a bearer token"},
 
 	// The agent loop. Every one of these was refused while `session` was an
 	// unqualified authority noun.
-	{"post_v1_agents_sessions", "POST /v1/agents/sessions — an agent session is a unit of WORK"},
-	{"post_v1_agents_sessions_by_id_message", "the turn itself"},
-	{"post_v1_agents_sessions_by_id_stop", "…and stopping it"},
+	{"post_agents_sessions", "POST /v1/agents/sessions — an agent session is a unit of WORK"},
+	{"post_agents_sessions_by_id_message", "the turn itself"},
+	{"post_agents_sessions_by_id_stop", "…and stopping it"},
 	{"patch_v1_agents_sessions_id", "…and steering it"},
-	{"get_v1_agents_sessions_stream", "…and watching it"},
-	{"post_v1_agents_by_ref_run", "POST /v1/agents/{ref}/run"},
+	{"get_agents_sessions_stream", "…and watching it"},
+	{"post_agents_by_ref_run", "POST /v1/agents/{ref}/run"},
 	{"post_v1_agents_targets_id_claim", "claiming a target is not minting its key"},
 
 	// Code, search, git, deploy, exec.
-	{"post_v1_code_ask", "POST /v1/code/ask"},
-	{"post_v1_code_index", "POST /v1/code/index"},
-	{"get_v1_code_search", "GET /v1/code/search"},
-	{"post_v1_search", "POST /v1/search"},
-	{"post_v1_git_repos", "POST /v1/git/repos — repos are not credentials"},
+	{"post_code_ask", "POST /v1/code/ask"},
+	{"post_code_index", "POST /v1/code/index"},
+	{"get_code_search", "GET /v1/code/search"},
+	{"post_search", "POST /v1/search"},
+	{"post_git_repos", "POST /v1/git/repos — repos are not credentials"},
 	{"post_v1_git_repos_name_push", "POST /v1/git/repos/{name}/push"},
-	{"post_v1_deploy_applications_by_name_sync", "POST /v1/deploy/applications/{name}/sync"},
-	{"post_v1_exec", "POST /v1/exec"},
+	{"post_deploy_applications_by_name_sync", "POST /v1/deploy/applications/{name}/sync"},
+	{"post_exec", "POST /v1/exec"},
 
 	// The fleet's path to the live internet. These names have to be checked
 	// against the rule rather than assumed past it: the rule reads the NAME, so
@@ -122,12 +122,12 @@ var survivors = []struct{ name, why string }{
 
 	// Words that LOOK dangerous and are not. Each names a store entry or a
 	// schema name, not a credential — see keyOfAStore.
-	{"get_v1_o11y_deployments_attribute_keys", "metric label names"},
+	{"get_o11y_deployments_attribute_keys", "metric label names"},
 	{"delete_v1_pubsub_kv_bucket_key", "DELETE /v1/pubsub/kv/{bucket}/{key}"},
 	{"delete_v1_flags_defs_key", "a feature-flag key"},
 	{"delete_v1_tracker_projects_key", "a tracker project key, e.g. CLOUD-1"},
 	{"patch_v1_tracker_projects_key_issues_num", "…and an issue under it"},
-	{"delete_v1_store_by_storeid_listing_by_key", "the `by_` filler must not become the key's context"},
+	{"delete_store_by_storeid_listing_by_key", "the `by_` filler must not become the key's context"},
 	{"delete_v1_cloudflare_kv_namespaces_namespace_values_key", "a KV value"},
 
 	// The whole ai CRUD surface, which zip names `by_owner_by_name`. All 45 of
@@ -138,7 +138,7 @@ var survivors = []struct{ name, why string }{
 
 	// Money is a different boundary and this rule does not claim it. Named here
 	// so the scope is a decision on the record rather than an oversight.
-	{"post_v1_research_grants", "a research grant is money, not authority"},
+	{"post_research_grants", "a research grant is money, not authority"},
 }
 
 func TestRefuse_DangerousOpsAreNotProjected(t *testing.T) {
@@ -236,7 +236,7 @@ func TestRank_PutsTheProductSurfaceInFrontOfTheConsole(t *testing.T) {
 	}
 	// Stem matching is on a '_' boundary, so a longer name under the prefix is
 	// promoted and an unrelated one that merely starts with the same letters is not.
-	if got := rank("get_v1_agents_sessions_stream"); got == len(productStems) {
+	if got := rank("get_agents_sessions_stream"); got == len(productStems) {
 		t.Error("a route UNDER a product stem must inherit its rank")
 	}
 	if got := rank("get_v1_agentsomething"); got != len(productStems) {
@@ -290,8 +290,8 @@ func TestWords_ReadsBothNamingConventions(t *testing.T) {
 		{"GetRolesByUserID", []string{"get", "roles", "by", "user", "id"}},
 		{"delete_v1_ai_signin-sessions_by_owner_by_name",
 			[]string{"delete", "v1", "ai", "signin", "sessions", "by", "owner", "by", "name"}},
-		{"post_v1_git_by_org_by_repo_git-upload-pack",
-			[]string{"post", "v1", "git", "by", "org", "by", "repo", "git", "upload", "pack"}},
+		{"post_git_by_org_by_repo_git-upload-pack",
+			[]string{"post", "git", "by", "org", "by", "repo", "git", "upload", "pack"}},
 	} {
 		got := words(c.in)
 		if strings.Join(got, " ") != strings.Join(c.want, " ") {
