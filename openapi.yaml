@@ -11770,6 +11770,13 @@ components:
           type: array
         start:
           type: string
+        topActors:
+          description: |-
+            TopActors is per-PRINCIPAL spend from the same ledger — whose bill it is,
+            which the per-model board cannot answer.
+          items:
+            $ref: '#/components/schemas/aimActorStat'
+          type: array
         topModels:
           description: cloud_usage per-model (populated today)
           items:
@@ -11777,6 +11784,25 @@ components:
           type: array
         usage:
           $ref: '#/components/schemas/aimUsage'
+      type: object
+    aimActorStat:
+      properties:
+        actor:
+          description: |-
+            Actor is the principal the ledger recorded, "<org>/<sub>". A value naming
+            an IAM APPLICATION rather than a person means that spend has no human
+            owner — which is the row to read first.
+          type: string
+        costCents:
+          description: CostCents is what they cost, in US cents, as the ledger recorded
+            it.
+          type: integer
+        requests:
+          description: Requests is how many calls that principal made in the window.
+          type: integer
+        tokens:
+          description: Tokens is the total tokens those calls consumed.
+          type: integer
       type: object
     aimEvals:
       properties:

@@ -351,8 +351,11 @@ func completeWithTools(ctx context.Context, ai types.AIClient, org, actor string
 		if round == maxToolRounds {
 			offer = nil // budget spent — answer in words
 		}
+		// EVERY round, not just the first: a tool-using run buys one completion
+		// per round and each is its own usage row, so an actor stated once
+		// would leave every round after it anonymous.
 		resp, m, err := completeWithFailover(ctx, ai,
-			&types.ChatRequest{Model: model, Org: org, Messages: msgs, Tools: offer, RunID: runID}, fallback)
+			&types.ChatRequest{Model: model, Org: org, Messages: msgs, Tools: offer, RunID: runID, Actor: actor}, fallback)
 		used = m
 		if err != nil {
 			return nil, used, err, calls

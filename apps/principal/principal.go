@@ -584,3 +584,29 @@ func BillingAccount(c *zip.Ctx) string {
 	}
 	return strings.Clone(acct)
 }
+
+// Actor names WHO is asking — "<org>/<sub>", which is how the whole fleet
+// already spells an audit identity: metering.IdentityFromGatewayHeaders builds
+// exactly this string, and an agent run carries it as its actor. One spelling,
+// so a usage row, a debit and a span all name one person the same way.
+//
+// It is ATTRIBUTION and nothing else, which is what keeps it cheap and safe.
+// Money is addressed by Payer, data by Org; neither reads this, so nothing a
+// caller can influence here moves a charge or widens a read.
+//
+// Empty when there is nobody to name: no validated principal (Org composes that
+// refusal, so a restored client header can never become an actor) or a token
+// with an org and no subject — a machine. An empty answer is the honest one: it
+// leaves the call attributed to the credential that made it, rather than
+// inventing a person for work no person asked for.
+func Actor(c *zip.Ctx) string {
+	org, ok := Org(c)
+	if !ok {
+		return ""
+	}
+	sub := strings.TrimSpace(c.User())
+	if sub == "" {
+		return ""
+	}
+	return org + "/" + sub
+}
