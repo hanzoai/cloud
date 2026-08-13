@@ -245,7 +245,7 @@ func TestHook_RefusesAnUnsignedDelivery(t *testing.T) {
 func TestHook_AcceptsEverySpellingTheForgeSends(t *testing.T) {
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 	for _, h := range []struct{ name, value string }{
-		{"X-Forgejo-Signature", sign(hookSecret, body)},
+		{"X-Git-Signature", sign(hookSecret, body)},
 		{"X-Gitea-Signature", sign(hookSecret, body)},
 		{"X-Hub-Signature-256", "sha256=" + sign(hookSecret, body)},
 	} {
