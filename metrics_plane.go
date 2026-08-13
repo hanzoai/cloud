@@ -16,9 +16,10 @@ package cloud
 
 import (
 	"context"
+	"maps"
 	"runtime/debug"
 	"runtime/metrics"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/zap-proto/zip"
@@ -221,12 +222,7 @@ func planeServed(name string) {
 func servedPlaneNames() []string {
 	servedMu.Lock()
 	defer servedMu.Unlock()
-	out := make([]string, 0, len(servedPlanes))
-	for n := range servedPlanes {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
+	return slices.Sorted(maps.Keys(servedPlanes))
 }
 
 // registerPlaneGauges installs the observable gauges: facts that are true at

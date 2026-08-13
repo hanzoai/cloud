@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // inproc.go is the IN-PROCESS twin of the /v1/agents/sessions control plane
@@ -51,10 +53,7 @@ func OpenSession(ctx context.Context, org, actor, agent, title string) (string, 
 	if len(title) > maxTitle {
 		title = title[:maxTitle]
 	}
-	id, err := genID("sess")
-	if err != nil {
-		return "", fmt.Errorf("agents: rng: %w", err)
-	}
+	id := mint.ID("sess")
 	now := time.Now().Unix()
 	x := Session{
 		ID: id, Org: org, Agent: agent, Actor: actor, Status: StatusRunning,
@@ -139,10 +138,7 @@ func LogSessionEvent(ctx context.Context, org, sessionID, kind, actor string, pa
 	if len(actor) > maxActor {
 		actor = actor[:maxActor]
 	}
-	evID, err := genID("evt")
-	if err != nil {
-		return fmt.Errorf("agents: rng: %w", err)
-	}
+	evID := mint.ID("evt")
 	e, err := sto.AppendEvent(ctx, Event{
 		ID: evID, SessionID: sessionID, Org: org, Kind: kind, Actor: actor,
 		Payload: string(payload), CreatedAt: time.Now().Unix(),

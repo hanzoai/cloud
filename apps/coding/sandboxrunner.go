@@ -64,7 +64,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -170,12 +171,7 @@ func CheckTool(tool string) error {
 	if tool = strings.TrimSpace(tool); tool == "" || tools[tool] {
 		return nil
 	}
-	names := make([]string, 0, len(tools))
-	for t := range tools {
-		names = append(names, t)
-	}
-	sort.Strings(names)
-	return fmt.Errorf("coding: %q is not a harness we run (%s)", tool, strings.Join(names, ", "))
+	return fmt.Errorf("coding: %q is not a harness we run (%s)", tool, strings.Join(slices.Sorted(maps.Keys(tools)), ", "))
 }
 
 // Run leases a sandbox, does the work in it, and ends the lease.

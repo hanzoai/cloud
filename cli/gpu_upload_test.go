@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"os"
@@ -27,7 +28,7 @@ func TestUploadOutputsIntegration(t *testing.T) {
 	if tok == "" || file == "" {
 		t.Skip("set HANZO_TOKEN and HANZO_UPLOAD_IT_FILE to run the live upload integration test")
 	}
-	uploadURL := firstNonEmpty(os.Getenv("HANZO_STUDIO_UPLOAD_URL"), defaultStudioUploadURL)
+	uploadURL := cmp.Or(os.Getenv("HANZO_STUDIO_UPLOAD_URL"), defaultStudioUploadURL)
 
 	w := &worker{
 		env:             &Env{}, // ensureToken reads HANZO_TOKEN first, so no creds needed

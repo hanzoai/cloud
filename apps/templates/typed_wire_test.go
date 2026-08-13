@@ -2,7 +2,9 @@ package templates
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -270,12 +272,7 @@ func TestTheCollectionRootHasNoTrailingSlash(t *testing.T) {
 }
 
 func sorted(m map[string]bool) string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return strings.Join(out, ", ")
+	return strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }
 
 // TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level

@@ -34,8 +34,6 @@ package finance
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -45,6 +43,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
 	"github.com/hanzoai/cloud/apps/treasury/ledger/sqlstore"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 	"github.com/hanzoai/namespace"
@@ -210,10 +209,7 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 	if err != nil {
 		return "", err
 	}
-	id, err := genID("dep")
-	if err != nil {
-		return "", err
-	}
+	id := mint.ID("dep")
 	ref := in.Ref
 	if ref == "" {
 		ref = id // no idempotency key → fresh ref, additive grant
@@ -487,10 +483,7 @@ func (f *ledgerFinance) RecordUsageOnce(ctx context.Context, in types.UsageInput
 			entryID, posted = replay, false
 			return nil // idempotent replay — already debited once
 		}
-		id, gerr := genID("use")
-		if gerr != nil {
-			return gerr
-		}
+		id := mint.ID("use")
 		ref := in.Ref
 		if ref == "" {
 			ref = id // no act id → the entry's own, server-minted (a single debit that stands alone)
@@ -554,14 +547,4 @@ func walletAcct(subject string) string {
 		}
 	}
 	return acctWallet
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits), stdlib
-// only — the SAME idiom the ledger core uses, so finance carries no id dependency.
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("finance: rng: %w", err)
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }

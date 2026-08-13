@@ -80,6 +80,8 @@ import (
 	"time"
 
 	"hash/maphash"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 const (
@@ -165,18 +167,6 @@ const (
 	maxCauseLen    = 64
 	maxDecisionLen = 64
 )
-
-// clamp truncates s to at most n bytes, on a rune boundary so a clamped value is
-// still valid UTF-8 when it is reported.
-func clamp(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	for n > 0 && s[n]&0xC0 == 0x80 {
-		n--
-	}
-	return s[:n]
-}
 
 // budget is the sensor's memory ceiling, charged in bytes. It is guarded by
 // Traffic.mu like everything else here.
@@ -705,9 +695,9 @@ func NewTraffic() *Traffic {
 func callerKey(s Signal) (string, bool) {
 	switch {
 	case s.Cred != "":
-		return clamp("cred:"+s.Cred, maxKeyLen), true
+		return shorten.To("cred:"+s.Cred, maxKeyLen), true
 	case s.IP != "":
-		return clamp("ip:"+s.IP, maxKeyLen), true
+		return shorten.To("ip:"+s.IP, maxKeyLen), true
 	}
 	return "", false
 }
@@ -724,7 +714,7 @@ func (t *Traffic) hash(s string) uint64 {
 // on demand, so admitting a scope never depends on reclaiming another one that is
 // still in use.
 func (t *Traffic) tenantLocked(org string, now time.Time) *tenant {
-	org = clamp(org, maxOrgLen)
+	org = shorten.To(org, maxOrgLen)
 	if tn := t.tenants[org]; tn != nil {
 		tn.seen = now
 		return tn
@@ -740,7 +730,7 @@ func (t *Traffic) tenantLocked(org string, now time.Time) *tenant {
 
 // lookupLocked returns org's scope WITHOUT creating it — the read path, so a
 // report on an org the sensor has never seen does not mint state for it.
-func (t *Traffic) lookupLocked(org string) *tenant { return t.tenants[clamp(org, maxOrgLen)] }
+func (t *Traffic) lookupLocked(org string) *tenant { return t.tenants[shorten.To(org, maxOrgLen)] }
 
 // sweepLocked reclaims whole scopes that have gone quiet for longer than any
 // verdict can live, on a fixed cadence. It never reclaims a scope to make room
@@ -809,7 +799,7 @@ func (t *Traffic) Observe(s Signal, now time.Time) Pattern {
 	// credential at all is a flood (EdgeRateLimit's question), not stuffing.
 	peers := 0
 	if s.IP != "" && s.Presented != "" {
-		if h, ok := tn.hosts.admit(clamp(s.IP, maxKeyLen), now, func() *host { return &host{} }); ok {
+		if h, ok := tn.hosts.admit(shorten.To(s.IP, maxKeyLen), now, func() *host { return &host{} }); ok {
 			h.seen = now
 			h.creds.add(now, t.hash(s.Presented))
 			peers = h.creds.count(now)
@@ -922,9 +912,9 @@ func (t *Traffic) Hold(s Signal, h Hold, d time.Duration, now time.Time) {
 	}
 	c.seen = now
 	c.hold = Hold{
-		Action:   clamp(h.Action, maxActionLen),
-		Reason:   clamp(h.Reason, maxCauseLen),
-		Decision: clamp(h.Decision, maxDecisionLen),
+		Action:   shorten.To(h.Action, maxActionLen),
+		Reason:   shorten.To(h.Reason, maxCauseLen),
+		Decision: shorten.To(h.Decision, maxDecisionLen),
 		Until:    now.Add(d),
 	}
 }

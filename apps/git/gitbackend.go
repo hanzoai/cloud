@@ -15,11 +15,13 @@
 package git
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -82,7 +84,7 @@ func (g *gitRepository) Resolve(_ context.Context, ref string) (Revision, string
 		if h, err := g.repo.Head(); err == nil {
 			label = h.Name().Short()
 		} else {
-			label = firstNonEmptyStr(g.meta.DefaultBranch, defaultBranchName)
+			label = cmp.Or(strings.TrimSpace(g.meta.DefaultBranch), defaultBranchName)
 		}
 	}
 	hash, err := g.repo.ResolveRevision(plumbing.Revision(label))

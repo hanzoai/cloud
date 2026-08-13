@@ -1,6 +1,10 @@
 package code
 
-import "testing"
+import (
+	"slices"
+	"strings"
+	"testing"
+)
 
 func findSym(syms []Symbol, name string) (Symbol, bool) {
 	for _, s := range syms {
@@ -12,24 +16,9 @@ func findSym(syms []Symbol, name string) (Symbol, bool) {
 }
 
 func hasEdge(edges []Edge, name, fromContains string) bool {
-	for _, e := range edges {
-		if e.Name == name && (fromContains == "" || contains(e.From, fromContains)) {
-			return true
-		}
-	}
-	return false
-}
-
-func contains(s, sub string) bool {
-	return len(sub) == 0 || (len(s) >= len(sub) && indexOf(s, sub) >= 0)
-}
-func indexOf(s, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
+	return slices.ContainsFunc(edges, func(e Edge) bool {
+		return e.Name == name && strings.Contains(e.From, fromContains)
+	})
 }
 
 func TestParseGoSymbolsAndEdges(t *testing.T) {
@@ -52,7 +41,7 @@ func TestParseGoSymbolsAndEdges(t *testing.T) {
 	if hello.Scope != "Greeter" {
 		t.Errorf("Hello scope=%q want Greeter", hello.Scope)
 	}
-	if !contains(hello.Signature, "func (g *Greeter) Hello()") {
+	if !strings.Contains(hello.Signature, "func (g *Greeter) Hello()") {
 		t.Errorf("Hello signature=%q missing receiver+name", hello.Signature)
 	}
 	if _, ok := findSym(p.Symbols, "greet"); !ok {
@@ -77,7 +66,7 @@ func TestParseGoSymbolsAndEdges(t *testing.T) {
 	if helloChunk == nil {
 		t.Fatal("no chunk for Hello")
 	}
-	if !contains(helloChunk.Text, "returns a greeting") {
+	if !strings.Contains(helloChunk.Text, "returns a greeting") {
 		t.Errorf("Hello chunk missing doc comment: %q", helloChunk.Text)
 	}
 }

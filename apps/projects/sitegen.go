@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -318,11 +319,9 @@ type projectsSiteDeploy struct {
 // siteResponse is the published-site answer shared by BuildSite and DeploySite,
 // so the generated and the hand-supplied path describe a publish identically.
 func siteResponse(p Project, d Deployment, st *site) *projectsSiteDeploy {
-	paths := make([]string, 0, len(st.files))
-	for k := range st.files {
-		paths = append(paths, k)
-	}
-	sort.Strings(paths)
+	// siteFromFiles/walkTarGz both require index.html at the root, so the map is
+	// never empty and the JSON array is never null.
+	paths := slices.Sorted(maps.Keys(st.files))
 	return &projectsSiteDeploy{
 		URL: d.LiveURL, Slug: p.Slug, Name: p.Name,
 		DeploymentID: d.ID, Files: paths, Status: d.Status,

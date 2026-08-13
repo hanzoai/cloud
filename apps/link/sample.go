@@ -4,6 +4,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // sample.go is the ACCOUNT-USAGE value plane: ONE metering lane of ONE provider
@@ -391,12 +393,13 @@ func clampInt64(v, hi int64) int64 {
 	return v
 }
 
-// clampStr trims a string and caps its length, keeping the result valid UTF-8 so a
-// multi-byte rune cut at the cap can never yield a broken column value.
+// clampStr trims a string and caps its length. The cap never falls inside a
+// character, and what is left is scrubbed to valid UTF-8, so a hostile sample can
+// never store a broken column value.
 func clampStr(s string, n int) string {
 	s = trim(s)
 	if len(s) > n {
-		return strings.ToValidUTF8(s[:n], "")
+		return strings.ToValidUTF8(shorten.To(s, n), "")
 	}
 	return s
 }

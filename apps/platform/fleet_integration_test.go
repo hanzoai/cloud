@@ -17,9 +17,10 @@ package platform
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/apps/k8s"
 	"os"
 	"testing"
+
+	"github.com/hanzoai/cloud/apps/k8s"
 
 	"github.com/hanzoai/cloud"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

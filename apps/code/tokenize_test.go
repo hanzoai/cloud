@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-func has(xs []string, want string) bool {
-	return slices.Contains(xs, want)
-}
-
 func TestCodeTokensCamelAndSnake(t *testing.T) {
 	cases := []struct {
 		in   string
@@ -23,7 +19,7 @@ func TestCodeTokensCamelAndSnake(t *testing.T) {
 	for _, c := range cases {
 		got := codeTokens(c.in)
 		for _, w := range c.want {
-			if !has(got, w) {
+			if !slices.Contains(got, w) {
 				t.Errorf("codeTokens(%q)=%v, missing %q", c.in, got, w)
 			}
 		}
@@ -33,12 +29,12 @@ func TestCodeTokensCamelAndSnake(t *testing.T) {
 func TestCodeTokensKeepsOperators(t *testing.T) {
 	got := codeTokens("a -> b == c && d")
 	for _, op := range []string{"->", "==", "&&"} {
-		if !has(got, op) {
+		if !slices.Contains(got, op) {
 			t.Errorf("codeTokens dropped operator %q: %v", op, got)
 		}
 	}
 	// The longest operator must win: "==" is one token, not two "=".
-	if has(got, "=") {
+	if slices.Contains(got, "=") {
 		t.Errorf("codeTokens split == into =: %v", got)
 	}
 }

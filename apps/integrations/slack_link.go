@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -363,7 +364,7 @@ func slackExchangeUser(ctx context.Context, creds OAuthConfig, redirectURI, code
 		return "", "", err
 	}
 	if !r.OK {
-		return "", "", fmt.Errorf("slack oauth.v2.access error: %s", nonEmpty(r.Error, "unknown_error"))
+		return "", "", fmt.Errorf("slack oauth.v2.access error: %s", cmp.Or(r.Error, "unknown_error"))
 	}
 	if r.AuthedUser.ID == "" || r.Team.ID == "" {
 		return "", "", fmt.Errorf("slack oauth: no authenticated user")

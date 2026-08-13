@@ -21,14 +21,16 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -256,7 +258,7 @@ func (c *Credentials) key() string {
 	if i := strings.IndexByte(name, '@'); i > 0 {
 		name = name[:i]
 	}
-	return firstNonEmpty(c.Owner, "-") + "/" + firstNonEmpty(name, "-")
+	return cmp.Or(c.Owner, "-") + "/" + cmp.Or(name, "-")
 }
 
 func identitiesPath() (string, error) {
@@ -293,14 +295,7 @@ func LoadIdentities() (*IdentityStore, error) {
 }
 
 // keys returns the identity keys, sorted, for deterministic output.
-func (s *IdentityStore) keys() []string {
-	ks := make([]string, 0, len(s.Identities))
-	for k := range s.Identities {
-		ks = append(ks, k)
-	}
-	sort.Strings(ks)
-	return ks
-}
+func (s *IdentityStore) keys() []string { return slices.Sorted(maps.Keys(s.Identities)) }
 
 // Put stores c under its key and makes it active, returning the key.
 func (s *IdentityStore) Put(c *Credentials) string {
@@ -422,36 +417,26 @@ type globalFlags struct {
 	org, output, platformURL, iamIssuer, cloudURL, clientID, platformToken string
 }
 
-// firstNonEmpty returns the first non-empty argument, or "".
-func firstNonEmpty(vs ...string) string {
-	for _, v := range vs {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 // resolve merges flags > env > config > built-in defaults into an Env. It is
 // pure given its inputs (config/creds are loaded by the caller) so it is
 // directly unit-testable.
 func resolve(cfg *Config, creds *Credentials, f globalFlags) *Env {
 	e := &Env{cfg: cfg, creds: creds, out: os.Stdout}
-	e.Output = firstNonEmpty(f.output, os.Getenv("HANZO_OUTPUT"), cfg.Output, "table")
-	e.IAMIssuer = strings.TrimRight(firstNonEmpty(f.iamIssuer, os.Getenv("HANZO_IAM_ISSUER"), cfg.IAMIssuer, defaultIAMIssuer), "/")
-	e.PlatformURL = strings.TrimRight(firstNonEmpty(f.platformURL, os.Getenv("HANZO_PLATFORM_URL"), cfg.PlatformURL, defaultPlatformURL), "/")
-	e.CloudURL = strings.TrimRight(firstNonEmpty(f.cloudURL, os.Getenv("HANZO_CLOUD_URL"), cfg.CloudURL, defaultCloudURL), "/")
-	e.ClientID = firstNonEmpty(f.clientID, os.Getenv("HANZO_CLIENT_ID"), cfg.ClientID, defaultClientID)
+	e.Output = cmp.Or(f.output, os.Getenv("HANZO_OUTPUT"), cfg.Output, "table")
+	e.IAMIssuer = strings.TrimRight(cmp.Or(f.iamIssuer, os.Getenv("HANZO_IAM_ISSUER"), cfg.IAMIssuer, defaultIAMIssuer), "/")
+	e.PlatformURL = strings.TrimRight(cmp.Or(f.platformURL, os.Getenv("HANZO_PLATFORM_URL"), cfg.PlatformURL, defaultPlatformURL), "/")
+	e.CloudURL = strings.TrimRight(cmp.Or(f.cloudURL, os.Getenv("HANZO_CLOUD_URL"), cfg.CloudURL, defaultCloudURL), "/")
+	e.ClientID = cmp.Or(f.clientID, os.Getenv("HANZO_CLIENT_ID"), cfg.ClientID, defaultClientID)
 	// Org for platform calls is the platform organization id (a distinct
 	// namespace from the IAM token's `owner` slug), so it comes only from
 	// flag/env/config — never silently from the token.
-	e.Org = firstNonEmpty(f.org, os.Getenv("HANZO_ORG"), cfg.Org)
+	e.Org = cmp.Or(f.org, os.Getenv("HANZO_ORG"), cfg.Org)
 	return e
 }
 
 // accessToken is the IAM user token (identity / cloud calls).
 func (e *Env) accessToken() string {
-	return firstNonEmpty(os.Getenv("HANZO_TOKEN"), e.creds.AccessToken)
+	return cmp.Or(os.Getenv("HANZO_TOKEN"), e.creds.AccessToken)
 }
 
 // freshAccessToken returns the IAM user token only while it is not yet expired.
@@ -479,7 +464,7 @@ func (e *Env) freshAccessToken() string {
 // machine tokens keep their precedence and internal automation is unchanged.
 // Never hardcoded.
 func (e *Env) platformToken(flagVal string) string {
-	return firstNonEmpty(
+	return cmp.Or(
 		flagVal,
 		os.Getenv("HANZO_PLATFORM_TOKEN"),
 		os.Getenv("PLATFORM_SERVICE_TOKEN"),
@@ -495,7 +480,7 @@ func (e *Env) platformToken(flagVal string) string {
 // `hanzo build` works off the one identity with no separate --build-token — the
 // platform verifies the IAM JWT and authorizes the build by org + role.
 func (e *Env) buildToken(flagVal string) string {
-	return firstNonEmpty(
+	return cmp.Or(
 		flagVal,
 		os.Getenv("HANZO_BUILD_TOKEN"),
 		os.Getenv("PLATFORM_BUILD_CALLBACK_TOKEN"),
@@ -798,14 +783,4 @@ func shortTime(unix int64) string {
 		return ""
 	}
 	return time.Unix(unix, 0).Format(time.RFC3339)
-}
-
-// sortedKeys returns the keys of m, sorted — for deterministic help output.
-func sortedKeys(m map[string]string) []string {
-	ks := make([]string, 0, len(m))
-	for k := range m {
-		ks = append(ks, k)
-	}
-	sort.Strings(ks)
-	return ks
 }

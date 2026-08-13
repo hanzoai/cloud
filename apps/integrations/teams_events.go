@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -150,7 +151,7 @@ func teamsReplyToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("teams reply token decode: %w", err)
 	}
 	if t.Error != "" || t.AccessToken == "" {
-		return "", fmt.Errorf("teams reply token: %s", nonEmpty(t.Error, "no access_token"))
+		return "", fmt.Errorf("teams reply token: %s", cmp.Or(t.Error, "no access_token"))
 	}
 	teamsTok = t.AccessToken
 	teamsTokExp = time.Now().Add(time.Duration(t.ExpiresIn) * time.Second)

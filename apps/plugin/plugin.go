@@ -239,7 +239,7 @@ func drift(hosts []Host) []Drift {
 			default:
 				d.Down++
 			}
-			if p.Running && p.Version != "" && !contains(d.Versions, p.Version) {
+			if p.Running && p.Version != "" && !slices.Contains(d.Versions, p.Version) {
 				d.Versions = append(d.Versions, p.Version)
 			}
 		}
@@ -252,10 +252,6 @@ func drift(hosts []Host) []Drift {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
-}
-
-func contains(s []string, v string) bool {
-	return slices.Contains(s, v)
 }
 
 // --- mutations -----------------------------------------------------------

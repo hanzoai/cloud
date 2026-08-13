@@ -9,6 +9,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"strings"
 	"time"
@@ -116,5 +117,5 @@ func normRepo(u string) string {
 // tracksBranch reports whether app a's tracked branch is the pushed branch. An
 // empty RepoBranch defaults to "main", matching app-create (branchDefault).
 func tracksBranch(a Application, branch string) bool {
-	return firstNonEmpty(a.RepoBranch, "main") == branch
+	return cmp.Or(a.RepoBranch, "main") == branch
 }

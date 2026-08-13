@@ -2,6 +2,8 @@ package agents
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"testing"
 
 	luxlog "github.com/luxfi/log"
@@ -51,7 +53,7 @@ func TestSeedPersonalities(t *testing.T) {
 	for _, want := range []string{"dev", "des", "vi"} {
 		a, ok := got[want]
 		if !ok {
-			t.Fatalf("@%s not seeded; have %v", want, keysOf(got))
+			t.Fatalf("@%s not seeded; have %v", want, slices.Collect(maps.Keys(got)))
 		}
 		if a.Model != cloud.DefaultModel || a.Status != "ready" || a.Instructions == "" {
 			t.Fatalf("@%s malformed: model=%q status=%q instr=%dB", want, a.Model, a.Status, len(a.Instructions))
@@ -85,14 +87,6 @@ func TestSeedPersonalities(t *testing.T) {
 			t.Fatalf("seeded %q on model %q, want %q", a.Name, a.Model, cloud.DefaultModel)
 		}
 	}
-}
-
-func keysOf(m map[string]Agent) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }
 
 // mustList is ListForOrg with the error folded into a fatal.

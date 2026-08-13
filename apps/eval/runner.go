@@ -9,6 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // EvalRunner is the PLUGGABLE execution seam (P3): the two independent steps of
@@ -53,7 +56,7 @@ type gatewayRunner struct {
 
 func newGatewayRunner() *gatewayRunner {
 	return &gatewayRunner{
-		base: loopbackBase(firstNonEmpty(getenv("CLOUD_LISTEN"), ":8080")),
+		base: loopbackBase(environ.Or("CLOUD_LISTEN", ":8080")),
 		hc:   &http.Client{Timeout: 120 * time.Second},
 	}
 }
@@ -179,7 +182,7 @@ func parseJudge(content string) (float64, string, error) {
 		}
 		return clamp01(f), "", nil
 	}
-	return 0, "", fmt.Errorf("could not parse judge score from %q", truncate(content, 120))
+	return 0, "", fmt.Errorf("could not parse judge score from %q", shorten.To(content, 120))
 }
 
 func asText(v any) string {
@@ -214,13 +217,4 @@ func loopbackBase(listen string) string {
 		port = "8080"
 	}
 	return "http://127.0.0.1:" + port
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

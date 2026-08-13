@@ -33,7 +33,6 @@ package destinations
 import (
 	"context"
 	"maps"
-	"sort"
 	"strings"
 	"time"
 )
@@ -191,14 +190,4 @@ func snapshot() map[string]Destination {
 	out := make(map[string]Destination, len(registry))
 	maps.Copy(out, registry)
 	return out
-}
-
-// sortedIDs returns the registered platform ids in stable order.
-func sortedIDs(m map[string]Destination) []string {
-	ids := make([]string, 0, len(m))
-	for id := range m {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	return ids
 }

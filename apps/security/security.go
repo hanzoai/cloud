@@ -7,8 +7,6 @@ package security
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -19,6 +17,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/security/detect"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -377,22 +376,15 @@ func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 		return nil, cloud.Denied(err)
 	}
 
-	scanID, err := genID("scan")
-	if err != nil {
-		return nil, zip.Errorf(500, "rng: %v", err)
-	}
+	scanID := mint.ID("scan")
 	now := time.Now().UTC().UnixMilli()
 
 	sc := Scan{ID: scanID, Org: org, Project: project, Files: len(in.Files), CreatedAt: now}
 	var stored []StoredFinding
 	for _, f := range in.Files {
 		for _, fnd := range detect.ScanContent(f.Path, f.Content) {
-			id, err := genID("fnd")
-			if err != nil {
-				return nil, zip.Errorf(500, "rng: %v", err)
-			}
 			stored = append(stored, StoredFinding{
-				ID: id, ScanID: scanID, Org: org,
+				ID: mint.ID("fnd"), ScanID: scanID, Org: org,
 				RuleID: fnd.RuleID, RuleName: fnd.RuleName, Severity: fnd.Severity,
 				Path: fnd.Path, Line: fnd.Line, Preview: fnd.Preview,
 				Fingerprint: fnd.Fingerprint, CreatedAt: now,
@@ -570,12 +562,3 @@ func projectScope(c *zip.Ctx) string {
 // are values the client writes: an address chosen by the party being audited is
 // not evidence.
 func clientIP(c *zip.Ctx) string { return cloud.ClientIP(c) }
-
-// genID mints a prefixed random id (mirrors clients/git.genID).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}

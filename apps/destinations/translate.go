@@ -1,6 +1,7 @@
 package destinations
 
 import (
+	"cmp"
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/analytics"
@@ -51,7 +52,7 @@ func Translate(ev analytics.SinkEvent) Conversion {
 		// it into properties + fires it on the pixel), else the messageId. This is what
 		// makes a browser pixel event and this server CAPI event DEDUPLICATE — without
 		// it the two carry different ids and a conversion is double-counted.
-		EventID:    firstNonEmpty(strProp(ev.Properties, "event_id"), ev.MessageID),
+		EventID:    cmp.Or(strProp(ev.Properties, "event_id"), strings.TrimSpace(ev.MessageID)),
 		Time:       ev.Time,
 		Value:      conversionValue(ev),
 		Currency:   conversionCurrency(ev),
@@ -149,7 +150,7 @@ func conversionCurrency(ev analytics.SinkEvent) string {
 func liftUser(ev analytics.SinkEvent) UserData {
 	p := ev.Properties
 	u := UserData{
-		ExternalID: firstNonEmpty(ev.DistinctID, ev.AnonymousID),
+		ExternalID: cmp.Or(strings.TrimSpace(ev.DistinctID), strings.TrimSpace(ev.AnonymousID)),
 		Email:      strProp(p, "email", "$email", "userEmail"),
 		Phone:      strProp(p, "phone", "$phone", "phoneNumber"),
 		IP:         strProp(p, "ip", "$ip", "client_ip_address", "ipAddress"),
@@ -209,11 +210,4 @@ func floatProp(p map[string]any, key string) (float64, bool) {
 	default:
 		return 0, false
 	}
-}
-
-func firstNonEmpty(a, b string) string {
-	if s := strings.TrimSpace(a); s != "" {
-		return s
-	}
-	return strings.TrimSpace(b)
 }

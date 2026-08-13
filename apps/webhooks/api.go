@@ -18,6 +18,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -188,8 +190,8 @@ type noInput struct{}
 // see the refusal but not which half of it fired; the status, the body shape and
 // the ordering are unchanged, and the message names both halves.
 func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
+	org, err := principal.RequireOrg(ctx)
+	if err != nil {
 		return "", zip.ErrUnauthorized("webhooks: a validated principal with an org scope is required")
 	}
 	return org, nil
@@ -272,7 +274,7 @@ func (o ops) createEndpoint(ctx context.Context, in *createEndpointIn) (*Endpoin
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	e := Endpoint{
-		ID:          newID("wh"),
+		ID:          mint.ID("wh"),
 		Org:         org,
 		URL:         url,
 		Events:      events,
@@ -551,18 +553,7 @@ func windowStart() string {
 }
 
 func clip(s string, max int) string {
-	s = strings.TrimSpace(s)
-	if len(s) > max {
-		return s[:max]
-	}
-	return s
-}
-
-// newID mints a prefixed, collision-resistant id (128 random bits).
-func newID(prefix string) string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	return prefix + "_" + hex.EncodeToString(b[:])
+	return shorten.To(strings.TrimSpace(s), max)
 }
 
 // newSecret mints the HMAC signing secret returned once on create (256 random bits,

@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	luxlog "github.com/luxfi/log"
@@ -73,7 +74,7 @@ func TestClusterListReportsDegradedSource(t *testing.T) {
 				t.Error("degraded entry carries no reason")
 			}
 			for _, bad := range []string{"<", "\n", "DOCTYPE"} {
-				if contains(reason, bad) {
+				if strings.Contains(reason, bad) {
 					t.Errorf("reason leaks the upstream response body (%q): %q", bad, reason)
 				}
 			}
@@ -132,12 +133,3 @@ func TestTerseIsFitForAResponseField(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
-
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}

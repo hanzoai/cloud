@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/integrations"
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // google.go is the import bridge: it reads an org's Google Drive folder and Google
@@ -179,17 +180,10 @@ func (g *httpGoogle) getBytes(ctx context.Context, u, tok string) ([]byte, error
 		return nil, fmt.Errorf("google: read: %w", err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("google http %d: %s", resp.StatusCode, truncate(string(raw), 256))
+		return nil, fmt.Errorf("google http %d: %s", resp.StatusCode, shorten.To(string(raw), 256))
 	}
 	return raw, nil
 }
 
 // maxImportBytes bounds a single Drive download / Sheets read.
 const maxImportBytes = 64 << 20 // 64 MiB
-
-func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
-}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // github_import.go implements the cloud.GitImporter seam (git_import.go in the
@@ -215,12 +216,8 @@ func ensureMirrorTarget(ctx context.Context, store *Store, org, project, repo, r
 	if err != nil {
 		return err
 	}
-	id, err := genID("mir")
-	if err != nil {
-		return err
-	}
 	err = store.CreateMirror(ctx, MirrorTarget{
-		ID: id, Org: org, Project: project, Repo: repo,
+		ID: mint.ID("mir"), Org: org, Project: project, Repo: repo,
 		Host: host, URL: target, CreatedAt: time.Now().Unix(),
 	})
 	if errors.Is(err, errConflict) {

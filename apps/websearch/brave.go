@@ -37,6 +37,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // braveKey is the subscription token. KMS-sourced, synced onto the cloud env as
@@ -45,7 +47,7 @@ import (
 func braveKey() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_BRAVE_KEY")) }
 
 func braveURL() string {
-	return envOr("WEBSEARCH_BRAVE_URL", "https://api.search.brave.com/res/v1/web/search")
+	return environ.Or("WEBSEARCH_BRAVE_URL", "https://api.search.brave.com/res/v1/web/search")
 }
 
 // braveQuery is the request, in ONE place, because build() and the fetch must

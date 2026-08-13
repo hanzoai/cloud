@@ -29,9 +29,8 @@
 package functions
 
 import (
+	"cmp"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -41,6 +40,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -399,7 +399,7 @@ func (o ops) create(ctx context.Context, in *definition) (*functionView, error) 
 		return nil, zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
 	// environment (functions.ts) and runtime are the same field; accept either.
-	runtime := strings.ToLower(strings.TrimSpace(firstNonEmpty(in.Runtime, in.Environment)))
+	runtime := strings.ToLower(cmp.Or(strings.TrimSpace(in.Runtime), strings.TrimSpace(in.Environment)))
 	if runtime == "" {
 		runtime = "node"
 	}
@@ -429,12 +429,8 @@ func (o ops) create(ctx context.Context, in *definition) (*functionView, error) 
 	if target == "fleet" && runtime != "python" {
 		return nil, zip.ErrBadRequest("target=fleet supports runtime=python only")
 	}
-	id, err := genID("fn")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	f := Function{
-		ID: id, Org: org, Name: name, Namespace: sanitizeNs(in.Namespace), Runtime: runtime,
+		ID: mint.ID("fn"), Org: org, Name: name, Namespace: sanitizeNs(in.Namespace), Runtime: runtime,
 		Image: strings.TrimSpace(in.Image), Code: in.Code, Handler: strings.TrimSpace(in.Handler),
 		TimeoutSec: timeout, MemoryLimit: mem, EnvNames: cleanList(in.EnvNames),
 		Target: target, Status: "ready", LastDeployAt: time.Now().Unix(),
@@ -734,15 +730,6 @@ func sanitizeNs(s string) string {
 	return out
 }
 
-func firstNonEmpty(xs ...string) string {
-	for _, x := range xs {
-		if strings.TrimSpace(x) != "" {
-			return x
-		}
-	}
-	return ""
-}
-
 func cleanList(xs []string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -765,14 +752,6 @@ func nonNil(xs []string) []string {
 		return []string{}
 	}
 	return xs
-}
-
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // Shutdown closes every open per-org functions store. Idempotent.

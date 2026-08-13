@@ -34,6 +34,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
@@ -80,8 +81,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	slots := uint64(envInt("VALIDATORS_SLOTS", 100))
 	nft, err := newNFTReader(
-		envOr("VALIDATORS_ETH_RPC", "https://ethereum-rpc.publicnode.com"),
-		envOr("VALIDATORS_NFT_CONTRACT", GenesisNFTContract),
+		environ.Or("VALIDATORS_ETH_RPC", "https://ethereum-rpc.publicnode.com"),
+		environ.Or("VALIDATORS_NFT_CONTRACT", GenesisNFTContract),
 		slots,
 	)
 	if err != nil {
@@ -89,7 +90,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("validators.Mount: nft reader: %w", err)
 	}
 
-	network := envOr("VALIDATORS_NETWORK", "devnet")
+	network := environ.Or("VALIDATORS_NETWORK", "devnet")
 	netID, ok := networkIDs[network]
 	if !ok {
 		_ = store.Close()
@@ -97,11 +98,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	prov := newK8sProvisioner(crConfig{
-		Group:     envOr("VALIDATORS_CR_GROUP", "node.lux.cloud"),
-		Namespace: envOr("VALIDATORS_NAMESPACE", "lux-validators"),
-		NodeImage: envOr("VALIDATORS_NODE_IMAGE", "ghcr.io/luxfi/node:v1.36.15"),
-		KMSHost:   envOr("VALIDATORS_KMS_HOST", "http://cloud."+deps.Brand+".svc.cluster.local:8000"),
-		KMSCreds:  envOr("VALIDATORS_KMS_CREDS", "platform-kms-auth"),
+		Group:     environ.Or("VALIDATORS_CR_GROUP", "node.lux.cloud"),
+		Namespace: environ.Or("VALIDATORS_NAMESPACE", "lux-validators"),
+		NodeImage: environ.Or("VALIDATORS_NODE_IMAGE", "ghcr.io/luxfi/node:v1.36.15"),
+		KMSHost:   environ.Or("VALIDATORS_KMS_HOST", "http://cloud."+deps.Brand+".svc.cluster.local:8000"),
+		KMSCreds:  environ.Or("VALIDATORS_KMS_CREDS", "platform-kms-auth"),
 		StorageGi: envInt("VALIDATORS_STORAGE_GI", 200),
 	})
 
@@ -364,7 +365,7 @@ func (o validatorOps) provision(ctx context.Context, body *validatorClaim) (*slo
 	}
 
 	name := crName(org, body.TokenID)
-	ns := envOr("VALIDATORS_NAMESPACE", "lux-validators")
+	ns := environ.Or("VALIDATORS_NAMESPACE", "lux-validators")
 	slot := Slot{
 		TokenID:   body.TokenID,
 		Org:       org,
@@ -637,13 +638,6 @@ func limitOf(v string) int {
 		return maxListLimit
 	}
 	return n
-}
-
-func envOr(key, dflt string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return dflt
 }
 
 func envInt(key string, dflt int) int {

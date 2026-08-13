@@ -27,6 +27,7 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"strings"
@@ -84,7 +85,7 @@ func k8sClusterView(kc visorKubernetesCluster) clusterView {
 		DoClusterID:   kc.ID,
 		Name:          kc.Name,
 		Region:        kc.RegionSlug,
-		Status:        firstNonEmpty(kc.Status, "unknown"),
+		Status:        cmp.Or(kc.Status, "unknown"),
 		Kind:          "managed",
 		NodePools:     []nodePoolView{},
 	}
@@ -157,7 +158,7 @@ func (o ops) getK8sCluster(ctx context.Context, in *k8sClusterRef) (*clusterDeta
 	view.NodePools = make([]nodePoolView, 0, len(d.NodePools))
 	for _, p := range d.NodePools {
 		view.NodePools = append(view.NodePools, nodePoolView{
-			PoolID: firstNonEmpty(p.ID, p.Name), Name: p.Name, Size: p.Size,
+			PoolID: cmp.Or(p.ID, p.Name), Name: p.Name, Size: p.Size,
 			Count: p.Count, MinNodes: p.MinNodes, MaxNodes: p.MaxNodes, AutoScale: p.AutoScale,
 		})
 		view.NodeCount += p.Count

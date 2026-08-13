@@ -36,6 +36,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -535,7 +536,7 @@ func normalizePriority(p string) string {
 func clip(s string, max int) string {
 	s = strings.TrimSpace(s)
 	if len(s) > max {
-		return s[:max]
+		return shorten.To(s, max)
 	}
 	return s
 }

@@ -10,6 +10,7 @@ package team
 // net/http — it is an external hop to hanzo.id.
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -31,6 +32,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/agents"
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 	model "github.com/hanzoai/iam/pkg/model"
@@ -213,7 +215,7 @@ func trunc(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return shorten.To(s, n) + "…"
 }
 func statusError(msg string) Status {
 	return Status{Severity: "ERROR", Code: "account:status:InternalServerError", Params: map[string]any{"message": msg}}
@@ -505,7 +507,7 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 		return "", "", "org_failed", fmt.Errorf("verified token has empty owner")
 	}
 	org := id.Owner
-	displayName := firstNonEmpty(name, localPart(email))
+	displayName := cmp.Or(name, localPart(email))
 	// The VERIFIED membership set (home ∪ every org the token proves) is the ONE
 	// source that drives BOTH the workspace union (getUserWorkspaces) AND the seat
 	// projection (Seats). Ensuring a workspace — hence a counted member row — in
@@ -1570,15 +1572,6 @@ func originOf(c *zip.Ctx) string {
 		scheme = "http"
 	}
 	return scheme + "://" + host
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func localPart(email string) string {

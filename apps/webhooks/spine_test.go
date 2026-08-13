@@ -19,6 +19,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/commerce/events"
 	"github.com/hanzoai/commerce/infra"
 	psembed "github.com/hanzoai/pubsub/embed"
@@ -104,7 +105,7 @@ func TestAnalyticsEventReachesWebhook(t *testing.T) {
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	if err := st.create(context.Background(), Endpoint{
-		ID: newID("wh"), Org: "acme", URL: sub.URL, Events: []string{"event.>"},
+		ID: mint.ID("wh"), Org: "acme", URL: sub.URL, Events: []string{"event.>"},
 		Secret: "whsec_spine", Status: "active", CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatal(err)
