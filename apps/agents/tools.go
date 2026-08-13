@@ -60,6 +60,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -319,7 +320,7 @@ func truncateToolResult(s string) string {
 	if len(s) <= maxToolResult {
 		return s
 	}
-	return s[:maxToolResult] + "\n…[truncated: the result was longer than this agent may read]"
+	return shorten.To(s, maxToolResult) + "\n…[truncated: the result was longer than this agent may read]"
 }
 
 // completeWithTools is the loop.

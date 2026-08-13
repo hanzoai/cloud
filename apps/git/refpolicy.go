@@ -80,7 +80,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"unicode/utf8"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // # Every writer, and where each states its intent
@@ -459,7 +460,7 @@ func refusalReport(cmds []refCommand, caps, reason string) []byte {
 	var report bytes.Buffer
 	report.Write(packetWrite("unpack ok\n"))
 	for _, c := range cmds {
-		report.Write(packetWrite(clip("ng "+c.Ref+" "+reason, maxPktPayload-1) + "\n"))
+		report.Write(packetWrite(shorten.To("ng "+c.Ref+" "+reason, maxPktPayload-1) + "\n"))
 	}
 	report.WriteString("0000")
 
@@ -481,18 +482,6 @@ func refusalReport(cmds []refCommand, caps, reason string) []byte {
 // maxPktPayload is the most a single pkt-line may carry: git's 65520-byte frame
 // less its own 4-byte hex length.
 const maxPktPayload = 65520 - 4
-
-// clip bounds one report line so it always fits a frame, cutting on a rune
-// boundary so a truncated line stays valid UTF-8 for whatever prints it.
-func clip(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	for max > 0 && !utf8.RuneStart(s[max]) {
-		max--
-	}
-	return s[:max]
-}
 
 // hasCap reports whether the client offered a capability. Exact token match on
 // a space-separated list, so "side-band-64k" is not matched by a longer name

@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/projects"
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // sync.go builds the corpus. It is a RECONCILE, not an API: there is no endpoint
@@ -145,7 +145,7 @@ func corpus(ctx context.Context) ([]Entry, map[string][]Entry, error) {
 	if err != nil {
 		ferr = err
 	}
-	platform := getenv(platformOrgEnv, "hanzo")
+	platform := environ.Or(platformOrgEnv, "hanzo")
 	// Which live slugs are OUR starters' demos, read forward from the curated
 	// gallery once per pass (origin.go) — the one thing that tells a template's
 	// own demo apart from an app somebody built on the platform.
@@ -468,7 +468,7 @@ func isAuth(err error) bool { return errors.Is(err, errAuth) }
 // expired or wrong-scoped token must not be able to empty the catalog, and why a
 // 401/403 is retried once anonymously rather than reported as a failed source.
 func ghJSON(ctx context.Context, url string, out any) error {
-	err := ghOnce(ctx, url, getenv("GH_PAT", ""), out)
+	err := ghOnce(ctx, url, environ.Or("GH_PAT", ""), out)
 	if isAuth(err) {
 		err = ghOnce(ctx, url, "", out)
 	}
@@ -507,7 +507,7 @@ var httpClient = &http.Client{Timeout: 30 * time.Second}
 // it as a source of THEIRS, and "our own software" is the answer that claims the
 // least — it neither offers the repos as starters nor credits them to a stranger.
 func sourceOrgs() map[string]source {
-	raw := strings.TrimSpace(getenv(sourceOrgsEnv, ""))
+	raw := environ.Or(sourceOrgsEnv, "")
 	if raw == "" {
 		return defaultOrgs
 	}
@@ -528,11 +528,4 @@ func sourceOrgs() map[string]source {
 		out[gh] = s
 	}
 	return out
-}
-
-func getenv(k, def string) string {
-	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-		return v
-	}
-	return def
 }

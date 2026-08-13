@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -265,7 +266,7 @@ func teamsExchangeIdentify(ctx context.Context, tenant, code, redirectURI string
 		return "", "", fmt.Errorf("teams identify decode: %w", err)
 	}
 	if tok.Error != "" || tok.IDToken == "" {
-		return "", "", fmt.Errorf("teams identify: %s", nonEmpty(tok.Error, "no id_token"))
+		return "", "", fmt.Errorf("teams identify: %s", cmp.Or(tok.Error, "no id_token"))
 	}
 	o, t := teamsOIDTIDFromIDToken(tok.IDToken)
 	if o == "" {

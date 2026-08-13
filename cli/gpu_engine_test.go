@@ -75,7 +75,7 @@ func TestRefreshEngineAdvertises(t *testing.T) {
 	if w.engine.URL != "http://node.example:1234" {
 		t.Fatalf("advertised URL = %q, want the endpoint, not the local probe URL", w.engine.URL)
 	}
-	if !contains(w.engine.APIs, "openai") || !contains(w.engine.APIs, "anthropic") {
+	if !slices.Contains(w.engine.APIs, "openai") || !slices.Contains(w.engine.APIs, "anthropic") {
 		t.Fatalf("APIs = %v, want both openai and anthropic (hanzo-engine serves both)", w.engine.APIs)
 	}
 	if len(w.engine.Models) != 1 || w.engine.Models[0] != "default" {
@@ -117,7 +117,7 @@ func TestBuildRegistrationCarriesEngine(t *testing.T) {
 	w.refreshEngine(context.Background())
 
 	reg := w.buildRegistration()
-	if !contains(reg.Capabilities, studioCap) || !contains(reg.Capabilities, engineCap) {
+	if !slices.Contains(reg.Capabilities, studioCap) || !slices.Contains(reg.Capabilities, engineCap) {
 		t.Fatalf("capabilities = %v, want both %q and %q", reg.Capabilities, studioCap, engineCap)
 	}
 	if reg.Engine == nil || reg.Engine.URL != "http://node.example:1234" {
@@ -228,7 +228,7 @@ func TestConnectServeEngineRoundTrip(t *testing.T) {
 		t.Fatalf("workers = %d, want 1", len(resp.Workers))
 	}
 	fw := resp.Workers[0]
-	if !contains(fw.Capabilities, engineCap) {
+	if !slices.Contains(fw.Capabilities, engineCap) {
 		t.Fatalf("fleet worker capabilities = %v, want engine.serve", fw.Capabilities)
 	}
 	if fw.Engine == nil || fw.Engine.URL != "http://node.example:1234" || fw.Engine.Status != "ready" {
@@ -237,8 +237,4 @@ func TestConnectServeEngineRoundTrip(t *testing.T) {
 	if len(fw.Engine.Models) != 2 {
 		t.Fatalf("fleet worker engine models = %v, want 2", fw.Engine.Models)
 	}
-}
-
-func contains(xs []string, v string) bool {
-	return slices.Contains(xs, v)
 }

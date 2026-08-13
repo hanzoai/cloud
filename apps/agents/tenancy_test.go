@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/shorten"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -122,7 +123,7 @@ func TestMountedStoreRefusesAnInvalidOrg(t *testing.T) {
 
 func truncate(s string) string {
 	if len(s) > 20 {
-		return s[:20] + "…"
+		return shorten.To(s, 20) + "…"
 	}
 	return s
 }

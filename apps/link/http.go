@@ -2,12 +2,12 @@ package link
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/mint"
 
 	luxlog "github.com/luxfi/log"
 
@@ -337,10 +337,7 @@ func (o ops) upsertLink(ctx context.Context, in *enrollReq) (*linkView, error) {
 	if err != nil {
 		return nil, err
 	}
-	id, err := genID("link")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("link")
 	now := time.Now().Unix()
 	l := Link{
 		ID: id, Org: org, User: user, Machine: machine, Host: trim(in.Host), OS: trim(in.OS),
@@ -614,12 +611,4 @@ func countActive(s *cloud.Service[state], ctx context.Context, org string, m Ses
 		return 0
 	}
 	return n
-}
-
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }

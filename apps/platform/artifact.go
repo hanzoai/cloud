@@ -40,6 +40,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/hanzoai/cloud/internal/environ"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -263,10 +264,10 @@ const artifactS3Secret = "artifact-s3"
 // host reads ONE index either way. This is the URL RECORDED in binaries.json.
 func artifactBase(bucket, repo, tag string) string {
 	scheme := "https"
-	if strings.EqualFold(getenv("S3_PUBLIC_SECURE", "true"), "false") {
+	if strings.EqualFold(environ.Or("S3_PUBLIC_SECURE", "true"), "false") {
 		scheme = "http"
 	}
-	host := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(getenv("S3_PUBLIC_ENDPOINT", "s3.hanzo.ai"), "https://"), "http://"), "/")
+	host := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(environ.Or("S3_PUBLIC_ENDPOINT", "s3.hanzo.ai"), "https://"), "http://"), "/")
 	return scheme + "://" + host + "/" + bucket + "/" + repo + "/" + tag
 }
 
@@ -278,10 +279,10 @@ func artifactBase(bucket, repo, tag string) string {
 // already draws — control operations internal, published URLs public.
 func artifactPutBase(bucket, repo, tag string) string {
 	scheme := "http"
-	if strings.EqualFold(getenv("S3_SECURE", "false"), "true") {
+	if strings.EqualFold(environ.Or("S3_SECURE", "false"), "true") {
 		scheme = "https"
 	}
-	return scheme + "://" + getenv("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000") + "/" + bucket + "/" + repo + "/" + tag
+	return scheme + "://" + environ.Or("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000") + "/" + bucket + "/" + repo + "/" + tag
 }
 
 // repoSlug reduces a validated clone URL to the <owner>/<repo> the publish path
@@ -400,7 +401,7 @@ func (k *k8sClient) artifactJobSpec(jobName, repoURL, ref, tag, base, putBase st
 						"image":        publishImage,
 						"command":      []any{"/bin/sh", "-c", artifactPublishScript},
 						"workingDir":   "/w",
-						"env":          []any{env("BASE", base), env("PUT_BASE", putBase), env("REPO", repoSlug(repoURL)), env("TAG", tag), secretEnv("S3_ADMIN_ACCESS_KEY", "access-key"), secretEnv("S3_ADMIN_SECRET_KEY", "secret-key"), env("S3_REGION", getenv("S3_REGION", "us-east-1"))},
+						"env":          []any{env("BASE", base), env("PUT_BASE", putBase), env("REPO", repoSlug(repoURL)), env("TAG", tag), secretEnv("S3_ADMIN_ACCESS_KEY", "access-key"), secretEnv("S3_ADMIN_SECRET_KEY", "secret-key"), env("S3_REGION", environ.Or("S3_REGION", "us-east-1"))},
 						"volumeMounts": []any{map[string]any{"name": "w", "mountPath": "/w"}},
 					}},
 					"volumes": []any{map[string]any{"name": "w", "emptyDir": map[string]any{"sizeLimit": artifactWorkspaceLimit}}},

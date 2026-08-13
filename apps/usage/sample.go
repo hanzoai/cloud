@@ -4,6 +4,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // sample.go is the ACCOUNT-USAGE value plane: ONE metering lane of ONE provider
@@ -425,7 +427,7 @@ func clampInt64(v, hi int64) int64 {
 func clampStr(s string, n int) string {
 	s = trim(s)
 	if len(s) > n {
-		return strings.ToValidUTF8(s[:n], "")
+		return strings.ToValidUTF8(shorten.To(s, n), "")
 	}
 	return s
 }

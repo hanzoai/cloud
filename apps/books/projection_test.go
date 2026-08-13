@@ -26,8 +26,9 @@ package books
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -293,7 +294,7 @@ func TestTheRawBodyRoutesDeclareBytesInAndAShapeOut(t *testing.T) {
 		if !ok {
 			t.Errorf("%s declares no application/octet-stream request — the declaration in "+
 				"openapi.Register is what tells an SDK this route takes a file; have %v",
-				key, sortedKeys(req.Content))
+				key, slices.Sorted(maps.Keys(req.Content)))
 			continue
 		}
 		if media.Schema.Type != "string" || media.Schema.Format != "binary" {
@@ -312,7 +313,7 @@ func TestTheRawBodyRoutesDeclareBytesInAndAShapeOut(t *testing.T) {
 		success, ok := resp["2XX"]
 		if !ok {
 			t.Errorf("%s declares no success response — the SDK has no return type; have %v",
-				key, sortedKeys(resp))
+				key, slices.Sorted(maps.Keys(resp)))
 			continue
 		}
 		wantRef := "#/components/schemas/" + wantComponent
@@ -355,17 +356,6 @@ func remarshal(t *testing.T, from, into any) {
 	if err := json.Unmarshal(b, into); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-}
-
-// sortedKeys names what a map DOES carry, so a failure above reports the shape found
-// instead of only the one wanted.
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // TestBookScanCarriesItsSchemaProseAndExample is the ONE op inspected in full, so the

@@ -17,7 +17,6 @@ package cloud
 import (
 	"context"
 	"errors"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -27,6 +26,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud/internal/planetest"
 )
 
 // Where a capability lives.
@@ -198,7 +199,7 @@ func TestAllListed(t *testing.T) {
 
 	// The list may not outlive the code: a stale entry is a claim nobody checks.
 	for name := range kinds {
-		if !has(found, name) {
+		if !slices.Contains(found, name) {
 			t.Errorf("kinds names %s, which this package no longer declares", name)
 		}
 	}
@@ -251,10 +252,6 @@ func registers(t *testing.T) []string {
 		t.Fatal("found no Register* declarations; the parse is not reading this package")
 	}
 	return out
-}
-
-func has(all []string, name string) bool {
-	return slices.Contains(all, name)
 }
 
 // unregister clears every remote registration so the tests see a process with no

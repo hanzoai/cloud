@@ -24,7 +24,6 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 )
 
 // zipdoc lifts the doc comment off each typed op into zipdoc_gen.go — the only
@@ -38,11 +37,6 @@ type ops struct{ s *cloud.Service[state] }
 
 // noInput is the In of an op whose whole input is its URL and its principal.
 type noInput struct{}
-
-// tenant is the validated org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context. Each caller keeps its own refusal text, so
-// the wire stays exactly what the raw handlers answered.
-func tenant(ctx context.Context) (string, bool) { return principal.OrgFrom(ctx) }
 
 // sudo reports whether the caller is a validated platform SuperAdmin
 // (X-User-IsAdmin, set only for a verified SuperAdmin after SanitizeIdentity) —

@@ -8,6 +8,7 @@ import (
 
 	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 
@@ -75,7 +76,7 @@ func (s *docStore) db(org, workspace string) (*sql.DB, error) {
 	if db, ok := s.dbs[ns]; ok {
 		return db, nil
 	}
-	journal := env("SQLITE_JOURNAL_MODE", "WAL") // DELETE/TRUNCATE on FUSE/S3 mounts
+	journal := environ.Or("SQLITE_JOURNAL_MODE", "WAL") // DELETE/TRUNCATE on FUSE/S3 mounts
 	db, err := cek.Open(ns, "docs", s.dir)
 	if err != nil {
 		return nil, err

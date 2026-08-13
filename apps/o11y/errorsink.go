@@ -29,6 +29,7 @@
 package o11y
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"os"
@@ -248,7 +249,7 @@ func buildSentryEvent(e analytics.ErrorEvent) *errortrackingtypes.SentryEvent {
 		EventID:     e.MessageID,
 		Timestamp:   json.RawMessage(strconv.FormatInt(e.Time.UTC().Unix(), 10)),
 		Platform:    e.Platform,
-		Level:       firstNonEmpty(e.Level, "error"),
+		Level:       cmp.Or(e.Level, "error"),
 		Environment: e.Environment,
 		Release:     e.Release,
 		Transaction: e.Transaction,
@@ -257,7 +258,7 @@ func buildSentryEvent(e analytics.ErrorEvent) *errortrackingtypes.SentryEvent {
 	if e.ExceptionType != "" || e.Message != "" {
 		se.Exception = &errortrackingtypes.SentryException{
 			Values: []errortrackingtypes.SentryExceptionValue{{
-				Type:  firstNonEmpty(e.ExceptionType, "Error"),
+				Type:  cmp.Or(e.ExceptionType, "Error"),
 				Value: e.Message,
 			}},
 		}
@@ -282,7 +283,7 @@ func buildSentryEvent(e analytics.ErrorEvent) *errortrackingtypes.SentryEvent {
 // errors. nil when empty.
 func buildTags(e analytics.ErrorEvent) json.RawMessage {
 	t := map[string]string{}
-	if svc := firstNonEmpty(e.Service, e.Product); svc != "" {
+	if svc := cmp.Or(e.Service, e.Product); svc != "" {
 		t["service_name"] = svc
 	}
 	if e.Site != "" {

@@ -1,9 +1,10 @@
 package platform
 
 import (
-	"github.com/hanzoai/cloud/apps/k8s"
 	"reflect"
 	"testing"
+
+	"github.com/hanzoai/cloud/apps/k8s"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"

@@ -18,6 +18,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -98,7 +99,7 @@ func (o ops) preview(ctx context.Context, body *previewReq) (*previewView, error
 	if err != nil {
 		return nil, err
 	}
-	branch := firstNonEmpty(strings.TrimSpace(body.Branch), strings.TrimSpace(parent.RepoBranch))
+	branch := cmp.Or(strings.TrimSpace(body.Branch), strings.TrimSpace(parent.RepoBranch))
 	if branch == "" {
 		return nil, zip.ErrBadRequest("branch is required")
 	}
@@ -249,7 +250,7 @@ func resolvePromotionTarget(s *cloud.Service[state], ctx context.Context, org st
 			return "", "", "", "", zip.ErrBadRequest("deployment has no built image to promote")
 		}
 		_, t := splitImageRef(d.Image)
-		return d.Image, t, firstNonEmpty(d.Source, a.Source), d.Commit, nil
+		return d.Image, t, cmp.Or(d.Source, a.Source), d.Commit, nil
 	}
 	if tag != "" {
 		img, t := imageForTag(s, org, a, tag)
@@ -314,7 +315,7 @@ func (o ops) rollback(ctx context.Context, body *rollbackReq) (*deploymentView, 
 		return nil, zip.ErrBadRequest("target deployment has no image to roll back to")
 	}
 	_, tag := splitImageRef(image)
-	return redeploy(s, ctx, c, org, proj, a, image, tag, firstNonEmpty(target.Source, a.Source), target.Commit,
+	return redeploy(s, ctx, c, org, proj, a, image, tag, cmp.Or(target.Source, a.Source), target.Commit,
 		"rolled back", "toVersion", target.Version, "image", image)
 }
 

@@ -29,6 +29,8 @@ import (
 
 	s3 "github.com/hanzoai/s3-go"
 	"github.com/hanzoai/s3-go/pkg/credentials"
+
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // Admin holds the shared S3 admin connection parameters, sourced once from the
@@ -63,15 +65,29 @@ type Admin struct {
 //	S3_PUBLIC_ENDPOINT     browser-routable host for presigned URLs
 //	                             (default s3.hanzo.ai; strips any scheme)
 //	S3_PUBLIC_SECURE       TLS for the public host (default true)
+//
+// publicHost is the browser-routable host, and the one setting here where SET AND
+// EMPTY differs from ABSENT: an operator with no such host must be able to say so,
+// and presigning then refuses honestly rather than signing URLs against a default
+// nobody can reach. os.LookupEnv is what separates the two — a reader that trims
+// cannot, and the old way to say "none" was a value holding SPACES, which worked
+// only for as long as nothing trimmed it.
+func publicHost() string {
+	if v, ok := os.LookupEnv("S3_PUBLIC_ENDPOINT"); ok {
+		return strings.TrimSpace(v)
+	}
+	return "s3.hanzo.ai"
+}
+
 func New() Admin {
 	return Admin{
-		endpoint:       env("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000"),
-		publicEndpoint: hostOnly(env("S3_PUBLIC_ENDPOINT", "s3.hanzo.ai")),
+		endpoint:       environ.Or("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000"),
+		publicEndpoint: hostOnly(publicHost()),
 		ak:             os.Getenv("S3_ADMIN_ACCESS_KEY"),
 		sk:             os.Getenv("S3_ADMIN_SECRET_KEY"),
 		secure:         boolEnv("S3_SECURE", false),
 		publicSecure:   boolEnv("S3_PUBLIC_SECURE", true),
-		region:         env("S3_REGION", "us-east-1"),
+		region:         environ.Or("S3_REGION", "us-east-1"),
 	}
 }
 
@@ -124,13 +140,6 @@ func hostOnly(s string) string {
 	s = strings.TrimPrefix(s, "https://")
 	s = strings.TrimPrefix(s, "http://")
 	return strings.TrimRight(s, "/")
-}
-
-func env(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }
 
 func boolEnv(key string, def bool) bool {

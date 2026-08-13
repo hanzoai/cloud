@@ -16,6 +16,7 @@ package cli
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -121,7 +122,7 @@ func newRunContainerCmd(envOf func() *Env) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			env := envOf()
 			spec.Image = args[0]
-			spec.Shape = firstNonEmpty(spec.Shape, "service")
+			spec.Shape = cmp.Or(spec.Shape, "service")
 			spec.Env = parseEnvKV(envKV)
 			out := &RunResult{}
 			if err := cloudCall(cmd.Context(), env, http.MethodPost, "/v1/run", &spec, out); err != nil {

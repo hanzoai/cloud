@@ -23,6 +23,7 @@
 package account
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -231,7 +232,7 @@ func (c *iamClient) do(ctx context.Context, method, path string, q url.Values, b
 				Msg   string `json:"msg"`
 			}
 			_ = json.Unmarshal(raw, &alt)
-			msg = firstNonEmpty(alt.Error, alt.Msg, fmt.Sprintf("iam status %d", resp.StatusCode))
+			msg = cmp.Or(alt.Error, alt.Msg, fmt.Sprintf("iam status %d", resp.StatusCode))
 		}
 		return iamEnvelope{}, fmt.Errorf("iam: %s", msg)
 	}

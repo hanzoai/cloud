@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/url"
@@ -92,7 +93,7 @@ func slackReadTurns(ctx context.Context, botToken, org string, in Inbound) ([]pl
 		// predates the history scopes answers `missing_scope`, and the fix is a
 		// re-install rather than a code change — Slack does not grant new scopes to
 		// a token it has already issued.
-		return nil, fmt.Errorf("slack %s: %s", strings.TrimPrefix(method, "/"), nonEmpty(r.Error, "unknown"))
+		return nil, fmt.Errorf("slack %s: %s", strings.TrimPrefix(method, "/"), cmp.Or(r.Error, "unknown"))
 	}
 	// Who we are in this workspace. Without it a bot message is only "some bot",
 	// and the assistant would read another app's posts as its own words.
