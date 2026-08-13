@@ -416,8 +416,23 @@ type GitPushEvent struct {
 // spell a bot differently — GitHub suffixes App-authored logins with "[bot]", our
 // forge attributes workflow-made pushes to its Actions system user — so the ONE
 // predicate knows both.
+//
+// IT ANSWERS THE UNKNOWN ACTOR "BOT", and that direction is the point. This is a
+// LOOP GUARD, so the question it really asks is "could this push be one of ours?"
+// — and a delivery that names nobody is precisely when that cannot be ruled out.
+// Answering "human" to an absent login let a push with an unparsed actor field
+// through the one gate that stops a release rebuilding itself.
+//
+// The suffix is matched WITHOUT case for the same reason. A login is compared
+// case-insensitively everywhere it is authenticated, so "renovate[BOT]" is the
+// same account as "renovate[bot]" — and a guard that a different capitalization
+// walks past is not one.
 func IsBotActor(login string) bool {
-	return strings.HasSuffix(login, "[bot]") || strings.EqualFold(login, "hanzo-actions")
+	login = strings.TrimSpace(login)
+	if login == "" {
+		return true
+	}
+	return strings.HasSuffix(strings.ToLower(login), "[bot]") || strings.EqualFold(login, "hanzo-actions")
 }
 
 // pushBuilder is the registered git-push-to-deploy trigger. clients/platform
