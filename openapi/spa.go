@@ -5,6 +5,8 @@
 
 package openapi
 
+import "github.com/zap-proto/zip"
+
 // DescribeSPA declares the prose for the two addresses an embedded single-page
 // app serves: the prefix itself and everything under it.
 //
@@ -67,6 +69,15 @@ func DescribeSPA(prefix, name string) {
 			"Not served by the "+name,
 			"Published because this address accepts every method, but a static bundle has no "+
 				"writes: the request is refused 405 and nothing is read or changed.")
+	}
+
+	// The shell's address is its API's minus the version, so both would derive one
+	// id and the document would refuse to publish either. These say what they are —
+	// the app, and the app's assets — which leaves the API holding the plain name a
+	// caller expects (get_tasks is /v1/tasks, get_tasks_app is the console).
+	for _, m := range Methods() {
+		identify(prefix, m, zip.ID(m, prefix)+"_app")
+		identify(prefix+"/*", m, zip.ID(m, prefix)+"_app_assets")
 	}
 }
 

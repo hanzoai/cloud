@@ -57,13 +57,13 @@ func order(t *testing.T, h *zip.App) []string {
 var dangerous = []string{
 	"CreateServiceAccountKey", "CreateSessionByEmailPassword", "CreateResetPasswordToken",
 	"GetResetPasswordToken", "CreateUser", "DeleteUser", "CreateAuthDomain",
-	"CreateRole", "SetRoleByUserID", "CreateInvite", "getToken", "get_v1_kms_secrets",
+	"CreateRole", "SetRoleByUserID", "CreateInvite", "getToken", "get_kms_secrets",
 }
 
 var useful = []string{
 	"post_v1_chat_completions", "get_v1_models", "post_v1_embeddings",
-	"post_v1_agents_sessions_by_id_message", "post_v1_code_ask", "post_v1_git_repos",
-	"post_v1_deploy_applications_by_name_sync", "GetUser", "GetUserPreference",
+	"post_agents_sessions_by_id_message", "post_code_ask", "post_git_repos",
+	"post_deploy_applications_by_name_sync", "GetUser", "GetUserPreference",
 }
 
 // TestTheDoorDoesNotProjectACredentialOpItsChildServes.
@@ -151,7 +151,7 @@ func TestARefusedToolIsNotCALLABLE(t *testing.T) {
 func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 	kid := startNamed(t, "console",
 		"AgentCheckIn", "GetAlerts", "GetUser", "GetUserPreference", "AuthzCheck",
-		"post_v1_chat_completions", "get_v1_models", "post_v1_code_ask")
+		"post_v1_chat_completions", "get_v1_models", "post_code_ask")
 	h := host(t, []string{"console"}, map[string]*child{"console": kid})
 
 	got := order(t, h)
@@ -173,7 +173,7 @@ func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 		t.Fatalf("%q (offered as %q) is missing from %v", id, fleet.Phrase(id), got)
 		return -1
 	}
-	for _, product := range []string{"post_v1_chat_completions", "get_v1_models", "post_v1_code_ask"} {
+	for _, product := range []string{"post_v1_chat_completions", "get_v1_models", "post_code_ask"} {
 		for _, console := range []string{"AgentCheckIn", "GetAlerts", "GetUser", "GetUserPreference", "AuthzCheck"} {
 			if at(product) > at(console) {
 				t.Errorf("%q (%d) comes after %q (%d) — a truncating client keeps the console, not the product",

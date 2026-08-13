@@ -18,7 +18,7 @@
   "paths": {
     "/v1/tel/calls": {
       "get": {
-        "operationId": "get_v1_tel_calls",
+        "operationId": "get_tel_calls",
         "summary": "Returns this org's call history, newest first as the store gives it.",
         "description": "Returns this org's call history, newest first as the store gives it.\nOrg-scoped like every read here.",
         "tags": [
@@ -38,7 +38,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_tel_calls",
+        "operationId": "post_tel_calls",
         "summary": "Dials.",
         "description": "Dials. An `agent` names a Hanzo assistant to answer it; the call is\nrefused up front when no assistant plane is configured, because a call that\nconnects to silence has already cost the person who answered it.",
         "tags": [
@@ -70,7 +70,7 @@
     },
     "/v1/tel/calls/{id}": {
       "delete": {
-        "operationId": "delete_v1_tel_calls_by_id",
+        "operationId": "delete_tel_calls_by_id",
         "summary": "Ends a live call.",
         "description": "Ends a live call. The holding is checked before the carrier is asked, so\na call belonging to another org answers 404 rather than being torn down: the\ncarrier knows nothing about tenancy and would obey either way.",
         "tags": [
@@ -102,7 +102,7 @@
     },
     "/v1/tel/messages": {
       "get": {
-        "operationId": "get_v1_tel_messages",
+        "operationId": "get_tel_messages",
         "summary": "Returns this org's message history.",
         "description": "Returns this org's message history. Org-scoped like every read here.",
         "tags": [
@@ -122,7 +122,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_tel_messages",
+        "operationId": "post_tel_messages",
         "summary": "Sends one message.",
         "description": "Sends one message. `from` must be a number this org holds -- the carrier\nwill send from any number it routes, so without that check one tenant could\noriginate traffic on another's number, and the bill and the reputation would\nfollow the number rather than the sender.",
         "tags": [
@@ -154,7 +154,7 @@
     },
     "/v1/tel/numbers": {
       "get": {
-        "operationId": "get_v1_tel_numbers",
+        "operationId": "get_tel_numbers",
         "summary": "Returns the numbers this org holds.",
         "description": "Returns the numbers this org holds. Scoped to the caller's org, so a\nnumber bought by one tenant is invisible to every other.",
         "tags": [
@@ -174,7 +174,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_tel_numbers",
+        "operationId": "post_tel_numbers",
         "summary": "Provisions with the carrier FIRST and records second.",
         "description": "Provisions with the carrier FIRST and records second. The other order\nrecords a holding that may not exist, and a number the platform believes it owns\nbut cannot use is worse than one it failed to buy.",
         "tags": [
@@ -206,7 +206,7 @@
     },
     "/v1/tel/numbers/available": {
       "get": {
-        "operationId": "get_v1_tel_numbers_available",
+        "operationId": "get_tel_numbers_available",
         "summary": "Asks the carrier what is available to buy.",
         "description": "Asks the carrier what is available to buy. Nothing is recorded —\na search is not a holding, and treating it as one is how inventory leaks.",
         "tags": [
@@ -262,7 +262,7 @@
     },
     "/v1/tel/numbers/{id}": {
       "delete": {
-        "operationId": "delete_v1_tel_numbers_by_id",
+        "operationId": "delete_tel_numbers_by_id",
         "summary": "Checks the holding is THIS org's before it reaches the carrier.",
         "description": "Checks the holding is THIS org's before it reaches the carrier.\nWithout that read, an id belonging to another tenant would be released by\nwhoever guessed it.",
         "tags": [
@@ -294,7 +294,7 @@
     },
     "/v1/tel/summary": {
       "get": {
-        "operationId": "get_v1_tel_summary",
+        "operationId": "get_tel_summary",
         "summary": "Counts what this org holds and has used -- numbers, calls, messages.",
         "description": "Counts what this org holds and has used -- numbers, calls, messages. The\none read the dashboard makes, so it is three counts rather than three lists.",
         "tags": [

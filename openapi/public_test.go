@@ -160,7 +160,7 @@ func TestPublicRefusesADuplicateDeclaration(t *testing.T) {
 // with no calls in it.
 func TestPublishRefusesAnEmptyProjection(t *testing.T) {
 	d := &Document{OpenAPI: "3.1.0", Paths: map[string]PathItem{
-		"/v1/x": {"get": &Operation{OperationID: "get_v1_x"}},
+		"/v1/x": {"get": &Operation{OperationID: "get_x"}},
 	}}
 	if _, err := Publish(d); err == nil {
 		t.Fatal("a document with nothing declared public produced a public document")
@@ -176,12 +176,12 @@ func TestPublishPrunesComponentsToWhatPublicOperationsReach(t *testing.T) {
 		OpenAPI: "3.1.0",
 		Paths: map[string]PathItem{
 			"/v1/open": {"post": &Operation{
-				OperationID: "post_v1_open", Public: true, Tags: []string{"open"},
+				OperationID: "post_open", Public: true, Tags: []string{"open"},
 				RequestBody: map[string]any{"content": map[string]any{
 					"application/json": map[string]any{"schema": map[string]any{"$ref": refPrefix + "Ask"}}}},
 			}},
 			"/v1/shut": {"post": &Operation{
-				OperationID: "post_v1_shut", Tags: []string{"shut"},
+				OperationID: "post_shut", Tags: []string{"shut"},
 				RequestBody: map[string]any{"content": map[string]any{
 					"application/json": map[string]any{"schema": map[string]any{"$ref": refPrefix + "Secret"}}}},
 			}},
@@ -219,7 +219,7 @@ func TestPublishPrunesComponentsToWhatPublicOperationsReach(t *testing.T) {
 // first, which is a worse place to find out than here.
 func TestPublishRefusesADanglingReference(t *testing.T) {
 	d := &Document{OpenAPI: "3.1.0", Paths: map[string]PathItem{
-		"/v1/open": {"post": &Operation{OperationID: "post_v1_open", Public: true,
+		"/v1/open": {"post": &Operation{OperationID: "post_open", Public: true,
 			RequestBody: map[string]any{"schema": map[string]any{"$ref": refPrefix + "Nowhere"}}}},
 	}}
 	if _, err := Publish(d); err == nil || !strings.Contains(err.Error(), "Nowhere") {

@@ -42,7 +42,7 @@
     },
     "/v1/iam/.well-known/jwks": {
       "get": {
-        "operationId": "get_v1_iam_.well-known_jwks",
+        "operationId": "get_iam_.well-known_jwks",
         "summary": "Publishes the public keys that verify the tokens issued here — the one URL you point a service at so it can check a token itself, offline, without calling back and without holding any secret of ours.",
         "description": "Publishes the public keys that verify the tokens issued here — the\none URL you point a service at so it can check a token itself, offline, without\ncalling back and without holding any secret of ours.\n\nKeys appear here before they start signing and stay after they stop, so a\nrotation never leaves a live token unverifiable. Nothing private is ever\npublished.",
         "tags": [
@@ -52,7 +52,7 @@
     },
     "/v1/iam/.well-known/oauth-authorization-server": {
       "get": {
-        "operationId": "get_v1_iam_.well-known_oauth-authorization-server",
+        "operationId": "get_iam_.well-known_oauth-authorization-server",
         "summary": "Returns the OpenID Connect discovery document — the one URL you point a standards-compliant client at so it can find every other endpoint on its own, instead of you configuring them by hand.",
         "description": "Returns the OpenID Connect discovery document — the one URL you\npoint a standards-compliant client at so it can find every other endpoint on\nits own, instead of you configuring them by hand.\n\nIt advertises only what is actually implemented, so a client that reads it\ncannot ask for a flow that will fail: the authorization-code flow, PKCE with\nS256, the supported grants, and the signing algorithms whose public keys the\nJWKS really publishes.\n\nThe issuer is derived from the host you asked on and is the same value the\ntokens carry, so a client that pins the issuer never sees it change.",
         "tags": [
@@ -62,7 +62,7 @@
     },
     "/v1/iam/.well-known/openid-configuration": {
       "get": {
-        "operationId": "get_v1_iam_.well-known_openid-configuration",
+        "operationId": "get_iam_.well-known_openid-configuration",
         "summary": "Returns the OpenID Connect discovery document — the one URL you point a standards-compliant client at so it can find every other endpoint on its own, instead of you configuring them by hand.",
         "description": "Returns the OpenID Connect discovery document — the one URL you\npoint a standards-compliant client at so it can find every other endpoint on\nits own, instead of you configuring them by hand.\n\nIt advertises only what is actually implemented, so a client that reads it\ncannot ask for a flow that will fail: the authorization-code flow, PKCE with\nS256, the supported grants, and the signing algorithms whose public keys the\nJWKS really publishes.\n\nThe issuer is derived from the host you asked on and is the same value the\ntokens carry, so a client that pins the issuer never sees it change.",
         "tags": [
@@ -72,7 +72,7 @@
     },
     "/v1/iam/account": {
       "get": {
-        "operationId": "get_v1_iam_account",
+        "operationId": "get_iam_account",
         "summary": "Returns the signed-in person's own account and the organization they belong to — what a console reads to draw the account menu.",
         "description": "Returns the signed-in person's own account and the organization\nthey belong to — what a console reads to draw the account menu.\n\nPasswords, API secrets and MFA material are stripped. It answers for a session\ncookie or a bearer token alike.",
         "tags": [
@@ -82,7 +82,7 @@
     },
     "/v1/iam/add-application": {
       "post": {
-        "operationId": "post_v1_iam_add-application",
+        "operationId": "post_iam_add-application",
         "summary": "Registers an application in your organization — one product or site your people sign in to, with its own client credentials, sign-in methods and allowed redirect URIs.",
         "description": "Registers an application in your organization — one product or site your\npeople sign in to, with its own client credentials, sign-in methods and\nallowed redirect URIs.\n\nThe older spelling of POST /v1/iam/application. A name already used in the\norganization is refused rather than overwritten.",
         "tags": [
@@ -115,7 +115,7 @@
     },
     "/v1/iam/add-membership": {
       "post": {
-        "operationId": "post_v1_iam_add-membership",
+        "operationId": "post_iam_add-membership",
         "summary": "Lets a person or an application act in an organization.",
         "description": "Lets a person or an application act in an organization. It is the grant\nbehind \"add someone to the team\", and it is safe to repeat — granting a\nmembership that already exists changes nothing. Granting membership IS the org's authority to give, so it takes the\nsame gate a write to that org's own registry row takes: a SuperAdmin, an admin\nof the org itself, or an org-admin-capable confidential client. One rule, one\nplace (internal/authz).",
         "tags": [
@@ -125,7 +125,7 @@
     },
     "/v1/iam/add-organization": {
       "post": {
-        "operationId": "post_v1_iam_add-organization",
+        "operationId": "post_iam_add-organization",
         "summary": "Creates an organization — the account everything else in your directory hangs from.",
         "description": "Creates an organization — the account everything else in your directory\nhangs from. Users, applications, roles, projects and workspaces are all\nnamed inside one organization, so this is the first write in a new tenant.\n\nThe older spelling of POST /v1/iam/organizations. Both reach the same\ncreate, so a name already taken is refused here too.",
         "tags": [
@@ -158,7 +158,7 @@
     },
     "/v1/iam/add-project": {
       "post": {
-        "operationId": "post_v1_iam_add-project",
+        "operationId": "post_iam_add-project",
         "summary": "Creates a project inside your organization — the scope people pick between when their work is separated by product or client rather than by team.",
         "description": "Creates a project inside your organization — the scope people pick between\nwhen their work is separated by product or client rather than by team.\n\nThe older spelling of POST /v1/iam/projects. Creating one takes an\nadministrator of the owning organization.",
         "tags": [
@@ -191,7 +191,7 @@
     },
     "/v1/iam/add-provider": {
       "post": {
-        "operationId": "post_v1_iam_add-provider",
+        "operationId": "post_iam_add-provider",
         "summary": "Adds an identity provider your people can sign in with, or a service your applications send through — a social or enterprise login, an email or SMS sender, a storage or payment connector.",
         "description": "Adds an identity provider your people can sign in with, or a service your\napplications send through — a social or enterprise login, an email or SMS\nsender, a storage or payment connector.\n\nA provider is configured once here and then switched on per application, so\nseveral applications can share one set of credentials.\n\nThe older spelling of POST /v1/iam/providers.",
         "tags": [
@@ -224,7 +224,7 @@
     },
     "/v1/iam/add-role": {
       "post": {
-        "operationId": "post_v1_iam_add-role",
+        "operationId": "post_iam_add-role",
         "summary": "Creates a role — a named group of people that permissions are granted to.",
         "description": "Creates a role — a named group of people that permissions are granted to.\nGranting to a role rather than to each person is what keeps access correct\nas your team changes: add someone to the role and they inherit everything\nit can do.\n\nThe older spelling of POST /v1/iam/roles.",
         "tags": [
@@ -257,7 +257,7 @@
     },
     "/v1/iam/add-user": {
       "post": {
-        "operationId": "post_v1_iam_add-user",
+        "operationId": "post_iam_add-user",
         "summary": "Adds a person to your organization and, if you send a password, sets the one they will sign in with.",
         "description": "Adds a person to your organization and, if you send a password, sets the\none they will sign in with. The password is hashed before it is stored and\nis never returned to you or to anyone else.\n\nUsernames are checked against one rule wherever an account is created —\nthis verb, password signup, a social sign-in, or SCIM — so a name accepted\nhere is a name accepted everywhere.\n\nThe older spelling of POST /v1/iam/users, and it posts the user's fields at\nthe top level rather than wrapped in {user, password}.",
         "tags": [
@@ -290,7 +290,7 @@
     },
     "/v1/iam/add-workspace": {
       "post": {
-        "operationId": "post_v1_iam_add-workspace",
+        "operationId": "post_iam_add-workspace",
         "summary": "Creates a workspace inside your organization — the scope a team works in, alongside projects rather than instead of them.",
         "description": "Creates a workspace inside your organization — the scope a team works in,\nalongside projects rather than instead of them.\n\nThe older spelling of POST /v1/iam/workspaces. Creating one takes an\nadministrator of the owning organization.",
         "tags": [
@@ -395,7 +395,7 @@
     },
     "/v1/iam/admin/provision": {
       "post": {
-        "operationId": "post_v1_iam_admin_provision",
+        "operationId": "post_iam_admin_provision",
         "summary": "Sets up an account on someone's behalf — the same onboarding a person gets themselves, driven by one of your own services instead of by them.",
         "description": "Sets up an account on someone's behalf — the same\nonboarding a person gets themselves, driven by one of your own services\ninstead of by them.\n\nIt authenticates as your service rather than as a person, which is why the\nperson to provision is named in the request. The setup it performs is\nidentical to self-service onboarding; there is one provisioning path, not\ntwo that can drift.",
         "tags": [
@@ -477,7 +477,7 @@
     },
     "/v1/iam/application": {
       "delete": {
-        "operationId": "delete_v1_iam_application",
+        "operationId": "delete_iam_application",
         "summary": "Removes an application.",
         "description": "Removes an application. Anyone mid-sign-in through it is\nturned away and its client credentials stop working, so retire the integration\nbefore deleting it.",
         "tags": [
@@ -516,7 +516,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_iam_application",
+        "operationId": "get_iam_application",
         "summary": "Returns one application: its sign-in methods, its allowed redirect URIs and the client credentials your integration authenticates with.",
         "description": "Returns one application: its sign-in methods, its allowed\nredirect URIs and the client credentials your integration authenticates with.",
         "tags": [
@@ -555,7 +555,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_application",
+        "operationId": "post_iam_application",
         "summary": "Registers an application in your organization — one product or site your people sign in to, with its own client credentials, sign-in methods and allowed redirect URIs.",
         "description": "Registers an application in your organization — one product or site\nyour people sign in to, with its own client credentials, sign-in methods and\nallowed redirect URIs. A name already used in the organization is refused\nrather than overwritten.\n\nExported so the legacy add-application alias reuses this exact path — one\ncreate, two spellings.",
         "tags": [
@@ -586,7 +586,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_iam_application",
+        "operationId": "put_iam_application",
         "summary": "Changes an application's display, its sign-in methods and the redirect URIs it may return to — the call that makes login work from a new host.",
         "description": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings.",
         "tags": [
@@ -619,7 +619,7 @@
     },
     "/v1/iam/applications": {
       "get": {
-        "operationId": "get_v1_iam_applications",
+        "operationId": "get_iam_applications",
         "summary": "Returns the applications in one organization, newest first — each product or site your people sign in to, with the sign-in methods and redirect URIs it allows.",
         "description": "Returns the applications in one organization, newest first —\neach product or site your people sign in to, with the sign-in methods and\nredirect URIs it allows.",
         "tags": [
@@ -649,7 +649,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_applications",
+        "operationId": "post_iam_applications",
         "summary": "Registers an application in your organization — one product or site your people sign in to, with its own client credentials, sign-in methods and allowed redirect URIs.",
         "description": "Registers an application in your organization — one product or site\nyour people sign in to, with its own client credentials, sign-in methods and\nallowed redirect URIs. A name already used in the organization is refused\nrather than overwritten.\n\nExported so the legacy add-application alias reuses this exact path — one\ncreate, two spellings.",
         "tags": [
@@ -681,7 +681,7 @@
     },
     "/v1/iam/applications/delete": {
       "post": {
-        "operationId": "post_v1_iam_applications_delete",
+        "operationId": "post_iam_applications_delete",
         "summary": "Removes an application.",
         "description": "Removes an application. Anyone mid-sign-in through it is\nturned away and its client credentials stop working, so retire the integration\nbefore deleting it.",
         "tags": [
@@ -713,7 +713,7 @@
     },
     "/v1/iam/applications/get": {
       "get": {
-        "operationId": "get_v1_iam_applications_get",
+        "operationId": "get_iam_applications_get",
         "summary": "Returns one application: its sign-in methods, its allowed redirect URIs and the client credentials your integration authenticates with.",
         "description": "Returns one application: its sign-in methods, its allowed\nredirect URIs and the client credentials your integration authenticates with.",
         "tags": [
@@ -753,7 +753,7 @@
     },
     "/v1/iam/applications/update": {
       "post": {
-        "operationId": "post_v1_iam_applications_update",
+        "operationId": "post_iam_applications_update",
         "summary": "Changes an application's display, its sign-in methods and the redirect URIs it may return to — the call that makes login work from a new host.",
         "description": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings.",
         "tags": [
@@ -785,7 +785,7 @@
     },
     "/v1/iam/audit-logs": {
       "get": {
-        "operationId": "get_v1_iam_audit-logs",
+        "operationId": "get_iam_audit-logs",
         "summary": "Returns your organization's audit trail, newest first — who did what, when, and from where.",
         "description": "Returns your organization's audit trail, newest first — who did\nwhat, when, and from where. It is the record you reach for during a security\nreview or an incident.\n\nYou see your own organization's audit trail and no one else's; which organization that\nis comes from your credentials, not from the request.",
         "tags": [
@@ -815,7 +815,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_audit-logs",
+        "operationId": "post_iam_audit-logs",
         "summary": "Records an audit entry, so activity from your own systems lands in the same trail as everything the Hanzo Cloud records for you.",
         "description": "Records an audit entry, so activity from your own systems lands in the\nsame trail as everything the Hanzo Cloud records for you.",
         "tags": [
@@ -847,7 +847,7 @@
     },
     "/v1/iam/audit-logs/delete": {
       "post": {
-        "operationId": "post_v1_iam_audit-logs_delete",
+        "operationId": "post_iam_audit-logs_delete",
         "summary": "Removes an audit entry.",
         "description": "Removes an audit entry. Retention policy is normally what should expire\na trail; deleting by hand leaves a gap a reviewer will notice.",
         "tags": [
@@ -879,7 +879,7 @@
     },
     "/v1/iam/audit-logs/get": {
       "post": {
-        "operationId": "post_v1_iam_audit-logs_get",
+        "operationId": "post_iam_audit-logs_get",
         "summary": "Returns one audit entry in full: the action, the person or key behind it, and the request it came in on.",
         "description": "Returns one audit entry in full: the action, the person or key behind it,\nand the request it came in on.",
         "tags": [
@@ -911,7 +911,7 @@
     },
     "/v1/iam/audit-logs/update": {
       "post": {
-        "operationId": "post_v1_iam_audit-logs_update",
+        "operationId": "post_iam_audit-logs_update",
         "summary": "Corrects an audit entry.",
         "description": "Corrects an audit entry. The trail is append-only in normal operation\nand nothing in the Hanzo Cloud rewrites it — this exists for an administrator\nto correct an entry their own systems recorded wrongly.",
         "tags": [
@@ -943,7 +943,7 @@
     },
     "/v1/iam/auth/application": {
       "get": {
-        "operationId": "get_v1_iam_auth_application",
+        "operationId": "get_iam_auth_application",
         "summary": "Returns everything a login screen needs to draw itself for one application: its branding, and each sign-in method it offers with the provider details that method needs.",
         "description": "Returns everything a login screen needs to draw itself for one\napplication: its branding, and each sign-in method it offers with the provider\ndetails that method needs.\n\nThe client secret is masked. Read before anyone has signed in, so it carries\nonly what is safe for a browser to see.",
         "tags": [
@@ -995,7 +995,7 @@
     },
     "/v1/iam/auth/methods": {
       "get": {
-        "operationId": "get_v1_iam_auth_methods",
+        "operationId": "get_iam_auth_methods",
         "summary": "Returns the sign-in methods one application actually has switched on, so a login screen can render the right buttons for it without you hard-coding a list that drifts the moment you add a provider.",
         "description": "Returns the sign-in methods one application actually has switched\non, so a login screen can render the right buttons for it without you\nhard-coding a list that drifts the moment you add a provider.\n\nPublic by design: it is read before anyone has signed in, and it exposes only\nwhich methods exist, never their credentials.",
         "tags": [
@@ -1038,7 +1038,7 @@
     },
     "/v1/iam/certs": {
       "get": {
-        "operationId": "get_v1_iam_certs",
+        "operationId": "get_iam_certs",
         "summary": "Returns your organization's signing certificates, newest first — the keys the tokens your applications verify are signed with.",
         "description": "Returns your organization's signing certificates, newest first — the keys\nthe tokens your applications verify are signed with. Private key material is\nmasked.\n\nYou see your own organization's certificates and no one else's; which\norganization that is comes from your credentials, not from the request, so a\nquery parameter can never widen the listing.",
         "tags": [
@@ -1068,7 +1068,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_certs",
+        "operationId": "post_iam_certs",
         "summary": "Adds a signing certificate your applications can verify tokens against — the call you make to bring your own key, or to stage the next one before a rotation.",
         "description": "Adds a signing certificate your applications can verify tokens against\n— the call you make to bring your own key, or to stage the next one before a\nrotation. A name already used in your organization is refused.",
         "tags": [
@@ -1100,7 +1100,7 @@
     },
     "/v1/iam/certs/delete": {
       "post": {
-        "operationId": "post_v1_iam_certs_delete",
+        "operationId": "post_iam_certs_delete",
         "summary": "Removes a signing certificate.",
         "description": "Removes a signing certificate. Tokens signed with it can no longer be\nverified, so retire it only once nothing is still presenting them.",
         "tags": [
@@ -1132,7 +1132,7 @@
     },
     "/v1/iam/certs/get": {
       "post": {
-        "operationId": "post_v1_iam_certs_get",
+        "operationId": "post_iam_certs_get",
         "summary": "Returns one signing certificate — its algorithm, its validity window and its public half.",
         "description": "Returns one signing certificate — its algorithm, its validity window and\nits public half. The private key is masked.",
         "tags": [
@@ -1164,7 +1164,7 @@
     },
     "/v1/iam/certs/update": {
       "post": {
-        "operationId": "post_v1_iam_certs_update",
+        "operationId": "post_iam_certs_update",
         "summary": "Changes a signing certificate's settings.",
         "description": "Changes a signing certificate's settings. What it is called does not\nchange, and neither does when it was added.",
         "tags": [
@@ -1196,7 +1196,7 @@
     },
     "/v1/iam/consent": {
       "get": {
-        "operationId": "get_v1_iam_consent",
+        "operationId": "get_iam_consent",
         "summary": "Returns the calling person's own privacy and communication choices.",
         "description": "Returns the calling person's own privacy and communication\nchoices. Somebody who has never set them gets the defaults rather than\nnothing, so a consent screen always has something to show — insights on, and\ntraining UNANSWERED, which is the state that means the screen still has to ask.",
         "tags": [
@@ -1204,7 +1204,7 @@
         ]
       },
       "put": {
-        "operationId": "put_v1_iam_consent",
+        "operationId": "put_iam_consent",
         "summary": "Records the calling person's privacy and communication choices.",
         "description": "Records the calling person's privacy and communication\nchoices. Only their own — there is no way to set consent for somebody else.\n\nSend only the answers you are changing. A question you leave out keeps the\nanswer it already had, so a screen that saves one switch never revokes the\nother, and two screens saving at once do not undo each other.\n\nAn answer this version does not recognize is refused here rather than stored,\nso nothing is ever persisted for a later reader to have to interpret.",
         "tags": [
@@ -1214,7 +1214,7 @@
     },
     "/v1/iam/delete-application": {
       "post": {
-        "operationId": "post_v1_iam_delete-application",
+        "operationId": "post_iam_delete-application",
         "summary": "Deletes an application.",
         "description": "Deletes an application. Anyone mid-sign-in through it is turned away and\nits client credentials stop working, so retire the integration first.\n\nThe older spelling of DELETE /v1/iam/application.",
         "tags": [
@@ -1247,7 +1247,7 @@
     },
     "/v1/iam/delete-membership": {
       "post": {
-        "operationId": "post_v1_iam_delete-membership",
+        "operationId": "post_iam_delete-membership",
         "summary": "Takes away a person's or an application's right to act in an organization.",
         "description": "Takes away a person's or an application's right to act in an\norganization. Their account survives; what ends is their access to that\norganization. Revoking a membership that is already gone reports that nothing\nwas removed rather than failing, so a retry is safe. It is the mirror of ensure and takes the SAME gate:\nrevoking membership is the org's authority to give or take, so a SuperAdmin, an\nadmin of the org itself, or an org-admin-capable confidential client. Idempotent\nthrough the store — deleting an absent membership reports removed=false, never an\nerror — so a retried revoke is safe.",
         "tags": [
@@ -1257,7 +1257,7 @@
     },
     "/v1/iam/delete-mfa": {
       "post": {
-        "operationId": "post_v1_iam_delete-mfa",
+        "operationId": "post_iam_delete-mfa",
         "summary": "Turns a factor off, so sign-in stops asking for it.",
         "description": "Turns a factor off, so sign-in stops asking for it. Naming no factor turns\noff ALL of them — the reset path. People may do this for themselves; doing it for\nsomebody else takes an administrator, which is what makes it the way back in when a\nphone is lost.\n\nThe recovery codes go with the last factor: they are the way past a challenge, so\nkeeping them alive for an account with nothing to challenge would leave a standing\ncredential behind.",
         "tags": [
@@ -1267,7 +1267,7 @@
     },
     "/v1/iam/delete-organization": {
       "post": {
-        "operationId": "post_v1_iam_delete-organization",
+        "operationId": "post_iam_delete-organization",
         "summary": "Deletes an organization and everything named inside it — its users, applications, roles, projects and workspaces.",
         "description": "Deletes an organization and everything named inside it — its users,\napplications, roles, projects and workspaces. There is no undo, and every\nsession issued under it stops working.\n\nThe older spelling of POST /v1/iam/organizations/delete.",
         "tags": [
@@ -1300,7 +1300,7 @@
     },
     "/v1/iam/delete-project": {
       "post": {
-        "operationId": "post_v1_iam_delete-project",
+        "operationId": "post_iam_delete-project",
         "summary": "Deletes a project.",
         "description": "Deletes a project. The people and roles in your organization are unchanged;\nwhat goes is the scope itself, so anything addressed by it must move first.\n\nThe older spelling of POST /v1/iam/projects/delete.",
         "tags": [
@@ -1333,7 +1333,7 @@
     },
     "/v1/iam/delete-provider": {
       "post": {
-        "operationId": "post_v1_iam_delete-provider",
+        "operationId": "post_iam_delete-provider",
         "summary": "Removes a provider.",
         "description": "Removes a provider. Sign-in through it stops for every application that\nused it, so detach those applications first if they have no other method.\n\nThe older spelling of POST /v1/iam/providers/delete.",
         "tags": [
@@ -1366,7 +1366,7 @@
     },
     "/v1/iam/delete-role": {
       "post": {
-        "operationId": "post_v1_iam_delete-role",
+        "operationId": "post_iam_delete-role",
         "summary": "Deletes a role.",
         "description": "Deletes a role. Everyone in it loses the access it carried; their accounts\nand any other roles they hold are untouched.\n\nThe older spelling of POST /v1/iam/roles/delete.",
         "tags": [
@@ -1399,7 +1399,7 @@
     },
     "/v1/iam/delete-user": {
       "post": {
-        "operationId": "post_v1_iam_delete-user",
+        "operationId": "post_iam_delete-user",
         "summary": "Removes a person from your organization.",
         "description": "Removes a person from your organization. Their sessions stop working and\nthe account is gone, not suspended — to keep the record and only stop\nsign-in, update the user instead.\n\nThe older spelling of POST /v1/iam/users/delete.",
         "tags": [
@@ -1432,7 +1432,7 @@
     },
     "/v1/iam/delete-workspace": {
       "post": {
-        "operationId": "post_v1_iam_delete-workspace",
+        "operationId": "post_iam_delete-workspace",
         "summary": "Deletes a workspace.",
         "description": "Deletes a workspace. The people and roles in your organization are\nunchanged; what goes is the scope itself.\n\nThe older spelling of POST /v1/iam/workspaces/delete.",
         "tags": [
@@ -1465,7 +1465,7 @@
     },
     "/v1/iam/get-account": {
       "get": {
-        "operationId": "get_v1_iam_get-account",
+        "operationId": "get_iam_get-account",
         "summary": "Returns the signed-in person's own account and the organization they belong to — what a console reads to draw the account menu.",
         "description": "Returns the signed-in person's own account and the organization\nthey belong to — what a console reads to draw the account menu.\n\nPasswords, API secrets and MFA material are stripped. It answers for a session\ncookie or a bearer token alike.",
         "tags": [
@@ -1475,7 +1475,7 @@
     },
     "/v1/iam/get-app-login": {
       "get": {
-        "operationId": "get_v1_iam_get-app-login",
+        "operationId": "get_iam_get-app-login",
         "summary": "Returns everything a login screen needs to draw itself for one application: its branding, and each sign-in method it offers with the provider details that method needs.",
         "description": "Returns everything a login screen needs to draw itself for one\napplication: its branding, and each sign-in method it offers with the provider\ndetails that method needs.\n\nThe client secret is masked. Read before anyone has signed in, so it carries\nonly what is safe for a browser to see.",
         "tags": [
@@ -1527,7 +1527,7 @@
     },
     "/v1/iam/get-application": {
       "get": {
-        "operationId": "get_v1_iam_get-application",
+        "operationId": "get_iam_get-application",
         "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
@@ -1537,7 +1537,7 @@
     },
     "/v1/iam/get-applications": {
       "get": {
-        "operationId": "get_v1_iam_get-applications",
+        "operationId": "get_iam_get-applications",
         "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
@@ -1547,7 +1547,7 @@
     },
     "/v1/iam/get-cert": {
       "get": {
-        "operationId": "get_v1_iam_get-cert",
+        "operationId": "get_iam_get-cert",
         "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
@@ -1557,7 +1557,7 @@
     },
     "/v1/iam/get-certs": {
       "get": {
-        "operationId": "get_v1_iam_get-certs",
+        "operationId": "get_iam_get-certs",
         "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
@@ -1567,7 +1567,7 @@
     },
     "/v1/iam/get-global-users": {
       "get": {
-        "operationId": "get_v1_iam_get-global-users",
+        "operationId": "get_iam_get-global-users",
         "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
@@ -1577,7 +1577,7 @@
     },
     "/v1/iam/get-invitations": {
       "get": {
-        "operationId": "get_v1_iam_get-invitations",
+        "operationId": "get_iam_get-invitations",
         "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
@@ -1587,7 +1587,7 @@
     },
     "/v1/iam/get-memberships": {
       "get": {
-        "operationId": "get_v1_iam_get-memberships",
+        "operationId": "get_iam_get-memberships",
         "summary": "Answers either question about who belongs where: which organizations one person can act in, or who can act in one organization.",
         "description": "Answers either question about who belongs where: which organizations one\nperson can act in, or who can act in one organization.\n\nBoth are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or\nabout a user whose home org is its own, and nothing else. The bound comes from\nthe verified credential via authz.Scope, so a request parameter can never\nwiden it — a membership row names who may act and spend in an org, so a\ncross-tenant read is a customer roster leak.",
         "tags": [
@@ -1639,7 +1639,7 @@
     },
     "/v1/iam/get-organization": {
       "get": {
-        "operationId": "get_v1_iam_get-organization",
+        "operationId": "get_iam_get-organization",
         "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
@@ -1649,7 +1649,7 @@
     },
     "/v1/iam/get-organization-projects": {
       "get": {
-        "operationId": "get_v1_iam_get-organization-projects",
+        "operationId": "get_iam_get-organization-projects",
         "summary": "Returns one organization's projects — what a scope switcher lists so somebody can move between them.",
         "description": "Returns one organization's projects — what a scope switcher\nlists so somebody can move between them.\n\nYou see your own organization and no other, whatever the request asks for.",
         "tags": [
@@ -1659,7 +1659,7 @@
     },
     "/v1/iam/get-organization-workspaces": {
       "get": {
-        "operationId": "get_v1_iam_get-organization-workspaces",
+        "operationId": "get_iam_get-organization-workspaces",
         "summary": "Returns one organization's workspaces — what a scope switcher lists so somebody can move between them.",
         "description": "Returns one organization's workspaces — what a scope\nswitcher lists so somebody can move between them.\n\nYou see your own organization and no other, whatever the request asks for.",
         "tags": [
@@ -1669,7 +1669,7 @@
     },
     "/v1/iam/get-organizations": {
       "get": {
-        "operationId": "get_v1_iam_get-organizations",
+        "operationId": "get_iam_get-organizations",
         "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
@@ -1679,7 +1679,7 @@
     },
     "/v1/iam/get-permission": {
       "get": {
-        "operationId": "get_v1_iam_get-permission",
+        "operationId": "get_iam_get-permission",
         "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
@@ -1689,7 +1689,7 @@
     },
     "/v1/iam/get-permissions": {
       "get": {
-        "operationId": "get_v1_iam_get-permissions",
+        "operationId": "get_iam_get-permissions",
         "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
@@ -1699,7 +1699,7 @@
     },
     "/v1/iam/get-provider": {
       "get": {
-        "operationId": "get_v1_iam_get-provider",
+        "operationId": "get_iam_get-provider",
         "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
@@ -1709,7 +1709,7 @@
     },
     "/v1/iam/get-providers": {
       "get": {
-        "operationId": "get_v1_iam_get-providers",
+        "operationId": "get_iam_get-providers",
         "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
@@ -1719,7 +1719,7 @@
     },
     "/v1/iam/get-records": {
       "get": {
-        "operationId": "get_v1_iam_get-records",
+        "operationId": "get_iam_get-records",
         "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
@@ -1729,7 +1729,7 @@
     },
     "/v1/iam/get-role": {
       "get": {
-        "operationId": "get_v1_iam_get-role",
+        "operationId": "get_iam_get-role",
         "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
@@ -1739,7 +1739,7 @@
     },
     "/v1/iam/get-roles": {
       "get": {
-        "operationId": "get_v1_iam_get-roles",
+        "operationId": "get_iam_get-roles",
         "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
@@ -1749,7 +1749,7 @@
     },
     "/v1/iam/get-user": {
       "get": {
-        "operationId": "get_v1_iam_get-user",
+        "operationId": "get_iam_get-user",
         "summary": "Reads one person, two ways.",
         "description": "Reads one person, two ways.\n\nName them and it is an ordinary read, with secrets stripped. Or hand it a\nSECRET API key and it answers with the person that key belongs to — how a\nservice of yours turns a credential on an incoming request into an identity.\n\nA publishable key resolves to nobody here, deliberately: it is safe to ship in\na browser precisely because it names an organization and never a person.\n\nget-user is handler-authorized (authz.handlerAuthorizedExact) because the key\nvariant carries no owner/name for the Guard to authorize; so the owner/name\nvariant reinstates the SAME read authorization the Guard applies, through the ONE\npolicy function (authz.Can) — identical behavior, a cross-tenant or non-self read\nstill refused 403 — then reuses the generic getHandler verbatim for resolution and\nredaction. No authz and no CRUD is reimplemented.",
         "tags": [
@@ -1759,7 +1759,7 @@
     },
     "/v1/iam/get-users": {
       "get": {
-        "operationId": "get_v1_iam_get-users",
+        "operationId": "get_iam_get-users",
         "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
@@ -1769,7 +1769,7 @@
     },
     "/v1/iam/invitations": {
       "get": {
-        "operationId": "get_v1_iam_invitations",
+        "operationId": "get_iam_invitations",
         "summary": "Returns your organization's invitations, newest first — who has been asked to join, on what terms, and how many seats each invitation still has left.",
         "description": "Returns your organization's invitations, newest first — who has\nbeen asked to join, on what terms, and how many seats each invitation still\nhas left.\n\nYou see your own organization's invitations and no one else's; which organization that\nis comes from your credentials, not from the request.",
         "tags": [
@@ -1799,7 +1799,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_invitations",
+        "operationId": "post_iam_invitations",
         "summary": "Issues an invitation to join your organization — the code or link a new member redeems, with the role they arrive holding and the date it stops working.",
         "description": "Issues an invitation to join your organization — the code or link a new\nmember redeems, with the role they arrive holding and the date it stops\nworking. A name already used in the organization is refused.",
         "tags": [
@@ -1831,7 +1831,7 @@
     },
     "/v1/iam/invitations/delete": {
       "post": {
-        "operationId": "post_v1_iam_invitations_delete",
+        "operationId": "post_iam_invitations_delete",
         "summary": "Withdraws an invitation.",
         "description": "Withdraws an invitation. It stops being redeemable at once; anyone who\nalready joined through it keeps their account.",
         "tags": [
@@ -1863,7 +1863,7 @@
     },
     "/v1/iam/invitations/get": {
       "post": {
-        "operationId": "post_v1_iam_invitations_get",
+        "operationId": "post_iam_invitations_get",
         "summary": "Returns one invitation: who it is for, what it grants on acceptance, and when it expires.",
         "description": "Returns one invitation: who it is for, what it grants on acceptance, and\nwhen it expires.",
         "tags": [
@@ -1895,7 +1895,7 @@
     },
     "/v1/iam/invitations/update": {
       "post": {
-        "operationId": "post_v1_iam_invitations_update",
+        "operationId": "post_iam_invitations_update",
         "summary": "Changes an invitation's terms — the role it grants, how many may redeem it, or when it expires.",
         "description": "Changes an invitation's terms — the role it grants, how many may redeem\nit, or when it expires. What it is called does not change.",
         "tags": [
@@ -1927,7 +1927,7 @@
     },
     "/v1/iam/issue-user-token": {
       "post": {
-        "operationId": "post_v1_iam_issue-user-token",
+        "operationId": "post_iam_issue-user-token",
         "summary": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target user (optional `?aud=` resource, RFC 8707), issued by the authenticated + allow-listed confidential client.",
         "description": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target\nuser (optional `?aud=` resource, RFC 8707), issued by the authenticated +\nallow-listed confidential client. The token's subject + owner are the TARGET\nUSER's, so a resource server scopes on the validated owner claim to the user's\ntenant — indistinguishable from a token the user obtained directly. Response is\nthe camelCase `{accessToken, expiresIn}` body identity.ts consumes. Equivalent to\nthe RFC 8693 token-exchange grant, minus the subject_token proof (the console has\nthe user's id, not a token) — the reason this compat shim exists.",
         "tags": [
@@ -1937,7 +1937,7 @@
     },
     "/v1/iam/keys": {
       "get": {
-        "operationId": "get_v1_iam_keys",
+        "operationId": "get_iam_keys",
         "summary": "Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half.",
         "description": "Returns your organization's API keys, newest first — what each is called,\nwhat it may reach, and its publishable half. Secret halves are never listed.",
         "tags": [
@@ -1967,7 +1967,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_keys",
+        "operationId": "post_iam_keys",
         "summary": "Issues an API key.",
         "description": "Issues an API key. A standard key comes back as a publishable half you\nmay ship in client code and a secret half you must not — the secret is shown\nonce, at creation, and cannot be retrieved afterwards. A publish-scoped key is\nissued with the publishable half only, so there is no secret to leak.\n\nA name already used in your organization is refused rather than reissued, so\ncreating twice never silently invalidates a key that is in production.",
         "tags": [
@@ -1999,7 +1999,7 @@
     },
     "/v1/iam/keys/delete": {
       "post": {
-        "operationId": "post_v1_iam_keys_delete",
+        "operationId": "post_iam_keys_delete",
         "summary": "Revokes an API key.",
         "description": "Revokes an API key. Anything still presenting it stops being authorized at\nonce, so roll the replacement out before you revoke.",
         "tags": [
@@ -2031,7 +2031,7 @@
     },
     "/v1/iam/keys/get": {
       "get": {
-        "operationId": "get_v1_iam_keys_get",
+        "operationId": "get_iam_keys_get",
         "summary": "Returns one API key: what it is called, what it may reach, and when it was issued.",
         "description": "Returns one API key: what it is called, what it may reach, and when it was\nissued.",
         "tags": [
@@ -2071,7 +2071,7 @@
     },
     "/v1/iam/keys/mint": {
       "post": {
-        "operationId": "post_v1_iam_keys_mint",
+        "operationId": "post_iam_keys_mint",
         "summary": "(re)generates the target user's key of the requested TYPE and returns it once, over the shared authorizeMinter + mintTarget seam.",
         "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
         "tags": [
@@ -2081,7 +2081,7 @@
     },
     "/v1/iam/keys/revoke": {
       "post": {
-        "operationId": "post_v1_iam_keys_revoke",
+        "operationId": "post_iam_keys_revoke",
         "summary": "Clears the target user's key of the requested TYPE (immediate revoke).",
         "description": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. A secret key's stored value is the sk- in its\nschema.Key row.",
         "tags": [
@@ -2091,7 +2091,7 @@
     },
     "/v1/iam/keys/update": {
       "post": {
-        "operationId": "post_v1_iam_keys_update",
+        "operationId": "post_iam_keys_update",
         "summary": "Changes what a key is called or what it may reach.",
         "description": "Changes what a key is called or what it may reach. The credential\nitself is not reissued — the key in your deployment keeps working.",
         "tags": [
@@ -2123,7 +2123,7 @@
     },
     "/v1/iam/link": {
       "post": {
-        "operationId": "post_v1_iam_link",
+        "operationId": "post_iam_link",
         "summary": "Starts connecting another sign-in identity to the account you are already signed in as.",
         "description": "Starts connecting another sign-in identity to the account you are already\nsigned in as. It answers with the provider's URL for the browser to follow; when\nthe provider returns, that identity is attached and you come back to returnUri.\n\nYour account is fixed here, from the credential you are already holding, and is\ncarried server-side for the rest of the round-trip — so nothing that happens at\nthe provider can point the link at somebody else.",
         "tags": [
@@ -2133,7 +2133,7 @@
     },
     "/v1/iam/linked-accounts": {
       "get": {
-        "operationId": "get_v1_iam_linked-accounts",
+        "operationId": "get_iam_linked-accounts",
         "summary": "Returns the sign-in identities linked to the calling person's account — every provider they can currently sign in with.",
         "description": "Returns the sign-in identities linked to the calling\nperson's account — every provider they can currently sign in with. It is what\na security page lists next to the option to disconnect one.",
         "tags": [
@@ -2143,7 +2143,7 @@
     },
     "/v1/iam/login": {
       "post": {
-        "operationId": "post_v1_iam_login",
+        "operationId": "post_iam_login",
         "summary": "Signs a person in with the credential they typed, and — when the request is part of an OAuth flow — hands back the one-time code that finishes it.",
         "description": "Signs a person in with the credential they typed, and — when the\nrequest is part of an OAuth flow — hands back the one-time code that finishes\nit. A second factor, if the account has one, is asked for and required here.\n\nThe password is compared against a stored one-way hash and is never logged,\nechoed or stored as typed.",
         "tags": [
@@ -2153,7 +2153,7 @@
     },
     "/v1/iam/memberships": {
       "get": {
-        "operationId": "get_v1_iam_memberships",
+        "operationId": "get_iam_memberships",
         "summary": "Answers either question about who belongs where: which organizations one person can act in, or who can act in one organization.",
         "description": "Answers either question about who belongs where: which organizations one\nperson can act in, or who can act in one organization.\n\nBoth are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or\nabout a user whose home org is its own, and nothing else. The bound comes from\nthe verified credential via authz.Scope, so a request parameter can never\nwiden it — a membership row names who may act and spend in an org, so a\ncross-tenant read is a customer roster leak.",
         "tags": [
@@ -2203,7 +2203,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_memberships",
+        "operationId": "post_iam_memberships",
         "summary": "Lets a person or an application act in an organization.",
         "description": "Lets a person or an application act in an organization. It is the grant\nbehind \"add someone to the team\", and it is safe to repeat — granting a\nmembership that already exists changes nothing. Granting membership IS the org's authority to give, so it takes the\nsame gate a write to that org's own registry row takes: a SuperAdmin, an admin\nof the org itself, or an org-admin-capable confidential client. One rule, one\nplace (internal/authz).",
         "tags": [
@@ -2213,7 +2213,7 @@
     },
     "/v1/iam/mfa/disable": {
       "post": {
-        "operationId": "post_v1_iam_mfa_disable",
+        "operationId": "post_iam_mfa_disable",
         "summary": "Turns a factor off, so sign-in stops asking for it.",
         "description": "Turns a factor off, so sign-in stops asking for it. Naming no factor turns\noff ALL of them — the reset path. People may do this for themselves; doing it for\nsomebody else takes an administrator, which is what makes it the way back in when a\nphone is lost.\n\nThe recovery codes go with the last factor: they are the way past a challenge, so\nkeeping them alive for an account with nothing to challenge would leave a standing\ncredential behind.",
         "tags": [
@@ -2223,7 +2223,7 @@
     },
     "/v1/iam/mfa/preferred": {
       "post": {
-        "operationId": "post_v1_iam_mfa_preferred",
+        "operationId": "post_iam_mfa_preferred",
         "summary": "Picks which second factor an account is asked for first when it has more than one.",
         "description": "Picks which second factor an account is asked for first when it has\nmore than one. Only a factor the account actually holds: storing an unheld one told\nthe login gate \"MFA is on\" — factor.Enabled reads that column — while leaving it\nnothing to ask for, so the sign-in required the password alone.",
         "tags": [
@@ -2233,7 +2233,7 @@
     },
     "/v1/iam/mfa/setup/enable": {
       "post": {
-        "operationId": "post_v1_iam_mfa_setup_enable",
+        "operationId": "post_iam_mfa_setup_enable",
         "summary": "Finishes the enrolment: from here the account's sign-ins ask for this factor.",
         "description": "Finishes the enrolment: from here the account's sign-ins ask for this factor.\nIt requires the proof initiate handed out — a passcode from the authenticator, or the\ncode that was sent — and verifies it BEFORE writing anything.\n\nIt used to write on the strength of a `secret` field alone. A client that skipped\nthe verify step, scanned the QR into the wrong app, or was simply buggy switched on\na factor no code would ever satisfy, and the account was then locked out with no\nself-service way back: the gate holds the sign-in before minting, so the person\ncannot obtain the bearer that disable requires.\n\nThe recovery codes are minted here and returned ONCE, on the first factor the\naccount adds. Answering with them is the way back in when no factor can be\nproduced, so they are the same value the row's digests were made from — by\nconstruction, not by a client echoing them back.",
         "tags": [
@@ -2243,7 +2243,7 @@
     },
     "/v1/iam/mfa/setup/initiate": {
       "post": {
-        "operationId": "post_v1_iam_mfa_setup_initiate",
+        "operationId": "post_iam_mfa_setup_initiate",
         "summary": "Starts enrolling a factor and hands over whatever the person needs to prove they hold it: app a fresh secret and the otpauth:// URL to render as a QR code sms a code texted to the number on the account email a code mailed to the address on the account Nothing is switched on yet, so abandoning this step leaves the account exactly as it was.",
         "description": "Starts enrolling a factor and hands over whatever the person needs to prove\nthey hold it:\n\n\tapp   a fresh secret and the otpauth:// URL to render as a QR code\n\tsms   a code texted to the number on the account\n\temail a code mailed to the address on the account\n\nNothing is switched on yet, so abandoning this step leaves the account exactly as\nit was. Response: {status:\"ok\", data:{mfaType, secret, url}} — secret and url only\nfor the authenticator.",
         "tags": [
@@ -2253,7 +2253,7 @@
     },
     "/v1/iam/mint-user-keys": {
       "post": {
-        "operationId": "post_v1_iam_mint-user-keys",
+        "operationId": "post_iam_mint-user-keys",
         "summary": "(re)generates the target user's key of the requested TYPE and returns it once, over the shared authorizeMinter + mintTarget seam.",
         "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
         "tags": [
@@ -2263,7 +2263,7 @@
     },
     "/v1/iam/oauth/authorize": {
       "get": {
-        "operationId": "get_v1_iam_oauth_authorize",
+        "operationId": "get_iam_oauth_authorize",
         "summary": "Starts a sign-in — the address you send a browser to, and the beginning of every OAuth and OpenID Connect flow.",
         "description": "Starts a sign-in — the address you send a browser to, and the\nbeginning of every OAuth and OpenID Connect flow.\n\nIf the person is ALREADY signed in here, it does not ask them again: it\nreturns them to the application with a one-time code and they never see this\npage. Otherwise it shows the right way to sign in for the application they are\nsigning in to, or hands off to another identity provider if that is what they\npick.\n\nA client can say what it wants with `prompt`: `none` means answer without any\nscreen at all — with the code if a session exists, with an error if not, but\nnever with a page; `login` means ask for the password again even if a session\nexists; `select_account` means let the person choose which identity to use.\n\nIt returns only to an address the application has registered. That check\nhappens before anything else, so a request naming an unregistered address is\nrefused where the person can see it rather than being bounced onwards.",
         "tags": [
@@ -2271,7 +2271,7 @@
         ]
       },
       "post": {
-        "operationId": "post_v1_iam_oauth_authorize",
+        "operationId": "post_iam_oauth_authorize",
         "summary": "Starts a sign-in — the address you send a browser to, and the beginning of every OAuth and OpenID Connect flow.",
         "description": "Starts a sign-in — the address you send a browser to, and the\nbeginning of every OAuth and OpenID Connect flow.\n\nIf the person is ALREADY signed in here, it does not ask them again: it\nreturns them to the application with a one-time code and they never see this\npage. Otherwise it shows the right way to sign in for the application they are\nsigning in to, or hands off to another identity provider if that is what they\npick.\n\nA client can say what it wants with `prompt`: `none` means answer without any\nscreen at all — with the code if a session exists, with an error if not, but\nnever with a page; `login` means ask for the password again even if a session\nexists; `select_account` means let the person choose which identity to use.\n\nIt returns only to an address the application has registered. That check\nhappens before anything else, so a request naming an unregistered address is\nrefused where the person can see it rather than being bounced onwards.",
         "tags": [
@@ -2281,7 +2281,7 @@
     },
     "/v1/iam/oauth/callback": {
       "get": {
-        "operationId": "get_v1_iam_oauth_callback",
+        "operationId": "get_iam_oauth_callback",
         "summary": "Completes the round-trip: it resolves and burns the single-use transaction (checking expiry + browser binding), exchanges and verifies the IdP response, links or provisions the local user, and mints the iam authorization code the relying party expects — then redirects to the original redirect_uri with code + state.",
         "description": "Completes the round-trip: it resolves and burns the\nsingle-use transaction (checking expiry + browser binding), exchanges and\nverifies the IdP response, links or provisions the local user, and mints the\niam authorization code the relying party expects — then redirects to the\noriginal redirect_uri with code + state.",
         "tags": [
@@ -2291,7 +2291,7 @@
     },
     "/v1/iam/oauth/device": {
       "post": {
-        "operationId": "post_v1_iam_oauth_device",
+        "operationId": "post_iam_oauth_device",
         "summary": "Starts a sign-in on a device with no browser and no keyboard — a TV, a CLI, a headless box.",
         "description": "Starts a sign-in on a device with no browser and no keyboard —\na TV, a CLI, a headless box. It returns a short code to show the person and\nthe address to send them to on a phone or laptop.\n\nNothing is granted until a human approves it there; until then the code is\njust a pending request.",
         "tags": [
@@ -2301,7 +2301,7 @@
     },
     "/v1/iam/oauth/device/info": {
       "post": {
-        "operationId": "post_v1_iam_oauth_device_info",
+        "operationId": "post_iam_oauth_device_info",
         "summary": "Answers \"what am I approving?\" for a pending device code.",
         "description": "Answers \"what am I approving?\" for a pending device code.\n\nThe approval page exists to tell a human WHICH application they are authorizing;\na page that names the wrong one defeats the control it implements. It used to\nrender the portal's own app name — a constant, `hanzo-console` for every code —\nso a device code minted by `hanzo-cli` was approved under a screen naming a\ndifferent application entirely. The client is a property of the CODE, so it is\nread from the code's row here and nowhere else.\n\nRequires a signed-in session, and answers with the same ONE opaque refusal\napproveDevice uses. That is deliberate: the user_code is only 40 bits and is the\none secret in this flow, so an unauthenticated lookup — or one that\ndistinguished unknown from expired from already-approved — would be an oracle\nfor hunting live codes. Gated and opaque, it reveals strictly less than the\napproval the same caller could already attempt.",
         "tags": [
@@ -2311,7 +2311,7 @@
     },
     "/v1/iam/oauth/federation/mfa": {
       "post": {
-        "operationId": "post_v1_iam_oauth_federation_mfa",
+        "operationId": "post_iam_oauth_federation_mfa",
         "summary": "Completes a sign-in that came in through another identity provider and still owes a second factor.",
         "description": "Completes a sign-in that came in through another identity\nprovider and still owes a second factor. The person supplies the factor here\nand the login finishes.\n\nThe account is fixed when the challenge is issued, not by the request, so no\none can redirect a half-finished login onto somebody else's account. A wrong\nfactor uses the challenge up: retrying means starting the sign-in again, the\nsame as a mistyped password.",
         "tags": [
@@ -2321,7 +2321,7 @@
     },
     "/v1/iam/oauth/introspect": {
       "post": {
-        "operationId": "post_v1_iam_oauth_introspect",
+        "operationId": "post_iam_oauth_introspect",
         "summary": "Answers whether an access token is still good, and what it is good for — the check a resource server of yours makes before honouring a token it did not mint.",
         "description": "Answers whether an access token is still good, and what it\nis good for — the check a resource server of yours makes before honouring a\ntoken it did not mint.\n\nA token counts as active only if it verifies AND has not been revoked, so a\nrevoked token reads as dead here immediately rather than until it expires. A\ntoken that is unknown, expired or revoked answers simply that it is not\nactive, and nothing more — the endpoint is not a way to learn about tokens you\nwere not given.",
         "tags": [
@@ -2331,7 +2331,7 @@
     },
     "/v1/iam/oauth/logout": {
       "get": {
-        "operationId": "get_v1_iam_oauth_logout",
+        "operationId": "get_iam_oauth_logout",
         "summary": "Ends a sign-in and sends the browser somewhere sensible.",
         "description": "Ends a sign-in and sends the browser somewhere sensible. Accepts\nGET or POST, so it works as a plain link.\n\nIt ACTUALLY signs you out, which is worth stating because the endpoint spent a\nrelease not doing it: the whole body computed a redirect and answered\n{\"status\":\"ok\"} unconditionally — no session ended, no token revoked. A logout\nthat reports success while leaving the session live is worse than no logout at\nall, because the person on the shared machine believes it worked. Three things\nhappen here now, in this order:\n\n 1. The browser session dies — sid revoked server-side AND the cookie expired\n    (sessions.Clear). Server-side revocation is the load-bearing half: a copy\n    of the cookie taken before logout must not still resolve.\n 2. The relying party's tokens are revoked when an id_token_hint names it, so\n    the refresh token cannot mint a fresh access token after the human left.\n    Revocation state is authoritative — a JWT's `exp` still reads valid for\n    days, so expiry is necessary but never sufficient.\n 3. Only then is a redirect considered, and only to a REGISTERED uri.\n\nThe open-redirect guard is unchanged: a redirect happens only when a VERIFIED\nid_token_hint identifies the application and that application has registered\nthe target. Anything else refuses to redirect — nobody can turn your logout\nlink into a redirect to a site of their choosing.",
         "tags": [
@@ -2339,7 +2339,7 @@
         ]
       },
       "post": {
-        "operationId": "post_v1_iam_oauth_logout",
+        "operationId": "post_iam_oauth_logout",
         "summary": "Ends a sign-in and sends the browser somewhere sensible.",
         "description": "Ends a sign-in and sends the browser somewhere sensible. Accepts\nGET or POST, so it works as a plain link.\n\nIt ACTUALLY signs you out, which is worth stating because the endpoint spent a\nrelease not doing it: the whole body computed a redirect and answered\n{\"status\":\"ok\"} unconditionally — no session ended, no token revoked. A logout\nthat reports success while leaving the session live is worse than no logout at\nall, because the person on the shared machine believes it worked. Three things\nhappen here now, in this order:\n\n 1. The browser session dies — sid revoked server-side AND the cookie expired\n    (sessions.Clear). Server-side revocation is the load-bearing half: a copy\n    of the cookie taken before logout must not still resolve.\n 2. The relying party's tokens are revoked when an id_token_hint names it, so\n    the refresh token cannot mint a fresh access token after the human left.\n    Revocation state is authoritative — a JWT's `exp` still reads valid for\n    days, so expiry is necessary but never sufficient.\n 3. Only then is a redirect considered, and only to a REGISTERED uri.\n\nThe open-redirect guard is unchanged: a redirect happens only when a VERIFIED\nid_token_hint identifies the application and that application has registered\nthe target. Anything else refuses to redirect — nobody can turn your logout\nlink into a redirect to a site of their choosing.",
         "tags": [
@@ -2349,7 +2349,7 @@
     },
     "/v1/iam/oauth/revoke": {
       "post": {
-        "operationId": "post_v1_iam_oauth_revoke",
+        "operationId": "post_iam_oauth_revoke",
         "summary": "Retires a token before it expires — what you call when someone signs out or a credential may have leaked.",
         "description": "Retires a token before it expires — what you call when someone\nsigns out or a credential may have leaked.\n\nRevoking an access token kills that token. Revoking a REFRESH token kills the\nwhole chain it belongs to, so no further access tokens can be minted from it\nand every token already minted from it dies with it.\n\nA token that is not yours, or that never existed, answers success and does\nnothing — so the endpoint cannot be used to discover which tokens are real.\n\nPUBLIC clients revoke too, and must: sign-out is the only control a long-lived\nrefresh token has. hanzo-cli is a public PKCE client holding a 30-day rotating\nrefresh token, so a confidential-only revocation endpoint made `hanzo auth\nlogout` a LOCAL DELETE — the credential it dropped stayed spendable at\nhanzo.id for the rest of the month, with nothing able to kill it. Measured\n2026-08-01: revoke answered 401 invalid_client and the refresh token went on\nminting access tokens.\n\nWidening authentication does not widen authority. The caller must still POSSESS\nthe token — and possession already permits USE, of which revocation is the\nstrict opposite — and the row must belong to the client that presents it, so a\npublic client_id buys the ability to destroy exactly what its holder could\notherwise spend. RFC 6749 §3.2.1 is the same reading: a client with no\ncredentials identifies itself with client_id.",
         "tags": [
@@ -2359,7 +2359,7 @@
     },
     "/v1/iam/oauth/token": {
       "post": {
-        "operationId": "post_v1_iam_oauth_token",
+        "operationId": "post_iam_oauth_token",
         "summary": "Exchanges what your application is holding for the tokens it needs — the one-time code from a finished sign-in, a refresh token, or your own client credentials when the caller is a program rather than a person.",
         "description": "Exchanges what your application is holding for the tokens it\nneeds — the one-time code from a finished sign-in, a refresh token, or your\nown client credentials when the caller is a program rather than a person.\n\nA refresh returns a NEW refresh token and retires the one you sent. If a\nretired one is ever presented again the whole chain is revoked, on the\nassumption that a token which came back from the dead was copied — so a stolen\nrefresh token buys an attacker one use and costs them the session.\n\nResponses are never cached, by any hop.",
         "tags": [
@@ -2369,7 +2369,7 @@
     },
     "/v1/iam/oauth/userinfo": {
       "get": {
-        "operationId": "get_v1_iam_oauth_userinfo",
+        "operationId": "get_iam_oauth_userinfo",
         "summary": "Returns the profile claims for whoever the access token belongs to — the standard OpenID Connect way to find out who is calling you without your application storing anything itself.",
         "description": "Returns the profile claims for whoever the access token\nbelongs to — the standard OpenID Connect way to find out who is calling you\nwithout your application storing anything itself.\n\nThe token must still be live: revoke it and this stops answering.",
         "tags": [
@@ -2377,7 +2377,7 @@
         ]
       },
       "post": {
-        "operationId": "post_v1_iam_oauth_userinfo",
+        "operationId": "post_iam_oauth_userinfo",
         "summary": "Returns the profile claims for whoever the access token belongs to — the standard OpenID Connect way to find out who is calling you without your application storing anything itself.",
         "description": "Returns the profile claims for whoever the access token\nbelongs to — the standard OpenID Connect way to find out who is calling you\nwithout your application storing anything itself.\n\nThe token must still be live: revoke it and this stops answering.",
         "tags": [
@@ -2387,7 +2387,7 @@
     },
     "/v1/iam/onboard": {
       "post": {
-        "operationId": "post_v1_iam_onboard",
+        "operationId": "post_iam_onboard",
         "summary": "Finishes setting up the account of whoever is calling — it creates their organization if they have none and puts them in it, so a person who has just signed up lands somewhere they can work.",
         "description": "Finishes setting up the account of whoever is calling — it\ncreates their organization if they have none and puts them in it, so a person\nwho has just signed up lands somewhere they can work.\n\nIt always acts on the caller and never on somebody named in the request, so\nthere is no way to onboard another person's account through it.",
         "tags": [
@@ -2579,7 +2579,7 @@
     },
     "/v1/iam/password": {
       "put": {
-        "operationId": "put_v1_iam_password",
+        "operationId": "put_iam_password",
         "summary": "Replaces the calling person's password.",
         "description": "Replaces the calling person's password. Only their own —\nthere is no shape of this request that writes somebody else's.\n\nProve who you are with the password you are replacing, or — when you cannot\nsign in at all — with a code sent to the address the account already holds.\nExactly one of the two: a request carrying both proves nothing more than\neither, and answering it would mean deciding which one mattered.\n\nA reset also clears the account lockout, in the SAME transaction as the\ndigest. Replacing a credential retires the run of guesses against the old one,\nand without this a person who reset a forgotten password was still refused for\nup to fifteen more minutes — with the brand-new password they had just chosen.",
         "tags": [
@@ -2639,7 +2639,7 @@
     },
     "/v1/iam/permissions": {
       "get": {
-        "operationId": "get_v1_iam_permissions",
+        "operationId": "get_iam_permissions",
         "summary": "Returns the permissions in one organization, newest first — each one a grant saying which people or roles may do what, and to which resources.",
         "description": "Returns the permissions in one organization, newest first — each one a\ngrant saying which people or roles may do what, and to which resources.",
         "tags": [
@@ -2669,7 +2669,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_permissions",
+        "operationId": "post_iam_permissions",
         "summary": "Grants a permission — the call that gives a person or a role the ability to do something.",
         "description": "Grants a permission — the call that gives a person or a role the ability to\ndo something. Adding refuses to overwrite a grant that already exists, so\nwidening an existing one is an update, never an accident.",
         "tags": [
@@ -2701,7 +2701,7 @@
     },
     "/v1/iam/permissions/delete": {
       "post": {
-        "operationId": "post_v1_iam_permissions_delete",
+        "operationId": "post_iam_permissions_delete",
         "summary": "Revokes a permission.",
         "description": "Revokes a permission. Everyone who held access only through it loses\nthat access immediately; grants they hold by another route are untouched.",
         "tags": [
@@ -2733,7 +2733,7 @@
     },
     "/v1/iam/permissions/get": {
       "get": {
-        "operationId": "get_v1_iam_permissions_get",
+        "operationId": "get_iam_permissions_get",
         "summary": "Returns one permission: who it grants to, what it allows, and the resources it covers.",
         "description": "Returns one permission: who it grants to, what it allows, and the\nresources it covers.",
         "tags": [
@@ -2773,7 +2773,7 @@
     },
     "/v1/iam/permissions/update": {
       "post": {
-        "operationId": "post_v1_iam_permissions_update",
+        "operationId": "post_iam_permissions_update",
         "summary": "Changes who a permission grants to, what it allows, or the resources it covers.",
         "description": "Changes who a permission grants to, what it allows, or the resources it\ncovers. Access changes as soon as the write lands. What the permission is\ncalled does not change, and neither does when it was created.",
         "tags": [
@@ -2805,7 +2805,7 @@
     },
     "/v1/iam/preferences": {
       "post": {
-        "operationId": "post_v1_iam_preferences",
+        "operationId": "post_iam_preferences",
         "summary": "Saves the calling person's own settings and returns the full set afterwards.",
         "description": "Saves the calling person's own settings and returns\nthe full set afterwards. Send only the settings you are changing — the rest\nare kept, so two screens can save at once without one undoing the other.",
         "tags": [
@@ -2815,7 +2815,7 @@
     },
     "/v1/iam/projects": {
       "get": {
-        "operationId": "get_v1_iam_projects",
+        "operationId": "get_iam_projects",
         "summary": "Returns your organization's projects, newest first — the scope people pick between when their work is separated by product or client rather than by team.",
         "description": "Returns your organization's projects, newest first — the scope\npeople pick between when their work is separated by product or client rather\nthan by team.\n\nYou see your own organization's projects and no one else's; which organization that\nis comes from your credentials, not from the request.",
         "tags": [
@@ -2845,7 +2845,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_projects",
+        "operationId": "post_iam_projects",
         "summary": "Makes a project inside your organization — the scope people pick between when their work is separated by product or client rather than by team.",
         "description": "Makes a project inside your organization — the scope people pick\nbetween when their work is separated by product or client rather than by team.\nA name already used in the organization is refused.",
         "tags": [
@@ -2877,7 +2877,7 @@
     },
     "/v1/iam/projects/delete": {
       "post": {
-        "operationId": "post_v1_iam_projects_delete",
+        "operationId": "post_iam_projects_delete",
         "summary": "Removes a project.",
         "description": "Removes a project. The people and roles in your organization are\nunchanged; what goes is the scope itself, so move anything addressed by it\nfirst.",
         "tags": [
@@ -2909,7 +2909,7 @@
     },
     "/v1/iam/projects/get": {
       "post": {
-        "operationId": "post_v1_iam_projects_get",
+        "operationId": "post_iam_projects_get",
         "summary": "Returns one project: what it is called and how it is set up.",
         "description": "Returns one project: what it is called and how it is set up.",
         "tags": [
@@ -2941,7 +2941,7 @@
     },
     "/v1/iam/projects/update": {
       "post": {
-        "operationId": "post_v1_iam_projects_update",
+        "operationId": "post_iam_projects_update",
         "summary": "Changes a project's settings.",
         "description": "Changes a project's settings. What it is called does not change, and\nneither does when it was created.",
         "tags": [
@@ -3131,7 +3131,7 @@
     },
     "/v1/iam/registry/jwks": {
       "get": {
-        "operationId": "get_v1_iam_registry_jwks",
+        "operationId": "get_iam_registry_jwks",
         "summary": "Publishes the public key your registry uses to verify the tokens issued above — the one URL to configure so the registry trusts logins without holding any secret of its own.",
         "description": "Publishes the public key your registry uses to verify the tokens issued\nabove — the one URL to configure so the registry trusts logins without holding\nany secret of its own.\n\nIf no signing key is available it refuses rather than publishing an empty set,\nbecause a registry that trusts nothing looks identical to one that trusts\neverything until somebody tries to push.",
         "tags": [
@@ -3141,7 +3141,7 @@
     },
     "/v1/iam/registry/token": {
       "get": {
-        "operationId": "get_v1_iam_registry_token",
+        "operationId": "get_iam_registry_token",
         "summary": "Signs a container client in to your registry.",
         "description": "Signs a container client in to your registry. `docker login`, and every\nbuild tool that pushes or pulls images, lands here: it exchanges the\ncredential for a short-lived token scoped to exactly the repositories that\ncredential may touch.\n\nBoth of the shapes container tooling uses are accepted, so the same login works\nwhichever client your pipeline runs.",
         "tags": [
@@ -3149,7 +3149,7 @@
         ]
       },
       "post": {
-        "operationId": "post_v1_iam_registry_token",
+        "operationId": "post_iam_registry_token",
         "summary": "Signs a container client in to your registry.",
         "description": "Signs a container client in to your registry. `docker login`, and every\nbuild tool that pushes or pulls images, lands here: it exchanges the\ncredential for a short-lived token scoped to exactly the repositories that\ncredential may touch.\n\nBoth of the shapes container tooling uses are accepted, so the same login works\nwhichever client your pipeline runs.",
         "tags": [
@@ -3159,7 +3159,7 @@
     },
     "/v1/iam/resolve-key": {
       "get": {
-        "operationId": "get_v1_iam_resolve-key",
+        "operationId": "get_iam_resolve-key",
         "summary": "Answers which organization a PUBLISHABLE key belongs to — what a service of yours calls to attribute a request that arrived carrying a key shipped in a browser.",
         "description": "Answers which organization a PUBLISHABLE key belongs to —\nwhat a service of yours calls to attribute a request that arrived carrying a\nkey shipped in a browser.\n\nIt names an organization and never a person: no path through it can load or\nreturn a user, so a key you put in client code cannot become a way to learn\nwho anyone is. A key that is expired, secret rather than publishable, or\nsimply unknown all answer with the same sentence, and with a `code` saying\nwhich of those it was. Only a confidential service that already proved it may\nresolve keys at all ever reads that code — there is no anonymous caller here\nto probe for which keys exist — and telling it apart is what lets the holder\nbe told to re-mint an expired key instead of hunting a configuration error.",
         "tags": [
@@ -3169,7 +3169,7 @@
     },
     "/v1/iam/revoke-user-keys": {
       "post": {
-        "operationId": "post_v1_iam_revoke-user-keys",
+        "operationId": "post_iam_revoke-user-keys",
         "summary": "Clears the target user's key of the requested TYPE (immediate revoke).",
         "description": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. A secret key's stored value is the sk- in its\nschema.Key row.",
         "tags": [
@@ -3179,7 +3179,7 @@
     },
     "/v1/iam/roles": {
       "get": {
-        "operationId": "get_v1_iam_roles",
+        "operationId": "get_iam_roles",
         "summary": "Returns your organization's roles, newest first — each a named group of people that permissions are granted to.",
         "description": "Returns your organization's roles, newest first — each a named group of\npeople that permissions are granted to.\n\nYou see your own organization's roles and no one else's; which organization\nthat is comes from your credentials, not from the request.",
         "tags": [
@@ -3209,7 +3209,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_roles",
+        "operationId": "post_iam_roles",
         "summary": "Makes a role — a named group of people that permissions are granted to.",
         "description": "Makes a role — a named group of people that permissions are granted to.\nGranting to a role rather than to each person is what keeps access correct as\nyour team changes: add someone to the role and they inherit everything it can\ndo. A name already used in your organization is refused.",
         "tags": [
@@ -3241,7 +3241,7 @@
     },
     "/v1/iam/roles/delete": {
       "post": {
-        "operationId": "post_v1_iam_roles_delete",
+        "operationId": "post_iam_roles_delete",
         "summary": "Removes a role.",
         "description": "Removes a role. Everyone in it loses the access it carried; their\naccounts, and any other role they hold, are untouched.",
         "tags": [
@@ -3273,7 +3273,7 @@
     },
     "/v1/iam/roles/get": {
       "post": {
-        "operationId": "post_v1_iam_roles_get",
+        "operationId": "post_iam_roles_get",
         "summary": "Returns one role: who is in it, and the roles it includes.",
         "description": "Returns one role: who is in it, and the roles it includes.",
         "tags": [
@@ -3305,7 +3305,7 @@
     },
     "/v1/iam/roles/update": {
       "post": {
-        "operationId": "post_v1_iam_roles_update",
+        "operationId": "post_iam_roles_update",
         "summary": "Changes who is in a role, or which roles it includes.",
         "description": "Changes who is in a role, or which roles it includes. Access changes for\neveryone in it as soon as the write lands. What the role is called does not\nchange, and neither does when it was created.",
         "tags": [
@@ -3337,7 +3337,7 @@
     },
     "/v1/iam/scim/v2/ResourceTypes": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_resourcetypes",
+        "operationId": "get_iam_scim_v2_resourcetypes",
         "summary": "Returns the kinds of record this directory provisions and the address of each, so your identity provider discovers them rather than having them configured by hand.",
         "description": "Returns the kinds of record this directory provisions and\nthe address of each, so your identity provider discovers them rather than\nhaving them configured by hand.",
         "tags": [
@@ -3359,7 +3359,7 @@
     },
     "/v1/iam/scim/v2/ResourceTypes/{name}": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_resourcetypes_by_name",
+        "operationId": "get_iam_scim_v2_resourcetypes_by_name",
         "summary": "Returns one provisionable record kind in full.",
         "description": "Returns one provisionable record kind in full.",
         "tags": [
@@ -3397,7 +3397,7 @@
     },
     "/v1/iam/scim/v2/Schemas": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_schemas",
+        "operationId": "get_iam_scim_v2_schemas",
         "summary": "Returns the attribute definitions this directory understands, so your identity provider knows which fields it may send and what they mean before it sends any.",
         "description": "Returns the attribute definitions this directory understands, so\nyour identity provider knows which fields it may send and what they mean\nbefore it sends any.",
         "tags": [
@@ -3419,7 +3419,7 @@
     },
     "/v1/iam/scim/v2/Schemas/{id}": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_schemas_by_id",
+        "operationId": "get_iam_scim_v2_schemas_by_id",
         "summary": "Returns one attribute definition in full.",
         "description": "Returns one attribute definition in full.",
         "tags": [
@@ -3457,7 +3457,7 @@
     },
     "/v1/iam/scim/v2/ServiceProviderConfig": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_serviceproviderconfig",
+        "operationId": "get_iam_scim_v2_serviceproviderconfig",
         "summary": "Tells your identity provider which parts of SCIM this directory supports, so it configures itself instead of you filling in a form.",
         "description": "Tells your identity provider which parts of SCIM this\ndirectory supports, so it configures itself instead of you filling in a form.\n\nFiltering and partial updates are supported. Bulk operations, sorting and\nentity tags are not — an IdP that reads this will not attempt them.",
         "tags": [
@@ -3479,7 +3479,7 @@
     },
     "/v1/iam/scim/v2/Users": {
       "get": {
-        "operationId": "get_v1_iam_scim_v2_users",
+        "operationId": "get_iam_scim_v2_users",
         "summary": "Returns the people in your organization to your identity provider, in the standard SCIM shape, so an IdP can reconcile its directory against ours.",
         "description": "Returns the people in your organization to your identity provider,\nin the standard SCIM shape, so an IdP can reconcile its directory against\nours. Searchable by username or email address, and paged.\n\nReading the whole list takes an administrator; an ordinary person is refused.",
         "tags": [
@@ -3487,7 +3487,7 @@
         ]
       },
       "post": {
-        "operationId": "post_v1_iam_scim_v2_users",
+        "operationId": "post_iam_scim_v2_users",
         "summary": "Provisions a person from your identity provider — how a new hire gets an account here automatically when they are added over there.",
         "description": "Provisions a person from your identity provider — how a new hire\ngets an account here automatically when they are added over there.\n\nTakes an administrator. Making someone an administrator takes more than that,\nso an IdP integration cannot escalate anyone by setting a flag.",
         "tags": [
@@ -3497,7 +3497,7 @@
     },
     "/v1/iam/scim/v2/Users/{owner}/{name}": {
       "delete": {
-        "operationId": "delete_v1_iam_scim_v2_users_by_owner_by_name",
+        "operationId": "delete_iam_scim_v2_users_by_owner_by_name",
         "summary": "Deprovisions a person — how removing someone in your identity provider removes their access here.",
         "description": "Deprovisions a person — how removing someone in your identity\nprovider removes their access here. Their sessions stop working immediately.\nTakes an administrator.",
         "tags": [
@@ -3523,7 +3523,7 @@
         ]
       },
       "get": {
-        "operationId": "get_v1_iam_scim_v2_users_by_owner_by_name",
+        "operationId": "get_iam_scim_v2_users_by_owner_by_name",
         "summary": "Returns one person in the standard SCIM shape.",
         "description": "Returns one person in the standard SCIM shape. An administrator may\nread anyone in the organization; everyone else may read only themselves.",
         "tags": [
@@ -3549,7 +3549,7 @@
         ]
       },
       "patch": {
-        "operationId": "patch_v1_iam_scim_v2_users_by_owner_by_name",
+        "operationId": "patch_iam_scim_v2_users_by_owner_by_name",
         "summary": "Applies a partial change from your identity provider — one attribute moved, not the whole record resent.",
         "description": "Applies a partial change from your identity provider — one attribute\nmoved, not the whole record resent.\n\nThe change is applied onto the person as they currently are, so everything you\ndid not mention keeps its value, including the parts SCIM does not describe.",
         "tags": [
@@ -3575,7 +3575,7 @@
         ]
       },
       "put": {
-        "operationId": "put_v1_iam_scim_v2_users_by_owner_by_name",
+        "operationId": "put_iam_scim_v2_users_by_owner_by_name",
         "summary": "Overwrites a person's SCIM attributes with what your identity provider sends — how a change made there lands here.",
         "description": "Overwrites a person's SCIM attributes with what your identity\nprovider sends — how a change made there lands here.\n\nOnly the attributes SCIM describes are replaced. Anything the standard does not\ncover — their multi-factor enrolment above all — survives untouched, so a\nroutine sync from your IdP can never quietly strip someone's second factor or\nbring a deleted account back.",
         "tags": [
@@ -3603,7 +3603,7 @@
     },
     "/v1/iam/send-verification-code": {
       "post": {
-        "operationId": "post_v1_iam_send-verification-code",
+        "operationId": "post_iam_send-verification-code",
         "summary": "Validates the request and asks otp to get a code to the person.",
         "description": "Validates the request and asks otp to get a code to the\nperson. The request fields are read via fiber's FormValue — the escape hatch zip\nexposes for form bodies (multipart or urlencoded) — since the typed JSON Bind does\nnot apply here. v1 also accepts countryCode/method/checkUser/captchaType; iam\nignores them (the captcha/forget/MFA flows those drive are not ported), and\nCAPTCHA verification is likewise not enforced — iam models no captcha provider —\nso the code is issued once the destination and application validate.",
         "tags": [
@@ -3613,7 +3613,7 @@
     },
     "/v1/iam/service-accounts": {
       "get": {
-        "operationId": "get_v1_iam_service-accounts",
+        "operationId": "get_iam_service-accounts",
         "summary": "Returns your organization's service accounts — what each is called and when it was created.",
         "description": "Returns your organization's service accounts — what each is called and\nwhen it was created. Never their secrets: a key's secret half exists in a\nresponse exactly once, when it is minted. Paginated in memory over the already org-scoped\nslice — the set per org is small, so a dedicated count query is overkill\n(v1 service_account.go:296-307).",
         "tags": [
@@ -3672,7 +3672,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_service-accounts",
+        "operationId": "post_iam_service-accounts",
         "summary": "Makes a service account — an identity for a program rather than a person, for a script, a bot or a deployment that has to authenticate on its own.",
         "description": "Makes a service account — an identity for a program rather than a\nperson, for a script, a bot or a deployment that has to authenticate on its\nown.\n\nIt comes back with its first key, and the secret half is shown ONCE, here.\nThere is no way to read it again; if you lose it, rotate.",
         "tags": [
@@ -3682,7 +3682,7 @@
     },
     "/v1/iam/service-accounts/{name}": {
       "delete": {
-        "operationId": "delete_v1_iam_service-accounts_by_name",
+        "operationId": "delete_iam_service-accounts_by_name",
         "summary": "Serves DELETE /v1/iam/service-accounts/:name.",
         "description": "Serves DELETE /v1/iam/service-accounts/:name.",
         "tags": [
@@ -3702,7 +3702,7 @@
     },
     "/v1/iam/service-accounts/{name}/keys": {
       "post": {
-        "operationId": "post_v1_iam_service-accounts_by_name_keys",
+        "operationId": "post_iam_service-accounts_by_name_keys",
         "summary": "Serves POST /v1/iam/service-accounts/:name/keys: mint a fresh key, invalidating the prior one, and return the new raw secret exactly once.",
         "description": "Serves POST /v1/iam/service-accounts/:name/keys: mint a fresh key,\ninvalidating the prior one, and return the new raw secret exactly once.",
         "tags": [
@@ -3882,7 +3882,7 @@
     },
     "/v1/iam/set-preferred-mfa": {
       "post": {
-        "operationId": "post_v1_iam_set-preferred-mfa",
+        "operationId": "post_iam_set-preferred-mfa",
         "summary": "Picks which second factor an account is asked for first when it has more than one.",
         "description": "Picks which second factor an account is asked for first when it has\nmore than one. Only a factor the account actually holds: storing an unheld one told\nthe login gate \"MFA is on\" — factor.Enabled reads that column — while leaving it\nnothing to ask for, so the sign-in required the password alone.",
         "tags": [
@@ -3892,7 +3892,7 @@
     },
     "/v1/iam/signin": {
       "post": {
-        "operationId": "post_v1_iam_signin",
+        "operationId": "post_iam_signin",
         "summary": "Completes a sign-in: it exchanges the one-time code your application was handed at the end of the login flow for a live session, and returns the signed-in account.",
         "description": "Completes a sign-in: it exchanges the one-time code your\napplication was handed at the end of the login flow for a live session, and\nreturns the signed-in account.\n\nThe code works once. This is the call that turns a finished login into\nsomething your application can act on.",
         "tags": [
@@ -3902,7 +3902,7 @@
     },
     "/v1/iam/signup": {
       "post": {
-        "operationId": "post_v1_iam_signup",
+        "operationId": "post_iam_signup",
         "summary": "Creates an account from the sign-up form and applies the application's own sign-up rules — whether self-service registration is open at all, and which fields it requires.",
         "description": "Creates an account from the sign-up form and applies the\napplication's own sign-up rules — whether self-service registration is open at\nall, and which fields it requires.\n\nThe password is hashed before it is stored and is never returned.",
         "tags": [
@@ -4046,7 +4046,7 @@
     },
     "/v1/iam/tokens/issue": {
       "post": {
-        "operationId": "post_v1_iam_tokens_issue",
+        "operationId": "post_iam_tokens_issue",
         "summary": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target user (optional `?aud=` resource, RFC 8707), issued by the authenticated + allow-listed confidential client.",
         "description": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target\nuser (optional `?aud=` resource, RFC 8707), issued by the authenticated +\nallow-listed confidential client. The token's subject + owner are the TARGET\nUSER's, so a resource server scopes on the validated owner claim to the user's\ntenant — indistinguishable from a token the user obtained directly. Response is\nthe camelCase `{accessToken, expiresIn}` body identity.ts consumes. Equivalent to\nthe RFC 8693 token-exchange grant, minus the subject_token proof (the console has\nthe user's id, not a token) — the reason this compat shim exists.",
         "tags": [
@@ -4088,7 +4088,7 @@
     },
     "/v1/iam/unlink": {
       "post": {
-        "operationId": "post_v1_iam_unlink",
+        "operationId": "post_iam_unlink",
         "summary": "Disconnects one sign-in identity from an account, so that provider can no longer be used to sign in as that person.",
         "description": "Disconnects one sign-in identity from an account, so that provider can\nno longer be used to sign in as that person. Their account and every other way\nthey sign in are untouched. Two principals may do it, and\nonly two: the account holder itself, and a SuperAdmin (a member of the reserved\nadmin org, the one predicate). An ORG ADMIN deliberately may NOT — unlinking is\nnot tenant administration, it is unpicking someone's own sign-in method, so the\ngeneric org-admin rule is the wrong answer here.\n\nA holder unlinking itself must also be permitted by the application — the\nprovider link's CanUnlink flag — so an organization that mandates federated\nsign-in cannot have its users strand themselves. A SuperAdmin is not bound by\nthat flag; it is the platform's own recovery path. Fail-closed throughout.",
         "tags": [
@@ -4098,7 +4098,7 @@
     },
     "/v1/iam/update-application": {
       "post": {
-        "operationId": "post_v1_iam_update-application",
+        "operationId": "post_iam_update-application",
         "summary": "Updates one of your applications — its display, its sign-in methods and the redirect URIs it is allowed to return to.",
         "description": "Updates one of your applications — its display, its sign-in methods and the\nredirect URIs it is allowed to return to. Which organization and name the\napplication has are fixed when it is created and are not editable here.\n\nA redirect URI you add becomes an allowed sign-in origin, so this is the\ncall that makes login work from a new host.\n\nThe older spelling of PUT /v1/iam/application.",
         "tags": [
@@ -4131,7 +4131,7 @@
     },
     "/v1/iam/update-organization": {
       "post": {
-        "operationId": "post_v1_iam_update-organization",
+        "operationId": "post_iam_update-organization",
         "summary": "Updates your organization — its display, its default settings and the sign-in rules everyone in it inherits.",
         "description": "Updates your organization — its display, its default settings and the\nsign-in rules everyone in it inherits.\n\nThe older spelling of POST /v1/iam/organizations/update.",
         "tags": [
@@ -4164,7 +4164,7 @@
     },
     "/v1/iam/update-preferences": {
       "post": {
-        "operationId": "post_v1_iam_update-preferences",
+        "operationId": "post_iam_update-preferences",
         "summary": "Saves the calling person's own settings and returns the full set afterwards.",
         "description": "Saves the calling person's own settings and returns\nthe full set afterwards. Send only the settings you are changing — the rest\nare kept, so two screens can save at once without one undoing the other.",
         "tags": [
@@ -4174,7 +4174,7 @@
     },
     "/v1/iam/update-provider": {
       "post": {
-        "operationId": "post_v1_iam_update-provider",
+        "operationId": "post_iam_update-provider",
         "summary": "Updates a provider's settings or rotates the credentials it holds.",
         "description": "Updates a provider's settings or rotates the credentials it holds. The\nchange takes effect on the next sign-in through it — sessions already\nissued are unaffected.\n\nThe older spelling of POST /v1/iam/providers/update.",
         "tags": [
@@ -4207,7 +4207,7 @@
     },
     "/v1/iam/update-role": {
       "post": {
-        "operationId": "post_v1_iam_update-role",
+        "operationId": "post_iam_update-role",
         "summary": "Updates a role's members or the roles it includes.",
         "description": "Updates a role's members or the roles it includes. Access changes for\neveryone in it as soon as the write lands.\n\nThe older spelling of POST /v1/iam/roles/update.",
         "tags": [
@@ -4240,7 +4240,7 @@
     },
     "/v1/iam/update-user": {
       "post": {
-        "operationId": "post_v1_iam_update-user",
+        "operationId": "post_iam_update-user",
         "summary": "Updates one of your users' profile, roles or credentials.",
         "description": "Updates one of your users' profile, roles or credentials. Send a password\nto reset it; leave it out and the current one stands.\n\nThe older spelling of POST /v1/iam/users/update, with the user's fields at\nthe top level rather than wrapped in {user, password}.",
         "tags": [
@@ -4273,7 +4273,7 @@
     },
     "/v1/iam/users": {
       "get": {
-        "operationId": "get_v1_iam_users",
+        "operationId": "get_iam_users",
         "summary": "Returns a page of the people in your organization, with the total so you can page through the rest.",
         "description": "Returns a page of the people in your organization, with the total so you\ncan page through the rest. Passwords, API secrets and MFA material are stripped\nfrom every entry.",
         "tags": [
@@ -4319,7 +4319,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_users",
+        "operationId": "post_iam_users",
         "summary": "Adds a person to your organization.",
         "description": "Adds a person to your organization. Send a password and it becomes the\none they sign in with; it is hashed before it is stored and never comes back\nin any response.\n\nThe username is checked against the same rule every account in the Hanzo Cloud\nis held to, whichever way it was created — this call, password signup, a social\nsign-in, or SCIM — so a name accepted here works everywhere.\n\nA name already taken in your organization is refused rather than overwritten.",
         "tags": [
@@ -4351,7 +4351,7 @@
     },
     "/v1/iam/users/delete": {
       "post": {
-        "operationId": "post_v1_iam_users_delete",
+        "operationId": "post_iam_users_delete",
         "summary": "Removes a person from your organization.",
         "description": "Removes a person from your organization. Their sessions stop working\nimmediately and the account is gone rather than suspended — to keep the record\nand only stop sign-in, update the user instead.",
         "tags": [
@@ -4383,7 +4383,7 @@
     },
     "/v1/iam/users/get": {
       "get": {
-        "operationId": "get_v1_iam_users_get",
+        "operationId": "get_iam_users_get",
         "summary": "Returns one person in your organization, by the organization they belong to and their username.",
         "description": "Returns one person in your organization, by the organization they belong\nto and their username. Passwords, API secrets and MFA material are stripped\nfrom the response.",
         "tags": [
@@ -4423,7 +4423,7 @@
     },
     "/v1/iam/users/update": {
       "post": {
-        "operationId": "post_v1_iam_users_update",
+        "operationId": "post_iam_users_update",
         "summary": "Changes a person's profile, their roles, or the credentials they sign in with.",
         "description": "Changes a person's profile, their roles, or the credentials they sign\nin with. Send a password to reset it; leave it out and their current one keeps\nworking.\n\nWho they are does not change: their organization, username and the identifier\ntheir existing sessions are keyed on all survive the write, so an update never\nsigns anyone out.",
         "tags": [
@@ -4455,7 +4455,7 @@
     },
     "/v1/iam/verification-codes": {
       "post": {
-        "operationId": "post_v1_iam_verification-codes",
+        "operationId": "post_iam_verification-codes",
         "summary": "Validates the request and asks otp to get a code to the person.",
         "description": "Validates the request and asks otp to get a code to the\nperson. The request fields are read via fiber's FormValue — the escape hatch zip\nexposes for form bodies (multipart or urlencoded) — since the typed JSON Bind does\nnot apply here. v1 also accepts countryCode/method/checkUser/captchaType; iam\nignores them (the captcha/forget/MFA flows those drive are not ported), and\nCAPTCHA verification is likewise not enforced — iam models no captcha provider —\nso the code is issued once the destination and application validate.",
         "tags": [
@@ -4465,7 +4465,7 @@
     },
     "/v1/iam/web3/nonce": {
       "get": {
-        "operationId": "get_v1_iam_web3_nonce",
+        "operationId": "get_iam_web3_nonce",
         "summary": "Starts a wallet sign-in: it returns a one-time challenge for the wallet to sign.",
         "description": "Starts a wallet sign-in: it returns a one-time challenge for the wallet\nto sign. The challenge is good once and is tied to the site that asked for it,\nso a signature collected elsewhere cannot be replayed here.",
         "tags": [
@@ -4475,7 +4475,7 @@
     },
     "/v1/iam/web3/verify": {
       "post": {
-        "operationId": "post_v1_iam_web3_verify",
+        "operationId": "post_iam_web3_verify",
         "summary": "Completes a wallet sign-in: it verifies the signed challenge and, if it holds, signs the wallet's owner in.",
         "description": "Completes a wallet sign-in: it verifies the signed challenge and, if it\nholds, signs the wallet's owner in.\n\nThis IS the login — it answers exactly as a password sign-in does, so the rest\nof your flow does not branch on how somebody arrived.",
         "tags": [
@@ -4643,7 +4643,7 @@
     },
     "/v1/iam/whoami": {
       "get": {
-        "operationId": "get_v1_iam_whoami",
+        "operationId": "get_iam_whoami",
         "summary": "Tells you who the current caller is — the lightweight check a page makes on load to decide whether to render signed-in or signed-out.",
         "description": "Tells you who the current caller is — the lightweight check a\npage makes on load to decide whether to render signed-in or signed-out.\n\nIt answers for a session cookie or a bearer token alike, and says plainly when\nnobody is signed in rather than failing.",
         "tags": [
@@ -4653,7 +4653,7 @@
     },
     "/v1/iam/workspaces": {
       "get": {
-        "operationId": "get_v1_iam_workspaces",
+        "operationId": "get_iam_workspaces",
         "summary": "Returns your organization's workspaces, newest first — the scope a team works in, alongside projects rather than instead of them.",
         "description": "Returns your organization's workspaces, newest first — the scope a\nteam works in, alongside projects rather than instead of them.\n\nYou see your own organization's workspaces and no one else's; which organization that\nis comes from your credentials, not from the request.",
         "tags": [
@@ -4683,7 +4683,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_iam_workspaces",
+        "operationId": "post_iam_workspaces",
         "summary": "Makes a workspace inside your organization — the scope a team works in, alongside projects rather than instead of them.",
         "description": "Makes a workspace inside your organization — the scope a team works in,\nalongside projects rather than instead of them. A name already used in the\norganization is refused.",
         "tags": [
@@ -4715,7 +4715,7 @@
     },
     "/v1/iam/workspaces/delete": {
       "post": {
-        "operationId": "post_v1_iam_workspaces_delete",
+        "operationId": "post_iam_workspaces_delete",
         "summary": "Removes a workspace.",
         "description": "Removes a workspace. The people and roles in your organization are\nunchanged; what goes is the scope itself.",
         "tags": [
@@ -4747,7 +4747,7 @@
     },
     "/v1/iam/workspaces/get": {
       "post": {
-        "operationId": "post_v1_iam_workspaces_get",
+        "operationId": "post_iam_workspaces_get",
         "summary": "Returns one workspace: what it is called and how it is set up.",
         "description": "Returns one workspace: what it is called and how it is set up.",
         "tags": [
@@ -4779,7 +4779,7 @@
     },
     "/v1/iam/workspaces/update": {
       "post": {
-        "operationId": "post_v1_iam_workspaces_update",
+        "operationId": "post_iam_workspaces_update",
         "summary": "Changes a workspace's settings.",
         "description": "Changes a workspace's settings. What it is called does not change, and\nneither does when it was created.",
         "tags": [

@@ -18,7 +18,7 @@
   "paths": {
     "/v1/licensing/download/{release}": {
       "get": {
-        "operationId": "get_v1_licensing_download_by_release",
+        "operationId": "get_licensing_download_by_release",
         "summary": "Download resolves a release to its artifact, gated on a valid license.",
         "description": "Download resolves a release to its artifact, gated on a valid license.\n\nThe gate is the LICENSE token, not the IAM bearer: being signed in is not\npermission to download a paid binary — holding a good license for it is. The\ntoken must verify against this deployment's public key, be unrevoked, be\nscoped to the release's app, and carry every feature the release requires.\nPresent it as the `X-License-Token` header (preferred, since a header does not\nland in proxy logs) or as `?token=`.\n\nThe response pairs the artifact URL with its cosign signature so the client\nverifies the binary BEFORE trusting it: a signed URL alone proves where the\nbytes came from, not what they are. A yanked release is 410 Gone.",
         "tags": [
@@ -66,7 +66,7 @@
     },
     "/v1/licensing/fingerprint": {
       "post": {
-        "operationId": "post_v1_licensing_fingerprint",
+        "operationId": "post_licensing_fingerprint",
         "summary": "Fingerprint turns raw device signals into the opaque value that binds a license to one machine.",
         "description": "Fingerprint turns raw device signals into the opaque value that binds a license\nto one machine.\n\nThis is the anti-copy step: the value returned here is folded into the signed\ntoken, so a token minted with it runs only on the device it was bound to. The\nderivation is one-way and salted — the signals are never stored and never\nechoed back — so the response is safe to persist client-side and pass to\nissue. Signals too weak to identify a machine (a hostname alone) are refused\nrather than turned into a binding that would collide with other machines.",
         "tags": [
@@ -106,7 +106,7 @@
     },
     "/v1/licensing/healthz": {
       "get": {
-        "operationId": "get_v1_licensing_healthz",
+        "operationId": "get_licensing_healthz",
         "summary": "Health reports which signer this deployment mints with, and in which env.",
         "description": "Health reports which signer this deployment mints with, and in which env.\n\nIt answers 200 whenever the process is up: there is nothing downstream to\nprobe, since the KMS is reached only when a token is actually minted. Its\nvalue is the `signer` field — `\"signer\":\"local\"` on a production host says\nthat deployment is signing licenses with a development key, which is a\nmisconfiguration worth paging on rather than a healthy 200.",
         "tags": [
@@ -128,7 +128,7 @@
     },
     "/v1/licensing/issue": {
       "post": {
-        "operationId": "post_v1_licensing_issue",
+        "operationId": "post_licensing_issue",
         "summary": "Issue mints a signed license token for a product the caller's org already pays for.",
         "description": "Issue mints a signed license token for a product the caller's org already pays\nfor.\n\nThe order is the whole security argument: the caller is an IAM-validated\nprincipal, commerce is then asked whether that principal's ORG holds an ACTIVE\nentitlement for the product, and only then is a token signed — by the KMS,\nnever by key material in this process. A product the org does not own answers\n403 and no token. The signed features are the plan's features verbatim, so the\nengine enforces exactly what was bought, and the expiry is clamped to the\nentitlement's so a token cannot outlive the subscription that paid for it.\n\nThe token is the credential the engine runs on. Treat it as a secret.",
         "tags": [
@@ -167,7 +167,7 @@
     },
     "/v1/licensing/jwks": {
       "get": {
-        "operationId": "get_v1_licensing_jwks",
+        "operationId": "get_licensing_jwks",
         "summary": "Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks.",
         "description": "Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and\n/jwks.\n\nThis is the only public-safe surface here and the reason the whole scheme\nworks offline: the engine embeds or fetches this key once and then verifies\nevery license itself, with no call home per launch. The private half never\nenters this process — it lives in the KMS — so nothing served here is a\nsecret. `provider` names the KMS holding that half; `\"local\"` means a\ndevelopment key, and a token signed by one is not a production credential.",
         "tags": [
@@ -189,7 +189,7 @@
     },
     "/v1/licensing/pubkey": {
       "get": {
-        "operationId": "get_v1_licensing_pubkey",
+        "operationId": "get_licensing_pubkey",
         "summary": "Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks.",
         "description": "Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and\n/jwks.\n\nThis is the only public-safe surface here and the reason the whole scheme\nworks offline: the engine embeds or fetches this key once and then verifies\nevery license itself, with no call home per launch. The private half never\nenters this process — it lives in the KMS — so nothing served here is a\nsecret. `provider` names the KMS holding that half; `\"local\"` means a\ndevelopment key, and a token signed by one is not a production credential.",
         "tags": [
@@ -211,7 +211,7 @@
     },
     "/v1/licensing/releases": {
       "get": {
-        "operationId": "get_v1_licensing_releases",
+        "operationId": "get_licensing_releases",
         "summary": "Lists the signed binary releases this deployment can serve.",
         "description": "Lists the signed binary releases this deployment can serve.\n\nMetadata only, and no download URL: the artifact is behind GET\n/v1/licensing/download/{release}, which is gated on a valid license token.\nKnowing that a release exists is not permission to run it, which is why this\nlist needs no license of its own.",
         "tags": [
@@ -231,7 +231,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_licensing_releases",
+        "operationId": "post_licensing_releases",
         "summary": "Publishes a signed binary release, answering 201 Created.",
         "description": "Publishes a signed binary release, answering 201 Created.\n\nOutside dev a release MUST carry its cosign signature: this is how a binary\nbecomes downloadable, so accepting an unsigned one would let an unverifiable\nartifact into the distribution path. Org-admin only — publishing is an\noperator action, not something a licensee does.",
         "tags": [
@@ -271,7 +271,7 @@
     },
     "/v1/licensing/releases/{release}": {
       "get": {
-        "operationId": "get_v1_licensing_releases_by_release",
+        "operationId": "get_licensing_releases_by_release",
         "summary": "Reads one release's metadata: its product, version, platform and the cosign material a client verifies the binary against.",
         "description": "Reads one release's metadata: its product, version, platform and the\ncosign material a client verifies the binary against.\n\nAn unknown id is 404. Like the list, this is metadata only — the bytes are\nbehind the license-gated download.",
         "tags": [
@@ -303,7 +303,7 @@
     },
     "/v1/licensing/revoke": {
       "post": {
-        "operationId": "post_v1_licensing_revoke",
+        "operationId": "post_licensing_revoke",
         "summary": "Revoke turns off tokens that have already been issued.",
         "description": "Revoke turns off tokens that have already been issued.\n\nA signed token cannot be un-signed, so revocation is the only way to withdraw\none: this appends an entry that verify and the license-gated download both\nconsult. It is a POST rather than a DELETE because it APPENDS a durable,\nattributed record — the entry names the admin who recorded it and when —\nrather than removing one.\n\nOrg-admin only. Scope it as narrowly as the incident allows: \"nonce\" for one\nleaked token, \"holder\" for one compromised account, \"fingerprint\" for one\nstolen machine, \"release\" when a whole build is bad.",
         "tags": [
@@ -340,7 +340,7 @@
     },
     "/v1/licensing/verify": {
       "post": {
-        "operationId": "post_v1_licensing_verify",
+        "operationId": "post_licensing_verify",
         "summary": "Verify checks a license token online: signature, schema, expiry, app_id and the revocation list.",
         "description": "Verify checks a license token online: signature, schema, expiry, app_id and\nthe revocation list.\n\nIt is UNAUTHENTICATED and always answers 200 — a bad token is `valid:false`\nwith a reason rather than an error status, because \"is this token good\" is a\nquestion anyone may ask about a credential they already hold and the answer is\nthe same either way. It is also OPTIONAL: the engine verifies OFFLINE against\nthe published public key (GET /v1/licensing/pubkey) and needs this endpoint\nonly to learn about revocation, so an outage here never stops a paid customer\nworking.",
         "tags": [
