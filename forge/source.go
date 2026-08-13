@@ -199,6 +199,63 @@ func (s *Source) Invalidate() {
 	s.mu.Unlock()
 }
 
+// ── the process's own client ────────────────────────────────────────────────
+
+// process is THIS process's forge credential, and [Dial] is the one way to
+// reach it.
+//
+// A [Source] per app was the shape while one app had a forge. It is the wrong
+// shape now that four do: each one held its own credential, its own refresh
+// window and — the part that actually drifted — its own derivation of the
+// deployment's domain, which is what decides WHICH FORGE the process talks to.
+// Four copies of that is four chances for two apps in one pod to read different
+// forges, and the KMS read they each paid for is the one thing worth not
+// repeating.
+//
+// One per process, not one per app: a client is an HTTP client and a token, and
+// what a shared one buys is a shared answer to "which forge" and a single KMS
+// round trip behind it.
+var process Source
+
+// Dial is the deployment's forge client for this process, UNSCOPED.
+//
+// Unscoped means every call on it refuses ([ErrNoActor]) until the caller states
+// who it acts as — [Client.As] for a person, [Client.Machine] for an act of the
+// platform that has no person behind it. That is deliberate: there is no path
+// here that ends at the machine identity by default.
+//
+// The KMS client is a PARAMETER because this package must stay reachable from
+// any app without linking one: see [Secrets].
+func Dial(ctx context.Context, kms Secrets) (*Client, error) {
+	return process.Client(ctx, kms, domain())
+}
+
+// Pinned reports whether the forge's host key is CONFIGURED rather than learned
+// on first use, and why not when it is not — for a composition root to say once
+// at startup. See [HostKeyRef].
+func Pinned() (bool, string) { return process.Pinned() }
+
+// Invalidate drops this process's held credential, so the next [Dial] re-reads
+// KMS rather than replaying a token the forge has just rejected for the rest of
+// the freshness window. Without it a revoked or rotated-out token keeps being
+// presented for [fresh] after the forge stopped accepting it.
+func Invalidate() { process.Invalidate() }
+
+// domain is this deployment's own public API host, from which the forge host is
+// derived ([Source.host]). Reading it here rather than at each call site is what
+// makes "which forge" one answer: a process that resolved it itself could reach
+// another brand's forge while its neighbour in the same pod reached ours.
+func domain() string {
+	if d := strings.TrimSpace(os.Getenv("CLOUD_DOMAIN")); d != "" {
+		return d
+	}
+	b := strings.TrimSpace(os.Getenv("CLOUD_BRAND"))
+	if b == "" {
+		b = brand.Default
+	}
+	return brand.APIHost(b)
+}
+
 // ── the org, on this forge ───────────────────────────────────────────────────
 
 // ErrNoOwner means this IAM org has no namespace on the forge. It is a REFUSAL

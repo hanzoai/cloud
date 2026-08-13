@@ -51,9 +51,15 @@ type forgeStub struct {
 	visible map[string][]string
 	// issues and milestones are keyed by org and repo respectively.
 	issues     map[string][]Issue
-	repos      map[string][]Repo
 	milestones map[string][]Milestone
-	token      string
+	repos      map[string][]Repo
+	// refs maps "org/repo@ref" to the commit it names, for both routes a ref can
+	// be asked through — /git/commits/{sha} and the /branches/* wildcard — so a
+	// test cannot make the two disagree.
+	refs map[string]string
+	// trees maps "org/repo@sha" to the tar.gz the archive route serves.
+	trees map[string][]byte
+	token string
 }
 
 func newStub(t *testing.T) *forgeStub {
@@ -64,6 +70,8 @@ func newStub(t *testing.T) *forgeStub {
 		issues:     map[string][]Issue{},
 		repos:      map[string][]Repo{},
 		milestones: map[string][]Milestone{},
+		refs:       map[string]string{},
+		trees:      map[string][]byte{},
 		token:      "machine-token-value",
 	}
 	mux := http.NewServeMux()
@@ -75,13 +83,23 @@ func newStub(t *testing.T) *forgeStub {
 			return
 		}
 		actor := r.Header.Get("Sudo")
+		// NO Sudo header is the MACHINE, and it sees everything. Forgejo requires
+		// the token behind Sudo to belong to a site administrator — that is what
+		// makes Sudo work at all — so an unsudoed call is made by an administrator.
+		// Modelling it as an unknown actor instead would make the machine calls
+		// (Tip, Grant, the delivery tree read) untestable against this stub, and
+		// they are exactly the calls whose reach needs pinning.
+		machine := actor == ""
 		orgs, known := s.visible[actor]
-		if !known {
+		if !machine && !known {
 			// The real forge's answer for an unknown sudo user.
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		canSee := func(org string) bool {
+			if machine {
+				return true
+			}
 			for _, o := range orgs {
 				if o == org {
 					return true
@@ -121,6 +139,45 @@ func newStub(t *testing.T) *forgeStub {
 				return
 			}
 			writeJSON(w, s.milestones[parts[0]+"/"+parts[1]])
+		case strings.Contains(path, "/git/commits/"):
+			// The single-SEGMENT route: a sha, a tag, an unslashed branch, HEAD.
+			owner, repo, ref, ok := repoRef(path, "/git/commits/")
+			if !ok || !canSee(owner) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			sha, known := s.refs[owner+"/"+repo+"@"+ref]
+			if !known {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			writeJSON(w, map[string]any{"sha": sha})
+		case strings.Contains(path, "/branches/"):
+			// The WILDCARD route, which is the only one a slashed name reaches.
+			owner, repo, ref, ok := repoRef(path, "/branches/")
+			if !ok || !canSee(owner) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			sha, known := s.refs[owner+"/"+repo+"@"+ref]
+			if !known {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			writeJSON(w, map[string]any{"commit": map[string]any{"id": sha}})
+		case strings.Contains(path, "/archive/"):
+			owner, repo, name, ok := repoRef(path, "/archive/")
+			if !ok || !canSee(owner) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			tgz, known := s.trees[owner+"/"+repo+"@"+strings.TrimSuffix(name, ".tar.gz")]
+			if !known {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/gzip")
+			_, _ = w.Write(tgz)
 		case strings.HasPrefix(path, "/repos/"):
 			// One repository by name, which is how a single board is read.
 			parts := strings.Split(strings.TrimPrefix(path, "/repos/"), "/")
@@ -147,6 +204,21 @@ func newStub(t *testing.T) *forgeStub {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// repoRef splits "/repos/{owner}/{repo}{route}{rest}" into its three parts. rest
+// is taken WHOLE — it is what a wildcard route receives, so a slashed branch
+// name arrives here exactly as the forge would see it.
+func repoRef(path, route string) (owner, repo, rest string, ok bool) {
+	head, rest, found := strings.Cut(path, route)
+	if !found {
+		return "", "", "", false
+	}
+	parts := strings.Split(strings.TrimPrefix(head, "/repos/"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || rest == "" {
+		return "", "", "", false
+	}
+	return parts[0], parts[1], rest, true
 }
 
 // pageOf applies the forge's limit/page paging to a slice.

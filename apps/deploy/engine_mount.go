@@ -104,10 +104,11 @@ func engineReconcile(s *cloud.Service[state], c *zip.Ctx) error {
 	// Let the informer cache warm before the first sync so live state is known.
 	time.Sleep(2 * time.Second)
 
-	// The principal is delegated to whichever source reads: a native repo is
-	// read as the caller, so the git plane scopes the answer itself rather than
-	// trusting this plane to have scoped it.
-	objs, revision, err := newSource(engineRepo(), engineRef(), enginePath(), c).render(ctx)
+	// The source coordinate is this deployment's own configuration, and the route
+	// above admits SuperAdmins only — see forgeTree (source_tree.go) for why the
+	// fleet's desired state is read as the platform rather than as whoever asked
+	// for the reconcile.
+	objs, revision, err := newSource(engineRepo(), engineRef(), enginePath()).render(ctx)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "engine: render source: %v", err)
 	}

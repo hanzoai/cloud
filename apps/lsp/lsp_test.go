@@ -5,7 +5,7 @@ package lsp
 // The daemon here is an httptest server speaking the actual wire contract — POST
 // /root, POST /ask, 409 {"need":"tree"}, X-API-Key — so these tests need no
 // gVisor, no gopls and no network, and still exercise the same client the binary
-// ships. The git peer is substituted at its two variables (resolveRev, readTree),
+// ships. The forge is substituted at its two variables (resolveRev, readTree),
 // which is what lets one process stand in for two.
 //
 // Four properties, and they are the four this rewrite has to hold:
@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +31,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/forge"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -60,18 +61,18 @@ type fleet struct {
 	held  bool
 	stuck bool
 
-	// files is what the git peer answers a whole-tree read with.
-	files []plane.File
+	// files is what the forge answers a whole-tree read with.
+	files []forge.File
 
 	calls []call   // every daemon request, in order
-	orgs  []string // the org each git-plane call was made FOR
+	orgs  []string // the org each forge read was made FOR
+	subs  []string // the principal each forge read RODE, which is who it acts as
 	refs  []string // the ref each whole-tree read was pinned to
-	globs []string
 }
 
 // newFleet stands the world up. key is what the proxy is configured with, so a
 // test can also describe a deployment that never got one.
-func newFleet(t *testing.T, key string, files []plane.File) *fleet {
+func newFleet(t *testing.T, key string, files []forge.File) *fleet {
 	t.Helper()
 	f := &fleet{files: files}
 
@@ -101,15 +102,14 @@ func newFleet(t *testing.T, key string, files []plane.File) *fleet {
 	t.Cleanup(up.Close)
 
 	prevRev, prevTree := resolveRev, readTree
-	resolveRev = func(ctx context.Context, in *plane.RevIn) (*plane.Rev, error) {
-		f.orgs = append(f.orgs, cloud.Who(ctx).Org)
-		return &plane.Rev{Rev: testSHA, Ref: "main"}, nil
+	resolveRev = func(ctx context.Context, org, repo, ref string) (string, error) {
+		f.saw(ctx, org)
+		return testSHA, nil
 	}
-	readTree = func(ctx context.Context, in *plane.FilesIn) (*plane.Files, error) {
-		f.orgs = append(f.orgs, cloud.Who(ctx).Org)
-		f.refs = append(f.refs, in.Ref)
-		f.globs = append(f.globs, in.Glob)
-		return &plane.Files{Rev: testSHA, Files: f.files}, nil
+	readTree = func(ctx context.Context, org, repo, sha string) (forge.Tree, error) {
+		f.saw(ctx, org)
+		f.refs = append(f.refs, sha)
+		return forge.Tree{Rev: testSHA, Files: f.files}, nil
 	}
 	t.Cleanup(func() { resolveRev, readTree = prevRev, prevTree })
 
@@ -194,8 +194,16 @@ func (f *fleet) post(t *testing.T, op, org string, body any) (int, []byte) {
 	return res.StatusCode, out
 }
 
-func source() []plane.File {
-	return []plane.File{{Path: "a.go", Data: []byte("package p\n")}}
+func source() []forge.File {
+	return []forge.File{{Path: "a.go", Data: []byte("package p\n")}}
+}
+
+// saw records one forge read: the tenant it names, and the principal it rides.
+// Both matter and neither substitutes for the other — the tenant picks the
+// namespace, the principal is who the forge is asked AS.
+func (f *fleet) saw(ctx context.Context, org string) {
+	f.orgs = append(f.orgs, org)
+	f.subs = append(f.subs, cloud.Who(ctx).User)
 }
 
 // TestEachOpReachesAskUnderItsOwnName proves the door→op mapping: every route
@@ -335,17 +343,25 @@ func TestTheOrgIsThePrincipalsAndNeverTheBodys(t *testing.T) {
 		}
 	}
 	if len(f.orgs) == 0 {
-		t.Fatal("the git plane was never asked")
+		t.Fatal("the forge was never read")
 	}
 	for _, org := range f.orgs {
 		if org != "acme" {
-			t.Errorf("git plane called for org %q, want acme", org)
+			t.Errorf("forge read for org %q, want acme", org)
+		}
+	}
+	// The principal has to RIDE the read, not merely precede it: the forge login
+	// this acts as is resolved from that context, so a read made without it has
+	// nobody to act as and would fall back to nothing.
+	for _, sub := range f.subs {
+		if sub != "u_acme" {
+			t.Errorf("forge read rode principal %q, want the caller's own", sub)
 		}
 	}
 }
 
 // TestNoPrincipalIsRefusedBeforeAnythingIsReached is the fail-closed spine: an
-// anonymous request reaches neither the git plane nor the daemon.
+// anonymous request reaches neither the forge nor the daemon.
 func TestNoPrincipalIsRefusedBeforeAnythingIsReached(t *testing.T) {
 	f := warm(t)
 	code, _ := f.post(t, "hover", "", Query{Repo: "cloud", Path: "a.go"})
@@ -353,7 +369,7 @@ func TestNoPrincipalIsRefusedBeforeAnythingIsReached(t *testing.T) {
 		t.Fatalf("status=%d, want 403", code)
 	}
 	if len(f.calls) != 0 || len(f.orgs) != 0 {
-		t.Fatalf("an anonymous request reached daemon=%v git=%v", f.paths(), f.orgs)
+		t.Fatalf("an anonymous request reached daemon=%v forge=%v", f.paths(), f.orgs)
 	}
 }
 
@@ -413,7 +429,7 @@ func TestNewDaemonReadsItsWiringFromTheEnvironment(t *testing.T) {
 // bytes no parser reads; a truncated file is a HALF file, and type-checking one
 // invents errors that are not in the repository.
 func TestOnlySourceIsSentToTheDaemon(t *testing.T) {
-	f := newFleet(t, testKey, []plane.File{
+	f := newFleet(t, testKey, []forge.File{
 		{Path: "a.go", Data: []byte("package p\n")},
 		{Path: "logo.png", Data: []byte{0x89, 'P', 'N', 'G', 0x00, 0x1a}},
 		{Path: "huge.go", Truncated: true},
@@ -428,10 +444,9 @@ func TestOnlySourceIsSentToTheDaemon(t *testing.T) {
 	}
 }
 
-// TestTheTreeIsReadAtTheResolvedCommit proves the git read is pinned to the
+// TestTheTreeIsReadAtTheResolvedCommit proves the forge read is pinned to the
 // commit the daemon was told about, not to the ref the caller named — so the tree
-// and the root key can never come from two sides of a push. The glob is the whole
-// tree, which is the SAME read the code index takes.
+// and the root key can never come from two sides of a push.
 func TestTheTreeIsReadAtTheResolvedCommit(t *testing.T) {
 	f := newFleet(t, testKey, source())
 
@@ -442,13 +457,10 @@ func TestTheTreeIsReadAtTheResolvedCommit(t *testing.T) {
 	if !slices.Equal(f.refs, []string{testSHA}) {
 		t.Errorf("tree read at %v, want the resolved commit [%s]", f.refs, testSHA)
 	}
-	if !slices.Equal(f.globs, []string{whole}) {
-		t.Errorf("tree read with globs %v, want [%s]", f.globs, whole)
-	}
 }
 
 // TestAMalformedRequestCostsNoCall proves the narrowing happens HERE: a slug or a
-// ref that cannot name anything is refused before the git plane or the daemon is
+// ref that cannot name anything is refused before the forge or the daemon is
 // reached.
 func TestAMalformedRequestCostsNoCall(t *testing.T) {
 	f := warm(t)
@@ -468,6 +480,19 @@ func TestAMalformedRequestCostsNoCall(t *testing.T) {
 		}
 	}
 	if len(f.calls) != 0 || len(f.orgs) != 0 {
-		t.Fatalf("a malformed request reached daemon=%v git=%v", f.paths(), f.orgs)
+		t.Fatalf("a malformed request reached daemon=%v forge=%v", f.paths(), f.orgs)
+	}
+}
+
+// TestReaderRefusesAnUnmappedTenant pins the first of the two tenancy controls
+// on the repository read. An IAM org reaches a forge namespace ONLY through
+// forge.Owner's closed table — never by being spelled like one — and it is
+// refused before a credential is spent on it. The second control is the sudo
+// actor, which forge/tree_test.go pins at the wire.
+func TestReaderRefusesAnUnmappedTenant(t *testing.T) {
+	for _, org := range []string{"hanzoai", "acme", "admin", ""} {
+		if _, _, err := reader(context.Background(), org); !errors.Is(err, forge.ErrNoOwner) {
+			t.Fatalf("org %q was refused as %v, want ErrNoOwner", org, err)
+		}
 	}
 }
