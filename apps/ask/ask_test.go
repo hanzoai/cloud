@@ -34,6 +34,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
@@ -60,6 +61,25 @@ func (r *recordingAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float
 // byOrg is a stand-in domain store: the figures each org holds. A peer built over it answers
 // for the org the CALLER was, which is what makes the isolation proof mean something.
 type byOrg map[string][]plane.Figure
+
+// byRepo is the forge inventory a test gives one org.
+type byRepo map[string][]forge.Repo
+
+// stubInventory answers the git domain's one read from a fixture, deriving the
+// org exactly as the live read does — from the caller zip carried, anonymous
+// refused. What is faked is the FORGE and nothing else.
+func stubInventory(t *testing.T, data byRepo) {
+	t.Helper()
+	prev := inventory
+	inventory = func(ctx context.Context) ([]forge.Repo, error) {
+		org := cloud.Who(ctx).Org
+		if org == "" {
+			return nil, zip.ErrForbidden("git figures: org required")
+		}
+		return append([]forge.Repo(nil), data[org]...), nil
+	}
+	t.Cleanup(func() { inventory = prev })
+}
 
 // peer declares one stand-in domain on the real plane, under the real app name and the real
 // operation id — so plane.Ask resolves it exactly as it resolves the live app.
@@ -101,7 +121,7 @@ func servePeers(t *testing.T, names ...string) {
 // newAskApp stands up the advisor over a recording AI, with stand-in books/projects/git peers
 // on the plane. Each test gets its own runtime dir and its own plane, so no test is ever
 // answered by a previous test's handler.
-func newAskApp(t *testing.T, ai types.AIClient, books, projects, git byOrg) *zip.App {
+func newAskApp(t *testing.T, ai types.AIClient, books, projects byOrg, repos byRepo) *zip.App {
 	t.Helper()
 	// A short run dir: a unix socket path is capped near 104 bytes and t.TempDir() spends
 	// most of that on the test's own name.
@@ -124,8 +144,12 @@ func newAskApp(t *testing.T, ai types.AIClient, books, projects, git byOrg) *zip
 
 	peer("books", "/books/figures", plane.BooksFigures, books)
 	peer("projects", "/projects/figures", plane.ProjectsFigures, projects)
-	peer("git", "/git/figures", plane.GitFigures, git)
-	servePeers(t, "books", "projects", "git")
+	servePeers(t, "books", "projects")
+	// git is NOT a plane peer: its figures are rolled up from the forge's own
+	// repository inventory, so the stand-in is that inventory. The org still
+	// comes from the in-flight request and anonymous is still refused, which is
+	// the mechanism under proof either way.
+	stubInventory(t, repos)
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: filepath.Join(dir, "data"), AI: ai}); err != nil {
@@ -213,7 +237,7 @@ func TestEveryWiredDomainContributes(t *testing.T) {
 	app := newAskApp(t, nil,
 		byOrg{"acme": money("$4,200")},
 		byOrg{"acme": {{Label: "Projects", Value: "7"}, {Label: "Deployed and serving", Value: "3"}}},
-		byOrg{"acme": {{Label: "Repositories", Value: "12"}, {Label: "Code stored", Value: "48.0 MB"}}},
+		byRepo{"acme": twelveRepos()},
 	)
 	for _, tc := range []struct{ question, domain, source, label, want string }{
 		{"what is my MRR?", "books", "books/figures", "MRR", "$4,200"},
