@@ -18,7 +18,7 @@
   "paths": {
     "/v1/usage/activity": {
       "get": {
-        "operationId": "get_v1_usage_activity",
+        "operationId": "get_usage_activity",
         "summary": "Activity returns the per-day usage series for ONE authorized subject — the points a contribution heatmap and a timeline are drawn from, gap-filled so every day in the range is present.",
         "description": "Activity returns the per-day usage series for ONE authorized subject — the points a\ncontribution heatmap and a timeline are drawn from, gap-filled so every day in the\nrange is present. Authorization is resolved server-side from the validated\nprincipal, so a caller can never widen the subject past what they are entitled to:\na non-admin reads only themselves and their own org. subject=project answers empty\nwith a note, because the usage ledger records no project column yet. When the\nwarehouse is not connected the series answers empty with available=false rather\nthan fabricated days.",
         "tags": [
@@ -81,7 +81,7 @@
     },
     "/v1/usage/leaderboard": {
       "get": {
-        "operationId": "get_v1_usage_leaderboard",
+        "operationId": "get_usage_leaderboard",
         "summary": "Leaderboard ranks AI usage over a window, either the users of the caller's own org or organizations against each other, and always reports the caller's own standing even when it falls outside the returned page.",
         "description": "Leaderboard ranks AI usage over a window, either the users of the caller's own org\nor organizations against each other, and always reports the caller's own standing\neven when it falls outside the returned page. Identities are private by default: a\ncaller sees themselves, plus the peers or orgs that opted into public listing, and\nonly an admin sees their own org's members named. Cross-org spend is restricted to\nplatform admins. When the warehouse is not connected the board answers empty with\navailable=false rather than a fabricated rank.",
         "tags": [
@@ -145,7 +145,7 @@
     },
     "/v1/usage/leaderboard/optin": {
       "get": {
-        "operationId": "get_v1_usage_leaderboard_optin",
+        "operationId": "get_usage_leaderboard_optin",
         "summary": "Returns the caller's own public-listing preference and their org's, each with whether the caller may change it.",
         "description": "Returns the caller's own public-listing preference and their org's,\neach with whether the caller may change it. Public listing is opt-in and private\nby default, so a fresh caller reads listed=false for both.",
         "tags": [
@@ -165,7 +165,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_usage_leaderboard_optin",
+        "operationId": "put_usage_leaderboard_optin",
         "summary": "Sets the CALLER's own public-listing preference on the leaderboard.",
         "description": "Sets the CALLER's own public-listing preference on the leaderboard.\nSelf only: the row written is keyed by the caller's validated ledger identity, so\nthis can never edit another member's visibility whatever the request says. A\ncaller opting in with no handle is given their username, so a listed row never\nrenders as \"Anonymous\" to its own owner.",
         "tags": [
@@ -201,7 +201,7 @@
     },
     "/v1/usage/leaderboard/optin/org": {
       "put": {
-        "operationId": "put_v1_usage_leaderboard_optin_org",
+        "operationId": "put_usage_leaderboard_optin_org",
         "summary": "Sets the ORG's listing on the cross-org global board.",
         "description": "Sets the ORG's listing on the cross-org global board. Only an admin of\nthe caller's own org — an org admin or a platform SuperAdmin — may change it, and\nthe org written is the caller's validated tenant, never a value from the request.\nListing consents to publishing the org's usage VOLUME; cross-org spend stays\nrestricted to platform admins regardless.",
         "tags": [
@@ -237,7 +237,7 @@
     },
     "/v1/usage/rollup/backfill": {
       "post": {
-        "operationId": "post_v1_usage_rollup_backfill",
+        "operationId": "post_usage_rollup_backfill",
         "summary": "Backfill seeds the derived usage rollup from ledger history — the rows written before the incremental view existed, which that view can never capture.",
         "description": "Backfill seeds the derived usage rollup from ledger history — the rows written\nbefore the incremental view existed, which that view can never capture. SuperAdmin\nonly. Because the rollup accumulates, a second unguarded run would double every\nday it re-reads, so it refuses with 409 when the rollup already holds rows unless\nforce=true is passed; forcing WILL double-count.",
         "tags": [

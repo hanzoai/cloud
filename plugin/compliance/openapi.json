@@ -18,7 +18,7 @@
   "paths": {
     "/v1/compliance/accreditation": {
       "get": {
-        "operationId": "get_v1_compliance_accreditation",
+        "operationId": "get_compliance_accreditation",
         "summary": "Returns the org's tracked accreditation-state records, newest first — evidence entries the org keeps, never a platform certification.",
         "description": "Returns the org's tracked accreditation-state records, newest\nfirst — evidence entries the org keeps, never a platform certification.",
         "tags": [
@@ -49,7 +49,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_compliance_accreditation",
+        "operationId": "post_compliance_accreditation",
         "summary": "Records an ASSERTED accreditation state for a subject — the subject's own assertion, with no verifier.",
         "description": "Records an ASSERTED accreditation state for a subject — the\nsubject's own assertion, with no verifier. Every CONFIRMED state\n(provider_verified, reviewer_confirmed) and every rejected/expired state is a\nDECISION recorded via the decision endpoint, attributed to the reviewer — a\ncreate can never stamp a confirmation. The underlying figures (income, net\nworth) are never stored; only the method, category, and state.",
         "tags": [
@@ -86,7 +86,7 @@
     },
     "/v1/compliance/accreditation/{id}": {
       "get": {
-        "operationId": "get_v1_compliance_accreditation_by_id",
+        "operationId": "get_compliance_accreditation_by_id",
         "summary": "Returns one tracked accreditation record.",
         "description": "Returns one tracked accreditation record.",
         "tags": [
@@ -120,7 +120,7 @@
     },
     "/v1/compliance/accreditation/{id}/decision": {
       "post": {
-        "operationId": "post_v1_compliance_accreditation_by_id_decision",
+        "operationId": "post_compliance_accreditation_by_id_decision",
         "summary": "Records an org reviewer's decision on an accreditation record — a reviewer confirmation, a provider verification the reviewer has evidence of (a CPA/attorney letter, a verifier report), a rejection, or an expiry.",
         "description": "Records an org reviewer's decision on an accreditation\nrecord — a reviewer confirmation, a provider verification the reviewer has\nevidence of (a CPA/attorney letter, a verifier report), a rejection, or an\nexpiry. ROLE-GATED (an org admin or platform reviewer) and ATTRIBUTED: the\nreviewer's identity is recorded as ReviewerSub and audited. Human-in-the-loop:\nthe platform never confirms on its own, and even a provider_verified state\ncarries the reviewer who recorded it.",
         "tags": [
@@ -168,7 +168,7 @@
     },
     "/v1/compliance/audit": {
       "get": {
-        "operationId": "get_v1_compliance_audit",
+        "operationId": "get_compliance_audit",
         "summary": "AuditRead is the compliance-scoped read of the SHARED tamper-evident audit plane — the SOC 2 posture surface (privileged actions: who started/decided what, when).",
         "description": "AuditRead is the compliance-scoped read of the SHARED tamper-evident audit plane —\nthe SOC 2 posture surface (privileged actions: who started/decided what, when). The\norg is PINNED to the caller's validated org and the rows are narrowed to\ncompliance.* actions. Fail-closed: no principal is a 403, no configured audit\nstore a 501.",
         "tags": [
@@ -201,7 +201,7 @@
     },
     "/v1/compliance/health": {
       "get": {
-        "operationId": "get_v1_compliance_health",
+        "operationId": "get_compliance_health",
         "summary": "Health reports subsystem liveness and the wired verification provider.",
         "description": "Health reports subsystem liveness and the wired verification provider. Fail-open\non purpose: it never probes the external provider, so a provider outage cannot\nfail liveness.",
         "tags": [
@@ -223,7 +223,7 @@
     },
     "/v1/compliance/records": {
       "get": {
-        "operationId": "get_v1_compliance_records",
+        "operationId": "get_compliance_records",
         "summary": "ListRecords is the unified compliance-record view for the org: its verifications and accreditation records together, each provider-reported or tracked, never platform-asserted.",
         "description": "ListRecords is the unified compliance-record view for the org: its verifications\nand accreditation records together, each provider-reported or tracked, never\nplatform-asserted. PII stays in the subject store; records carry only opaque ids\nand statuses.",
         "tags": [
@@ -256,7 +256,7 @@
     },
     "/v1/compliance/status": {
       "get": {
-        "operationId": "get_v1_compliance_status",
+        "operationId": "get_compliance_status",
         "summary": "Status is the org's honest posture read: the wired provider and the per-status tally of its verifications.",
         "description": "Status is the org's honest posture read: the wired provider and the per-status\ntally of its verifications. It is deliberately NOT a boolean \"compliant\" — it\nreports counts of provider-reported states and carries the boundary disclaimer.",
         "tags": [
@@ -278,7 +278,7 @@
     },
     "/v1/compliance/subjects": {
       "get": {
-        "operationId": "get_v1_compliance_subjects",
+        "operationId": "get_compliance_subjects",
         "summary": "Returns the org's subjects as PII-MINIMIZED summaries — no name or email, only whether an email is on file.",
         "description": "Returns the org's subjects as PII-MINIMIZED summaries — no name or\nemail, only whether an email is on file. The full record is returned only by the\nexplicit single-subject read.",
         "tags": [
@@ -309,7 +309,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_compliance_subjects",
+        "operationId": "post_compliance_subjects",
         "summary": "Records a party the org is verifying as part of its own onboarding/compliance — a team member, vendor, customer, or counterparty.",
         "description": "Records a party the org is verifying as part of its own\nonboarding/compliance — a team member, vendor, customer, or counterparty. The\nsubject's contact PII (name/email) is sealed at rest and returned only to the\nowning org; downstream records reference the subject by opaque id.",
         "tags": [
@@ -346,7 +346,7 @@
     },
     "/v1/compliance/subjects/{id}": {
       "get": {
-        "operationId": "get_v1_compliance_subjects_by_id",
+        "operationId": "get_compliance_subjects_by_id",
         "summary": "Returns one subject WITH its contact PII — the only surface that returns it, and only to the owning org.",
         "description": "Returns one subject WITH its contact PII — the only surface that\nreturns it, and only to the owning org. The response is never cached by any\nintermediary.",
         "tags": [
@@ -380,7 +380,7 @@
     },
     "/v1/compliance/verifications": {
       "get": {
-        "operationId": "get_v1_compliance_verifications",
+        "operationId": "get_compliance_verifications",
         "summary": "Returns the org's KYC/KYB verifications, newest first — opaque subject references and provider-reported statuses only, no subject PII.",
         "description": "Returns the org's KYC/KYB verifications, newest first — opaque\nsubject references and provider-reported statuses only, no subject PII.",
         "tags": [
@@ -411,7 +411,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_compliance_verifications",
+        "operationId": "post_compliance_verifications",
         "summary": "Begins a KYC/KYB verification of a subject through the wired provider — an existing subject by id, or one created inline from the request.",
         "description": "Begins a KYC/KYB verification of a subject through the wired\nprovider — an existing subject by id, or one created inline from the request.\nThe returned status is provider-reported and never terminal on a fresh start:\nstarting a verification can never yield a verified record, and a provider error\nis a 502, never a verification.",
         "tags": [
@@ -446,7 +446,7 @@
     },
     "/v1/compliance/verifications/webhook": {
       "post": {
-        "operationId": "post_v1_compliance_verifications_webhook",
+        "operationId": "post_compliance_verifications_webhook",
         "summary": "Provider push that settles a verification, authenticated by HMAC signature",
         "description": "The external PUSH reconcile: a verification provider (or a Hanzo relay) signals that a check settled, and the reconciled check comes back. It authenticates by an HMAC SIGNATURE over the RAW body bytes rather than by a principal — an external caller has no validated org — and the org is then resolved FROM the record the signed provider reference matches, so a call can only ever touch the one tenant that owns that reference.\n\nThe body carries NO trusted decision. A valid signature cannot force a status: the reference only says WHICH check to re-read, and the status is then pulled from the wired provider, which stays the source of truth. With no real provider configured a check stays pending, and the only route to a passing status is the role-gated, attributed reviewer decision.\n\nAn unknown reference is a benign 200 `{\"ignored\": ...}` no-op, not an error, so a provider replaying stale events neither retry-storms nor learns whether a reference exists in some other tenant. Fails closed otherwise: 501 unless a webhook secret is configured, 401 on a signature that does not verify, 400 with no provider reference, 413 over 1 MiB, and 502 if the secret or the provider is unreachable.",
         "tags": [
@@ -456,7 +456,7 @@
     },
     "/v1/compliance/verifications/{id}": {
       "get": {
-        "operationId": "get_v1_compliance_verifications_by_id",
+        "operationId": "get_compliance_verifications_by_id",
         "summary": "Returns one verification — its opaque subject reference and provider-reported status, no subject PII.",
         "description": "Returns one verification — its opaque subject reference and\nprovider-reported status, no subject PII.",
         "tags": [
@@ -490,7 +490,7 @@
     },
     "/v1/compliance/verifications/{id}/decision": {
       "post": {
-        "operationId": "post_v1_compliance_verifications_by_id_decision",
+        "operationId": "post_compliance_verifications_by_id_decision",
         "summary": "Records a privileged reviewer's MANUAL decision on a verification — the human-in-the-loop path, and the ONLY route to a passing status when no real provider is wired.",
         "description": "Records a privileged reviewer's MANUAL decision on a\nverification — the human-in-the-loop path, and the ONLY route to a passing status\nwhen no real provider is wired. It produces a DISTINCT reviewer_confirmed, never\na provider_verified (a provider decision is the provider's to report, via the\nwebhook or a reconcile), and it is ROLE-GATED (an org admin or platform reviewer)\nAND ATTRIBUTED (the reviewer's user id is DecidedBy), so a manual pass is always\naccountable.",
         "tags": [
@@ -538,7 +538,7 @@
     },
     "/v1/compliance/verifications/{id}/refresh": {
       "post": {
-        "operationId": "post_v1_compliance_verifications_by_id_refresh",
+        "operationId": "post_compliance_verifications_by_id_refresh",
         "summary": "Polls the wired provider for its current decision and records it, ATTRIBUTED to the provider — the internal PULL reconcile.",
         "description": "Polls the wired provider for its current decision and\nrecords it, ATTRIBUTED to the provider — the internal PULL reconcile. For the\nManual provider the check stays pending; for a hosted provider it reflects the\nprovider's settled status. A poll error is a 502, never a verification.",
         "tags": [

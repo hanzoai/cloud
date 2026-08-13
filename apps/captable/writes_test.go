@@ -526,7 +526,7 @@ func TestTypedWritesAddressThroughArgumentsAlone(t *testing.T) {
 
 	// Named the way zip v1.26.0 settled it: ONE rule, an id derives from the
 	// absolute path the occurrence answers at (zip.ID), so these are
-	// patch_v1_captable_stakeholders_by_id and post_v1_captable_rounds_by_id_close.
+	// patch_captable_stakeholders_by_id and post_captable_rounds_by_id_close.
 	// The pins below were the pre-v1.26 spelling ("patch_stakeholders",
 	// "post_rounds"), which bab535c2 taught the bots/agents projections and missed
 	// here. The segments still name the same two ops unambiguously — no other

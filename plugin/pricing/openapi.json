@@ -24,7 +24,7 @@
   "paths": {
     "/v1/admin/catalog": {
       "get": {
-        "operationId": "get_v1_admin_catalog",
+        "operationId": "get_admin_catalog",
         "summary": "Returns the full model and provider catalog annotated with each entry's enablement state, for the operator console.",
         "description": "Returns the full model and provider catalog annotated with\neach entry's enablement state, for the operator console. Nothing is hidden:\nthis is the admin's view of what exists and what is currently off, in beta or\ngenerally available. SuperAdmin only; every other caller is refused.",
         "tags": [
@@ -46,7 +46,7 @@
     },
     "/v1/admin/catalog/models/{wildcard1}": {
       "patch": {
-        "operationId": "patch_v1_admin_catalog_models_by_wildcard1",
+        "operationId": "patch_admin_catalog_models_by_wildcard1",
         "summary": "Turn one model off, into beta for named orgs, or generally available",
         "description": "Sets one model's availability overlay — and the price overrides applied on top of the catalog — then answers the new effective overlay, so a console needs no second read. The model id is the whole remaining path, so a slashed id like `acme/some-model-1` addresses intact.\n\nSuperAdmin only; every other caller is 403, decided before the body is read. The overlay is PLATFORM-WIDE — this is the catalog every org prices against, not a per-org setting — and `betaOrgs` is what narrows a beta to named orgs.\n\nOnly the fields the patch names change; an entry with no overlay yet starts from the catalog default, which is enabled. `state` is the coherent tri-state setter (`off`|`beta`|`ga`) and the low-level `enabled`/`beta` flags are applied AFTER it, so they win where both are sent; anything else in `state` is 400. A field sent as an explicit `null` arrives indistinguishable from an absent one, so null does not clear anything.\n\nThe rule worth reading twice: a disabled entry that still carries beta orgs IS a beta — `{\"enabled\":false,\"betaOrgs\":[\"acme\"]}` leaves acme seeing the model. Only an explicit `off` (or `beta:false`) with an empty list is the absolute kill switch that a user's own beta opt-in can never re-open.\n\n`overrides` is an RFC 7386 merge patch, stored and echoed back verbatim; it must be a JSON object or null — an array or a scalar is refused — and is bounded in size and nesting depth. An uninitialised overlay store answers 503.",
         "tags": [
@@ -66,7 +66,7 @@
     },
     "/v1/admin/catalog/providers/{name}": {
       "patch": {
-        "operationId": "patch_v1_admin_catalog_providers_by_name",
+        "operationId": "patch_admin_catalog_providers_by_name",
         "summary": "Sets one provider's availability overlay.",
         "description": "Sets one provider's availability overlay.\n\nThe overlay decides whether a provider is off, in beta for named orgs, or\ngenerally available, and carries the price overrides applied on top of the\ncatalog. Only the fields the patch names change; every other field keeps the\nvalue it had, and an absent overlay starts from the catalog default (enabled).\nAnswers the new effective overlay, so a console needs no second read.\n\nSuperAdmin only.",
         "tags": [
@@ -109,7 +109,7 @@
     },
     "/v1/admin/enablement": {
       "get": {
-        "operationId": "get_v1_admin_enablement",
+        "operationId": "get_admin_enablement",
         "summary": "Returns every item an operator has set an enablement state on — its global state (off, beta or ga) and the orgs granted its beta.",
         "description": "Returns every item an operator has set an enablement state on —\nits global state (off, beta or ga) and the orgs granted its beta. An item\nnobody has touched is absent, because an untouched item is generally\navailable; the console composes the candidate list from the live catalog.\nSuperAdmin only; every other caller is refused.",
         "tags": [
@@ -129,7 +129,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_admin_enablement",
+        "operationId": "put_admin_enablement",
         "summary": "Sets one item's global enablement state — off, beta or ga — and optionally replaces the list of orgs granted its beta.",
         "description": "Sets one item's global enablement state — off, beta or ga — and\noptionally replaces the list of orgs granted its beta. It is generic over\nkind, so the same call manages models, providers and product features through\nthe one registry. `off` is an absolute kill switch: a self-service opt-in can\nnever re-open it. SuperAdmin only; every other caller is refused.",
         "tags": [
@@ -169,7 +169,7 @@
     },
     "/v1/enablement": {
       "get": {
-        "operationId": "get_v1_enablement",
+        "operationId": "get_enablement",
         "summary": "Returns what the caller's org can actually use: every managed item with its global state, whether it is effective here, whether this org is already opted into its beta, and whether it may still opt in.",
         "description": "Returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
         "tags": [
@@ -191,7 +191,7 @@
     },
     "/v1/enablement/optin": {
       "post": {
-        "operationId": "post_v1_enablement_optin",
+        "operationId": "post_enablement_optin",
         "summary": "Opts the caller's OWN org into a beta item.",
         "description": "Opts the caller's OWN org into a beta item. The org is the\ncaller's validated one, so this can never target another org, and the registry\nrefuses anything not in beta — so it can neither re-open an item an operator\nturned off nor touch one that is already generally available. Requires a\nsigned-in caller with an org.",
         "tags": [
@@ -227,7 +227,7 @@
     },
     "/v1/enablement/optout": {
       "post": {
-        "operationId": "post_v1_enablement_optout",
+        "operationId": "post_enablement_optout",
         "summary": "Removes the caller's OWN org from a beta item's grant list, the reverse of OptIntoBeta and idempotent.",
         "description": "Removes the caller's OWN org from a beta item's grant list, the\nreverse of OptIntoBeta and idempotent. The org is the caller's validated one,\nso this can never revoke another org's grant. Requires a signed-in caller with\nan org.",
         "tags": [
@@ -263,7 +263,7 @@
     },
     "/v1/pricing": {
       "get": {
-        "operationId": "get_v1_pricing",
+        "operationId": "get_pricing",
         "summary": "Returns the whole pricing catalog in one document: Zen and third-party models, providers, model families, the free-model list, plan and infrastructure pricing.",
         "description": "Returns the whole pricing catalog in one document: Zen and\nthird-party models, providers, model families, the free-model list, plan and\ninfrastructure pricing. Every model and provider it names is filtered to what\nthe caller's org may see — the same gate the leaf routes apply, so this can\nnever be an un-gated second source for what they hide.",
         "tags": [
@@ -288,7 +288,7 @@
     },
     "/v1/pricing/base": {
       "get": {
-        "operationId": "get_v1_pricing_base",
+        "operationId": "get_pricing_base",
         "summary": "Returns the Hanzo Base plans — the managed-instance tiers, each with its monthly and annual price, storage and request allowances and feature list.",
         "description": "Returns the Hanzo Base plans — the managed-instance tiers,\neach with its monthly and annual price, storage and request allowances and\nfeature list.",
         "tags": [
@@ -310,7 +310,7 @@
     },
     "/v1/pricing/blockchain": {
       "get": {
-        "operationId": "get_v1_pricing_blockchain",
+        "operationId": "get_pricing_blockchain",
         "summary": "Returns the blockchain access plans — the RPC and node tiers, each with its monthly price, compute-unit allowance and feature list.",
         "description": "Returns the blockchain access plans — the RPC and node\ntiers, each with its monthly price, compute-unit allowance and feature list.",
         "tags": [
@@ -332,7 +332,7 @@
     },
     "/v1/pricing/cloud": {
       "get": {
-        "operationId": "get_v1_pricing_cloud",
+        "operationId": "get_pricing_cloud",
         "summary": "Returns the public cloud section of the catalog in one document: its instance plans, its regions and its block-storage prices.",
         "description": "Returns the public cloud section of the catalog in one\ndocument: its instance plans, its regions and its block-storage prices. The\nsection's internal half — the provider costs Hanzo pays and the plan-to-\nprovider routing table — is stripped before it is served, so this is what a\ncustomer may see and nothing more.",
         "tags": [
@@ -357,7 +357,7 @@
     },
     "/v1/pricing/cloud/plans": {
       "get": {
-        "operationId": "get_v1_pricing_cloud_plans",
+        "operationId": "get_pricing_cloud_plans",
         "summary": "Returns just the cloud instance plans — each with its vCPU, memory, disk, CPU type, VM allowance, feature list and monthly and hourly price.",
         "description": "Returns just the cloud instance plans — each with its vCPU,\nmemory, disk, CPU type, VM allowance, feature list and monthly and hourly\nprice. It is the plans of the cloud section on their own.",
         "tags": [
@@ -379,7 +379,7 @@
     },
     "/v1/pricing/cloud/regions": {
       "get": {
-        "operationId": "get_v1_pricing_cloud_regions",
+        "operationId": "get_pricing_cloud_regions",
         "summary": "Returns the regions a cloud instance can be placed in, each with its id, display name and physical location.",
         "description": "Returns the regions a cloud instance can be placed in, each\nwith its id, display name and physical location. It is the regions of the\ncloud section on their own.",
         "tags": [
@@ -401,7 +401,7 @@
     },
     "/v1/pricing/cloud/storage": {
       "get": {
-        "operationId": "get_v1_pricing_cloud_storage",
+        "operationId": "get_pricing_cloud_storage",
         "summary": "Returns the block-storage prices of the cloud section: the per-GB monthly rate and the volume size bounds a caller may ask for.",
         "description": "Returns the block-storage prices of the cloud\nsection: the per-GB monthly rate and the volume size bounds a caller may ask\nfor.",
         "tags": [
@@ -426,7 +426,7 @@
     },
     "/v1/pricing/compute": {
       "get": {
-        "operationId": "get_v1_pricing_compute",
+        "operationId": "get_pricing_compute",
         "summary": "Returns the compute section of the catalog: the cloud provider and region the prices are quoted for, the monthly markup applied to them, the full instance-size tier list and the named presets.",
         "description": "Returns the compute section of the catalog: the cloud\nprovider and region the prices are quoted for, the monthly markup applied to\nthem, the full instance-size tier list and the named presets. It is the\nwhole section as the pricing source records it, un-gated — no model or\nprovider identity appears in it.",
         "tags": [
@@ -451,7 +451,7 @@
     },
     "/v1/pricing/compute/presets": {
       "get": {
-        "operationId": "get_v1_pricing_compute_presets",
+        "operationId": "get_pricing_compute_presets",
         "summary": "Returns just the named compute sizes — the short, human-labelled list (\"Starter\", \"Pro\") a size picker renders, each carrying its provider slug, vCPU, memory, disk and price.",
         "description": "Returns just the named compute sizes — the short,\nhuman-labelled list (\"Starter\", \"Pro\") a size picker renders, each carrying\nits provider slug, vCPU, memory, disk and price. It is the presets of the\ncompute section on their own, for a caller that does not need the full tier\ntable.",
         "tags": [
@@ -473,7 +473,7 @@
     },
     "/v1/pricing/datastore": {
       "get": {
-        "operationId": "get_v1_pricing_datastore",
+        "operationId": "get_pricing_datastore",
         "summary": "Returns the Hanzo Datastore rate card: the tier list, the per-GB storage and egress usage rates, the annual discount and the trial.",
         "description": "Returns the Hanzo Datastore rate card: the tier list, the\nper-GB storage and egress usage rates, the annual discount and the trial. It is\nthe section as authored, un-gated — no provider identity appears in it.\n\nThe route was missing while the data existed, so this 404d and every visitor to\nhanzo.ai's Infrastructure tab was told pricing was \"temporarily unavailable\".",
         "tags": [
@@ -498,7 +498,7 @@
     },
     "/v1/pricing/featured": {
       "get": {
-        "operationId": "get_v1_pricing_featured",
+        "operationId": "get_pricing_featured",
         "summary": "Returns the models the catalog highlights, filtered to what the caller's org may see.",
         "description": "Returns the models the catalog highlights, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks featured.",
         "tags": [
@@ -520,7 +520,7 @@
     },
     "/v1/pricing/free": {
       "get": {
-        "operationId": "get_v1_pricing_free",
+        "operationId": "get_pricing_free",
         "summary": "Returns the models that cost nothing to call, filtered to what the caller's org may see.",
         "description": "Returns the models that cost nothing to call, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks free.",
         "tags": [
@@ -542,7 +542,7 @@
     },
     "/v1/pricing/gpu": {
       "get": {
-        "operationId": "get_v1_pricing_gpu",
+        "operationId": "get_pricing_gpu",
         "summary": "ListGPUTiers returns the rentable GPU configurations, each with its accelerator count and model, VRAM, vCPU, host memory and hourly price.",
         "description": "ListGPUTiers returns the rentable GPU configurations, each with its\naccelerator count and model, VRAM, vCPU, host memory and hourly price.",
         "tags": [
@@ -564,7 +564,7 @@
     },
     "/v1/pricing/health": {
       "get": {
-        "operationId": "get_v1_pricing_health",
+        "operationId": "get_pricing_health",
         "summary": "Health reports that the pricing subsystem is mounted and serving.",
         "description": "Health reports that the pricing subsystem is mounted and serving. It answers\nfrom the process itself and consults neither the catalog bundle nor the\nenablement store, so it stays \"ok\" while either is degraded.",
         "tags": [
@@ -590,7 +590,7 @@
     },
     "/v1/pricing/iam": {
       "get": {
-        "operationId": "get_v1_pricing_iam",
+        "operationId": "get_pricing_iam",
         "summary": "ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its monthly and annual price, monthly-active-user allowance and feature list.",
         "description": "ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its\nmonthly and annual price, monthly-active-user allowance and feature list.",
         "tags": [
@@ -612,7 +612,7 @@
     },
     "/v1/pricing/model/{name}": {
       "get": {
-        "operationId": "get_v1_pricing_model_by_name",
+        "operationId": "get_pricing_model_by_name",
         "summary": "Returns one model's catalog entry — its pricing, context window and capabilities as the pricing source records them.",
         "description": "Returns one model's catalog entry — its pricing, context window and\ncapabilities as the pricing source records them. A model hidden for the\ncaller's org answers the same 404 an unknown name does, so a disabled model\ngets no existence oracle.",
         "tags": [
@@ -649,7 +649,7 @@
     },
     "/v1/pricing/models": {
       "get": {
-        "operationId": "get_v1_pricing_models",
+        "operationId": "get_pricing_models",
         "summary": "Returns the whole model catalog — Hanzo's own Zen models and every third-party model — filtered to what the caller's org may see.",
         "description": "Returns the whole model catalog — Hanzo's own Zen models and every\nthird-party model — filtered to what the caller's org may see. A model an\nadmin has disabled is absent; one in beta appears only for an org granted it.\nA SuperAdmin sees every model, each annotated with its enablement state.",
         "tags": [
@@ -671,7 +671,7 @@
     },
     "/v1/pricing/paas": {
       "get": {
-        "operationId": "get_v1_pricing_paas",
+        "operationId": "get_pricing_paas",
         "summary": "ListPaaSPlans returns the application-hosting plans — the deploy-and-host tiers, each with its monthly and annual price, app and memory allowances and feature list.",
         "description": "ListPaaSPlans returns the application-hosting plans — the deploy-and-host\ntiers, each with its monthly and annual price, app and memory allowances and\nfeature list.",
         "tags": [
@@ -693,7 +693,7 @@
     },
     "/v1/pricing/policy": {
       "get": {
-        "operationId": "get_v1_pricing_policy",
+        "operationId": "get_pricing_policy",
         "summary": "Returns the pricing policy document: the revenue-sharing terms (the idle-resale share and the open-source share, each with its percentage and who is eligible) and the commitments Hanzo makes about how it bills — no hidden fees, no egress charges, no surprise bills.",
         "description": "Returns the pricing policy document: the revenue-sharing\nterms (the idle-resale share and the open-source share, each with its\npercentage and who is eligible) and the commitments Hanzo makes about how it\nbills — no hidden fees, no egress charges, no surprise bills.",
         "tags": [
@@ -718,7 +718,7 @@
     },
     "/v1/pricing/providers": {
       "get": {
-        "operationId": "get_v1_pricing_providers",
+        "operationId": "get_pricing_providers",
         "summary": "Returns the model providers the catalog knows, each with its info object, filtered to what the caller's org may see.",
         "description": "Returns the model providers the catalog knows, each with its\ninfo object, filtered to what the caller's org may see. A provider an admin\nhas disabled is absent — and so are its models everywhere else on this\nsurface, because a provider's state cascades to what it serves.",
         "tags": [
@@ -740,7 +740,7 @@
     },
     "/v1/pricing/services": {
       "get": {
-        "operationId": "get_v1_pricing_services",
+        "operationId": "get_pricing_services",
         "summary": "Returns the managed-service rate cards — Search, Crawl, Vector, Console and Managed Services — each with its own tiers, and some with usage rates or a comparison table.",
         "description": "Returns the managed-service rate cards — Search, Crawl,\nVector, Console and Managed Services — each with its own tiers, and some with\nusage rates or a comparison table. It is the section as authored, un-gated.\n\nThese are DISPLAY rate cards: what a product costs, not what a plan grants. No\nentitlement or limit fields ride here, so nothing can bill off them.",
         "tags": [
@@ -765,7 +765,7 @@
     },
     "/v1/pricing/subscriptions": {
       "get": {
-        "operationId": "get_v1_pricing_subscriptions",
+        "operationId": "get_pricing_subscriptions",
         "summary": "Returns the API subscription plans — the account-level tiers a customer subscribes to, each with its monthly and annual price, included credit, rate limits and feature list.",
         "description": "Returns the API subscription plans — the account-level\ntiers a customer subscribes to, each with its monthly and annual price,\nincluded credit, rate limits and feature list.",
         "tags": [
@@ -787,7 +787,7 @@
     },
     "/v1/pricing/summary": {
       "get": {
-        "operationId": "get_v1_pricing_summary",
+        "operationId": "get_pricing_summary",
         "summary": "Returns the catalog's headline statistics — model counts by family and the provider directory.",
         "description": "Returns the catalog's headline statistics — model counts by\nfamily and the provider directory. The provider sub-object is filtered to what\nthe caller's org may see, so a disabled provider's name never leaks; the\naggregate counts are the catalog's own, over everything it holds.",
         "tags": [
@@ -812,7 +812,7 @@
     },
     "/v1/pricing/sync": {
       "post": {
-        "operationId": "post_v1_pricing_sync",
+        "operationId": "post_pricing_sync",
         "summary": "Refreshes the third-party section of the catalog from its upstream listings and returns the time the refreshed catalog was stamped with.",
         "description": "Refreshes the third-party section of the catalog from its upstream\nlistings and returns the time the refreshed catalog was stamped with. The\nfetch runs in Go and the markup transform in the pricing bundle. SuperAdmin\nonly; every other caller is refused.",
         "tags": [
@@ -834,7 +834,7 @@
     },
     "/v1/pricing/tools": {
       "get": {
-        "operationId": "get_v1_pricing_tools",
+        "operationId": "get_pricing_tools",
         "summary": "Returns the per-use tool prices — web search, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit.",
         "description": "Returns the per-use tool prices — web search, code\ninterpreter, file storage, image generation, speech-to-text and\ntext-to-speech — each with the unit it is billed by and its price in that\nunit.",
         "tags": [
