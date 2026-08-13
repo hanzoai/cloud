@@ -129,20 +129,13 @@ func TestTheStorePathIsTheOneIAMWrites(t *testing.T) {
 // sqliteMagic is the 16-byte header every unencrypted SQLite file starts with.
 var sqliteMagic = []byte("SQLite format 3\x00")
 
-// THE IDENTITY STORE IS PLAINTEXT AT REST. This records it rather than discovering it
-// again later from a volume read.
+// The store's on-disk format is pinned here, so a change to it is caught by a test
+// rather than by a process that can no longer open what it is pointed at.
 //
-// It is not a preference. The file that holds every identity already exists and is
-// plaintext; cek derives a key unconditionally and refuses a plaintext database at
-// open, so it cannot be pointed at that file; and re-keying an existing file is a
-// migration, which is forbidden here — one store, pointed at, never converted. The
-// only shape that changes this without a migration is a NEW store born encrypted with
-// the old one retired, and that is a decision above this package.
-//
-// So this asserts the posture rather than pretending otherwise. If it ever fails,
-// something has started encrypting the identity store and this comment is the thing
-// to read first: the standalone iam, the iam CLI and the migrator all open it plain,
-// and any one of them would then be locked out of the fleet's own database.
+// Three readers share one opener — IAM's serving binary, its CLI and its migrator —
+// so the format is a contract between them, not a detail of any one. A failure here
+// means one of them has begun writing a format the other two cannot read; the fix is
+// to move all three together, or to select a different backend.
 func TestTheIdentityStoreIsPlaintextAndThatIsRecorded(t *testing.T) {
 	dir := t.TempDir()
 	path := StorePath(dir)
