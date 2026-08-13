@@ -650,8 +650,8 @@
     "/v1/pricing/models": {
       "get": {
         "operationId": "get_pricing_models",
-        "summary": "Returns the whole model catalog — Hanzo's own Zen models and every third-party model — filtered to what the caller's org may see.",
-        "description": "Returns the whole model catalog — Hanzo's own Zen models and every\nthird-party model — filtered to what the caller's org may see. A model an\nadmin has disabled is absent; one in beta appears only for an org granted it.\nA SuperAdmin sees every model, each annotated with its enablement state.",
+        "summary": "Returns the whole model catalog — every model the gateway serves, Zen and third-party alike — filtered to what the caller's org may see.",
+        "description": "Returns the whole model catalog — every model the gateway serves,\nZen and third-party alike — filtered to what the caller's org may see. A\nmodel an admin has disabled is absent; one in beta appears only for an org\ngranted it. A SuperAdmin sees every model, each annotated with its\nenablement state.",
         "tags": [
           "pricing"
         ],
