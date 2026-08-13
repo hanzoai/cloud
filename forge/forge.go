@@ -334,13 +334,18 @@ func (c *Client) do(ctx context.Context, path string, q url.Values, out any) err
 	return err
 }
 
-// get is [Client.do] with the response headers surfaced.
+// open issues one authenticated, sudoed GET and hands the LIVE BODY back.
 //
-// Only the repository walk needs them, and it needs exactly one: X-Total-Count,
-// which is what lets it fetch its pages CONCURRENTLY instead of discovering the
-// end of the list one serial page at a time. Everything else calls do and stays
-// unaware that a response has headers at all.
-func (c *Client) get(ctx context.Context, path string, q url.Values, out any) (http.Header, error) {
+// It is the ONE place the credential is attached and the ONE place Sudo is
+// enforced. Everything that reads the forge is written in terms of it —
+// [Client.get] for the JSON endpoints, tree.go for the archive, which is gzip
+// and cannot be decoded as JSON — so no second call site can attach the token
+// itself and forget the actor with it.
+//
+// THE CALLER CLOSES THE BODY, and only on the success path: every refusal here
+// closes it before returning, so a caller that checks the error first can never
+// leak a connection.
+func (c *Client) open(ctx context.Context, path string, q url.Values, accept string) (*http.Response, error) {
 	if c.actor == "" && !c.machine {
 		return nil, ErrNoActor
 	}
@@ -363,7 +368,7 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, out any) (h
 	if !c.machine {
 		req.Header.Set("Sudo", c.actor)
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", accept)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -372,10 +377,10 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, out any) (h
 		// the token cannot ride out in an error string.
 		return nil, fmt.Errorf("forge: GET %s: %w", path, err)
 	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
+		return resp, nil
 	case http.StatusNotFound:
 		// With Sudo set, the forge answers 404 both for "the actor does not exist"
 		// and for "this actor cannot see that". Neither is an error the caller can
@@ -383,15 +388,32 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, out any) (h
 		// success — a 404 rendered as an empty list is how a board silently lies.
 		// A machine call has no actor for it to be a statement about, so there the
 		// same status is plain absence.
+		resp.Body.Close()
 		if c.machine {
 			return nil, fmt.Errorf("%w: %s", ErrNotFound, path)
 		}
 		return nil, fmt.Errorf("%w: %s", ErrUnknownActor, c.actor)
 	case http.StatusUnauthorized, http.StatusForbidden:
+		resp.Body.Close()
 		return nil, fmt.Errorf("forge: %s: credential rejected (%d)", path, resp.StatusCode)
 	default:
+		resp.Body.Close()
 		return nil, fmt.Errorf("forge: %s: unexpected status %d", path, resp.StatusCode)
 	}
+}
+
+// get is [Client.do] with the response headers surfaced.
+//
+// Only the repository walk needs them, and it needs exactly one: X-Total-Count,
+// which is what lets it fetch its pages CONCURRENTLY instead of discovering the
+// end of the list one serial page at a time. Everything else calls do and stays
+// unaware that a response has headers at all.
+func (c *Client) get(ctx context.Context, path string, q url.Values, out any) (http.Header, error) {
+	resp, err := c.open(ctx, path, q, "application/json")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if err != nil {
@@ -419,6 +441,15 @@ type Repo struct {
 	Open     int    `json:"open_issues_count"`
 	Branch   string `json:"default_branch"`
 	Size     int64  `json:"size"` // KiB, as the forge reports it
+
+	// UpdatedAt is when the forge last saw this repository move.
+	//
+	// A time and not the string the wire carries, because it is COMPARED against
+	// a window and FORMATTED as a date and never echoed — parsing it at each call
+	// site is the same rule written twice, and the second spelling is the one that
+	// gets the layout wrong. The zero value means the forge sent none, which reads
+	// as "has not moved" rather than as "moved at the epoch".
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// SSH is the remote a run clones and pushes, taken from the forge rather than
 	// built here: it already carries a non-default port and any host rewrite the

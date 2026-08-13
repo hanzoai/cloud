@@ -95,8 +95,13 @@ func serveForge(t *testing.T, p *peers) {
 	// A fresh Source per test: the production one holds its credential for five
 	// minutes, and a test that inherited another test's forge would pass for the
 	// wrong reason.
-	credential = forge.Source{Host: srv.URL}
-	t.Cleanup(func() { credential = forge.Source{} })
+	// CLOUD_FORGE_HOST is the documented override for a deployment whose forge is
+	// not the sibling of its own domain — a developer box, a staging forge, and
+	// this. The held credential is dropped either side so no test is answered by
+	// the forge another one stood up.
+	t.Setenv("CLOUD_FORGE_HOST", srv.URL)
+	forge.Invalidate()
+	t.Cleanup(forge.Invalidate)
 }
 
 func servePeers(t *testing.T, p *peers) {

@@ -2,62 +2,46 @@ package deploy
 
 import (
 	"context"
-	"net"
 	"strings"
 	"testing"
-	"time"
 
-	luxlog "github.com/luxfi/log"
-
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
-	"github.com/zap-proto/zip"
+	"github.com/hanzoai/cloud/forge"
 )
 
-// fakeGit publishes a git.files method on the internal plane for one test, at
-// the socket zip.DialApp resolves for the "git" app. It uses the REAL server — a
-// declared op on a real listener — so a render exercises the transport it uses in
-// production: identity forwarding, request out, reply in, the typed contract. A
-// stub standing in for that would prove none of it, and the contract is exactly
-// where a silent mistake becomes a wrong desired set.
-func fakeGit(t *testing.T, rev string, files []plane.File, fault error) {
-	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
-
-	app := zip.New(zip.Config{AppName: "git", Logger: luxlog.New("gittest")})
-	compose(app)
-	zip.Post[plane.FilesIn, plane.Files](app, "/git/files",
-		func(ctx context.Context, _ *plane.FilesIn) (*plane.Files, error) {
-			if fault != nil {
-				return nil, fault
-			}
-			if cloud.Who(ctx).Org == "" {
-				return nil, zip.ErrForbidden("org required")
-			}
-			return &plane.Files{Rev: rev, Files: files}, nil
-		}, zip.WithOperationID(plane.GitFiles))
-
-	go func() { _ = app.Listen(zip.SocketPath("git")) }()
-	t.Cleanup(func() { _ = app.Shutdown() })
-	for i := 0; i < 200; i++ {
-		if c, derr := net.Dial("unix", zip.SocketPath("git")); derr == nil {
-			_ = c.Close()
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("git stand-in never began listening at %s", zip.SocketPath("git"))
+// asked records what the render actually requested of the forge. The tenancy
+// property here is a property of the REQUEST — which namespace, which ref, which
+// directory — so the tests assert on that and not only on what came back.
+type asked struct {
+	org, repo, ref, path string
 }
 
-// TestTreeSourceRender proves the no-clone source over the real socket
-// transport: bytes in, objects plus the revision they came from out, with the
-// revision GIT resolved rather than the ref that was asked for.
+// standIn points the tree read at a fixed answer for one test and gives back
+// what the render asked for. The forge's own wire is pinned in forge/tree_test.go;
+// what is proved here is what this source does with the answer.
+func standIn(t *testing.T, tree forge.Tree, fault error) *asked {
+	t.Helper()
+	got := &asked{}
+	prev := read
+	read = func(_ context.Context, org, repo, ref, path string) (forge.Tree, error) {
+		*got = asked{org: org, repo: repo, ref: ref, path: path}
+		return tree, fault
+	}
+	t.Cleanup(func() { read = prev })
+	return got
+}
+
+// TestTreeSourceRender proves the no-clone source: bytes in, objects plus the
+// revision they came from out, with the revision the FORGE resolved rather than
+// the ref that was asked for.
 func TestTreeSourceRender(t *testing.T) {
-	fakeGit(t, "9c955a4710000000000000000000000000000000", []plane.File{
-		{Path: "infra/k8s/a.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a\n")},
-		{Path: "infra/k8s/nested/b.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n")},
-		{Path: "infra/k8s/kustomization.yaml", Data: []byte("resources:\n  - a.yaml\n")},
-		{Path: "infra/k8s/README.md", Data: []byte("# not a manifest\n")},
+	got := standIn(t, forge.Tree{
+		Rev: "9c955a4710000000000000000000000000000000",
+		Files: []forge.File{
+			{Path: "infra/k8s/a.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a\n")},
+			{Path: "infra/k8s/nested/b.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n")},
+			{Path: "infra/k8s/kustomization.yaml", Data: []byte("resources:\n  - a.yaml\n")},
+			{Path: "infra/k8s/README.md", Data: []byte("# not a manifest\n")},
+		},
 	}, nil)
 
 	objs, rev, err := treeSource{org: "hanzo", repo: "universe", ref: "main", path: "infra/k8s"}.render(context.Background())
@@ -65,16 +49,19 @@ func TestTreeSourceRender(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 	if rev != "9c955a4710000000000000000000000000000000" {
-		t.Fatalf("rev = %q, want the revision git resolved", rev)
+		t.Fatalf("rev = %q, want the revision the forge resolved", rev)
+	}
+	if *got != (asked{org: "hanzo", repo: "universe", ref: "main", path: "infra/k8s"}) {
+		t.Fatalf("asked the forge for %+v", *got)
 	}
 	// Nested manifests are included — a non-recursive read plus prune deletes
 	// whatever the subdirectories declared.
 	if len(objs) != 2 {
-		got := []string{}
+		names := []string{}
 		for _, o := range objs {
-			got = append(got, o.GetName())
+			names = append(names, o.GetName())
 		}
-		t.Fatalf("objects = %v, want a and b only", got)
+		t.Fatalf("objects = %v, want a and b only", names)
 	}
 	for _, o := range objs {
 		if o.GetName() != "a" && o.GetName() != "b" {
@@ -87,9 +74,12 @@ func TestTreeSourceRender(t *testing.T) {
 // listed but not read means the desired set is missing objects, and handing that
 // to a pruning reconcile deletes whatever the missing file declared.
 func TestTreeSourceRefusesTruncated(t *testing.T) {
-	fakeGit(t, "abc", []plane.File{
-		{Path: "k8s/small.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: s\n")},
-		{Path: "k8s/huge.yaml", Truncated: true},
+	standIn(t, forge.Tree{
+		Rev: "abc",
+		Files: []forge.File{
+			{Path: "k8s/small.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: s\n")},
+			{Path: "k8s/huge.yaml", Truncated: true},
+		},
 	}, nil)
 
 	_, _, err := treeSource{org: "hanzo", repo: "universe", ref: "main", path: "k8s"}.render(context.Background())
@@ -101,22 +91,31 @@ func TestTreeSourceRefusesTruncated(t *testing.T) {
 	}
 }
 
-// TestTreeSourceNoRevisionIsError proves a reply with no resolved revision is a
-// failure, not "nothing to deploy". An empty desired set reaching a pruning
-// reconcile sweeps the fleet, so the two must never look alike.
-func TestTreeSourceNoRevisionIsError(t *testing.T) {
-	fakeGit(t, "", nil, nil)
-	if _, _, err := (treeSource{org: "hanzo", repo: "universe", ref: "main"}).render(context.Background()); err == nil {
-		t.Fatal("render succeeded with no revision resolved")
+// TestTreeSourceUnreadableIsError proves a forge that will not answer surfaces as
+// an error. "The forge is unreachable" and "the manifest directory is empty" must
+// never look alike: an empty desired set reaching a pruning reconcile sweeps the
+// fleet.
+func TestTreeSourceUnreadableIsError(t *testing.T) {
+	standIn(t, forge.Tree{}, context.DeadlineExceeded)
+	_, _, err := treeSource{org: "hanzo", repo: "universe", ref: "main"}.render(context.Background())
+	if err == nil {
+		t.Fatal("render succeeded with no answer from the forge")
+	}
+	if !strings.Contains(err.Error(), "hanzo/universe@main") {
+		t.Fatalf("error does not name the source it could not read: %v", err)
 	}
 }
 
-// TestTreeSourceUnreachableGitIsError proves an absent git plane surfaces as an
-// error. "git is not running" and "the inventory is empty" must not look alike.
-func TestTreeSourceUnreachableGitIsError(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir()) // no git.sock, and there is no network fallback
-	if _, _, err := (treeSource{org: "hanzo", repo: "universe"}).render(context.Background()); err == nil {
-		t.Fatal("render succeeded with no git plane reachable")
+// TestForgeTreeRefusesAnUnmappedTenant pins the tenancy control on the delivery
+// read. The tree is read as the MACHINE — a site administrator on the forge — so
+// the only thing deciding WHICH namespace it reaches is forge.Owner's closed
+// table. An org that is not in it must be refused, never resolved to its own
+// name, and refused BEFORE a credential is spent on it.
+func TestForgeTreeRefusesAnUnmappedTenant(t *testing.T) {
+	for _, org := range []string{"hanzoai", "acme", "admin", ""} {
+		if _, err := forgeTree(context.Background(), org, "universe", "main", "k8s"); err == nil {
+			t.Fatalf("org %q reached the forge", org)
+		}
 	}
 }
 
@@ -150,7 +149,7 @@ func TestNewSourcePicksByReference(t *testing.T) {
 		"tenant-acme/deploy": {"tenant-acme", "deploy"},
 	}
 	for ref, want := range native {
-		s := newSource(ref, "main", "k8s", nil)
+		s := newSource(ref, "main", "k8s")
 		got, ok := s.(treeSource)
 		if !ok {
 			t.Fatalf("newSource(%q) = %T, want treeSource", ref, s)
@@ -168,7 +167,7 @@ func TestNewSourcePicksByReference(t *testing.T) {
 		"a/b/c",    // not an org/repo pair
 		"",
 	} {
-		if s := newSource(ref, "main", "k8s", nil); !isClone(s) {
+		if s := newSource(ref, "main", "k8s"); !isClone(s) {
 			t.Fatalf("newSource(%q) = %T, want gitSource", ref, s)
 		}
 	}

@@ -34,7 +34,6 @@ import (
 
 	"github.com/hanzoai/cloud/plane"
 	booksplane "github.com/hanzoai/cloud/plane/books"
-	gitplane "github.com/hanzoai/cloud/plane/git"
 	projectsplane "github.com/hanzoai/cloud/plane/projects"
 )
 
@@ -112,7 +111,7 @@ func domains() []Contributor {
 			name:     "git",
 			source:   "git/figures",
 			keywords: gitKeywords,
-			ask:      gitplane.GitFigures,
+			ask:      gitFigures,
 		},
 	}
 }

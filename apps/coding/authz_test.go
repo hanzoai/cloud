@@ -78,8 +78,13 @@ func forgeAs(t *testing.T, can map[string]bool, addr func(login string) string) 
 		}
 	}))
 	t.Cleanup(srv.Close)
-	credential = forge.Source{Host: srv.URL}
-	t.Cleanup(func() { credential = forge.Source{} })
+	// CLOUD_FORGE_HOST is the documented override for a deployment whose forge is
+	// not the sibling of its own domain — a developer box, a staging forge, and
+	// this. The held credential is dropped either side so no test is answered by
+	// the forge another one stood up.
+	t.Setenv("CLOUD_FORGE_HOST", srv.URL)
+	forge.Invalidate()
+	t.Cleanup(forge.Invalidate)
 
 	t.Setenv("ZIP_RUNTIME_DIR", socketDir(t))
 	// The identity store, answering about the CALLER. Every test address here is
