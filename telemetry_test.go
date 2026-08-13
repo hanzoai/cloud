@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/environ"
 	luxlog "github.com/luxfi/log"
 	"github.com/luxfi/zap"
 	"go.opentelemetry.io/otel"
@@ -153,13 +154,13 @@ func TestInstallTelemetry_RetiresOTLPExporterEnv(t *testing.T) {
 	shutdown := InstallTelemetry(context.Background(), testLogger(), "hanzo-cloud")
 	t.Cleanup(func() { shutdown(context.Background()) })
 
-	if v := firstNonEmptyEnv("OTEL_EXPORTER_OTLP_ENDPOINT"); v != "" {
+	if v := environ.Or("OTEL_EXPORTER_OTLP_ENDPOINT", ""); v != "" {
 		t.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want cleared", v)
 	}
-	if v := firstNonEmptyEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"); v != "" {
+	if v := environ.Or("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""); v != "" {
 		t.Errorf("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = %q, want cleared", v)
 	}
-	if v := firstNonEmptyEnv("OTEL_EXPORTER_ZAP_ENDPOINT"); v == "" {
+	if v := environ.Or("OTEL_EXPORTER_ZAP_ENDPOINT", ""); v == "" {
 		t.Errorf("OTEL_EXPORTER_ZAP_ENDPOINT was cleared, want intact")
 	}
 }

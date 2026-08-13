@@ -40,6 +40,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/analytics"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -298,10 +299,7 @@ func (o ops) create(ctx context.Context, in *campaignWrite) (*campaignRecord, er
 	if !okCh {
 		return nil, zip.ErrBadRequest("each channel kind must be one of paid, organic, email")
 	}
-	id, err := genID("cmp")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("cmp")
 	now := time.Now().Unix()
 	saved, err := o.s.State.store.CreateCampaign(ctx, Campaign{
 		ID: id, Org: org, Name: name, Audience: clip(in.Audience),

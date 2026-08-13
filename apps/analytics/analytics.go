@@ -331,19 +331,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // second place for the same binding to be got wrong.
 type readOps struct{ s *cloud.Service[state] }
 
-// tenantOf is tenant() for a typed op: the VALIDATED org cloud.Bridge parked on the
-// context, never a field of In. An In field is caller-supplied, so a tenant key read
-// from one is a cross-tenant read the caller asserted for itself. The 403 it returns
-// is byte-identical to the one tenant() produces on the untyped path — both are
-// zip.ErrForbidden through the same error handler.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("valid bearer required")
-	}
-	return org, nil
-}
-
 // noArgs is the In of an op that takes nothing off the wire at all. ONE of these for
 // the package: an op with no input has no input to describe twice.
 type noArgs struct{}
@@ -505,7 +492,7 @@ func isWarehouseUnreachable(err error) bool {
 //
 // Example: {"range": "7d"}
 func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -578,7 +565,7 @@ func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, erro
 //
 // Example: {"range": "30d"}
 func (o readOps) timeseries(ctx context.Context, in *windowQuery) (*Timeseries, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -636,7 +623,7 @@ func (o readOps) timeseries(ctx context.Context, in *windowQuery) (*Timeseries, 
 //
 // Example: {"range": "7d", "limit": 25}
 func (o readOps) top(ctx context.Context, in *topQuery) (*Top, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}

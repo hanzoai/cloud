@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -116,7 +117,7 @@ func TestDenyResource_SpendCapDistinct402(t *testing.T) {
 			t.Fatalf("%s: status = %d, want %d", tc.name, resp.StatusCode, tc.wantCode)
 		}
 		body, _ := io.ReadAll(resp.Body)
-		if !containsSub(string(body), `"code":"`+tc.wantBody+`"`) {
+		if !strings.Contains(string(body), `"code":"`+tc.wantBody+`"`) {
 			t.Fatalf("%s: body %q missing %q", tc.name, string(body), tc.wantBody)
 		}
 	}

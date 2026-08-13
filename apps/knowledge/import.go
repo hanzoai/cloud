@@ -72,7 +72,7 @@ const (
 func importVault(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("valid principal required")
+		return zip.ErrForbidden("X-Org-Id required")
 	}
 	if !framework.Installed(c.Context(), org, DTPage) {
 		return zip.ErrBadRequest("install the kb module first (POST /v1/framework/modules/kb/install)")

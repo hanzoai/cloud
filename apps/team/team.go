@@ -1,6 +1,7 @@
 package team
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
 	"os"
@@ -247,8 +248,8 @@ func Shutdown() error {
 // with a public literal.
 func loadConfig(deps cloud.Deps) config {
 	return config{
-		iamEndpoint:     firstNonEmpty(deps.IAMIssuer, os.Getenv("IAM_ENDPOINT"), "https://hanzo.id"),
-		iamClientID:     firstNonEmpty(os.Getenv("TEAM_IAM_CLIENT_ID"), "hanzo-team"),
+		iamEndpoint:     cmp.Or(deps.IAMIssuer, os.Getenv("IAM_ENDPOINT"), "https://hanzo.id"),
+		iamClientID:     cmp.Or(os.Getenv("TEAM_IAM_CLIENT_ID"), "hanzo-team"),
 		iamClientSecret: os.Getenv("TEAM_IAM_CLIENT_SECRET"),
 		serverSecret:    os.Getenv("SERVER_SECRET"),
 		frontURL:        strings.TrimRight(os.Getenv("FRONT_URL"), "/"),
@@ -258,7 +259,7 @@ func loadConfig(deps cloud.Deps) config {
 		// sit behind the gateway uniformly like api.hanzo.ai and still emit the
 		// correct public callback). TEAM_PUBLIC_URL preferred; PUBLIC_ORIGIN is the
 		// shared fallback name. Unset → derive from the request Host (no regression).
-		publicURL: strings.TrimRight(firstNonEmpty(os.Getenv("TEAM_PUBLIC_URL"), os.Getenv("PUBLIC_ORIGIN")), "/"),
+		publicURL: strings.TrimRight(cmp.Or(os.Getenv("TEAM_PUBLIC_URL"), os.Getenv("PUBLIC_ORIGIN")), "/"),
 	}
 }
 
@@ -281,15 +282,6 @@ func teamAgentsMaxConcurrency() int {
 		n = 64
 	}
 	return n
-}
-
-// env returns the value of key, or fallback when unset. The ONE env helper for the
-// package (used by the docs store).
-func env(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }
 
 // resolveSecret decides the HS256 signing posture from the RAW SERVER_SECRET env.

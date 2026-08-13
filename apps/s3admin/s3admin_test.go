@@ -1,11 +1,17 @@
 package s3admin
 
 import (
+	"os"
 	"testing"
 )
 
-// setEnv sets an env var for the test and restores it after (t.Setenv does this,
-// but we want to also clear vars that may be set in the ambient environment).
+// clearS3Env makes every S3 variable ABSENT, which is not the same as setting it
+// to "". For S3_PUBLIC_ENDPOINT those are two different answers — absent takes the
+// default, set-and-empty disables presigning — so a helper that "cleared" by
+// setting "" could not express the starting state these tests mean.
+//
+// t.Setenv first, for its restoration of whatever the developer's shell had; then
+// Unsetenv, which is what actually removes it for the duration of the test.
 func clearS3Env(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
@@ -13,6 +19,9 @@ func clearS3Env(t *testing.T) {
 		"S3_SECURE", "S3_REGION", "S3_PUBLIC_ENDPOINT", "S3_PUBLIC_SECURE",
 	} {
 		t.Setenv(k, "")
+		if err := os.Unsetenv(k); err != nil {
+			t.Fatalf("unset %s: %v", k, err)
+		}
 	}
 }
 
@@ -94,11 +103,11 @@ func TestPresignDisabledWhenPublicEndpointBlank(t *testing.T) {
 	clearS3Env(t)
 	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIA")
 	t.Setenv("S3_ADMIN_SECRET_KEY", "secret")
-	// A single space is trimmed to "", which env() treats as unset → falls back to
-	// the default. To truly blank it we set a sentinel the loader strips to "".
-	t.Setenv("S3_PUBLIC_ENDPOINT", "   ")
+	// Whitespace is not a value — a blank variable reads as unset and takes the
+	// default — so blanking the host takes a sentinel that IS a value and that
+	// hostOnly reduces to "". A bare slash is one: it is a path with no host.
+	t.Setenv("S3_PUBLIC_ENDPOINT", "/")
 	a := New()
-	// "   " → env() sees non-empty (has spaces) → hostOnly trims to "".
 	if a.publicEndpoint != "" {
 		t.Fatalf("blanked public endpoint = %q, want empty", a.publicEndpoint)
 	}

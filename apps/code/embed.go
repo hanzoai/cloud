@@ -2,9 +2,9 @@ package code
 
 import (
 	"context"
-	"os"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // Embedder turns text into vectors for the semantic tier. It is an interface so
@@ -33,7 +33,7 @@ func newEmbedder(ai cloud.AIClient, model string) *aiEmbedder {
 		// The gateway serves the SKU (zen-embedding), not the raw upstream name:
 		// a request for "bge-m3" 400s ("model not available"), which silently left
 		// the semantic tier empty (vectors:0). zen-embedding routes to bge-m3.
-		model = getenv("CLOUD_EMBED_MODEL", "zen-embedding")
+		model = environ.Or("CLOUD_EMBED_MODEL", "zen-embedding")
 	}
 	return &aiEmbedder{ai: ai, model: model}
 }
@@ -67,11 +67,4 @@ func (e *aiEmbedder) Embed(ctx context.Context, org, billingOrg, project string,
 		out = append(out, vecs...)
 	}
 	return out, nil
-}
-
-func getenv(key, dflt string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return dflt
 }

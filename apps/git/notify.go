@@ -9,6 +9,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/integrations"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/tasks/pkg/sdk/temporal"
 	"github.com/hanzoai/tasks/pkg/sdk/workflow"
 )
@@ -326,11 +327,7 @@ func mrkdwnField(text string) map[string]any {
 // shortSHA returns the first 7 chars of a commit hash (or the whole thing if
 // shorter), matching git's abbreviated-hash convention.
 func shortSHA(sha string) string {
-	sha = strings.TrimSpace(sha)
-	if len(sha) > 7 {
-		return sha[:7]
-	}
-	return sha
+	return shorten.To(strings.TrimSpace(sha), 7)
 }
 
 // commitSubject reads the one-line commit subject (%s) for the pushed commit from

@@ -44,6 +44,7 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -210,12 +211,7 @@ func scanSource(ctx context.Context, cli *s3.Client, bucket, src string) ([]rele
 }
 
 func hasIndex(objs []releaseObject) bool {
-	for _, o := range objs {
-		if o.rel == "index.html" {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(objs, func(o releaseObject) bool { return o.rel == "index.html" })
 }
 
 // releaseID is the content address: SHA-256 over the sorted manifest of

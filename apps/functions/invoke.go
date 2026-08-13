@@ -11,6 +11,8 @@ import (
 	"github.com/hanzoai/cloud/apps/exec"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -180,11 +182,10 @@ func (o ops) invoke(ctx context.Context, in *invokeReq) (*invocationView, error)
 	}
 	dur := time.Since(start).Milliseconds()
 
-	id, _ := genID("inv")
 	iv := Invocation{
-		ID: id, Org: org, FunctionName: name, Method: "POST",
+		ID: mint.ID("inv"), Org: org, FunctionName: name, Method: "POST",
 		DurationMs: dur, CreatedAt: time.Now().Unix(),
-		StatusCode: res.StatusCode, Output: truncate(res.Output, 64*1024),
+		StatusCode: res.StatusCode, Output: shorten.To(res.Output, 64*1024),
 	}
 	switch {
 	case runErr != nil:
@@ -197,7 +198,7 @@ func (o ops) invoke(ctx context.Context, in *invokeReq) (*invocationView, error)
 		iv.Status = "ok"
 	default:
 		iv.Status = "error"
-		iv.Error = truncate(res.Errout, 16*1024)
+		iv.Error = shorten.To(res.Errout, 16*1024)
 	}
 	if err := store.InsertInvocation(ctx, iv); err != nil {
 		s.Log.Warn("record invocation failed", "org", org, "fn", name, "err", err)
@@ -232,11 +233,4 @@ func (o ops) invoke(ctx context.Context, in *invokeReq) (*invocationView, error)
 		Time: rfc3339(iv.CreatedAt), DurationMs: iv.DurationMs,
 		reply: code,
 	}, nil
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
 }

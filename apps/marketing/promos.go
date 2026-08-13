@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -519,7 +520,7 @@ type RedeemResult struct {
 //
 // Response: {"data": [{"promo": {"code": "first1000", "percentOff": 90, "maxRedemptions": 1000, "active": true}, "redeemed": 137, "remaining": 863}]}
 func (o ops) listPromos(ctx context.Context, _ *struct{}) (*PromoList, error) {
-	if _, err := tenant(ctx); err != nil {
+	if _, err := principal.RequireOrg(ctx); err != nil {
 		return nil, err
 	}
 	promos, err := o.s.State.store.ListPromos(ctx)
@@ -542,7 +543,7 @@ func (o ops) listPromos(ctx context.Context, _ *struct{}) (*PromoList, error) {
 // Example: {"code": "first1000", "plan": "team", "seats": 12}
 // Response: {"code": "first1000", "plan": "team", "seats": 12, "eligible": true, "listCents": 19900, "chargeCents": 418900, "discountCents": 179100, "remaining": 863}
 func (o ops) quotePromo(ctx context.Context, in *QuoteQuery) (*Quote, error) {
-	if _, err := tenant(ctx); err != nil {
+	if _, err := principal.RequireOrg(ctx); err != nil {
 		return nil, err
 	}
 	p, err := o.s.State.store.GetPromo(ctx, strings.TrimSpace(in.Code))
@@ -592,7 +593,7 @@ func (o ops) quotePromo(ctx context.Context, in *QuoteQuery) (*Quote, error) {
 //
 // Example: {"code": "first1000", "instrument": "pm_1QxYz2AbCdEf"}
 func (o ops) redeemPromo(ctx context.Context, in *RedeemInput) (*RedeemResult, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -688,7 +689,7 @@ func (o ops) orgPlan(ctx context.Context, org string) (string, error) {
 //
 // Example: {"code": "first1000"}
 func (o ops) getRedemption(ctx context.Context, in *PromoRef) (*Redemption, error) {
-	org, err := tenant(ctx)
+	org, err := principal.RequireOrg(ctx)
 	if err != nil {
 		return nil, err
 	}

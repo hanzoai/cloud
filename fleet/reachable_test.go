@@ -90,7 +90,7 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 		// (read_page, search_web, research_web) is published verbatim; only a
 		// route-derived one is rephrased. fleet/verbs.go is why.
 		as := fleet.Phrase(w.op)
-		if !contains(offering, as) {
+		if !slices.Contains(offering, as) {
 			t.Errorf("%s (offered as %s) does NOT project — so the assistant still cannot %s.\n"+
 				"  the door offers: %s", w.op, as, w.why, strings.Join(offering, " "))
 			continue
@@ -126,7 +126,3 @@ func TestTheAgentCanReachTheWeb(t *testing.T) {
 // three names above are in the survivors table. A second gate assertion would be
 // a second place the policy is stated, which is the thing fleet/surface.go's own
 // note spends a page avoiding.
-
-func contains(xs []string, want string) bool {
-	return slices.Contains(xs, want)
-}

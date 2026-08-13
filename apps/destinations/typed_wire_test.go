@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -263,11 +265,7 @@ func TestTestReportsTheSameTwoShapes(t *testing.T) {
 		if err := json.Unmarshal(b, &got); err != nil {
 			t.Fatalf("%s: decode: %v", tc.name, err)
 		}
-		keys := make([]string, 0, len(got))
-		for k := range got {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
+		keys := slices.Sorted(maps.Keys(got))
 		if strings.Join(keys, ",") != strings.Join(tc.want, ",") {
 			t.Errorf("%s branch answers keys %v, want %v", tc.name, keys, tc.want)
 		}
@@ -375,12 +373,7 @@ func TestTheCollectionRootHasNoTrailingSlash(t *testing.T) {
 }
 
 func sorted(m map[string]bool) string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return strings.Join(out, ", ")
+	return strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }
 
 // TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level

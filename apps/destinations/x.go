@@ -9,8 +9,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -159,11 +160,7 @@ func xAuthHeader(method, endpoint string, c xCreds) string {
 	}
 
 	// Signature base string: METHOD & enc(url) & enc(sorted "k=v" params).
-	keys := make([]string, 0, len(params))
-	for k := range params {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(params))
 	pairs := make([]string, 0, len(keys))
 	for _, k := range keys {
 		pairs = append(pairs, oauthEnc(k)+"="+oauthEnc(params[k]))
@@ -175,11 +172,7 @@ func xAuthHeader(method, endpoint string, c xCreds) string {
 	params["oauth_signature"] = base64.StdEncoding.EncodeToString(mac.Sum(nil))
 
 	// Header: OAuth k="v", … over the same params incl. the signature.
-	hkeys := make([]string, 0, len(params))
-	for k := range params {
-		hkeys = append(hkeys, k)
-	}
-	sort.Strings(hkeys)
+	hkeys := slices.Sorted(maps.Keys(params))
 	parts := make([]string, 0, len(hkeys))
 	for _, k := range hkeys {
 		parts = append(parts, oauthEnc(k)+`="`+oauthEnc(params[k])+`"`)

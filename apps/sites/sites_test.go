@@ -513,22 +513,12 @@ func TestGameAssetContentType(t *testing.T) {
 		}
 	}
 	// Non-game assets still defer to the stdlib table (non-empty, sane).
-	if got := contentType("app.css"); got == "" || !contains(got, "css") {
+	if got := contentType("app.css"); got == "" || !strings.Contains(got, "css") {
 		t.Errorf("contentType(app.css) = %q, want a css type", got)
 	}
-	if got := contentType("index.html"); got == "" || !contains(got, "html") {
+	if got := contentType("index.html"); got == "" || !strings.Contains(got, "html") {
 		t.Errorf("contentType(index.html) = %q, want an html type", got)
 	}
-}
-
-func contains(s, sub string) bool { return len(s) >= len(sub) && (s == sub || indexOf(s, sub) >= 0) }
-func indexOf(s, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
 }
 
 // TestCrossOriginIsolation pins the opt-in header policy: OFF ⇒ no isolation

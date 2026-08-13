@@ -10,6 +10,7 @@ import (
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -86,7 +87,7 @@ func TestIssueNumberingStatusAndCascade(t *testing.T) {
 			st = "in_progress"
 		}
 		got, err := s.CreateIssue(ctx, Issue{
-			ID: genMust(t), ProjectID: pid, Org: "hanzo",
+			ID: mint.ID("issue"), ProjectID: pid, Org: "hanzo",
 			Title: title, Status: st, Priority: "none", CreatedAt: 100, UpdatedAt: 100,
 		})
 		if err != nil {
@@ -169,7 +170,7 @@ func TestIssuePolymorphicSpine(t *testing.T) {
 		{Title: "plan q3", Status: "backlog"}, // defaults: kind=issue, source=team
 	}
 	for _, in := range seed {
-		in.ID = genMust(t)
+		in.ID = mint.ID("issue")
 		in.ProjectID = pid
 		in.Org = "hanzo"
 		in.CreatedAt, in.UpdatedAt = 100, 100
@@ -235,7 +236,7 @@ func TestIssueScheduleAndTimelineFilter(t *testing.T) {
 		{Title: "triage inbox", Status: "backlog"},
 	}
 	for _, in := range seed {
-		in.ID = genMust(t)
+		in.ID = mint.ID("issue")
 		in.ProjectID = pid
 		in.Org = "hanzo"
 		in.CreatedAt, in.UpdatedAt = 100, 100
@@ -326,13 +327,4 @@ func TestCheckSchedule(t *testing.T) {
 			}
 		})
 	}
-}
-
-func genMust(t *testing.T) string {
-	t.Helper()
-	id, err := genID("issue")
-	if err != nil {
-		t.Fatalf("genID: %v", err)
-	}
-	return id
 }

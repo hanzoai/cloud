@@ -32,13 +32,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/hanzoai/cloud/apps/k8s"
 	"math"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/internal/environ"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
@@ -185,12 +187,12 @@ var dedicatedEngines = map[string]engine{
 	// we mirror it. Root/self-chowning image (no fsGroup needed).
 	"sql": {
 		prefix: "sql", dsType: "postgresql",
-		image: "ghcr.io/hanzoai/sql", tag: env("CLOUD_DEDICATED_SQL_TAG", "18"),
+		image: "ghcr.io/hanzoai/sql", tag: environ.Or("CLOUD_DEDICATED_SQL_TAG", "18"),
 		ports:      []enginePort{{"sql", 5432}},
 		clientPort: 5432,
 		dataMount:  "/var/lib/postgresql/data",
 		env:        map[string]string{"PGDATA": "/var/lib/postgresql/data/pgdata"},
-		memReq:     env("CLOUD_DEDICATED_SQL_MEM_REQUEST", "128Mi"), memLim: env("CLOUD_DEDICATED_SQL_MEM_LIMIT", "512Mi"),
+		memReq:     environ.Or("CLOUD_DEDICATED_SQL_MEM_REQUEST", "128Mi"), memLim: environ.Or("CLOUD_DEDICATED_SQL_MEM_LIMIT", "512Mi"),
 		secretEnv: func(user, pw, db string) map[string]string {
 			return map[string]string{
 				"POSTGRES_USER":     user,
@@ -211,14 +213,14 @@ var dedicatedEngines = map[string]engine{
 	// "default" (there is no "admin" ACL user). Root/self-chowning image.
 	"kv": {
 		prefix: "kv", dsType: "valkey",
-		image: "ghcr.io/hanzoai/kv", tag: env("CLOUD_DEDICATED_KV_TAG", "9"),
+		image: "ghcr.io/hanzoai/kv", tag: environ.Or("CLOUD_DEDICATED_KV_TAG", "9"),
 		ports:       []enginePort{{"kv", 6379}},
 		clientPort:  6379,
 		dataMount:   "/data",
 		adminUser:   "default",
 		secretMount: "/etc/kvconf",
 		args:        []string{"/etc/kvconf/kv.conf", "--bind", "0.0.0.0", "--dir", "/data", "--protected-mode", "no", "--maxmemory-policy", "allkeys-lru"},
-		memReq:      env("CLOUD_DEDICATED_KV_MEM_REQUEST", "64Mi"), memLim: env("CLOUD_DEDICATED_KV_MEM_LIMIT", "512Mi"),
+		memReq:      environ.Or("CLOUD_DEDICATED_KV_MEM_REQUEST", "64Mi"), memLim: environ.Or("CLOUD_DEDICATED_KV_MEM_LIMIT", "512Mi"),
 		secretEnv: func(_, pw, _ string) map[string]string {
 			// A valkey config snippet, not env: requirepass sets the default
 			// user's password (genToken output is [A-Za-z0-9_-] — no quoting
@@ -243,10 +245,10 @@ var dedicatedEngines = map[string]engine{
 	// datastore CR already runs.
 	"datastore": {
 		prefix: "ds", dsType: "datastore",
-		image: "ghcr.io/hanzoai/datastore", tag: env("CLOUD_DEDICATED_DATASTORE_TAG", "26.2.3.2"),
+		image: "ghcr.io/hanzoai/datastore", tag: environ.Or("CLOUD_DEDICATED_DATASTORE_TAG", "26.2.3.2"),
 		ports:      []enginePort{{"http", 8123}, {"native", 9000}},
 		clientPort: 8123,
-		memReq:     env("CLOUD_DEDICATED_DATASTORE_MEM_REQUEST", "256Mi"), memLim: env("CLOUD_DEDICATED_DATASTORE_MEM_LIMIT", "1Gi"),
+		memReq:     environ.Or("CLOUD_DEDICATED_DATASTORE_MEM_REQUEST", "256Mi"), memLim: environ.Or("CLOUD_DEDICATED_DATASTORE_MEM_LIMIT", "1Gi"),
 		secretEnv: func(user, pw, db string) map[string]string {
 			return map[string]string{
 				"DATASTORE_DB":       db,
@@ -269,12 +271,12 @@ var dedicatedEngines = map[string]engine{
 	// StatefulSet verbatim, no operator branch needed.
 	"docdb": {
 		prefix: "ddb", dsType: "docdb",
-		image: "ghcr.io/hanzoai/docdb-sqlite", tag: env("CLOUD_DEDICATED_DOCDB_TAG", "1.24.0"),
+		image: "ghcr.io/hanzoai/docdb-sqlite", tag: environ.Or("CLOUD_DEDICATED_DOCDB_TAG", "1.24.0"),
 		ports:      []enginePort{{"mongo", 27017}},
 		clientPort: 27017,
 		dataMount:  "/state",
 		fsGroup:    1000, // FerretDB image runs as UID:GID 1000 (distroless); PVC must be group-writable
-		memReq:     env("CLOUD_DEDICATED_DOCDB_MEM_REQUEST", "128Mi"), memLim: env("CLOUD_DEDICATED_DOCDB_MEM_LIMIT", "512Mi"),
+		memReq:     environ.Or("CLOUD_DEDICATED_DOCDB_MEM_REQUEST", "128Mi"), memLim: environ.Or("CLOUD_DEDICATED_DOCDB_MEM_LIMIT", "512Mi"),
 		secretEnv: func(user, pw, db string) map[string]string {
 			// FerretDB v1.24 SQLite backend + per-instance SCRAM auth. Data at
 			// rest is SQLite files under /state — NO mongod, NO Postgres. The
@@ -328,7 +330,7 @@ func dedicatedSize(kind string) string {
 	if v := os.Getenv(dedicatedSizeEnvPrefix + "_" + strings.ToUpper(kind)); v != "" {
 		return v
 	}
-	return env(dedicatedSizeEnvPrefix, defaultDedicatedSize)
+	return environ.Or(dedicatedSizeEnvPrefix, defaultDedicatedSize)
 }
 
 // createDedicated launches the org's dedicated instance and records it as
@@ -406,7 +408,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 		return zip.Errorf(http.StatusBadGateway, "project admin secret: %v", err)
 	}
 	size := dedicatedSize(kind)
-	crObj := datastoreCR(ns, org, inst, id, kind, e, size, os.Getenv("CLOUD_DEDICATED_STORAGE_CLASS"), secretName, env("CLOUD_DEDICATED_PULL_SECRET", "ghcr-pull"))
+	crObj := datastoreCR(ns, org, inst, id, kind, e, size, os.Getenv("CLOUD_DEDICATED_STORAGE_CLASS"), secretName, environ.Or("CLOUD_DEDICATED_PULL_SECRET", "ghcr-pull"))
 	if err := s.State.orch.ApplyDatastore(ctx, ns, inst, crObj); err != nil {
 		_ = s.State.orch.DeleteSecret(ctx, ns, secretName)
 		if storedRef != "" {

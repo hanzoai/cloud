@@ -44,6 +44,7 @@ package sandbox
 // assumption stops holding, it refuses.
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -239,7 +240,7 @@ func open(s *Service, c *zip.Ctx) error {
 		return err
 	}
 	if m.Status != "running" {
-		return zip.Errorf(http.StatusConflict, "sandbox is %s", firstNonEmpty(m.Status, "unknown"))
+		return zip.Errorf(http.StatusConflict, "sandbox is %s", cmp.Or(m.Status, "unknown"))
 	}
 	tok, err := s.State.tickets.mint(time.Now(), o, m.ID)
 	if err != nil {
@@ -279,7 +280,7 @@ func attach(s *Service, c *zip.Ctx) error {
 		return err
 	}
 	if m.Status != "running" {
-		return zip.Errorf(http.StatusConflict, "sandbox is %s", firstNonEmpty(m.Status, "unknown"))
+		return zip.Errorf(http.StatusConflict, "sandbox is %s", cmp.Or(m.Status, "unknown"))
 	}
 	touched(c.Context(), store, m)
 

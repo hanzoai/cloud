@@ -48,6 +48,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1430,12 +1431,7 @@ func providerViewFor(s *cloud.Service[state], ctx context.Context, org string, p
 }
 
 func sortedProviderIDs(s *cloud.Service[state]) []string {
-	ids := make([]string, 0, len(s.State.providers))
-	for id := range s.State.providers {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	return ids
+	return slices.Sorted(maps.Keys(s.State.providers))
 }
 
 // successRedirect 302s to {console}/integrations?connected={provider}&account=<label>.

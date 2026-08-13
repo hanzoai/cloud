@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -117,7 +118,7 @@ func teamsExchange(ctx context.Context, creds OAuthConfig, redirectURI, code str
 		return nil, fmt.Errorf("teams token decode: %w", err)
 	}
 	if tok.Error != "" || tok.IDToken == "" {
-		return nil, fmt.Errorf("teams token: %s", nonEmpty(tok.Error, "no id_token"))
+		return nil, fmt.Errorf("teams token: %s", cmp.Or(tok.Error, "no id_token"))
 	}
 	tid, name := teamsClaimsFromIDToken(tok.IDToken)
 	if tid == "" {
@@ -126,7 +127,7 @@ func teamsExchange(ctx context.Context, creds OAuthConfig, redirectURI, code str
 	return &ExchangeResult{
 		Tokens:       map[string]string{},
 		ExternalID:   tid,
-		AccountLabel: nonEmpty(name, tid),
+		AccountLabel: cmp.Or(strings.TrimSpace(name), tid),
 	}, nil
 }
 

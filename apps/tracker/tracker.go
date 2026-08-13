@@ -38,8 +38,6 @@
 package tracker
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -392,15 +390,6 @@ func deriveKey(name string) string {
 		return "PRJ"
 	}
 	return k
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // Shutdown closes every open per-(org,project) tracker store. Idempotent.

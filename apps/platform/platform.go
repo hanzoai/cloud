@@ -34,6 +34,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -44,7 +45,6 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -55,6 +55,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/brand"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
@@ -119,14 +120,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// the isolated build ns (holding only the per-org push creds + git token), never
 	// alongside the platform secrets (H2). The operator provisions this namespace and
 	// its scoped credentials (like every other build credential today).
-	k := newK8sClient(getenv("CLOUD_PLATFORM_IMAGE_PREFIX", defaultBuildImagePrefix), getenv("CLOUD_PLATFORM_BUILD_NS", defaultBuildNamespace))
+	k := newK8sClient(environ.Or("CLOUD_PLATFORM_IMAGE_PREFIX", defaultBuildImagePrefix), environ.Or("CLOUD_PLATFORM_BUILD_NS", defaultBuildNamespace))
 	if k.initErr != "" {
 		log.Warn("kubernetes client unavailable; deploy/build will fail closed", "err", k.initErr)
 	}
 
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "platform"),
 		State: state{store: store, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS, deps.IAMIssuer, deps.Brand),
-			sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
+			sitesHost: environ.Or("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
 	// The project source is the CANONICAL IAM: the iam peer over the plane when
 	// the deployment names a separate one (IAM_URL), the embedded store when this
 	// binary IS the IAM. Neither takes an address or a credential — the peer is
@@ -722,8 +723,8 @@ func (o ops) createApp(ctx context.Context, body *createAppReq) (*appView, error
 	}
 	a := Application{
 		ID: id, Org: org, ProjectID: project, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
-		Environment: firstNonEmpty(strings.TrimSpace(body.Environment), "production"), Source: source,
-		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: firstNonEmpty(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
+		Environment: cmp.Or(strings.TrimSpace(body.Environment), "production"), Source: source,
+		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: cmp.Or(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
 		RepoProvider: providerFromURL(body.Repo.URL), ImageRepo: strings.TrimSpace(body.Image.Repository), ImageTag: strings.TrimSpace(body.Image.Tag),
 		BuildType: buildType, Dockerfile: strings.TrimSpace(body.Dockerfile), Port: portOr(body.Port), Replicas: s.State.k8s.limits.clampReplicas(body.Replicas),
 		StorageGB: s.State.k8s.limits.clampStorage(body.StorageGB),
@@ -1104,13 +1105,6 @@ func genID(prefix string) (string, error) {
 		return "", err
 	}
 	return prefix + "_" + base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-func getenv(key, dflt string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return dflt
 }
 
 // Shutdown closes the platform store. Idempotent. Mirrors the projects

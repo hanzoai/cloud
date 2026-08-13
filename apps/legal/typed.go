@@ -41,6 +41,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -417,10 +418,7 @@ func (o ops) generateDocument(ctx context.Context, in *generateRequest) (*docume
 		// (the field names, never any secret).
 		return nil, zip.ErrBadRequest(err.Error())
 	}
-	id, err := genID("doc")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("doc")
 	now := nowUnix()
 	doc := Document{
 		ID: id, Org: org, TemplateID: t.ID, TemplateVersion: t.Version, Category: t.Category,
@@ -620,10 +618,7 @@ func (o ops) createFiling(ctx context.Context, in *filingRequest) (*filingReply,
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "filing submit failed")
 	}
-	id, err := genID("filing")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("filing")
 	now := nowUnix()
 	f := Filing{
 		ID: id, Org: org, DocumentIDs: in.DocumentIDs, Jurisdiction: in.Jurisdiction,

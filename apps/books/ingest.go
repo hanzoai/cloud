@@ -15,6 +15,7 @@ package books
 // re-scan), never the correctness boundary.
 
 import (
+	"cmp"
 	"context"
 	"sort"
 	"strings"
@@ -119,7 +120,7 @@ func ruleFor(t commerceTxn) (Voucher, bool) {
 		SourceKind:  "commerce_txn",
 		SourceID:    t.ID,
 		PostingAt:   t.CreatedAt,
-		Description: firstNonEmpty(strings.TrimSpace(t.Notes), strings.TrimSpace(t.Tags), string(t.Kind)),
+		Description: cmp.Or(strings.TrimSpace(t.Notes), strings.TrimSpace(t.Tags), string(t.Kind)),
 	}
 	switch k {
 	case kindDeposit:
@@ -257,13 +258,4 @@ func ingestOrg(ctx context.Context, src txnSource, cost costSource, st *store, o
 		}
 	}
 	return posted, nil
-}
-
-func firstNonEmpty(vs ...string) string {
-	for _, v := range vs {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

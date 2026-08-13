@@ -2,14 +2,14 @@ package compliance
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/mint"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/idv"
@@ -371,10 +371,7 @@ func newSubject(s *cloud.Service[state], ctx context.Context, org string, kind S
 	if email == "" && ref == "" {
 		return Subject{}, zip.ErrBadRequest("subject needs an email or a ref")
 	}
-	id, err := genID("sub")
-	if err != nil {
-		return Subject{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("sub")
 	now := time.Now().Unix()
 	sub := Subject{ID: id, Org: org, Kind: kind, Ref: ref, Email: email, Name: name, CreatedAt: now, UpdatedAt: now}
 	if err := s.State.store.CreateSubject(ctx, sub); err != nil {
@@ -546,10 +543,7 @@ func (o ops) startVerification(ctx context.Context, in *verificationReq) (*check
 	if initial.Terminal() {
 		initial = idv.StatusPending
 	}
-	id, err := genID("chk")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("chk")
 	now := time.Now().Unix()
 	chk := Check{
 		ID: id, Org: org, SubjectID: sub.ID, Kind: sub.Kind,
@@ -892,10 +886,7 @@ func (o ops) createAccreditation(ctx context.Context, in *accreditationReq) (*ac
 	} else if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "get subject: %v", err)
 	}
-	id, err := genID("acc")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("acc")
 	now := time.Now().Unix()
 	a := Accreditation{
 		ID: id, Org: org, SubjectID: in.SubjectID, Method: in.Method, Basis: in.Basis,
@@ -1176,12 +1167,3 @@ func mustJSON(v any) json.RawMessage {
 // are values the client writes: an address chosen by the party being audited is
 // not evidence.
 func clientIP(c *zip.Ctx) string { return cloud.ClientIP(c) }
-
-// genID mints a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}

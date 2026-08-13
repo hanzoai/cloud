@@ -54,6 +54,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
@@ -66,11 +67,10 @@ const defaultUpstream = "https://oci.hanzo.ai"
 // deployment). Overridable via REGISTRY_PKG.
 const defaultPkg = "https://pkg.hanzo.ai"
 
+// env is a registry base URL, without its trailing slash: every caller appends a
+// rooted path, and a doubled slash is a different address to a distribution registry.
 func env(key, fallback string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	return fallback
+	return strings.TrimRight(environ.Or(key, fallback), "/")
 }
 
 func upstream() string { return env("REGISTRY_UPSTREAM", defaultUpstream) }

@@ -77,7 +77,7 @@ func TestProductionHeaders_WiredWithBrandRegistry(t *testing.T) {
 }
 
 // TestConfig_VersionSourcing proves the exact expression LoadConfig uses for
-// Config.Version — getenv("CLOUD_VERSION", getenv("HANZO_VERSION", Version)) —
+// Config.Version — environ.Or("CLOUD_VERSION", environ.Or("HANZO_VERSION", Version)) —
 // resolves CLOUD_VERSION first, then the operator-set HANZO_VERSION, then the
 // link-time cloud.Version default. It exercises the sourcing directly rather
 // than LoadConfig, which registers process-global flags and must not be called

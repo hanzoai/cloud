@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // agentpr.go is the IN-PROCESS door for opening a native "PR" work item from a
@@ -87,13 +89,9 @@ func CreateAgentPR(ctx context.Context, in AgentPRInput) (AgentPR, error) {
 		return AgentPR{}, err
 	}
 
-	id, err := genID("issue")
-	if err != nil {
-		return AgentPR{}, fmt.Errorf("tracker: rng: %w", err)
-	}
 	now := time.Now().Unix()
 	created, err := store.CreateIssue(ctx, Issue{
-		ID: id, ProjectID: proj.ID, Org: org,
+		ID: mint.ID("issue"), ProjectID: proj.ID, Org: org,
 		Kind: "pr", Source: "agent", Repo: repo, ExtRef: head,
 		Title: title, Description: body, Status: "todo", Priority: "none",
 		Assignee: assignee, CreatedAt: now, UpdatedAt: now,
@@ -125,12 +123,8 @@ func ensureAgentProject(ctx context.Context, store *Store, org, repo string) (Pr
 	if !errors.Is(err, errNotFound) {
 		return Project{}, fmt.Errorf("tracker: get project: %w", err)
 	}
-	id, gerr := genID("prj")
-	if gerr != nil {
-		return Project{}, fmt.Errorf("tracker: rng: %w", gerr)
-	}
 	now := time.Now().Unix()
-	np := Project{ID: id, Org: org, Key: key, Name: repo, CreatedAt: now, UpdatedAt: now}
+	np := Project{ID: mint.ID("prj"), Org: org, Key: key, Name: repo, CreatedAt: now, UpdatedAt: now}
 	cerr := store.CreateProject(ctx, np)
 	if cerr == nil {
 		return np, nil

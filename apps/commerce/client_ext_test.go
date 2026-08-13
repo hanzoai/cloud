@@ -94,10 +94,6 @@ func seedActiveGrant(t *testing.T, ctx context.Context, org, planSlug string) {
 	}
 }
 
-func hasFeature(features []string, want string) bool {
-	return slices.Contains(features, want)
-}
-
 // TestInProcessClient exercises the REAL in-process commerce.Client end-to-end:
 // GetOrgConfig, a genuinely-entitled org (Active:true with the plan's real license
 // features), a resolvable-but-not-entitled org (Active:false, no error — never a
@@ -135,10 +131,10 @@ func TestInProcessClient(t *testing.T) {
 			t.Errorf("Plan = %q, want max", ent.Plan)
 		}
 		// Real features come from @hanzo/plans toLicenseFeatures — NOT fabricated.
-		if !hasFeature(ent.Features, "licensing.product:engine") {
+		if !slices.Contains(ent.Features, "licensing.product:engine") {
 			t.Errorf("Features %v missing product-scope token licensing.product:engine", ent.Features)
 		}
-		if !hasFeature(ent.Features, "inference") {
+		if !slices.Contains(ent.Features, "inference") {
 			t.Errorf("Features %v missing engine_feature 'inference'", ent.Features)
 		}
 	})
@@ -187,7 +183,7 @@ func TestInProcessClient(t *testing.T) {
 		if ent.Plan != "plus" {
 			t.Errorf("Plan = %q, want plus", ent.Plan)
 		}
-		if !hasFeature(ent.Features, "licensing.product:team") {
+		if !slices.Contains(ent.Features, "licensing.product:team") {
 			t.Errorf("Features %v missing licensing.product:team", ent.Features)
 		}
 	})

@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/metering"
@@ -76,7 +77,7 @@ func TestPropagatedRefusalsKeepTheirStatusAndCode(t *testing.T) {
 			if status != tc.status {
 				t.Fatalf("status = %d, want %d (body %s)", status, tc.status, body)
 			}
-			if !containsSub(body, `"code":"`+tc.code+`"`) {
+			if !strings.Contains(body, `"code":"`+tc.code+`"`) {
 				t.Fatalf("body %s missing code %q", body, tc.code)
 			}
 		})
@@ -119,7 +120,7 @@ func TestGenuineFaultsStayInternal(t *testing.T) {
 			if status != http.StatusInternalServerError {
 				t.Fatalf("status = %d, want 500 (body %s)", status, body)
 			}
-			if containsSub(body, `"code":"payment_required"`) || containsSub(body, `"code":"forbidden"`) {
+			if strings.Contains(body, `"code":"payment_required"`) || strings.Contains(body, `"code":"forbidden"`) {
 				t.Fatalf("a fault rendered as an actionable refusal: %s", body)
 			}
 		})
@@ -143,7 +144,7 @@ func TestOutagesAreNotRefusals(t *testing.T) {
 	if status != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502 (body %s)", status, body)
 	}
-	if containsSub(body, `"code":"`) {
+	if strings.Contains(body, `"code":"`) {
 		t.Fatalf("an outage gained a refusal code: %s", body)
 	}
 }

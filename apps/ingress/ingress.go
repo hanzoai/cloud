@@ -59,14 +59,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
 
@@ -103,10 +106,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	edgeEnabled := boolEnv("CLOUD_INGRESS_EDGE_ENABLED")
 	ecfg := edgeConfig{
-		httpAddr:  getenv("CLOUD_INGRESS_HTTP_ADDR", ":80"),
-		httpsAddr: getenv("CLOUD_INGRESS_HTTPS_ADDR", ":443"),
+		httpAddr:  environ.Or("CLOUD_INGRESS_HTTP_ADDR", ":80"),
+		httpsAddr: environ.Or("CLOUD_INGRESS_HTTPS_ADDR", ":443"),
 		cacheDir:  filepath.Join(deps.DataDir, "ingress", "acme"),
-		email:     getenv("CLOUD_INGRESS_ACME_EMAIL", ""),
+		email:     environ.Or("CLOUD_INGRESS_ACME_EMAIL", ""),
 		staging:   boolEnv("CLOUD_INGRESS_ACME_STAGING"),
 	}
 	role := "app"
@@ -757,33 +760,9 @@ func genID() string {
 	return hex.EncodeToString(b[:])
 }
 
-func getenv(key, dflt string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return dflt
-}
-
 func boolEnv(key string) bool {
 	v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
 	return v == "true" || v == "1"
 }
 
-func sortedKeys(m map[string]struct{}) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sortStrings(out)
-	return out
-}
-
-// sortStrings is a tiny insertion sort — the host set is small and this avoids a
-// sort import solely for a status field.
-func sortStrings(a []string) {
-	for i := 1; i < len(a); i++ {
-		for j := i; j > 0 && a[j-1] > a[j]; j-- {
-			a[j-1], a[j] = a[j], a[j-1]
-		}
-	}
-}
+func sortedKeys(m map[string]struct{}) []string { return slices.Sorted(maps.Keys(m)) }

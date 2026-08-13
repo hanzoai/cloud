@@ -23,6 +23,8 @@ package sandbox
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -178,9 +180,5 @@ func TestProjectDiskSaysWhoseItIsAndWhenItWasLastLeased(t *testing.T) {
 }
 
 func keys(m map[string]*unstructured.Unstructured) string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return strings.Join(out, ", ")
+	return strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }

@@ -17,6 +17,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -234,7 +235,7 @@ func (o ops) run(ctx context.Context, body *runReq) (*runView, error) {
 		Name:   a.Name,
 		URL:    "https://" + defaultHost(s, org, slug),
 		Status: a.Status,
-		Shape:  firstNonEmpty(strings.TrimSpace(body.Shape), "auto"),
+		Shape:  cmp.Or(strings.TrimSpace(body.Shape), "auto"),
 	}, nil
 }
 

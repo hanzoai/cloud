@@ -34,6 +34,7 @@ package visor
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"io"
@@ -147,7 +148,7 @@ func (o ops) listBots(ctx context.Context, _ *noArgs) (*botList, error) {
 	}
 	out := make([]botView, 0, len(machines))
 	for _, m := range machines {
-		out = append(out, toBotView(m, byMachine[firstNonEmpty(m.Id, m.Name)]))
+		out = append(out, toBotView(m, byMachine[cmp.Or(m.Id, m.Name)]))
 	}
 	return &botList{Bots: out}, nil
 }
@@ -179,7 +180,7 @@ func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	size := strings.TrimSpace(firstNonEmpty(body.Size, body.InstanceType))
+	size := cmp.Or(strings.TrimSpace(body.Size), strings.TrimSpace(body.InstanceType))
 	if size == "" {
 		return zip.ErrBadRequest("size is required")
 	}
@@ -211,7 +212,7 @@ func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 	// not found" if it was never created (the gap this closes). Doing it before
 	// the machine launch also fails a bad request (e.g. a non-catalog model → 400)
 	// BEFORE any metered machine is provisioned. org is the validated tenant.
-	agent := firstNonEmpty(strings.TrimSpace(body.Agent), name)
+	agent := cmp.Or(strings.TrimSpace(body.Agent), name)
 	if err := ensureAgent(s, c, agent, body.Model, body.Instructions); err != nil {
 		return err
 	}
@@ -232,7 +233,7 @@ func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 	if wrap.Machine.Name == "" && wrap.Machine.Id == "" {
 		_ = json.Unmarshal(data, &wrap.Machine)
 	}
-	machineID := firstNonEmpty(wrap.Machine.Id, wrap.Machine.Name)
+	machineID := cmp.Or(wrap.Machine.Id, wrap.Machine.Name)
 	if machineID == "" {
 		return zip.Errorf(http.StatusBadGateway, "bot launch: vm returned no machine")
 	}

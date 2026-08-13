@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -500,7 +501,7 @@ func (o ops) completeDeployment(ctx context.Context, in *projectsComplete) (*pro
 		// completion is the one billable success, an "error" completion bills nothing.
 		meterDeploy(s, c, cloud.ResourceFeeCents(deployFeeEnvPrefix, deployKind))
 	} else {
-		emitProjectLifecycle(ctx, cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+nonEmptyStr(d.Message, "deploy failed"))
+		emitProjectLifecycle(ctx, cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+cmp.Or(d.Message, "deploy failed"))
 	}
 	out := toDeployment(d)
 	return &out, nil
@@ -528,14 +529,6 @@ func (o ops) completeDeployment(ctx context.Context, in *projectsComplete) (*pro
 // the health of a site that is up.
 func failureOwnsProject(currentDeploy, deployID string) bool {
 	return currentDeploy == "" || currentDeploy == deployID
-}
-
-// nonEmptyStr returns s trimmed, or fallback when blank.
-func nonEmptyStr(s, fallback string) string {
-	if strings.TrimSpace(s) == "" {
-		return fallback
-	}
-	return s
 }
 
 // ListDeployments returns a project's deploy history, newest version first.

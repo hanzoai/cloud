@@ -35,7 +35,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/zap-proto/zip"
 )
 
 // o11yPrefix is the subtree this package's cloud-native routes live under — the
@@ -57,17 +56,6 @@ const productPrefix = o11yPrefix + "/product"
 // apps/o11y openapi` and by the Dockerfile's `go generate -run zipdoc ./...`.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
-
-// tenantOf is the validated org for a typed op — the one the gateway asserted
-// and cloud.Bridge parked on the context. The 403 text is the same one every
-// untyped o11y handler answered with, so the wire is unchanged.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	return org, nil
-}
 
 // callerIsAdmin is admin() for a typed op: the validated platform SuperAdmin bit
 // (X-User-IsAdmin, set only for the reserved admin org after SanitizeIdentity).

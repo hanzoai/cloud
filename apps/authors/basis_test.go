@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -109,9 +110,7 @@ func deploys(t *testing.T, app *zip.App, deployingOrg, repo, project string) {
 // the sweep uses, so a test can place a row in a chosen period at a chosen instant.
 func latch(t *testing.T, s *cloud.Service[state], authorID, org, period string, spend, shareBps, now int64) {
 	t.Helper()
-	accrualID, _ := genID("aca")
-	ledgerID, _ := genID("alg")
-	won, err := s.State.store.LatchAccrual(context.Background(), accrualID, ledgerID, authorID, org, period,
+	won, err := s.State.store.LatchAccrual(context.Background(), mint.ID("aca"), mint.ID("alg"), authorID, org, period,
 		shareBps, spend, spend*shareBps/bpsDenom, now)
 	if err != nil || !won {
 		t.Fatalf("latch(%s,%s): won=%v err=%v", org, period, won, err)

@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // Platform is a thin client over the LIVE Hanzo Cloud control plane
@@ -113,7 +115,7 @@ func serverMessage(raw []byte) string {
 	}
 	s := strings.TrimSpace(string(raw))
 	if len(s) > 240 {
-		s = s[:240] + "…"
+		return shorten.To(s, 240) + "…"
 	}
 	return s
 }

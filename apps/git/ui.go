@@ -22,6 +22,7 @@
 package git
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"html/template"
@@ -254,7 +255,7 @@ func uiHome(s *cloud.Service[state], c *zip.Ctx) error {
 	rows := make([]repoRow, 0, len(repos))
 	for _, r := range repos {
 		rows = append(rows, repoRow{Name: r.Name, Description: r.Description,
-			DefaultBranch: firstNonEmptyStr(r.DefaultBranch, defaultBranchName),
+			DefaultBranch: cmp.Or(strings.TrimSpace(r.DefaultBranch), defaultBranchName),
 			Size:          humanBytes(r.SizeBytes), Updated: rfc3339(r.UpdatedAt)})
 	}
 	base := uiBase(s, c)
@@ -290,7 +291,7 @@ func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
 		d.Empty = true
 	}
 	if d.Ref == "" {
-		d.Ref = firstNonEmptyStr(r.DefaultBranch, defaultBranchName)
+		d.Ref = cmp.Or(strings.TrimSpace(r.DefaultBranch), defaultBranchName)
 	}
 	return render(c, base, http.StatusOK, r.Name, repoTmpl, d)
 }
@@ -444,13 +445,6 @@ func crumbs(org, repo, ref, p, base string) []crumb {
 			Href: base + "/" + org + "/" + repo + "/tree/" + acc + "?ref=" + template.URLQueryEscaper(ref)})
 	}
 	return out
-}
-
-func firstNonEmptyStr(a, b string) string {
-	if strings.TrimSpace(a) != "" {
-		return a
-	}
-	return b
 }
 
 func humanBytes(n int64) string {

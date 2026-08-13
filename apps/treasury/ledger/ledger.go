@@ -30,14 +30,13 @@ package ledger
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/money"
 )
 
@@ -270,10 +269,7 @@ func (l *Ledger) Accrue(ctx context.Context, period string, revenueCents, now in
 	if share <= 0 {
 		return JournalEntry{}, false, nil // nothing to accrue this period
 	}
-	id, err := genID("acc")
-	if err != nil {
-		return JournalEntry{}, false, err
-	}
+	id := mint.ID("acc")
 	shareAmt := money.FromCents(share)
 	e := JournalEntry{
 		ID:        id,
@@ -301,10 +297,7 @@ func (l *Ledger) Seed(ctx context.Context, ref, memo string, amountCents, now in
 	if strings.TrimSpace(ref) == "" {
 		return JournalEntry{}, false, ErrEmptyRef
 	}
-	id, err := genID("seed")
-	if err != nil {
-		return JournalEntry{}, false, err
-	}
+	id := mint.ID("seed")
 	amt := money.FromCents(amountCents)
 	e := JournalEntry{ID: id, Kind: KindSeed, Ref: ref, Memo: memo, Amount: amt, CreatedAt: now}
 	postings := []Posting{
@@ -340,10 +333,7 @@ func (l *Ledger) DebitReserve(ctx context.Context, program, ref, memo string, am
 	if program == "" || ref == "" {
 		return JournalEntry{}, false, false, ErrEmptyRef
 	}
-	id, gerr := genID("pay")
-	if gerr != nil {
-		return JournalEntry{}, false, false, gerr
-	}
+	id := mint.ID("pay")
 	amt := money.FromCents(amountCents)
 	e := JournalEntry{ID: id, Kind: KindPayout, Program: program, Ref: ref, Memo: memo, Amount: amt, CreatedAt: now}
 	postings := []Posting{
@@ -561,14 +551,4 @@ func validateBalanced(postings []Posting) error {
 		return ErrUnbalanced
 	}
 	return nil
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits) —
-// stdlib only, so the core carries no id-library dependency into hanzoai/finance.
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("ledger: rng: %w", err)
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }

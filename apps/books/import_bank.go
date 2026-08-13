@@ -29,6 +29,7 @@ package books
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/csv"
@@ -82,7 +83,7 @@ func looksOFX(data []byte) bool {
 // ">" to the next "<" — SGML simply omits the leaf close tag XML includes.
 func parseOFX(data []byte) ([]BankTxn, error) {
 	s := string(data)
-	currency := firstNonEmpty(strings.ToLower(strings.TrimSpace(ofxLeaf(s, "CURDEF"))), "usd")
+	currency := cmp.Or(strings.ToLower(strings.TrimSpace(ofxLeaf(s, "CURDEF"))), "usd")
 
 	var txns []BankTxn
 	rest := s
@@ -149,7 +150,7 @@ func ofxTxn(block, currency string) (*BankTxn, error) {
 		PostedAt:    postedAt,
 		AmountCents: cents,
 		Currency:    currency,
-		Description: firstNonEmpty(strings.TrimSpace(name+" "+memo), name, memo),
+		Description: cmp.Or(strings.TrimSpace(name+" "+memo), name, memo),
 		Merchant:    name,
 		Direction:   dir,
 	}, nil

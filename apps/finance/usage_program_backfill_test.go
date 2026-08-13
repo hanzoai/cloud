@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 )
@@ -154,10 +155,7 @@ func writeLegacyUsage(t *testing.T, f *ledgerFinance, org, subject, ref string, 
 	if err != nil {
 		t.Fatalf("open %s ledger: %v", org, err)
 	}
-	id, err := genID("use")
-	if err != nil {
-		t.Fatalf("mint entry id: %v", err)
-	}
+	id := mint.ID("use")
 	if err := store.Tx(context.Background(), func(tx ledger.Tx) error {
 		return tx.Insert(
 			ledger.JournalEntry{ID: id, Kind: string(KindUsage), Program: "", Ref: ref, Amount: amount},
