@@ -64,6 +64,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -179,11 +180,7 @@ func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
 
 // clip trims and bounds a text field to maxField.
 func clip(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > maxField {
-		return s[:maxField]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), maxField)
 }
 
 func limitOf(c *zip.Ctx) int {

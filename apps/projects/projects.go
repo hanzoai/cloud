@@ -63,6 +63,7 @@ import (
 	"github.com/hanzoai/cloud/apps/sites"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -776,10 +777,7 @@ type projectsUpdate struct {
 // smuggle newlines or run unbounded.
 func credit(s string) string {
 	s = strings.TrimSpace(strings.NewReplacer("\r", " ", "\n", " ").Replace(s))
-	if len(s) > 200 {
-		s = s[:200]
-	}
-	return s
+	return shorten.To(s, 200)
 }
 
 // sanitizeTags cleans a site's browser tag config: lower-cased platform keys, trimmed

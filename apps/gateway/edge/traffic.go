@@ -79,6 +79,8 @@ import (
 	"time"
 
 	"hash/maphash"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 const (
@@ -168,13 +170,7 @@ const (
 // clamp truncates s to at most n bytes, on a rune boundary so a clamped value is
 // still valid UTF-8 when it is reported.
 func clamp(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	for n > 0 && s[n]&0xC0 == 0x80 {
-		n--
-	}
-	return s[:n]
+	return shorten.To(s, n)
 }
 
 // budget is the sensor's memory ceiling, charged in bytes. It is guarded by

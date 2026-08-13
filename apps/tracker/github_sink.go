@@ -10,6 +10,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // github_sink.go implements cloud.IssueSink: it mirrors an external work item (today
@@ -151,10 +152,7 @@ func cleanLabels(in []string) []string {
 // clampStr caps s to n bytes, dropping any partial trailing rune so the result is
 // always valid UTF-8 (the DB stores TEXT).
 func clampStr(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return strings.ToValidUTF8(s[:n], "")
+	return strings.ToValidUTF8(shorten.To(s, n), "")
 }
 
 // normKindDefault clamps an external kind to the tracker's closed set, defaulting to

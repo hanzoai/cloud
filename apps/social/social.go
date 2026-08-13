@@ -63,6 +63,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -307,11 +308,7 @@ func clip(s string) string { return clipN(s, maxField) }
 func clipBody(s string) string { return clipN(s, maxContent) }
 
 func clipN(s string, n int) string {
-	s = strings.TrimSpace(s)
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), n)
 }
 
 func limitOf(c *zip.Ctx) int {

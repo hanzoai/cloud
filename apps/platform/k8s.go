@@ -29,6 +29,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/k8s"
 	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/namespace"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -1825,8 +1826,5 @@ func jobIDSuffix(buildID string) string {
 
 // truncate caps a DNS-1123 name at n chars, trimming a trailing '-'.
 func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return strings.TrimRight(s[:n], "-")
+	return strings.TrimRight(shorten.To(s, n), "-")
 }

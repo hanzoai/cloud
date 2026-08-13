@@ -44,6 +44,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/shorten"
 	"gopkg.in/yaml.v3"
 )
 
@@ -109,12 +110,7 @@ func probe(client *http.Client, base, method, url string) (int, string, string) 
 	return resp.StatusCode, string(body), resp.Header.Get("server")
 }
 
-func truncate(s string) string {
-	if len(s) > 200 {
-		return s[:200]
-	}
-	return s
-}
+func truncate(s string) string { return shorten.To(s, 200) }
 
 // isDark reports whether this answer PROVED the address is unrouted.
 //
