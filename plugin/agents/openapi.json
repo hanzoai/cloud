@@ -1149,7 +1149,7 @@
     },
     "/v1/coding": {
       "post": {
-        "operationId": "post_v1_coding",
+        "operationId": "post_coding",
         "summary": "Start one autonomous coding run against a repo in the caller's org",
         "description": "Is the app's door. It answers 202 with the run's handle the\nmoment the run is ADMITTED — not when it finishes. A coding run takes minutes;\nholding a request open for one would tie a connection to a model loop and give\nthe caller nothing it cannot get better from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis door does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.",
         "tags": [

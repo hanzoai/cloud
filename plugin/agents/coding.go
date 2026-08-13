@@ -65,7 +65,6 @@ func mountAgents(app cloud.Router, deps cloud.Deps) error {
 		return err
 	}
 	zip.Post[plane.CodingStartIn, plane.CodingStarted](cloud.ZipApp(app), "/v1/coding", httpCodingStart,
-		zip.WithOperationID("post_v1_coding"),
 		zip.WithStatus(http.StatusAccepted),
 		zip.WithSummary("Start one autonomous coding run against a repo in the caller's org"))
 	return nil
