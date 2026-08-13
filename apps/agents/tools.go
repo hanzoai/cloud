@@ -377,7 +377,7 @@ func completeWithTools(ctx context.Context, ai types.AIClient, org, actor string
 // here to leak into a transcript: what goes back is the tool's own output or our
 // own sentence about why there is none.
 func dispatchOne(ctx context.Context, org, actor string, tc types.ToolCall, runID string, round int) string {
-	ctx, span := agentTracer.Start(ctx, "agent.tool "+tc.Name, trace.WithSpanKind(trace.SpanKindInternal))
+	ctx, span := agentTracer().Start(ctx, "agent.tool "+tc.Name, trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 	// Everything an operator needs to read one dispatch out of a run: which run,
 	// which tenant, which person, which tool, which subsystem answers for it, and
