@@ -39124,6 +39124,28 @@ components:
         slug:
           type: string
       type: object
+    projectsDeployStart:
+      properties:
+        commit:
+          description: |-
+            Commit is the git sha this build was produced from, recorded on the
+            deployment so a released site can be traced back to its source. Optional.
+
+            It is the ONLY field here, and deliberately: the predecessor also accepted
+            `source` and `branch`. `source` was the Content-Type discriminator this
+            split removed. `branch` was accepted and DISCARDED — there is no branch
+            column on a deployment, and the lifecycle event derives the branch from the
+            project's own linked one — so declaring it would publish a settable field
+            that does nothing into the document, every generated SDK and the MCP input
+            schema. A field that is read by nothing is not described as if it were.
+
+            `url:"-"` because zip binds the query string OVER a decoded body, so
+            without it a `?commit=` the caller never sent would outrank the one it did.
+          type: string
+        slug:
+          description: Slug is the site to deploy, from the path.
+          type: string
+      type: object
     projectsDeployment:
       properties:
         bucket:
@@ -104453,9 +104475,11 @@ paths:
   /v1/platform/sites/{slug}/deploy:
     post:
       description: |-
-        Takes a built site live at `https://<slug>.hanzo.app`. The content type decides the shape: a `zip` or `tar.gz` — raw in the body or as a multipart file part, which is what the platform's upload UI posts — is stored and served immediately, answering 200 with the finished deployment; a JSON body instead queues a build from the site's linked repo and answers 202 with a queued deployment plus, where one could be minted, a scoped upload grant for CI. The git path requires a linked repo (400 without one).
+        Takes a built site live at `https://<slug>.hanzo.app` in one call. The body is the site itself — a `zip` or `tar.gz` holding `index.html` at its root (or a single wrapper directory that does), sent raw or as a multipart file part. It is unpacked to the site's own storage prefix and served immediately, answering the finished deployment.
 
-        The hosting gate is fail-closed and runs first, before anything is parsed or uploaded: 402 for an unfunded org, 503 for unreachable commerce, nothing written. The debit lands only on success — a failed upload is never billed and never flips the live site — and a redeploy answers the SAME URL, because slug and apex are stable.
+        It is bounded by the edge body limit (16 MiB by default), and that bound is the whole reason the other path exists: an oversized POST is refused by the server BEFORE any handler runs and surfaces as an opaque `400 Error when parsing request` that reads like a malformed payload rather than a size cap. A site too large for one archive opens a deployment with `POST /v1/sites/{slug}/deployments` instead and writes its files straight to storage against the scoped grant that answers with — no body limit, and no bytes through this API at all.
+
+        Billing is fail-closed and fails FIRST: the hosting gate runs before anything is parsed or uploaded, so an unfunded org is 402 and an unreachable commerce is 503 with nothing written. The debit lands only on success — a failed upload is never billed and never flips the live site — and a redeploy answers the SAME URL, because slug and apex are stable.
 
         Scope: a validated principal is required (403 without one) and the site is resolved within that principal's org, so another tenant's slug is a 404. Object storage must be configured (503); an archive that does not walk is a 400 and one over the size cap is a 413.
       operationId: post_platform_sites_by_slug_deploy
@@ -104465,7 +104489,20 @@ paths:
         required: true
         schema:
           type: string
-      summary: Upload a built site — this is where a zip goes live
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsDeployment'
+          description: Success
+      summary: Upload a built site as one archive and serve it
       tags:
       - platform
       x-app: projects
@@ -104505,6 +104542,65 @@ paths:
       tags:
       - platform
       x-app: projects
+    post:
+      description: |-
+        Opens a deployment and hands back a short-lived, prefix-scoped
+        grant to write its bytes straight to object storage. Answers 202.
+
+        This is the path for a site too large to send as one archive: a real export is
+        hundreds of megabytes against a 16 MiB body limit, so the bytes deliberately do
+        NOT pass through the API. The answer carries `bucket`, `prefix` and `upload` —
+        a presigned POST policy that S3 itself confines to this site's prefix
+        (starts-with `<org>/<slug>/`), expires in 30 minutes and bounds each object.
+        So a build writes its own files and holds no standing bucket credential; there
+        is nothing to rotate and nothing that leaks between tenants. Never guess the
+        prefix — it is server-derived, and a guessed one lands where nothing is served.
+
+        The deployment is `queued` until POST .../deployments/{id}/complete flips it
+        live (or error). That completion is also where DELETION happens: the grant
+        authorizes writes only, so a build cannot remove a file, and cloud reconciles
+        the prefix against the `keys` manifest the completion carries. A build that
+        dies before completing leaves the deployment queued rather than a half-live
+        site.
+
+        The grant is on the 202 and NOWHERE else — it is never stored and never
+        replayed on a later read, so it cannot outlive the build it was minted for. A
+        deployment whose grant could not be minted is still created and still
+        completable; it simply carries no `upload`, and a caller with no other way to
+        write should treat that as the failure it is.
+
+        Billing: the hosting gate runs BEFORE anything is created (402 unfunded, 503
+        commerce unreachable), and the debit lands on the completion that goes live —
+        never on a queued or failed build.
+
+        Scope: a validated principal is required (403 without one) and the site is
+        resolved within that principal's org, so another tenant's slug is a 404.
+      operationId: post_platform_sites_by_slug_deployments
+      parameters:
+      - description: Slug is the site to deploy, from the path.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/projectsDeployStart'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsDeployment'
+          description: accepted
+      summary: Opens a deployment and hands back a short-lived, prefix-scoped grant
+        to write its bytes straight to object storage.
+      tags:
+      - platform
+      x-app: projects
   /v1/platform/sites/{slug}/deployments/{id}:
     get:
       description: |-
@@ -104541,6 +104637,60 @@ paths:
                 $ref: '#/components/schemas/projectsDeployment'
           description: ok
       summary: Returns one deployment of a project by id.
+      tags:
+      - platform
+      x-app: projects
+  /v1/platform/sites/{slug}/deployments/{id}/complete:
+    post:
+      description: |-
+        CompleteDeployment is the CI completion hook that flips a queued git
+        deployment to live (or error) once CI has synced the built site to S3.
+
+        `status` must be `live` or `error`. On a LIVE completion the public host is
+        claimed FIRST, so the deployment reports the URL it actually OWNS — a
+        CI-supplied `liveUrl` is a hint that can refine that URL but can never assert
+        a subdomain another tenant holds. `keys` is the manifest CI just uploaded,
+        relative to the deployment prefix: cloud reconciles the prefix against it so a
+        page deleted from the build actually stops serving. Omit `keys` and nothing is
+        deleted — the prefix only grows. Reconciliation runs only on a live completion
+        (pruning against a failed build's manifest would delete the site the last good
+        build is still serving) and is best-effort, so a stale leftover never turns a
+        successful deploy into a 500. A live completion is also the one billable
+        moment on the git path; an error completion bills nothing.
+
+        Scope: a validated principal is required (403 without one). CI authenticates
+        with an org-scoped token through the gateway, so the deployment is resolved
+        within that principal's org and another tenant's slug or deployment id is a
+        404.
+      operationId: post_platform_sites_by_slug_deployments_by_id_complete
+      parameters:
+      - description: Slug is the project the deployment belongs to, from the path.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - description: ID is the queued deployment to complete, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/projectsComplete'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsDeployment'
+          description: ok
+      summary: CompleteDeployment is the CI completion hook that flips a queued git
+        deployment to live (or error) once CI has synced the built site to S3.
       tags:
       - platform
       x-app: projects
@@ -105793,11 +105943,13 @@ paths:
   /v1/projects/{slug}/deploy:
     post:
       description: |-
-        Takes a built site live at `https://<slug>.hanzo.app`. It accepts BOTH shapes on one address and the content type decides which: a `zip` or `tar.gz` archive — raw in the body or as a multipart file part — is uploaded and served immediately, answering 200 with the finished deployment; a JSON body instead queues a build from the project's linked repo and answers 202 with a queued deployment and, where one could be minted, a scoped upload grant for CI to write with. The git path needs a linked repo (400 without one) and is finished later by the completion hook.
+        Takes a built site live at `https://<slug>.hanzo.app` in one call. The body is the site itself — a `zip` or `tar.gz` holding `index.html` at its root (or a single wrapper directory that does), sent raw or as a multipart file part. It is unpacked to the site's own storage prefix and served immediately, answering the finished deployment.
 
-        Billing is fail-closed and fails FIRST: the hosting gate runs before anything is parsed or uploaded, so an unfunded org is 402 and an unreachable commerce is 503 with nothing written. The debit lands only on success — a failed upload is never billed and never flips the live site, and a queued build is billed at completion rather than at queue time. A redeploy returns the SAME URL, because slug and apex are stable.
+        It is bounded by the edge body limit (16 MiB by default), and that bound is the whole reason the other path exists: an oversized POST is refused by the server BEFORE any handler runs and surfaces as an opaque `400 Error when parsing request` that reads like a malformed payload rather than a size cap. A site too large for one archive opens a deployment with `POST /v1/sites/{slug}/deployments` instead and writes its files straight to storage against the scoped grant that answers with — no body limit, and no bytes through this API at all.
 
-        Scope: a validated principal is required (403 without one) and the project is resolved within that principal's org, so another tenant's slug is a 404. Object storage must be configured, else 503; an archive that does not walk is a 400 and one over the size cap is a 413.
+        Billing is fail-closed and fails FIRST: the hosting gate runs before anything is parsed or uploaded, so an unfunded org is 402 and an unreachable commerce is 503 with nothing written. The debit lands only on success — a failed upload is never billed and never flips the live site — and a redeploy answers the SAME URL, because slug and apex are stable.
+
+        Scope: a validated principal is required (403 without one) and the site is resolved within that principal's org, so another tenant's slug is a 404. Object storage must be configured (503); an archive that does not walk is a 400 and one over the size cap is a 413.
       operationId: post_projects_by_slug_deploy
       parameters:
       - in: path
@@ -105805,8 +105957,20 @@ paths:
         required: true
         schema:
           type: string
-      summary: Deploy a build — upload an archive, or trigger a build from the linked
-        repo
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsDeployment'
+          description: Success
+      summary: Upload a built site as one archive and serve it
       tags:
       - projects
       x-app: projects
@@ -105843,6 +106007,65 @@ paths:
                 type: array
           description: ok
       summary: Returns a project's deploy history, newest version first.
+      tags:
+      - projects
+      x-app: projects
+    post:
+      description: |-
+        Opens a deployment and hands back a short-lived, prefix-scoped
+        grant to write its bytes straight to object storage. Answers 202.
+
+        This is the path for a site too large to send as one archive: a real export is
+        hundreds of megabytes against a 16 MiB body limit, so the bytes deliberately do
+        NOT pass through the API. The answer carries `bucket`, `prefix` and `upload` —
+        a presigned POST policy that S3 itself confines to this site's prefix
+        (starts-with `<org>/<slug>/`), expires in 30 minutes and bounds each object.
+        So a build writes its own files and holds no standing bucket credential; there
+        is nothing to rotate and nothing that leaks between tenants. Never guess the
+        prefix — it is server-derived, and a guessed one lands where nothing is served.
+
+        The deployment is `queued` until POST .../deployments/{id}/complete flips it
+        live (or error). That completion is also where DELETION happens: the grant
+        authorizes writes only, so a build cannot remove a file, and cloud reconciles
+        the prefix against the `keys` manifest the completion carries. A build that
+        dies before completing leaves the deployment queued rather than a half-live
+        site.
+
+        The grant is on the 202 and NOWHERE else — it is never stored and never
+        replayed on a later read, so it cannot outlive the build it was minted for. A
+        deployment whose grant could not be minted is still created and still
+        completable; it simply carries no `upload`, and a caller with no other way to
+        write should treat that as the failure it is.
+
+        Billing: the hosting gate runs BEFORE anything is created (402 unfunded, 503
+        commerce unreachable), and the debit lands on the completion that goes live —
+        never on a queued or failed build.
+
+        Scope: a validated principal is required (403 without one) and the site is
+        resolved within that principal's org, so another tenant's slug is a 404.
+      operationId: post_projects_by_slug_deployments
+      parameters:
+      - description: Slug is the site to deploy, from the path.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/projectsDeployStart'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsDeployment'
+          description: accepted
+      summary: Opens a deployment and hands back a short-lived, prefix-scoped grant
+        to write its bytes straight to object storage.
       tags:
       - projects
       x-app: projects
@@ -111627,6 +111850,194 @@ paths:
           description: ok
       summary: Generates a self-contained, mobile-responsive static site from a natural-language
         brief and deploys it live in one call.
+      tags:
+      - sites
+      x-app: projects
+  /v1/sites/{slug}/deployments:
+    get:
+      description: |-
+        Returns a project's deploy history, newest version first.
+
+        Every deploy of the project is a row — uploads, generated sites, and git/CI
+        builds alike — carrying its version, status, source, commit, live URL, file
+        count and byte count. The short-lived upload grant a queued git deployment was
+        handed is NOT replayed here: it exists only on the 202 that minted it, so a
+        grant cannot outlive its build by being fetched again.
+
+        Scope: a validated principal is required (403 without one) and the project is
+        resolved within that principal's org, so another tenant's slug is a 404.
+      operationId: get_sites_by_slug_deployments
+      parameters:
+      - description: |-
+          Slug is the project to act on, from the path. It is unique within the
+          caller's org and nowhere else, so another tenant's slug is a 404.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/projectsDeployment'
+                type: array
+          description: ok
+      summary: Returns a project's deploy history, newest version first.
+      tags:
+      - sites
+      x-app: projects
+    post:
+      description: |-
+        Opens a deployment and hands back a short-lived, prefix-scoped
+        grant to write its bytes straight to object storage. Answers 202.
+
+        This is the path for a site too large to send as one archive: a real export is
+        hundreds of megabytes against a 16 MiB body limit, so the bytes deliberately do
+        NOT pass through the API. The answer carries `bucket`, `prefix` and `upload` —
+        a presigned POST policy that S3 itself confines to this site's prefix
+        (starts-with `<org>/<slug>/`), expires in 30 minutes and bounds each object.
+        So a build writes its own files and holds no standing bucket credential; there
+        is nothing to rotate and nothing that leaks between tenants. Never guess the
+        prefix — it is server-derived, and a guessed one lands where nothing is served.
+
+        The deployment is `queued` until POST .../deployments/{id}/complete flips it
+        live (or error). That completion is also where DELETION happens: the grant
+        authorizes writes only, so a build cannot remove a file, and cloud reconciles
+        the prefix against the `keys` manifest the completion carries. A build that
+        dies before completing leaves the deployment queued rather than a half-live
+        site.
+
+        The grant is on the 202 and NOWHERE else — it is never stored and never
+        replayed on a later read, so it cannot outlive the build it was minted for. A
+        deployment whose grant could not be minted is still created and still
+        completable; it simply carries no `upload`, and a caller with no other way to
+        write should treat that as the failure it is.
+
+        Billing: the hosting gate runs BEFORE anything is created (402 unfunded, 503
+        commerce unreachable), and the debit lands on the completion that goes live —
+        never on a queued or failed build.
+
+        Scope: a validated principal is required (403 without one) and the site is
+        resolved within that principal's org, so another tenant's slug is a 404.
+      operationId: post_sites_by_slug_deployments
+      parameters:
+      - description: Slug is the site to deploy, from the path.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/projectsDeployStart'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsDeployment'
+          description: accepted
+      summary: Opens a deployment and hands back a short-lived, prefix-scoped grant
+        to write its bytes straight to object storage.
+      tags:
+      - sites
+      x-app: projects
+  /v1/sites/{slug}/deployments/{id}:
+    get:
+      description: |-
+        Returns one deployment of a project by id.
+
+        It is how a console follows a build: the status (`queued`, `uploading`,
+        `live`, `error`), the message a failure left, and the URL and prefix it went
+        live at. Like the history, it never replays the upload grant.
+
+        Scope: a validated principal is required (403 without one). Both the project
+        and the deployment are resolved within that principal's org, so a deployment
+        of another project — or of another tenant — is a 404.
+      operationId: get_sites_by_slug_deployments_by_id
+      parameters:
+      - description: Slug is the project the deployment belongs to, from the path.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - description: |-
+          ID is the deployment id, from the path. A deployment of another project —
+          or of another tenant's project — is not found.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsDeployment'
+          description: ok
+      summary: Returns one deployment of a project by id.
+      tags:
+      - sites
+      x-app: projects
+  /v1/sites/{slug}/deployments/{id}/complete:
+    post:
+      description: |-
+        CompleteDeployment is the CI completion hook that flips a queued git
+        deployment to live (or error) once CI has synced the built site to S3.
+
+        `status` must be `live` or `error`. On a LIVE completion the public host is
+        claimed FIRST, so the deployment reports the URL it actually OWNS — a
+        CI-supplied `liveUrl` is a hint that can refine that URL but can never assert
+        a subdomain another tenant holds. `keys` is the manifest CI just uploaded,
+        relative to the deployment prefix: cloud reconciles the prefix against it so a
+        page deleted from the build actually stops serving. Omit `keys` and nothing is
+        deleted — the prefix only grows. Reconciliation runs only on a live completion
+        (pruning against a failed build's manifest would delete the site the last good
+        build is still serving) and is best-effort, so a stale leftover never turns a
+        successful deploy into a 500. A live completion is also the one billable
+        moment on the git path; an error completion bills nothing.
+
+        Scope: a validated principal is required (403 without one). CI authenticates
+        with an org-scoped token through the gateway, so the deployment is resolved
+        within that principal's org and another tenant's slug or deployment id is a
+        404.
+      operationId: post_sites_by_slug_deployments_by_id_complete
+      parameters:
+      - description: Slug is the project the deployment belongs to, from the path.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - description: ID is the queued deployment to complete, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/projectsComplete'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsDeployment'
+          description: ok
+      summary: CompleteDeployment is the CI completion hook that flips a queued git
+        deployment to live (or error) once CI has synced the built site to S3.
       tags:
       - sites
       x-app: projects
