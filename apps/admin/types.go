@@ -175,6 +175,18 @@ type usageData struct {
 	Totals    usageTotals      `json:"totals"`
 	Series    []usagePoint     `json:"series"`
 	ByProduct []usageByProduct `json:"byProduct"`
+	// Sources names a money read that did NOT answer, on the SAME core.SourceStatus
+	// channel /overview, /revenue and /finance already report freshness on — one
+	// vocabulary for one fact, rather than a second spelling invented here.
+	//
+	// It is ADDITIVE and absent when every read answered, so a healthy response is
+	// byte-identical to what this endpoint has always sent and no consumer changes to
+	// keep working. What changes is that `spendCents: 0` is now a REAL zero unless
+	// this says otherwise: a fleet that spent nothing and a fleet whose ledger could
+	// not be reached were the same three bytes on the wire, and the second is what
+	// production was sending. Rows counts the orgs that DID answer, so the reader can
+	// see how much of the fleet the total actually covers.
+	Sources []core.SourceStatus `json:"sources,omitempty"`
 }
 
 // usageIn is the GET /v1/admin/usage query.
