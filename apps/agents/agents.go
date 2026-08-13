@@ -62,7 +62,22 @@ import (
 
 // agentTracer emits the per-run/per-step agent spans (shipped over ZAP to
 // o11y). A run is one root span; each step nests an LLM GenAI client span.
-var agentTracer = otel.Tracer("hanzo.ai/cloud/agents")
+//
+// IT IS A FUNCTION, AND IT HAS TO BE. As a package-level `var` it called
+// otel.Tracer at INIT — before serve.go installs the process-global provider —
+// and pinned a tracer from the provider that existed beforehand. Every
+// agent.run, agent.step and agent.tool span was then recorded by a tracer whose
+// provider never became the real one, so they were built and went nowhere:
+// event.span carried 700+ `chat {model}` spans and, over the same days, ZERO
+// beginning with `agent`. Resolving per call always yields the CURRENT global
+// provider, so no ordering between package init and telemetry install can
+// silence this again.
+//
+// The ai module hit the same thing and fixed it by capturing the tracer
+// immediately AFTER installing the provider (object/telemetry.go
+// captureGenAITracer, via AdoptHostTracerProvider). That works and needs a
+// caller to remember the order; this needs nothing.
+func agentTracer() trace.Tracer { return otel.Tracer("hanzo.ai/cloud/agents") }
 
 // nameRE constrains an agent's org-unique name at the create boundary — the one
 // place a name is written. Path addressing (Store.Resolve, parameterized) accepts
@@ -911,7 +926,7 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input string, history []types.ChatMessage, actor, requestID, clientIP string) (Run, error) {
 	// Root span per run — the whole trace (balance gate → step → LLM call)
 	// nests under it, shipped over ZAP to o11y.
-	ctx, span := agentTracer.Start(ctx, "agent.run "+a.Name, trace.WithSpanKind(trace.SpanKindInternal))
+	ctx, span := agentTracer().Start(ctx, "agent.run "+a.Name, trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 
 	// The run's NAME, minted before the work rather than after it.
@@ -1048,7 +1063,7 @@ const (
 // tool dispatch runs as the principal the run is charged to.
 func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Agent, input string, history []types.ChatMessage, fallback, runID string) Run {
 	// Child step span; the AI client opens its own GenAI span nested under this.
-	ctx, span := agentTracer.Start(ctx, "agent.step", trace.WithSpanKind(trace.SpanKindInternal))
+	ctx, span := agentTracer().Start(ctx, "agent.step", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 	// The run's name on every span it produces, not only on the root. A trace
 	// query that finds a slow LLM call or a failing tool should answer "which run"
