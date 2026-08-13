@@ -61,7 +61,14 @@ var Apps = []App{
 	// route the three and nothing more. They were in manifest/router_test.go's
 	// `unreachable` ledger until now — a relying party's FIRST call, reaching no app.
 	{Name: "iam", Prefixes: []string{"/.well-known/jwks", "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration", "/login/oauth", "/v1/iam"}},
-	{Name: "base", Prefixes: []string{"/rest/v1", "/v1/base", "/v1/collections", "/v1/waitlist"}},
+	// base CLAIMS /rest/v1 and serves nothing under it, deliberately. That prefix
+	// was the PostgREST-compatible dialect of the retired /v1/collections forward,
+	// and the pinned hanzoai/base implements no such surface — only the separate
+	// orchestrator deployment ever did. Unclaiming it would not make it 404: a path
+	// outside /v1 that no app owns falls to the console catch-all and answers 200
+	// with a 378KB HTML shell, so a JSON client would parse a web page. Claimed, it
+	// reaches base and gets base's own JSON 404, which is the true answer.
+	{Name: "base", Prefixes: []string{"/rest/v1", "/v1/base", "/v1/waitlist"}},
 	// /v1/summary is the PUBLIC platform status document (apps/o11y/summary.go),
 	// the outward projection of the fleet health probes o11y already runs. It has
 	// to be listed here or the host never routes it to this app and it falls to
