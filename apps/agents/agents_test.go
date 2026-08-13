@@ -38,14 +38,19 @@ type fakeAI struct {
 	// string and does not quietly become true when the shape changes.
 	gotPrompt string
 	gotMsgs   []types.ChatMessage
-	content   string
-	err       error
+	// gotActor is WHO the completion was made for. A run states it on the
+	// request because there is no live request the meter could read one off, so
+	// this is the only place a test can see whether the person survived.
+	gotActor string
+	content  string
+	err      error
 }
 
 func (f *fakeAI) ChatCompletion(_ context.Context, req *types.ChatRequest) (*types.ChatResponse, error) {
 	f.gotModel = req.Model
 	f.gotPrompt = req.Text()
 	f.gotMsgs = req.Messages
+	f.gotActor = req.Actor
 	if f.err != nil {
 		return nil, f.err
 	}

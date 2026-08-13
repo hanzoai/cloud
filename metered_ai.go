@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
 )
@@ -98,6 +99,7 @@ type meteredAIStream struct{ *meteredAI }
 // before a token is spent, debit the real usage the terminal frame reports — so
 // streaming can never be a cheaper way to buy inference.
 func (m *meteredAIStream) ChatStream(ctx context.Context, req *types.ChatRequest, emit func(string) error) (*types.ChatResponse, error) {
+	req = named(ctx, req)
 	payer := billedOrg(req.BillingOrg, req.Org)
 	h, err := m.reserve(ctx, payer, req.Project, atMost(req))
 	if err != nil {
@@ -128,6 +130,7 @@ func (m *meteredAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) 
 	// admin ledger. The inner AI call still receives req (req.Org, the EFFECTIVE org)
 	// for its data scope (BYO keys, RAG). billedOrg falls back to req.Org when the
 	// caller did not split them (home==effective for a normal caller).
+	req = named(ctx, req)
 	payer := billedOrg(req.BillingOrg, req.Org)
 	h, err := m.reserve(ctx, payer, req.Project, atMost(req))
 	if err != nil {
@@ -161,6 +164,11 @@ func (m *meteredAI) settle(payer string, req *types.ChatRequest, resp *types.Cha
 		PromptTokens:     resp.PromptTokens,
 		CompletionTokens: resp.CompletionTokens,
 		TotalTokens:      total,
+		// WHO the debit was made for. Usage.Actor is the audit half of the
+		// ledger's identity and it has always been empty on this path, so a
+		// debit could be traced to an org and never to a person. It is audit
+		// only: the account charged is `payer`, above, and reads nothing here.
+		Actor: req.Actor,
 		// The run that caused this charge, when a run did. It is the correlation
 		// id, never the idempotency key: a tool loop settles once per ROUND, and
 		// every round of one run carries the same value here on purpose — that is
@@ -191,6 +199,39 @@ func (m *meteredAI) Embed(ctx context.Context, req *types.EmbedRequest) ([][]flo
 	}
 	m.record(payer, req.Project, req.Model, metering.Usage{TotalTokens: toks}, toks, h)
 	return vecs, nil
+}
+
+// named answers WHO an inference is for, on the request that travels.
+//
+// A request that STATES an actor keeps it, and that ordering is the whole rule: a
+// run executes on a detached context long after the asker's HTTP request is gone,
+// so the runner carries the person it acts for and nothing here may overwrite
+// them. Every other caller is a live one, and the validated identity the boundary
+// already minted IS the answer — no second header, no second lookup, and nothing
+// a caller sends can name anyone but themselves.
+//
+// It is here because this is the ONE wrapper every inference passes through, so
+// an inference cannot be made anonymous by a call site forgetting a field — the
+// same reason the gate and the debit live here rather than at twelve callers.
+//
+// It returns a COPY when it has something to add: the caller built the value and
+// may reuse it, so the actor is stated on the request that goes to the gateway,
+// never written back into theirs.
+func named(ctx context.Context, req *types.ChatRequest) *types.ChatRequest {
+	if req == nil || strings.TrimSpace(req.Actor) != "" {
+		return req
+	}
+	c, ok := Request(ctx)
+	if !ok {
+		return req // no request behind this call, and no person to invent
+	}
+	actor := principal.Actor(c)
+	if actor == "" {
+		return req
+	}
+	r := *req
+	r.Actor = actor
+	return &r
 }
 
 // billedOrg resolves the org whose ledger PAYS for an inference: the caller's HOME
