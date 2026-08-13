@@ -61,6 +61,7 @@ import (
 	"github.com/hanzoai/cloud/apps/base"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/hanzoai/cloud/internal/shorten"
@@ -114,6 +115,14 @@ type state struct {
 	// see provisionSpace — a failure NEVER fails project creation. nil disables the
 	// side effect entirely (space is provisioned lazily on first real use).
 	ensureSpace func(ctx context.Context, org string) error
+	// forge resolves the deployment's forge client, through which a published
+	// project's source is world-readable exactly when the project is
+	// (visibility.go). It reads the machine credential from KMS on first use and
+	// re-reads it as it rotates, so nothing here holds a secret.
+	forge *forge.Source
+	// queue runs one visibility reconcile at a time per project, so two writes
+	// cannot land on the forge out of order — see visibility.go.
+	queue *queue
 }
 
 // mounted is the active service so Shutdown can release the store. The unified
@@ -268,6 +277,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		bill:        cloud.NewResourceMeter(deps, hostingProvider),
 		apex:        environ.Or("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
 		ensureSpace: base.EnsureSpace,                            // wired-by-default Base data space (fail-soft).
+		forge:       &forge.Source{},                             // the credential is read from KMS on first publish, not here.
+		queue:       &queue{},
 	}}
 	mounted = s
 
@@ -322,6 +333,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// unreachable Cloudflare cannot delay the mount, and fail-soft — it only ever
 	// logs.
 	go s.State.cf.AssertHTMLPassthrough(context.Background())
+
+	// Nothing a publisher took private may be readable because this process was
+	// away when they did it (visibility.go). Off-thread and read-only in the
+	// steady state, so a forge that is down delays no mount and changes nothing.
+	go sweep(s, context.Background())
 
 	b.Log.Info("projects mounted", "bucket", s.State.blob.bucket, "s3", s.State.blob.configured(),
 		"ai", s.State.ai != nil, "apex", s.State.apex, "billing", s.State.bill.Enabled(), "brand", deps.Brand)
