@@ -13,9 +13,9 @@ package finance
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
-	"github.com/hanzoai/ai/funding"
 	"context"
 	"errors"
+	"github.com/hanzoai/ai/funding"
 	"time"
 
 	"github.com/hanzoai/cloud"

@@ -58,8 +58,8 @@ const (
 
 // Canonical cloud→ring product-API routes.
 const (
-	pathDeploySmartWallet = "/v1/wallets/%s/smart-wallet" // %s = ring MPC wallet id
-	pathGetSmartWallet    = "/v1/smart-wallets/%s"        // %s = smart wallet id
+	pathDeploySmartWallet = "/v1/wallets/%s/smart-wallet"  // %s = ring MPC wallet id
+	pathGetSmartWallet    = "/v1/smart-wallets/%s"         // %s = smart wallet id
 	pathProposeSafeTx     = "/v1/smart-wallets/%s/propose" // %s = smart wallet id
 )
 

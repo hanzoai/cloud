@@ -32,9 +32,9 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/clients"
 	"github.com/zap-proto/zip"
 )
 

@@ -59,12 +59,12 @@ func (p policyRow) validate() error {
 type gateReason string
 
 const (
-	dmOpenWildcard      gateReason = "dmOpenWildcard"
-	dmAllowlisted       gateReason = "dmAllowlisted"
-	dmPaired            gateReason = "dmPaired"
+	dmOpenWildcard gateReason = "dmOpenWildcard"
+	dmAllowlisted  gateReason = "dmAllowlisted"
+	dmPaired       gateReason = "dmPaired"
 	// dmInstaller: admitted as the person who installed this workspace, before
 	// the org has an owner. See dmGate.
-	dmInstaller gateReason = "dmInstaller"
+	dmInstaller         gateReason = "dmInstaller"
 	dmNotAllowlisted    gateReason = "dmNotAllowlisted"
 	dmPairingRequired   gateReason = "dmPairingRequired"
 	groupOpen           gateReason = "groupOpen"

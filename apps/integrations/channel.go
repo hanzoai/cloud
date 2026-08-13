@@ -187,7 +187,6 @@ func (l *orgLimiter) release(org string) {
 
 // ── the ONE agent brain (shared by every platform + its @mention/DM/slash) ──
 
-
 // channelReply is the ONE agent brain, shared by every platform's @mention/DM/slash
 // path. It resolves the caller's linked Hanzo identity and either runs the agent ON
 // BEHALF OF them IN-PROCESS (RunOnBehalf — no gateway hop) returning the model's
