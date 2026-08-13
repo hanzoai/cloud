@@ -18,7 +18,7 @@
   "paths": {
     "/v1/legal/documents": {
       "get": {
-        "operationId": "get_v1_legal_documents",
+        "operationId": "get_legal_documents",
         "summary": "Returns the org's generated documents, newest first, WITHOUT their rendered content — fetch one document to read its body.",
         "description": "Returns the org's generated documents, newest first, WITHOUT\ntheir rendered content — fetch one document to read its body.\n\nThe response is marked no-store: these records name the counterparties an org is\ncontracting with, and must not sit in a shared cache.",
         "tags": [
@@ -49,7 +49,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_legal_documents",
+        "operationId": "post_legal_documents",
         "summary": "Renders a document from a template and the caller's own merge data, seals it in the org's store, and returns it with its rendered body.",
         "description": "Renders a document from a template and the caller's own\nmerge data, seals it in the org's store, and returns it with its rendered body.\n\nThe render is PURE and deterministic — no clock, no I/O — so the same template\nversion and the same data always produce identical bytes, which is what makes a\ngenerated contract reproducible. It fails CLOSED on a missing merge field: there\nis no blank-filled contract, only a 400 naming the fields that were absent. When\nthe template is counsel-review the rendered body opens with the counsel notice,\nwhich no caller can suppress.\n\nThe document is a DRAFT. Hanzo Legal manages documents; it does not give legal\nadvice and does not determine that a document is valid or sufficient.",
         "tags": [
@@ -88,7 +88,7 @@
     },
     "/v1/legal/documents/{id}": {
       "get": {
-        "operationId": "get_v1_legal_documents_by_id",
+        "operationId": "get_legal_documents_by_id",
         "summary": "Returns one of the org's documents WITH its rendered body.",
         "description": "Returns one of the org's documents WITH its rendered body. 404\nwhen the org has no document with that id — a document is never readable across\norgs.\n\nThe response is marked no-store: the body is contract text, sealed at rest and\nreturned only to the owning org, and must not sit in a shared cache.",
         "tags": [
@@ -121,7 +121,7 @@
     },
     "/v1/legal/documents/{id}/sign": {
       "post": {
-        "operationId": "post_v1_legal_documents_by_id_sign",
+        "operationId": "post_legal_documents_by_id_sign",
         "summary": "Opens an e-signature request over one document and moves it to out_for_signature, returning the provider's reference for the request.",
         "description": "Opens an e-signature request over one document and moves it\nto out_for_signature, returning the provider's reference for the request.\n\nThe provider is whatever this deployment has wired. The honest default is\n\"manual\": the request is recorded and the org fulfils it out of band — nothing\nhere fabricates a signature, and the stub never reports itself complete.",
         "tags": [
@@ -174,7 +174,7 @@
     },
     "/v1/legal/documents/{id}/sign/complete": {
       "post": {
-        "operationId": "post_v1_legal_documents_by_id_sign_complete",
+        "operationId": "post_legal_documents_by_id_sign_complete",
         "summary": "Record that a generated document's signature request completed",
         "description": "Records completion of the signature request opened over a generated document and answers the document with a `signed` flag.\n\nThe e-sign provider's own status is consulted FIRST and is the default answer; an explicit `signed` field in the body overrides it. That override is the whole point: the default `manual` provider never self-completes, so a reviewer (or a real provider's webhook) is what moves the document. A completion flips the document to `signed`, stamps `signedAt`, and writes a `legal.document.signed` audit event; a provider still reporting incomplete answers 200 with the document unchanged, so the call is safe to repeat and never fabricates a signature.\n\nOrg-scoped and fails closed: a validated principal is required (403 without one), the document is read under the caller's OWN org so another tenant's id is a 404, a document with no open signature request is a 400, and a provider whose status call errors is a 502.",
         "tags": [
@@ -194,7 +194,7 @@
     },
     "/v1/legal/filings": {
       "get": {
-        "operationId": "get_v1_legal_filings",
+        "operationId": "get_legal_filings",
         "summary": "Returns the org's filing records, newest first — which documents were filed where, through which provider, and what the filing's honest status is.",
         "description": "Returns the org's filing records, newest first — which documents\nwere filed where, through which provider, and what the filing's honest status is.",
         "tags": [
@@ -225,7 +225,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_legal_filings",
+        "operationId": "post_legal_filings",
         "summary": "Records a filing of one or more of the org's documents with a state or agency, and returns the tracking record.",
         "description": "Records a filing of one or more of the org's documents with a\nstate or agency, and returns the tracking record.\n\nIt is a TRACKING record, not an autonomous filing. With no filing partner wired\nthe honest status is \"manual\" and the note says so: the documents were generated\nfor signature, and the org files them through its registered agent. Nothing here\ninvents a filing id it does not have.\n\nEvery document id must belong to the caller's org; one that does not is a 404\nnaming it, so a filing can never reach across tenants.",
         "tags": [
@@ -263,7 +263,7 @@
     },
     "/v1/legal/health": {
       "get": {
-        "operationId": "get_v1_legal_health",
+        "operationId": "get_legal_health",
         "summary": "Reports that the legal subsystem is serving and how many built-in templates its catalog carries.",
         "description": "Reports that the legal subsystem is serving and how many built-in\ntemplates its catalog carries. It reads no tenant, so a liveness prober that\nsends no principal is answered rather than refused.",
         "tags": [
@@ -285,7 +285,7 @@
     },
     "/v1/legal/templates": {
       "get": {
-        "operationId": "get_v1_legal_templates",
+        "operationId": "get_legal_templates",
         "summary": "Returns the org's effective template catalog: every built-in template, with any the org has overridden replaced by its own latest version.",
         "description": "Returns the org's effective template catalog: every built-in\ntemplate, with any the org has overridden replaced by its own latest version.\n\nThe listing carries each template's metadata and its declared MERGE FIELDS — the\nkeys a document generation must supply — but never the template bodies; fetch one\ntemplate to get its body. Templates in the formation and equity categories are\nmarked counselReview: every document rendered from them carries a counsel notice,\nand that posture cannot be dropped by an override.",
         "tags": [
@@ -307,7 +307,7 @@
     },
     "/v1/legal/templates/{id}": {
       "get": {
-        "operationId": "get_v1_legal_templates_by_id",
+        "operationId": "get_legal_templates_by_id",
         "summary": "Returns one template resolved for the caller's org — the org's own override if it has saved one, else the built-in — with its full text/template body and its declared merge fields.",
         "description": "Returns one template resolved for the caller's org — the org's\nown override if it has saved one, else the built-in — with its full text/template\nbody and its declared merge fields. 404 when neither exists.",
         "tags": [
@@ -338,7 +338,7 @@
         }
       },
       "put": {
-        "operationId": "put_v1_legal_templates_by_id",
+        "operationId": "put_legal_templates_by_id",
         "summary": "Saves the org's own version of a template — a custom NDA, a house MSA — and returns it with its new version number.",
         "description": "Saves the org's own version of a template — a custom\nNDA, a house MSA — and returns it with its new version number. It takes effect\nfor that org only; other orgs keep the built-in.\n\nTwo boundaries cannot be crossed here. Overriding a built-in INHERITS its\ncategory and its counsel-review posture, which can be raised but never dropped;\nand a formation or equity template is counsel-review whatever the caller sends,\nso no org can generate a securities-class document without the notice.\n\nThe body is validated on save, not at generation: a template that references an\nUNDECLARED merge field is refused with 400 rather than stored and rendered blank\ninto a contract months later.",
         "tags": [

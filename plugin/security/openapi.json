@@ -18,7 +18,7 @@
   "paths": {
     "/v1/security/findings": {
       "get": {
-        "operationId": "get_v1_security_findings",
+        "operationId": "get_security_findings",
         "summary": "Is the org's findings — rule, severity, path, line, masked preview and fingerprint — newest first, across scans or within one.",
         "description": "Is the org's findings — rule, severity, path, line, masked preview\nand fingerprint — newest first, across scans or within one.\n\nA minSeverity outside critical|high|medium|low is refused rather than quietly\nignored, so a filter typo cannot read as \"no findings\". Strictly org-scoped, and\na caller with no validated org is refused.",
         "tags": [
@@ -69,7 +69,7 @@
     },
     "/v1/security/findings/{id}": {
       "get": {
-        "operationId": "get_v1_security_findings_by_id",
+        "operationId": "get_security_findings_by_id",
         "summary": "Returns a single finding: which rule fired, where (path and line), the masked preview and the SHA-256 fingerprint of the secret — the raw secret is not stored and cannot be read back.",
         "description": "Returns a single finding: which rule fired, where (path and line),\nthe masked preview and the SHA-256 fingerprint of the secret — the raw secret is\nnot stored and cannot be read back.\n\nScoped to the caller's org, and a finding belonging to another org is the same\n404 as one that never existed.",
         "tags": [
@@ -102,7 +102,7 @@
     },
     "/v1/security/health": {
       "get": {
-        "operationId": "get_v1_security_health",
+        "operationId": "get_security_health",
         "summary": "Reports that the scanning subsystem is serving and how many secret-detection rules the engine holds.",
         "description": "Reports that the scanning subsystem is serving and how many\nsecret-detection rules the engine holds.\n\nIt has no external dependency — the answer is ok whenever the findings store\nopened — so it measures this process rather than anything downstream. It reads\nno tenant: a prober that sends no principal is answered, not refused.",
         "tags": [
@@ -124,7 +124,7 @@
     },
     "/v1/security/rules": {
       "get": {
-        "operationId": "get_v1_security_rules",
+        "operationId": "get_security_rules",
         "summary": "Is the secret-detection catalog the engine scans with.",
         "description": "Is the secret-detection catalog the engine scans with.\n\nIt returns every rule a scan can fire — the id, name and severity a finding\ncites — so a caller can render or triage results without hard-coding the\ncatalog. It is the same for everyone and discloses nothing tenant-specific, so\nit carries no org scope.",
         "tags": [
@@ -146,7 +146,7 @@
     },
     "/v1/security/scans": {
       "get": {
-        "operationId": "get_v1_security_scans",
+        "operationId": "get_security_scans",
         "summary": "Is the org's scan history, newest first, each as the same summary the submission answered — files read, findings fired, tally by severity.",
         "description": "Is the org's scan history, newest first, each as the same summary the\nsubmission answered — files read, findings fired, tally by severity.\n\nStrictly org-scoped: a caller only ever sees its own scans, and one with no\nvalidated org is refused.",
         "tags": [
@@ -177,7 +177,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_security_scans",
+        "operationId": "post_security_scans",
         "summary": "Runs the detection engine over a batch of files and answers 201 with the scan summary: how many files were read, how many findings fired, and the tally by severity.",
         "description": "Runs the detection engine over a batch of files and answers 201 with\nthe scan summary: how many files were read, how many findings fired, and the\ntally by severity.\n\nTHE SUBMITTED CONTENT IS NEVER STORED. It is scanned in memory; what persists is\nthe finding — its rule, its path and line, a MASKED preview (first and last\ncharacters kept, the middle starred) and the SHA-256 fingerprint of the raw\nsecret. The fingerprint is what makes the same secret recognisable across scans\nand after rotation without the secret ever being written down.\n\nIt requires a validated org, which scopes the stored scan and every finding on\nit; a caller with no org is refused. Bounded at 500 files and 8 MiB of total\ncontent per submission — split a larger tree across scans. One scan is one\nmetered unit, and the scan is recorded in the audit log with its tally, never\nwith its findings.",
         "tags": [
@@ -209,7 +209,7 @@
     },
     "/v1/security/scans/{id}": {
       "get": {
-        "operationId": "get_v1_security_scans_by_id",
+        "operationId": "get_security_scans_by_id",
         "summary": "Returns one scan together with every finding on it, so the detail view is one round-trip rather than a list call per scan.",
         "description": "Returns one scan together with every finding on it, so the detail view\nis one round-trip rather than a list call per scan. The findings carry masked\npreviews and fingerprints, never secrets.\n\nScoped to the caller's org: a scan id belonging to another org is the same 404\nas an id that never existed, so a ruleset learns nothing about what exists\nelsewhere. No validated org is refused.",
         "tags": [

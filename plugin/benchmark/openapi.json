@@ -18,7 +18,7 @@
   "paths": {
     "/v1/benchmark/catalog": {
       "get": {
-        "operationId": "get_v1_benchmark_catalog",
+        "operationId": "get_benchmark_catalog",
         "summary": "Is the canonical public benchmarks this arena runs — the id, title, axis, item count and upstream source of each, with native marking the ones the standardized harness runs today; the rest are registered and adapter-pending.",
         "description": "Is the canonical public benchmarks this arena runs — the id, title, axis,\nitem count and upstream source of each, with native marking the ones the\nstandardized harness runs today; the rest are registered and adapter-pending.\n\nThese ids are the vocabulary the rest of the surface takes: a run names them, and\nthe leaderboard and compare read them from ?benchmark=. The catalog is\ndeployment-wide and identical for every caller — there is no tenant in it.",
         "tags": [
@@ -40,7 +40,7 @@
     },
     "/v1/benchmark/compare": {
       "get": {
-        "operationId": "get_v1_benchmark_compare",
+        "operationId": "get_benchmark_compare",
         "summary": "Is the ONLY valid arm-vs-arm test: it pairs the two models on the items BOTH completed, and answers rescue and damage counts with an exact-McNemar p.",
         "description": "Is the ONLY valid arm-vs-arm test: it pairs the two models on the items\nBOTH completed, and answers rescue and damage counts with an exact-McNemar p.\n\nPairing is what prevents the subset artifact — comparing one model's easy subset\nagainst another's full run — so n_common, not either arm's own coverage, is the\nnumber to read this by.\n\nBoth a and b are required. The benchmark defaults to gpqa_diamond.",
         "tags": [
@@ -91,7 +91,7 @@
     },
     "/v1/benchmark/leaderboard": {
       "get": {
-        "operationId": "get_v1_benchmark_leaderboard",
+        "operationId": "get_benchmark_leaderboard",
         "summary": "Answers one row per model for the benchmark named — what our own harness measured, beside what the vendor claims, and the gap between them.",
         "description": "Answers one row per model for the benchmark named — what our own\nharness measured, beside what the vendor claims, and the gap between them.\n\nThe gap is the point of the arena; provider-reported claims have run materially\nhot against one standardized harness.\n\nThe two planes are NEVER blended, and that is the rule to read the rows by: a\nmodel we have measured but no vendor has claimed for shows published null, a\nmodel with only a claim shows measured null, and gap exists only where both do.\n\nn is coverage and is not decoration: two measured numbers taken over different\nitem counts are not comparable, so read the row's n before reading its accuracy.",
         "tags": [
@@ -124,7 +124,7 @@
     },
     "/v1/benchmark/presets": {
       "get": {
-        "operationId": "get_v1_benchmark_presets",
+        "operationId": "get_benchmark_presets",
         "summary": "Are the router blends available to compose from — a named set of model arms, the rank they escalate through and the panel width that bounds fan-out — each served by the model layer as enso-\u003cname\u003e.",
         "description": "Are the router blends available to compose from — a named set of model\narms, the rank they escalate through and the panel width that bounds fan-out —\neach served by the model layer as enso-\u003cname\u003e.\n\nToday it answers exactly one row, the reference blend: a worked example written\nin models we name, published as an example of the FORM. It is deliberately not\nthe composition of a Hanzo-served tier — the tier name exists to abstract that —\nso fork it and swap arms by what the leaderboard measures on your own tasks\nrather than reading it as a disclosure.",
         "tags": [
@@ -144,7 +144,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_benchmark_presets",
+        "operationId": "post_benchmark_presets",
         "summary": "Validates a router blend — its name, its arms, the rank they escalate through and the panel fan-out width — and answers 202 with the preset and the enso-\u003cname\u003e it would be served as.",
         "description": "Validates a router blend — its name, its arms, the rank they escalate\nthrough and the panel fan-out width — and answers 202 with the preset and the\nenso-\u003cname\u003e it would be served as.\n\nIt VALIDATES AND ECHOES: the definition is not persisted yet, so a preset\naccepted here is not one the model layer will resolve. Treat the response as a\ncheck on the blend, not a promise to serve it.\n\nDefaults fill the shape rather than refusing it: an omitted rank becomes the arms\nin declared order and a panel below 1 becomes 1. The one real invariant is that\nrank may only name arms the blend declares — the same rule the model catalog\nenforces — and a rank naming anything else is a 422 listing exactly which entries\nwere undeclared. A blend with no name or no arms is a 400.",
         "tags": [
@@ -176,7 +176,7 @@
     },
     "/v1/benchmark/runs": {
       "post": {
-        "operationId": "post_v1_benchmark_runs",
+        "operationId": "post_benchmark_runs",
         "summary": "Admits and queues a benchmark run against a model or your own endpoint, and answers 202 with the receipt.",
         "description": "Admits and queues a benchmark run against a model or your own endpoint, and\nanswers 202 with the receipt.\n\nIt is an ADMISSION, not a result: the work is done by the harness afterwards and\nthe numbers appear on the leaderboard as it completes them.\n\nCost is bounded by the store rather than by a quota: attempts are append-only and\nkeyed by (benchmark, item, model), so an (item, model) pair already attempted is\nskipped instead of re-spent, and re-queuing the same run is close to free.\n\nValidation is up front and total — a request with neither model nor endpoint is a\n400, one with no benchmarks is a 400, and any benchmark id outside the catalog is\na 422 naming exactly which ids were unknown, so a typo never silently queues a\npartial run.",
         "tags": [
