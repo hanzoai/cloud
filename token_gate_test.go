@@ -1,6 +1,9 @@
 package cloud_test
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"sort"
 	"strings"
 	"testing"
@@ -17,9 +20,15 @@ import (
 // every machine principal into a human. apps/team/token is the live example,
 // pinned below as condemned, together with every file that still reads it.
 //
-// So the raw material is pinned. Outside apps/iam — the authority — no app
-// file imports what a bearer is hand-rolled from (crypto/hmac, a JWT library)
-// and no file joins the condemned package, except the entries below. Exactly
+// So the raw material is pinned, and it is pinned TWO ways, because a file can
+// depend on the second authority without naming it. Outside apps/iam — the
+// authority — no app file imports what a bearer is hand-rolled from
+// (crypto/hmac, a JWT library), no file joins the condemned package, and no file
+// calls identity.hs256, the seam the HS256 arm is reached through. The third
+// selector is not symmetry: transactor.go imports nothing condemned and still
+// cannot compile without the arm, so an import-only pin reported the reader set
+// as one file when it was two, and the deletion this map exists to drive would
+// have gone green while the data plane lost its only credential lane. Exactly
 // two HMAC uses are legitimate in an app and every entry is one of them:
 // speaking a FOREIGN service's own auth wire, or sealing a non-identity value
 // against tampering. Neither mints anything a Hanzo surface accepts. Test
@@ -33,11 +42,13 @@ var allowedTokenPrimitives = map[string]string{
 		"cutover deletes this package (the session lane reads the hanzo_iam_token the browser already " +
 		"holds, the workspace grant moves behind the authority). Do not add readers — the entries below " +
 		"are the complete set and it only shrinks.",
-	"apps/team/account.go": "the ONE reader inside apps/team, and the whole of the dual read: identity.who " +
-		"resolves an IAM access token first and falls back to this package's decode, so every other team " +
-		"surface resolves a caller and touches no algorithm. The fallback arm — and this import with it — is " +
-		"deleted when login mints IAM-only and front/love/analytics-collector verify IAM. Four readers " +
-		"(collabws, transactor, typed, and the files plane's helpers) left the set when the seam landed.\n\n" +
+	"apps/team/account.go": "where the HS256 arm is DEFINED (identity.hs256), and one of its two callers. " +
+		"identity.who resolves an IAM access token first and falls back to that decode, so every other team " +
+		"surface resolves a caller and touches no algorithm. collabws, typed and the files plane's helpers " +
+		"left the reader set for good when the seam landed — they authorize against the membership rows and " +
+		"work on either lane. The transactor only stopped IMPORTING; it still calls the arm, and it is the " +
+		"deletion's real blocker (see its entry). Deleting the arm here is the LAST step, not the first: it " +
+		"waits on login minting IAM-only and on front/love/analytics-collector verifying IAM.\n\n" +
 		"IT GATES AUDIENCE, and the divergence is deliberate. THIS file's verification is the boundary's " +
 		"(cloud.NewTokenValidator), which does not gate `aud` — correctly, for an API door: a signature from " +
 		"a trusted issuer already proves IAM minted the token for one of its own apps, and the app-registry " +
@@ -47,6 +58,18 @@ var allowedTokenPrimitives = map[string]string{
 		"the door (identity.forThisDeployment; shape pinned by TestSessionAudienceIsNamedNotPatterned, " +
 		"behaviour by TestIAMLaneRefusesAForeignAudience). A second session-issuing surface owes the same " +
 		"gate — verification says IAM minted it, never that it was minted for you.",
+	"apps/team/transactor.go": "THE SECOND READER, reached through the seam rather than an import — it calls " +
+		"identity.hs256 on the credential in its path segment — and it is what actually blocks the deletion. " +
+		"Cut the arm and this is the one file left that will not compile.\n\n" +
+		"IT HAS NO IAM LANE BY DECISION. A browser can put a credential on a WebSocket in two places. The URL " +
+		"is where the HS256 workspace token already sits, survivable only because that token names one " +
+		"workspace for twelve hours; an estate-wide IAM bearer in a path that proxies and access logs record " +
+		"is not. The cookie is worse here than anywhere else: a WebSocket is EXEMPT FROM CORS, so a foreign " +
+		"page may open one and read every frame, leaving an Origin check as the only access control. The lane " +
+		"that works is the sibling socket's — upgrade first, take the credential in an in-band Auth frame, " +
+		"authorize the workspace the client NAMES through admit — and the client that must send that frame is " +
+		"the team front (hanzoai/team, live at team.hanzo.ai), a different repo. So this entry does not shrink " +
+		"from inside cloud, and neither does the one above it.",
 	"apps/analytics/team.go": "reader of the condemned team token — the ingest trust order already resolves " +
 		"a validated IAM bearer ahead of it (eventTenant step 1), so this arm dies with the cutover and " +
 		"needs no IAM lane of its own.",
@@ -100,6 +123,30 @@ var tokenPrimitives = []string{
 	"github.com/hanzoai/cloud/apps/team/token",
 }
 
+// callsHS256 reports whether path CALLS identity.hs256 — the HS256 arm reached
+// through the seam. A caller imports nothing condemned, so this is the only way
+// the pin sees it; the definition alone does not count, or every file would.
+func callsHS256(t *testing.T, path string) bool {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		t.Errorf("parse %s: %v", path, err)
+		return false
+	}
+	found := false
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "hs256" {
+			found = true
+		}
+		return true
+	})
+	return found
+}
+
 func TestOnlyIAMMintsTokens(t *testing.T) {
 	found := map[string]string{}
 	for name, ff := range appFiles(t) {
@@ -113,6 +160,11 @@ func TestOnlyIAMMintsTokens(t *testing.T) {
 						found[f] = imp
 					}
 				}
+			}
+			// The seam, checked second so a file that also imports keeps the
+			// sharper label. This is what makes the reader set complete.
+			if _, ok := found[f]; !ok && callsHS256(t, f) {
+				found[f] = "identity.hs256 (the seam, not an import)"
 			}
 		}
 	}
