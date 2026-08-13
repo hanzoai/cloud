@@ -102,7 +102,7 @@ type Blueprint struct {
 	Sections   []Section     `json:"sections,omitempty"`
 	Steps      []JourneyStep `json:"steps"`
 	Strategies []Strategy    `json:"strategies,omitempty"`
-	Templates  []Page    `json:"templates,omitempty"`
+	Templates  []Page        `json:"templates,omitempty"`
 }
 
 // Bounds on the corpus/collections so an org-custom or admin-authored blueprint can't

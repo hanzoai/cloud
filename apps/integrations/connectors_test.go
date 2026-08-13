@@ -182,18 +182,18 @@ type startResp struct {
 }
 
 type pollResp struct {
-	Status    string    `json:"status"`
-	Interval  int64     `json:"interval"`
+	Status     string    `json:"status"`
+	Interval   int64     `json:"interval"`
 	Connection *connView `json:"connector"`
 }
 
 type credResp struct {
-	Connected bool      `json:"connected"`
+	Connected  bool      `json:"connected"`
 	Connection *connView `json:"connector"`
 }
 
 type refreshResp struct {
-	Refreshed bool      `json:"refreshed"`
+	Refreshed  bool      `json:"refreshed"`
 	Connection *connView `json:"connector"`
 }
 
