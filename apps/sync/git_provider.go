@@ -10,20 +10,26 @@ import (
 	"github.com/hanzoai/cloud/apps/integrations"
 )
 
-// git_provider.go is the FIRST sync provider: GitHub/GitLab ⇆ Hanzo Git (the NATIVE
-// /v1/git plane in this same binary). It carries no git logic of its own — Reconcile
-// composes the native git object-plane seams (cloud.ImportGitRepo / cloud.InboundGitSync
-// / cloud.EnsureGitMirror, which clients/git registers at Mount), so the native git
-// store is the ONE git store and no byte transits an external git host:
+// git_provider.go is the FIRST sync provider: GitHub/GitLab ⇆ the FORGE
+// (git.hanzo.ai, where this estate's repositories live). It carries no git logic
+// of its own — Reconcile composes the git seams (cloud.InboundGitSync /
+// cloud.ImportGitRepo / cloud.EnsureGitMirror), which importer.go answers
+// against the forge. The forge is the ONE git store, and it is CANONICAL:
 //
-//   - INBOUND (a source push): cloud.InboundGitSync advances the matching branch
-//     fast-forward only — a diverged native ref is a Conflict, never overwritten (the
-//     split-brain guard, enforced by git itself, native preserved).
-//   - RECONCILE (a manual run / initial sync): for a pulling direction, cloud.ImportGitRepo
-//     fast-forward mirrors every branch of the upstream INTO native (and, when the sync
-//     also pushes, registers the outbound native→upstream mirror so the native push
-//     lifecycle propagates every later commit back); for a push-only direction,
-//     cloud.EnsureGitMirror declares that outbound target without importing.
+//   - INBOUND (a source push): cloud.InboundGitSync advances the matching ref
+//     fast-forward only — a diverged forge ref is a Conflict, never overwritten
+//     (the split-brain guard, enforced by git itself, the forge preserved).
+//   - RECONCILE (a manual run / initial sync): for a pulling direction,
+//     cloud.ImportGitRepo advances every ref of the upstream INTO the forge and,
+//     when the sync also pushes, declares the outbound target and advances the
+//     same refs back out to it; for a push-only direction, cloud.EnsureGitMirror
+//     declares that target and pushOut advances the forge's refs to it, with
+//     nothing coming in.
+//
+// Nothing this provider drives is ever a force. Both directions are the same
+// fast-forward advance with the two ends swapped, so a downstream that has moved
+// on is REPORTED rather than overwritten — which matters because a bidirectional
+// sync's "downstream" is a place people push.
 //
 // The short-lived GitHub App installation token rides IN the event when a webhook
 // already minted it; for a manual run the provider mints a fresh one per org. It is
@@ -84,7 +90,7 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		return false, err
 	}
 	if a.inbound {
-		// Advance the pushed branch fast-forward only; a diverged native ref is a
+		// Advance the pushed ref fast-forward only; a diverged forge ref is a
 		// Conflict (preserved) and an up-to-date ref is a no-op — both "no change".
 		res, err := cloud.InboundGitSync(cloud.For(ctx, owner), cloud.GitInboundReq{
 			Org: owner, Repo: native, Ref: ev.Ref,
@@ -95,10 +101,10 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		}
 		return res.Applied, nil
 	}
-	// Manual reconcile toward the direction. Pull/both fast-forward mirror EVERY branch
-	// IN (and, when it also pushes, register the outbound native→source mirror so the
-	// native push lifecycle propagates later commits back); push-only declares that
-	// outbound target without importing. Off would not reach here.
+	// Manual reconcile toward the direction. Pull/both fast-forward advances EVERY
+	// ref IN (and, when it also pushes, declares the outbound target and advances
+	// the same refs back out); push-only declares the target and advances out only.
+	// Off would not reach here.
 	changed := false
 	if dirPulls(sy.Direction) {
 		mirrorURL := ""
@@ -120,6 +126,14 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 	} else if dirPushes(sy.Direction) {
 		if err := cloud.EnsureGitMirror(ctx, owner, "", native, source, true); err != nil {
 			return false, fmt.Errorf("ensure mirror: %w", err)
+		}
+		// DECLARING A TARGET SENDS NOTHING TO IT. Push-only means nothing comes in,
+		// so advancing the forge's refs out IS this direction's whole reconcile —
+		// without it a push-only sync recorded an intention and moved no bytes,
+		// which is what it did while the pushing lived on a lifecycle in an app
+		// that no longer receives one.
+		if err := pushOut(cloud.For(ctx, owner), owner, native); err != nil {
+			return false, fmt.Errorf("mirror out: %w", err)
 		}
 		changed = true
 	}
