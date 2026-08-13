@@ -7,17 +7,20 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /:id/terminal", zip.Doc{
-		Description: "Answers the terminal page.\n\nIt does NOT redeem the ticket, and that is the whole reason the page and the\nsocket are two addresses: a ticket is spent once, and spending it here would\nleave the page holding a credential that no longer opens anything. The page is\nmarkup — the socket is the gate, and it is the socket that checks.",
+	zip.Describe("GET /:id/screen/ws", zip.Doc{
+		Description: "Serves one screen: RFB from the sandbox's display, as long as somebody\nis looking. The window is ignored — a browser pane's size is not the X\nserver's, and the page scales what it is given rather than asking a server\nwith no RandR to resize itself.",
 	})
 	zip.Describe("GET /:id/terminal/ws", zip.Doc{
-		Description: "Serves one terminal. The ticket is spent BEFORE the upgrade, so a\nrequest that presents nothing gets an ordinary 401 with a body a client can\nread, rather than a socket that opens and immediately closes for reasons the\nbrowser will not tell it.",
+		Description: "Serves one terminal: a shell on a pseudo-terminal, for as long as\nsomebody is typing.",
 	})
 	zip.Describe("GET /v1/sandboxes/:id/fs", zip.Doc{
 		Description: "Answers text, because this address always has: a file as its bytes, a\ndirectory as one entry per line. The typed Entry the core returns is what the\nplane carries; here it is rendered back to the one shape this route has served.",
 	})
+	zip.Describe("POST /:id/screen/ticket", zip.Doc{
+		Description: "Mints the ticket for one DOOR. Gated exactly like its siblings — a\nvalidated principal, resolved to the org whose sandboxes may be addressed —\nand it resolves the sandbox before minting, so a ticket never names a sandbox\nthe caller does not own or one that is not running.\n\nTHE DOOR IS THE ADDRESS AND NOT THE GRANT. A ticket says which org and which\nsandbox, and the terminal and the screen are two views of that one machine —\na caller holding the authority to type in a sandbox holds the authority to\nlook at it. Binding the door into the token would be a second gate answering\na question the first one already closed, and a gate that decides nothing is\none somebody later has to reason about anyway. What the door decides is the\nURL a caller is handed back, which is the only part that differs.",
+	})
 	zip.Describe("POST /:id/terminal/ticket", zip.Doc{
-		Description: "Mints the ticket for one terminal. Gated exactly like its siblings — a\nvalidated principal, resolved to the org whose sandboxes may be addressed —\nand it resolves the sandbox before minting, so a ticket never names a sandbox\nthe caller does not own or one that is not running.",
+		Description: "Mints the ticket for one DOOR. Gated exactly like its siblings — a\nvalidated principal, resolved to the org whose sandboxes may be addressed —\nand it resolves the sandbox before minting, so a ticket never names a sandbox\nthe caller does not own or one that is not running.\n\nTHE DOOR IS THE ADDRESS AND NOT THE GRANT. A ticket says which org and which\nsandbox, and the terminal and the screen are two views of that one machine —\na caller holding the authority to type in a sandbox holds the authority to\nlook at it. Binding the door into the token would be a second gate answering\na question the first one already closed, and a gate that decides nothing is\none somebody later has to reason about anyway. What the door decides is the\nURL a caller is handed back, which is the only part that differs.",
 	})
 	zip.Describe("POST /sandbox/end", zip.Doc{
 		Description: "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too.",
