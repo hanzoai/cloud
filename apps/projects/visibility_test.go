@@ -132,6 +132,18 @@ func (f *forgery) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 		writeRepo(w, body.Name, body.Private)
 
+	case strings.HasPrefix(path, "/orgs/") && !strings.Contains(strings.TrimPrefix(path, "/orgs/"), "/"):
+		// A bare org path is the existence check EnsureOrg makes before it
+		// publishes. This stub's community namespace already exists, so publishing
+		// is a no-op here rather than a mint — the create-on-missing path is proven
+		// in forge/ensureorg_test.go (TestEnsureOrgCreatesAMissingNamespaceOnce).
+		if anon {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		owner := strings.TrimPrefix(path, "/orgs/")
+		_ = json.NewEncoder(w).Encode(map[string]any{"username": owner})
+
 	case strings.HasSuffix(path, "/branch_protections"):
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{}`))
