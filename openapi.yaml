@@ -84496,9 +84496,14 @@ paths:
   /v1/iam/users/get:
     get:
       description: |-
-        Returns one person in your organization, by the organization they belong
-        to and their username. Passwords, API secrets and MFA material are stripped
-        from the response.
+        Returns one person in your organization, addressed by their username or by
+        their email address. Passwords, API secrets and MFA material are stripped from
+        the response.
+
+        An address that names two accounts names none: the read refuses rather than
+        picking one, and says so instead of reporting "no such user". Handing back an
+        arbitrary one of two rows is how somebody gets added to a team under a
+        colleague's identity.
       operationId: get_iam_users_get
       parameters:
       - in: query
@@ -84508,7 +84513,12 @@ paths:
           type: string
       - in: query
         name: name
-        required: true
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: email
+        required: false
         schema:
           type: string
       responses:
@@ -84518,8 +84528,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/iam.User'
           description: ok
-      summary: Returns one person in your organization, by the organization they belong
-        to and their username.
+      summary: Returns one person in your organization, addressed by their username
+        or by their email address.
       tags:
       - iam
       x-app: iam
