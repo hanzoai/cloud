@@ -139,3 +139,37 @@ func TestSubscriptionsWireReadsMRRCents(t *testing.T) {
 		t.Fatalf("decoded %+v, want one subscription with MRRCents 4242", w.Subscriptions)
 	}
 }
+
+// The org namespace is selected by X-Org-Id, and the wallet is keyed under the
+// BARE org slug — never X-IAM-Org-Id, never an "org/org" subject. Commerce's
+// EdgeAuth trusts that one header (after verifying the service-token bearer) and
+// resolves the billing namespace from it, so a wrong header or a wrong subject
+// resolves an EMPTY wallet: that pair is the $0-fleet-revenue bug, where every
+// board read zero against real balances (lux $10,000, maxpower $20,498).
+//
+// It is pinned HERE, on the client that sets the header, rather than in a caller's
+// fake. The money reads left HTTP for the plane; the plan and the ledger did not,
+// and they are set by this same seam.
+func TestReadsCarryTheBareOrgSlugAsXOrgId(t *testing.T) {
+	var gotOrg, gotStale, gotUser string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotOrg, gotStale = r.Header.Get("X-Org-Id"), r.Header.Get("X-IAM-Org-Id")
+		gotUser = r.URL.Query().Get("user")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"subscriptions":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	if _, err := New(srv.URL, "test-token").Plan(context.Background(), "acme"); err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if gotOrg != "acme" {
+		t.Errorf("X-Org-Id = %q, want acme — commerce resolves the namespace from this header alone", gotOrg)
+	}
+	if gotStale != "" {
+		t.Errorf("X-IAM-Org-Id = %q, want unset — commerce reads X-Org-Id only", gotStale)
+	}
+	if gotUser != "acme" {
+		t.Errorf("user = %q, want acme (the bare slug) — an org/org subject resolves an empty wallet", gotUser)
+	}
+}

@@ -118,6 +118,9 @@ func (o ops) Customers(ctx context.Context, _ *core.None) (*CustomersOut, error)
 	}
 	s := o.s
 	cr := core.CallerCreds(c)
+	// Money is read per org, and three of these folds run their orgs in parallel, so
+	// the principal is lifted off the request ONCE here and re-pointed per tenant.
+	ctx = core.Acting(c)
 	orgs, err := core.ListOrgs(s, ctx, cr)
 	if err != nil {
 		return &CustomersOut{Status: core.Err, Msg: err.Error()}, nil
@@ -176,6 +179,9 @@ func (o ops) CustomerDetail(ctx context.Context, in *OrgIn) (*CustomerDetailOut,
 	}
 	s := o.s
 	cr := core.CallerCreds(c)
+	// Money is read per org, and three of these folds run their orgs in parallel, so
+	// the principal is lifted off the request ONCE here and re-pointed per tenant.
+	ctx = core.Acting(c)
 	org := strings.TrimSpace(in.Org)
 	if org == "" {
 		return &CustomerDetailOut{Status: core.Err, Msg: "org is required"}, nil
