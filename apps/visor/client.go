@@ -32,6 +32,7 @@ package visor
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"io"
@@ -41,6 +42,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -160,7 +162,7 @@ func (cl *client) call(c *zip.Ctx, method, path, query string, body any, out any
 		return zip.Errorf(http.StatusBadGateway, "visor: decode envelope: %v", err)
 	}
 	if env.Status != "" && env.Status != "ok" {
-		return zip.Errorf(http.StatusBadGateway, "visor: %s", firstNonEmpty(env.Msg, "upstream error"))
+		return zip.Errorf(http.StatusBadGateway, "visor: %s", cmp.Or(strings.TrimSpace(env.Msg), "upstream error"))
 	}
 	if out != nil && len(env.Data) > 0 && string(env.Data) != "null" {
 		if err := json.Unmarshal(env.Data, out); err != nil {
@@ -237,18 +239,5 @@ func q(pairs ...string) string {
 }
 
 func snippet(b []byte) string {
-	s := strings.TrimSpace(string(b))
-	if len(s) > 200 {
-		return s[:200]
-	}
-	return s
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
+	return shorten.To(strings.TrimSpace(string(b)), 200)
 }

@@ -1,10 +1,11 @@
 package deploy
 
 import (
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -76,7 +77,7 @@ func TestRenderRealChartMatchesHelm(t *testing.T) {
 
 	got, want := digest(t, mine), digest(t, filterEmpty(theirs))
 	if len(got) != len(want) {
-		t.Fatalf("object count: ours %d, helm %d\n ours: %v\n helm: %v", len(got), len(want), keys(got), keys(want))
+		t.Fatalf("object count: ours %d, helm %d\n ours: %v\n helm: %v", len(got), len(want), slices.Sorted(maps.Keys(got)), slices.Sorted(maps.Keys(want)))
 	}
 	for k, w := range want {
 		g, ok := got[k]
@@ -144,14 +145,5 @@ func digest(t *testing.T, objs []*unstructured.Unstructured) map[string]string {
 		}
 		out[key] = string(b)
 	}
-	return out
-}
-
-func keys(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
 	return out
 }

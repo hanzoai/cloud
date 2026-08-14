@@ -3,11 +3,13 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/apps/principal"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -469,10 +471,7 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 		return nil, zip.ErrBadRequest("published requires a project — a build with no product is not a story anyone can open")
 	}
 
-	id, err := genID("sess")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("sess")
 	now := time.Now().Unix()
 	x := Session{
 		ID: id, Org: org, Agent: agent, Actor: actor, Status: status,
@@ -883,7 +882,7 @@ type eventReq struct {
 func appendSessionEvent(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	sto, err := s.State.storeFor(org)
 	if err != nil {
@@ -925,10 +924,7 @@ func appendSessionEvent(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(actor) > maxActor {
 		return zip.ErrBadRequest("actor too long")
 	}
-	evID, err := genID("evt")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	evID := mint.ID("evt")
 	e, err := sto.AppendEvent(c.Context(), Event{
 		ID: evID, SessionID: id, Org: org, Kind: kind, Actor: actor,
 		Payload: string(body.Payload), CreatedAt: time.Now().Unix(),
@@ -974,7 +970,7 @@ func messageSession(s *cloud.Service[state], c *zip.Ctx) error { return control(
 func control(s *cloud.Service[state], c *zip.Ctx, command string) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	sto, err := s.State.storeFor(org)
 	if err != nil {
@@ -1021,10 +1017,7 @@ func control(s *cloud.Service[state], c *zip.Ctx, command string) error {
 
 	actor := billingActor(org, c.User())
 	cp, _ := json.Marshal(controlPayload{Command: command, Message: body.Message, Payload: body.Payload})
-	evID, err := genID("evt")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	evID := mint.ID("evt")
 	e, err := sto.AppendEvent(c.Context(), Event{
 		ID: evID, SessionID: id, Org: org, Kind: KindControl, Actor: actor,
 		Payload: string(cp), CreatedAt: time.Now().Unix(),
@@ -1094,11 +1087,7 @@ func openRunSession(s *cloud.Service[state], ctx context.Context, a Agent, r Run
 	if r.Status != "ok" {
 		status = StatusError
 	}
-	id, err := genID("sess")
-	if err != nil {
-		s.Log.Warn("run session: rng", "err", err)
-		return
-	}
+	id := mint.ID("sess")
 	ts := r.CreatedAt
 	if ts == 0 {
 		ts = time.Now().Unix()
@@ -1116,11 +1105,7 @@ func openRunSession(s *cloud.Service[state], ctx context.Context, a Agent, r Run
 		"runId": r.ID, "status": r.Status, "model": r.Model,
 		"durationMs": r.DurationMs, "error": r.Error,
 	})
-	evID, err := genID("evt")
-	if err != nil {
-		publishSession(s, x, 0, 0)
-		return
-	}
+	evID := mint.ID("evt")
 	e, aerr := sto.AppendEvent(ctx, Event{
 		ID: evID, SessionID: id, Org: a.Org, Kind: KindLog, Actor: actor,
 		Payload: string(payload), CreatedAt: ts,

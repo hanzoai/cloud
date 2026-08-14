@@ -267,7 +267,7 @@ var inference = map[string]bool{
 //   - tools answers /v1/skills, /v1/plugins and /v1/mcp/servers beside /v1/tools.
 //
 // And ten Metered surfaces were missing outright (ask, auto, automations, content,
-// flow, platform, provisioning, tracker, translate, venue). The list had to be
+// flow, platform, provisioning, todo, translate, venue). The list had to be
 // edited in lockstep with two other files and nothing checked that it was.
 // TestMeteredSurfacesRequireStanding now reads Price straight out of every
 // plugin/<name>/main.go and fails on a Metered surface missing from here — the check
@@ -298,7 +298,7 @@ var meteredApps = []string{
 	"security",     // scan fee.
 	"storage",      // object-storage data plane.
 	"tools",        // per-tool dispatch.
-	"tracker",      // per-project/issue fee.
+	"todo",         // per-project/issue fee.
 	"translate",    // per-character fee.
 	"venue",        // folded clusters (compute).
 	"visor",        // GPU clusters (compute).

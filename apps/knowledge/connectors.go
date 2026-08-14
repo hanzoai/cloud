@@ -40,6 +40,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
@@ -84,15 +86,15 @@ func oauthConfig(provider string) (oauthApp, bool) {
 	case "github":
 		app.authURL = "https://github.com/login/oauth/authorize"
 		app.tokenURL = "https://github.com/login/oauth/access_token"
-		app.scope = getenv("KB_GITHUB_SCOPE", "repo read:org")
+		app.scope = environ.Or("KB_GITHUB_SCOPE", "repo read:org")
 	case "slack":
 		app.authURL = "https://slack.com/oauth/v2/authorize"
 		app.tokenURL = "https://slack.com/api/oauth.v2.access"
-		app.scope = getenv("KB_SLACK_SCOPE", "channels:history,channels:read,users:read")
+		app.scope = environ.Or("KB_SLACK_SCOPE", "channels:history,channels:read,users:read")
 	case "google":
 		app.authURL = "https://accounts.google.com/o/oauth2/v2/auth"
 		app.tokenURL = "https://oauth2.googleapis.com/token"
-		app.scope = getenv("KB_GOOGLE_SCOPE", "https://www.googleapis.com/auth/drive.readonly")
+		app.scope = environ.Or("KB_GOOGLE_SCOPE", "https://www.googleapis.com/auth/drive.readonly")
 	case "notion":
 		// Notion is a long-tail connector: OAuth here, PULL via the activepieces JS
 		// piece through the auto runner (see sync_piece.go). Notion's OAuth has no
@@ -100,7 +102,7 @@ func oauthConfig(provider string) (oauthApp, bool) {
 		// the scope stays empty.
 		app.authURL = "https://api.notion.com/v1/oauth/authorize"
 		app.tokenURL = "https://api.notion.com/v1/oauth/token"
-		app.scope = getenv("KB_NOTION_SCOPE", "")
+		app.scope = environ.Or("KB_NOTION_SCOPE", "")
 	}
 	return app, true
 }
@@ -109,7 +111,7 @@ func oauthConfig(provider string) (oauthApp, bool) {
 // derived from the deployment Domain (Deps.Domain) — a fixed, server-known origin —
 // so it is never client-influenced. Providers must have this registered.
 func callbackURL(s *cloud.Service[state], provider string) string {
-	base := getenv("KB_OAUTH_REDIRECT_BASE", "https://"+s.Domain)
+	base := environ.Or("KB_OAUTH_REDIRECT_BASE", "https://"+s.Domain)
 	return strings.TrimRight(base, "/") + "/v1/kb/connectors/" + provider + "/callback"
 }
 
@@ -218,7 +220,7 @@ type kbAuthorizeOut struct {
 // over the caller's validated org, so the connection the callback completes can
 // only ever land in that org.
 func (o ops) connectStart(ctx context.Context, in *providerIn) (*kbAuthorizeOut, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +366,7 @@ type kbConnectorsOut struct {
 // connected appears as disconnected, so the console can offer a Connect button.
 // No secret is ever returned.
 func (o ops) listConnectors(ctx context.Context, _ *noInput) (*kbConnectorsOut, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +416,7 @@ type kbSyncOut struct {
 // sync its own connection. A provider failure is reported honestly (502) and
 // recorded on the connector rather than silently swallowed.
 func (o ops) syncConnector(ctx context.Context, in *providerIn) (*kbSyncOut, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -464,7 +466,7 @@ func (o ops) syncConnector(ctx context.Context, in *providerIn) (*kbSyncOut, err
 // ingested stay in the org's store — they are the org's own data — but stop being
 // retrievable by search; a caller deletes them through the document surface.
 func (o ops) disconnectConnector(ctx context.Context, in *providerIn) (*connectionOut, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

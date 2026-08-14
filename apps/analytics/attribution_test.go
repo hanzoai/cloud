@@ -30,6 +30,11 @@ func stubKeys(t *testing.T, table map[string]Attribution) {
 	})
 }
 
+// bootKeys is the resolver a process holds before anything installs one — read at
+// package init, so the answer is the package's own default and not whatever the
+// test that ran last left behind.
+var bootKeys = currentKeyResolver()
+
 type fixedKeys map[string]Attribution
 
 func (f fixedKeys) Resolve(_ context.Context, key string) (Attribution, bool, error) {
@@ -45,6 +50,44 @@ func (failingKeys) Resolve(context.Context, string) (Attribution, bool, error) {
 }
 
 const siteKey = "pk-sitekeysitekeysitekeysitekeysitekey00"
+
+// TestAdmitAsksBothIssuers is the whole of what Admit is: TWO issuers, and a key
+// from either one names its org. They are disjoint — a key minted by a project
+// exists only in the project store, one issued by IAM only in IAM — so a door that
+// asks a single issuer refuses every key the other minted, which is a door that
+// refuses the key it tells a caller to create. Every door that admits a key calls
+// this, so the sequence is proved once, here.
+func TestAdmitAsksBothIssuers(t *testing.T) {
+	stubKeys(t, map[string]Attribution{"pk-project": {Org: "acme", Project: "shop"}})
+	orig := resolveKeyOrg
+	resolveKeyOrg = func(_ context.Context, key string) (string, bool) {
+		return "beta", key == "pk-iam"
+	}
+	t.Cleanup(func() { resolveKeyOrg = orig })
+
+	for _, tc := range []struct {
+		name string
+		key  string
+		want Attribution
+		ok   bool
+	}{
+		// The project store answers the narrower question, so it answers first: org
+		// AND the site the key was minted with.
+		{"a project key", "pk-project", Attribution{Org: "acme", Project: "shop"}, true},
+		// IAM can only ever say org, having no project to scope to — and an empty
+		// project honestly says this write names no site.
+		{"an IAM key", "pk-iam", Attribution{Org: "beta"}, true},
+		{"a key neither issued", "pk-forged", Attribution{}, false},
+		{"no key at all", "", Attribution{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			at, ok := Admit(context.Background(), tc.key)
+			if ok != tc.ok || at != tc.want {
+				t.Fatalf("Admit(%q) = %+v, %v; want %+v, %v", tc.key, at, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
 
 // TestProjectKeyAttributesToItsSite is the design: the key names org AND site, so a
 // beacon lands in the project's org tagged with the project — an attribution the
@@ -220,9 +263,15 @@ func TestResolverFailureIsNotAMiss(t *testing.T) {
 	if ok {
 		t.Fatal("precondition")
 	}
+	keyMu.Lock()
+	origR, origF := keyResolver, keyFallback
+	keyMu.Unlock()
 	SetKeyResolver(failingKeys{})
 	SetFallbackKeyResolver(nil)
-	t.Cleanup(func() { SetKeyResolver(nil); SetFallbackKeyResolver(nil) })
+	// RESTORE, not clear: clearing left the package's plane default nil for every
+	// test that ran after this one, so what those tests measured depended on the
+	// order they ran in.
+	t.Cleanup(func() { SetKeyResolver(origR); SetFallbackKeyResolver(origF) })
 	if _, ok := resolveAttribution(context.Background(), siteKey); ok {
 		t.Fatal("a failing resolver must not attribute")
 	}
@@ -253,19 +302,15 @@ func TestAttributeProjectIsPureAndTotal(t *testing.T) {
 	}
 }
 
-// TestMountWiresTheKeyDoor: an unwired seam refuses every beacon on the fleet, and no
-// behavioural test inside this package can see it because the package is correct
-// either way. So the wiring itself is asserted.
-func TestMountWiresTheKeyDoor(t *testing.T) {
-	keyMu.Lock()
-	origR, origF := keyResolver, keyFallback
-	keyMu.Unlock()
-	SetKeyResolver(nil)
-	SetFallbackKeyResolver(nil)
-	t.Cleanup(func() { SetKeyResolver(origR); SetFallbackKeyResolver(origF) })
-
-	_ = mountApp(t)
-	if !HasFallbackKeyResolver() {
-		t.Fatal("Mount left the key resolver unwired; every beacon on the fleet would refuse")
+// TestTheKeyDoorNeedsNoMount: the cross-process resolver is the package DEFAULT, so
+// every binary that links this package resolves a project key — the one that mounts
+// analytics and the one that only calls Admit (apps/integrations serves the
+// OpenRouter webhook). While a Mount installed it, a key resolved in one process and
+// named nothing in the next, and no behavioural test inside this package could see
+// that, because the package is correct either way. So the default itself is asserted.
+func TestTheKeyDoorNeedsNoMount(t *testing.T) {
+	if _, ok := bootKeys.(planeKeys); !ok {
+		t.Fatalf("a process that mounts nothing resolves keys through %T, not the plane; "+
+			"every project key it is handed would name no org", bootKeys)
 	}
 }

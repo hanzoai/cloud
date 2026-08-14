@@ -375,12 +375,11 @@ type userLink struct {
 	Subject string `json:"subject"`
 	Org     string `json:"org"`
 	Refresh string `json:"refresh"`
-	// Model and Routing are what the person chose on the App Home tab. Both are
-	// OMITEMPTY and both have a working default, so a link written before the Home
-	// tab existed decodes fine and behaves exactly as it did — a preference that
-	// breaks an existing link is not a preference, it is an outage.
-	Model   string `json:"model,omitempty"`
-	Routing string `json:"routing,omitempty"`
+	// Model is what the person chose on the App Home tab. OMITEMPTY with a working
+	// default, so a link written before the Home tab existed decodes fine and
+	// behaves exactly as it did — a preference that breaks an existing link is not
+	// a preference, it is an outage.
+	Model string `json:"model,omitempty"`
 }
 
 func putUserLink(s *cloud.Service[state], org, provider, extUser string, link userLink) error {

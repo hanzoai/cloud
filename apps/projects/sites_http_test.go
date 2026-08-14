@@ -220,7 +220,7 @@ func TestBuildSite_MetersOnce(t *testing.T) {
 	if resp.Slug != "shop" || resp.Status != "live" || resp.DeploymentID == "" {
 		t.Fatalf("bad response: %+v", resp)
 	}
-	if !contains(resp.Files, "index.html") {
+	if !slices.Contains(resp.Files, "index.html") {
 		t.Fatalf("response files must include index.html: %v", resp.Files)
 	}
 	if ai.calls != 1 {
@@ -459,8 +459,65 @@ func mustJSON(t *testing.T, b []byte, v any) {
 	}
 }
 
-func contains(ss []string, want string) bool {
-	return slices.Contains(ss, want)
-}
-
 func bytesContains(hay, needle string) bool { return bytes.Contains([]byte(hay), []byte(needle)) }
+
+// TestSites_GetSite: one site, by slug.
+//
+// Every sub-resource under a site already answered — deployments, releases,
+// publish — and the site itself did not, so `GET /v1/sites/<slug>` returned 404
+// for a LIVE site exactly as for one that never existed. A client could not tell
+// "not yet" from "not a route", and the one call a CI lane makes to watch for
+// its own publish could only ever say no.
+func TestSites_GetSite(t *testing.T) {
+	f := startFakeS3(t)
+	bs := &billServer{available: 100000}
+	ai := &fakeAI{content: okManifest()}
+	app := mountSites(t, ai, bs.start(t))
+	_ = f
+
+	// A slug nobody has published is honestly absent.
+	code, _ := doSite(t, app, http.MethodGet, "/v1/sites/nothing-here", "acme", nil)
+	if code != http.StatusNotFound {
+		t.Fatalf("absent site want 404, got %d", code)
+	}
+
+	// Build one, then read it back at its own address.
+	code, body := doSite(t, app, http.MethodPost, "/v1/sites", "acme",
+		map[string]any{"brief": "hi", "slug": "shop"})
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("build want 2xx, got %d: %s", code, body)
+	}
+
+	code, body = doSite(t, app, http.MethodGet, "/v1/sites/shop", "acme", nil)
+	if code != http.StatusOK {
+		t.Fatalf("live site want 200, got %d: %s", code, body)
+	}
+	var got struct {
+		Slug, URL, Name, Status string
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if got.Slug != "shop" {
+		t.Errorf("slug = %q, want shop", got.Slug)
+	}
+	if got.Status != "live" {
+		t.Errorf("status = %q, want live", got.Status)
+	}
+	if got.URL == "" {
+		t.Error("url is empty — the address a site serves at is the point of reading one")
+	}
+
+	// The org comes from the validated principal, never the path: another
+	// tenant's identically-named site is a 404, not someone else's row.
+	code, _ = doSite(t, app, http.MethodGet, "/v1/sites/shop", "evil", nil)
+	if code != http.StatusNotFound {
+		t.Fatalf("cross-tenant read want 404, got %d", code)
+	}
+
+	// No principal at all is refused before any lookup.
+	code, _ = doSite(t, app, http.MethodGet, "/v1/sites/shop", "", nil)
+	if code != http.StatusForbidden {
+		t.Fatalf("no-principal want 403, got %d", code)
+	}
+}

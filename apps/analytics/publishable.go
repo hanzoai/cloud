@@ -65,6 +65,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -228,7 +229,7 @@ type errorList struct {
 //
 // Example: {"limit": 100}
 func (o readOps) errors(ctx context.Context, in *limitQuery) (*errorList, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

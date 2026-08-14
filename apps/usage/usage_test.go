@@ -16,6 +16,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -249,8 +250,74 @@ func TestSummary_NoCommerceInTheFleet_HonestZeros(t *testing.T) {
 func TestSummary_BadRange_400(t *testing.T) {
 	app := mountApp(t)
 	code, _ := call(t, app, "/v1/usage/summary?range=bogus", "maxpower/dave", "maxpower")
-	// ResolveCloudUsageWindow rejects an unknown range enum with a 400.
+	// types.ParseWindow rejects a label that is not a window with a 400.
 	if code != http.StatusBadRequest {
 		t.Fatalf("bad range: want 400, got %d", code)
+	}
+}
+
+// TestSummaryServesEveryWindowItAdmits is the gate on the money surface: an
+// operator tracing where spend went asks for a quarter or for everything, and
+// used to get a 400 for both. Status is only half of it — the window the answer
+// CARRIES has to be the one that was asked for, or a fixed 400 just becomes a
+// number for the wrong period, which on a spend view is the worse failure.
+func TestSummaryServesEveryWindowItAdmits(t *testing.T) {
+	app := mountApp(t)
+	for _, tc := range []struct {
+		label string
+		back  time.Duration
+		want  string
+	}{
+		{"", 24 * time.Hour, "24h"},
+		{"1h", time.Hour, "hour"},
+		{"24h", 24 * time.Hour, "hour"},
+		{"7d", 7 * 24 * time.Hour, "day"},
+		{"14d", 14 * 24 * time.Hour, "day"},
+		{"30d", 30 * 24 * time.Hour, "day"},
+		{"90d", 90 * 24 * time.Hour, "day"},
+		{"180d", 180 * 24 * time.Hour, "day"},
+		{"365d", 365 * 24 * time.Hour, "day"},
+		{"all", types.Horizon, "day"},
+	} {
+		t.Run("range="+tc.label, func(t *testing.T) {
+			code, body := call(t, app, "/v1/usage/summary?range="+tc.label, "maxpower/dave", "maxpower")
+			if code != http.StatusOK {
+				t.Fatalf("range %q want 200, got %d (%s)", tc.label, code, body)
+			}
+			s := decodeSummary(t, body)
+			want := tc.label
+			if want == "" {
+				want = "24h"
+			}
+			if s.Range != want {
+				t.Errorf("answered range %q, asked %q", s.Range, want)
+			}
+			from, err := time.Parse(time.RFC3339, s.Start)
+			if err != nil {
+				t.Fatalf("start %q: %v", s.Start, err)
+			}
+			to, err := time.Parse(time.RFC3339, s.End)
+			if err != nil {
+				t.Fatalf("end %q: %v", s.End, err)
+			}
+			if span := to.Sub(from); span < tc.back-time.Minute || span > tc.back+time.Minute {
+				t.Errorf("range %q answered a %v window, asked for %v", tc.label, span, tc.back)
+			}
+		})
+	}
+}
+
+// TestSummaryRefusesWhatItCannotAnswer: the ledger behind this keeps two years,
+// so a window past that is refused by name rather than served short. A quarter
+// of missing spend that renders as zeros is indistinguishable from a quarter
+// where nothing was spent.
+func TestSummaryRefusesWhatItCannotAnswer(t *testing.T) {
+	app := mountApp(t)
+	for _, bad := range []string{"bogus", "1y", "3mo", "1w", "0d", "731d", "3650d"} {
+		t.Run("range="+bad, func(t *testing.T) {
+			if code, body := call(t, app, "/v1/usage/summary?range="+bad, "maxpower/dave", "maxpower"); code != http.StatusBadRequest {
+				t.Fatalf("range %q want 400, got %d (%s)", bad, code, body)
+			}
+		})
 	}
 }

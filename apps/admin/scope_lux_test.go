@@ -39,9 +39,7 @@ var luxAdminHdr = map[string]string{
 func TestScope_LuxAdminCannotReachZooOrgs(t *testing.T) {
 	iam := newScopeIAM()
 	defer iam.server.Close()
-	commerce := newFakeCommerce()
-	defer commerce.server.Close()
-	do, s, _ := mountService(t, iam.server.URL, commerce.server.URL, "")
+	do, s, _ := mountService(t, iam.server.URL, "", "")
 	s.State.WLTenants = map[string]bool{"lux": true} // Lux ENABLED → admitted, then scoped.
 
 	resp, body := do("GET", "/v1/admin/orgs?org=zoo", luxAdminHdr)
@@ -65,9 +63,7 @@ func TestScope_LuxAdminCannotReachZooOrgs(t *testing.T) {
 func TestScope_LuxAdminCannotReachHanzoUsers(t *testing.T) {
 	iam := newScopeIAM()
 	defer iam.server.Close()
-	commerce := newFakeCommerce()
-	defer commerce.server.Close()
-	do, s, _ := mountService(t, iam.server.URL, commerce.server.URL, "")
+	do, s, _ := mountService(t, iam.server.URL, "", "")
 	s.State.WLTenants = map[string]bool{"lux": true}
 
 	if resp, body := do("GET", "/v1/admin/users?org=hanzo", luxAdminHdr); resp.StatusCode != http.StatusOK {

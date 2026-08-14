@@ -1,6 +1,7 @@
 package commerce
 
 import (
+	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"net/http/httptest"
 	"strings"
@@ -29,7 +30,7 @@ func TestCommerceErrorScope(t *testing.T) {
 	// projects (after commerce) — typed 403; must NOT be clobbered to 500. On the
 	// APP, not the group: that is the whole point of the case, a sibling subsystem
 	// whose routes are not beneath commerce's chain.
-	app.Get("/v1/projects", func(c *zip.Ctx) error { return zip.ErrForbidden("X-Org-Id required") })
+	app.Get("/v1/projects", func(c *zip.Ctx) error { return principal.Refused(c) })
 	// a commerce store route — typed 403; commerce envelope applies. Registered ON
 	// THE GROUP, which is both what production does (Mount's storeV1 group) and
 	// what makes this test a valid program: zip refuses to compose a definition

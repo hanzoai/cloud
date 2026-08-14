@@ -151,7 +151,7 @@ type corpusView struct {
 //
 // Example: {"category": "viral-coefficient", "stage": "scaling"}
 func (o ops) strategies(ctx context.Context, in *strategiesQuery) (*corpusView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

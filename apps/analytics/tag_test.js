@@ -129,6 +129,12 @@ function anonOf(r) {
   assert.strictEqual(init.headers.authorization, 'Bearer pk-live-abc')
   assert.strictEqual(init.keepalive, true)
   assert.ok(JSON.parse(init.body).batch.length === 1)
+  // The send must not ask for cookies. A credentialed cross-origin POST is read
+  // only when the response carries Access-Control-Allow-Credentials, which is
+  // granted to exact first-party origins alone — so on a customer's own site,
+  // the one place this tag is meant to run, the preflight fails and nothing is
+  // ever sent. The bearer key is the credential.
+  assert.strictEqual(init.credentials, undefined, 'the key is the credential; cookies must not ride')
 }
 
 // 5. The key may ride the src query, for a host that strips data-* attributes.

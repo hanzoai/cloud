@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -59,12 +60,17 @@ const mirrorRefSpec = "+refs/*:refs/*"
 // the unknown refspec, which fails the mirror closed — the safe direction.)
 const mirrorExcludeAgent = "^" + agentRefPrefix + "*"
 
-// mirrorEnvToken is the STEM of the env var — KMS-injected via a KMSSecret sync,
-// never hardcoded, never logged — holding the credential for mirroring a PRIVATE
-// https source. The host is the rest of the name (see mirrorCredential): the
-// credential for github.com is GIT_MIRROR_TOKEN_GITHUB_COM. Nothing held for a
-// host means an anonymous fetch, which is all a public source needs.
-const mirrorEnvToken = "GIT_MIRROR_TOKEN"
+// mirrorTokenStem is the STEM of the env var — KMS-injected via a KMSSecret sync,
+// never hardcoded, never logged. The HOST is the rest of the name, so the
+// credential for github.com is GIT_MIRROR_TOKEN_GITHUB_COM (see mirrorCredential).
+// Nothing held for a host means an anonymous fetch, which is all a public source
+// needs.
+//
+// A stem and not a whole name, in EVERY direction. It briefly meant both: a stem
+// for the inbound fetch and a complete variable for the outbound push and the
+// community reader — one constant with two meanings, which is one too many. Every
+// credential now resolves through mirrorCredential.
+const mirrorTokenStem = "GIT_MIRROR_TOKEN"
 
 // mirrorOutAllowHostsEnv (comma-separated) overrides the OUTBOUND mirror-target
 // allowlist; empty ⇒ the default {github.com, gitlab.com}. The local git host is
@@ -81,8 +87,9 @@ type mirrorReq struct {
 	// Name is the local repo to mirror into, from the :name path segment. It is
 	// CREATED on first use.
 	Name string `json:"name"`
-	// Source is the http(s) git URL to fetch from. The host is SSRF-guarded and
-	// the shared mirror credential is only sent to allowlisted hosts.
+	// Source is the http(s) git URL to fetch from. The host is SSRF-guarded, and a
+	// credential is sent only if we hold one NAMED FOR that host — so a
+	// tenant-supplied URL to anywhere else fetches anonymously.
 	Source string `json:"source"`
 	// Project is the sub-scope to land the repo in; empty uses the caller's own,
 	// exactly as a create would.
@@ -126,8 +133,8 @@ func (o ops) mirror(ctx context.Context, in *mirrorReq) (*repoView, error) {
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "ensure repo: %v", err)
 	}
-	// The org-supplied /mirror endpoint uses the SHARED, host-allowlisted mirror
-	// credential (empty gitCred ⇒ mirrorGitEnv falls back to the env-token path).
+	// The org-supplied /mirror endpoint uses the PER-HOST mirror credential (empty
+	// gitCred ⇒ mirrorGitEnv falls back to mirrorCredential for the source's host).
 	// The GitHub-App path passes a per-org installation token instead (github_import.go).
 	if err := o.s.State.storage.mirrorInto(ctx, t.org, project, name, src, gitCred{}); err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "mirror fetch: %v", err)
@@ -148,7 +155,7 @@ func (o ops) mirror(ctx context.Context, in *mirrorReq) (*repoView, error) {
 // only http.extraHeader (never argv, never a log). User is the basic-auth
 // username the host expects (x-access-token for GitHub, oauth2 for GitLab); Token
 // is the secret (an App installation token / OAuth token). A zero gitCred means
-// "no explicit credential" — the shared, host-allowlisted env-token path applies.
+// "no explicit credential" — the per-host env-token path applies.
 type gitCred struct {
 	User  string
 	Token string
@@ -159,7 +166,7 @@ type gitCred struct {
 // so a clone-back resolves a default. Idempotent: an up-to-date source is a
 // no-op. The pack streams to disk via `git fetch` (bounded memory). cred is the
 // per-call credential (a GitHub-App installation token); a zero cred falls back
-// to the shared, host-allowlisted env token (the org-supplied /mirror path).
+// to the env token named for the source's host (the org-supplied /mirror path).
 func (s *storage) mirrorInto(ctx context.Context, org, project, name, srcURL string, cred gitCred) error {
 	bareDir := s.absRepoPath(org, project, name)
 	env := mirrorGitEnv(srcURL, cred)
@@ -250,13 +257,9 @@ func ensureRepo(s *cloud.Service[state], ctx context.Context, store *Store, org,
 	if !errors.Is(err, errNotFound) {
 		return Repo{}, err
 	}
-	id, err := genID("repo")
-	if err != nil {
-		return Repo{}, err
-	}
 	now := time.Now().Unix()
 	fresh := Repo{
-		ID: id, Org: org, Project: project, Name: name,
+		ID: mint.ID("repo"), Org: org, Project: project, Name: name,
 		DefaultBranch: defaultBranchName, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := provision(s, ctx, store, fresh); err != nil && !errors.Is(err, errConflict) {
@@ -410,7 +413,7 @@ func mirrorCredential(host string) string {
 	if name == "" {
 		return ""
 	}
-	return strings.TrimSpace(os.Getenv(mirrorEnvToken + "_" + envHost(name)))
+	return strings.TrimSpace(os.Getenv(mirrorTokenStem + "_" + envHost(name)))
 }
 
 // envHost renders a hostname as the tail of an environment-variable name: upper

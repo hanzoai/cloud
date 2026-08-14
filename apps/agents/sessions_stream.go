@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/apps/principal"
 	"strings"
 	"sync"
 	"time"
@@ -139,7 +140,7 @@ func (b *bus) close() {
 func sessionsStream(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	// CLONE the root filter: c.Query returns a zero-copy view into the fasthttp
 	// request buffer, and the stream loop below OUTLIVES this handler (it runs

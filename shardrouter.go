@@ -42,6 +42,7 @@ package cloud
 // package report), never a live rebalance this router pretends to do.
 
 import (
+	"cmp"
 	"errors"
 	"net"
 	"os"
@@ -97,7 +98,7 @@ type shardRouter struct {
 // hostname), matching the id the live membership source assigns each pod.
 func newShardRouter(cfg *Config, log luxlog.Logger, live func() []ha.Member) *shardRouter {
 	peers := parsePeers(cfg.ShardPeers)
-	self := firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr(""))
+	self := cmp.Or(strings.TrimSpace(cfg.ShardSelf), hostnameOr(""))
 	if live != nil {
 		if self == "" {
 			return nil // no stable id ⇒ cannot decide "do I own this org"; single-pod path.

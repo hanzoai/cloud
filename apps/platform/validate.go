@@ -25,13 +25,14 @@ package platform
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/hanzoai/cloud/internal/environ"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -57,7 +58,7 @@ var gitProviderHosts = resolveGitHosts()
 var selfGitHost string
 
 func resolveGitHosts() []string {
-	raw := strings.TrimSpace(getenv("CLOUD_PLATFORM_GIT_HOSTS", ""))
+	raw := environ.Or("CLOUD_PLATFORM_GIT_HOSTS", "")
 	if raw == "" {
 		return defaultGitProviderHosts
 	}
@@ -252,11 +253,7 @@ func buildArgs(args map[string]string) ([]any, error) {
 	if len(args) > 64 {
 		return nil, fmt.Errorf("too many build args (%d, max 64)", len(args))
 	}
-	names := make([]string, 0, len(args))
-	for k := range args {
-		names = append(names, k)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(args))
 	out := make([]any, 0, 2*len(names))
 	for _, k := range names {
 		if !buildArgNameRE.MatchString(k) {
@@ -305,6 +302,30 @@ func validateGitRef(raw string) (string, error) {
 // image is validated here — not merely prefix-checked at the handler — so the
 // `--output` exporter attribute-injection class is closed on the privileged path
 // itself (M1), matching the url/dockerfile/ref treatment.
+// validateBuildRef is validateGitRef plus the one rule a BUILD adds: a hex ref must
+// be a whole commit.
+//
+// Separate from validateGitRef because an abbreviated sha is a perfectly good ref in
+// general — it just cannot build. buildkit resolves a git source by exact object, so
+// a short sha dies nine seconds in with "repository does not contain ref"; and
+// REVISION is stamped only for a full commit, so an image built from one could never
+// name itself and /v1/health would answer revision "unknown" forever. That is how a
+// rollback went unnoticed here.
+//
+// A BRANCH NAME IS NOT CAUGHT. A branch is a legitimate build context and its image
+// honestly reports no revision; only a value that looks like a commit and is not one
+// is a mistake. Both build doors call this, so the rule has one home.
+func validateBuildRef(raw string) (string, error) {
+	s, err := validateGitRef(raw)
+	if err != nil {
+		return "", err
+	}
+	if hexSHARE.MatchString(s) && len(s) < 40 {
+		return "", fmt.Errorf("git ref %q is an abbreviated commit; pass the full 40-character sha", s)
+	}
+	return s, nil
+}
+
 func validateBuildInputs(rawURL, dockerfile, ref, image string) (cleanURL, cleanDockerfile, cleanRef, cleanImage string, err error) {
 	if cleanURL, err = validateRepoURL(rawURL); err != nil {
 		return "", "", "", "", err
@@ -315,7 +336,7 @@ func validateBuildInputs(rawURL, dockerfile, ref, image string) (cleanURL, clean
 		}
 	}
 	if strings.TrimSpace(ref) != "" {
-		if cleanRef, err = validateGitRef(ref); err != nil {
+		if cleanRef, err = validateBuildRef(ref); err != nil {
 			return "", "", "", "", err
 		}
 	}
@@ -359,19 +380,19 @@ type resourceLimits struct {
 // raises them per cluster; nothing here needs to change per environment.
 func newResourceLimits() resourceLimits {
 	return resourceLimits{
-		maxReplicas:     atoiDefault(getenv("CLOUD_PLATFORM_MAX_REPLICAS", ""), defaultMaxReplicas),
-		maxStorageGB:    atoiDefault(getenv("CLOUD_PLATFORM_MAX_STORAGE_GB", ""), defaultMaxStorageGB),
-		maxBuilds:       atoiDefault(getenv("CLOUD_PLATFORM_MAX_CONCURRENT_BUILDS", ""), defaultMaxBuilds),
-		maxDeploys:      atoiDefault(getenv("CLOUD_PLATFORM_MAX_CONCURRENT_DEPLOYS", ""), defaultMaxDeploys),
-		quotaCPU:        getenv("CLOUD_PLATFORM_QUOTA_CPU", "20"),
-		quotaMemory:     getenv("CLOUD_PLATFORM_QUOTA_MEMORY", "40Gi"),
-		quotaPods:       getenv("CLOUD_PLATFORM_QUOTA_PODS", "50"),
-		limitDefaultCPU: getenv("CLOUD_PLATFORM_LIMIT_DEFAULT_CPU", "500m"),
-		limitDefaultMem: getenv("CLOUD_PLATFORM_LIMIT_DEFAULT_MEM", "512Mi"),
-		limitReqCPU:     getenv("CLOUD_PLATFORM_LIMIT_REQ_CPU", "100m"),
-		limitReqMem:     getenv("CLOUD_PLATFORM_LIMIT_REQ_MEM", "128Mi"),
-		limitMaxCPU:     getenv("CLOUD_PLATFORM_LIMIT_MAX_CPU", "4"),
-		limitMaxMem:     getenv("CLOUD_PLATFORM_LIMIT_MAX_MEM", "8Gi"),
+		maxReplicas:     atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_REPLICAS", ""), defaultMaxReplicas),
+		maxStorageGB:    atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_STORAGE_GB", ""), defaultMaxStorageGB),
+		maxBuilds:       atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_CONCURRENT_BUILDS", ""), defaultMaxBuilds),
+		maxDeploys:      atoiDefault(environ.Or("CLOUD_PLATFORM_MAX_CONCURRENT_DEPLOYS", ""), defaultMaxDeploys),
+		quotaCPU:        environ.Or("CLOUD_PLATFORM_QUOTA_CPU", "20"),
+		quotaMemory:     environ.Or("CLOUD_PLATFORM_QUOTA_MEMORY", "40Gi"),
+		quotaPods:       environ.Or("CLOUD_PLATFORM_QUOTA_PODS", "50"),
+		limitDefaultCPU: environ.Or("CLOUD_PLATFORM_LIMIT_DEFAULT_CPU", "500m"),
+		limitDefaultMem: environ.Or("CLOUD_PLATFORM_LIMIT_DEFAULT_MEM", "512Mi"),
+		limitReqCPU:     environ.Or("CLOUD_PLATFORM_LIMIT_REQ_CPU", "100m"),
+		limitReqMem:     environ.Or("CLOUD_PLATFORM_LIMIT_REQ_MEM", "128Mi"),
+		limitMaxCPU:     environ.Or("CLOUD_PLATFORM_LIMIT_MAX_CPU", "4"),
+		limitMaxMem:     environ.Or("CLOUD_PLATFORM_LIMIT_MAX_MEM", "8Gi"),
 	}
 }
 

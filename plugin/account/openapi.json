@@ -325,6 +325,13 @@
             "description": "Key is the FULL value, and is present for a publishable key only: it is\npublic by construction and useless to its holder if it cannot be read back.",
             "type": "string"
           },
+          "limit": {
+            "description": "Limit is what this key may reach, as `kind:name` entries — `model:zen5`,\n`project:acme`, `product:commerce`. Absent means the key reaches whatever\nits holder does, which is what every key minted before limits existed does\nand must keep doing.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "prefix": {
             "description": "Prefix is the recognizable, non-secret head of the key — enough to tell two\nkeys apart, never enough to use one.",
             "type": "string"
@@ -409,6 +416,13 @@
       },
       "keyTypeIn": {
         "properties": {
+          "limit": {
+            "description": "Limit narrows what the minted key may reach, as `kind:name` entries:\n`model:zen5`, `project:acme`, `product:commerce`, or `model:*` for a whole\nkind. It only ever NARROWS — a key can never reach further than the person\nwho minted it — so an unrecognised kind costs availability, never privilege.\n\nOmitted mints an unrestricted key, because that is what every key in the\nestate is today and a default that restricted would revoke all of them.\n\nExample: {\"type\": \"secret\", \"limit\": [\"model:zen5\", \"project:acme\"]}",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "type": {
             "description": "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
             "type": "string"
@@ -425,6 +439,13 @@
           "key": {
             "description": "Key is the credential, returned ONCE — a secret key is unreadable afterwards.",
             "type": "string"
+          },
+          "limit": {
+            "description": "Limit is what the minted key may reach, echoed back so the caller can see\nthe narrowing took. Absent means unrestricted.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "type": {
             "description": "Type is the class of key that was minted.",

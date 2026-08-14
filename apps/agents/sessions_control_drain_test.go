@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // TestListControlAfterFiltersCursorsAndScopes proves the CLI drain query: it
@@ -18,13 +20,13 @@ func TestListControlAfterFiltersCursorsAndScopes(t *testing.T) {
 	}
 	now := time.Now().Unix()
 	// Interleave non-control noise with two control commands.
-	_, _ = s.AppendEvent(ctx, Event{ID: genIDMust(t), SessionID: "root", Org: "acme", Kind: KindLog, CreatedAt: now})
-	c1, err := s.AppendEvent(ctx, Event{ID: genIDMust(t), SessionID: "root", Org: "acme", Kind: KindControl, Payload: `{"command":"pause"}`, CreatedAt: now})
+	_, _ = s.AppendEvent(ctx, Event{ID: mint.ID("evt"), SessionID: "root", Org: "acme", Kind: KindLog, CreatedAt: now})
+	c1, err := s.AppendEvent(ctx, Event{ID: mint.ID("evt"), SessionID: "root", Org: "acme", Kind: KindControl, Payload: `{"command":"pause"}`, CreatedAt: now})
 	if err != nil {
 		t.Fatalf("append c1: %v", err)
 	}
-	_, _ = s.AppendEvent(ctx, Event{ID: genIDMust(t), SessionID: "root", Org: "acme", Kind: KindMessage, CreatedAt: now})
-	c2, err := s.AppendEvent(ctx, Event{ID: genIDMust(t), SessionID: "root", Org: "acme", Kind: KindControl, Payload: `{"command":"stop"}`, CreatedAt: now})
+	_, _ = s.AppendEvent(ctx, Event{ID: mint.ID("evt"), SessionID: "root", Org: "acme", Kind: KindMessage, CreatedAt: now})
+	c2, err := s.AppendEvent(ctx, Event{ID: mint.ID("evt"), SessionID: "root", Org: "acme", Kind: KindControl, Payload: `{"command":"stop"}`, CreatedAt: now})
 	if err != nil {
 		t.Fatalf("append c2: %v", err)
 	}

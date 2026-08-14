@@ -22,7 +22,7 @@ import (
 // views, so one insert becomes three parts — and the ZAP wire carries one batch
 // per RESOURCE, so insert volume tracks how many OBJECTS the fleet observes
 // rather than how much data it produces. Measured on hanzo-k8s 2026-08-08:
-// ~518 writes a minute, event.metric_30m past its part ceiling, and ClickHouse
+// ~518 writes a minute, event.metric_30m past its part ceiling, and Datastore
 // answering code 252 to EVERY metric write for an hour — app telemetry that had
 // been landing for months, not just the new collectors.
 //

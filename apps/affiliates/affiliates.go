@@ -51,8 +51,6 @@ package affiliates
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -66,7 +64,9 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/authors"
 	"github.com/hanzoai/cloud/apps/flags"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -405,7 +405,7 @@ type affiliateStanding struct {
 // Hanzo's MARGIN, never on the referred customer's bill, so nothing here changes
 // what that customer pays.
 func (o ops) standing(ctx context.Context, _ *noInput) (*affiliateStanding, error) {
-	org, ok := tenant(ctx)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return nil, zip.ErrForbidden("sign in to view your affiliate program")
 	}
@@ -532,7 +532,7 @@ type affiliateSelf struct {
 // Scoped to the validated org and nothing else, and refused without a
 // principal. A PURE READ — it reports the downline but accrues nothing.
 func (o ops) self(ctx context.Context, _ *noInput) (*affiliateSelf, error) {
-	org, ok := tenant(ctx)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return nil, zip.ErrForbidden("sign in to view your affiliate program")
 	}
@@ -656,7 +656,7 @@ func (a *application) StatusCode() int {
 //
 // Example: {"requestedCode": "acme"}
 func (o ops) apply(ctx context.Context, in *applyRequest) (*application, error) {
-	org, ok := tenant(ctx)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return nil, zip.ErrForbidden("sign in to apply as an affiliate")
 	}
@@ -668,11 +668,7 @@ func (o ops) apply(ctx context.Context, in *applyRequest) (*application, error) 
 		return nil, zip.ErrBadRequest("requested code must be 3–32 chars of a–z, 0–9, hyphen")
 	}
 
-	id, err := genID("aff")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	a, created, err := o.s.State.store.Apply(ctx, id, org, strings.TrimSpace(actor(ctx)), code, defaultRateBps)
+	a, created, err := o.s.State.store.Apply(ctx, mint.ID("aff"), org, strings.TrimSpace(actor(ctx)), code, defaultRateBps)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "apply: %v", err)
 	}
@@ -741,7 +737,7 @@ func (a *attribution) StatusCode() int {
 //
 // Example: {"code": "acme"}
 func (o ops) attribute(ctx context.Context, in *attributeRequest) (*attribution, error) {
-	referredOrg, ok := tenant(ctx)
+	referredOrg, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return nil, zip.ErrForbidden("sign in to record an affiliate")
 	}
@@ -765,11 +761,7 @@ func (o ops) attribute(ctx context.Context, in *attributeRequest) (*attribution,
 		return nil, zip.ErrBadRequest("cannot attribute yourself")
 	}
 
-	id, err := genID("afr")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	edge, created, err := o.s.State.store.Attribute(ctx, id, aff.ID, referredOrg, aff.Org, code)
+	edge, created, err := o.s.State.store.Attribute(ctx, mint.ID("afr"), aff.ID, referredOrg, aff.Org, code)
 	if err != nil {
 		switch err {
 		case errSelfAttribution:
@@ -1110,10 +1102,8 @@ func (o ops) adminApprove(ctx context.Context, in *approval) (*affiliateOut, err
 	}
 	// Mirror the minted primary code as a link row so click tracking is uniform across
 	// every code (best-effort — a link-mirror hiccup never fails the approval).
-	if lid, gerr := genID("aln"); gerr == nil {
-		if lerr := o.s.State.store.EnsureLink(ctx, lid, a.ID, a.Code, "primary", time.Now().Unix()); lerr != nil {
-			o.s.Log.Warn("affiliates: ensure primary link failed", "affiliate", a.ID, "err", lerr)
-		}
+	if lerr := o.s.State.store.EnsureLink(ctx, mint.ID("aln"), a.ID, a.Code, "primary", time.Now().Unix()); lerr != nil {
+		o.s.Log.Warn("affiliates: ensure primary link failed", "affiliate", a.ID, "err", lerr)
 	}
 	emitAudit(o.s, ctx, "affiliate.approve", a, map[string]any{"code": a.Code, "rateBps": a.RateBps})
 	return &affiliateOut{Data: affiliateData{Affiliate: adminViewOf(a, 0)}, envelope: ok()}, nil
@@ -1219,12 +1209,8 @@ func (o ops) adminPayout(ctx context.Context, in *disbursal) (*payoutOut, error)
 		return nil, zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
 	}
 
-	payoutID, err := genID("apo")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	// Reserve against pending FIRST (atomic guard) — a payout can never exceed owed.
-	payout, err := o.s.State.store.RecordPayout(ctx, payoutID, a.ID, in.AmountCents, method, strings.TrimSpace(in.Reference), time.Now().Unix())
+	payout, err := o.s.State.store.RecordPayout(ctx, mint.ID("apo"), a.ID, in.AmountCents, method, strings.TrimSpace(in.Reference), time.Now().Unix())
 	if err != nil {
 		switch err {
 		case errNotFound:
@@ -1374,11 +1360,7 @@ func accrueSource(s *cloud.Service[state], ctx context.Context, sourceOrg string
 		if commission <= 0 {
 			continue
 		}
-		accrualID, gerr := genID("aca")
-		if gerr != nil {
-			continue
-		}
-		moved, lerr := s.State.store.Accrue(ctx, accrualID, aff.ID, sourceOrg, period, level, spend, margin, commission, now)
+		moved, lerr := s.State.store.Accrue(ctx, mint.ID("aca"), aff.ID, sourceOrg, period, level, spend, margin, commission, now)
 		if lerr != nil {
 			s.Log.Warn("affiliates: accrual failed", "affiliate", aff.ID, "source", sourceOrg, "err", lerr)
 			continue
@@ -1565,15 +1547,6 @@ func opt[T any](v T) *T { return &v }
 // usage rollup is month-to-date, so one accrual per referred org per month is the
 // at-most-once unit.
 func periodKey(t time.Time) string { return t.UTC().Format("2006-01") }
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}
 
 // adminLimit clamps a caller's page bound: non-positive (including an absent or
 // unparseable value, which binds as zero) means the default, and nothing exceeds

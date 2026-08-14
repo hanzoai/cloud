@@ -18,8 +18,10 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/orm"
@@ -101,7 +103,7 @@ type projectView struct {
 
 func toProjectView(p *model.Project, apps int) projectView {
 	return projectView{
-		Org: p.Owner, Slug: p.Name, Name: firstNonEmpty(p.DisplayName, p.Name),
+		Org: p.Owner, Slug: p.Name, Name: cmp.Or(strings.TrimSpace(p.DisplayName), p.Name),
 		Description: p.Description, Applications: apps, CreatedAt: projectCreatedAt(p),
 	}
 }

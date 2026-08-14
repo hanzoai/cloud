@@ -15,6 +15,7 @@ import (
 	"github.com/hanzoai/cloud/apps/domain/namecom"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/environ"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -112,15 +113,8 @@ func configFromEnv() Config {
 		Nameservers: nsEnv("HANZO_NAMESERVERS", []string{"ns1.hanzo.ai", "ns2.hanzo.ai"}),
 		// The registrar env is EXPLICIT and fail-safe: only "prod" hits the live,
 		// billable registrar; anything else (incl. unset) is the sandbox.
-		Env: envOr("NAMECOM_ENV", "test"),
+		Env: environ.Or("NAMECOM_ENV", "test"),
 	}
-}
-
-func envOr(key, def string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return def
 }
 
 func floatEnv(key string, def float64) float64 {
@@ -232,17 +226,6 @@ func (z *hanzodnsZones) EnsureZone(ctx context.Context, org, domainName string) 
 }
 
 // ── handlers ───────────────────────────────────────────────────────────────────────
-
-// tenant resolves the org — the ownership and billing KEY — from the validated
-// principal cloud.Bridge parked. A typed op receives a context.Context and nothing
-// else, so it reads the org there rather than off the request. Fails closed.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	return org, nil
-}
 
 // statusErr maps a core sentinel / registrar error to a zip HTTP status.
 func statusErr(err error) error {
@@ -359,7 +342,7 @@ type searchQuery struct {
 // purchase, so a name quoted here can be gone or dearer by the time you buy it. A
 // deployment with no registrar credentials answers 503.
 func (o ops) search(ctx context.Context, in *searchQuery) (*quoteList, error) {
-	if _, err := tenant(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	q := strings.TrimSpace(in.Q)
@@ -393,7 +376,7 @@ type availabilityQuery struct {
 // It requires a validated principal; 403 without one. Nothing is charged and
 // nothing is held. A deployment with no registrar credentials answers 503.
 func (o ops) availability(ctx context.Context, in *availabilityQuery) (*quoteList, error) {
-	if _, err := tenant(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	raw := strings.TrimSpace(in.Domain)
@@ -431,7 +414,7 @@ type holdings struct {
 // is not here. The default store is in-process, so a deployment that has not
 // swapped in a durable store answers from what this process registered.
 func (o ops) list(ctx context.Context, _ *noIn) (*holdings, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -477,7 +460,7 @@ type order struct {
 // the zone service is down the domain is still registered against Hanzo's
 // nameservers and the zone reconciles afterwards, rather than the purchase failing.
 func (o ops) register(ctx context.Context, in *order) (*RegisterResult, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -512,7 +495,7 @@ type renewReq struct {
 // when the prepaid balance cannot cover it, 503 when the deployment has no
 // registrar credentials. Requires a validated principal.
 func (o ops) renew(ctx context.Context, in *renewReq) (*RenewResult, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -550,7 +533,7 @@ type transferReq struct {
 // transfer completes at the losing registrar. Unlike a registration this does not
 // provision a zone, so the record carries this deployment's configured nameservers.
 func (o ops) transfer(ctx context.Context, in *transferReq) (*RegisterResult, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

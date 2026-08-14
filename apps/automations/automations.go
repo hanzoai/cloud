@@ -49,6 +49,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -56,6 +57,8 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -381,14 +384,7 @@ func (o ops) createFlow(ctx context.Context, in *createFlowReq) (*populatedFlow,
 		return nil, zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
 	now := time.Now().UnixMilli()
-	flowID, err := genID("flow")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	verID, err := genID("ver")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	flowID, verID := mint.ID("flow"), mint.ID("ver")
 	f := Flow{
 		ID: flowID, Org: org, ExternalID: clip(in.ExternalID), FolderID: clip(in.FolderID),
 		Status: FlowDisabled, Created: now, Updated: now,
@@ -583,13 +579,9 @@ func (o ops) createVersion(ctx context.Context, in *createVersionIn) (*FlowVersi
 	if err := validateTrigger(in.Trigger); err != nil {
 		return nil, zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
-	verID, err := genID("ver")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	now := time.Now().UnixMilli()
 	v := FlowVersion{
-		ID: verID, Org: org, FlowID: clip(in.ID), DisplayName: clip(in.DisplayName),
+		ID: mint.ID("ver"), Org: org, FlowID: clip(in.ID), DisplayName: clip(in.DisplayName),
 		Trigger: in.Trigger, Valid: in.Trigger != nil, State: VersionDraft,
 		SchemaVersion: LatestFlowSchemaVersion, Created: now, Updated: now,
 	}
@@ -859,13 +851,9 @@ func (o ops) runFlow(ctx context.Context, in *flowRef) (*FlowRun, error) {
 	if err != nil {
 		return nil, mapStoreErr(err, "flow has no runnable version")
 	}
-	runID, err := genID("run")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	// startRun applies the per-org bounds (concurrency + durable budget) uniformly for every
 	// run-start path. Manual run: depth 0, no trigger payload.
-	run, _, err := startRun(o.s, ctx, org, f, v, runID, 0, nil)
+	run, _, err := startRun(o.s, ctx, org, f, v, mint.ID("run"), 0, nil)
 	if err != nil {
 		return nil, engineErr(err)
 	}
@@ -1359,8 +1347,11 @@ func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
 // caller asserted for itself. Same validOrg rule and same 403 as tenant, and it fails
 // closed off the HTTP path, where nothing parked an org.
 func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok || !validOrg(org) {
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !validOrg(org) {
 		return "", zip.ErrForbidden("a validated principal is required")
 	}
 	return org, nil
@@ -1394,20 +1385,7 @@ func boundLimit(n int) int {
 
 // clip trims and bounds a text field.
 func clip(s string) string {
-	if len(s) > maxField {
-		s = s[:maxField]
-	}
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t' || s[0] == '\n' || s[0] == '\r') {
-		s = s[1:]
-	}
-	for len(s) > 0 {
-		last := s[len(s)-1]
-		if last != ' ' && last != '\t' && last != '\n' && last != '\r' {
-			break
-		}
-		s = s[:len(s)-1]
-	}
-	return s
+	return strings.TrimSpace(shorten.To(s, maxField))
 }
 
 func terminal(s FlowRunStatus) bool {

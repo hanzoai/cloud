@@ -4,33 +4,32 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/integrations"
 )
 
-// gitMirrorTokenEnv is the git plane's shared mirror credential (git.mirrorEnvToken):
-// the KMS-injected token mirror.go fetches a private source with, sent ONLY to the
-// allowlisted source host. The sync provider falls back to it when the per-org GitHub
-// App is not connected, so native mirroring uses ONE credential path, not two.
-const gitMirrorTokenEnv = "GIT_MIRROR_TOKEN"
-
-// git_provider.go is the FIRST sync provider: GitHub/GitLab ⇆ Hanzo Git (the NATIVE
-// /v1/git plane in this same binary). It carries no git logic of its own — Reconcile
-// composes the native git object-plane seams (cloud.ImportGitRepo / cloud.InboundGitSync
-// / cloud.EnsureGitMirror, which clients/git registers at Mount), so the native git
-// store is the ONE git store and no byte transits an external git host:
+// git_provider.go is the FIRST sync provider: GitHub/GitLab ⇆ the FORGE
+// (git.hanzo.ai, where this estate's repositories live). It carries no git logic
+// of its own — Reconcile composes the git seams (cloud.InboundGitSync /
+// cloud.ImportGitRepo / cloud.EnsureGitMirror), which importer.go answers
+// against the forge. The forge is the ONE git store, and it is CANONICAL:
 //
-//   - INBOUND (a source push): cloud.InboundGitSync advances the matching branch
-//     fast-forward only — a diverged native ref is a Conflict, never overwritten (the
-//     split-brain guard, enforced by git itself, native preserved).
-//   - RECONCILE (a manual run / initial sync): for a pulling direction, cloud.ImportGitRepo
-//     fast-forward mirrors every branch of the upstream INTO native (and, when the sync
-//     also pushes, registers the outbound native→upstream mirror so the native push
-//     lifecycle propagates every later commit back); for a push-only direction,
-//     cloud.EnsureGitMirror declares that outbound target without importing.
+//   - INBOUND (a source push): cloud.InboundGitSync advances the matching ref
+//     fast-forward only — a diverged forge ref is a Conflict, never overwritten
+//     (the split-brain guard, enforced by git itself, the forge preserved).
+//   - RECONCILE (a manual run / initial sync): for a pulling direction,
+//     cloud.ImportGitRepo advances every ref of the upstream INTO the forge and,
+//     when the sync also pushes, declares the outbound target and advances the
+//     same refs back out to it; for a push-only direction, cloud.EnsureGitMirror
+//     declares that target and pushOut advances the forge's refs to it, with
+//     nothing coming in.
+//
+// Nothing this provider drives is ever a force. Both directions are the same
+// fast-forward advance with the two ends swapped, so a downstream that has moved
+// on is REPORTED rather than overwritten — which matters because a bidirectional
+// sync's "downstream" is a place people push.
 //
 // The short-lived GitHub App installation token rides IN the event when a webhook
 // already minted it; for a manual run the provider mints a fresh one per org. It is
@@ -84,17 +83,21 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		return false, nil
 	}
 	owner := sy.Org
-	native := normalizeGitName(sy.Target.Locator)
+	native := fold(sy.Target.Locator)
 	source := sy.Source.Locator
+	// The ACCOUNT the source belongs to, which is half of which repository this
+	// is: a name is unique only within one, and the sync's own source URL is
+	// where this row's account is written down.
+	account := accountOf(source)
 	tok, err := gitToken(ctx, sy.Source.Provider, sy.Org, source, ev.Token)
 	if err != nil {
 		return false, err
 	}
 	if a.inbound {
-		// Advance the pushed branch fast-forward only; a diverged native ref is a
+		// Advance the pushed ref fast-forward only; a diverged forge ref is a
 		// Conflict (preserved) and an up-to-date ref is a no-op — both "no change".
 		res, err := cloud.InboundGitSync(cloud.For(ctx, owner), cloud.GitInboundReq{
-			Org: owner, Repo: native, Ref: ev.Ref,
+			Org: owner, Project: account, Repo: native, Ref: ev.Ref,
 			CloneURL: source, Token: tok, Origin: hostOf(source),
 		})
 		if err != nil {
@@ -102,10 +105,10 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		}
 		return res.Applied, nil
 	}
-	// Manual reconcile toward the direction. Pull/both fast-forward mirror EVERY branch
-	// IN (and, when it also pushes, register the outbound native→source mirror so the
-	// native push lifecycle propagates later commits back); push-only declares that
-	// outbound target without importing. Off would not reach here.
+	// Manual reconcile toward the direction. Pull/both fast-forward advances EVERY
+	// ref IN (and, when it also pushes, declares the outbound target and advances
+	// the same refs back out); push-only declares the target and advances out only.
+	// Off would not reach here.
 	changed := false
 	if dirPulls(sy.Direction) {
 		mirrorURL := ""
@@ -119,14 +122,27 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		// wins over a stated one, so a job supplies an identity where there is
 		// none and can never launder one.
 		if err := cloud.ImportGitRepo(cloud.For(ctx, owner), cloud.GitImportReq{
-			Org: owner, Repo: native, CloneURL: source, Token: tok, MirrorURL: mirrorURL,
+			Org: owner, Project: account, Repo: native,
+			CloneURL: source, Token: tok, MirrorURL: mirrorURL,
 		}); err != nil {
 			return false, fmt.Errorf("import: %w", err)
 		}
 		changed = true
 	} else if dirPushes(sy.Direction) {
-		if err := cloud.EnsureGitMirror(ctx, owner, "", native, source, true); err != nil {
+		if err := cloud.EnsureGitMirror(ctx, owner, account, native, source, true); err != nil {
 			return false, fmt.Errorf("ensure mirror: %w", err)
+		}
+		// DECLARING A TARGET SENDS NOTHING TO IT. Push-only means nothing comes in,
+		// so advancing the forge's refs out IS this direction's whole reconcile —
+		// without it a push-only sync recorded an intention and moved no bytes,
+		// which is what it did while the pushing lived on a lifecycle in an app
+		// that no longer receives one.
+		//
+		// And it is the whole of it, so its failure is this reconcile's failure:
+		// returning "changed" for a push nothing received is what stamps "last
+		// synced, just now" on a repository that is not synced at all.
+		if err := pushOut(cloud.For(ctx, owner), owner, account, native); err != nil {
+			return false, fmt.Errorf("mirror out: %w", err)
 		}
 		changed = true
 	}
@@ -139,10 +155,10 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 //   - for GitHub, the per-org GitHub App installation token (short-lived, scoped to
 //     the org's OWN installation) when the App is connected AND its creds are present,
 //     else
-//   - the git plane's shared mirror credential (GIT_MIRROR_TOKEN), the SAME token
-//     mirror.go fetches a private source with — so native mirroring has ONE credential
-//     path — else
-//   - anonymous ("").
+//   - nothing, which is not the same as anonymous: an empty token leaves a zero
+//     gitCred, and the git plane then resolves the credential for the SOURCE'S OWN
+//     HOST. That is the one credential path, and naming a second env var here to
+//     "share" it was what made it two.
 //
 // It NEVER hard-fails: a PUBLIC repo needs no credential, so failing the whole
 // reconcile because the App is not connected would wrongly freeze the public mirrors
@@ -155,10 +171,18 @@ func gitToken(ctx context.Context, provider, org, source, eventToken string) (st
 		return eventToken, nil
 	}
 	if strings.EqualFold(provider, provGitHub) {
-		if tok, err := integrations.InstallationToken(ctx, org, githubOwnerOf(source)); err == nil && strings.TrimSpace(tok) != "" {
+		if tok, err := integrations.InstallationToken(ctx, org, accountOf(source)); err == nil && strings.TrimSpace(tok) != "" {
 			return tok, nil
 		}
-		return strings.TrimSpace(os.Getenv(gitMirrorTokenEnv)), nil
+		// NO FALLBACK TOKEN HERE, deliberately. Returning "" leaves the import with a
+		// zero gitCred, and the git plane then resolves the credential for the source's
+		// OWN HOST (credAuthHeader → mirrorAuthHeader → mirrorCredential). This
+		// package used to name a second env var for the same secret and read it whole,
+		// which stopped being the same secret the moment that credential became
+		// per-host: a deployment setting only the per-host name left this returning ""
+		// and a private repo fetching anonymously, while its comment claimed "ONE
+		// credential path, not two".
+		return "", nil
 	}
 	return "", nil
 }
@@ -167,14 +191,14 @@ func gitToken(ctx context.Context, provider, org, source, eventToken string) (st
 // name (last path segment of the clone URL, minus .git) is the identity; it equals
 // the native target name for a git sync.
 func gitRepoMatches(sy Sync, ev Event) bool {
-	want := normalizeGitName(ev.Repo)
+	want := fold(ev.Repo)
 	if want == "" {
 		want = repoNameFromLocator(ev.Locator)
 	}
 	if want == "" {
 		return false
 	}
-	return want == repoNameFromLocator(sy.Source.Locator) || want == normalizeGitName(sy.Target.Locator)
+	return want == repoNameFromLocator(sy.Source.Locator) || want == fold(sy.Target.Locator)
 }
 
 // repoNameFromLocator extracts the short repo name from a clone URL or an
@@ -192,12 +216,16 @@ func repoNameFromLocator(locator string) string {
 	if i := strings.LastIndexByte(locator, '/'); i >= 0 {
 		locator = locator[i+1:]
 	}
-	return normalizeGitName(locator)
+	return fold(locator)
 }
 
-// normalizeGitName lowercases + trims a repo name (git repo names are case-folded
-// in this store, matching the git plane's normalizeName).
-func normalizeGitName(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+// fold is the canonical spelling of a name — an org, an account, a repository.
+//
+// ONE operation, because it is one question: two spellings that differ only in
+// case or in surrounding space name the same thing, upstream and on the forge
+// alike. Folding some of them and not others is what let ` Hanzo ` and `hanzo`
+// take different gates and different store files while addressing one namespace.
+func fold(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
 
 // hostOf returns the lowercased host of a URL — the loop-prevention Origin stamp the
 // outbound mirror matches. "" on a parse miss.
@@ -209,17 +237,33 @@ func hostOf(raw string) string {
 	return strings.ToLower(u.Hostname())
 }
 
-// githubOwnerOf reads the account from a GitHub source URL — the first path segment
-// of https://github.com/<owner>/<repo>.git. Empty when the URL names none, which
-// lets the single-connection case resolve as before.
-func githubOwnerOf(source string) string {
+// accountOf reads the ACCOUNT out of a clone URL: everything ahead of the
+// repository's own name in https://host/<account>/<repo>.git. Empty when the URL
+// names none, which lets the single-connection case resolve as before.
+//
+// It is one function because it answers one question in two places: WHOSE
+// installation token to mint, and WHICH repository this is (a name is unique
+// only within an account — see [newRepo]).
+//
+// EVERYTHING ahead of the name, not the first segment of it. A GitLab namespace
+// nests, and reading only its top said group/sub1/widgets and group/sub2/widgets
+// were both group's `widgets`: two repositories, one coordinate, the second
+// import walking into the first's refs and HEAD. Reading the whole namespace
+// makes them different values again, and a value the flat forge cannot spell is
+// then refused by [newRepo] rather than truncated onto somebody else's
+// repository.
+//
+// It is the SAME cut [repoNameFromLocator] takes the name from — the last
+// separator — so the two halves of a clone URL always come apart in one place.
+func accountOf(source string) string {
 	u, err := url.Parse(strings.TrimSpace(source))
 	if err != nil {
 		return ""
 	}
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) == 0 {
+	path := strings.Trim(u.Path, "/")
+	i := strings.LastIndexByte(path, '/')
+	if i < 0 {
 		return ""
 	}
-	return parts[0]
+	return path[:i]
 }

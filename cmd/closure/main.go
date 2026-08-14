@@ -114,7 +114,11 @@ var listEnv = []string{
 }
 
 // pkg is the slice of `go list` output this needs: who a package is, where its
-// source is, and what it imports.
+// source is, what it imports, and — for one that resolved to nothing — why.
+//
+// Error is what `-e` does with a failure instead of aborting: it attaches it to
+// the package and stays quiet. Asking for it is the difference between naming a
+// missing package and naming the cause, and nothing else here reads it.
 type pkg struct {
 	ImportPath string
 	Dir        string
@@ -125,6 +129,7 @@ type pkg struct {
 		Path    string
 		Version string
 	}
+	Error *struct{ Err string }
 }
 
 // witnessed says whether a package is part of what a document was generated FROM.
@@ -242,7 +247,7 @@ func repoRoot() (string, error) {
 // and not one this gate may swallow: placed below is the other half of the flag.
 func list(root string) ([]pkg, error) {
 	cmd := exec.Command("go", "list", "-e", "-deps",
-		"-json=ImportPath,Dir,GoFiles,CgoFiles,Imports,Module", rootPattern)
+		"-json=ImportPath,Dir,GoFiles,CgoFiles,Imports,Module,Error", rootPattern)
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), listEnv...)
 	cmd.Stderr = os.Stderr
@@ -298,7 +303,11 @@ func placed(pkgs []pkg) error {
 	var lost []string
 	for i := range pkgs {
 		if pkgs[i].Dir == "" {
-			lost = append(lost, pkgs[i].ImportPath)
+			why := "no reason recorded"
+			if pkgs[i].Error != nil && pkgs[i].Error.Err != "" {
+				why = strings.ReplaceAll(pkgs[i].Error.Err, "\n", "\n        ")
+			}
+			lost = append(lost, pkgs[i].ImportPath+"\n        "+why)
 		}
 	}
 	if len(lost) == 0 {
@@ -306,10 +315,10 @@ func placed(pkgs []pkg) error {
 	}
 	sort.Strings(lost)
 	return fmt.Errorf("the toolchain could not place %d package(s), so this closure witnesses nothing:\n    %s\n\n"+
-		"  Each is an import that resolves to no source in this environment. The usual\n"+
-		"  cause is a version go.mod names that is published to only one of a module's\n"+
-		"  homes — github.com/hanzoai/* resolves from the forge here. Ask the toolchain\n"+
-		"  which one and why: `go mod download <module>` says both in one line.",
+		"  Each is an import that resolves to no source in this environment, and the line\n"+
+		"  under it is the toolchain's own reason. Read that reason before reproducing it\n"+
+		"  by hand: which HOST git dialled is set by the runner's insteadOf rewrite, so a\n"+
+		"  warm cache or a different rewrite answers a different question than CI asked.",
 		len(lost), strings.Join(lost, "\n    "))
 }
 

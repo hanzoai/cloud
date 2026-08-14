@@ -52,9 +52,15 @@ type forgeStub struct {
 	visible map[string][]string
 	// issues and milestones are keyed by org and repo respectively.
 	issues     map[string][]Issue
-	repos      map[string][]Repo
 	milestones map[string][]Milestone
-	token      string
+	repos      map[string][]Repo
+	// refs maps "org/repo@ref" to the commit it names, for both routes a ref can
+	// be asked through — /git/commits/{sha} and the /branches/* wildcard — so a
+	// test cannot make the two disagree.
+	refs map[string]string
+	// trees maps "org/repo@sha" to the tar.gz the archive route serves.
+	trees map[string][]byte
+	token string
 }
 
 func newStub(t *testing.T) *forgeStub {
@@ -65,6 +71,8 @@ func newStub(t *testing.T) *forgeStub {
 		issues:     map[string][]Issue{},
 		repos:      map[string][]Repo{},
 		milestones: map[string][]Milestone{},
+		refs:       map[string]string{},
+		trees:      map[string][]byte{},
 		token:      "machine-token-value",
 	}
 	mux := http.NewServeMux()
@@ -76,14 +84,21 @@ func newStub(t *testing.T) *forgeStub {
 			return
 		}
 		actor := r.Header.Get("Sudo")
+		// NO Sudo header is the MACHINE, and it sees everything. Forgejo requires
+		// the token behind Sudo to belong to a site administrator — that is what
+		// makes Sudo work at all — so an unsudoed call is made by an administrator.
+		// Modelling it as an unknown actor instead would make the machine calls
+		// (Tip, Grant, the delivery tree read) untestable against this stub, and
+		// they are exactly the calls whose reach needs pinning.
+		machine := actor == ""
 		orgs, known := s.visible[actor]
-		if !known {
+		if !machine && !known {
 			// The real forge's answer for an unknown sudo user.
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		canSee := func(org string) bool {
-			return slices.Contains(orgs, org)
+			return machine || slices.Contains(orgs, org)
 		}
 
 		path := strings.TrimPrefix(r.URL.Path, "/v1")
@@ -117,6 +132,45 @@ func newStub(t *testing.T) *forgeStub {
 				return
 			}
 			writeJSON(w, s.milestones[parts[0]+"/"+parts[1]])
+		case strings.Contains(path, "/git/commits/"):
+			// The single-SEGMENT route: a sha, a tag, an unslashed branch, HEAD.
+			owner, repo, ref, ok := repoRef(path, "/git/commits/")
+			if !ok || !canSee(owner) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			sha, known := s.refs[owner+"/"+repo+"@"+ref]
+			if !known {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			writeJSON(w, map[string]any{"sha": sha})
+		case strings.Contains(path, "/branches/"):
+			// The WILDCARD route, which is the only one a slashed name reaches.
+			owner, repo, ref, ok := repoRef(path, "/branches/")
+			if !ok || !canSee(owner) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			sha, known := s.refs[owner+"/"+repo+"@"+ref]
+			if !known {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			writeJSON(w, map[string]any{"commit": map[string]any{"id": sha}})
+		case strings.Contains(path, "/archive/"):
+			owner, repo, name, ok := repoRef(path, "/archive/")
+			if !ok || !canSee(owner) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			tgz, known := s.trees[owner+"/"+repo+"@"+strings.TrimSuffix(name, ".tar.gz")]
+			if !known {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/gzip")
+			_, _ = w.Write(tgz)
 		case strings.HasPrefix(path, "/repos/"):
 			// One repository by name, which is how a single board is read.
 			parts := strings.Split(strings.TrimPrefix(path, "/repos/"), "/")
@@ -143,6 +197,21 @@ func newStub(t *testing.T) *forgeStub {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// repoRef splits "/repos/{owner}/{repo}{route}{rest}" into its three parts. rest
+// is taken WHOLE — it is what a wildcard route receives, so a slashed branch
+// name arrives here exactly as the forge would see it.
+func repoRef(path, route string) (owner, repo, rest string, ok bool) {
+	head, rest, found := strings.Cut(path, route)
+	if !found {
+		return "", "", "", false
+	}
+	parts := strings.Split(strings.TrimPrefix(head, "/repos/"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || rest == "" {
+		return "", "", "", false
+	}
+	return parts[0], parts[1], rest, true
 }
 
 // pageOf applies the forge's limit/page paging to a slice.
@@ -222,9 +291,9 @@ func TestNoActor_EveryCallRefusesAndNothingReachesTheWire(t *testing.T) {
 	c := s.client(t)
 
 	calls := map[string]func() error{
-		"Issues":     func() error { _, err := c.Issues(t.Context(), "acme", IssueFilter{}); return err },
-		"Repos":      func() error { _, err := c.Repos(t.Context(), "acme"); return err },
-		"Milestones": func() error { _, err := c.Milestones(t.Context(), "acme"); return err },
+		"Issues": func() error { _, err := c.Issues(t.Context(), "acme", IssueFilter{}); return err },
+		"Repos":  func() error { _, err := c.Repos(t.Context(), "acme"); return err },
+		"Issue":  func() error { _, err := c.Issue(t.Context(), "acme", "api", 1); return err },
 	}
 	for name, call := range calls {
 		t.Run(name, func(t *testing.T) {
@@ -348,7 +417,7 @@ func TestTenancy_ActorCannotReadAnotherOrgsIssues(t *testing.T) {
 // one becomes a deliberate act that breaks a named test rather than a quiet
 // convenience. A filter field would be caller-supplied, and a tenant key read
 // from caller-supplied data is a cross-tenant read the caller asserted for
-// itself (apps/tracker/typed.go states the same rule for In fields).
+// itself (apps/todo/typed.go states the same rule for In fields).
 func TestIssueFilter_CarriesNoTenancy(t *testing.T) {
 	for _, forbidden := range []string{"Org", "Owner", "Tenant", "Repo", "Sudo", "Actor", "User"} {
 		if fieldExists[IssueFilter](forbidden) {
@@ -395,115 +464,13 @@ func TestValidOrg_RefusesAnythingThatIsNotAPathSegment(t *testing.T) {
 			if _, err := c.Repos(t.Context(), bad); err == nil {
 				t.Fatalf("Repos(%q) succeeded; want refusal", bad)
 			}
-			if _, err := c.Milestones(t.Context(), bad); err == nil {
-				t.Fatalf("Milestones(%q) succeeded; want refusal", bad)
+			if _, err := c.Issue(t.Context(), bad, "api", 1); err == nil {
+				t.Fatalf("Issue(%q) succeeded; want refusal", bad)
+			}
+			if _, err := c.Issue(t.Context(), "acme", bad, 1); err == nil {
+				t.Fatalf("Issue(repo=%q) succeeded; want refusal", bad)
 			}
 		})
-	}
-}
-
-// ── the org rollup the forge does not offer ──────────────────────────────────
-
-// Milestones is repo-scoped upstream, so the org view is a server-side fan-out.
-// It must cover every live repo, stamp each milestone with the repo it came
-// from, and skip archived repos.
-func TestMilestones_FansOutOverTheOrgsRepos(t *testing.T) {
-	s := newStub(t)
-	s.visible["alice"] = []string{"acme"}
-	s.repos["acme"] = []Repo{
-		{Name: "api", FullName: "acme/api"},
-		{Name: "web", FullName: "acme/web"},
-		{Name: "old", FullName: "acme/old", Archived: true},
-	}
-	s.milestones["acme/api"] = []Milestone{{ID: 1, Title: "v1", State: "open", Open: 3}}
-	s.milestones["acme/web"] = []Milestone{{ID: 2, Title: "launch", State: "open", Open: 5}}
-	s.milestones["acme/old"] = []Milestone{{ID: 3, Title: "ancient"}}
-
-	got, err := s.client(t).As("alice").Milestones(t.Context(), "acme")
-	if err != nil {
-		t.Fatalf("Milestones: %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("got %d milestones, want 2 (archived repo excluded): %+v", len(got), got)
-	}
-	byRepo := map[string]Milestone{}
-	for _, m := range got {
-		byRepo[m.Repo] = m
-	}
-	if m, ok := byRepo["api"]; !ok || m.Title != "v1" {
-		t.Fatalf("missing api/v1; got %+v", got)
-	}
-	if m, ok := byRepo["web"]; !ok || m.Title != "launch" {
-		t.Fatalf("missing web/launch; got %+v", got)
-	}
-	for _, m := range got {
-		if m.Repo == "" {
-			t.Fatalf("milestone %q has no repo stamped: an org rollup that cannot say where a milestone came from is unusable", m.Title)
-		}
-		if m.Title == "ancient" {
-			t.Fatal("archived repo's milestone leaked into the rollup")
-		}
-	}
-}
-
-// A partial rollup presented as a complete one is a wrong answer. One repo
-// failing must fail the whole call.
-func TestMilestones_OneRepoFailingFailsTheRollup(t *testing.T) {
-	s := newStub(t)
-	s.visible["alice"] = []string{"acme"}
-	s.repos["acme"] = []Repo{{Name: "api"}, {Name: "web"}}
-	s.milestones["acme/api"] = []Milestone{{Title: "v1"}}
-	// acme/web has no milestones entry; the stub 404s only on an org the actor
-	// cannot see, so make the failure explicit by swapping the handler.
-	s.Server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.got.add(r)
-		if strings.Contains(r.URL.Path, "/web/milestones") {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		if strings.HasSuffix(r.URL.Path, "/repos") {
-			writeJSON(w, s.repos["acme"])
-			return
-		}
-		writeJSON(w, s.milestones["acme/api"])
-	})
-
-	if _, err := s.client(t).As("alice").Milestones(t.Context(), "acme"); err == nil {
-		t.Fatal("rollup succeeded while a repo failed; a partial answer must not read as complete")
-	}
-}
-
-// The fan-out must stay bounded, or a large org turns a board load into a
-// denial-of-service against our own forge.
-func TestMilestones_FanOutIsBounded(t *testing.T) {
-	s := newStub(t)
-	s.visible["alice"] = []string{"acme"}
-	for i := range 40 {
-		s.repos["acme"] = append(s.repos["acme"], Repo{Name: fmt.Sprintf("r%d", i)})
-	}
-
-	var live, peak int64
-	s.Server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/milestones") {
-			n := atomic.AddInt64(&live, 1)
-			for {
-				old := atomic.LoadInt64(&peak)
-				if n <= old || atomic.CompareAndSwapInt64(&peak, old, n) {
-					break
-				}
-			}
-			defer atomic.AddInt64(&live, -1)
-			writeJSON(w, []Milestone{{Title: "m"}})
-			return
-		}
-		writeJSON(w, pageOf(s.repos["acme"], r))
-	})
-
-	if _, err := s.client(t).As("alice").Milestones(t.Context(), "acme"); err != nil {
-		t.Fatalf("Milestones: %v", err)
-	}
-	if p := atomic.LoadInt64(&peak); p > fanout {
-		t.Fatalf("peak concurrent repo requests = %d, want <= %d", p, fanout)
 	}
 }
 

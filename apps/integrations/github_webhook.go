@@ -16,7 +16,7 @@ import (
 )
 
 // github_webhook.go is the GitHub trigger of the universal sync engine: the org's
-// GitHub App POSTs a push event to /v1/connector/github/webhook, we HMAC-verify it, resolve
+// GitHub App POSTs a push event to /v1/integrations/github/webhook, we HMAC-verify it, resolve
 // the org from the (signed) installation id, mint the installation token, and hand
 // the push to cloud.Sync. The engine resolves the SyncLink(s) for the repo and the
 // git provider fast-forward-only advances native. PUBLIC at the JWT layer (GitHub
@@ -95,8 +95,8 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	case "push":
 		// handled below
 	case "issues", "issue_comment":
-		// Issue lifecycle → native tracker mirror (github_issues.go). Same signed
-		// installation → org resolution as push; the tracker sink is idempotent by
+		// Issue lifecycle → native todo mirror (github_issues.go). Same signed
+		// installation → org resolution as push; the todo sink is idempotent by
 		// ExtRef, so opened/edited/closed/reopened + comment all re-sync one row.
 		return handleGitHubIssueEvent(c, body)
 	default:
@@ -142,12 +142,15 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	// automations use: our outbound mirror pushes AS the App, and a release must
 	// never rebuild itself.
 	if !isBotActor(actorOf(ev)) {
-		if err := cloud.OnGitPush(c.Context(), cloud.GitPushEvent{
+		if builds, err := cloud.OnGitPush(c.Context(), cloud.GitPushEvent{
 			Org: org, Repo: ev.Repository.Name, Ref: ev.Ref,
 			Commit: ev.After, CloneURL: clone,
 		}); err != nil {
 			s.Log.Warn("github push: build trigger failed",
 				"org", org, "repo", ev.Repository.Name, "ref", ev.Ref, "err", err)
+		} else {
+			s.Log.Info("github push: build trigger",
+				"org", org, "repo", ev.Repository.Name, "ref", ev.Ref, "builds", builds)
 		}
 	}
 

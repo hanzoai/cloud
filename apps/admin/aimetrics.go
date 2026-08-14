@@ -76,7 +76,6 @@ import (
 // noticed. The projection now lives ONCE in o11y.go (o11yAIObs = event.span plus
 // the o11yGenAI* attribute consts; same package) and this file reads it there.
 const (
-	aimUsageTable = "hanzo.cloud_usage"
 	aimEvalTraces = "hanzo.eval_traces"
 	aimEvalScores = "hanzo.eval_scores"
 	aimTopN       = 12
@@ -234,6 +233,7 @@ func aimetrics(ctx context.Context, in *rangeIn) (*aimetricsOut, error) {
 
 	sinceTS := chTS(since) // DateTime literal — cloud_usage.timestamp, span.time, eval_*.ts
 	interval := o11yBucket(rangeLabel)
+	fleet := ledgerScope{Since: since} // the ledger reads are fleet-wide here
 
 	// ── LLM generations (fleet) over gen_ai spans — totals builder SHARED with the
 	// o11y board (o11y.go): one query, one builder, two boards ──
@@ -254,16 +254,10 @@ func aimetrics(ctx context.Context, in *rangeIn) (*aimetricsOut, error) {
 		payload.O11yAIModels = lfModelsFromRows(rows)
 	}
 
-	// ── Per-model usage (fleet) from the live cloud_usage ledger ──
-	if rows, err := datastore.Query(ctx, aimUsageTotalsSQL(), sinceTS); err == nil {
-		fillAimUsage(&payload.Usage, firstRowOr(rows))
-	}
-	if rows, err := datastore.Query(ctx, aimTopModelsSQL(), sinceTS); err == nil {
-		payload.TopModels = aimModelsFromRows(rows)
-	}
-	if rows, err := datastore.Query(ctx, aimTopActorsSQL(), sinceTS); err == nil {
-		payload.TopActors = aimActorsFromRows(rows)
-	}
+	// ── Per-model usage (fleet) from the live cloud_usage ledger (ledger.go) ──
+	fillAimUsage(&payload.Usage, firstRowOr(ledgerRows(ctx, ledgerTotals(fleet))))
+	payload.TopModels = aimModelsFromRows(ledgerRows(ctx, ledgerByModel(fleet, aimTopN)))
+	payload.TopActors = aimActorsFromRows(ledgerRows(ctx, ledgerByActor(fleet, aimTopN)))
 
 	// ── Evals (fleet): traces + scores + progress ──
 	if rows, err := datastore.Query(ctx, aimEvalTracesSQL(), sinceTS); err == nil {
@@ -309,31 +303,6 @@ func aimO11yAIModelsSQL() string {
 	return "SELECT " + o11yGenAIModel + " AS model, count() AS gens, sum(" + o11yGenAICost + ") AS cost " +
 		"FROM " + o11yAIObs + " WHERE " + o11yGenAISpan + " AND time >= ? AND model != '' " +
 		"GROUP BY model ORDER BY gens DESC LIMIT " + strconv.Itoa(aimTopN)
-}
-
-func aimUsageTotalsSQL() string {
-	return "SELECT count() AS requests, sum(total_tokens) AS tokens, " +
-		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
-		"sum(cost_cents) AS cost_cents, uniqExact(model) AS models " +
-		"FROM " + aimUsageTable + " WHERE timestamp >= ?"
-}
-
-func aimTopModelsSQL() string {
-	return "SELECT model, count() AS requests, sum(total_tokens) AS tokens, " +
-		"sum(cost_cents) AS cost_cents FROM " + aimUsageTable +
-		" WHERE timestamp >= ? AND model != '' GROUP BY model ORDER BY requests DESC LIMIT " + strconv.Itoa(aimTopN)
-}
-
-// aimTopActorsSQL ranks the ledger by SPEND rather than by traffic, because the
-// question this row answers is whose bill it is — a cheap chatty caller is not
-// the one an operator is looking for. An unattributed row (empty user_id) names
-// nobody and is left out; a row naming an application is not, since that is the
-// finding.
-func aimTopActorsSQL() string {
-	return "SELECT user_id AS actor, count() AS requests, sum(total_tokens) AS tokens, " +
-		"sum(cost_cents) AS cost_cents FROM " + aimUsageTable +
-		" WHERE timestamp >= ? AND user_id != '' GROUP BY actor " +
-		"ORDER BY cost_cents DESC, requests DESC LIMIT " + strconv.Itoa(aimTopN)
 }
 
 func aimEvalTracesSQL() string {

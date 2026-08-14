@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // Google is an OAuth2 provider on the SAME registry as Slack/GitHub. It custodies a
@@ -221,8 +223,5 @@ var secretRE = regexp.MustCompile(`(?i)(gh[oprsu]_[A-Za-z0-9_]{10,}|github_pat_[
 func truncateBody(b []byte) string {
 	s := secretRE.ReplaceAllString(string(b), "[redacted]")
 	const n = 256
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
+	return shorten.To(s, n)
 }

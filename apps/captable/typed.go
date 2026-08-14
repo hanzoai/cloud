@@ -107,7 +107,7 @@ func bundleMessage(status int, body []byte) string {
 // something that is not the out shape — becomes cloud's own 500, which is the
 // answer the untyped dispatch already gives in exactly that case.
 func (o ops) call(ctx context.Context, route string, params map[string]string, out any) error {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return err
 	}

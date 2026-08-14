@@ -98,18 +98,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/import", cloud.Handle(s, importVault)) // Obsidian/Notion/Roam/Evernote import
 }
 
-// tenant resolves the caller's org — the ONE tenant boundary on this surface —
-// for a typed op, which receives a context and nothing else. cloud.Bridge parks
-// the validated org there; an In field could only ever be a tenant key the caller
-// asserted for itself, which is a cross-tenant read.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("valid principal required")
-	}
-	return org, nil
-}
-
 // noInput is the In of an op addressed entirely by the caller's principal: it
 // takes nothing off the wire. ONE of these for the whole package.
 type noInput struct{}
@@ -150,7 +138,7 @@ type searchOut struct {
 //
 // Example: {"query": "how do we rotate the signing key", "limit": 5}
 func (o ops) search(ctx context.Context, in *searchIn) (*searchOut, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -73,7 +73,7 @@ func testStore(t *testing.T) *Store {
 
 func mk(org, name, content string) Prompt {
 	return Prompt{
-		// id is the global PK; production genID makes it collision-resistant.
+		// id is the global PK; mint.ID makes it collision-resistant in production.
 		// Include org+name here so two orgs' same-named prompts get distinct ids.
 		ID: org + "-" + name + "-id", Org: org, Name: name, Type: "text", Content: content,
 		Labels: []string{"prod"}, Tags: []string{"a"}, UpdatedAt: time.Now().Unix(),
@@ -181,7 +181,7 @@ func TestGetMissReturnsNotFound(t *testing.T) {
 
 // TestNameValidation guards the prompt-name boundary. (There is intentionally
 // no org normalization anymore — the org isolation key is used EXACTLY as the
-// trust boundary mints it; see tenant(). Cross-tenant isolation on distinct-but-
+// trust boundary mints it; see principal.Acting. Cross-tenant isolation on distinct-but-
 // similar orgs is proven at the HTTP layer in http_test.go / red_*_test.go.)
 func TestNameValidation(t *testing.T) {
 	for _, bad := range []string{"", "../etc", "a b", "name!", strings.Repeat("x", 65)} {

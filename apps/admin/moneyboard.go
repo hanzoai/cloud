@@ -146,6 +146,9 @@ func (o ops) Money(ctx context.Context, _ *core.None) (*MoneyOut, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Money is read per org, and three of these folds run their orgs in parallel, so
+	// the principal is lifted off the request ONCE here and re-pointed per tenant.
+	ctx = core.Acting(c)
 	s := o.s
 	at := time.Now().UTC().Format(time.RFC3339)
 

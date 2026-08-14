@@ -2,6 +2,7 @@ package git
 
 import (
 	"errors"
+	"github.com/hanzoai/cloud/apps/principal"
 	"net/http"
 	"strings"
 
@@ -170,7 +171,7 @@ type zapProcReq struct {
 func zapCreate(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := org(c)
 	if !ok {
-		return errEnvelope(c, http.StatusForbidden, "X-Org-Id required")
+		return errEnvelope(c, http.StatusForbidden, principal.Refusal(c))
 	}
 	var body zapProcReq
 	if err := c.Bind(&body); err != nil {
@@ -188,7 +189,7 @@ func zapCreate(s *cloud.Service[state], c *zip.Ctx) error {
 func zapList(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := org(c)
 	if !ok {
-		return errEnvelope(c, http.StatusForbidden, "X-Org-Id required")
+		return errEnvelope(c, http.StatusForbidden, principal.Refusal(c))
 	}
 	out, err := coreList(s, c.Context(), org, projectScope(c))
 	if err != nil {
@@ -200,7 +201,7 @@ func zapList(s *cloud.Service[state], c *zip.Ctx) error {
 func zapGet(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := org(c)
 	if !ok {
-		return errEnvelope(c, http.StatusForbidden, "X-Org-Id required")
+		return errEnvelope(c, http.StatusForbidden, principal.Refusal(c))
 	}
 	var body zapProcReq
 	if err := c.Bind(&body); err != nil {
@@ -216,7 +217,7 @@ func zapGet(s *cloud.Service[state], c *zip.Ctx) error {
 func zapDelete(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := org(c)
 	if !ok {
-		return errEnvelope(c, http.StatusForbidden, "X-Org-Id required")
+		return errEnvelope(c, http.StatusForbidden, principal.Refusal(c))
 	}
 	var body zapProcReq
 	if err := c.Bind(&body); err != nil {
@@ -231,7 +232,7 @@ func zapDelete(s *cloud.Service[state], c *zip.Ctx) error {
 func zapUsage(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := org(c)
 	if !ok {
-		return errEnvelope(c, http.StatusForbidden, "X-Org-Id required")
+		return errEnvelope(c, http.StatusForbidden, principal.Refusal(c))
 	}
 	out, err := coreUsage(s, c.Context(), org)
 	if err != nil {

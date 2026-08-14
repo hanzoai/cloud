@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -318,11 +319,9 @@ type projectsSiteDeploy struct {
 // siteResponse is the published-site answer shared by BuildSite and DeploySite,
 // so the generated and the hand-supplied path describe a publish identically.
 func siteResponse(p Project, d Deployment, st *site) *projectsSiteDeploy {
-	paths := make([]string, 0, len(st.files))
-	for k := range st.files {
-		paths = append(paths, k)
-	}
-	sort.Strings(paths)
+	// siteFromFiles/walkTarGz both require index.html at the root, so the map is
+	// never empty and the JSON array is never null.
+	paths := slices.Sorted(maps.Keys(st.files))
 	return &projectsSiteDeploy{
 		URL: d.LiveURL, Slug: p.Slug, Name: p.Name,
 		DeploymentID: d.ID, Files: paths, Status: d.Status,
@@ -518,6 +517,48 @@ func (o ops) listSites(ctx context.Context, _ *void) (*projectsSites, error) {
 	return &out, nil
 }
 
+// GetSite returns one site — the same row ListSites carries, for one slug.
+//
+// Every sub-resource under a site already answered: deployments, releases,
+// publish. The site itself did not, and a route that is never registered
+// answers 404 for a LIVE site exactly as it does for one that was never
+// created. So the one call a client makes to ask "is it there yet?" could only
+// ever say no, and a CI lane watching for its own publish would wait forever on
+// a success it had already achieved.
+//
+// The org is the caller's, never a path segment. A slug is unique within an org
+// and two orgs may both own `tel`; taking the org from the validated principal
+// instead of the URL means a caller cannot read another org's site by editing a
+// path, and it is the same scope ListProjects and ListSites already use.
+//
+// A site that exists but is not live is NOT found here, matching ListSites,
+// which keeps only `live` rows so a draft or a failed build is never advertised
+// as a site. One definition of "is a site", used by both.
+func (o ops) getSite(ctx context.Context, in *projectsRef) (*projectsSite, error) {
+	_, org, err := o.callerOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	slug := slugOf(in.Slug)
+	if slug == "" || !slugRE.MatchString(slug) || sites.IsReserved(slug) {
+		return nil, zip.ErrNotFound("site not found")
+	}
+	p, err := o.s.State.store.GetProject(ctx, org, slug)
+	if errors.Is(err, errNotFound) {
+		return nil, zip.ErrNotFound("site not found")
+	}
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	if p.Status != "live" {
+		return nil, zip.ErrNotFound("site not found")
+	}
+	return &projectsSite{
+		Slug: p.Slug, URL: siteURL(o.s, org, p.Slug), Name: p.Name,
+		Status: p.Status, UpdatedAt: p.UpdatedAt,
+	}, nil
+}
+
 // ---- slug + project helpers ----
 
 // resolveSlug turns a caller-provided slug (or, when empty, a name) into a valid,
@@ -545,10 +586,7 @@ func resolveSlug(raw, name string) (string, error) {
 // "site-<random>". genID gives "site_<22 url-safe chars>"; slugify lowercases it
 // and turns '_' into '-', so the result always begins "site-" and matches slugRE.
 func mintSlug() (string, error) {
-	tok, err := genID("site")
-	if err != nil {
-		return "", zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	tok := genID("site")
 	return slugify(tok), nil
 }
 
@@ -567,10 +605,7 @@ func ensureProject(s *cloud.Service[state], ctx context.Context, org, slug, name
 		return Project{}, zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
 	}
 	now := time.Now().Unix()
-	id, err := genID("proj")
-	if err != nil {
-		return Project{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := genID("proj")
 	np := Project{
 		ID: id, Org: org, Slug: slug, Name: name, Framework: "static",
 		Status: "draft", Bucket: s.State.blob.bucket, CreatedAt: now, UpdatedAt: now,

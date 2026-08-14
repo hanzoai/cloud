@@ -53,8 +53,6 @@ package social
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -66,6 +64,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -293,21 +293,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 // ---- shared helpers (mirror clients/crm + clients/marketing) ----
 
-// tenant resolves the org — the tenant-isolation KEY — for a request. It uses
-// principal.Org EXACTLY as SanitizeIdentity minted it from the validated IAM owner
-// claim (HIP-0026): never lowercased, stripped, or truncated.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
-
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}
 
 // clip trims and bounds a short text field to maxField.
 func clip(s string) string { return clipN(s, maxField) }
@@ -316,11 +302,7 @@ func clip(s string) string { return clipN(s, maxField) }
 func clipBody(s string) string { return clipN(s, maxContent) }
 
 func clipN(s string, n int) string {
-	s = strings.TrimSpace(s)
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), n)
 }
 
 func limitOf(c *zip.Ctx) int {
@@ -404,9 +386,9 @@ func mapErr(err error, notFoundMsg string) error {
 // ---- accounts ----
 
 func createAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body Account
 	if err := c.Bind(&body); err != nil {
@@ -420,13 +402,9 @@ func createAccount(s *cloud.Service[state], c *zip.Ctx) error {
 	if !okSt {
 		return zip.ErrBadRequest("status must be one of connected, disconnected, error")
 	}
-	id, err := genID("acct")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	now := time.Now().Unix()
 	acct := Account{
-		ID: id, Org: org, Provider: provider, Handle: clip(body.Handle), Status: status,
+		ID: mint.ID("acct"), Org: org, Provider: provider, Handle: clip(body.Handle), Status: status,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	saved, err := s.State.store.CreateAccount(c.Context(), acct)
@@ -437,9 +415,9 @@ func createAccount(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func listAccounts(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	provider := strings.ToLower(strings.TrimSpace(c.Query("provider")))
 	rows, err := s.State.store.ListAccounts(c.Context(), org, provider, limitOf(c))
@@ -450,9 +428,9 @@ func listAccounts(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func getAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	acct, err := s.State.store.GetAccount(c.Context(), org, idParam(c))
 	if err != nil {
@@ -462,9 +440,9 @@ func getAccount(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func updateAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body Account
 	if err := c.Bind(&body); err != nil {
@@ -490,9 +468,9 @@ func updateAccount(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func deleteAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	deleted, err := s.State.store.DeleteAccount(c.Context(), org, idParam(c))
 	if err != nil {
@@ -507,9 +485,9 @@ func deleteAccount(s *cloud.Service[state], c *zip.Ctx) error {
 // ---- posts ----
 
 func createPost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body Post
 	if err := c.Bind(&body); err != nil {
@@ -527,13 +505,9 @@ func createPost(s *cloud.Service[state], c *zip.Ctx) error {
 	if !okSt {
 		return zip.ErrBadRequest("status must be one of draft, scheduled, published, failed")
 	}
-	id, err := genID("post")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	now := time.Now().Unix()
 	post := Post{
-		ID: id, Org: org, Content: content, Channel: channel, Status: status,
+		ID: mint.ID("post"), Org: org, Content: content, Channel: channel, Status: status,
 		ScheduleAt: nonNeg(body.ScheduleAt), Media: normMedia(body.Media), CreatedAt: now, UpdatedAt: now,
 	}
 	saved, err := s.State.store.CreatePost(c.Context(), post)
@@ -555,9 +529,9 @@ func createPost(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func listPosts(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
 	rows, err := s.State.store.ListPosts(c.Context(), org, status, limitOf(c))
@@ -568,9 +542,9 @@ func listPosts(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func getPost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	post, err := s.State.store.GetPost(c.Context(), org, idParam(c))
 	if err != nil {
@@ -580,9 +554,9 @@ func getPost(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func updatePost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body Post
 	if err := c.Bind(&body); err != nil {
@@ -612,9 +586,9 @@ func updatePost(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func deletePost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	deleted, err := s.State.store.DeletePost(c.Context(), org, idParam(c))
 	if err != nil {
@@ -633,9 +607,9 @@ func deletePost(s *cloud.Service[state], c *zip.Ctx) error {
 // an already-published post returns it unchanged. 404 if the post is not the org's; 503
 // (with the exact missing credentials) if the deployment cannot publish the provider.
 func publishPostHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	post, err := publishPost(c.Context(), s, org, idParam(c))
 	if err != nil {
@@ -649,8 +623,8 @@ func publishPostHandler(s *cloud.Service[state], c *zip.Ctx) error {
 // live (reads the environment), never fabricated — the console's connect affordance and
 // the coordinator's pre-cutover checklist of what to supply.
 func listProviders(_ *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := tenant(c); !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+	if _, ok := principal.Org(c); !ok {
+		return principal.Refused(c)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": providerCapabilities()})
 }
@@ -671,9 +645,9 @@ func mapPublishErr(err error) error {
 // ---- summary ----
 
 func summary(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	posts, scheduled, published, accounts, err := s.State.store.Counts(c.Context(), org)
 	if err != nil {

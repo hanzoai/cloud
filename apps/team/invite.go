@@ -27,6 +27,7 @@ package team
 // the button lands — no second path.
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -38,6 +39,7 @@ import (
 
 	"github.com/zap-proto/zip"
 
+	"github.com/hanzoai/cloud/internal/iam"
 	model "github.com/hanzoai/iam/pkg/model"
 )
 
@@ -72,10 +74,13 @@ func (g *api) iamBasicAuth() string {
 	return "Basic " + basicToken(g.cfg.iamClientID, g.cfg.iamClientSecret)
 }
 
-// iamDo performs one authenticated IAM request and decodes the /v1 envelope
-// ({status,msg,data}). A non-ok status surfaces IAM's own message. The body is
-// size-bounded and never logged (a user row carries email/salt). q is optional
-// query params; body is an optional JSON payload.
+// iamDo performs one authenticated IAM request and hands the body to iam.Answer,
+// which owns reading IAM's two wire shapes — the legacy verbs' {status,msg,data}
+// envelope and the typed nouns' bare resource. Assuming the envelope here parsed
+// a user row with Status "" and rejected it as `iam status 200`, so this door
+// could not read a successful answer at all. The body is size-bounded and never
+// logged (a user row carries an address). q is optional query params; body is an
+// optional JSON payload.
 func (g *api) iamDo(ctx context.Context, method, path string, q url.Values, body []byte) (json.RawMessage, error) {
 	if g.cfg.iamClientID == "" || g.cfg.iamClientSecret == "" {
 		return nil, fmt.Errorf("team: IAM app credentials not configured")
@@ -106,25 +111,7 @@ func (g *api) iamDo(ctx context.Context, method, path string, q url.Values, body
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("iam denied (%d)", resp.StatusCode)
-	}
-	var env struct {
-		Status string          `json:"status"`
-		Msg    string          `json:"msg"`
-		Data   json.RawMessage `json:"data"`
-	}
-	if err := json.Unmarshal(raw, &env); err != nil {
-		return nil, fmt.Errorf("iam non-envelope response (%d)", resp.StatusCode)
-	}
-	if env.Status != "ok" {
-		msg := env.Msg
-		if msg == "" {
-			msg = fmt.Sprintf("iam status %d", resp.StatusCode)
-		}
-		return nil, fmt.Errorf("iam: %s", msg)
-	}
-	return env.Data, nil
+	return iam.Answer(resp.StatusCode, raw)
 }
 
 // iamGetUserByEmail resolves the invitee's IAM identity by (org, email). The
@@ -236,7 +223,7 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 	if inviteeAccount == "" {
 		return g.fail(c, statusInvite("invitee has no IAM subject"))
 	}
-	displayName := firstNonEmpty(u.DisplayName, u.Name, localPart(email))
+	displayName := cmp.Or(u.DisplayName, u.Name, localPart(email))
 	if err := g.accounts.AddMember(c.Context(), ws.ID, inviteeAccount, role, displayName); err != nil {
 		g.log.Error("team: invite — local member row write failed", "err", err)
 		return g.fail(c, statusInvite("could not add workspace member: "+err.Error()))

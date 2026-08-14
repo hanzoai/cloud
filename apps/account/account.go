@@ -67,13 +67,13 @@
 package account
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -385,6 +385,11 @@ type apiKey struct {
 	Key string `json:"key,omitempty"`
 	// CreatedAt is when the key last changed, as IAM records it.
 	CreatedAt string `json:"createdAt,omitempty"`
+	// Limit is what this key may reach, as `kind:name` entries — `model:zen5`,
+	// `project:acme`, `product:commerce`. Absent means the key reaches whatever
+	// its holder does, which is what every key minted before limits existed does
+	// and must keep doing.
+	Limit []string `json:"limit,omitempty"`
 }
 
 // apiKeyList is the caller's own API keys. Named for what they ARE rather than
@@ -402,6 +407,16 @@ type keyTypeIn struct {
 	// on a server) or "publishable" (pk-, org-identifying, safe in a browser
 	// bundle). Omitted means secret, which is what every existing caller means.
 	Type string `json:"type"`
+	// Limit narrows what the minted key may reach, as `kind:name` entries:
+	// `model:zen5`, `project:acme`, `product:commerce`, or `model:*` for a whole
+	// kind. It only ever NARROWS — a key can never reach further than the person
+	// who minted it — so an unrecognised kind costs availability, never privilege.
+	//
+	// Omitted mints an unrestricted key, because that is what every key in the
+	// estate is today and a default that restricted would revoke all of them.
+	//
+	// Example: {"type": "secret", "limit": ["model:zen5", "project:acme"]}
+	Limit []string `json:"limit,omitempty" url:"-"`
 }
 
 // mintedKey is the one-time reveal of a freshly minted key.
@@ -413,6 +428,9 @@ type mintedKey struct {
 	// AccessKey is the same value under its predecessor name, carried so callers
 	// written against the older field keep working. One value, two names.
 	AccessKey string `json:"accessKey"`
+	// Limit is what the minted key may reach, echoed back so the caller can see
+	// the narrowing took. Absent means unrestricted.
+	Limit []string `json:"limit,omitempty"`
 }
 
 // keyClass normalizes a requested key type: empty means secret, which is what
@@ -479,44 +497,44 @@ func (o ops) getKey(ctx context.Context, _ *noInput) (*apiKeyList, error) {
 	}
 	out := apiKeyList{Keys: make([]apiKey, 0, len(rows))}
 	for _, r := range rows {
-		rec := apiKey{Type: keyTypeSecret, CreatedAt: r.UpdatedTime}
+		// The reach half of the row's scope, so a holder can see what this key may
+		// reach without minting a new one to find out. The publish CLASS is not a
+		// reach and does not appear here.
+		rec := apiKey{Type: keyTypeSecret, CreatedAt: r.UpdatedTime, Limit: cloud.ParseGrant(r.Scope).Reach()}
+		// A secret row is reported bare: no value, and no prefix either. Its AccessKey
+		// is the pk- half of the same row, not a head of the credential the holder
+		// presents, so offering it as "your key starts with…" names a different
+		// string than the sk- in their code — under a heading that reads "Cloud API
+		// key". IAM masks the sk-, so there is no honest prefix to give.
 		if publishable(r) {
 			// Publishable: hand back the whole value. It is the one a browser bundle
 			// carries, and there is no second chance to read it.
 			rec.Type, rec.Key, rec.Prefix = keyTypePublishable, r.AccessKey, prefixOf(r.AccessKey)
-		} else {
-			// Secret: the prefix only. The AccessKey half identifies the row; the
-			// confidential sk- is masked by IAM and never leaves it.
-			rec.Prefix = prefixOf(r.AccessKey)
 		}
 		out.Keys = append(out.Keys, rec)
 	}
 	return &out, nil
 }
 
-// publishable answers what a key IS, and answers it from the PREFIX FIRST.
+// publishable answers what a key IS, and the SCOPE is what says so — because on
+// this row it is the only field that can.
 //
-// Two things claim to say a key's type: IAM's stored scope, and the prefix the
-// key wears. Every door reads the prefix — cloud.IsPublishableKey decides whether
-// a key may become a principal at all — so when they disagree the prefix is the
-// fact and the scope is a label sitting on top of it.
+// This used to read the AccessKey prefix first, reasoning that every door
+// dispatches on the prefix and so the prefix is the fact. That holds for the
+// credential a holder PRESENTS, and AccessKey is not that credential. IAM mints
+// both classes with a pk- AccessKey and puts the secret key's sk- in AccessSecret,
+// which the listing masks (keys.MintUserKey: `access, secret := Mint("pk"), Mint("sk")`).
+// So the prefix read the same on every row and this returned true for all of them.
+// Measured on production: a freshly minted SECRET key came back from GET /v1/keys
+// typed "publishable", with its pk- half printed as though it were a browser
+// credential — and the console, which looks for the secret row, offered "create
+// your Cloud API key" to a user who already held a working one.
 //
-// Reading the label alone told a holder their key was SECRET while every gate
-// treated it as publishable, and a pk- never authenticates: the console showed a
-// working credential that silently authenticated nothing. Measured on this
-// cluster: two rows scoped non-publish carrying pk- prefixes, one minted the same
-// day this was written.
-//
-// The scope stays as a second reason to say yes, not as a way to say no. An sk-
-// row that IAM has scoped publish is a different disagreement with the opposite
-// risk, and calling it publishable here would print a confidential key's value
-// into a listing — so a bare scope can promote nothing that the prefix has not
-// already shown to be safe.
+// An sk- sitting in AccessKey is still refused: that disagreement has the opposite
+// risk, and would print a confidential value into a listing.
 func publishable(r userKey) bool {
-	if cloud.IsPublishableKey(r.AccessKey) {
-		return true
-	}
-	return r.Scope == iamScopePublish && !strings.HasPrefix(r.AccessKey, "sk-")
+	return cloud.ParseGrant(r.Scope).Publishable() &&
+		!strings.HasPrefix(r.AccessKey, prefixForType(keyTypeSecret))
 }
 
 // prefixOf is the recognizable, non-secret head of a key — enough for a holder to
@@ -548,13 +566,20 @@ func (o ops) mintKey(ctx context.Context, in *keyTypeIn) (*mintedKey, error) {
 	if !ok {
 		return nil, zip.ErrBadRequest("type must be " + keyTypeSecret + " or " + keyTypePublishable)
 	}
-	key, err := o.s.State.iam.mintUserKey(c.Context(), cr.keyID(), typ)
+	// The limit is VALIDATED here, not stored as typed. A kind cloud does not ask
+	// about is a limit nothing enforces — it would read as a narrowing and be one
+	// nowhere, which is the worst of the three possible answers.
+	limit, err := cloud.ParseLimit(in.Limit)
+	if err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
+	}
+	key, err := o.s.State.iam.mintUserKey(c.Context(), cr.keyID(), typ, limit.String())
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "could not mint an API key: %v", err)
 	}
 	// `key` is the canonical field and `accessKey` its predecessor, carried so the
 	// live console keeps working across the deploy; both are the same one value.
-	return &mintedKey{Type: typ, Key: key, AccessKey: key}, nil
+	return &mintedKey{Type: typ, Key: key, AccessKey: key, Limit: limit.Reach()}, nil
 }
 
 // revokedKey is the answer to a revoke: which class stopped working.
@@ -795,7 +820,7 @@ func resolveOnboardName(s *cloud.Service[state], body onboardReq, cr caller) (ba
 	if body.Personal {
 		baseSlug = personalOrgSlug(cr.name)
 		if len(baseSlug) < minOrgSlug || isReservedOrg(baseSlug) {
-			baseSlug = "org-" + firstNonEmpty(slugifyOrg(cr.name), "workspace")
+			baseSlug = "org-" + cmp.Or(slugifyOrg(cr.name), "workspace")
 		}
 		return baseSlug, humanize(cr.name), nil
 	}
@@ -908,22 +933,6 @@ func humanize(username string) string {
 		parts[i] = strings.ToUpper(p[:1]) + p[1:]
 	}
 	return strings.Join(parts, " ")
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-func getenv(key, dflt string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return dflt
 }
 
 func basicToken(id, secret string) string {
