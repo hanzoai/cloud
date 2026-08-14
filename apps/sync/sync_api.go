@@ -462,8 +462,12 @@ func deriveGitTarget(e endpointReq, src Endpoint) Endpoint {
 // never fatal to the CRUD op (a webhook / re-run reconciles). push=false removes the
 // target; push=true ensures it.
 func reconcileOutboundMirror(ctx context.Context, s *cloud.Service[state], sy Sync, push bool) {
-	native := normalizeGitName(sy.Target.Locator)
-	if err := cloud.EnsureGitMirror(ctx, sy.Org, "", native, sy.Source.Locator, push); err != nil {
+	native := fold(sy.Target.Locator)
+	// The target is declared for THIS repository, which is (account, name) and not
+	// a name alone — the sync's own source URL says which account, and without it
+	// a second sync of a same-named repository from another account would take
+	// this one's target over.
+	if err := cloud.EnsureGitMirror(ctx, sy.Org, accountOf(sy.Source.Locator), native, sy.Source.Locator, push); err != nil {
 		s.Log.Warn("sync: outbound mirror", "sync", sy.ID, "push", push, "err", err)
 	}
 }

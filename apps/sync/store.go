@@ -16,14 +16,23 @@ import (
 //
 //	sync     one bidirectional-sync intent — two endpoints, a direction, a
 //	         trigger, and the engine's cursor.
-//	outcome  what the last advance did to one (repo, ref): when, and whether it
-//	         left a conflict. The forge holds the refs and therefore knows what
-//	         a repository IS; it has nowhere to record that an upstream tried to
-//	         move one backwards and was refused. Without this, a divergence is a
-//	         log line that scrolls away.
+//	outcome  what the last advance did to one (repo, ref, destination): when, and
+//	         whether it left a conflict. The forge holds the refs and therefore
+//	         knows what a repository IS; it has nowhere to record that an upstream
+//	         tried to move one backwards and was refused. Without this, a
+//	         divergence is a log line that scrolls away.
 //	mirror   a repository's declared outbound targets. A sync's own row states
 //	         one upstream; a repository may be replicated to several, and the
 //	         GitHub-App import declares one without a sync row at all.
+//
+// # A repository is (account, name), in both tables
+//
+// A repository's name is only unique WITHIN the account it belongs to upstream:
+// hanzoai/ai, hanzo-apps/ai and hanzo-docs/ai are three real repositories. Keyed
+// by the bare name, all three share one row — one console status for three
+// repositories, and one mirror row, so the second import to declare a target
+// overwrites the first's and account A's refs are then pushed into account B's
+// repository under the org's own credential. See [newRepo].
 
 // errNotFound is returned when a sync lookup misses; handlers map it to HTTP 404.
 var errNotFound = errors.New("sync: not found")
@@ -67,6 +76,18 @@ func openStore(db *sql.DB) (*store, error) {
 }
 
 func (s *store) migrate() error {
+	// The two ref tables gained the ACCOUNT the repository belongs to. A row
+	// written before that names a repository we can no longer attribute — it is
+	// the collision itself, written down — so the old shape is DROPPED rather
+	// than carried forward under a guessed account. Both tables are re-derived:
+	// an outcome by the next advance, a mirror by the import or the sync that
+	// declares it. Keeping them would keep pushing account A's refs at account
+	// B's repository, which is the whole reason the column is there.
+	for _, t := range []string{"outcome", "mirror"} {
+		if err := s.dropPreAccount(t); err != nil {
+			return err
+		}
+	}
 	const ddl = `
 CREATE TABLE IF NOT EXISTS sync (
   id               TEXT PRIMARY KEY,
@@ -91,32 +112,63 @@ CREATE INDEX IF NOT EXISTS ix_sync_org ON sync(org, updated_at);
 -- Resolution index: a webhook resolves by (org, kind, source_provider).
 CREATE INDEX IF NOT EXISTS ix_sync_src ON sync(org, kind, source_provider);
 
--- What the last advance did to one ref. conflict is the REASON, and empty means
--- there is none — one column, so "resolved" is a write of '' rather than a row
--- that has to be found and deleted.
+-- What the last advance did to one ref, ON ONE DESTINATION. conflict is the
+-- REASON, and empty means there is none — one column, so "resolved" is a write
+-- of '' rather than a row that has to be found and deleted.
+--
+-- host is WHERE the ref was advanced to: '' is the forge, the canonical store,
+-- and a hostname is a declared replica. Both directions are the same advance and
+-- both can diverge, but they are not the same FACT — without this column a clean
+-- inbound advance would clear a replica's unresolved divergence, and a replica's
+-- success would clear the forge's. One row per destination, and neither can
+-- speak for the other.
 CREATE TABLE IF NOT EXISTS outcome (
   org      TEXT NOT NULL,
+  account  TEXT NOT NULL,
   repo     TEXT NOT NULL,
   ref      TEXT NOT NULL,
+  host     TEXT NOT NULL DEFAULT '',
   conflict TEXT NOT NULL DEFAULT '',
   at       INTEGER NOT NULL,
-  PRIMARY KEY (org, repo, ref)
+  PRIMARY KEY (org, account, repo, ref, host)
 );
-CREATE INDEX IF NOT EXISTS ix_outcome_repo ON outcome(org, repo);
+CREATE INDEX IF NOT EXISTS ix_outcome_repo ON outcome(org, account, repo);
 
 -- A repository's declared outbound targets, one row per HOST: a second target
 -- on a host we already push to is the same target, and the primary key says so
 -- rather than a uniqueness check somewhere in the code.
 CREATE TABLE IF NOT EXISTS mirror (
-  org  TEXT NOT NULL,
-  repo TEXT NOT NULL,
-  host TEXT NOT NULL,
-  url  TEXT NOT NULL,
-  PRIMARY KEY (org, repo, host)
+  org     TEXT NOT NULL,
+  account TEXT NOT NULL,
+  repo    TEXT NOT NULL,
+  host    TEXT NOT NULL,
+  url     TEXT NOT NULL,
+  PRIMARY KEY (org, account, repo, host)
 );
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
+	}
+	return nil
+}
+
+// dropPreAccount removes table if it is there WITHOUT an account column — the
+// shape that could not tell two accounts' same-named repositories apart. A table
+// that is absent, or already carries the column, is left alone, so this is a
+// no-op on every boot after the first.
+func (s *store) dropPreAccount(table string) error {
+	var n int
+	// The table name is a constant from the caller's own list, never an argument
+	// from outside this file; the column name binds normally.
+	if err := s.db.QueryRow(
+		`SELECT count(*) FROM pragma_table_info(?) WHERE name='account'`, table).Scan(&n); err != nil {
+		return fmt.Errorf("read %s columns: %w", table, err)
+	}
+	if n > 0 {
+		return nil
+	}
+	if _, err := s.db.Exec(`DROP TABLE IF EXISTS ` + table); err != nil {
+		return fmt.Errorf("drop pre-account %s: %w", table, err)
 	}
 	return nil
 }
@@ -276,15 +328,15 @@ type rollup struct {
 	At       int64
 }
 
-// Record writes the outcome of one advance. conflict is the reason a divergence
-// was refused, or "" when the ref is in step — so recording success and clearing
-// a past conflict are the SAME write, and there is no way to do one without the
-// other.
-func (s *store) Record(ctx context.Context, org, repo, ref, conflict string, at int64) error {
+// Record writes the outcome of one advance of r's ref TO host ("" = the forge).
+// conflict is the reason a divergence was refused, or "" when the ref is in step
+// — so recording success and clearing a past conflict are the SAME write, and
+// there is no way to do one without the other.
+func (s *store) Record(ctx context.Context, org string, r repo, ref, host, conflict string, at int64) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO outcome (org,repo,ref,conflict,at) VALUES (?,?,?,?,?)
-		 ON CONFLICT(org,repo,ref) DO UPDATE SET conflict=excluded.conflict, at=excluded.at`,
-		org, repo, ref, conflict, at)
+		`INSERT INTO outcome (org,account,repo,ref,host,conflict,at) VALUES (?,?,?,?,?,?,?)
+		 ON CONFLICT(org,account,repo,ref,host) DO UPDATE SET conflict=excluded.conflict, at=excluded.at`,
+		org, r.account, r.name, ref, host, conflict, at)
 	if err != nil {
 		return fmt.Errorf("record outcome: %w", err)
 	}
@@ -296,23 +348,26 @@ func (s *store) Record(ctx context.Context, org, repo, ref, conflict string, at 
 // One query rather than one per name: the file IS this org's, the console asks
 // about every repository it can see at once, and a per-name read would be a
 // query per repository on a page load.
-func (s *store) States(ctx context.Context, org string) (map[string]rollup, error) {
+//
+// Every destination folds into the SAME roll-up: a repository whose replica has
+// diverged is not in step, and that is the one word the console renders.
+func (s *store) States(ctx context.Context, org string) (map[repo]rollup, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT repo, MAX(at), MAX(CASE WHEN conflict<>'' THEN 1 ELSE 0 END)
-		   FROM outcome WHERE org=? GROUP BY repo`, org)
+		`SELECT account, repo, MAX(at), MAX(CASE WHEN conflict<>'' THEN 1 ELSE 0 END)
+		   FROM outcome WHERE org=? GROUP BY account, repo`, org)
 	if err != nil {
 		return nil, fmt.Errorf("read outcomes: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := map[string]rollup{}
+	out := map[repo]rollup{}
 	for rows.Next() {
-		var repo string
+		var r repo
 		var at int64
 		var bad int
-		if err := rows.Scan(&repo, &at, &bad); err != nil {
+		if err := rows.Scan(&r.account, &r.name, &at, &bad); err != nil {
 			return nil, fmt.Errorf("scan outcome: %w", err)
 		}
-		out[repo] = rollup{Conflict: bad == 1, At: at}
+		out[r] = rollup{Conflict: bad == 1, At: at}
 	}
 	return out, rows.Err()
 }
@@ -320,12 +375,14 @@ func (s *store) States(ctx context.Context, org string) (map[string]rollup, erro
 // ── mirror: where a repository is replicated to ──────────────────────────────
 
 // SetMirror declares an outbound target. Keyed by HOST, so re-declaring the same
-// host updates the address rather than accumulating a second target to it.
-func (s *store) SetMirror(ctx context.Context, org, repo, host, url string) error {
+// host updates the address rather than accumulating a second target to it — and
+// by ACCOUNT, so two same-named repositories from different accounts each keep
+// their own target instead of the second one taking over the first's.
+func (s *store) SetMirror(ctx context.Context, org string, r repo, host, url string) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO mirror (org,repo,host,url) VALUES (?,?,?,?)
-		 ON CONFLICT(org,repo,host) DO UPDATE SET url=excluded.url`,
-		org, repo, host, url)
+		`INSERT INTO mirror (org,account,repo,host,url) VALUES (?,?,?,?,?)
+		 ON CONFLICT(org,account,repo,host) DO UPDATE SET url=excluded.url`,
+		org, r.account, r.name, host, url)
 	if err != nil {
 		return fmt.Errorf("declare mirror: %w", err)
 	}
@@ -334,18 +391,20 @@ func (s *store) SetMirror(ctx context.Context, org, repo, host, url string) erro
 
 // DropMirror removes the target on host. Removing one that is not there is not
 // an error — the caller asked for a state, and that state already holds.
-func (s *store) DropMirror(ctx context.Context, org, repo, host string) error {
+func (s *store) DropMirror(ctx context.Context, org string, r repo, host string) error {
 	if _, err := s.db.ExecContext(ctx,
-		`DELETE FROM mirror WHERE org=? AND repo=? AND host=?`, org, repo, host); err != nil {
+		`DELETE FROM mirror WHERE org=? AND account=? AND repo=? AND host=?`,
+		org, r.account, r.name, host); err != nil {
 		return fmt.Errorf("remove mirror: %w", err)
 	}
 	return nil
 }
 
 // Mirrors lists a repository's declared outbound target URLs.
-func (s *store) Mirrors(ctx context.Context, org, repo string) ([]string, error) {
+func (s *store) Mirrors(ctx context.Context, org string, r repo) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT url FROM mirror WHERE org=? AND repo=? ORDER BY host ASC`, org, repo)
+		`SELECT url FROM mirror WHERE org=? AND account=? AND repo=? ORDER BY host ASC`,
+		org, r.account, r.name)
 	if err != nil {
 		return nil, fmt.Errorf("list mirrors: %w", err)
 	}

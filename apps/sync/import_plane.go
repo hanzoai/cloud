@@ -50,6 +50,21 @@ func exposeImport() {
 		zip.WithSummary("Declare or withdraw a repo's outbound mirror target"))
 }
 
+// sourceOK refuses a call that would hand a credential to a host this
+// deployment does not mint credentials for.
+//
+// The tenant is the caller's plane identity, but the SOURCE is an argument: both
+// import ops take a clone URL and a token off the request, and the token is a
+// live installation credential. The advance refuses the same pair on its own
+// ([upstream]) — this is the door saying so with a status, so a caller learns it
+// asked for something it may not have rather than reading a transport failure.
+func sourceOK(cloneURL, token string) error {
+	if token == "" || mirrorInHostAllowed(hostOf(cloneURL)) {
+		return nil
+	}
+	return zip.ErrBadRequest("git: a credential may not be sent to " + hostOf(cloneURL))
+}
+
 // planeInbound advances ONE ref of the CALLER's repo from an upstream push.
 //
 // The forge is canonical: the push that carries the update is non-forcing, so a
@@ -63,6 +78,9 @@ func planeInbound(ctx context.Context, in *plane.InboundIn) (*plane.Synced, erro
 	who := cloud.Who(ctx)
 	if who.Org == "" {
 		return nil, zip.ErrForbidden("git inbound: org required")
+	}
+	if err := sourceOK(in.CloneURL, in.Token); err != nil {
+		return nil, err
 	}
 	// The local implementation directly, never cloud.InboundGitSync. That function
 	// falls through to the plane when the in-process seam is nil, so routing back
@@ -97,6 +115,9 @@ func planeImport(ctx context.Context, in *plane.ImportIn) (*plane.Imported, erro
 	}
 	if in.Repo == "" || in.CloneURL == "" {
 		return nil, zip.ErrBadRequest("git import: repo and cloneUrl are required")
+	}
+	if err := sourceOK(in.CloneURL, in.Token); err != nil {
+		return nil, err
 	}
 	if err := (importer{}).ImportRepo(ctx, cloud.GitImportReq{
 		Org:       who.Org,
@@ -137,7 +158,7 @@ func planeStatus(ctx context.Context, in *plane.StatusIn) (*plane.Statuses, erro
 	// as it is emitted so a name asked twice is one row rather than two.
 	rows := make([]plane.RepoStatus, 0, len(st))
 	for _, n := range in.Names {
-		name := normalizeGitName(n)
+		name := fold(n)
 		r, ok := st[name]
 		if !ok || r == (cloud.GitRepoStatus{}) {
 			continue
