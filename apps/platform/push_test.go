@@ -30,10 +30,57 @@ func seedGitApp(t *testing.T, s *cloud.Service[state], org, slug, repoURL, branc
 func pushService(t *testing.T) *cloud.Service[state] {
 	t.Helper()
 	_, s := mountSvcK8s(t, fakeK8s())
-	prev := selfGitHost
-	selfGitHost = "git.hanzo.ai"
-	t.Cleanup(func() { selfGitHost = prev })
+	self, fh := selfGitHost, forgeHost
+	selfGitHost, forgeHost = "git.hanzo.ai", "git.hanzo.ai"
+	t.Cleanup(func() { selfGitHost, forgeHost = self, fh })
 	return s
+}
+
+// A FORGE PUSH BUILDS AN APPLICATION THAT NAMES THE UPSTREAM. This is the whole
+// functional half of the migration: the estate's applications carry the RepoURL
+// a person typed, which is the github.com spelling, while a forge delivery
+// derives the git.hanzo.ai one. Held apart by host, the two never compared equal
+// — every forge push matched nothing, built nothing, and showed green on the
+// forge's delivery page, with one WARN line for it.
+func TestBuildFromPush_ForgeDeliveryBuildsAnUpstreamApp(t *testing.T) {
+	ctx := context.Background()
+	s := pushService(t)
+	a := seedGitApp(t, s, "hanzo", "console", "https://github.com/hanzoai/console", "main")
+
+	ev := mkPushEvent("hanzo", "console", "main", "deadbeefcafe0123456789abcdef0123456789ab",
+		"https://git.hanzo.ai/hanzoai/console.git")
+	n, err := buildFromPush(s, ctx, ev)
+	if err != nil {
+		t.Fatalf("buildFromPush: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("a forge delivery for an app tracking the upstream launched %d builds, want 1", n)
+	}
+	deps, err := s.State.store.ListDeployments(ctx, "hanzo", a.ID)
+	if err != nil {
+		t.Fatalf("list deployments: %v", err)
+	}
+	if len(deps) != 1 || deps[0].Commit != ev.Commit {
+		t.Fatalf("unexpected deployments: %+v", deps)
+	}
+}
+
+// The collapse is bounded to the mirrored pair. Another host serving the same
+// path is another repository, and an application pointed at one is not rebuilt
+// by a push to the other.
+func TestBuildFromPush_AnotherHostIsAnotherRepo(t *testing.T) {
+	ctx := context.Background()
+	s := pushService(t)
+	seedGitApp(t, s, "hanzo", "console", "https://gitlab.com/hanzoai/console", "main")
+
+	n, err := buildFromPush(s, ctx, mkPushEvent("hanzo", "console", "main",
+		"deadbeefcafe0123456789abcdef0123456789ab", "https://git.hanzo.ai/hanzoai/console.git"))
+	if err != nil {
+		t.Fatalf("buildFromPush: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("a push to the forge built %d apps pointed at another host, want 0", n)
+	}
 }
 
 // A push whose repo+branch matches a git app launches a build: the app flips to

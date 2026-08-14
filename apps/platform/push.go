@@ -89,12 +89,10 @@ func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPus
 	}
 	switch {
 	case matched == 0:
-		// WARN, not Debug. A push that reaches here and matches nothing is the fleet's
-		// commonest real defect and its quietest: an application's RepoURL is free
-		// text a person typed, and the estate's habitual spelling names github.com
-		// while a forge delivery derives git.hanzo.ai — so the two never compare equal
-		// and every push builds nothing while the forge shows the delivery green. At
-		// Debug that line is off in production, which is the same as not having it.
+		// WARN, not Debug. A push that reaches here and matches nothing is the
+		// fleet's commonest real defect and its quietest — an application's RepoURL
+		// is free text a person typed. At Debug that line is off in production,
+		// which is the same as not having it.
 		s.Log.Warn("git push: no app tracks this repo+ref — nothing was built",
 			"org", ev.Org, "repo", ev.Repo, "ref", ev.Ref, "cloneUrl", ev.CloneURL)
 	case launched == 0:
@@ -106,9 +104,8 @@ func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPus
 	return launched, nil
 }
 
-// sameRepo compares two repo URLs ignoring a trailing ".git" and slash. The app's
-// RepoURL and the git server's clone URL address the same host, so exact match
-// after normalization is right. An empty RepoURL never matches.
+// sameRepo reports whether two URLs name the same repository. An empty one
+// never matches anything.
 func sameRepo(a, b string) bool {
 	return a != "" && normRepo(a) == normRepo(b)
 }
@@ -128,13 +125,66 @@ const releaseRef = "refs/heads/main"
 // installation is not what identifies this repo. A push carrying no commit is
 // ignored: the pipeline pins an exact commit, and resolving a branch name again
 // here could build something newer than the event describes.
+//
+// It needs no forge clause of its own: hanzoai/cloud on the forge and
+// hanzoai/cloud on the upstream are ONE repository under [normRepo], so a merge
+// to main publishes a version whichever host the merge landed on. That was the
+// point of the migration and it was the half that did not work.
 func isReleasePush(ev cloud.GitPushEvent) bool {
 	return ev.Ref == releaseRef && ev.Commit != "" && sameRepo(releaseRepoURL, ev.CloneURL)
 }
 
+// upstream is where the estate's repositories are published besides the forge.
+// One repository, two spellings, for as long as the migration runs.
+const upstream = "github.com"
+
+// forgeHost is this deployment's own forge, resolved once at Mount from the ONE
+// derivation of it (forge.Host), beside selfGitHost and for the same reason.
+// Empty in a deployment that names no forge, which simply leaves the forge
+// spelling unrecognised — fewer matches, never more.
+var forgeHost string
+
+// mirrored reports whether host holds the estate's repositories under a path
+// that is the whole of their identity: the upstream, and the forge it is
+// migrating to.
+func mirrored(host string) bool {
+	return host == upstream || (forgeHost != "" && host == forgeHost)
+}
+
+// normRepo is a repository's identity, and it is the whole of what [sameRepo]
+// compares: the host and the path, lowercased, without scheme, trailing slash
+// or ".git" — except on a MIRRORED host, which contributes no identity at all.
+//
+// DROPPING THE HOST THERE IS THE POINT. github.com/hanzoai/cloud and
+// git.hanzo.ai/hanzoai/cloud are one repository mirrored across the migration;
+// an application's RepoURL is what a person typed and the estate's habit is the
+// upstream spelling, while a forge delivery derives the forge one. Compared with
+// the host in, those two were never equal: every forge push matched nothing,
+// built nothing, and showed green on the forge's delivery page.
+//
+// THE PATH IS COMPARED WHOLE, never by its last two segments, and that is what
+// keeps the collapse from being an escalation. The embedded git server's clone
+// URL is https://api.hanzo.ai/v1/git/<org>/<project>/<repo>, whose tail is named
+// by a tenant: a project `hanzoai` holding a repo `cloud` would spell the
+// release repository's own coordinate, and a push to its main would cut a
+// release of the binary the whole fleet runs. Whole paths, so /v1/git/... is
+// simply a different repository — and every host outside the mirrored pair keeps
+// host + path, because two repositories that merely share a path on different
+// servers are two repositories.
 func normRepo(u string) string {
-	u = strings.TrimSuffix(strings.TrimSpace(u), "/")
-	return strings.ToLower(strings.TrimSuffix(u, ".git"))
+	u = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(u)), "/")
+	u = strings.TrimSuffix(u, ".git")
+	if u == "" {
+		return ""
+	}
+	if _, rest, scheme := strings.Cut(u, "://"); scheme {
+		u = rest
+	}
+	host, path, _ := strings.Cut(u, "/")
+	if mirrored(host) {
+		return "/" + path
+	}
+	return host + "/" + path
 }
 
 // tracksBranch reports whether app a's tracked branch is the pushed branch. An

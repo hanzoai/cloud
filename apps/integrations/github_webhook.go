@@ -142,12 +142,15 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	// automations use: our outbound mirror pushes AS the App, and a release must
 	// never rebuild itself.
 	if !isBotActor(actorOf(ev)) {
-		if err := cloud.OnGitPush(c.Context(), cloud.GitPushEvent{
+		if builds, err := cloud.OnGitPush(c.Context(), cloud.GitPushEvent{
 			Org: org, Repo: ev.Repository.Name, Ref: ev.Ref,
 			Commit: ev.After, CloneURL: clone,
 		}); err != nil {
 			s.Log.Warn("github push: build trigger failed",
 				"org", org, "repo", ev.Repository.Name, "ref", ev.Ref, "err", err)
+		} else {
+			s.Log.Info("github push: build trigger",
+				"org", org, "repo", ev.Repository.Name, "ref", ev.Ref, "builds", builds)
 		}
 	}
 

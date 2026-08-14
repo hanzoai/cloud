@@ -439,12 +439,19 @@ func IsBotActor(login string) bool {
 // installs it in Mount; clients/git calls OnGitPush after a push lands. The
 // inversion keeps git⇄platform decoupled — git never imports platform — exactly
 // like kmsClientFactory and the subsystem Registry. Exactly one registration.
-var pushBuilder func(ctx context.Context, ev GitPushEvent) error
+//
+// It answers HOW MANY BUILDS IT LAUNCHED. Most pushes track no application, so
+// zero is ordinary rather than a failure — but zero and one are different facts,
+// and a seam that returns only an error collapses them into the same "accepted".
+// The plane half already carried the number (plane.Built.Builds) while the
+// in-process half threw it away, so the answer a caller got depended on which
+// process the builder happened to be in.
+var pushBuilder func(ctx context.Context, ev GitPushEvent) (int, error)
 
 // RegisterPushBuilder installs the git-push-to-deploy trigger. clients/platform
 // calls this from its Mount when co-resident; it is the ONE inversion point that
 // lets the embedded git server launch a platform build with no git⇄platform cycle.
-func RegisterPushBuilder(f func(ctx context.Context, ev GitPushEvent) error) {
+func RegisterPushBuilder(f func(ctx context.Context, ev GitPushEvent) (int, error)) {
 	pushBuilder = f
 }
 
@@ -466,15 +473,22 @@ func RegisterPushBuilder(f func(ctx context.Context, ev GitPushEvent) error) {
 // push-to-deploy in this fleet" — the one error a caller may read as fall back —
 // and anything else is an outage worth alarming on. Erasing both into nil is what
 // made those two indistinguishable.
-func OnGitPush(ctx context.Context, ev GitPushEvent) error {
+//
+// It returns the number of builds launched for the same reason: a caller that
+// cannot tell "built" from "did nothing" guesses, and the guess is always the
+// optimistic one.
+func OnGitPush(ctx context.Context, ev GitPushEvent) (int, error) {
 	if pushBuilder != nil {
 		return pushBuilder(ctx, ev)
 	}
-	_, err := Ask[plane.PushIn, plane.Built](For(ctx, ev.Org), "platform", plane.PlatformPush, &plane.PushIn{
+	out, err := Ask[plane.PushIn, plane.Built](For(ctx, ev.Org), "platform", plane.PlatformPush, &plane.PushIn{
 		Project: ev.Project, Repo: ev.Repo, Ref: ev.Ref,
 		Commit: ev.Commit, CloneURL: ev.CloneURL,
 	})
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return out.Builds, nil
 }
 
 // ---- first-party service release (push→build→image→CR rollout) ----

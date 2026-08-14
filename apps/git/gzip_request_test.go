@@ -25,7 +25,7 @@ import (
 // repos). This posts a genuinely gzipped upload-pack request through the live
 // Fiber server and asserts a packfile comes back.
 func TestUploadPackAcceptsGzippedRequest(t *testing.T) {
-	cloud.RegisterPushBuilder(func(context.Context, cloud.GitPushEvent) error { return nil })
+	cloud.RegisterPushBuilder(func(context.Context, cloud.GitPushEvent) (int, error) { return 0, nil })
 	t.Cleanup(func() { cloud.RegisterPushBuilder(nil) })
 
 	app := mountApp(t)
