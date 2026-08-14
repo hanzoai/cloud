@@ -3,6 +3,7 @@ package projects
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -11,6 +12,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/forge"
+	"github.com/hanzoai/cloud/plane"
+	gitplane "github.com/hanzoai/cloud/plane/git"
 	"github.com/zap-proto/zip"
 )
 
@@ -52,22 +55,27 @@ import (
 // left behind by a deleted project is readable with no row left to say it must
 // not be, and the next tenant of that slug INHERITS it: forge.Ensure is
 // idempotent by name, so a create finds the old repository, adopts its commits
-// and publishes them. Hence [forget].
+// and publishes them. Hence [forget] — and hence [born], which empties the name
+// before it fills it, so an inheritance cannot survive even a retirement that
+// never landed.
 //
-// # The GitHub replica is not here
+// # There are three copies, and they close together
 //
-// A published project also has a real repository at github.com/hanzo-community,
-// so its author has a link to hand out, and its visibility is kept in step
-// there. That replica is a MIRROR — the outbound push of one repository's
-// contents to another host — which is what the sync surface does for every other
-// mirrored repository and where the one outbound target list lives. Whether it
-// stays driven from here or becomes a push mirror the forge runs itself is that
-// surface's call.
+// One project's source lives in three places: the repository on the forge this
+// seam writes, the one the git app serves, and the real repository at
+// github.com/hanzo-community that gives an author a link to hand out. All three
+// are derived from the same row and all three are moved by the same [want] — the
+// forge here, the other two through the git app ([tell]), which is where a
+// repository is made and destroyed by the same calls its own surface uses and
+// where the one outbound mirror list lives.
 //
-// What matters here is that nothing below depends on it. The flip is a write to
-// the forge and a read back from the forge, so a replica that is absent, stale
-// or failing can neither manufacture a success this seam did not have nor stop a
-// project from being closed.
+// They move TOGETHER because a leak needs only one of them. A close that reached
+// the forge and not the replica leaves a private project's source on github.com,
+// and nothing would ever notice: nobody is notified, and the next write is the
+// publisher's, who already believes it is closed. So a step is not finished
+// until every copy has answered, one that did not is retried and then reported
+// at ERROR ([settle]), and the audit that catches what the retries could not
+// closes all three ([vet]).
 
 const (
 	// Public is the default: the project appears in the community
@@ -199,12 +207,16 @@ func plain(s string) bool {
 // It is the whole vocabulary of this seam. Every path below reads a row into one
 // of these ([wanted]) and applies it ([apply]); the paths differ only in which
 // of the three they are allowed to reach.
-type want int
+//
+// The values are the ones the git app applies to the OTHER TWO copies
+// ([plane.Visibility]), so the three copies are moved by one word each rather
+// than by a word here and a translation of it there.
+type want string
 
 const (
-	shut want = iota // closed: readable only by someone on the repository
-	open             // world-readable
-	gone             // not there at all
+	shut want = plane.Shut // closed: readable only by someone on the repository
+	open want = plane.Open // world-readable
+	gone want = plane.Gone // not there at all
 )
 
 // wanted reads one project's row and says what its repository must be.
@@ -228,7 +240,8 @@ func wanted(s *cloud.Service[state], ctx context.Context, org, slug string) (wan
 	return shut, p, nil
 }
 
-// apply moves one repository to w, AS THE MACHINE.
+// apply moves the repository ON THE FORGE to w, AS THE MACHINE. It is one of the
+// three copies; the other two are [tell]'s.
 //
 // It acts as the machine because the visibility of a published project is the
 // platform's to enforce, not the requesting user's to be asked about: a
@@ -237,6 +250,7 @@ func wanted(s *cloud.Service[state], ctx context.Context, org, slug string) (wan
 // Sudoing as whoever happened to make the write would make an un-share fail for
 // exactly the people whose access has been taken away.
 func apply(ctx context.Context, m *forge.Client, name string, w want, p Project) error {
+	var err error
 	switch w {
 	case gone:
 		// A project's source does not outlive the project, and DELETING it rather
@@ -247,10 +261,9 @@ func apply(ctx context.Context, m *forge.Client, name string, w want, p Project)
 		// CLOSED FIRST and then deleted, because the two cover different failures: a
 		// forge that refuses the delete has still been told to close it, and open is
 		// the half that leaks.
-		if _, err := retract(ctx, m, name); err != nil {
-			return err
+		if _, err = retract(ctx, m, name); err == nil {
+			err = m.Delete(ctx, community, name)
 		}
-		return m.Delete(ctx, community, name)
 
 	case open:
 		// The repository is ENSURED, not created on a first event we would have to
@@ -262,21 +275,49 @@ func apply(ctx context.Context, m *forge.Client, name string, w want, p Project)
 		// the create and never on the read — so an author who edits their
 		// repository's description keeps their edit. Visibility is ours; their prose
 		// is not.
-		if _, err := m.Ensure(ctx, community, name, p.Description); err != nil {
-			return err
+		if _, err = m.Ensure(ctx, community, name, p.Description); err == nil {
+			err = m.SetPublic(ctx, community, name, true)
 		}
-		return m.SetPublic(ctx, community, name, true)
+
+	default:
+		// shut. The close goes FIRST and alone, gated on nothing — see [retract].
+		var there bool
+		if there, err = retract(ctx, m, name); err == nil && !there {
+			// It is not there at all, which is already closed. A private project still
+			// gets its source, born closed, so choosing private is not choosing a
+			// project with nowhere to push.
+			_, err = m.Ensure(ctx, community, name, p.Description)
+		}
 	}
-	// shut. The close goes FIRST and alone, gated on nothing — see [retract].
-	there, err := retract(ctx, m, name)
-	if err != nil || there {
-		return err
-	}
-	// It is not there at all, which is already closed. A private project still
-	// gets its source, born closed, so choosing private is not choosing a project
-	// with nowhere to push.
-	_, err = m.Ensure(ctx, community, name, p.Description)
 	return err
+}
+
+// tell states one project's want to the git app, which holds the OTHER TWO
+// copies of its source: the repository it serves, and the real one at
+// github.com/hanzo-community that gives an author a link to hand out.
+//
+// It is ONE fact rather than two calls, because the two copies must not be able
+// to disagree, and it is the git app's to apply because that is where a
+// repository is made and destroyed by the same calls its own surface uses and
+// where the one outbound mirror target list lives. Nothing here reaches
+// github.com directly.
+//
+// The ORG RIDES THE CALL and is never a field of the fact: the far side takes
+// the caller's plane identity as the tenant, so a caller that could name an org
+// would be publishing — and un-publishing — into another tenant's repositories.
+//
+// A failure is RETURNED and not swallowed. Logging it and moving on is exactly
+// how a project ends up private in the row, closed on the forge and readable on
+// github.com with nothing left that will ever notice; the caller retries, and
+// past the retries it is an ERROR naming the repository.
+func tell(ctx context.Context, org, slug string, w want, p Project) error {
+	_, err := gitplane.GitPublish(cloud.For(ctx, org), &plane.Visibility{
+		Slug: slug, Name: p.Name, Description: p.Description, State: string(w),
+	})
+	if err != nil {
+		return fmt.Errorf("git: %s %s/%s: %w", w, org, slug, err)
+	}
+	return nil
 }
 
 // retract closes one repository, and reports whether it was there at all.
@@ -313,80 +354,127 @@ func machine(s *cloud.Service[state], ctx context.Context) (*forge.Client, error
 
 // ── the three steps ──────────────────────────────────────────────────────────
 
-// step is one attempt at bringing one project's repository into line: the shape
-// [queue] runs one at a time and [settle] retries. There are three, and they
-// differ only in which of the three [want]s they may reach.
-type step func(s *cloud.Service[state], ctx context.Context, org, slug, name string) error
+// step is WHICH derivation a run makes: the shape [queue] runs one at a time and
+// [settle] retries. There are three, and they differ only in which of the three
+// [want]s they may reach.
+//
+// It is a VALUE and not the function it selects, because the queue has to be
+// able to tell two runs apart. Collapsing a queued run into one already in
+// flight is only safe between runs that mean the same thing — a [renew] that
+// was replaced by a [reconcile] is a deletion that never happened.
+type step int
 
-// reconcile applies one project's row to its repository, once. It is the write
-// path's step and the only one that may OPEN anything.
-func reconcile(s *cloud.Service[state], ctx context.Context, org, slug, name string) error {
+const (
+	// renew is the CREATE and DELETE path's step: whatever repository this name
+	// holds is DELETED, and only then is the row read and applied.
+	//
+	// The deletion is unconditional and comes FIRST because a name is not a
+	// project. A repository is ensured BY NAME, so one left behind is one the next
+	// project of that name adopts — commits and all — and then publishes:
+	// create(private) → delete → create(public) republished the deleted project's
+	// source, from an audit that had only ever closed the leftover. Emptying the
+	// name before reading the row makes that structurally impossible, in the one
+	// place where a name changes hands.
+	//
+	// It is ONE step rather than a delete followed by a create because the row is
+	// read AFTER the deletion. A retirement that read it first would find the NEXT
+	// project's row and adopt the very repository it was sent to destroy; reading
+	// it after means whoever holds the name now gets a repository that has never
+	// held anything else — which is also what makes this safe to run twice.
+	renew step = iota
+	// reconcile is the UPDATE path's step: the row is read and applied to the
+	// repository, which is ensured by name.
+	//
+	// It is the only step an update may take. An update must never empty the name
+	// first — that is the project's own live source, with the author's commits in
+	// it.
+	reconcile
+	// vet is the AUDIT's step, and it may only ever CLOSE.
+	//
+	// The row is re-read under the same queue a write goes through, so a project
+	// that went public while the audit was walking is left alone rather than
+	// closed from a snapshot taken before it did. And an absent row is CLOSED
+	// rather than retired: the audit holds an absence, not a deletion — a store
+	// that is empty, half-restored, or newly pointed at an old forge must be able
+	// to cost a namespace of closed repositories, never a namespace of deleted
+	// ones.
+	vet
+)
+
+// run makes one attempt at bringing one project's repository — every copy of it
+// — into line.
+//
+// The two halves are kept apart on purpose. Each copy's converge is GATED ON ITS
+// OWN destruction, so a leftover that could not be destroyed is never opened;
+// and neither half is held back by the other's failure, so a git app that is
+// away cannot stop the forge from closing and a forge that is away cannot stop
+// the other two. Both answers are reported, the step fails if either did, and
+// the retry re-runs both — every half is idempotent.
+func (st step) run(s *cloud.Service[state], ctx context.Context, org, slug, name string) error {
 	m, err := machine(s, ctx)
 	if err != nil {
 		return err
+	}
+	// wrote is the forge's copy; told is the git app's two.
+	var wrote, told error
+	if st == renew {
+		wrote = apply(ctx, m, name, gone, Project{})
+		told = tell(ctx, org, slug, gone, Project{})
 	}
 	w, p, err := wanted(s, ctx, org, slug)
 	if err != nil {
-		return err
+		return errors.Join(wrote, told, err)
 	}
-	return apply(ctx, m, name, w, p)
-}
-
-// retire is the delete path's step: the project is gone, so its repository is.
-//
-// The deletion is UNCONDITIONAL rather than derived from the absent row, because
-// a slug is free to reclaim the moment the row is gone — a retirement that read
-// the row first would find the NEXT project's row and adopt the very repository
-// it was sent to destroy. The row is read AFTER, so whoever holds the slug now
-// gets a fresh repository, which is also what makes this safe to run twice.
-func retire(s *cloud.Service[state], ctx context.Context, org, slug, name string) error {
-	m, err := machine(s, ctx)
-	if err != nil {
-		return err
+	if st == vet {
+		if w == open {
+			return nil // a live row permits it: not the audit's business
+		}
+		// CLOSED, and only closed: never opened and never deleted, on any copy. Nor
+		// is one built on the forge — the audit acts on repositories it found open,
+		// and one that has gone since the walk is not one to build. What the git app
+		// makes of a copy it does not have is its own call, and the worst it can
+		// cost is a closed repository, which is the half this is allowed to spend.
+		_, err := retract(ctx, m, name)
+		return errors.Join(err, tell(ctx, org, slug, shut, p))
 	}
-	if err := apply(ctx, m, name, gone, Project{}); err != nil {
-		return err
+	if st == renew && w == gone {
+		return errors.Join(wrote, told) // emptied above, and nobody has claimed it
 	}
-	w, p, err := wanted(s, ctx, org, slug)
-	if err != nil || w == gone {
-		return err
+	if wrote == nil {
+		wrote = apply(ctx, m, name, w, p)
 	}
-	return apply(ctx, m, name, w, p)
-}
-
-// vet is the audit's step, and it may only ever CLOSE.
-//
-// The row is re-read here, under the same queue a write goes through, so a
-// project that went public while the audit was walking is left alone rather than
-// closed from a snapshot taken before it did. And an absent row is CLOSED rather
-// than retired: the audit holds an absence, not a deletion — a store that is
-// empty, half-restored, or newly pointed at an old forge must be able to cost a
-// namespace of closed repositories, never a namespace of deleted ones.
-func vet(s *cloud.Service[state], ctx context.Context, org, slug, name string) error {
-	m, err := machine(s, ctx)
-	if err != nil {
-		return err
+	if told == nil {
+		told = tell(ctx, org, slug, w, p)
 	}
-	w, _, err := wanted(s, ctx, org, slug)
-	if err != nil {
-		return err
-	}
-	if w == open {
-		return nil // a live row permits it: not the audit's business
-	}
-	_, err = retract(ctx, m, name)
-	return err
+	return errors.Join(wrote, told)
 }
 
 // ── running a step ───────────────────────────────────────────────────────────
 
+// born gives a NEW project its source, on a name that STARTS OVER.
+//
+// It is the create path's door and differs from [share] in exactly one way: the
+// name is emptied before it is filled ([renew]). A project is created only when
+// no live project of that (org, slug) exists — the row is unique per org and had
+// to be written first — so anything the name still holds is a leftover from a
+// project that is gone, and ensuring past it would publish a deleted project's
+// commits under whoever holds the slug now.
+//
+// That is a create-only move. It is the moment a name changes hands, and the
+// only moment at which destroying what the name holds is right.
+func born(s *cloud.Service[state], ctx context.Context, p Project) {
+	enqueue(s, ctx, p.Org, p.Slug, renew)
+}
+
 // share brings a project's repository into step with its row, behind the write.
 //
-// It is FIRED ON EVERY CREATE AND UPDATE rather than on a transition, because
-// the transition that gets missed is the one nobody noticed happening, and a
-// missed one leaves a private project's source readable. The work is idempotent
-// twice over — the repository is ensured rather than created, and the visibility
-// is set rather than toggled — so a redundant firing costs a read.
+// It is the update path's door, and it fires on EVERY update rather than on a
+// transition, because the transition that gets missed is the one nobody noticed
+// happening, and a missed one leaves a private project's source readable — a
+// moderation, a rename that changed nothing here, an update that only touched
+// the description. The work is idempotent twice over — the repository is ensured
+// rather than created, and the visibility is set rather than toggled — so a
+// redundant firing costs a read.
 //
 // It does not run on the caller's request. The row is already committed and is
 // what anyone reads; the forge is downstream of it, costs several round trips,
@@ -399,7 +487,7 @@ func share(s *cloud.Service[state], ctx context.Context, p Project) {
 	enqueue(s, ctx, p.Org, p.Slug, reconcile)
 }
 
-// forget takes a deleted project's source off the forge, BEFORE the delete
+// forget takes a deleted project's source off every copy, BEFORE the delete
 // answers.
 //
 // Inline, unlike every other step here, and for a reason the write path does not
@@ -424,28 +512,32 @@ func forget(s *cloud.Service[state], ctx context.Context, p Project) {
 	var err error
 	run := func() {
 		one, cancel := context.WithTimeout(ctx, hurry)
-		err = retire(s, one, p.Org, p.Slug, name)
+		err = renew.run(s, one, p.Org, p.Slug, name)
 		cancel()
 	}
-	held, more := s.State.queue.hold(p.Org+"/"+p.Slug, run)
-	if !held {
+	if held := s.State.queue.hold(p.Org+"/"+p.Slug, run); !held {
 		// Something else holds this project's place, and the retirement does NOT
 		// wait for it. That run would carry the deletion — it re-reads the row and
 		// finds none — but only until the slug is reclaimed, and then it finds the
-		// NEW row and adopts the very repository it was meant to destroy. Running
+		// NEW row and opens the very repository it was meant to destroy. Running
 		// beside it costs at worst a repository that run recreates EMPTY and
-		// unlisted, which the audit closes; yielding costs the deleted project's
-		// commits, republished under somebody else's project.
+		// unlisted, which the audit closes; yielding publishes the deleted
+		// project's commits under somebody else's project until that project's own
+		// renewal destroys them, which is a window that does not need to exist.
 		run()
 	}
-	if err == nil && !more {
-		return // done, before this answered
-	}
 	if err != nil {
-		s.Log.Warn("a deleted project's source may still be on the forge; retrying",
+		s.Log.Warn("a deleted project's source may still be readable; retrying",
 			"org", p.Org, "slug", p.Slug, "repo", community+"/"+name, "err", err)
 	}
-	enqueue(s, ctx, p.Org, p.Slug, retire)
+	// The follow-up is queued WHATEVER this answered, and that is not belt and
+	// braces. This attempt reports success on a repository that is not there — an
+	// absence is the state it asked for — so a delete that raced a create still in
+	// flight destroys nothing, finds nothing, and would have been finished here
+	// while that create's run went on to OPEN the repository behind it: an open
+	// repository, no row, and a delete that answered 204. Queued behind that run,
+	// the follow-up is the one that sees what it left.
+	enqueue(s, ctx, p.Org, p.Slug, renew)
 }
 
 // enqueue runs one step for one project: one at a time per project, retried, and
@@ -461,7 +553,7 @@ func enqueue(s *cloud.Service[state], ctx context.Context, org, slug string, do 
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
-	s.State.queue.add(org+"/"+slug, func() { settle(s, ctx, org, slug, name, do) })
+	s.State.queue.add(org+"/"+slug, do, func() { settle(s, ctx, org, slug, name, do) })
 }
 
 // tries is how long a step keeps trying before it gives up and says so.
@@ -502,7 +594,7 @@ func settle(s *cloud.Service[state], ctx context.Context, org, slug, name string
 			time.Sleep(wait)
 		}
 		attempt, cancel := context.WithTimeout(ctx, budget)
-		err = do(s, attempt, org, slug, name)
+		err = do.run(s, attempt, org, slug, name)
 		cancel()
 		if err == nil {
 			return
@@ -514,98 +606,118 @@ func settle(s *cloud.Service[state], ctx context.Context, org, slug, name string
 
 // ── ordering ─────────────────────────────────────────────────────────────────
 
-// queue runs one step at a time per project, and collapses the rest.
+// queue runs one step at a time per project, and collapses only what MEANS the
+// same thing.
 //
 // Two writes to one project must not reach the forge out of order: the second is
 // the one that is true, and the first landing after it would set the visibility
 // the publisher just changed away from. Running them one at a time is the whole
 // of that guarantee, and because each step re-reads the row, a write that
-// arrives while one is running does not need a place in a queue — it only needs
-// to make sure another run happens after this one. So the depth is one, and a
-// burst of writes to one project costs two runs rather than a burst of them
-// against our own forge.
+// arrives while one is running does not need a place of its own — it only needs
+// to make sure another run of THAT STEP happens after this one. So a burst of
+// writes to one project costs two runs rather than a burst of them against our
+// own forge.
 //
-// Collapsing is safe because every step CONVERGES: a run that was queued as a
-// reconcile and re-run as a retirement, or the other way round, reads the row it
-// finds and reaches the same place as the run it replaced.
+// The step is carried BY the place in the queue, because collapsing across two
+// different steps is not the same trade. Two reconciles converge on the row, so
+// the second is free; a [renew] and a [reconcile] do not — a renew deletes
+// before it reads anything, and a reconcile that stood in for one would leave
+// the repository it was sent to destroy exactly where it was, adopted by
+// whoever holds the slug now. So a waiting step is replaced only by ITSELF, and
+// steps that differ all run, in the order they were asked for.
 type queue struct {
 	mu   sync.Mutex
-	work map[string]slot
+	work map[string]*line
 }
 
-// slot is what one project's place in the queue means.
-type slot int
+// line is one project's place: it exists exactly while a run is in flight, and
+// holds the steps waiting behind that run — at most one of each, in the order
+// they arrived.
+type line struct{ next []waiting }
 
-const (
-	idle    slot = iota // no run: not in the map at all
-	running             // one is running
-	again               // one is running and the row changed under it
-)
+// waiting is one queued run and the step it makes.
+type waiting struct {
+	step step
+	run  func()
+}
 
 // add starts a run for one project, or arranges for one to follow the run
 // already in flight.
-func (q *queue) add(key string, run func()) {
+func (q *queue) add(key string, st step, run func()) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.work == nil {
-		q.work = map[string]slot{}
+		q.work = map[string]*line{}
 	}
-	if q.work[key] != idle {
-		// Something is already running for this project. It may already have read
-		// the row this write changed, so a further run has to happen — but only one,
-		// because that one will read whatever is current when it starts.
-		q.work[key] = again
+	l, busy := q.work[key]
+	if !busy {
+		q.work[key] = &line{}
+		go q.drain(key, run)
 		return
 	}
-	q.work[key] = running
-	go q.drain(key, run)
+	// Something is already running for this project. It may already have read the
+	// row this write changed, so a further run of this step has to happen — but
+	// only one, because that one will read whatever is current when it starts.
+	for _, w := range l.next {
+		if w.step == st {
+			return
+		}
+	}
+	l.next = append(l.next, waiting{step: st, run: run})
 }
 
 // hold takes this project's place in the queue and runs `run` HERE, reporting
-// whether it could — and, when it could, whether a write landed under it that
-// still wants a run of its own.
+// whether it could.
 //
 // It is [queue.add] for the one caller that cannot be behind its own work: the
 // delete path frees the slug as it answers, so its retirement has to have
 // HAPPENED by then rather than be scheduled (see [forget]). Everything the queue
 // is for still holds — the run is exclusive for that project — and what it
-// deliberately does not do is start the follow-up itself: `run` belongs to the
+// deliberately does not do is re-run `run` itself: that closure belongs to the
 // caller's goroutine and nothing here may still be executing it after this
-// returns. The caller queues the follow-up, as its own work.
-func (q *queue) hold(key string, run func()) (held, more bool) {
+// returns. Work that landed underneath is somebody else's closure, so it is
+// drained from a goroutine of its own rather than dropped.
+func (q *queue) hold(key string, run func()) (held bool) {
 	q.mu.Lock()
 	if q.work == nil {
-		q.work = map[string]slot{}
+		q.work = map[string]*line{}
 	}
-	if q.work[key] != idle {
+	if _, busy := q.work[key]; busy {
 		q.mu.Unlock()
-		return false, false
+		return false
 	}
-	q.work[key] = running
+	q.work[key] = &line{}
 	q.mu.Unlock()
 
 	run()
 
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	more = q.work[key] == again
-	delete(q.work, key)
-	return true, more
+	l := q.work[key]
+	if len(l.next) == 0 {
+		delete(q.work, key)
+		return true
+	}
+	first := l.next[0]
+	l.next = l.next[1:]
+	go q.drain(key, first.run)
+	return true
 }
 
-// drain runs until nothing more is wanted for this project.
+// drain runs until nothing more is waiting for this project.
 func (q *queue) drain(key string, run func()) {
 	for {
 		run()
 		q.mu.Lock()
-		if q.work[key] == again {
-			q.work[key] = running
+		l := q.work[key]
+		if len(l.next) == 0 {
+			delete(q.work, key)
 			q.mu.Unlock()
-			continue
+			return
 		}
-		delete(q.work, key)
+		run = l.next[0].run
+		l.next = l.next[1:]
 		q.mu.Unlock()
-		return
 	}
 }
 
