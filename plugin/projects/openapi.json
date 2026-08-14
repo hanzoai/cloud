@@ -1406,6 +1406,39 @@
         }
       }
     },
+    "/v1/sites/{slug}": {
+      "get": {
+        "operationId": "get_sites_by_slug",
+        "summary": "Returns one site — the same row ListSites carries, for one slug.",
+        "description": "Returns one site — the same row ListSites carries, for one slug.\n\nEvery sub-resource under a site already answered: deployments, releases,\npublish. The site itself did not, and a route that is never registered\nanswers 404 for a LIVE site exactly as it does for one that was never\ncreated. So the one call a client makes to ask \"is it there yet?\" could only\never say no, and a CI lane watching for its own publish would wait forever on\na success it had already achieved.\n\nThe org is the caller's, never a path segment. A slug is unique within an org\nand two orgs may both own `tel`; taking the org from the validated principal\ninstead of the URL means a caller cannot read another org's site by editing a\npath, and it is the same scope ListProjects and ListSites already use.\n\nA site that exists but is not live is NOT found here, matching ListSites,\nwhich keeps only `live` rows so a draft or a failed build is never advertised\nas a site. One definition of \"is a site\", used by both.",
+        "tags": [
+          "sites"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "description": "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/projectsSite"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/sites/{slug}/deployments": {
       "get": {
         "operationId": "get_sites_by_slug_deployments",
