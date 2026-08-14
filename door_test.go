@@ -151,19 +151,28 @@ func TestInsideTheFleetAnOrgAloneIsStillRefused(t *testing.T) {
 	}
 }
 
-// accepts blocks until a socket has a listener behind it, so "the subsystem is
+// accepts blocks until an address has a listener behind it, so "the subsystem is
 // up" is a fact rather than an intention — the same wait cloud.ServePlane makes
 // before it reports a plane bound.
-func accepts(t *testing.T, sock string) {
+//
+// The network is read off the address the way zip reads it (transport.go
+// `networkOf`): a path is a unix socket, anything else is tcp. One waiter for
+// both, because "is it listening" is one question and a second copy of it is
+// how the two come to disagree about what listening means.
+func accepts(t *testing.T, addr string) {
 	t.Helper()
+	network := "tcp"
+	if strings.HasPrefix(addr, "/") {
+		network = "unix"
+	}
 	for range 400 {
-		if c, err := net.Dial("unix", sock); err == nil {
+		if c, err := net.Dial(network, addr); err == nil {
 			_ = c.Close()
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("%s never began listening", sock)
+	t.Fatalf("%s never began listening", addr)
 }
 
 // tool runs tenantOp through one door as (org, user) and reads back what the op
