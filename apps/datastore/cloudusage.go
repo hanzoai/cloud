@@ -99,7 +99,7 @@ var cloudUsageColumnMigrations = []string{
 // traffic is cheapest and highest. Summed first, the same rows round to what they
 // cost, and the most a window can be off by is half a cent.
 //
-// The rounding is integer, not round(x/1e7): ClickHouse's round() is float and
+// The rounding is integer, not round(x/1e7): Datastore's round() is float and
 // banker's at the midpoint, and this must match the writer's nanoToCents.
 //
 // It reads the ledger's cost_nano and the rollup's, which carry the same name, so
