@@ -1063,18 +1063,35 @@ type Files struct {
 	Files []File `json:"files"`
 }
 
-// Visibility is one project's resolved publication state.
-//
-// Listed is the ONE derived answer — public and moderated — computed by the
+// Visibility is what one project's repository must BE, as the ONE derived
+// answer — public, moderated and deleted resolved together — computed by the
 // owner of that rule and never re-derived from parts here. Name and Description
 // seed a repo the first time it is created and are never re-imposed, so an
 // author who edits their own description keeps it.
+//
+// State has THREE values because the project row has three, and the third is
+// load-bearing: a repository is created by NAME, so one left behind by a deleted
+// project is one the next project of that name inherits — commits and all — and
+// then publishes. A two-valued fact could say "closed" and could not say "gone",
+// which left the deletion nowhere to go.
 type Visibility struct {
 	Slug        string `json:"slug" validate:"required"`
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
-	Listed      bool   `json:"listed"`
+	State       string `json:"state" validate:"required"`
 }
+
+// The three states a project's repository is asked to be in. They are the whole
+// vocabulary of the visibility seam, on both sides of it.
+const (
+	// Open: readable by anyone, including a reader with no credential.
+	Open = "open"
+	// Shut: it exists and is readable only by someone on it.
+	Shut = "shut"
+	// Gone: not there at all, with its contents. Deletion rather than closure,
+	// because a closed repository is still there to be adopted and re-opened.
+	Gone = "gone"
+)
 
 // ---- platform.fleet --------------------------------------------------------
 
