@@ -385,6 +385,11 @@ type apiKey struct {
 	Key string `json:"key,omitempty"`
 	// CreatedAt is when the key last changed, as IAM records it.
 	CreatedAt string `json:"createdAt,omitempty"`
+	// Limit is what this key may reach, as `kind:name` entries — `model:zen5`,
+	// `project:acme`, `product:commerce`. Absent means the key reaches whatever
+	// its holder does, which is what every key minted before limits existed does
+	// and must keep doing.
+	Limit []string `json:"limit,omitempty"`
 }
 
 // apiKeyList is the caller's own API keys. Named for what they ARE rather than
@@ -402,6 +407,16 @@ type keyTypeIn struct {
 	// on a server) or "publishable" (pk-, org-identifying, safe in a browser
 	// bundle). Omitted means secret, which is what every existing caller means.
 	Type string `json:"type"`
+	// Limit narrows what the minted key may reach, as `kind:name` entries:
+	// `model:zen5`, `project:acme`, `product:commerce`, or `model:*` for a whole
+	// kind. It only ever NARROWS — a key can never reach further than the person
+	// who minted it — so an unrecognised kind costs availability, never privilege.
+	//
+	// Omitted mints an unrestricted key, because that is what every key in the
+	// estate is today and a default that restricted would revoke all of them.
+	//
+	// Example: {"type": "secret", "limit": ["model:zen5", "project:acme"]}
+	Limit []string `json:"limit,omitempty" url:"-"`
 }
 
 // mintedKey is the one-time reveal of a freshly minted key.
@@ -413,6 +428,9 @@ type mintedKey struct {
 	// AccessKey is the same value under its predecessor name, carried so callers
 	// written against the older field keep working. One value, two names.
 	AccessKey string `json:"accessKey"`
+	// Limit is what the minted key may reach, echoed back so the caller can see
+	// the narrowing took. Absent means unrestricted.
+	Limit []string `json:"limit,omitempty"`
 }
 
 // keyClass normalizes a requested key type: empty means secret, which is what
@@ -479,7 +497,10 @@ func (o ops) getKey(ctx context.Context, _ *noInput) (*apiKeyList, error) {
 	}
 	out := apiKeyList{Keys: make([]apiKey, 0, len(rows))}
 	for _, r := range rows {
-		rec := apiKey{Type: keyTypeSecret, CreatedAt: r.UpdatedTime}
+		// The reach half of the row's scope, so a holder can see what this key may
+		// reach without minting a new one to find out. The publish CLASS is not a
+		// reach and does not appear here.
+		rec := apiKey{Type: keyTypeSecret, CreatedAt: r.UpdatedTime, Limit: cloud.ParseGrant(r.Scope).Reach()}
 		// A secret row is reported bare: no value, and no prefix either. Its AccessKey
 		// is the pk- half of the same row, not a head of the credential the holder
 		// presents, so offering it as "your key starts with…" names a different
@@ -512,7 +533,8 @@ func (o ops) getKey(ctx context.Context, _ *noInput) (*apiKeyList, error) {
 // An sk- sitting in AccessKey is still refused: that disagreement has the opposite
 // risk, and would print a confidential value into a listing.
 func publishable(r userKey) bool {
-	return r.Scope == iamScopePublish && !strings.HasPrefix(r.AccessKey, prefixForType(keyTypeSecret))
+	return cloud.ParseGrant(r.Scope).Publishable() &&
+		!strings.HasPrefix(r.AccessKey, prefixForType(keyTypeSecret))
 }
 
 // prefixOf is the recognizable, non-secret head of a key — enough for a holder to
@@ -544,13 +566,20 @@ func (o ops) mintKey(ctx context.Context, in *keyTypeIn) (*mintedKey, error) {
 	if !ok {
 		return nil, zip.ErrBadRequest("type must be " + keyTypeSecret + " or " + keyTypePublishable)
 	}
-	key, err := o.s.State.iam.mintUserKey(c.Context(), cr.keyID(), typ)
+	// The limit is VALIDATED here, not stored as typed. A kind cloud does not ask
+	// about is a limit nothing enforces — it would read as a narrowing and be one
+	// nowhere, which is the worst of the three possible answers.
+	limit, err := cloud.ParseLimit(in.Limit)
+	if err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
+	}
+	key, err := o.s.State.iam.mintUserKey(c.Context(), cr.keyID(), typ, limit.String())
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "could not mint an API key: %v", err)
 	}
 	// `key` is the canonical field and `accessKey` its predecessor, carried so the
 	// live console keeps working across the deploy; both are the same one value.
-	return &mintedKey{Type: typ, Key: key, AccessKey: key}, nil
+	return &mintedKey{Type: typ, Key: key, AccessKey: key, Limit: limit.Reach()}, nil
 }
 
 // revokedKey is the answer to a revoke: which class stopped working.
