@@ -37,7 +37,7 @@ var frozen = []string{
 	"index", "catalog", "world", "bot", "authors",
 	"bots", "audit", "affiliates", "esign", "product", "evals",
 	"benchmark", "research", "experiments", "books", "treasury", "admin",
-	"admission", "tasks", "automations", "flow", "engine", "registry", "auto", "tools", "marketplace", "referrals",
+	"admission", "tasks", "tel", "automations", "flow", "engine", "registry", "auto", "tools", "marketplace", "referrals",
 	// `agent` is GONE from this sequence on purpose: it was a second app beside
 	// `agents`, one concept with two plugins and a pair of names differing by an
 	// `s`. Its surface (/v1/agent and its presets/conversations) is mounted by
