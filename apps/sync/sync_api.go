@@ -435,8 +435,13 @@ func validateGitSource(e endpointReq) (Endpoint, error) {
 		return Endpoint{}, zip.ErrBadRequest("source.locator host must be " + host)
 	}
 	u.User = nil // credentials ride env-only at fetch time, never a stored value
-	if repoNameFromLocator(u.String()) == "" {
-		return Endpoint{}, zip.ErrBadRequest("source.locator must name a repository")
+	// Which repository this is, asked at the door with the SAME rule the import
+	// answers to ([newRepo]): an account and a name the flat forge can spell. A
+	// source it could never hold — a nested GitLab namespace, a name outside the
+	// fold — is refused here with a status, rather than accepted and then refused
+	// by every reconcile into a log nobody reads.
+	if _, err := newRepo(accountOf(u.String()), repoNameFromLocator(u.String())); err != nil {
+		return Endpoint{}, zip.ErrBadRequest(err.Error())
 	}
 	return Endpoint{Connector: strings.TrimSpace(e.Connector), Provider: provider, Locator: u.String()}, nil
 }
