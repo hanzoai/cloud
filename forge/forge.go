@@ -566,28 +566,6 @@ func (c *Client) Repos(ctx context.Context, org string) ([]Repo, error) {
 	return append([]Repo(nil), got...), nil
 }
 
-// Inventory is [Client.Repos] read from the forge NOW, with no cache.
-//
-// The two are the same question asked for different purposes. A board being
-// rendered can take an answer minutes old — that is what the staleness window in
-// cache.go buys, and what makes a board load in three seconds instead of twenty.
-// A JUDGEMENT cannot: the visibility audit closes every repository no live
-// project permits to be open, and a stale list would have it act on a repository
-// that has since changed and, worse, silently skip one that has since been
-// opened. So the caller that decides something reads the forge.
-//
-// It neither reads nor fills the cache, so an audit cannot displace what a board
-// is being served from, and cannot be served what a board left behind.
-func (c *Client) Inventory(ctx context.Context, org string) ([]Repo, error) {
-	if err := validOrg(org); err != nil {
-		return nil, err
-	}
-	if c.actor == "" && !c.machine {
-		return nil, ErrNoActor
-	}
-	return c.listRepos(ctx, org)
-}
-
 // listRepos is the uncached walk of the org's repository pages.
 //
 // It fetches SMALL PAGES CONCURRENTLY, which is the whole reason a board that
