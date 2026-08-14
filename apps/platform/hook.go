@@ -43,7 +43,10 @@
 // one value, and the KMS ref is where the deployment keeps it. Rotating means
 // writing the new value at that ref and pasting the same value on the forge's
 // hook; deliveries signed with the old one are refused within one [hookFresh]
-// window.
+// window — of a KMS that ANSWERS. A refresh that fails keeps serving the last
+// value that read cleanly ([secret.read]), so a rotation done to burn a leaked
+// secret is only as fast as the read that carries it: if KMS is unreachable,
+// restart the pods rather than waiting for a window that cannot turn.
 
 package platform
 
@@ -85,9 +88,10 @@ const (
 	// within this window with no restart, and an unauthenticated flood costs one
 	// KMS read per window rather than one per request.
 	hookFresh = 5 * time.Minute
-	// hookWindow is how long a fired push is remembered for. It covers a
-	// redelivery of a request the forge could not complete — which is the only way
-	// one push arrives twice.
+	// hookWindow is how long a fired push is remembered for. It covers a replay of
+	// a delivery whose seams already ran and whose answer never arrived — which is
+	// the only way one push arrives twice, since a delivery that FAILED is not
+	// remembered at all (seen.drop).
 	hookWindow = 30 * time.Minute
 	// hookRead bounds one KMS read of the verifying secret. The read runs on a
 	// context detached from the request (fetch), so this is the only thing that
@@ -469,8 +473,12 @@ func signed(secret string, body []byte, sigs ...string) bool {
 
 // ignored answers 200 naming why nothing fired.
 //
-// 200 and not an error: the delivery is well-formed and correctly declined, and a
-// non-2xx would put it in the forge's retry queue to be declined again forever.
+// 200 and not an error: the delivery is well-formed and CORRECTLY declined, so
+// there is nothing to recover. Red on the forge's delivery page means "act", and
+// the only act it offers is Replay — which would decline this delivery again,
+// identically, forever. A non-2xx is spent on the one case where replaying does
+// help: a push this door meant to dispatch and could not.
+//
 // The reason travels in the BODY, where the forge's delivery page shows it, so
 // "why did my push not build" is answered at the forge instead of only in a log.
 func ignored(c *zip.Ctx, why string) error {
@@ -508,9 +516,12 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		// 503 and not 401. A deployment that cannot read its own secret has not been
 		// handed a bad signature, and saying so would send an operator to look at the
-		// forge's hook configuration for a fault that is in ours. It is still
-		// fail-closed — nothing below this line runs — and the forge redelivers, so
-		// the push builds once KMS answers again.
+		// forge's hook configuration for a fault that is in ours. It is fail-closed —
+		// nothing below this line runs — and it is red on the delivery page, which is
+		// the whole recovery: the forge does not retry, so the push builds when
+		// somebody replays it after KMS answers again. That is also why a good key
+		// survives a failed refresh (secret.read): the fewer deliveries land here,
+		// the fewer need a person.
 		s.Log.Error("forge hook: no secret to verify against", "err", err)
 		return zip.Errorf(http.StatusServiceUnavailable, "forge webhook secret unavailable")
 	}
