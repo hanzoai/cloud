@@ -148,8 +148,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // usageWindowQuery is the window every money read shares: the SAME grammar
 // /v1/analytics/* uses, so the two surfaces cannot drift.
 type usageWindowQuery struct {
-	// Range is the window: 24h, 7d, 30d, or custom. Empty means 24h. A label this
-	// surface does not know is refused rather than silently replaced.
+	// Range is the window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d —
+	// or day, week, month, all, custom. Empty means 24h. A label this surface
+	// does not know, or one reaching past the 730-day horizon, is refused rather
+	// than silently replaced.
 	Range string `json:"range"`
 	// Start is the inclusive window start, RFC3339. Read only when Range is
 	// custom.
@@ -269,7 +271,9 @@ type usageAnalyticsQuery struct {
 	// cloud has no org-to-plan resolver yet, so the caller names the plan; when
 	// that resolver lands this becomes the caller org's own plan.
 	Plan string `json:"plan"`
-	// Range is the window: 24h, 7d, 30d, or custom. Empty means 24h.
+	// Range is the window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d —
+	// or day, week, month, all, custom. Empty means 24h. The window is then
+	// clamped forward to the plan's retention entitlement.
 	Range string `json:"range"`
 	// Start is the inclusive window start, RFC3339. Read only when Range is
 	// custom, and clamped forward to the plan's retention floor.
