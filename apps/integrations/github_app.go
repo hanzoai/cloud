@@ -612,19 +612,31 @@ func (o ops) githubRepos(ctx context.Context, _ *noArgs) (*githubReposOut, error
 	if err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(repos))
+	// The roll-up is asked for PER ACCOUNT, because a repository name means one
+	// repository only within one. This list spans every installation the org
+	// holds — hanzoai/ai, hanzo-apps/ai and hanzo-docs/ai are three rows — so
+	// asking about "ai" without saying whose draws one status for all three, and
+	// whichever was imported last makes the other two read as imported too.
+	byAccount := map[string][]string{}
 	for _, r := range repos {
-		names = append(names, r.Name)
+		account, _, _ := splitFullName(r.FullName)
+		byAccount[account] = append(byAccount[account], r.Name)
 	}
 	// Best-effort status roll-up from the git object plane (nil if git is unmounted).
-	status, _ := cloud.GitRepoStatuses(ctx, org, "", names)
+	status := make(map[string]cloud.GitRepoStatus, len(repos))
+	for account, names := range byAccount {
+		st, _ := cloud.GitRepoStatuses(ctx, org, account, names)
+		for name, v := range st {
+			status[account+"/"+name] = v
+		}
+	}
 	out := make([]githubRepoView, 0, len(repos))
 	for _, r := range repos {
 		v := githubRepoView{
 			Name: r.Name, FullName: r.FullName, Private: r.Private,
 			DefaultBranch: r.DefaultBranch, HTMLURL: r.HTMLURL,
 		}
-		if st, ok := status[r.Name]; ok && st.Imported {
+		if st, ok := status[strings.ToLower(r.FullName)]; ok && st.Imported {
 			v.Imported = true
 			v.SyncStatus = "synced"
 			if st.Conflict {
