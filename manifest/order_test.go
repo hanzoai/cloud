@@ -34,7 +34,7 @@ var frozen = []string{
 	"dataroom", "explorer", "security", "integrations", "destinations", "cloudflare",
 	"sbom", "team", "meet", "settings", "prefs", "notify",
 	"channels", "gateway", "entitlements", "exec", "sandboxes", "websearch", "crawl",
-	"index", "catalog", "world", "web3", "bot", "authors",
+	"index", "catalog", "taxonomy", "world", "web3", "bot", "authors",
 	"bots", "audit", "affiliates", "esign", "product", "evals",
 	"benchmark", "research", "experiments", "books", "treasury", "admin",
 	"admission", "tasks", "tel", "automations", "flow", "engine", "registry", "auto", "tools", "marketplace", "referrals",

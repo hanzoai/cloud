@@ -370,6 +370,11 @@ var Apps = []App{
 	{Name: "crawl", Prefixes: []string{"/v1/crawl"}},
 	{Name: "index", Prefixes: []string{"/v1/index"}},
 	{Name: "catalog", Prefixes: []string{"/v1/catalog"}},
+	// The product TAXONOMY — categories, tags and display order — beside catalog
+	// rather than inside it, and beside commerce rather than inside it. catalog is
+	// the deployed-sites corpus and commerce's `product` is a priced SKU; this is
+	// navigation copy, most of which is not purchasable and has no price.
+	{Name: "taxonomy", Prefixes: []string{"/v1/taxonomy"}},
 	{Name: "world", Prefixes: []string{"/v1/world"}},
 	// web3 is named for the domain and serves none of it under /v1/web3, so the
 	// /v1/<name> default would cover nothing it registers — the apps/plan defect.
