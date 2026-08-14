@@ -113,15 +113,18 @@ const repoPage = 5
 // shrinking the page size did not quietly shrink the ceiling with it: this is
 // the same 2,500 repositories the issue walk allows.
 //
-// It is a REFUSAL threshold and not a truncation, for the same reason
-// [maxRollup] is: a list cut off at the ceiling is a partial answer presented as
-// a complete one, and the caller that most needs to know is the one that cannot
-// tell. The visibility audit walks a namespace asking which repositories are
-// open that no live project permits; truncated, every repository past the
-// ceiling is invisible to it FOREVER, and a tenant that can mint projects can
-// put one there on purpose. So a namespace past this fails loudly, naming the
-// cap, and nothing downstream ever reasons about a list that silently ended
-// early.
+// What must never happen is a list cut off at the ceiling and PRESENTED AS
+// WHOLE. The visibility audit walks a namespace asking which repositories are
+// open that no live project permits; handed the first 2,500 of a longer list it
+// reports a clean sweep, everything past the ceiling is invisible to it forever,
+// and a tenant that can mint projects can put something there deliberately.
+//
+// So the walk says whether the list is COMPLETE and each caller decides ([Repos]
+// refuses a partial one, [Inventory] hands it back and lets the audit act on
+// what it has). Refusing everywhere would be the same mistake wearing the
+// opposite sign: a close-only audit that cannot read a full namespace is an
+// audit that never runs again, and a partial sweep closes strictly more than no
+// sweep at all.
 const maxRepoPages = 2500 / repoPage
 
 // maxBody bounds a single response read. The forge is a trusted service, but
@@ -564,9 +567,7 @@ func (c *Client) Repos(ctx context.Context, org string) ([]Repo, error) {
 	if c.actor == "" && !c.machine {
 		return nil, ErrNoActor
 	}
-	got, err := c.repos.do(ctx, c.key(org), func(ctx context.Context) ([]Repo, error) {
-		return c.listRepos(ctx, org)
-	})
+	got, err := c.repos.do(ctx, c.key(org), c.fill(org))
 	if err != nil {
 		return nil, err
 	}
@@ -588,12 +589,19 @@ func (c *Client) Repos(ctx context.Context, org string) ([]Repo, error) {
 //
 // It neither reads nor fills the cache, so an audit cannot displace what a board
 // is being served from, and cannot be served what a board left behind.
-func (c *Client) Inventory(ctx context.Context, org string) ([]Repo, error) {
+//
+// whole is false when the namespace is larger than one walk reads ([maxRepoPages]).
+// The list is still returned, because this caller CLOSES what it finds and never
+// prunes from what it does not: a partial sweep closes strictly more than the no
+// sweep a refusal would leave, and an audit that stops running is exactly the
+// state a tenant could arrange by minting projects. It is the caller's business
+// to say so out loud — the repositories past the ceiling are NOT audited.
+func (c *Client) Inventory(ctx context.Context, org string) (repos []Repo, whole bool, err error) {
 	if err := validOrg(org); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if c.actor == "" && !c.machine {
-		return nil, ErrNoActor
+		return nil, false, ErrNoActor
 	}
 	return c.listRepos(ctx, org)
 }
@@ -608,7 +616,12 @@ func (c *Client) Inventory(ctx context.Context, org string) ([]Repo, error) {
 // X-Total-Count is what makes that possible — without it the only way to find
 // the end of a list is to keep asking until a page comes back short, and that is
 // inherently serial.
-func (c *Client) listRepos(ctx context.Context, org string) ([]Repo, error) {
+//
+// whole says the list ENDED — every repository the org has is in it. It is a
+// return value rather than an error because the two callers want different
+// things from a namespace past the ceiling, and neither wants a short list that
+// cannot be told from a complete one ([maxRepoPages]).
+func (c *Client) listRepos(ctx context.Context, org string) (repos []Repo, whole bool, err error) {
 	path := "/orgs/" + url.PathEscape(org) + "/repos"
 	fetch := func(ctx context.Context, p int) ([]Repo, http.Header, error) {
 		var batch []Repo
@@ -619,7 +632,7 @@ func (c *Client) listRepos(ctx context.Context, org string) ([]Repo, error) {
 
 	first, hdr, err := fetch(ctx, 1)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	total, err := strconv.Atoi(strings.TrimSpace(hdr.Get("X-Total-Count")))
 	if err != nil || total <= len(first) {
@@ -628,18 +641,19 @@ func (c *Client) listRepos(ctx context.Context, org string) ([]Repo, error) {
 		// the serial walk, which is SLOWER BUT CORRECT — a degradation, not a
 		// second design.
 		if err == nil {
-			return first, nil
+			return first, true, nil
 		}
 		return c.walkRepos(ctx, path, first)
 	}
 
 	pages := (total + repoPage - 1) / repoPage
 	if pages > maxRepoPages {
-		// REFUSE rather than truncate: see [maxRepoPages]. The forge has already
+		// Read what can be read and say it is not everything. The forge has already
 		// said how many there are, so this is the one place that can tell the
 		// difference between a complete list and the first 2,500 of one.
-		return nil, fmt.Errorf("forge: org %s has %d repositories, past the %d this walk reads",
-			org, total, maxRepoPages*repoPage)
+		pages, whole = maxRepoPages, false
+	} else {
+		whole = true
 	}
 	// Page 1 is already in hand; the rest go out together.
 	out := make([][]Repo, pages)
@@ -684,7 +698,7 @@ func (c *Client) listRepos(ctx context.Context, org string) ([]Repo, error) {
 	}
 	wg.Wait()
 	if bad != nil {
-		return nil, bad
+		return nil, false, bad
 	}
 	// Concatenated in PAGE ORDER, not completion order, so the list a caller
 	// sees does not reshuffle between two identical reads.
@@ -692,7 +706,7 @@ func (c *Client) listRepos(ctx context.Context, org string) ([]Repo, error) {
 	for _, b := range out {
 		all = append(all, b...)
 	}
-	return all, nil
+	return all, whole, nil
 }
 
 // walkRepos finishes the list one page at a time, for a forge that does not send
@@ -700,23 +714,23 @@ func (c *Client) listRepos(ctx context.Context, org string) ([]Repo, error) {
 // kept only for the case that makes the fast path impossible.
 //
 // A SHORT PAGE is the end of the list, and it is the only thing that is. Running
-// out of pages first means the list goes on past the ceiling, which is the one
-// answer this must not return quietly — see [maxRepoPages].
-func (c *Client) walkRepos(ctx context.Context, path string, first []Repo) ([]Repo, error) {
+// out of pages first means the list goes on past the ceiling, and what comes
+// back then is what was read AND the fact that it is not everything — never a
+// short list wearing the shape of a complete one. See [maxRepoPages].
+func (c *Client) walkRepos(ctx context.Context, path string, first []Repo) (repos []Repo, whole bool, err error) {
 	all := first
 	for p := 2; p <= maxRepoPages; p++ {
 		var batch []Repo
 		q := url.Values{"limit": {strconv.Itoa(repoPage)}, "page": {strconv.Itoa(p)}}
 		if err := c.do(ctx, path, q, &batch); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		all = append(all, batch...)
 		if len(batch) < repoPage {
-			return all, nil
+			return all, true, nil
 		}
 	}
-	return nil, fmt.Errorf("forge: %s has at least %d repositories, past the %d this walk reads",
-		path, len(all), maxRepoPages*repoPage)
+	return all, false, nil
 }
 
 // Repo reads ONE repository by name.
@@ -753,13 +767,34 @@ func (c *Client) ReposWarm(ctx context.Context, org string) ([]Repo, bool) {
 	if validOrg(org) != nil || c.actor == "" {
 		return nil, false
 	}
-	got, ok := c.repos.warm(ctx, c.key(org), func(ctx context.Context) ([]Repo, error) {
-		return c.listRepos(ctx, org)
-	})
+	got, ok := c.repos.warm(ctx, c.key(org), c.fill(org))
 	if !ok {
 		return nil, false
 	}
 	return append([]Repo(nil), got...), true
+}
+
+// fill is what the CACHED readers put in the entry, and the one place a partial
+// list is refused.
+//
+// Everything served from that entry renders or PRUNES from it — a board, a
+// milestone rollup, a fleet's desired set — and each of them reads a short list
+// as "those do not exist". So a namespace the walk could not read to the end
+// caches nothing and answers an error naming the ceiling. [Client.Inventory] is
+// the one caller that can act on a partial answer, and it does not come through
+// here.
+func (c *Client) fill(org string) func(context.Context) ([]Repo, error) {
+	return func(ctx context.Context) ([]Repo, error) {
+		all, whole, err := c.listRepos(ctx, org)
+		switch {
+		case err != nil:
+			return nil, err
+		case !whole:
+			return nil, fmt.Errorf("forge: org %s has more repositories than the %d this walk reads",
+				org, maxRepoPages*repoPage)
+		}
+		return all, nil
+	}
 }
 
 // IssueFilter narrows an issue search. Every field is OPTIONAL and none of them

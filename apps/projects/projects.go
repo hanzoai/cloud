@@ -660,7 +660,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body project
 	// Give it a canonical repo at git.hanzo.ai, world-readable exactly when the
 	// project is — on a name that STARTS OVER, so a reclaimed slug inherits
 	// nothing from the project that held it before (visibility.go).
-	born(s, c.Context(), p)
+	born(s, p)
 	out := toProject(p)
 	return &out, nil
 }
@@ -921,7 +921,7 @@ func (o ops) update(ctx context.Context, in *projectsUpdate) (*projectsProject, 
 	}
 	// Reconcile the repo to whatever this update settled on — including a
 	// moderation, which must reach the source and not just the listing.
-	share(s, ctx, p)
+	share(s, p)
 	out := toProject(p)
 	return &out, nil
 }
@@ -967,7 +967,7 @@ func (o ops) del(ctx context.Context, in *projectsRef) (*void, error) {
 	// Take the source with it, before this answers: the slug is free to reclaim
 	// the moment it does, and a repository left behind is one the next project of
 	// that name adopts — commits and all — and then publishes (visibility.go).
-	forget(s, ctx, p)
+	forget(s, p)
 	// Best-effort purge of the live site; metadata is already gone, so a purge
 	// failure must not resurrect the project — log and continue. BOTH spaces go:
 	// the legacy mutable prefix AND the site's release space, which is a sibling
