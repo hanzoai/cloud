@@ -12,7 +12,7 @@ package fleet_test
 // zip's op registry (zip typed.go, registeredOp), and that registry is the single
 // value every projection reads: the REST route, the OpenAPI operation, the SDK
 // method, the CLI command and the MCP tool. A subsystem of raw routes therefore
-// serves perfectly and is invisible to the agent, which is tracker #190 showing
+// serves perfectly and is invisible to the agent, which is todo #190 showing
 // up as a product failure rather than as a documentation gap.
 //
 // So this test asks the question the way a client asks it, and it asks it of the

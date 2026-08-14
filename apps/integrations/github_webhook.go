@@ -95,8 +95,8 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	case "push":
 		// handled below
 	case "issues", "issue_comment":
-		// Issue lifecycle → native tracker mirror (github_issues.go). Same signed
-		// installation → org resolution as push; the tracker sink is idempotent by
+		// Issue lifecycle → native todo mirror (github_issues.go). Same signed
+		// installation → org resolution as push; the todo sink is idempotent by
 		// ExtRef, so opened/edited/closed/reopened + comment all re-sync one row.
 		return handleGitHubIssueEvent(c, body)
 	default:

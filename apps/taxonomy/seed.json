@@ -1272,13 +1272,13 @@
   },
   {
    "owner": "hanzo",
-   "id": "tracker",
-   "name": "Tracker",
+   "id": "todo",
+   "name": "Todo",
    "description": "Track work as issues grouped by status — projects, a grouped List, and a Board.",
    "category": "platform",
    "tags": [],
    "icon": "ClipboardList",
-   "route": "/tracker",
+   "route": "/todo",
    "brands": [],
    "order": 6,
    "published": true

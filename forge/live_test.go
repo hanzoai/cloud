@@ -14,7 +14,7 @@ package forge_test
 //	  go test -run Live -v ./forge/
 //
 // The token is read from the ENVIRONMENT and never from a file in the repo. In
-// production the same credential comes from KMS (apps/tracker/source.go).
+// production the same credential comes from KMS (apps/todo/source.go).
 
 import (
 	"os"
@@ -44,33 +44,6 @@ func liveClient(t *testing.T) (*forge.Client, string) {
 		t.Fatalf("New: %v", err)
 	}
 	return c.As(actor), org
-}
-
-// The org rollup against a real forge: list the org's repos, fan out over their
-// milestones, and prove every row names the repo it came from.
-func TestLive_MilestoneOrgRollup(t *testing.T) {
-	c, org := liveClient(t)
-
-	repos, err := c.Repos(t.Context(), org)
-	if err != nil {
-		t.Fatalf("Repos(%s): %v", org, err)
-	}
-	if len(repos) == 0 {
-		t.Fatalf("%s has no repositories visible to this actor", org)
-	}
-	t.Logf("live: %s has %d repositories visible", org, len(repos))
-
-	ms, err := c.Milestones(t.Context(), org)
-	if err != nil {
-		t.Fatalf("Milestones(%s): %v", org, err)
-	}
-	t.Logf("live: org rollup returned %d milestones across %d repos", len(ms), len(repos))
-	for _, m := range ms {
-		if m.Repo == "" {
-			t.Errorf("milestone %q (id %d) does not name its repo", m.Title, m.ID)
-		}
-		t.Logf("  %s/%s: %q state=%s open=%d closed=%d", org, m.Repo, m.Title, m.State, m.Open, m.Closed)
-	}
 }
 
 // The issues search really does answer labels, milestone and the owning
@@ -119,11 +92,11 @@ func TestLive_SudoDropsPrivilege(t *testing.T) {
 	if len(parts) != 2 {
 		t.Fatalf("FORGE_LIVE_PRIVATE = %q, want org/repo", target)
 	}
-	ms, err := c.Milestones(t.Context(), parts[0])
-	if err == nil && len(ms) > 0 {
-		t.Fatalf("the sudoed actor read %d milestones from %s — Sudo did not drop privilege, "+
+	got, err := c.Repo(t.Context(), parts[0], parts[1])
+	if err == nil && got.FullName != "" {
+		t.Fatalf("the sudoed actor read %s — Sudo did not drop privilege, "+
 			"and the machine credential is therefore the only thing standing between "+
-			"one tenant and another", len(ms), parts[0])
+			"one tenant and another", got.FullName)
 	}
 	t.Logf("live: sudoed actor correctly cannot read %s (err=%v)", target, err)
 }

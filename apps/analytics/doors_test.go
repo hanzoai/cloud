@@ -75,13 +75,13 @@ func sameWire(a, b decode) bool { return samePtr(a, b) }
 //
 //   - /v1/ingest was the publishable-key door; @hanzo/event 0.3.0 moved pk- onto
 //     /v1/event and a fleet sweep found no remaining caller.
-//   - /v1/analytics, /v1/analytics/batch and /v1/tracker were name-aliases of the
+//   - /v1/analytics, /v1/analytics/batch and /v1/todo were name-aliases of the
 //     canonical wire /v1/event already serves. @hanzo/capture, the one SDK that
 //     named them, has no importer left in the fleet.
 //
-// /v1/tracker is retired FROM THIS PACKAGE only, and this list is scoped to this
-// package's own router. The path itself belongs to the tracker product, which owns the prefix in the app manifest
-// and keeps serving /v1/tracker/projects/… — analytics squatting the bare path is
+// /v1/todo is retired FROM THIS PACKAGE only, and this list is scoped to this
+// package's own router. The path itself belongs to the todo product, which owns the prefix in the app manifest
+// and keeps serving /v1/todo/projects/… — analytics squatting the bare path is
 // precisely what ends here. mountApp mounts analytics alone, so a 404 in this
 // harness is the honest statement that ANALYTICS no longer answers there.
 var retiredDoors = []string{
@@ -90,7 +90,7 @@ var retiredDoors = []string{
 	// /v1/event; only the second path is gone. insights.hanzo.ai's /e, /batch and
 	// /capture reach it through the ingress rewrite, so no caller moved.
 	"/v1/insights/e",
-	"/v1/analytics", "/v1/analytics/batch", "/v1/tracker",
+	"/v1/analytics", "/v1/analytics/batch", "/v1/todo",
 }
 
 func doorPaths() []string {

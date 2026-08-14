@@ -80,7 +80,7 @@ var unextracted = []string{
 	// hanzoai/cloud, and no hanzoai/tel exists to mount — so the functionality
 	// lives here and nowhere else, which is what this bucket means.
 	"tel",
-	"templates", "tenant", "tools", "tracker", "translate",
+	"templates", "tenant", "tools", "todo", "translate",
 	"treasury", "validators", "venue", "wallets", "webhooks", "websearch",
 	// web3 is the chain-access surface. It REPLACES the api/ half of
 	// hanzoai/bootnode rather than extracting from it — that half was Python

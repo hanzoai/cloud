@@ -28,7 +28,7 @@ import (
 // enabled via POST /v1/automations/flows/:id/enable. wait_for_approval is the review
 // gate; content_transition advances the lifecycle; content_publish (or the transition's
 // own fan-out) distributes. Tracking each run as a hanzo.team task is a separate flow
-// step (a future "tracker" connector over the native /v1/tracker REST), keeping content
+// step (a future "todo" connector over the native /v1/todo REST), keeping content
 // orthogonal to tracking.
 func init() {
 	register(&Connector{

@@ -101,9 +101,9 @@ func (c Case) Run(t *testing.T) {
 
 // owned reports whether any prefix owns pattern. A prefix owns its whole
 // SUBTREE — the host mounts each plugin with All(prefix) and All(prefix+"/*") —
-// so "/v1/tracker" owns "/v1/tracker" and everything under "/v1/tracker/", and
+// so "/v1/todo" owns "/v1/todo" and everything under "/v1/todo/", and
 // nothing else. The boundary matters: "/track" must not be read as owning
-// "/tracker".
+// "/todo".
 func owned(prefixes []string, pattern string) bool {
 	for _, p := range prefixes {
 		if pattern == p || strings.HasPrefix(pattern, strings.TrimSuffix(p, "/")+"/") {
