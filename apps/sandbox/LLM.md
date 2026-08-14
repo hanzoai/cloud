@@ -317,69 +317,83 @@ typed ops and that chat therefore has no computer. That was wrong, and wrong in
 a way worth remembering: it was concluded from grepping `apps/` alone, and the
 doors are registered in `plugin/`.
 
-Both exist, in `plugin/agents/coding.go`:
+
+There is now exactly ONE door, in `plugin/agents/coding.go`:
 
 ```go
-zip.Post[...](cloud.ZipApp(app), "/v1/coding",    httpCodingStart)   // product op -> agent tool
-zip.Post[...](cloud.Plane(),     "/coding/start", planeCodingStart)  // plane op   -> chat bridge
+zip.Post[plane.CodingStartIn, plane.CodingStarted](cloud.ZipApp(app), "/v1/coding", httpCodingStart)
 ```
 
-So the sandbox IS a typed product op and DOES project as a tool an agent can
-call. The `code:` prefix in Slack (`codingIntent`, slack_coding.go) is a
-SHORTCUT onto the plane door, not the only way in — a keyword that skips the
-model rather than one the model needs.
+A typed op is four surfaces at once, so that single registration IS the REST
+route, the OpenAPI operation, the CLI command and the MCP tool. The plane door
+(`coding_start`) is DELETED: its only caller was Slack's `code:` prefix, and a
+second way in for one caller is a caller whose model never has to choose.
 
-The credential is already right and needs no redesign: `start.go` resolves it
-server-side via `agentCredential(ctx, repo, project, "refs/heads/"+branch, ttl)`
-AFTER the session exists, because the session names the branch and the branch is
-what the grant is FOR. It expires with the run's own budget plus a minute. A
-sandbox run without one fails closed rather than discovering at push time that
-it cannot write.
+## The magic word is gone, and here is the evidence it was never the only path
 
-What is genuinely unverified is whether a chat turn ever REACHES it — whether
-the tool is offered and chosen. That is a question to answer by watching one
-turn, not by reading more code, and it is the next thing to check rather than
-anything to build.
+MEASURED on the deployed door before anything was deleted — twice more of this
+file's prose had gone stale in the meantime, so read the numbers, not the claim:
 
-## How the shortcut works, and why it reads as the only path
+```
+POST https://api.hanzo.ai/v1/mcp  tools/list
+  → 109 tools; the `agents` tool's `op` enum carries **create_coding**
 
-`apps/agents` is the chat brain and reaches no sandbox. `apps/coding` has the
-sandbox and no chat. Slack bridges them with a literal prefix:
-
-```go
-if !strings.EqualFold(t[:len("code:")], "code:") { return "", false }
+POST .../v1/mcp  tools/call {"name":"agents","arguments":{"op":"create_coding",…}}
+  → {"text":"coding: org required","isError":true}      ← startCoding's OWN sentence
+POST .../v1/mcp  tools/call {"name":"agents","arguments":{"op":"create_bogus_probe"}}
+  → {"error":{"code":-32602,"message":"unknown tool"}}  ← the bogus control
 ```
 
-`@hanzo code: repo fix the bug` gets a machine. `@hanzo fix the bug in repo`
-gets a model with no machine. hanzo.app and hanzo.chat do not have the magic
-word at all, which is the whole of why they are not computer-using.
+The call reaches the handler and is refused by the handler's own fail-closed org
+check; a name nobody listed is refused by the door two layers earlier. So the op
+was genuinely offered and genuinely dispatchable, and `codingIntent` was pure
+subtraction. It is deleted, along with `slack_coding.go` entirely — the parse,
+the usage sentence, the target lookup and the dispatch were reachable only from
+the prefix. `SLACK_AGENT_REF` did not become an orphan knob:
+`channelAgentRef("slack")` reads the same variable for the chat turn.
 
-**The cause is one fact: `apps/coding` registers ZERO typed ops.** The agent's
-tools come from the one registry —
+`post_v1_coding` is published as **`create_coding`**, because the door renames a
+derived operation id to the verb phrase it already contains (`fleet/verbs.go`).
+That is the string a `tools/call` carries; do not look for `post_v1_coding` on
+the wire.
 
-```go
-for _, t := range tools.Default().List(ctx, tools.Scope{Org: org}) {
-    if !wanted[t.Name] || !t.Dispatchable || !t.Activated { continue }
-```
+## What actually blocked the model, and it was not the wiring
 
-— so anything in the registry that the agent's list names is callable, and the
-sandbox is not in the registry. A keyword gate got bolted on beside the brain
-because the brain had no way to reach it. Same shape as bridge.go beside
-channels, and the two doors beside one connector registry.
+The description. `zipdoc` strips an exact leading match of the handler's own
+name, so `// httpCodingStart is the app's door.` reached every SDK, the document
+and the MCP tool list as:
 
-**The fix is structural, not an integration.** Give coding a typed op and it
-lands in the registry, becomes a tool, and every surface — Slack, hanzo.app,
-hanzo.chat, MCP — reaches it through the one brain. `codingIntent` then deletes,
-and the model decides what a model should decide.
+> Is the app's door. It answers 202 with the run's handle the moment the run is
+> ADMITTED — not when it finishes…
 
-The input is NOT RunRequest. That type carries `CredToken`, and a tool schema
-the model fills in must never be able to name a credential:
+Every word true; none of it says the thing writes code. A model picks a tool by
+reading it, so an operation described by its own HTTP semantics is an operation
+nothing chooses — which is exactly what makes a keyword nobody can delete look
+load-bearing. The doc comment now opens with the ACT, and
+`plugin/agents/coding_test.go` asserts the words a coding request matches on.
+Keep the Go idiom (open with the identifier); write the rest for the model.
 
-```go
-type CodeRunIn  struct { Repo, Task, Tool, Branch string; Desktop bool }
-type CodeRunOut struct { RunID, Status, Output, Branch, URL string }
-```
+## The input says what to do and never who to be
 
-The org's GitHub credential is resolved on the ANSWERING side from its
-connection row — the same rule the rest of this file is about. An agent says
-what to do; it never says what to authenticate as.
+`CodingStartIn` carries no org, no subject and no credential. Each left for the
+same reason one step later than the last:
+
+- **the credential**, because a token with write access to every repo in the org
+  no longer needs to exist outside the engine (`agentCredential` mints a grant
+  for ONE ref, AFTER the session names the branch, expiring with the run);
+- **the org**, because a caller that can name a tenant can spend another's
+  balance;
+- **the subject**, because the thing filling in a tool's arguments is a MODEL.
+  Attribution-by-argument was sound while every door was an adapter we wrote and
+  stopped being sound the moment the op became a tool.
+
+Both halves of the identity are now parameters of `coding.Start(ctx, org,
+subject, in, log)`, read off `cloud.Who(ctx)` by the door. The check lives in
+the HANDLER and not in middleware, and that is not a style choice: zip dispatches
+an MCP `tools/call` and a call-plane op STRAIGHT into the handler
+(`registeredOp.direct`), so a middleware guard covers one door in three — the
+same hole `apps/exec` was walked through.
+
+`TestNothingInTheInputCanNameWhoTheRunIsFor` walks the type by reflection rather
+than listing the fields it does not want, so a field added tomorrow is judged by
+the same rule.

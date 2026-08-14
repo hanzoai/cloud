@@ -31,9 +31,9 @@ func TestStartRefusesABaseThatIsNotABranch(t *testing.T) {
 		"a semicolon":          "main;id",
 		"a leading dot":        ".hidden",
 	} {
-		in := startIn("u", "api", "do a thing")
+		in := startIn("api", "do a thing")
 		in.Base = base
-		if _, err := Start(context.Background(), "acme", in, nil); err == nil {
+		if _, err := Start(context.Background(), "acme", "u", in, nil); err == nil {
 			t.Errorf("%s (%q): accepted; it reaches a git argv on a customer's machine", name, base)
 		} else if !strings.Contains(err.Error(), "branch name") {
 			t.Errorf("%s (%q): refused for the wrong reason: %v", name, base, err)
@@ -55,9 +55,9 @@ func TestStartAcceptsARealBase(t *testing.T) {
 // reason Repo is: a value carrying a separator addresses another namespace.
 func TestStartRefusesAProjectThatIsAPath(t *testing.T) {
 	for _, project := range []string{"../other", "a/b", ".", "..", "a/../b"} {
-		in := startIn("u", "api", "do a thing")
+		in := startIn("api", "do a thing")
 		in.Project = project
-		if _, err := Start(context.Background(), "acme", in, nil); err == nil {
+		if _, err := Start(context.Background(), "acme", "u", in, nil); err == nil {
 			t.Errorf("project %q: accepted; it is a path", project)
 		}
 	}

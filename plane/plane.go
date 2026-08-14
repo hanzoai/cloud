@@ -2417,22 +2417,17 @@ const (
 	// TrackerAgentPR opens the native PR work item for a finished run.
 	TrackerAgentPR = "tracker_agent_pr"
 
-	// CodingStart is the ONE door onto a coding run, for a caller in another
-	// process.
+	// A coding run has no plane op, and that absence is a decision.
 	//
-	// The engine has to live in exactly one process and that process is agents:
-	// it already holds the live session store the run streams into, the durable
-	// tasks engine, and the in-memory mailbox a routed run is handed through.
-	// A second process assembling its own Dispatcher would be a second engine —
-	// same orchestration, different pool, different in-flight set, a run started
-	// from chat unobservable from the app. So the ENGINE stays put and the START
-	// travels, exactly as AgentsRunOnBehalf made one brain reachable from every
-	// chat platform.
-	//
-	// The chat adapter and the /v1/coding route are then two DOORS onto the same
-	// coding.Start, which is what makes "one engine, two adapters" a fact about
-	// the code rather than a claim about it.
-	CodingStart = "coding_start"
+	// There was a `coding_start`, so that the process holding the Slack adapter
+	// could reach the engine in the agents process. Its only caller was the
+	// `code:` prefix a human typed, and the whole point of deleting that prefix is
+	// that a chat surface reaches the engine the way every other capability is
+	// reached: the brain calls the TOOL. That path already runs through this
+	// plane — AgentsRunOnBehalf carries the turn, the run's tool loop asks the
+	// fleet's own door, and the door routes the call to the agents process — so a
+	// second op would be a second way in for exactly one caller, and a caller with
+	// a private way in is a caller whose model never has to choose.
 )
 
 // The ORG rides in these arguments rather than on the caller's plane identity,
@@ -2563,36 +2558,33 @@ type RouteRunIn struct {
 
 // CodingStartIn asks the engine to begin one coding run.
 //
-// IT CARRIES NO CREDENTIAL, and that absence is the point. The org's agent git
-// secret used to be read by the Slack surface and handed down through the
-// request, so a token with write access to every repo in the org existed in the
-// chat process, crossed a socket, and sat in a struct that three packages
-// touched. None of them needed it. The ENGINE needs it, at the one moment it
-// dispatches a sandbox, so the engine now reads it from KMS itself in the org
-// the run belongs to. Custody shrinks from three processes to one, and a door
-// onto this op can no longer be a door onto the secret.
+// IT SAYS WHAT TO DO AND NEVER WHO TO BE, and that absence is the whole shape of
+// the type. There is no org on it, no subject and no credential, so the two
+// questions worth forging — whose balance, whose name — have no field to answer
+// them with. The door reads both off the caller it already proved
+// (plugin/agents/coding.go), which is what makes the boundary structural: there
+// is nothing to validate away, because there is nothing there.
 //
-// Subject is the linked Hanzo identity the run is attributed to, already proved
-// by the door (a Slack account link, or the authenticated caller of /v1/coding).
-// It is refused when empty rather than defaulted: a run that lost its human must
-// not execute AS THE ORG.
+// Each of the three left for the same reason one step later than the last.
 //
-// The tenant is NOT here. It rides the caller — stated on a detached context
-// before the hop — because a run spends the org's balance and reaches the org's
-// repos, and a field the caller can set is not an identity.
+// The org's agent git secret used to be read by the Slack surface and handed
+// down through the request, so a token with write access to every repo in the
+// org existed in the chat process, crossed a socket, and sat in a struct that
+// three packages touched. None of them needed it; the ENGINE needs it, at the
+// one moment it dispatches a sandbox, and reads it from KMS itself now.
+//
+// The subject — the person a run is ATTRIBUTED to, its session's actor and its
+// PR's assignee — used to be filled in by whichever adapter had proved the
+// account link. That was sound while every door was an adapter we wrote. It
+// stopped being sound the moment this op became an MCP tool, because the thing
+// filling in a tool's arguments is a MODEL: a subject field is a model deciding
+// whose run this is, and it could hand the work, the session and the assignment
+// to a colleague who never asked for any of it. A field a model writes is not an
+// identity, so there is no longer a field.
+//
+// What remains is entirely facts about the WORK, which is exactly what a model
+// is entitled to decide.
 type CodingStartIn struct {
-	// Subject is the person the run is ATTRIBUTED to — the session's actor and the
-	// PR's assignee. Empty is refused rather than defaulted: a run that lost its
-	// human must not execute as the org.
-	//
-	// IT IS NOT AN AUTHORIZATION INPUT and must never become one. It arrives in
-	// this body and the HTTP door passes it through unread (plugin/agents
-	// httpCodingStart), so it is a name the caller picks. What the run ACTS AS on
-	// the forge is resolved separately, from the validated address on the caller's
-	// own identity and confirmed against the forge (apps/coding actorOf →
-	// forge.LoginFor) — because attribution is not entitlement, and a field a
-	// caller fills cannot be either.
-	Subject string `json:"subject"`
 	// Repo is what to work on, as `owner/name` in the caller's own org. The engine
 	// resolves the clone URL and the push credential from the org itself, so this
 	// says WHICH repository and never how to reach it.
@@ -2626,8 +2618,11 @@ type CodingStartIn struct {
 	// what argv starts; the screen decides which image carries an X server. A
 	// caller may want claude WITH a browser it can see, and a single enum would
 	// have made that combination unsayable.
-	Tool    string `json:"tool,omitempty"`
-	Desktop bool   `json:"desktop,omitempty"`
+	Tool string `json:"tool,omitempty"`
+	// Desktop asks for a run with a SCREEN — an image carrying an X server — for a
+	// task that has to drive a browser or another windowed program. False, the
+	// default, is a headless checkout, which is what writing code needs.
+	Desktop bool `json:"desktop,omitempty"`
 	// ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the door
 	// that started it has somewhere for it to talk. Empty means nobody is
 	// listening and the run simply does not narrate — which is the app door's
@@ -2649,11 +2644,22 @@ type CodingStartIn struct {
 // policy). Progress streams at /v1/agents/sessions/{sessionId}/stream for every
 // door equally, which is why neither door grew a progress endpoint of its own.
 type CodingStarted struct {
+	// SessionID is the run's handle: its durable record, and the id its live
+	// progress streams under at /v1/agents/sessions/{sessionId}/stream. Every
+	// later question about this run is asked with it.
 	SessionID string `json:"sessionId"`
-	Branch    string `json:"branch"`
-	Repo      string `json:"repo"`
-	Routed    bool   `json:"routed,omitempty"`
-	TargetID  string `json:"targetId,omitempty"`
+	// Branch is the ref the run will push its work to, and the ONLY ref it is
+	// permitted to write. It exists before the work does, so it is safe to tell
+	// somebody where to look while the run is still going.
+	Branch string `json:"branch"`
+	// Repo is the repository the run was admitted against, echoed back as the
+	// engine resolved it.
+	Repo string `json:"repo"`
+	// Routed says the run went to one of the org's own registered machines rather
+	// than to a sandbox in our cluster. False is the ordinary case.
+	Routed bool `json:"routed,omitempty"`
+	// TargetID names that machine when Routed is true, and is empty otherwise.
+	TargetID string `json:"targetId,omitempty"`
 }
 
 // ---- ask.figures -----------------------------------------------------------
