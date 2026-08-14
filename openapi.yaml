@@ -46473,8 +46473,11 @@ components:
           $ref: '#/components/schemas/ProviderBreakdown'
           description: Providers is the per-provider roll-up over the window.
         range:
-          description: Range is the window label that was served, which is what was
-            asked for.
+          description: |-
+            Range is the label that was ASKED for. A plan whose retention is shorter
+            than that window is served the retention instead, so read start and end for
+            the window the rows actually cover and retentionDays for the reason — on a
+            clamped read the label is longer than what was served.
           type: string
         retentionDays:
           description: RetentionDays is how far back the resolved plan allows reading.
