@@ -54,10 +54,13 @@ var typedOps = []string{
 // rawRoutes is every route that stays a raw handler, with the reason it cannot be
 // a typed op. Registered here so the reason is checked, not just written down.
 //
-// Exactly two reasons remain, and both are properties of the WIRE, not of effort:
-// a 302 is not a JSON body (and zip.WithStatus takes 2xx only), and a signature
-// over the raw request bytes cannot be checked by an op handed the decoded In.
-// "202 Accepted" was a third until zip v1.18.2 gave WithStatus a vocabulary for
+// Three reasons remain, and all are properties of the WIRE, not of effort: a 302
+// is not a JSON body (and zip.WithStatus takes 2xx only), a signature over the raw
+// request bytes cannot be checked by an op handed the decoded In, and a body this
+// package decodes only a SUBSET of cannot be an In without publishing that subset
+// as the whole wire.
+//
+// "202 Accepted" was one of them until zip v1.18.2 gave WithStatus a vocabulary for
 // it; /repos/import and /pages/builds are typed ops now.
 var rawRoutes = map[string]string{
 	"GET /v1/integrations/:provider/callback":    "302 to the console",
@@ -78,8 +81,9 @@ var rawRoutes = map[string]string{
 	"GET /v1/integrations/telegram/link":          "302",
 	"GET /v1/integrations/telegram/link/auth":     "302",
 	"GET /v1/integrations/telegram/link/callback": "302",
-	"POST /v1/connector/github/webhook":           "HMAC over the raw body",
+	"POST /v1/integrations/github/webhook":        "HMAC over the raw body",
 	"POST /v1/integrations/discord/interactions":  "Ed25519 over the raw body",
+	"POST /v1/integrations/openrouter/webhook":    "OTLP body, decoded as a subset",
 	"POST /v1/integrations/slack/commands":        "HMAC over the raw form body",
 	"POST /v1/integrations/slack/events":          "HMAC over the raw body",
 	"POST /v1/integrations/teams/events":          "Bot Framework JWT",
