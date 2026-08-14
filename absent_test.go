@@ -49,10 +49,10 @@ var kinds = map[string]struct {
 	where int
 	why   string
 }{
-	"RegisterGitImporter":         {remote, "integrations decides to import; git holds the repos"},
-	"RegisterGitMirrorController": {remote, "sync declares the mirror; git holds the repo that pushes it"},
+	"RegisterGitImporter":         {remote, "integrations decides to import; sync runs the advance"},
+	"RegisterGitMirrorController": {remote, "any app may declare a mirror; sync records it and pushes it"},
 	"RegisterIssueSink":           {remote, "integrations feeds the items; todo holds the store"},
-	"RegisterSync":                {remote, "integrations and git trigger; sync holds the engine"},
+	"RegisterSync":                {remote, "integrations and the webhook door trigger; sync holds the engine"},
 	"RegisterPushBuilder":         {remote, "git takes the push; platform holds the builder"},
 	"RegisterServiceReleaser":     {remote, "a build releases; platform holds the CR control plane"},
 	"RegisterOrgScopeResolver":    {remote, "the identity check asks; projects holds the registry"},

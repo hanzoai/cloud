@@ -204,6 +204,50 @@ func (c *Client) rules(ctx context.Context, owner, repo string) ([]rule, error) 
 	return all, nil
 }
 
+// monotone makes every branch of owner/repo move ONE WAY: a push may add
+// commits to it, and nothing may rewrite or delete it.
+//
+// It is what a synced repository is FOR. [Client.Protect] is the wrong rule here
+// — it refuses every direct push, including the sync's own, so the repository
+// could never receive the branch it exists to receive. This one leaves the push
+// open and closes the two operations that lose history, which is exactly the
+// property the advance already keeps on its side of the wire.
+//
+// And that is why it belongs on the SERVER. apps/sync never sends a forcing
+// refspec, and it never deletes; but that is one client's discipline, and the
+// repository holds a canonical copy that a colleague with a clone, a run's key,
+// or a future caller of this package could rewrite in one command. A rule the
+// forge enforces needs nobody to keep being careful.
+//
+// `**` because it is EVERY branch: a rule on the default branch alone leaves the
+// release lines and everybody's working branches rewritable, and a mirror has no
+// branch it would be reasonable to lose.
+//
+// Deliberately NOT the exact-name rule [Client.Protected] reads. That question
+// is "may a run's deploy key write here", the answer for a synced repository is
+// no, and a glob is not read as protecting a branch — so these repositories stay
+// outside [Client.Grant], which is where they belong.
+func (c *Client) monotone(ctx context.Context, owner, repo string) error {
+	err := c.Machine().send(ctx, sendOpts{
+		method: http.MethodPost,
+		path:   "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/branch_protections",
+		body: map[string]any{
+			"rule_name": "**",
+			// Push YES — an upstream's commits have to be able to land.
+			"enable_push": true,
+			// Force NO, and a protected branch also refuses deletion
+			// (hook_pre_receive.go:190-225). Those are the two ways a ref stops
+			// being a record of what happened.
+			"enable_force_push": false,
+		},
+	})
+	// A rule that is already there is the state we wanted.
+	if err != nil && !errors.Is(err, ErrExists) {
+		return fmt.Errorf("forge: keep %s/%s advance-only: %w", owner, repo, err)
+	}
+	return nil
+}
+
 // Protect makes org/repo's default branch refuse every direct write, so the
 // only way into it is a reviewed pull request.
 //
