@@ -25,7 +25,7 @@ func init() {
 			"usageAnalyticsView.export":        "Export is whether the resolved plan allows exporting these rows.",
 			"usageAnalyticsView.plan":          "Plan echoes the plan id the entitlement was resolved from.",
 			"usageAnalyticsView.providers":     "Providers is the per-provider roll-up over the window.",
-			"usageAnalyticsView.range":         "Range is the window label that was served, which is what was asked for.",
+			"usageAnalyticsView.range":         "Range is the label that was ASKED for. A plan whose retention is shorter\nthan that window is served the retention instead, so read start and end for\nthe window the rows actually cover and retentionDays for the reason — on a\nclamped read the label is longer than what was served.",
 			"usageAnalyticsView.retentionDays": "RetentionDays is how far back the resolved plan allows reading.",
 			"usageAnalyticsView.scope":         "Scope is the tenant the rows were read under — the validated principal's org.",
 			"usageAnalyticsView.start":         "Start is the window's inclusive start, RFC3339 UTC, AFTER the retention\nclamp — so it may be later than the start that was asked for.",
