@@ -13,16 +13,21 @@ package platform
 // about the SEAM, and the fired/not-fired counts are the whole point.
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -103,18 +108,39 @@ func hookApp(t *testing.T, key string) (*zip.App, *fired) {
 // forge host is derived from, so an empty one is a deployment that names no forge.
 func hookAppOn(t *testing.T, key, domain string) (*zip.App, *fired) {
 	t.Helper()
+	return hookAppWith(t, sealed(t, key), domain, nil)
+}
+
+// sealed is a KMS holding key at the ref the door reads. An empty key seals
+// nothing, which is the deployment whose secret was never provisioned.
+func sealed(t *testing.T, key string) *fakeKMS {
+	t.Helper()
 	kms := newFakeKMS()
 	if key != "" {
 		if err := kms.PutSecret(context.Background(), forge.WebhookRef, []byte(key)); err != nil {
 			t.Fatalf("seal webhook secret: %v", err)
 		}
 	}
+	return kms
+}
+
+// hookAppWith is hookAppOn over a caller-supplied KMS and builder, so a test can
+// make either FAIL the way production can — a KMS that stops answering, a
+// draining platform, no peer to ask.
+func hookAppWith(t *testing.T, kms cloud.KMSClient, domain string, build func(context.Context, cloud.GitPushEvent) (int, error)) (*zip.App, *fired) {
+	t.Helper()
 	s := &cloud.Service[state]{
 		Base: cloud.Base{KMS: kms, Log: luxlog.New("test"), Brand: "hanzo", Domain: domain},
 	}
 
 	f := &fired{}
-	cloud.RegisterPushBuilder(func(_ context.Context, ev cloud.GitPushEvent) error { f.push(ev); return nil })
+	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) (int, error) {
+		f.push(ev)
+		if build != nil {
+			return build(ctx, ev)
+		}
+		return 0, nil
+	})
 	cloud.ResetLifecycleSubscribers()
 	cloud.RegisterLifecycleSubscriber(func(_ context.Context, ev cloud.LifecycleEvent) { f.event(ev) })
 	t.Cleanup(func() {
@@ -274,6 +300,63 @@ func TestHook_FailsClosedWithNoSecret(t *testing.T) {
 	if p, e := f.counts(); p != 0 || e != 0 {
 		t.Fatalf("a delivery we could not verify dispatched %d push / %d lifecycle", p, e)
 	}
+}
+
+// An ENCODED body is refused before it is read, which is the only place the
+// refusal can be: reading it is what decompresses it, and by then the allocation
+// the cap would refuse has already been paid. The measurement is the assertion —
+// a 64 MiB bomb that costs less than the cap itself never expanded.
+func TestHook_RefusesAnEncodedBodyBeforeReadingIt(t *testing.T) {
+	const plain = 64 << 20
+	var buf bytes.Buffer
+	zw, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if _, err := io.Copy(zw, io.LimitReader(zeroes{}, plain)); err != nil {
+		t.Fatalf("compress: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	wire := buf.Bytes()
+
+	for _, enc := range []string{"gzip", "deflate", "br", "zstd", "gzip, gzip"} {
+		app, f := hookApp(t, hookSecret)
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+
+		req := httptest.NewRequest(http.MethodPost, hookPath, bytes.NewReader(wire))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", enc)
+		req.Header.Set("X-Git-Signature", strings.Repeat("ab", 32))
+		resp, err := app.Test(req, zip.TestConfig{Timeout: 60 * time.Second})
+		if err != nil {
+			t.Fatalf("%s: deliver: %v", enc, err)
+		}
+		_, _ = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		runtime.ReadMemStats(&after)
+
+		if resp.StatusCode != http.StatusUnsupportedMediaType {
+			t.Fatalf("Content-Encoding %q: want 415, got %d", enc, resp.StatusCode)
+		}
+		if alloc := after.TotalAlloc - before.TotalAlloc; alloc >= maxHookBody {
+			t.Fatalf("Content-Encoding %q: %d bytes on the wire allocated %d — the body was expanded before it was refused",
+				enc, len(wire), alloc)
+		}
+		if p, e := f.counts(); p != 0 || e != 0 {
+			t.Fatalf("%s dispatched %d push / %d lifecycle", enc, p, e)
+		}
+	}
+}
+
+// zeroes is an endless run of the most compressible bytes there are.
+type zeroes struct{}
+
+func (zeroes) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 0
+	}
+	return len(p), nil
 }
 
 // A body over the bound is refused before it is hashed or parsed.
@@ -468,6 +551,12 @@ func TestHook_DeclinesWithAReason(t *testing.T) {
 		{"a commit that is not one", "malformed coordinate", func(t *testing.T) []byte {
 			return pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, "HEAD;curl evil", "z")
 		}},
+		// Git names a ref's new tip in FULL. A prefix is a name that resolves to
+		// different objects in different clones of one repository, and it is not
+		// something the forge ever sends.
+		{"a commit prefix", "malformed coordinate", func(t *testing.T) []byte {
+			return pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit[:7], "z")
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			app, f := hookApp(t, hookSecret)
@@ -532,6 +621,103 @@ func TestHook_ARedeliveryFiresOnce(t *testing.T) {
 	f.settle(t, 2, 2)
 }
 
+// ONE LANDED COMMIT IS ONE FACT, whatever case the namespace arrives in. Tenancy
+// is decided on the lowercased namespace (forge.Org), so a key on the raw one is
+// a second key for the same push — and the second delivery builds it again, on
+// the tenant's compute. The forge will not vary the case; the dedup is the only
+// thing standing between a redelivery and a second build, and it must not depend
+// on that.
+func TestHook_ARedeliveryUnderAnotherCaseFiresOnce(t *testing.T) {
+	app, f := hookApp(t, hookSecret)
+	for _, owner := range []string{"hanzoai", "HanzoAI", "HANZOAI", "hanzoAI"} {
+		body := pushBody(t, owner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
+		code, v := signedDelivery(t, app, body)
+		if code != http.StatusOK {
+			t.Fatalf("owner %q: want 200, got %d", owner, code)
+		}
+		if owner == "hanzoai" && !v.Fired {
+			t.Fatalf("the first delivery did not fire: %+v", v)
+		}
+		if owner != "hanzoai" && (v.Fired || v.Reason != "already landed") {
+			t.Fatalf("owner %q is the same landed commit and got %+v", owner, v)
+		}
+	}
+	f.settle(t, 1, 1)
+}
+
+// A PUSH THAT COULD NOT BE DISPATCHED IS ANSWERED AS ONE, and leaves nothing
+// behind. This fork has no auto-retry — a delivery is marked delivered before
+// the attempt, and the only recovery is a person clicking Replay — so answering
+// a failed dispatch 200 fired:true loses the push twice over: the delivery page
+// says it worked, and the Replay that would have worked is declined as a
+// duplicate of the attempt that did not.
+func TestHook_ADispatchFailureIsRefusedAndLeavesNoDedup(t *testing.T) {
+	var fail atomic.Bool
+	fail.Store(true)
+	app, f := hookAppWith(t, sealed(t, hookSecret), "api.hanzo.ai",
+		func(context.Context, cloud.GitPushEvent) (int, error) {
+			if fail.Load() {
+				return 0, fmt.Errorf("store read failed: platform draining")
+			}
+			return 2, nil
+		})
+	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
+
+	code, v := signedDelivery(t, app, body)
+	if code != http.StatusInternalServerError {
+		t.Fatalf("a dispatch that failed answered %d, want 500 so the delivery page shows it", code)
+	}
+	if v.Fired {
+		t.Fatalf("a dispatch that failed claimed to have fired: %+v", v)
+	}
+	// The lifecycle seam does not run either: the delivery is unprocessed as a
+	// whole, and the Replay redoes both halves.
+	if p, e := f.counts(); p != 1 || e != 0 {
+		t.Fatalf("dispatched %d push / %d lifecycle; want the one attempt and no lifecycle", p, e)
+	}
+
+	// The operator fixes the fault and replays the delivery, which is the ONE
+	// recovery this fork has. It must reach a fresh attempt.
+	fail.Store(false)
+	code, v = signedDelivery(t, app, body)
+	if code != http.StatusOK || !v.Fired {
+		t.Fatalf("the replay of a lost push got %d %+v — it was refused as a duplicate of an attempt that built nothing", code, v)
+	}
+	if v.Builds != 2 {
+		t.Fatalf("verdict Builds = %d, want the 2 the builder launched", v.Builds)
+	}
+	f.settle(t, 2, 1)
+}
+
+// FIRED IS NOT BUILT. Most pushes track no application, so a fired delivery that
+// built nothing is ordinary — and it is exactly what "fired" cannot say. The
+// builder has always known the number; the forge leg used to drop it, leaving
+// one green for a push that built eleven services and one that built none.
+func TestHook_TheVerdictCarriesWhatWasBuilt(t *testing.T) {
+	for _, want := range []int{0, 1, 7} {
+		app, f := hookAppWith(t, sealed(t, hookSecret), "api.hanzo.ai",
+			func(context.Context, cloud.GitPushEvent) (int, error) { return want, nil })
+		body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
+		code, v := signedDelivery(t, app, body)
+		if code != http.StatusOK || !v.Fired {
+			t.Fatalf("want 200 fired, got %d %+v", code, v)
+		}
+		if v.Builds != want {
+			t.Fatalf("verdict Builds = %d, want %d", v.Builds, want)
+		}
+		f.settle(t, 1, 1)
+	}
+	// And the count is in the wire shape, not only in the struct: it is what the
+	// forge's delivery page shows.
+	b, err := json.Marshal(verdict{Org: "hanzo", Repo: "cloud", Fired: true, Builds: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"builds":3`) {
+		t.Fatalf("the answer the forge shows is %s", b)
+	}
+}
+
 // ── the parts, directly ──────────────────────────────────────────────────────
 
 // signed knows every spelling and is fail-closed on each way a signature can be
@@ -575,27 +761,33 @@ func TestSigned(t *testing.T) {
 	}
 }
 
-// seen is the redelivery memory: first inside the window, and first again once it
+// seen is the redelivery memory: held inside the window, and free again once it
 // has expired, so a branch pushed to the same commit weeks later still builds.
 func TestSeen(t *testing.T) {
 	var k seen
 	now := time.Now()
-	if !k.first("a", now) {
-		t.Fatal("a key never seen was not first")
+	if !k.hold("a", now) {
+		t.Fatal("a key never seen was not held")
 	}
-	if k.first("a", now.Add(hookWindow-time.Second)) {
-		t.Fatal("a key inside the window was first again")
+	if k.hold("a", now.Add(hookWindow-time.Second)) {
+		t.Fatal("a key inside the window was held twice")
 	}
-	if !k.first("b", now) {
-		t.Fatal("a different key was not first")
+	if !k.hold("b", now) {
+		t.Fatal("a different key was not held")
 	}
-	if !k.first("a", now.Add(hookWindow+time.Second)) {
-		t.Fatal("a key past the window was not first again")
+	if !k.hold("a", now.Add(hookWindow+time.Second)) {
+		t.Fatal("a key past the window was not held again")
 	}
 	// Swept on write: the expired entries are gone rather than held for the
 	// process's lifetime.
 	if _, held := k.at["b"]; held {
 		t.Fatalf("expired keys are still held: %v", k.at)
+	}
+	// A hold given back is free at once: nothing fired, so there is nothing to
+	// remember, and the next delivery naming that push is a fresh attempt.
+	k.drop("a")
+	if !k.hold("a", now.Add(hookWindow+time.Second)) {
+		t.Fatal("a dropped key was still held")
 	}
 }
 
@@ -639,6 +831,95 @@ func TestSecretIsHeldAndRefused(t *testing.T) {
 	empty := &cloud.Service[state]{Base: cloud.Base{KMS: blank, Log: luxlog.New("test")}}
 	if got, err := empty.State.hook.read(empty, context.Background()); err == nil {
 		t.Fatalf("an empty secret produced a key: %q", got)
+	}
+}
+
+// A FAILED REFRESH DOES NOT TAKE THE KEY WITH IT. The read failed; the secret
+// did not change — it is still the value the forge is signing with. Discarding
+// it turned one KMS blip into a window of deliveries this door could not verify,
+// and this fork does not redeliver them.
+func TestSecretSurvivesAFailedRefresh(t *testing.T) {
+	kms := newFakeKMS()
+	if err := kms.PutSecret(context.Background(), forge.WebhookRef, []byte(hookSecret)); err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms, Log: luxlog.New("test")}}
+	if v, err := s.State.hook.read(s, context.Background()); err != nil || v != hookSecret {
+		t.Fatalf("first read: %q %v", v, err)
+	}
+
+	// KMS goes down exactly at the window boundary.
+	kms.down = fmt.Errorf("dial kms: connection refused")
+	s.State.hook.when = time.Now().Add(-hookFresh - time.Second)
+	if v, err := s.State.hook.read(s, context.Background()); err != nil || v != hookSecret {
+		t.Fatalf("a failed refresh answered %q, %v — the key that works was discarded", v, err)
+	}
+	// And every caller behind it inside the window gets the same answer, not the
+	// error: one rule, wherever you arrived.
+	if v, err := s.State.hook.read(s, context.Background()); err != nil || v != hookSecret {
+		t.Fatalf("a caller inside the window got %q, %v", v, err)
+	}
+	// The failure is still RECORDED — kept, not swallowed.
+	s.State.hook.mu.Lock()
+	held := s.State.hook.err
+	s.State.hook.mu.Unlock()
+	if held == nil {
+		t.Fatal("the failed refresh left no error behind; the degradation is invisible")
+	}
+	// KMS recovers, the window turns, and the rotation is live.
+	kms.down = nil
+	if err := kms.PutSecret(context.Background(), forge.WebhookRef, []byte("key-two")); err != nil {
+		t.Fatalf("rotate: %v", err)
+	}
+	s.State.hook.when = time.Now().Add(-hookFresh - time.Second)
+	if v, err := s.State.hook.read(s, context.Background()); err != nil || v != "key-two" {
+		t.Fatalf("after recovery: %q, %v; want the rotated value", v, err)
+	}
+}
+
+// A PANIC INSIDE THE READ RELEASES THE REFRESH. One panic used to strand the
+// in-flight flag: every later delivery answered 503 for the life of the process,
+// with KMS healthy, and no second read was ever attempted.
+func TestSecretRefreshSurvivesAPanickingKMS(t *testing.T) {
+	kms := newFakeKMS()
+	kms.panics = true
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms, Log: luxlog.New("test")}}
+
+	func() {
+		defer func() { _ = recover() }() // the edge recovers; the door must settle
+		_, _ = s.State.hook.read(s, context.Background())
+	}()
+
+	s.State.hook.mu.Lock()
+	busy := s.State.hook.busy
+	s.State.hook.mu.Unlock()
+	if busy {
+		t.Fatal("the refresh is still marked in flight; every later delivery is 503 forever")
+	}
+	// The recorded outcome is a FAILURE, never the empty value settled as a
+	// success — which would 401 every delivery and blame the forge's config.
+	if v, err := s.State.hook.read(s, context.Background()); err == nil || v != "" {
+		t.Fatalf("a panicked read settled as %q, %v", v, err)
+	}
+	// KMS is healthy again, the window turns, and the door recovers by itself.
+	kms.panics = false
+	if err := kms.PutSecret(context.Background(), forge.WebhookRef, []byte(hookSecret)); err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	s.State.hook.when = time.Now().Add(-hookFresh - time.Second)
+	if v, err := s.State.hook.read(s, context.Background()); err != nil || v != hookSecret {
+		t.Fatalf("after the panic cleared: %q, %v", v, err)
+	}
+}
+
+// The KMS read is bounded UNDER the forge's own 5s delivery timeout. The forge
+// hangs up at 5s and this fork does not retry, so a read that outlives the
+// delivery has already lost the push and is only choosing whether to hold the
+// refresh open behind it as well.
+func TestHookReadFailsInsideTheDeliveryWindow(t *testing.T) {
+	const forgeDelivers = 5 * time.Second // services/webhook: DeliverTimeout
+	if hookRead >= forgeDelivers {
+		t.Fatalf("hookRead = %v, which is not inside the %v the forge waits: a slow read answers nobody", hookRead, forgeDelivers)
 	}
 }
 
