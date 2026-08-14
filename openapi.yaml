@@ -2050,6 +2050,22 @@ components:
       type: object
     CodingStartIn:
       properties:
+        after:
+          description: |-
+            After names a previous run's session, and starts this one from where that
+            one stopped instead of from the repository's default. It is how a follow-up
+            instruction — "now add tests for it" — builds on work already done rather
+            than beginning again on a fresh clone.
+
+            It sets the base and nothing else, so this run still writes its OWN branch.
+            One run, one branch: a run that wrote back onto an earlier run's branch
+            would break the rule the forge's ref policy is built on, and would leave
+            two turns of work with one name to review.
+
+            A caller who already knows the branch may pass Base directly; this exists
+            because the branch is derived from a session id and nobody should have to
+            know how. Base wins if both are given.
+          type: string
         agentRef:
           description: |-
             AgentRef names a configured agent to run as, which is how an org pins a
@@ -67234,9 +67250,8 @@ paths:
       description: |-
         Runs a coding task on a repository: clones it into a sandbox, lets a model read
         and edit the code, run the tests, and push the work to a branch. Say the thing
-        you want done — "fix
-        the failing auth test in hanzoai/cloud" — and the run infers the repo, the
-        branch and the plan. No prefix, no ceremony.
+        you want done — "fix the failing auth test in hanzoai/cloud" — and the run
+        infers the repo, the branch and the plan. No prefix, no ceremony.
 
         It answers 202 with the run's handle the moment the run is ADMITTED — not when
         it finishes. A coding run takes minutes; holding a request open for one would
@@ -67247,6 +67262,12 @@ paths:
         run's durable record and its live stream (/v1/agents/sessions/{id}/stream), so
         this door does not grow a progress endpoint, a status endpoint or a cancel
         endpoint of its own. One way to watch a run, whoever started it.
+
+        It is also how work CONTINUES. Pass an earlier run's session as `after` and
+        this one starts from where that one stopped, so "now add tests for it" builds
+        on the branch already pushed instead of a fresh clone. The follow-up still gets
+        its own branch and its own session — one run, one branch, always reviewable on
+        its own.
       operationId: post_coding
       requestBody:
         content:

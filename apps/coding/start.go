@@ -157,7 +157,7 @@ func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log
 	// makes git run a command of the caller's choosing on the executor. BaseRE
 	// is git's own branch shape, which is alnum-led and therefore cannot begin
 	// with a dash; that is the property doing the work, not the length bound.
-	base := strings.TrimSpace(in.Base)
+	base := BaseOf(in.Base, in.After)
 	if base != "" && !BaseRE.MatchString(base) {
 		return Accepted{}, fmt.Errorf("coding: %q is not a branch name", base)
 	}

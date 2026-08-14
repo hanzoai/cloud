@@ -2600,6 +2600,20 @@ type CodingStartIn struct {
 	// Base is the branch to start from. Empty takes the repository's default. The
 	// run never writes here — it writes the agent branch it answers with.
 	Base string `json:"base,omitempty"`
+	// After names a previous run's session, and starts this one from where that
+	// one stopped instead of from the repository's default. It is how a follow-up
+	// instruction — "now add tests for it" — builds on work already done rather
+	// than beginning again on a fresh clone.
+	//
+	// It sets the base and nothing else, so this run still writes its OWN branch.
+	// One run, one branch: a run that wrote back onto an earlier run's branch
+	// would break the rule the forge's ref policy is built on, and would leave
+	// two turns of work with one name to review.
+	//
+	// A caller who already knows the branch may pass Base directly; this exists
+	// because the branch is derived from a session id and nobody should have to
+	// know how. Base wins if both are given.
+	After string `json:"after,omitempty"`
 	// AgentRef names a configured agent to run as, which is how an org pins a
 	// harness, a model and a prompt to a name. Empty runs the default agent.
 	AgentRef string `json:"agentRef,omitempty"`
