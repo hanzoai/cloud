@@ -79,7 +79,7 @@
             "name": "range",
             "in": "query",
             "required": false,
-            "description": "Range is the window: 24h, 7d, 30d, or custom. Empty means 24h.",
+            "description": "Range is the window: a count and a unit — 24h, 7d, 90d, any \u003cN\u003eh or \u003cN\u003ed —\nor day, week, month, all, custom. Empty means 24h. The window is then\nclamped forward to the plan's retention entitlement.",
             "schema": {
               "type": "string"
             }
@@ -172,7 +172,7 @@
             "name": "range",
             "in": "query",
             "required": false,
-            "description": "Range is the window to read: 1h, 24h, 7d or 30d. Empty means 24h, and any\nother label is refused rather than silently replaced.",
+            "description": "Range is the window to read: a count and a unit — 1h, 24h, 90d, any \u003cN\u003eh or\n\u003cN\u003ed — or day, week, month, all. Empty means 24h. A label that is not a\ncount, or one reaching past the 730-day horizon, is refused rather than\nsilently replaced.",
             "schema": {
               "type": "string"
             }
@@ -214,7 +214,7 @@
             "name": "range",
             "in": "query",
             "required": false,
-            "description": "Range is the window: 24h, 7d, 30d, or custom. Empty means 24h. A label this\nsurface does not know is refused rather than silently replaced.",
+            "description": "Range is the window: a count and a unit — 24h, 7d, 90d, any \u003cN\u003eh or \u003cN\u003ed —\nor day, week, month, all, custom. Empty means 24h. A label this surface\ndoes not know, or one reaching past the 730-day horizon, is refused rather\nthan silently replaced.",
             "schema": {
               "type": "string"
             }
