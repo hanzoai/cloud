@@ -1,5 +1,13 @@
-// Package tracker is your org's issue tracker: projects, issues, and the filters to
-// find them.
+// Package tracker is Hanzo Todo: boards, the work items on them, and the filters
+// that make a board.
+//
+// The product is named Todo and the package is named tracker, and that is
+// deliberate rather than a rename left half-done. `tracker` names the WORK-ITEM
+// PLANE (contract.go) — the one primitive every surface in the estate files
+// against — while Todo is what a person opens at tracker.hanzo.ai. Renaming the
+// package would move /v1/tracker, the /tracker/callback URI registered at IAM,
+// the k8s objects and the import path, all to say the same thing a title tag
+// already says.
 //
 // It mounts the Hanzo Cloud /v1/tracker/* surface. THE FORGE IS THE STORE
 // (source.go): a board is a repository on git.hanzo.ai and an issue is its issue,
@@ -22,16 +30,17 @@
 //	POST   /v1/tracker/projects                          405, named at the forge
 //	PATCH  /v1/tracker/projects/:key                     405, named at the forge
 //	DELETE /v1/tracker/projects/:key                     405, named at the forge
-//	GET    /v1/tracker/projects/:key/issues[?status=&kind=&repo=&source=&scheduled=]  -> [Issue]
+//	GET    /v1/tracker/projects/:key/issues[?status=&kind=&repo=&label=&source=&scheduled=]  -> [Issue]
 //	POST   /v1/tracker/projects/:key/issues              file an issue           -> Issue (201)
 //	PATCH  /v1/tracker/projects/:key/issues/:num         update an issue         -> Issue
+//	GET    /v1/tracker/board[?status=&kind=&repo=&label=&source=&scheduled=]         -> [Issue]
 //	GET    /v1/tracker/milestones                        org rollup              -> [Milestone]
 //	GET    /v1/tracker/issues                            search across the org   -> [Issue]
 //	POST   /v1/tracker/projects/:key/issues/:num/claim   take a piece of work
 //
 // And the UI the surface exists for, embedded in this binary (ui/):
 //
-//	GET    /tracker, /tracker/*                          the board + timeline SPA
+//	GET    /tracker, /tracker/*                          the Hanzo Todo SPA
 //
 // Order 129: binds /v1/tracker/* before the AI subsystem's /v1/* catch-all
 // (150). serve.go auto-registers GET /v1/tracker/health.
@@ -180,7 +189,7 @@ func init() {
 				"org. Those are the routes beside this one.")
 	}
 
-	openapi.DescribeSPA("/tracker", "tracker board")
+	openapi.DescribeSPA("/tracker", "Hanzo Todo board")
 }
 
 // routes registers the tracker surface. Literal routes register before their
@@ -220,6 +229,18 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/projects/:key/issues", o.forgeIssues)
 	zip.Post(g, "/projects/:key/issues", o.forgeCreateIssue)
 	zip.Patch(g, "/projects/:key/issues/:num", o.forgePatchIssue)
+
+	// THE GLOBAL BOARD — every board's work in one set of columns. Same op as the
+	// per-board list above with its key left unbound, because the key is a FILTER
+	// and not an address: the forge fan-out those routes make is org-wide already
+	// and then narrows, so this is the narrowing declined rather than a second
+	// implementation to keep in step.
+	//
+	// It is also how a board smaller than a repository exists. The estate's apps
+	// are directories inside one repository, so there is no repo per app to point
+	// at; `?label=app/meet` is the meet board, and nothing had to be provisioned
+	// for it. 140 boards cost 140 queries, not 140 objects.
+	zip.Get(g, "/board", o.forgeIssues)
 
 	// The org rollup the forge does not offer: milestones are repo-scoped
 	// upstream, so the org view is a server-side fan-out (forge.Client.Milestones).

@@ -3,7 +3,7 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-// Package ui embeds the built Hanzo Tracker SPA (@hanzo/tracker, the tracker
+// Package ui embeds the built Hanzo Todo SPA (@hanzo/tracker, the tracker
 // app in hanzoai/admin, Vite + hanzogui shell over the forge's own board CSS)
 // into the cloud binary and serves it at /tracker/*.
 //
