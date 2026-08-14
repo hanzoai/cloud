@@ -57,6 +57,28 @@ var BaseRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$`)
 // refs/heads/agent/<something>, and nothing else, ever.
 func BranchFor(sessionID string) string { return "agent/" + shortID(sessionID) }
 
+// BaseOf is where a run starts: the branch given, or the branch of the run named
+// by after, or the repository's default.
+//
+// `after` is what makes a follow-up instruction — "now add tests for it" — build
+// on work already done instead of beginning again on a fresh clone. It sets the
+// base and NOTHING else, so the new run still writes its own branch: a run that
+// wrote back onto an earlier run's branch would break the rule the forge's ref
+// policy rests on, and would leave two turns of work under one name to review.
+//
+// A session is turned into a branch HERE rather than accepted as one, so naming a
+// run can never name a branch outside agent/. A given base wins — a caller who
+// already knows the branch is not overruled by a convenience.
+func BaseOf(base, after string) string {
+	if base = strings.TrimSpace(base); base != "" {
+		return base
+	}
+	if after = strings.TrimSpace(after); after != "" {
+		return BranchFor(after)
+	}
+	return ""
+}
+
 // Event kinds mirrored into the agent session. These are the agents session
 // vocabulary (a stable wire contract): a phase is a tool-call, a free line is a
 // log, a lifecycle transition is a status. Kept as local constants so coding does
