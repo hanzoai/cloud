@@ -291,9 +291,9 @@ func TestNoActor_EveryCallRefusesAndNothingReachesTheWire(t *testing.T) {
 	c := s.client(t)
 
 	calls := map[string]func() error{
-		"Issues":     func() error { _, err := c.Issues(t.Context(), "acme", IssueFilter{}); return err },
-		"Repos":      func() error { _, err := c.Repos(t.Context(), "acme"); return err },
-		"Issue":      func() error { _, err := c.Issue(t.Context(), "acme", "api", 1); return err },
+		"Issues": func() error { _, err := c.Issues(t.Context(), "acme", IssueFilter{}); return err },
+		"Repos":  func() error { _, err := c.Repos(t.Context(), "acme"); return err },
+		"Issue":  func() error { _, err := c.Issue(t.Context(), "acme", "api", 1); return err },
 	}
 	for name, call := range calls {
 		t.Run(name, func(t *testing.T) {

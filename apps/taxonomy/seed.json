@@ -1278,7 +1278,7 @@
    "category": "platform",
    "tags": [],
    "icon": "ClipboardList",
-   "route": "/todo",
+   "href": "https://todo.hanzo.ai/",
    "brands": [],
    "order": 6,
    "published": true
