@@ -74,9 +74,7 @@ func ingest(ctx context.Context, ev plane.ChannelsIngestIn) {
 		// ACCEPTED TRADEOFF (C1-F3): under groupPolicy=open any group member
 		// inserts inbox rows; event-key dedupe, 8 KiB truncation, 30-day GC, and
 		// single-conn SQLite serialization bound the damage. A per-org ingest
-		// limiter is the named follow-up alongside agent delivery.
-		// Agent delivery is NOT built this pass: this insert is the seam a
-		// future channels.RegisterDelivery consumer will observe.
+		// limiter is the named follow-up.
 		if ierr := st.insertInbox(ctx, inboxRow{
 			Org:        ev.Org,
 			Channel:    m.Channel,
