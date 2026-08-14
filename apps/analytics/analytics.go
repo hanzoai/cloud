@@ -339,8 +339,9 @@ type noArgs struct{}
 // is the SAME grammar hanzoai/types.ParseWindow gives the console, so analytics and
 // the Overview module cannot disagree about what "7d" means.
 type windowQuery struct {
-	// Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
-	// start and end are given. An unknown value is a 400.
+	// Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
+	// <N>d — or day, week, month, all. Default 24h. Ignored when both start and
+	// end are given. An unknown value, or one past the 730-day horizon, is a 400.
 	Range string `json:"range"`
 	// Start is the inclusive lower bound of a custom window, RFC3339. Requires end.
 	Start string `json:"start"`
@@ -352,8 +353,9 @@ type windowQuery struct {
 // window fields are spelled out rather than embedded: zip's schema walk publishes
 // an embedded type as a nested object property the flat wire does not carry.
 type topQuery struct {
-	// Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
-	// start and end are given. An unknown value is a 400.
+	// Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
+	// <N>d — or day, week, month, all. Default 24h. Ignored when both start and
+	// end are given. An unknown value, or one past the 730-day horizon, is a 400.
 	Range string `json:"range"`
 	// Start is the inclusive lower bound of a custom window, RFC3339. Requires end.
 	Start string `json:"start"`
