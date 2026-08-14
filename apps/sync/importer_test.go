@@ -525,6 +525,30 @@ func TestAPushWithNoTargetIsNotASync(t *testing.T) {
 	}
 }
 
+// TestSyncedRepositoriesAreBornAdvanceOnly: the forge is asked to refuse a force
+// push and a deletion on every branch of a repository this seam creates.
+//
+// The advance never sends a force and never deletes, but that is one client's
+// discipline — a colleague with a clone, or a future caller, reaches the same
+// repository with neither. The rule is the forge's, so it holds for all of them.
+func TestSyncedRepositoriesAreBornAdvanceOnly(t *testing.T) {
+	_, fg, _, _ := imported(t)
+
+	rule := fg.rule(widgets.flat())
+	if rule == nil {
+		t.Fatal("no branch rule was asked for; the repository is only as safe as its clients")
+	}
+	if rule["rule_name"] != "**" {
+		t.Errorf("rule covers %q, want every branch", rule["rule_name"])
+	}
+	if rule["enable_push"] != true {
+		t.Error("the rule refuses the push the repository exists to receive")
+	}
+	if rule["enable_force_push"] != false {
+		t.Error("the rule permits a force push, which is the one thing this seam exists to prevent")
+	}
+}
+
 // TestACredentialGoesOnlyToASourceWeMintFor: the token a caller hands in is
 // offered only to a host this deployment mints credentials for, and a call that
 // would send it elsewhere is REFUSED rather than quietly downgraded.
