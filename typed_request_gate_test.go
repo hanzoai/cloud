@@ -165,6 +165,16 @@ var allowedRequestUses = map[string]string{
 		"request. Fails closed off the HTTP path: no request means the unbilled, default-project answer, " +
 		"and tenant() has already refused before any op reaches it.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
+	"apps/admin/core/fanin.go": "Delegate — a read that FORWARDS the caller's own identity, and the one " +
+		"place the fleet overview lifts it off the request. The value it needs is the principal WHOLE, not " +
+		"the org: the overview answers for every tenant, so each per-tenant read re-points the operator's " +
+		"authority at someone else's books (cloud.As), and an org is exactly the thing it must not be " +
+		"fixed to. It is here rather than inside the fan-out because BUILDING the principal reads the " +
+		"request's headers, and fasthttp's header store shares one scratch buffer across reads — twelve " +
+		"goroutines each building their own race on it, which -race proves. So it is called ONCE, ahead " +
+		"of the fan-out, and every read after is a cheap re-pointing of a value nobody else holds. Fails " +
+		"closed off the HTTP path: no request means the plain context, which carries no operator standing " +
+		"and is refused by the reads themselves.",
 	"apps/tracker/source.go": "scopeForge. The forge-backed board needs the caller's IAM USERNAME " +
 		"(X-User-Name) as well as their org: the org says WHICH tenant's work to ask the forge for, and the " +
 		"username is who the forge is asked AS (Forgejo Sudo), which drops privilege to that user so the " +
