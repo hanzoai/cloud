@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -332,10 +334,5 @@ func TestDeleteAnswers204WithNoBody(t *testing.T) {
 }
 
 func sortedKeys(m map[string]bool) string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return strings.Join(out, ", ")
+	return strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }

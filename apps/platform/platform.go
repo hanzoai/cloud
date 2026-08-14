@@ -34,6 +34,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -44,7 +45,6 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -55,6 +55,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/brand"
+	"github.com/hanzoai/cloud/forge"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
@@ -94,6 +96,8 @@ type state struct {
 	appLock     appMutex           // per-app serialization of apply-CR→finalize-live (applylive.go, RED LOW-1)
 	deployGate  inflightGate       // per-org in-flight synchronous-deploy cap (deploy.go, RED LOW L1)
 	resolver    fqdn.Resolver      // custom-domain ownership verification (domains.go); nil ⇒ system resolver
+	hook        secret             // the forge's webhook key, held for a window (hook.go)
+	landed      seen               // pushes already fired, so a redelivery builds once (hook.go)
 }
 
 // mounted is the active service so Shutdown can release the store.
@@ -119,14 +123,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// the isolated build ns (holding only the per-org push creds + git token), never
 	// alongside the platform secrets (H2). The operator provisions this namespace and
 	// its scoped credentials (like every other build credential today).
-	k := newK8sClient(getenv("CLOUD_PLATFORM_IMAGE_PREFIX", defaultBuildImagePrefix), getenv("CLOUD_PLATFORM_BUILD_NS", defaultBuildNamespace))
+	k := newK8sClient(environ.Or("CLOUD_PLATFORM_IMAGE_PREFIX", defaultBuildImagePrefix), environ.Or("CLOUD_PLATFORM_BUILD_NS", defaultBuildNamespace))
 	if k.initErr != "" {
 		log.Warn("kubernetes client unavailable; deploy/build will fail closed", "err", k.initErr)
 	}
 
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "platform"),
 		State: state{store: store, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS, deps.IAMIssuer, deps.Brand),
-			sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
+			sitesHost: environ.Or("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
 	// The project source is the CANONICAL IAM: the iam peer over the plane when
 	// the deployment names a separate one (IAM_URL), the embedded store when this
 	// binary IS the IAM. Neither takes an address or a credential — the peer is
@@ -180,16 +184,34 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// with no list to maintain per brand.
 	selfGitHost = brand.Apex(deps.Domain)
 
+	// The forge, by the same reasoning and from the ONE derivation of it. It is
+	// what makes an application's github.com RepoURL and a delivery's git.hanzo.ai
+	// clone URL the same repository while the migration runs (normRepo).
+	forgeHost = forge.Host(deps.Domain)
+
 	// git-push-to-deploy: a push landed on the embedded git server (clients/git)
 	// triggers a build for every app tracking that repo+branch. Inverted so git
 	// never imports platform — build.go RegisterPushBuilder ⇄ OnGitPush (push.go).
-	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) error { return buildFromPush(mounted, ctx, ev) })
+	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) (int, error) {
+		return buildFromPush(mounted, ctx, ev)
+	})
 
 	// The same trigger on the plane. git and platform are separate processes, so
 	// the registration above is nil in the process where pushes actually land —
 	// which made OnGitPush's nil-when-unregistered a silent no-op for every push
 	// the fleet has ever served.
 	exposePush()
+
+	// The same trigger from the FORGE. Pushes land on git.hanzo.ai, a separate
+	// server whose refs never touch this fleet's receive-pack, so the two seams
+	// above are reached from there by a signed delivery (hook.go) — registered here,
+	// in the process holding the builder, which is the whole reason the door apps/git
+	// used to serve could accept a push and build nothing.
+	//
+	// Raw, not a typed op: the HMAC covers the bytes and has to run before the
+	// decode. Terminal keeps its 401/413 intact under an outer /v1 error filter,
+	// exactly as the GitHub webhook does.
+	app.Post(hookPath, cloud.Terminal(cloud.Handle(s, hook)))
 
 	// Own the git build→deploy handoff: a background reconciler that applies the
 	// Service CR once a build Job succeeds (reconcile.go). Restart-safe — it reads
@@ -716,14 +738,11 @@ func (o ops) createApp(ctx context.Context, body *createAppReq) (*appView, error
 	domainsJSON, _ := json.Marshal(domains)
 
 	now := time.Now().Unix()
-	id, err := genID("app")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := genID("app")
 	a := Application{
 		ID: id, Org: org, ProjectID: project, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
-		Environment: firstNonEmpty(strings.TrimSpace(body.Environment), "production"), Source: source,
-		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: firstNonEmpty(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
+		Environment: cmp.Or(strings.TrimSpace(body.Environment), "production"), Source: source,
+		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: cmp.Or(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
 		RepoProvider: providerFromURL(body.Repo.URL), ImageRepo: strings.TrimSpace(body.Image.Repository), ImageTag: strings.TrimSpace(body.Image.Tag),
 		BuildType: buildType, Dockerfile: strings.TrimSpace(body.Dockerfile), Port: portOr(body.Port), Replicas: s.State.k8s.limits.clampReplicas(body.Replicas),
 		StorageGB: s.State.k8s.limits.clampStorage(body.StorageGB),
@@ -1098,24 +1117,33 @@ func sanitizeDomains(in []string) []string {
 }
 
 // genID returns "<prefix>_<22-char-url-safe-token>" (96 bits of entropy).
-func genID(prefix string) (string, error) {
+// genID mints this package's ids: sixteen random bytes in base64url, which is the
+// shape its rows already carry — shorter than the hex mint.ID makes, and not
+// interchangeable with it for that reason.
+//
+// No error. crypto/rand.Read fills the buffer or panics; since Go 1.24 it cannot
+// report a short read, so there was never a failure for a caller to handle.
+func genID(prefix string) string {
 	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return prefix + "_" + base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-func getenv(key, dflt string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return dflt
+	_, _ = rand.Read(b)
+	return prefix + "_" + base64.RawURLEncoding.EncodeToString(b)
 }
 
 // Shutdown closes the platform store. Idempotent. Mirrors the projects
 // Shutdown contract so the serve layer releases subsystem resources uniformly.
 func Shutdown() error {
+	// UNREGISTER FIRST, because the registration outlives the thing it reaches.
+	// The push builder is a closure over `mounted`, which the last line of this
+	// function sets to nil — so a push arriving after a shutdown (a co-resident git
+	// server draining, a rolling deploy) dispatched buildFromPush(nil, …) and
+	// dereferenced a nil Service. A self-inflicted panic in the process that owns
+	// builds, on the one path that is meant to be best-effort.
+	//
+	// Unregistered, OnGitPush falls to the plane and gets an honest failure from a
+	// platform that is going away, which is what a caller can act on. Before the
+	// guard below: an unregistration is correct whether or not a store was ever
+	// opened, and Register is the one thing Mount does that has no other undo.
+	cloud.RegisterPushBuilder(nil)
 	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}

@@ -44,8 +44,6 @@ package referrals
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -57,6 +55,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -351,10 +350,7 @@ func (o referralOps) claim(ctx context.Context, body *claimRequest) (*claimView,
 		return nil, zip.ErrBadRequest("cannot refer yourself")
 	}
 
-	id, err := genID("ref")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("ref")
 	ref, created, err := s.State.store.Claim(ctx, id, referrerOrg, refereeOrg, code)
 	if err != nil {
 		switch err {
@@ -627,15 +623,6 @@ func (a *adminSummary) add(r Referral) {
 	case StatusQualified:
 		a.Qualified++
 	}
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // adminLimitOf is the ONE `?limit=` rule for the admin board: an absent,

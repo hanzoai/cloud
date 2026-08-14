@@ -60,17 +60,17 @@ func TestTenantDBPathConvention(t *testing.T) {
 	}
 
 	// project-scoped nests under projects/{project}
-	got, err = path("acme", "web", "tracker")
+	got, err = path("acme", "web", "kms")
 	if err != nil {
 		t.Fatalf("project-scoped path: %v", err)
 	}
-	if want := filepath.Join(dir, "orgs", "acme", "projects", "web", "tracker.db"); got != want {
+	if want := filepath.Join(dir, "orgs", "acme", "projects", "web", "kms.db"); got != want {
 		t.Fatalf("project-scoped path = %q, want %q", got, want)
 	}
 
 	// the default project is a real, nested segment (not folded into org scope)
-	got, _ = path("acme", "default", "tracker")
-	if want := filepath.Join(dir, "orgs", "acme", "projects", "default", "tracker.db"); got != want {
+	got, _ = path("acme", "default", "kms")
+	if want := filepath.Join(dir, "orgs", "acme", "projects", "default", "kms.db"); got != want {
 		t.Fatalf("default-project path = %q, want %q", got, want)
 	}
 
@@ -92,7 +92,7 @@ func TestTenantDBPathConvention(t *testing.T) {
 	if _, err := path("bad org", "", "git"); err == nil {
 		t.Fatal("org with a space (unsafe rune) must error")
 	}
-	if _, err := path("acme", "bad project", "tracker"); err == nil {
+	if _, err := path("acme", "bad project", "kms"); err == nil {
 		t.Fatal("project with a space (unsafe rune) must error")
 	}
 	if _, err := path("acme", "", ""); err == nil {
@@ -154,12 +154,12 @@ func TestTenantDBOrgIsolation(t *testing.T) {
 func TestTenantDBProjectIsolation(t *testing.T) {
 	dir := t.TempDir()
 
-	alpha, err := OrgDB(dir, MustOrgNamespace("acme", "alpha"), "tracker")
+	alpha, err := OrgDB(dir, MustOrgNamespace("acme", "alpha"), "kms")
 	if err != nil {
 		t.Fatalf("open alpha: %v", err)
 	}
 	defer func() { _ = alpha.Close() }()
-	beta, err := OrgDB(dir, MustOrgNamespace("acme", "beta"), "tracker")
+	beta, err := OrgDB(dir, MustOrgNamespace("acme", "beta"), "kms")
 	if err != nil {
 		t.Fatalf("open beta: %v", err)
 	}
@@ -175,8 +175,8 @@ func TestTenantDBProjectIsolation(t *testing.T) {
 
 	_ = alpha.Close()
 	_ = beta.Close()
-	fAlpha := filepath.Join(dir, "orgs", "acme", "projects", "alpha", "tracker.db")
-	fBeta := filepath.Join(dir, "orgs", "acme", "projects", "beta", "tracker.db")
+	fAlpha := filepath.Join(dir, "orgs", "acme", "projects", "alpha", "kms.db")
+	fBeta := filepath.Join(dir, "orgs", "acme", "projects", "beta", "kms.db")
 	for _, f := range []string{fAlpha, fBeta} {
 		if _, err := os.Stat(f); err != nil {
 			t.Fatalf("expected a nested project store at %s: %v", f, err)

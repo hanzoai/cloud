@@ -61,7 +61,10 @@ import (
 	"github.com/hanzoai/cloud/apps/base"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/forge"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -112,6 +115,17 @@ type state struct {
 	// see provisionSpace — a failure NEVER fails project creation. nil disables the
 	// side effect entirely (space is provisioned lazily on first real use).
 	ensureSpace func(ctx context.Context, org string) error
+	// forge resolves the deployment's forge client, through which a published
+	// project's source is world-readable exactly when the project is
+	// (visibility.go). It reads the machine credential from KMS on first use and
+	// re-reads it as it rotates, so nothing here holds a secret.
+	forge *forge.Source
+	// queue runs one visibility reconcile at a time per project, so two writes
+	// cannot land on the forge out of order — see visibility.go.
+	queue *queue
+	// stop ends the background visibility audit, so it does not outlive the store
+	// it reads (Shutdown).
+	stop context.CancelFunc
 }
 
 // mounted is the active service so Shutdown can release the store. The unified
@@ -261,8 +275,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		cf:          sites.NewPurger(b.Log),
 		ai:          deps.AI, // may be nil (no gateway) — buildSite degrades to 503.
 		bill:        cloud.NewResourceMeter(deps, hostingProvider),
-		apex:        env("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
-		ensureSpace: base.EnsureSpace,                     // wired-by-default Base data space (fail-soft).
+		apex:        environ.Or("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
+		ensureSpace: base.EnsureSpace,                            // wired-by-default Base data space (fail-soft).
+		forge:       &forge.Source{},                             // the credential is read from KMS on first publish, not here.
+		queue:       &queue{},
 	}}
 	mounted = s
 
@@ -318,6 +334,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// logs.
 	go s.State.cf.AssertHTMLPassthrough(context.Background())
 
+	// Nothing a publisher took private — and nothing a deleted project left
+	// behind — may be readable because this process was away when it happened
+	// (visibility.go). Off-thread and read-only in the steady state, so a forge
+	// that is down delays no mount and changes nothing; it keeps trying until it
+	// lands, because boot is the least reliable moment to ask the forge anything
+	// and this is the only thing that recovers a close nobody noticed missing.
+	audited, stop := context.WithCancel(context.Background())
+	s.State.stop = stop
+	go audit(s, audited)
+
 	b.Log.Info("projects mounted", "bucket", s.State.blob.bucket, "s3", s.State.blob.configured(),
 		"ai", s.State.ai != nil, "apex", s.State.apex, "billing", s.State.bill.Enabled(), "brand", deps.Brand)
 	return nil
@@ -329,14 +355,30 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // doc comment (see routes below) — which is what puts them in the OpenAPI
 // document, the SDKs, the CLI and the MCP tool list with a SHAPE.
 //
-// A deploy cannot join them, and the reason is the wire, not effort. Its request
-// body is a zip or a tar(.gz) of the built site — raw in the body or as a
-// multipart part — OR a JSON git descriptor, chosen by Content-Type; and it
-// answers 200 for an artifact it published or 202 for a build it queued. A typed
-// In is one JSON shape and zip.WithStatus declares one success status, so a typed
-// deploy would refuse the archive that is its main path and mislabel half its
-// answers. openapi.Describe is the only way a route with no schema can say
-// anything at all, so that is what these two keep.
+// An archive upload cannot join them, and the reason is the wire, not effort:
+// its request body is BYTES — a zip or tar(.gz), raw in the body or as a
+// multipart part — and zip decodes every non-empty typed body with
+// jsonenc.Unmarshal before the handler runs, so an In here would answer a real
+// archive with 400. Typing it would not mis-describe the route, it would break
+// it.
+//
+// It used to be worse than untypeable, it was TWO OPERATIONS: the same address
+// also took a JSON git descriptor and answered 202 instead of 200, so no typed
+// registration could have described it even in principle. That half is now its
+// own typed op (POST .../deployments, startDeployment), which is what let these
+// two say something concrete at last. They are untyped and no longer SILENT:
+// openapi.Register declares the archive request through openapi.Binary — the
+// honest declaration no Go struct can make, rendering `application/octet-stream`
+// with `{type: string, format: binary}`, which a generator turns into a file
+// parameter — and the deployment they answer with. Before it, both published an
+// operationId and a tag and nothing else, indistinguishable from a route that
+// takes no body and returns none, so every generated SDK offered a site upload
+// with nowhere to put the site.
+//
+// What Register still cannot carry is FIELD prose: it derives a schema by
+// reflection and Go drops comments, so projectsDeployment's properties publish
+// bare here. That is a generator gap, not a diligence one — do not hand-write a
+// schema beside the struct, which is the drift Register exists to prevent.
 //
 // The ONE rule stated on both is the scope, because it is the rule this plane
 // lives or dies by: the org is the gateway-minted, IAM-validated owner and is
@@ -349,43 +391,39 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // while the router actually serves the route — which is also why the two path
 // families are declared separately rather than aliased: each is its own live route.
 func init() {
+	const archiveProse = "Takes a built site live at `https://<slug>.hanzo.app` in one call. The body is the " +
+		"site itself — a `zip` or `tar.gz` holding `index.html` at its root (or a single wrapper " +
+		"directory that does), sent raw or as a multipart file part. It is unpacked to the site's " +
+		"own storage prefix and served immediately, answering the finished deployment.\n\n" +
+		"It is bounded by the edge body limit (16 MiB by default), and that bound is the whole " +
+		"reason the other path exists: an oversized POST is refused by the server BEFORE any " +
+		"handler runs and surfaces as an opaque `400 Error when parsing request` that reads like a " +
+		"malformed payload rather than a size cap. A site too large for one archive opens a " +
+		"deployment with `POST /v1/sites/{slug}/deployments` instead and writes its files straight " +
+		"to storage against the scoped grant that answers with — no body limit, and no bytes " +
+		"through this API at all.\n\n" +
+		"Billing is fail-closed and fails FIRST: the hosting gate runs before anything is parsed " +
+		"or uploaded, so an unfunded org is 402 and an unreachable commerce is 503 with nothing " +
+		"written. The debit lands only on success — a failed upload is never billed and never " +
+		"flips the live site — and a redeploy answers the SAME URL, because slug and apex are " +
+		"stable.\n\n" +
+		"Scope: a validated principal is required (403 without one) and the site is resolved " +
+		"within that principal's org, so another tenant's slug is a 404. Object storage must be " +
+		"configured (503); an archive that does not walk is a 400 and one over the size cap is a " +
+		"413."
+
+	// Both live archive addresses, spelled out per surface rather than looped —
+	// the same rule routes() follows, so a reader grepping either literal path
+	// finds the declaration that governs it. Register states the two facts the
+	// router cannot: the body is BYTES (openapi.Binary — the declaration no Go
+	// struct can make) and the answer is a deployment.
+	openapi.Register("/v1/projects/:slug/deploy", http.MethodPost, openapi.Binary{}, projectsDeployment{})
 	openapi.Describe("/v1/projects/:slug/deploy", http.MethodPost,
-		"Deploy a build — upload an archive, or trigger a build from the linked repo",
-		"Takes a built site live at `https://<slug>.hanzo.app`. It accepts BOTH shapes on one "+
-			"address and the content type decides which: a `zip` or `tar.gz` archive — raw in the "+
-			"body or as a multipart file part — is uploaded and served immediately, answering 200 "+
-			"with the finished deployment; a JSON body instead queues a build from the project's "+
-			"linked repo and answers 202 with a queued deployment and, where one could be minted, "+
-			"a scoped upload grant for CI to write with. The git path needs a linked repo (400 "+
-			"without one) and is finished later by the completion hook.\n\n"+
-			"Billing is fail-closed and fails FIRST: the hosting gate runs before anything is "+
-			"parsed or uploaded, so an unfunded org is 402 and an unreachable commerce is 503 "+
-			"with nothing written. The debit lands only on success — a failed upload is never "+
-			"billed and never flips the live site, and a queued build is billed at completion "+
-			"rather than at queue time. A redeploy returns the SAME URL, because slug and apex "+
-			"are stable.\n\n"+
-			"Scope: a validated principal is required (403 without one) and the project is "+
-			"resolved within that principal's org, so another tenant's slug is a 404. Object "+
-			"storage must be configured, else 503; an archive that does not walk is a 400 and one "+
-			"over the size cap is a 413.")
+		"Upload a built site as one archive and serve it", archiveProse)
+
+	openapi.Register("/v1/platform/sites/:slug/deploy", http.MethodPost, openapi.Binary{}, projectsDeployment{})
 	openapi.Describe("/v1/platform/sites/:slug/deploy", http.MethodPost,
-		"Upload a built site — this is where a zip goes live",
-		"Takes a built site live at `https://<slug>.hanzo.app`. The content type decides the "+
-			"shape: a `zip` or `tar.gz` — raw in the body or as a multipart file part, which is "+
-			"what the platform's upload UI posts — is stored and served immediately, answering "+
-			"200 with the finished deployment; a JSON body instead queues a build from the site's "+
-			"linked repo and answers 202 with a queued deployment plus, where one could be "+
-			"minted, a scoped upload grant for CI. The git path requires a linked repo (400 "+
-			"without one).\n\n"+
-			"The hosting gate is fail-closed and runs first, before anything is parsed or "+
-			"uploaded: 402 for an unfunded org, 503 for unreachable commerce, nothing written. "+
-			"The debit lands only on success — a failed upload is never billed and never flips "+
-			"the live site — and a redeploy answers the SAME URL, because slug and apex are "+
-			"stable.\n\n"+
-			"Scope: a validated principal is required (403 without one) and the site is resolved "+
-			"within that principal's org, so another tenant's slug is a 404. Object storage must "+
-			"be configured (503); an archive that does not walk is a 400 and one over the size "+
-			"cap is a 413.")
+		"Upload a built site as one archive and serve it", archiveProse)
 }
 
 // routes registers the projects surface and its two mirrors — /v1/sites and
@@ -425,17 +463,23 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Patch(r, "/v1/projects/:slug", o.update)
 	zip.Delete(r, "/v1/projects/:slug", o.del, zip.WithStatus(http.StatusNoContent))
 
-	// UNTYPED BY DESIGN — the artifact/git deploy. Its request body is a zip or a
-	// tar(.gz) of the built site, sent raw or as a multipart part, OR a JSON git
-	// descriptor; and it answers 200 for the artifact it just published or 202 for
-	// the build it just queued. A typed In is ONE JSON shape and a typed op
-	// declares ONE success status, so typing this route would refuse the archive
-	// upload that is its main path and mislabel the other half of its answers. Its
-	// prose therefore stays an openapi.Describe (see init above), which is the only
-	// way a route with no schema can say anything at all.
+	// UNTYPED BY DESIGN — and by BYTES alone, now that it is one operation. The
+	// request body is a zip or tar(.gz) of the built site, raw or as a multipart
+	// part, and zip decodes every non-empty typed body as JSON before the handler
+	// runs, so an In here would answer a real archive with 400. Its request and
+	// response ARE declared (openapi.Register + openapi.Binary, see init above), so
+	// it publishes a shape rather than a bare address; what it still cannot have is
+	// zip's own registry — prose lifted per field, an MCP tool and a CLI command.
 	app.Post("/v1/projects/:slug/deploy", cloud.Handle(s, deploy))
 
 	zip.Post(r, "/v1/projects/:slug/purge", o.purge)
+	// The deployment lifecycle, in the order it runs: open one and take the scoped
+	// write grant, then complete it. startDeployment is the typed half that used to
+	// share the /deploy address with the archive upload above, disambiguated by
+	// Content-Type — two operations at one address, which is exactly why neither
+	// could be typed. POST on the collection that already lists them: the verb is
+	// the method, the noun is the resource, and nothing new had to be named.
+	zip.Post(r, "/v1/projects/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
 	zip.Get(r, "/v1/projects/:slug/deployments", o.listDeployments)
 	zip.Get(r, "/v1/projects/:slug/deployments/:id", o.getDeployment)
 	zip.Post(r, "/v1/projects/:slug/deployments/:id/complete", o.completeDeployment)
@@ -453,6 +497,24 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Post(r, "/v1/sites", o.buildSite)
 	zip.Post(r, "/v1/sites/deploy", o.deploySite)
 	zip.Get(r, "/v1/sites", o.listSites)
+	// One site, by slug. Every sub-resource under a site answered — deployments,
+	// releases, publish — and the site itself did not, so the one call a client
+	// makes to ask "is it live yet?" returned 404 for a LIVE site exactly as for
+	// one that never existed. A CI lane watching for its own publish waited
+	// forever on a success it had already achieved.
+	zip.Get(r, "/v1/sites/:slug", o.getSite)
+
+	// The deployment lifecycle, on the SITES noun. It was missing here, and that
+	// omission is what made a CI client straddle two nouns: deployments existed
+	// only under /v1/projects while publish and releases existed only under
+	// /v1/sites, so shipping a site meant knowing that its deployments live under
+	// the older name for the same rows. The whole lifecycle now answers under one
+	// noun — open, write, complete, publish — and no client has to learn which
+	// half of it moved.
+	zip.Post(r, "/v1/sites/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
+	zip.Get(r, "/v1/sites/:slug/deployments", o.listDeployments)
+	zip.Get(r, "/v1/sites/:slug/deployments/:id", o.getDeployment)
+	zip.Post(r, "/v1/sites/:slug/deployments/:id/complete", o.completeDeployment)
 
 	// Releases — how content GETS to a site's serving prefix (release.go). The
 	// builder's build output already lives in OUR object store, so publishing is a
@@ -483,8 +545,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// twin — and this is the surface hanzo.app's upload UI actually posts zips to.
 	app.Post("/v1/platform/sites/:slug/deploy", cloud.Handle(s, deploy))
 	zip.Post(r, "/v1/platform/sites/:slug/purge", o.purge)
+	zip.Post(r, "/v1/platform/sites/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
 	zip.Get(r, "/v1/platform/sites/:slug/deployments", o.listDeployments)
 	zip.Get(r, "/v1/platform/sites/:slug/deployments/:id", o.getDeployment)
+	zip.Post(r, "/v1/platform/sites/:slug/deployments/:id/complete", o.completeDeployment)
 	zip.Get(r, "/v1/platform/sites/:slug/domains", o.listDomains)
 	zip.Post(r, "/v1/platform/sites/:slug/domains", o.bindDomains)
 	zip.Post(r, "/v1/platform/sites/:slug/domains/:host/verify", o.verifyDomain)
@@ -598,10 +662,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body project
 	}
 
 	now := time.Now().Unix()
-	id, err := genID("proj")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := genID("proj")
 	p := Project{
 		ID: id, Org: org, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: strings.TrimSpace(body.Repo.Branch),
@@ -632,8 +693,9 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body project
 	// a Base hiccup is logged and swallowed — it never fails the create.
 	provisionSpace(s, c.Context(), &p)
 	// Give it a canonical repo at git.hanzo.ai, world-readable exactly when the
-	// project is.
-	share(s, c.Context(), p)
+	// project is — on a name that STARTS OVER, so a reclaimed slug inherits
+	// nothing from the project that held it before (visibility.go).
+	born(s, p)
 	out := toProject(p)
 	return &out, nil
 }
@@ -775,10 +837,7 @@ type projectsUpdate struct {
 // smuggle newlines or run unbounded.
 func credit(s string) string {
 	s = strings.TrimSpace(strings.NewReplacer("\r", " ", "\n", " ").Replace(s))
-	if len(s) > 200 {
-		s = s[:200]
-	}
-	return s
+	return shorten.To(s, 200)
 }
 
 // sanitizeTags cleans a site's browser tag config: lower-cased platform keys, trimmed
@@ -897,7 +956,7 @@ func (o ops) update(ctx context.Context, in *projectsUpdate) (*projectsProject, 
 	}
 	// Reconcile the repo to whatever this update settled on — including a
 	// moderation, which must reach the source and not just the listing.
-	share(s, ctx, p)
+	share(s, p)
 	out := toProject(p)
 	return &out, nil
 }
@@ -907,11 +966,12 @@ func (o ops) update(ctx context.Context, in *projectsUpdate) (*projectsProject, 
 // The metadata delete is authoritative and everything after it is best-effort,
 // in this order: the public `<slug>` subdomain binding is released so the slug is
 // free to reclaim, the release rows are dropped so a reclaimed slug never
-// inherits the previous owner's rollback menu, the S3 origin is purged under
-// BOTH `<org>/<slug>/` and the site's sibling release space, and the edge
-// cache-tag is flushed. A failure in any of those is logged and the delete still
-// answers 204 — resurrecting a project because a purge missed would be worse
-// than a leaked prefix.
+// inherits the previous owner's rollback menu, the git source is retired on
+// every copy it has so a reclaimed slug never adopts a repository left behind
+// (visibility.go), the S3 origin is purged under BOTH `<org>/<slug>/` and the
+// site's sibling release space, and the edge cache-tag is flushed. A failure in
+// any of those is logged and the delete still answers 204 — resurrecting a
+// project because a purge missed would be worse than a leaked prefix.
 //
 // Scope: a validated principal is required (403 without one) and the project is
 // resolved within that principal's org, so another tenant's slug is a 404 and
@@ -938,6 +998,10 @@ func (o ops) del(ctx context.Context, in *projectsRef) (*void, error) {
 	if rErr := s.State.store.DeleteReleases(ctx, org, p.Slug); rErr != nil {
 		s.Log.Warn("delete releases failed (continuing)", "org", org, "slug", p.Slug, "err", rErr)
 	}
+	// Take the source with it, before this answers: the slug is free to reclaim
+	// the moment it does, and a repository left behind is one the next project of
+	// that name adopts — commits and all — and then publishes (visibility.go).
+	forget(s, p)
 	// Best-effort purge of the live site; metadata is already gone, so a purge
 	// failure must not resurrect the project — log and continue. BOTH spaces go:
 	// the legacy mutable prefix AND the site's release space, which is a sibling
@@ -1061,6 +1125,11 @@ func providerFromURL(raw string) string {
 func Shutdown() error {
 	if mounted == nil || mounted.State.store == nil {
 		return nil
+	}
+	// The audit reads the store on a timer, so it ends with it rather than
+	// outliving it (visibility.go).
+	if mounted.State.stop != nil {
+		mounted.State.stop()
 	}
 	err := mounted.State.store.Close()
 	mounted = nil

@@ -35,6 +35,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/environ"
 	"golang.org/x/net/html"
 )
 
@@ -150,16 +151,9 @@ func errStatus(engine string, code int) error {
 
 // ── engine endpoints (functions, not vars, so tests override via env) ────────
 
-func bingURL() string   { return envOr("WEBSEARCH_BING_URL", "https://www.bing.com/search") }
-func ddgURL() string    { return envOr("WEBSEARCH_DDG_URL", "https://lite.duckduckgo.com/lite/") }
-func mojeekURL() string { return envOr("WEBSEARCH_MOJEEK_URL", "https://www.mojeek.com/search") }
-
-func envOr(key, def string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return def
-}
+func bingURL() string   { return environ.Or("WEBSEARCH_BING_URL", "https://www.bing.com/search") }
+func ddgURL() string    { return environ.Or("WEBSEARCH_DDG_URL", "https://lite.duckduckgo.com/lite/") }
+func mojeekURL() string { return environ.Or("WEBSEARCH_MOJEEK_URL", "https://www.mojeek.com/search") }
 
 var bingEngine = engine{
 	name: bingName,

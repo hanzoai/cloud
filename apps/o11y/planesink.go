@@ -47,12 +47,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"maps"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	ds "github.com/hanzo-ds/go"
+	"github.com/hanzoai/o11y/pkg/types/llmobstypes"
 	zaplogreceiver "github.com/hanzoai/o11y/pkg/zaplogreceiver"
 	zapreceiver "github.com/hanzoai/o11y/pkg/zapreceiver"
 	luxlog "github.com/luxfi/log"
@@ -87,6 +90,32 @@ const (
 	// complete span table.
 	// This sink is the production span writer, so this sink owes the partial.
 	planeTraceTable = "event.trace"
+
+	// event.log_resource is the RESOURCE IDENTITY every log read narrows through,
+	// and it is fed BY THE LOG WRITER for the same reason event.trace is fed by
+	// the span writer: nothing else knows what a row's resource was.
+	//
+	// AN EMPTY RESOURCE TABLE IS NOT A MISSING INDEX, IT IS EVERY LOG QUERY
+	// ANSWERING EMPTY. The read plane does not filter `service` on event.log at
+	// all. It compiles a resource-context predicate into a CTE over THIS table and
+	// leaves the main query with `resource_fingerprint GLOBAL IN (…)` and nothing
+	// else — hanzoai/o11y's own golden pins that shape
+	// (pkg/telemetrylogs/stmt_builder_test.go), and the visitor deliberately
+	// STRIPS the resource key from the main WHERE once the CTE carries it
+	// (pkg/querybuilder/where_clause_visitor.go). So a row whose fingerprint names
+	// no resource row is unreachable by any filter a console panel can express.
+	//
+	// Measured before this: 65 rows in event.log_resource, all written 2026-08-01
+	// to 08-02 by the o11y module's own writer, and none since this sink replaced
+	// it; `resource_fingerprint` was empty on all 122M rows of a day. Every
+	// per-product Logs view in the console was therefore empty for every product,
+	// which read as "the service ships no logs" and was never that.
+	planeLogResourceTable = "event.log_resource"
+
+	// resourceBucket is the width event.log_resource is partitioned and read on:
+	// the reader bounds its CTE by seen_at_ts_bucket_start, so a resource must be
+	// re-stated in every bucket it is still logging in, not once when first seen.
+	resourceBucket = 1800
 
 	// The ZAP wire addresses, unchanged from the embedded collector: 4317 is
 	// the canonical span wire every Hanzo service sends to, 4318 the log wire.
@@ -123,7 +152,14 @@ var (
 	planeSpanColumns = []string{"org", "time", "id", "name", "kind", "service",
 		"trace_id", "span_id", "parent", "duration", "status", "attributes"}
 	planeLogColumns = []string{"org", "time", "id", "name", "kind", "service",
-		"severity_text", "severity_number", "body", "trace_id", "span_id", "attributes"}
+		"severity_text", "severity_number", "body", "trace_id", "span_id", "attributes",
+		"resource_fingerprint"}
+
+	// The identity row the fingerprint above points at. seen_at_ts_bucket_start is
+	// bound here and NOT left to a default, unlike ingested_at: it is not a clock,
+	// it is which 30-minute window this resource was observed logging in, and the
+	// reader matches on it.
+	planeLogResourceColumns = []string{"org", "fingerprint", "labels", "seen_at_ts_bucket_start"}
 
 	// event.trace's full column list — the table has FIVE columns and no
 	// ingested_at, so the rule above has nothing to omit here. Its retention and
@@ -153,6 +189,72 @@ type planeSink struct {
 	sink    *datastoreSink
 	spanRcv *zapreceiver.Receiver
 	logRcv  *zaplogreceiver.Receiver
+
+	// logs and spans coalesce rows so the store takes a few statements a second
+	// instead of one per wire batch. See planebuffer.go for the arithmetic: this
+	// path's ceiling is set by STATEMENTS, and one INSERT per batch put ~9 of
+	// them resident at all times against an idle store.
+	logs  *rowBuffer
+	spans *rowBuffer
+
+	// seen is which (org, fingerprint, bucket) identities have already been
+	// stated, so a resource is written ONCE per 30-minute bucket instead of once
+	// per batch. Without it this is one INSERT per batch into a seven-table
+	// fan-out, which is the write amplification that has taken this datastore
+	// down before ("Too many parts"); with it the rate is the number of distinct
+	// resources per half hour, measured at ~150 for this fleet.
+	mu   sync.Mutex
+	seen map[string]struct{}
+}
+
+// rememberResource states a batch's resource identity at most once per bucket.
+//
+// Fail-soft and SAID, like every other branch of this sink: a resource that does
+// not land makes its rows unreadable, which is exactly the failure this whole
+// change exists to end, so it must never pass silently. The key is only marked
+// once the write succeeded — a failed attempt is retried by the next batch rather
+// than remembered as done.
+func (ps *planeSink) rememberResource(ctx context.Context, log luxlog.Logger, rows [][]any) {
+	pending := make([][]any, 0, len(rows))
+	keys := make([]string, 0, len(rows))
+	ps.mu.Lock()
+	if ps.seen == nil {
+		ps.seen = map[string]struct{}{}
+	}
+	for _, row := range rows {
+		if len(row) != len(planeLogResourceColumns) {
+			continue
+		}
+		key := fmt.Sprint(row[0], "\x00", row[1], "\x00", row[3])
+		if _, done := ps.seen[key]; done {
+			continue
+		}
+		pending = append(pending, row)
+		keys = append(keys, key)
+	}
+	ps.mu.Unlock()
+	if len(pending) == 0 {
+		return
+	}
+
+	if err := ps.sink.Insert(ctx, planeLogResourceTable, planeLogResourceColumns, pending); err != nil {
+		log.Warn("plane log resource identity not stated — rows in this batch are unreachable by a resource filter until it is",
+			"table", planeLogResourceTable, "err", err)
+		return
+	}
+
+	ps.mu.Lock()
+	// Buckets roll every 30 minutes and the fleet has a bounded number of
+	// resources, so this map is small. The clear is the floor under a pathological
+	// sender inventing resources: it costs one repeated write per bucket, never
+	// unbounded memory.
+	if len(ps.seen) > 8192 {
+		ps.seen = map[string]struct{}{}
+	}
+	for _, key := range keys {
+		ps.seen[key] = struct{}{}
+	}
+	ps.mu.Unlock()
 }
 
 var embeddedPlaneSink *planeSink
@@ -175,6 +277,17 @@ func mountPlaneIngest(deps cloud.Deps) error {
 	}
 	ps := &planeSink{sink: sink}
 
+	// One second bounds staleness and the crash window; the row caps bound
+	// memory. 10k log rows is ~10 MB against this pod's 11 Gi ceiling, and it is
+	// reached only by a burst — the steady state is one flush of whatever the
+	// fleet produced in the last second.
+	ps.logs = newRowBuffer("event.log", func(ctx context.Context, rows [][]any) error {
+		return ps.sink.Insert(ctx, planeLogTable, planeLogColumns, rows)
+	}, time.Second, 10000, log)
+	ps.spans = newRowBuffer("event.span", func(ctx context.Context, rows [][]any) error {
+		return ps.writeSpans(ctx, log, rows)
+	}, time.Second, 10000, log)
+
 	spanRcv, err := zapreceiver.New(zapreceiver.Config{
 		Listen: planeSpanListen,
 		NodeID: "cloud-o11y-plane",
@@ -196,7 +309,12 @@ func mountPlaneIngest(deps cloud.Deps) error {
 			if len(rows) == 0 {
 				return nil
 			}
-			return ps.sink.Insert(ctx, planeLogTable, planeLogColumns, rows)
+			// The IDENTITY first. A log row whose fingerprint names no resource
+			// row is unreadable by any filter; a resource row nothing points at
+			// yet is merely early. Ordering the pair this way means a crash
+			// between the two never loses something a reader could have seen.
+			ps.rememberResource(ctx, log, logResourceRowsOf(b, time.Now().UTC()))
+			return ps.logs.add(ctx, rows)
 		},
 	})
 	if err != nil {
@@ -239,6 +357,15 @@ func shutdownPlaneIngest(context.Context) error {
 	if ps.logRcv != nil {
 		ps.logRcv.Stop()
 	}
+	// Listeners first, buffers second, connection last. Closing a buffer flushes
+	// it, and that final write needs the sink still open — this is the ordering
+	// that makes a graceful shutdown lose nothing rather than lose the buffer.
+	if ps.logs != nil {
+		ps.logs.Close()
+	}
+	if ps.spans != nil {
+		ps.spans.Close()
+	}
 	return ps.sink.Close()
 }
 
@@ -257,6 +384,19 @@ func shutdownPlaneIngest(context.Context) error {
 // and absorb the repeat; the count is a sum and does not). Failing soft costs a
 // stale summary; failing hard corrupts it.
 func (ps *planeSink) insertSpans(ctx context.Context, log luxlog.Logger, rows [][]any) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	return ps.spans.add(ctx, rows)
+}
+
+// writeSpans is the statement half of insertSpans: the buffer hands it whatever
+// accumulated and it writes the facts and then the summary they imply. Deriving
+// the partials from the COALESCED rows is not merely equivalent to deriving them
+// per batch, it is cheaper for the same answer: event.trace folds them over
+// min/max/sum, so one partial per trace per flush sums to exactly what one
+// partial per trace per batch summed to.
+func (ps *planeSink) writeSpans(ctx context.Context, log luxlog.Logger, rows [][]any) error {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -302,8 +442,13 @@ func spanRowsOf(b *zapreceiver.SpanBatch) [][]any {
 		if s.EndUnixNs > s.StartUnixNs {
 			dur = uint64(s.EndUnixNs - s.StartUnixNs)
 		}
+		// Hoisted rather than called inside the literal: it MUTATES attrs, and the
+		// row below carries attrs — Go does not fix the evaluation order of calls
+		// within a composite literal, so an inline call would be a coin flip over
+		// whether the attribute reached the store.
+		org := planeTenant(attrs)
 		rows = append(rows, []any{
-			planeOrg(attrs),
+			org,
 			time.Unix(0, s.StartUnixNs).UTC(),
 			s.SpanID,
 			s.Name,
@@ -320,12 +465,88 @@ func spanRowsOf(b *zapreceiver.SpanBatch) [][]any {
 	return rows
 }
 
+// planeResource is a batch's resource as the read plane needs it: the LABELS it
+// matches on, and the FINGERPRINT that joins those labels to the rows.
+//
+// service.name is written INTO the labels rather than left to whatever the sender
+// happened to put there, because the label is what the reader matches
+// (simpleJSONExtractString(labels, 'service.name')) while `service` on the row is
+// what it displays, and the two disagreeing is a row that renders under a name no
+// filter can reach. planeService already decides what a service IS for every row
+// on this plane, so this states the SAME answer in the second place the reader
+// looks — one resolution, written twice, rather than two resolutions.
+//
+// The fingerprint is FNV-1a-64 of the canonical JSON, as a decimal string.
+// encoding/json sorts map keys, so equal resources hash equal across batches and
+// processes. It is an opaque JOIN KEY, not a checksum anyone verifies: the reader
+// never recomputes it, it only follows it from a row to this table, so the whole
+// requirement is that BOTH writes here derive it from the same bytes.
+func planeResource(resource map[string]string, service string) (fingerprint, labels string) {
+	attrs := make(map[string]string, len(resource)+1)
+	maps.Copy(attrs, resource)
+	if service != "" {
+		attrs["service.name"] = service
+	}
+	b, err := json.Marshal(attrs)
+	if err != nil {
+		// A map[string]string cannot fail to marshal; if it somehow did, an empty
+		// identity would silently unreach every row in the batch, so say so.
+		return "", ""
+	}
+	h := fnv.New64a()
+	_, _ = h.Write(b)
+	return strconv.FormatUint(h.Sum64(), 10), string(b)
+}
+
+// logResourceRowsOf is the identity of a batch's resource, in the bucket it was
+// observed in and under EVERY tenant whose rows point at it.
+//
+// One row per distinct org, not one per batch, because org is a per-RECORD fact
+// here (planeOrg reads hanzo.org off the record) and one process serves many
+// tenants: the ai binary answers for every org that calls it, so a single batch
+// routinely carries several. The identity table is keyed (org, bucket,
+// fingerprint), so an identity written under one tenant does not resolve for
+// another — naming only the first record's org would leave every other tenant in
+// the batch exactly as unreachable as writing nothing.
+//
+// The table is a ReplacingMergeTree on that key, so re-stating a resource every
+// bucket collapses rather than accumulates.
+func logResourceRowsOf(b *zaplogreceiver.LogBatch, at time.Time) [][]any {
+	if b == nil || len(b.Records) == 0 {
+		return nil
+	}
+	service := planeService(b.Resource, b.AppName)
+	fp, labels := planeResource(b.Resource, service)
+	if fp == "" {
+		return nil
+	}
+	bucket := at.Unix() / resourceBucket * resourceBucket
+
+	rows := make([][]any, 0, 1)
+	seen := make(map[string]struct{}, 1)
+	for _, r := range b.Records {
+		attrs := make(map[string]string, len(b.Resource)+len(r.Attributes))
+		maps.Copy(attrs, b.Resource)
+		for k, v := range r.Attributes {
+			attrs[k] = attrString(v)
+		}
+		org := planeOrg(attrs)
+		if _, dup := seen[org]; dup {
+			continue
+		}
+		seen[org] = struct{}{}
+		rows = append(rows, []any{org, fp, labels, bucket})
+	}
+	return rows
+}
+
 // logRowsOf renders one wire LogBatch as event.log rows.
 func logRowsOf(b *zaplogreceiver.LogBatch) [][]any {
 	if b == nil || len(b.Records) == 0 {
 		return nil
 	}
 	service := planeService(b.Resource, b.AppName)
+	fingerprint, _ := planeResource(b.Resource, service)
 	rows := make([][]any, 0, len(b.Records))
 	for i, r := range b.Records {
 		attrs := make(map[string]string, len(b.Resource)+len(r.Attributes))
@@ -358,6 +579,7 @@ func logRowsOf(b *zaplogreceiver.LogBatch) [][]any {
 			r.TraceID,
 			r.SpanID,
 			attrs,
+			fingerprint,
 		})
 	}
 	return rows
@@ -400,8 +622,11 @@ func sdkSpanRowsOf(spans []sdktrace.ReadOnlySpan) [][]any {
 		if s.Status().Code.String() == "Error" {
 			status = "error"
 		}
+		// Hoisted for the same reason as the wire path: planeTenant mutates attrs,
+		// which this row carries.
+		org := planeTenant(attrs)
 		rows = append(rows, []any{
-			planeOrg(attrs),
+			org,
 			s.StartTime().UTC(),
 			sc.SpanID().String(),
 			s.Name(),
@@ -501,6 +726,33 @@ func planeOrg(attrs map[string]string) string {
 		return org
 	}
 	return platformOrg
+}
+
+// planeTenant resolves the row's tenant AND stamps it onto the span's own
+// attributes, so the column and the attribute are ONE fact rather than two
+// spellings of it.
+//
+// They were two. This path wrote the tenant to the org COLUMN and never set the
+// attribute, while every llmobs view filters on the ATTRIBUTE
+// (llmobstypes.GenAIHanzoOrgID, impllmobs/views.go) — so a span whose tenant was
+// perfectly well known was invisible to every org that could have read it. It
+// went unnoticed because the failure is silent and selective: the majority of
+// gen_ai spans arrive through spansink, which has always stamped it
+// (spansink.go), so the views were populated and merely incomplete. Measured
+// before this change: 76 spans carried hanzo.org and no attribute, and ALL 76
+// were error spans from the agents and channels emitters — the ones a customer
+// most needs to see.
+//
+// Stamped unconditionally and last, for the reason spansink states in full: the
+// key is the tenant boundary of every llmobs read, so it is never taken from the
+// wire. A client-supplied value would let one org write rows another org reads.
+//
+// Safe for non-LLM telemetry: every llmobs view is gated on gen_ai.system, so an
+// infrastructure span carrying this attribute is still not an llmobs row.
+func planeTenant(attrs map[string]string) string {
+	org := planeOrg(attrs)
+	attrs[llmobstypes.GenAIHanzoOrgID] = org
+	return org
 }
 
 // k8sWorkloadKeys is OTel's own service.name recommendation for a resource that

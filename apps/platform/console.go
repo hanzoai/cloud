@@ -29,6 +29,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -37,6 +38,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -179,14 +181,14 @@ func (o ops) listEnvironments(ctx context.Context, _ *noInput) (*environmentBoar
 	order := make([]string, 0, len(apps))
 	byEnv := map[string]*agg{}
 	for _, a := range apps {
-		env := firstNonEmpty(a.Environment, "production")
+		env := cmp.Or(a.Environment, "production")
 		g := byEnv[env]
 		if g == nil {
 			g = &agg{}
 			byEnv[env] = g
 			order = append(order, env)
 		}
-		g.services = append(g.services, firstNonEmpty(a.Name, a.Slug))
+		g.services = append(g.services, cmp.Or(a.Name, a.Slug))
 		switch a.Status {
 		case "live", "deploying":
 			g.anyLive = true
@@ -248,8 +250,8 @@ func (o ops) listPipelines(ctx context.Context, _ *noInput) (*pipelineBoard, err
 	for _, a := range apps {
 		v := pipelineRow{
 			ID:     a.ID,
-			Name:   firstNonEmpty(a.Name, a.Slug),
-			Repo:   firstNonEmpty(a.RepoURL, a.ImageRepo),
+			Name:   cmp.Or(a.Name, a.Slug),
+			Repo:   cmp.Or(a.RepoURL, a.ImageRepo),
 			Status: a.Status,
 		}
 		if d, has := latest[a.ID]; has {
@@ -295,9 +297,9 @@ func (o ops) listBuilds(ctx context.Context, _ *noInput) (*buildBoard, error) {
 	for _, b := range builds {
 		repo := ""
 		if a, has := appByID[b.ApplicationID]; has {
-			repo = firstNonEmpty(a.RepoURL, a.ImageRepo)
+			repo = cmp.Or(a.RepoURL, a.ImageRepo)
 		}
-		repo = firstNonEmpty(repo, b.Image)
+		repo = cmp.Or(repo, b.Image)
 		commit := ""
 		if d, has := depByID[b.DeploymentID]; has {
 			commit = shortCommit(d.Commit)
@@ -345,7 +347,7 @@ func (o ops) listReleases(ctx context.Context, _ *noInput) (*releaseBoard, error
 		}
 		name, env := d.ApplicationID, ""
 		if a, has := appByID[d.ApplicationID]; has {
-			name = firstNonEmpty(a.Name, a.Slug)
+			name = cmp.Or(a.Name, a.Slug)
 			env = a.Environment
 		}
 		out = append(out, releaseRow{
@@ -456,11 +458,7 @@ func runDuration(status string, start, end int64) string {
 
 // shortCommit trims a git ref/sha to a compact display token.
 func shortCommit(ref string) string {
-	ref = strings.TrimSpace(ref)
-	if len(ref) > 12 {
-		return ref[:12]
-	}
-	return ref
+	return shorten.To(strings.TrimSpace(ref), 12)
 }
 
 // rfc3339 renders a unix timestamp as an RFC3339 string (what the FE's

@@ -67,7 +67,7 @@ import (
 	"strings"
 	"time"
 
-	s3 "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzos3/go"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -295,7 +295,7 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	gated := cloud.Guard(cloud.Member, func(ctx *zip.Ctx) error {
 		org, ok := tenant(ctx)
 		if !ok {
-			return zip.ErrForbidden("X-Org-Id required")
+			return principal.Refused(ctx)
 		}
 		ctx.Locals(orgKey, org)
 

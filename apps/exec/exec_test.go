@@ -11,10 +11,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -462,11 +463,4 @@ func TestNestedArtifactsAreListed(t *testing.T) {
 	}
 }
 
-func sortedKeys(m map[string][]byte) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
+func sortedKeys(m map[string][]byte) []string { return slices.Sorted(maps.Keys(m)) }

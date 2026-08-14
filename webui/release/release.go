@@ -28,7 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	s3 "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzos3/go"
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/apps/s3admin"

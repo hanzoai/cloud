@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 	"golang.org/x/crypto/ssh"
 )
@@ -66,15 +67,11 @@ func (o ops) registerKey(ctx context.Context, in *registerKeyReq) (*keyView, err
 	canonical := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pub)))
 	fp := ssh.FingerprintSHA256(pub)
 
-	id, err := genID("gitkey")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	// The owner is the BRIDGED principal (ops.go), never an In field: an In field
 	// is caller-supplied, so a key written under a user read from one would let a
 	// caller register a key in someone else's name.
 	row := sshKey{
-		ID: id, Org: t.org, UserID: t.user, Title: title,
+		ID: mint.ID("gitkey"), Org: t.org, UserID: t.user, Title: title,
 		PublicKey: canonical, Fingerprint: fp, CreatedAt: time.Now().Unix(),
 	}
 	if err := o.s.State.keys.Add(ctx, row); err != nil {

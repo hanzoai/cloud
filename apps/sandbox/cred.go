@@ -57,13 +57,13 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"strings"
 
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
 	"github.com/hanzoai/cloud/apps/fleet"
+	"github.com/hanzoai/cloud/internal/environ"
 
 	luxlog "github.com/luxfi/log"
 )
@@ -134,7 +134,7 @@ func credFor(ctx context.Context, log luxlog.Logger) (cred, error) {
 	// it into the environment under the name the app already reads. Asking KMS for
 	// it directly here would be a SECOND way to the same secret in the same
 	// process, which is the thing we do not do.
-	token := strings.TrimSpace(envOr("DO_API_TOKEN", ""))
+	token := environ.Or("DO_API_TOKEN", "")
 	do := digitalocean.New(token)
 	if !do.Ready() {
 		return cred{}, fmt.Errorf("DO_API_TOKEN not configured")

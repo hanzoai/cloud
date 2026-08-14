@@ -1,21 +1,10 @@
 package automations
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
 )
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}
 
 // concurrencyLimiter is a per-key in-flight counter with a hard ceiling. acquire
 // reports whether a slot was granted (false ⇒ at capacity, caller returns 429);

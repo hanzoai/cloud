@@ -22,9 +22,10 @@
 
 package zt
 
-import "slices"
-
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // orgRolePrefix + regionRolePrefix are the ONE role-attribute conventions this
 // subsystem reads. "org-<org>" is the tenant key; "region-<slug>" optionally

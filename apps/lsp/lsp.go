@@ -23,10 +23,11 @@
 //     that org is the daemon's isolation key. A caller supplies a repo SLUG,
 //     never an owner and never a URL, so there is no input from which one tenant
 //     could name another tenant's repository.
-//   - REPOSITORY. The revision and the tree come from the git plane, over the
-//     socket, for the caller's own org. The daemon holds no git credential —
-//     one that could fetch any repository is exactly what must not exist next to
-//     an unjailed compiler — so the tree is pushed to it, never pulled by it.
+//   - REPOSITORY. The revision and the tree come from the forge, read AS THE
+//     CALLER, so the forge's own ACL decides which repositories answer. The
+//     daemon holds no git credential — one that could fetch any repository is
+//     exactly what must not exist next to an unjailed compiler — so the tree is
+//     pushed to it, never pulled by it.
 //   - LEDGER. The gate runs before the work and the debit after it (meter.go).
 //
 // # Positions are the LSP's, not a translation of them
@@ -51,8 +52,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/plane"
-	gitplane "github.com/hanzoai/cloud/plane/git"
+	"github.com/hanzoai/cloud/forge"
 	"github.com/zap-proto/zip"
 )
 
@@ -233,7 +233,7 @@ func (s *state) complete(ctx context.Context, in *Query) (*Answer, error) {
 // served work nobody can be billed for; the debit is after the answer so nothing
 // is charged for work that failed.
 func (s *state) query(ctx context.Context, in *Query, op string) (*Answer, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +272,7 @@ func (s *state) query(ctx context.Context, in *Query, op string) (*Answer, error
 		}
 	}
 
-	// The commit, from the git plane, for the caller's own org. The daemon keys a
+	// The commit, from the forge, for the caller's own org. The daemon keys a
 	// root by a RESOLVED sha and refuses anything else — which is what makes a
 	// root immutable, and therefore what removes cache invalidation from the
 	// whole service: a branch moves, a commit never does.
@@ -312,9 +312,30 @@ func (s *state) query(ctx context.Context, in *Query, op string) (*Answer, error
 	return out, nil
 }
 
+// coldSlots bounds how many cold prepares run at once. A prepare holds the whole
+// tree resident several times over — the forge bytes, the string copy files()
+// makes, and the JSON body the daemon encodes — all live until daemon.root
+// returns. unpack bounds ONE tree (maxTree); nothing bounded the PROCESS, so a
+// caller firing N hovers at N distinct cold shas — each a fresh root, since the
+// daemon keys roots by resolved sha — pulled N whole trees into memory at once
+// and turned a per-hover charge into an OOM. This is that ceiling. A warm root
+// never reaches prepare (query asks the daemon first), so this gates only the
+// slow, rare cold path: serializing it a few wide costs a little tail latency and
+// buys a hard bound on resident memory.
+var coldSlots = make(chan struct{}, 4)
+
 // prepare hands the daemon the tree for one commit and records on out whether
 // that call actually built it.
 func (s *state) prepare(ctx context.Context, c *zip.Ctx, org, repo, sha string, out *Answer) error {
+	// Hold a slot for the whole memory-resident window — the read AND the handoff
+	// to the daemon, since the tree stays live until root() returns. A caller that
+	// hangs up while waiting releases its place rather than pinning one.
+	select {
+	case coldSlots <- struct{}{}:
+		defer func() { <-coldSlots }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	files, err := s.files(ctx, c, org, repo, sha)
 	if err != nil {
 		return err
@@ -339,47 +360,100 @@ func decided(err error) bool {
 	return errors.As(err, &he)
 }
 
-// ── the git plane ────────────────────────────────────────────────────────────
+// ── the forge ────────────────────────────────────────────────────────────────
 
-// The two calls this package makes to git, held in variables for the one thing a
-// variable buys here: a test can drive the real handler without standing up a
-// second process to answer it. Neither is ever reassigned in production — the
-// only writer is a test, and the compiler holds each signature to the generated
-// client's.
+// The two reads this package makes of the repository, held in variables for the
+// one thing a variable buys here: a test can drive a query without a forge
+// behind it. Neither is ever reassigned in production — the only writer is a
+// test, and the compiler holds each stand-in to the same signature.
 //
-// They are two ops rather than one because they cost differently. resolveRev is a
-// ref lookup and runs on EVERY request; readTree is a walk of the whole
-// repository and runs only when the daemon says it holds no root. Folding them
-// into one call would drag a monorepo across a socket to answer a hover.
+// They are two calls rather than one because they cost differently. resolveRev
+// is a ref lookup and runs on EVERY request; readTree is the whole repository
+// and runs only when the daemon says it holds no root. Folding them into one
+// would drag a monorepo across the wire to answer a hover.
 var (
-	resolveRev = gitplane.GitRev
-	readTree   = gitplane.GitFiles
+	resolveRev = forgeRev
+	readTree   = forgeTree
 )
+
+// reader is the forge, scoped to the CALLER and pointed at their own namespace.
+//
+// AS THE HUMAN, never as the machine, and that is the whole tenancy story here.
+// The repository is named by a slug the caller sent, and the machine credential
+// is a site administrator — so a machine read would answer any repository in the
+// namespace to any member of the org, including the private ones that member
+// cannot open themselves. Sudo makes the forge's own ACL the answer.
+//
+// The namespace comes from forge.Owner's CLOSED table applied to the validated
+// principal's org, so no caller-supplied value decides which org is read, and it
+// is resolved BEFORE the credential — a tenant with no namespace on the forge is
+// refused without spending a KMS read on it.
+//
+// Fail closed at every step: a caller with no proved forge identity is refused
+// rather than served under the deployment's.
+func reader(ctx context.Context, org string) (*forge.Client, string, error) {
+	owner, err := forge.Owner(org)
+	if err != nil {
+		return nil, "", err
+	}
+	c, err := forge.Dial(ctx, cloud.KMSPeer{})
+	if err != nil {
+		return nil, "", err
+	}
+	login, err := c.Caller(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	return c.As(login), owner, nil
+}
+
+// forgeRev resolves a branch, tag or sha to the commit it names.
+func forgeRev(ctx context.Context, org, repo, ref string) (string, error) {
+	c, owner, err := reader(ctx, org)
+	if err != nil {
+		return "", err
+	}
+	return c.Resolve(ctx, owner, repo, ref)
+}
+
+// forgeTree reads the whole repository at one commit — the empty prefix is the
+// tree's root, so this selects every file beneath it.
+func forgeTree(ctx context.Context, org, repo, sha string) (forge.Tree, error) {
+	c, owner, err := reader(ctx, org)
+	if err != nil {
+		return forge.Tree{}, err
+	}
+	return c.Files(ctx, owner, repo, sha, "")
+}
 
 // rev resolves what the caller named to the commit it names, in the caller's own
 // org. An empty ref is the repository's default branch.
+//
+// It is on the HOT PATH: every op resolves before it asks the daemon anything,
+// because the daemon keys a root by an immutable sha and refuses anything else.
+// The read is one small GET (the commit's diff and signature are asked off — see
+// forge.Client.Resolve), and it is deliberately not cached: a branch moves, and
+// a remembered branch→commit would serve an answer about a tree nobody has.
 func (s *state) rev(ctx context.Context, c *zip.Ctx, org, repo, want string) (string, error) {
-	got, err := resolveRev(as(ctx, c, org), &plane.RevIn{Repo: repo, Ref: want})
-	if err != nil || got == nil {
+	sha, err := resolveRev(as(ctx, c, org), org, repo, want)
+	if err != nil || sha == "" {
 		s.Log.Warn("lsp resolve failed", "org", org, "repo", repo, "ref", want, "err", err)
 		return "", zip.ErrNotFound("no such repository or revision in your org")
 	}
-	return got.Rev, nil
+	return sha, nil
 }
 
-// files reads the repository's TEXT at one commit, through git's own object
-// plane — the read that replaced cloning for delivery, and the ONE read of a
-// repository this fleet has. Nothing here checks anything out: a language server
-// needs the bytes of some files at one revision, which is a tree read, not a
-// packfile.
+// files reads the repository's TEXT at one commit, from the forge that holds it.
+// Nothing here checks anything out: a language server needs the bytes of some
+// files at one revision, which is a tree read, not a packfile.
 //
 // Binary and truncated blobs are dropped rather than sent. A language server
 // parses source; a binary spends the daemon's tree budget on bytes no server will
 // read, and a truncated file is a HALF file, which type-checks to errors that are
 // not in the repository.
 func (s *state) files(ctx context.Context, c *zip.Ctx, org, repo, sha string) ([]file, error) {
-	got, err := readTree(as(ctx, c, org), &plane.FilesIn{Repo: repo, Ref: sha, Glob: whole})
-	if err != nil || got == nil {
+	got, err := readTree(as(ctx, c, org), org, repo, sha)
+	if err != nil {
 		s.Log.Warn("lsp tree read failed", "org", org, "repo", repo, "rev", sha, "err", err)
 		return nil, zip.ErrInternal("repository unavailable")
 	}
@@ -396,10 +470,6 @@ func (s *state) files(ctx context.Context, c *zip.Ctx, org, repo, sha string) ([
 	return out, nil
 }
 
-// whole is the glob for a whole tree: `**` matches zero or more whole segments,
-// so as the only segment it selects every file beneath the root.
-const whole = "**"
-
 // text reports whether a blob is source. NUL and invalid UTF-8 are what separate
 // a compiled object or an image from a file a parser can open.
 func text(b []byte) bool {
@@ -408,22 +478,17 @@ func text(b []byte) bool {
 
 // ── the identity seam ────────────────────────────────────────────────────────
 
-// tenant is the VALIDATED org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of Query. A Query field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. Fails closed off the HTTP path.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("valid principal required")
-	}
-	return org, nil
-}
-
-// as is the context a git-plane call rides: THIS request's principal, delegated
-// unchanged, so git answers for the caller's own authority and this package can
-// never name another org. Off the HTTP path there is no request to delegate, so
-// the already-validated org is stated explicitly instead.
+// as is the context a forge read rides: THIS request's principal, delegated
+// unchanged, so the forge answers for the caller's own authority and this
+// package can never name another org. It is what [reader] resolves the caller's
+// forge login from, so the delegation is not decoration — drop it and the read
+// has nobody to act as and refuses.
+//
+// Off the HTTP path there is no request to delegate, so the already-validated
+// org is stated explicitly instead. That names the tenant but not the person, so
+// a read made there has no forge identity and is refused: this surface is
+// reached over HTTP, and a caller with no proved identity must not be served
+// under the deployment's.
 func as(ctx context.Context, c *zip.Ctx, org string) context.Context {
 	if c == nil {
 		return cloud.For(ctx, org)

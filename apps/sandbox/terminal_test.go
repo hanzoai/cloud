@@ -298,6 +298,41 @@ func TestNamedShellAttachesAndDegrades(t *testing.T) {
 	}
 }
 
+// THE TERMINAL HAS TO SAY WHAT KIND OF TERMINAL IT IS.
+//
+// The exec subresource opens a pty and sets no environment on it, so TERM arrives
+// unset and tmux refuses the screen it was given: "terminal does not support
+// clear", then exit. Beside `exec`, that refusal is not a degradation — the shell
+// is already gone, nothing is left to fall back to, and the socket closes. Every
+// named terminal opened and immediately reported the connection closed, and no
+// session was ever created to reattach to.
+//
+// So it is asserted on BOTH shapes and BEFORE the first command: a TERM exported
+// after the shell has been replaced is a TERM nothing reads.
+func TestShellNamesTheTerminal(t *testing.T) {
+	for _, session := range []string{"", "pane-1"} {
+		cmd := shell(session)[2]
+		if !strings.Contains(cmd, "TERM=") {
+			t.Errorf("shell(%q) = %q sets no TERM — Kubernetes sets none either, and a "+
+				"pty of unknown type is one tmux will not draw on", session, cmd)
+			continue
+		}
+		if !strings.Contains(cmd, "xterm") {
+			t.Errorf("shell(%q) = %q does not name an xterm; every surface frames the "+
+				"same xterm.js page, so anything else is a lie about the far end",
+				session, cmd)
+		}
+		// Before the shell is replaced, or it is never read.
+		if i, j := strings.Index(cmd, "TERM="), strings.Index(cmd, "exec"); i < 0 || j < 0 || i > j {
+			t.Errorf("shell(%q) = %q exports TERM after the first exec", session, cmd)
+		}
+		// A caller that already said which terminal it is keeps its answer.
+		if !strings.Contains(cmd, ":-") {
+			t.Errorf("shell(%q) = %q overwrites TERM instead of defaulting it", session, cmd)
+		}
+	}
+}
+
 // The name reaches a COMMAND LINE, so what may be in it is an allowlist and not
 // an escape. This is the injection gate and it is measured as one.
 func TestSessionNameIsAnAllowlist(t *testing.T) {
@@ -424,6 +459,49 @@ func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 	if n := strings.Count(page, "</script"); n != 3 {
 		t.Errorf("found %d </script, want exactly the 3 the template opens — a "+
 			"vendored file that closes a script tag would be markup, not code", n)
+	}
+}
+
+// THE PAGE REPORTS BOTH OUTCOMES, NOT ONLY THE GOOD ONE.
+//
+// It announced `ready` on open and said NOTHING on any failure, so a framing
+// host had one signal and one absence — and an absence has no cause written on
+// it. Every way of failing (a refused socket, a gate, a CSP refusal, a page that
+// never loaded) arrived as the same silence, the host waited out its deadline,
+// and the only explanation that fits an unexplained silence is a stale
+// credential. So it minted a fresh ticket for a socket that was failing for its
+// own reasons, and did it again, and again.
+//
+// That silence is what made the sandbox terminal's 502 read as an expired
+// ticket for as long as it did. The page knows what happened; this is it saying so.
+func TestThePageReportsAFailureAndNotOnlyReadiness(t *testing.T) {
+	page := document()
+
+	// The success half, unchanged.
+	if !strings.Contains(page, "ready: true") {
+		t.Error("the page no longer announces readiness — every framed pane reads as dead")
+	}
+	// The half that did not exist.
+	if !strings.Contains(page, "ready: false") {
+		t.Error("the page never tells its host that it FAILED, so a failure is " +
+			"indistinguishable from a slow start and gets answered with a new ticket")
+	}
+	// Carrying the reason, which is the whole difference between "it did not come
+	// up" and something a person can act on.
+	if !strings.Contains(page, "why: why") {
+		t.Error("the failure carries no reason; the host can only guess at one")
+	}
+	// Both outcomes leave by the same door, so a host has one message to parse.
+	if n := strings.Count(page, "source: 'hanzo-term'"); n != 3 {
+		t.Errorf("found %d messages to the host, want 3 (ready, failed, retry) — "+
+			"one channel, or a host has to learn a second", n)
+	}
+	// A spent ticket cannot be re-presented, so the page must not answer its own
+	// Reconnect by reloading itself when there is a parent holding the identity
+	// that can mint another.
+	if !strings.Contains(page, "retry: true") {
+		t.Error("the page's Reconnect reloads with a ticket the socket already " +
+			"spent, which is refused for a reason unrelated to the first failure")
 	}
 }
 

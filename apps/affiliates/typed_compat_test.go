@@ -11,8 +11,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"testing"
 )
 
@@ -23,12 +24,7 @@ func keysOf(t *testing.T, body []byte) []string {
 	if err := json.Unmarshal(body, &m); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	return slices.Sorted(maps.Keys(m))
 }
 
 func wantKeys(t *testing.T, path string, body []byte, want ...string) {

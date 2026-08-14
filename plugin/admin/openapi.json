@@ -1954,7 +1954,7 @@
       "get": {
         "operationId": "adminOverview",
         "summary": "Is the Platform Overview tiles: how many orgs and users are in the caller's tenant window, the fleet workload counts, and month-to-date spend and credits.",
-        "description": "Is the Platform Overview tiles: how many orgs and users are in the caller's\ntenant window, the fleet workload counts, and month-to-date spend and credits.\n\nIt ALWAYS answers 200 — a tile board that fails as a whole because one upstream is\ndown is useless. Instead every upstream reports itself in sources[]: ok, degraded, or\nnot-configured. A commerce read that failed for ANY org marks that source degraded,\nbecause the spend/credits totals are then an undercount and must not read healthy.\n\ntokens30d is 0 for the same reason /usage has no series: there is no fleet token\ncounter to read yet.",
+        "description": "Is the Platform Overview tiles: how many orgs and users are in the caller's\ntenant window, the fleet workload counts, and month-to-date spend and credits.\n\nIt ALWAYS answers 200 — a tile board that fails as a whole because one upstream is\ndown is useless. Instead every upstream reports itself in sources[]: ok, degraded, or\nnot-configured. A commerce read that failed for ANY org marks that source degraded,\nbecause the spend/credits totals are then an undercount and must not read healthy.\n\nThe AI tiles — 30-day spend and tokens — come from the AI ledger (ledger.go), the\nplane that owns \"what was served\". They used to come from the money plane with the\ntoken counter hardcoded to zero, so the board read $0.00 and 0 tokens over a month in\nwhich the fleet served fifteen thousand requests. Credits still come from commerce,\nwhich owns the wallet.",
         "tags": [
           "admin"
         ],
@@ -2565,8 +2565,8 @@
     "/v1/admin/usage": {
       "get": {
         "operationId": "adminUsage",
-        "summary": "Returns the metered spend over the trailing 30 days: one org's when org names one, else the fleet sum across every org a SuperAdmin can see.",
-        "description": "Returns the metered spend over the trailing 30 days: one org's when org names\none, else the fleet sum across every org a SuperAdmin can see.\n\nThe figure comes from core.OrgMoney — the ONE per-org money read /overview, /orgs,\n/revenue and /customers all fold — so every panel of the cockpit answers with the same\nnumber from the same source. It used to be its own read, a service-token GET to\ncommerce's /v1/billing/usage/rollup, and that route is registered in no binary we ship:\nthe error was dropped and the total stayed 0, so this endpoint reported an empty fleet\nwhile /v1/usage/summary showed the same customers being debited. Reading through the\nshared seam is what stops one surface having its own answer to a question another\nsurface already answers.\n\nThe window moved with the seam, from the calendar month to the trailing 30 days, which\nis what OrgMoney reads and what the overview tile beside it has always rendered.\n\nseries and byProduct are STILL always empty, and tokens and requests are still 0. A\ndaily trend, a per-product split and fleet token counters live in insights/datastore\nand are not derivable from the ledger, so this answers with honest empties rather than\nfabricating a shape the console would then chart. Nothing here derives them; the money\ntotal is the only thing this fix touched.\n\nA read that did not answer is named in sources[] and never folded into a silent zero;\na directory that cannot be listed has no fleet to sum at all, so it answers status\nerror with no data rather than a number with nothing behind it.",
+        "summary": "Returns the trailing 30 days of AI usage: one org's when org names one, else the whole fleet's — the spend, the tokens and the requests, the daily curve behind them, and the split by model.",
+        "description": "Returns the trailing 30 days of AI usage: one org's when org names one, else the\nwhole fleet's — the spend, the tokens and the requests, the daily curve behind them,\nand the split by model.\n\nIt reads the AI ledger (ledger.go), which is the plane that owns this question. It used\nto ask the commerce billing API instead, once per org, and answer with a hardcoded\nempty series, zero tokens and zero requests, on the reasoning that a trend and a split\nwere \"not derivable from the commerce billing API\". They are not — but the question was\nnever commerce's. hanzo.cloud_usage carries a row per served request, so all three fall\nout of the same window the totals do.",
         "tags": [
           "admin"
         ],
@@ -2575,7 +2575,7 @@
             "name": "org",
             "in": "query",
             "required": false,
-            "description": "Org reads ONE tenant's month-to-date total instead of the fleet sum. Honoured\nfor a SuperAdmin only — a white-label admin always reads their own org.",
+            "description": "Org reads ONE tenant's trailing-30-day total instead of the fleet sum. Honoured\nfor a SuperAdmin only — a white-label admin always reads their own org.\n\nThe window is the one core.OrgMoney returns, and it is what the operator board\nbeside this already labelled (\"Daily, last 30 days\"). The wire used to say\nmonth-to-date while that UI said 30 days; they agree now. This comment is\nREGENERATED into plugin/admin/openapi.json and openapi.yaml as the ?org\nparameter description, so a stale word here ships as a contradiction inside\none spec file — which is the drift this whole change set exists to remove.",
             "schema": {
               "type": "string"
             },
@@ -2588,12 +2588,25 @@
               "application/json": {
                 "example": {
                   "data": {
-                    "byProduct": [],
-                    "series": [],
+                    "byModel": [
+                      {
+                        "model": "claude-opus-4-8",
+                        "spendCents": 9000,
+                        "tokens": 80000
+                      }
+                    ],
+                    "series": [
+                      {
+                        "date": "2026-08-13",
+                        "requests": 3,
+                        "spendCents": 900,
+                        "tokens": 12000
+                      }
+                    ],
                     "totals": {
-                      "requests": 0,
+                      "requests": 42,
                       "spendCents": 12500,
-                      "tokens": 0
+                      "tokens": 170000
                     }
                   },
                   "msg": "",
@@ -6363,9 +6376,9 @@
         },
         "type": "object"
       },
-      "usageByProduct": {
+      "usageByModel": {
         "properties": {
-          "product": {
+          "model": {
             "type": "string"
           },
           "spendCents": {
@@ -6379,22 +6392,15 @@
       },
       "usageData": {
         "properties": {
-          "byProduct": {
+          "byModel": {
             "items": {
-              "$ref": "#/components/schemas/usageByProduct"
+              "$ref": "#/components/schemas/usageByModel"
             },
             "type": "array"
           },
           "series": {
             "items": {
               "$ref": "#/components/schemas/usagePoint"
-            },
-            "type": "array"
-          },
-          "sources": {
-            "description": "Sources names a money read that did NOT answer, on the SAME core.SourceStatus\nchannel /overview, /revenue and /finance already report freshness on — one\nvocabulary for one fact, rather than a second spelling invented here.\n\nIt is ADDITIVE and absent when every read answered, so a healthy response is\nbyte-identical to what this endpoint has always sent and no consumer changes to\nkeep working. What changes is that `spendCents: 0` is now a REAL zero unless\nthis says otherwise: a fleet that spent nothing and a fleet whose ledger could\nnot be reached were the same three bytes on the wire, and the second is what\nproduction was sending. Rows counts the orgs that DID answer, so the reader can\nsee how much of the fleet the total actually covers.",
-            "items": {
-              "$ref": "#/components/schemas/SourceStatus"
             },
             "type": "array"
           },

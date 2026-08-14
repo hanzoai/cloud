@@ -2,8 +2,6 @@ package o11y
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -11,6 +9,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -293,7 +294,7 @@ type annQueueDeleted struct {
 //
 // Example: {"page": 1, "limit": 20}
 func (s *annService) listQueues(ctx context.Context, in *annPage) (*annQueueList, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +325,7 @@ type createQueueReq struct {
 //
 // Example: {"name": "hallucination review", "scoreConfigIds": ["quality"]}
 func (s *annService) createQueue(ctx context.Context, in *createQueueReq) (*annQueueView, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -340,10 +341,7 @@ func (s *annService) createQueue(ctx context.Context, in *createQueueReq) (*annQ
 	if err != nil {
 		return nil, err
 	}
-	id, err := genID("annq")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("annq")
 	now := time.Now().Unix()
 	q, err := s.store.CreateQueue(ctx, annQueue{
 		ID: id, Org: org, Project: callerProject(ctx), Name: name,
@@ -366,7 +364,7 @@ func (s *annService) createQueue(ctx context.Context, in *createQueueReq) (*annQ
 //
 // Example: {"id": "annq_1"}
 func (s *annService) getQueue(ctx context.Context, in *annQueueRef) (*annQueueDetailView, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -415,7 +413,7 @@ type updateQueueIn struct {
 //
 // Example: {"id": "annq_1", "name": "hallucination review v2"}
 func (s *annService) updateQueue(ctx context.Context, in *updateQueueIn) (*annQueueView, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +467,7 @@ func (s *annService) updateQueue(ctx context.Context, in *updateQueueIn) (*annQu
 //
 // Example: {"id": "annq_1"}
 func (s *annService) deleteQueue(ctx context.Context, in *annQueueRef) (*annQueueDeleted, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +500,7 @@ type listItemsIn struct {
 //
 // Example: {"id": "annq_1", "status": "PENDING"}
 func (s *annService) listItems(ctx context.Context, in *listItemsIn) (*annItemList, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -570,7 +568,7 @@ type annItemsCreated struct {
 //
 // Example: {"id": "annq_1", "items": [{"traceId": "tr_1"}]}
 func (s *annService) addItems(ctx context.Context, in *addItemsIn) (*annItemsCreated, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -597,12 +595,8 @@ func (s *annService) addItems(ctx context.Context, in *addItemsIn) (*annItemsCre
 		if len(item.Assignee) > maxAnnFieldLen {
 			return nil, zip.ErrBadRequest("assignee too long")
 		}
-		itemID, err := genID("annqi")
-		if err != nil {
-			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-		}
 		items = append(items, annItem{
-			ID: itemID, Org: org, Project: q.Project, QueueID: id,
+			ID: mint.ID("annqi"), Org: org, Project: q.Project, QueueID: id,
 			ObjectType: objType, ObjectID: objID, Status: statusPending,
 			Assignee: strings.TrimSpace(item.Assignee), CreatedAt: now, UpdatedAt: now,
 		})
@@ -636,7 +630,7 @@ type updateItemIn struct {
 //
 // Example: {"id": "annq_1", "itemId": "annqi_1", "status": "COMPLETED"}
 func (s *annService) updateItem(ctx context.Context, in *updateItemIn) (*annItemView, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -702,11 +696,7 @@ func resolveObject(in itemInput) (string, string, error) {
 }
 
 func boundedID(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > maxAnnFieldLen {
-		return s[:maxAnnFieldLen]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), maxAnnFieldLen)
 }
 
 // cleanScoreConfigIDs trims, drops blanks/dupes, and bounds the set. Each id is a
@@ -763,13 +753,4 @@ func rfc3339Unix(sec int64) string {
 		return ""
 	}
 	return time.Unix(sec, 0).UTC().Format(time.RFC3339)
-}
-
-// genID mints a prefixed random id (prefix_<32 hex>), the eval-metastore id shape.
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }

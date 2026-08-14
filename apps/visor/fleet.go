@@ -20,6 +20,7 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -139,7 +140,7 @@ func byoWorkers(ctx context.Context, org string) []byoWorker {
 		if b, err := json.Marshal(a.Input); err == nil {
 			_ = json.Unmarshal(b, &reg)
 		}
-		host := firstNonEmpty(reg.Hostname, a.Execution.WorkflowId)
+		host := cmp.Or(strings.TrimSpace(reg.Hostname), a.Execution.WorkflowId)
 		out = append(out, byoWorker{
 			ID:            a.Execution.WorkflowId,
 			Hostname:      host,
@@ -630,13 +631,13 @@ func (o ops) cancelFleetJob(ctx context.Context, in *jobCancel) (*jobCanceled, e
 	if id == "" {
 		return nil, zip.ErrBadRequest("job id required")
 	}
-	run := firstNonEmpty(strings.TrimSpace(in.Run), id)
+	run := cmp.Or(strings.TrimSpace(in.Run), id)
 	eng := cloud.EmbeddedTasks()
 	if eng == nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "tasks engine not ready")
 	}
-	who := firstNonEmpty(c.Header("X-User-Id"), org)
-	if err := eng.CancelActivityForOrg(org, jobsNamespace, id, run, firstNonEmpty(in.Reason, "canceled from console"), who); err != nil {
+	who := cmp.Or(strings.TrimSpace(c.Header("X-User-Id")), org)
+	if err := eng.CancelActivityForOrg(org, jobsNamespace, id, run, cmp.Or(strings.TrimSpace(in.Reason), "canceled from console"), who); err != nil {
 		switch cancelErrStatus(err) {
 		case http.StatusNotFound:
 			return nil, zip.ErrNotFound("job not found")

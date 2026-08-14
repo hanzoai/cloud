@@ -57,11 +57,26 @@ func owner() string {
 	return defaultOwner
 }
 
-// name is the far-side repo name for one project. A single GitHub
-// org is a flat namespace and tenant slugs collide across orgs, so the tenant org
-// is part of the name. It is an identifier, derived identically every time —
-// never a display name.
-func name(org, slug string) string { return org + "-" + slug }
+// name is the far-side repo name for one project, and false for a pair that
+// cannot have one.
+//
+// A single GitHub org is a flat namespace and tenant slugs collide across orgs,
+// so the tenant org is part of the name. It is an identifier, derived
+// identically every time — never a display name.
+//
+// The separator is `_` because NEITHER HALF MAY CONTAIN ONE, which is the whole
+// of what makes the flattening injective — and injective is not cosmetic here:
+// with `-`, org `a-b` publishing project `c` and org `a` publishing project
+// `b-c` spell ONE repo, so the first tenant's create would decide who may read
+// the second tenant's source. A pair that cannot be spelled this way gets NO
+// replica, which is the safe half: nothing is published, so nothing is exposed.
+// It is the same name, minted by the same rule, that the canonical forge uses.
+func name(org, slug string) (string, bool) {
+	if org == "" || slug == "" || strings.ContainsAny(org+slug, "_/") {
+		return "", false
+	}
+	return org + "_" + slug, true
+}
 
 // visibility is GitHub's name for what we call listed. The CREATE endpoint
 // takes a `private` boolean and the PATCH endpoint takes this string; they are
@@ -73,8 +88,10 @@ func visibility(listed bool) string {
 	return "private"
 }
 
-// token is the shared mirror credential, or "" when unconfigured.
-func secret() string { return strings.TrimSpace(os.Getenv(mirrorEnvToken)) }
+// secret is our GitHub credential, resolved by the ONE resolver every other git
+// credential goes through. This reader only ever talks to api.github.com, so the host
+// is named here rather than configured.
+func secret() string { return mirrorCredential("github.com") }
 
 // call performs one authenticated GitHub API call and returns the status code.
 // Bodies are read and discarded except on the decode path, so a caller never
@@ -118,12 +135,17 @@ func call(ctx context.Context, method, endpoint string, body any) (int, error) {
 // what it just ensured, and "" when the token is unconfigured — which is the
 // signal to skip the mirror too, rather than register a push that cannot land.
 func ensure(ctx context.Context, org, slug, description string, listed bool) (string, error) {
-	if secret() == "" {
+	name, ok := name(org, slug)
+	if !ok || secret() == "" {
 		return "", nil
 	}
-	ghOrg, name := owner(), name(org, slug)
+	ghOrg := owner()
 	repoURL := fmt.Sprintf("https://github.com/%s/%s.git", ghOrg, name)
-	api := fmt.Sprintf("%s/repos/%s/%s", api,
+	// Named for what it addresses, and NOT `api`: shadowing the root here built
+	// the create endpoint out of the repo endpoint, so a create went to
+	// /repos/<org>/<name>/orgs/<org>/repos — a path GitHub answers 404, on the
+	// one call that has to work before any replica exists at all.
+	endpoint := fmt.Sprintf("%s/repos/%s/%s", api,
 		url.PathEscape(ghOrg), url.PathEscape(name))
 
 	// Visibility is the ONE field this owns. Description is sent only at create
@@ -135,7 +157,7 @@ func ensure(ctx context.Context, org, slug, description string, listed bool) (st
 	// live hanzo-community org — with `private` here, creates would have worked
 	// and every RETRACTION would have silently failed, which is precisely the
 	// direction that cannot be allowed to fail.
-	code, err := call(ctx, http.MethodPatch, api, map[string]any{"visibility": visibility(listed)})
+	code, err := call(ctx, http.MethodPatch, endpoint, map[string]any{"visibility": visibility(listed)})
 	if err != nil {
 		return "", fmt.Errorf("github: patch %s/%s: %w", ghOrg, name, err)
 	}
@@ -149,7 +171,7 @@ func ensure(ctx context.Context, org, slug, description string, listed bool) (st
 	// Not there yet: create it, born with the right visibility so a private
 	// project is never briefly public. auto_init stays false — the first mirror
 	// push carries the real history, and an initial commit would collide with it.
-	create := fmt.Sprintf("%s/orgs/%s/repos", api, url.PathEscape(ghOrg))
+	create := fmt.Sprintf("%s/orgs/%s/repos", api, url.PathEscape(ghOrg)) // the API root, not the repo
 	code, err = call(ctx, http.MethodPost, create, map[string]any{
 		"name": name, "description": description,
 		"private": !listed, "auto_init": false, "has_wiki": false,
@@ -163,4 +185,55 @@ func ensure(ctx context.Context, org, slug, description string, listed bool) (st
 		return "", fmt.Errorf("github: create %s/%s: status %d", ghOrg, name, code)
 	}
 	return repoURL, nil
+}
+
+// remove takes a deleted project's replica off GitHub: CLOSED first, then
+// deleted, and the deletion CONFIRMED by failing to find it.
+//
+// Deleting rather than closing is what makes a reclaimed slug safe. The replica
+// is found by NAME, so one left behind is one the next project of that name
+// adopts — mirrored history and all — and the first thing that project does is
+// publish. The trade goes the other way for a project that merely goes private
+// (see ensure): there the project still exists, its stars, forks and issues are
+// its own, and the visibility is the only thing that has changed.
+//
+// Closed first because the two cover different failures: a token that may not
+// delete has still been told the readable half, and open is the half that leaks.
+//
+// An absent repo is SUCCESS, on both halves. Absence is the state asked for, and
+// a retirement that has to be retried must be able to say so by trying again.
+func remove(ctx context.Context, org, slug string) error {
+	name, ok := name(org, slug)
+	if !ok || secret() == "" {
+		return nil
+	}
+	ghOrg := owner()
+	endpoint := fmt.Sprintf("%s/repos/%s/%s", api, url.PathEscape(ghOrg), url.PathEscape(name))
+
+	code, err := call(ctx, http.MethodPatch, endpoint, map[string]any{"visibility": visibility(false)})
+	if err != nil {
+		return fmt.Errorf("github: patch %s/%s: %w", ghOrg, name, err)
+	}
+	if code == http.StatusNotFound {
+		return nil // not there at all, which is the state asked for
+	}
+	if code != http.StatusOK {
+		return fmt.Errorf("github: patch %s/%s: status %d", ghOrg, name, code)
+	}
+	if code, err = call(ctx, http.MethodDelete, endpoint, nil); err != nil {
+		return fmt.Errorf("github: delete %s/%s: %w", ghOrg, name, err)
+	}
+	if code != http.StatusNoContent && code != http.StatusNotFound {
+		return fmt.Errorf("github: delete %s/%s: status %d", ghOrg, name, code)
+	}
+	// The verdict comes from a READ, the same way the canonical forge's delete
+	// reaches one: a 2xx says GitHub accepted the request, and the only statement
+	// that the repo is gone is GitHub failing to find it afterwards.
+	if code, err = call(ctx, http.MethodGet, endpoint, nil); err != nil {
+		return fmt.Errorf("github: confirm delete %s/%s: %w", ghOrg, name, err)
+	}
+	if code != http.StatusNotFound {
+		return fmt.Errorf("github: %s/%s is still there after a delete: status %d", ghOrg, name, code)
+	}
+	return nil
 }

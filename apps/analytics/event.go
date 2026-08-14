@@ -204,27 +204,24 @@ func eventTenant(c *zip.Ctx) (admission, bool) {
 	return admission{}, false
 }
 
-// keyAdmission resolves ONE presented key, on either carrier, to what it names.
-// Both carriers call it so they cannot drift into meaning different things by the
-// same string.
+// keyAdmission resolves ONE presented key, on either carrier, to what it names and
+// what it may do. Both carriers call it so they cannot drift into meaning different
+// things by the same string.
 //
-// Two issuers, and they are DISJOINT rather than a fallback chain: a project key
-// exists only in the project store and an IAM key only in IAM, so a lookup in one
-// can never shadow the other and the order costs nothing but a miss. Projects are
-// asked first because they answer a strictly narrower question — org AND site,
-// where IAM can only ever say org, having no project to scope to.
+// WHAT the key names is Admit (attribution.go) — both issuers, asked in one place,
+// so this door and every other door that admits a key answer the same key the same
+// way. All this adds is the capability, which is an event write's question and not a
+// key's: a resolved credential writes unprojected into its org.
 //
 // A project key is the credential a site's own beacon carries, so it also carries
 // the property the whole change is for: it stops resolving the moment the project
 // stops existing.
 func keyAdmission(c *zip.Ctx, key string) (admission, bool) {
-	if sc, ok := resolveAttribution(c.Context(), key); ok {
-		return admission{org: sc.Org, project: sc.Project, full: true}, true
+	at, ok := Admit(c.Context(), key)
+	if !ok {
+		return admission{}, false
 	}
-	if org, ok := resolveKeyOrg(c.Context(), key); ok {
-		return admission{org: org, full: true}, true
-	}
-	return admission{}, false
+	return admission{org: at.Org, project: at.Project, full: true}, true
 }
 
 // firstNonWS returns the index of the first non-JSON-whitespace byte, or len(body)
@@ -681,7 +678,7 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 // decode and wire are the two halves of ONE fact: what this door accepts. decode is
 // the half that runs; wire is the half that is PUBLISHED, and it sits here rather
 // than in a table of its own so a door cannot be routed with one wire and documented
-// with another — the drift that put /v1/tracker in the router and not in the carve.
+// with another — the drift that put /v1/todo in the router and not in the carve.
 //
 // summary and description are the PROSE half of that same fact, and they live here
 // for the same reason: a door is untyped by construction (typed_wire_test.go names
@@ -707,7 +704,7 @@ type door struct {
 //
 // They used to, because the answer was written three times — the route table, sites'
 // analyticsPaths literal, and a path switch inside the carve — and the copies had
-// already drifted: /v1/tracker and /v1/ingest were routed doors that sites did not
+// already drifted: /v1/todo and /v1/ingest were routed doors that sites did not
 // name, so the same beacon was admitted (503, datastore down) on an API host and
 // refused (405) on a site host. Nothing decided that; two lists just disagreed.
 //
@@ -739,17 +736,17 @@ type door struct {
 //     (which tolerates a trailing slash) and never the site-host carve — the carve's
 //     byte-exact matching is not what holds this door open.
 //
-// A door is a WIRE, never a NAME. /v1/analytics, /v1/analytics/batch and /v1/tracker
+// A door is a WIRE, never a NAME. /v1/analytics, /v1/analytics/batch and /v1/todo
 // were three more spellings of the canonical wire already served above, and the ONE
 // thing that made them alternatives rather than duplicates — a caller that named them
 // — is gone:
 //
 //   - @hanzo/event (0.3.x) is the client every Hanzo surface now ships, and it posts
 //     the canonical door. The SDK it replaced, @hanzo/capture 0.1.1, POSTed
-//     /v1/analytics and beaconed /v1/tracker on unload; the fleet holds no importer
-//     of it, and its unload beacon had ALREADY stopped landing anywhere — apps/tracker
-//     owns /v1/tracker in the app manifest and registers only /v1/tracker/projects/…,
-//     so this package's entry for that path sat behind the tracker product's prefix
+//     /v1/analytics and beaconed /v1/todo on unload; the fleet holds no importer
+//     of it, and its unload beacon had ALREADY stopped landing anywhere — apps/todo
+//     owns /v1/todo in the app manifest and registers only /v1/todo/projects/…,
+//     so this package's entry for that path sat behind the todo product's prefix
 //     and answered 405 in the fleet while passing its own single-app tests.
 //   - the batch alias was kept for "openapi analytics_batch, the generated python SDK,
 //     and `hanzo analytics batch`". Those name analytics.hanzo.ai — the standalone
@@ -763,7 +760,7 @@ type door struct {
 // one door. A second path for a second body shape is a second way to say one thing.
 //
 // The prefixes stay in the app manifest, because /v1/analytics still carries the READ
-// lenses (overview, timeseries, top, health) and /v1/tracker belongs to the tracker
+// lenses (overview, timeseries, top, health) and /v1/todo belongs to the todo
 // product. What ends here is this package's claim on them as WRITE paths.
 // decodeEvent is the ONE door's decoder. It picks the wire by SNIFFING THE KEYS,
 // never by "did the first decoder return anything".
@@ -988,7 +985,7 @@ const sentryWire = "\n\nCLOUD ROUTES IT AND READS NONE OF IT. The body is relaye
 	"DSN key itself, fail-closed: a request without a valid one is refused there, never admitted " +
 	"here. Presenting a Hanzo bearer instead does nothing.\n\n" +
 	"`project` IS THE DSN'S PROJECT ID — the identifier in the DSN the SDK was configured with, and " +
-	"what the tenant is derived from. It is NOT a Hanzo IAM project and NOT a tracker project key. " +
+	"what the tenant is derived from. It is NOT a Hanzo IAM project and NOT a todo project key. " +
 	"Only these two ingest paths map through: no observability READ API is reachable by any other " +
 	"suffix under this prefix."
 

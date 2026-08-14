@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -32,9 +33,13 @@ import (
 // ON-BEHALF-OF the linked user), and the per-user link. The @hanzo CHAT turn is now
 // ONE code path across all four platforms.
 //
-// ONE Slack-SPECIFIC branch stays, deliberately NOT folded into the chat channel: a
-// `code:` prefix routes to the durable CODING agent (slack_coding.go) — its own pool
-// and dispatch to the engine. The coding agent is a distinct flow from a chat turn.
+// THERE IS NO SLACK-SPECIFIC BRANCH LEFT. A `code:` prefix used to route past the
+// brain into the coding engine, and it was deleted rather than kept beside the
+// tool path: a coding run is a TOOL the brain calls (create_coding, the fleet's
+// own door), so a prefix a person had to type made the model's choice irrelevant
+// here and left every surface that did not know the word — hanzo.app, hanzo.chat,
+// MCP — unable to run code at all. Keeping it as a shortcut would have kept the
+// model path unexercised, which is the same thing as not having one.
 //
 // ISOLATION BAR: a workspace's events reach ONLY the org that connected that Slack
 // team. The org comes ONLY from OrgForExternalID("slack", team_id) — never a payload
@@ -83,7 +88,8 @@ func slackBridgeReady(s *cloud.Service[state]) {
 // https://{domain}/v1/integrations/slack/events). It HMAC-verifies the raw body,
 // answers the url_verification challenge, and routes @mentions / DMs — acking FAST
 // (empty 200) and doing the billed work async on the channel under the bounded pool,
-// deduped durably on event_id. A `code:` prompt branches to the coding flow.
+// deduped durably on event_id. There is one flow: the turn's own tools reach the
+// sandbox when the model picks that tool.
 func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	slackBridgeReady(s)
 	secret := slackSigningSecret()
@@ -169,13 +175,6 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 			s.Log.Warn("slack: dedupe gc", "err", gerr)
 		}
 		route := d
-		// CODING is a DISTINCT flow — it is handed to the coding engine rather than
-		// answered by the chat brain — but the hand-off is short and synchronous, so
-		// it rides the same bounded spawn every other Slack turn does.
-		if codingText, isCoding := codingIntent(route.Text); isCoding {
-			channelSpawn(s, org, func() { slackCodingEvent(s, org, route, codingText) })
-			return c.NoContent(http.StatusOK)
-		}
 		in := Inbound{
 			Provider: "slack", ExternalID: route.TeamID, User: route.User,
 			Channel: route.Channel, ThreadID: route.ThreadTS, Text: route.Text, DedupeKey: key,
@@ -263,42 +262,20 @@ func parseSlashCommand(raw []byte) (team, channel, user, text, responseURL, trig
 	return
 }
 
-// ── Slack dispatch: chat via the channel, coding via its own flow ────────────
-
-// slackCodingEvent runs the @mention/DM CODING path for a PRE-RESOLVED org: it
-// fetches THIS org's bot token (the reply sink) and hands off to slack_coding.go,
-// which owns the parse, the link check, and the dispatch to the engine. Coding is
-// deliberately NOT folded into the chat brain: it is a different act with a
-// different budget, and it answers with a run handle rather than a sentence.
-func slackCodingEvent(s *cloud.Service[state], org string, d slackRoute, codingText string) {
-	ctx, cancel := context.WithTimeout(context.Background(), channelAgentTimeout)
-	defer cancel()
-	// Echo-loop guard already applied in the sync path; the bot token is the reply
-	// sink both the ack and the result card post through.
-	tok, err := TokenFor(ctx, org, "slack", slackBotTokenSecret)
-	if err != nil {
-		s.Log.Warn("slack: bot token fetch", "team", d.TeamID, "err", err)
-		return
-	}
-	handleSlackCoding(s, ctx, org, string(tok), d.TeamID, d.Channel, d.ThreadTS, d.User, codingText)
-}
+// ── Slack dispatch: every turn goes to the one brain ────────────────────────
 
 // slackSlashTurn is the async slash body dispatched on the channel. An empty org means
-// the workspace's Hanzo connection was removed. A `code:` prompt branches to the
-// coding flow (slack_coding.go). A body that NAMES a registry command runs it as the
-// linked user (slack_command.go); anything else runs the ONE agent brain
-// (channelReply). Delivery is via the (host-pinned) response_url: an agent answer goes
-// in_channel; a command's result and the account-link prompt go ephemeral (only the
-// invoker sees them).
+// the workspace's Hanzo connection was removed. A body that NAMES a registry command
+// runs it as the linked user (slack_command.go); anything else runs the ONE agent
+// brain (channelReply) — including a request to change code, which the brain answers
+// by calling the coding tool. Delivery is via the (host-pinned) response_url: an agent
+// answer goes in_channel; a command's result and the account-link prompt go ephemeral
+// (only the invoker sees them).
 func slackSlashTurn(s *cloud.Service[state], org string, in Inbound, responseURL string) {
 	ctx, cancel := context.WithTimeout(context.Background(), channelAgentTimeout)
 	defer cancel()
 	if org == "" {
 		_ = slackPostResponseURL(ctx, responseURL, "ephemeral", "This Slack workspace isn't connected to Hanzo yet.")
-		return
-	}
-	if codingText, isCoding := codingIntent(in.Text); isCoding {
-		handleSlackSlashCoding(s, ctx, org, in.ExternalID, in.Channel, in.User, codingText, responseURL)
 		return
 	}
 	if cmds := commands(s); len(cmds) > 0 {
@@ -537,7 +514,7 @@ func slackChatPostTS(ctx context.Context, botToken, method string, fields map[st
 	}
 	_ = json.Unmarshal(body, &data)
 	if !data.OK {
-		return "", fmt.Errorf("slack %s failed: %s", strings.TrimPrefix(method, "/"), nonEmpty(data.Error, "unknown"))
+		return "", fmt.Errorf("slack %s failed: %s", strings.TrimPrefix(method, "/"), cmp.Or(data.Error, "unknown"))
 	}
 	return data.TS, nil
 }
@@ -661,15 +638,10 @@ func slackPostResponseURL(ctx context.Context, responseURL, responseType, text s
 
 func slackSigningSecret() string { return strings.TrimSpace(os.Getenv("SLACK_SIGNING_SECRET")) }
 
-// slackAgentRef resolves the agent the Slack CODING flow runs (slack_coding.go). The
-// CHAT path resolves its agent through the channel (channelAgentRef("slack")); this
-// stays for the coding path, unchanged: SLACK_AGENT_REF, default "hanzo".
-func slackAgentRef() string {
-	if v := strings.TrimSpace(os.Getenv("SLACK_AGENT_REF")); v != "" {
-		return v
-	}
-	return "hanzo"
-}
+// SLACK_AGENT_REF is not read here any more, and it did not become an unset knob:
+// channelAgentRef("slack") reads the same variable for the chat turn, so the one
+// remaining path honours it and there is one implementation of the lookup rather
+// than a coding copy beside a chat copy that could disagree about the default.
 
 // slackReadBody returns the exact raw request body the HMAC must be computed over,
 // bounded to slackMaxBody. fiber's transport already bounds the body; this is the

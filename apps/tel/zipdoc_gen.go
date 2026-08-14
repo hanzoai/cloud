@@ -8,25 +8,25 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/tel/calls/:id", zip.Doc{
-		Description: "Ends a live call. The holding is checked before the carrier is asked, so\na call belonging to another org answers 404 rather than being torn down: the\ncarrier knows nothing about tenancy and would obey either way.",
+		Description: "Ends a call this org placed. The holding is read for THIS org before the\ncarrier is asked, for the reason releaseNumber gives one surface up: an id\nbelonging to another tenant would otherwise be hung up by whoever guessed it.",
 	})
 	zip.Describe("DELETE /v1/tel/numbers/:id", zip.Doc{
 		Description: "Checks the holding is THIS org's before it reaches the carrier.\nWithout that read, an id belonging to another tenant would be released by\nwhoever guessed it.",
 	})
 	zip.Describe("GET /v1/tel/calls", zip.Doc{
-		Description: "Returns this org's call history, newest first as the store gives it.\nOrg-scoped like every read here.",
+		Description: "Lists the calls this org has placed or received, newest first. Like the\nmessage list beside it, these are our own records rather than the carrier's.",
 		Fields: map[string]string{
 			"Call.status": "queued | ringing | answered | completed | failed",
 		},
 	})
 	zip.Describe("GET /v1/tel/messages", zip.Doc{
-		Description: "Returns this org's message history. Org-scoped like every read here.",
+		Description: "Lists the messages this org has sent or received, newest first. Records from\nour own store, not the carrier's — so it is what this platform did on the\norg's behalf, which is the set an audit or a bill has to agree with.",
 		Fields: map[string]string{
 			"SMS.status": "queued | sent | delivered | failed",
 		},
 	})
 	zip.Describe("GET /v1/tel/numbers", zip.Doc{
-		Description: "Returns the numbers this org holds. Scoped to the caller's org, so a\nnumber bought by one tenant is invisible to every other.",
+		Description: "Lists the phone numbers this org HOLDS — the ones it has bought and not\nreleased. Distinct from the availability search one path down\n(`/numbers/available`), which asks the carrier what could be bought: this\nanswers only from our own store, so it is what an org owns rather than what\nit could own.",
 		Fields: map[string]string{
 			"Number.capable": "voice | sms | mms | fax",
 			"Number.monthly": "minor units, as the carrier quoted it",
@@ -40,7 +40,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/tel/summary", zip.Doc{
-		Description: "Counts what this org holds and has used -- numbers, calls, messages. The\none read the dashboard makes, so it is three counts rather than three lists.",
+		Description: "Counts what this org holds on the telephony plane: its numbers, its calls and\nits messages. The one read a dashboard makes before it asks for any list, so\nit answers three totals and no rows.",
 	})
 	zip.Describe("POST /v1/tel/calls", zip.Doc{
 		Description: "Dials. An `agent` names a Hanzo assistant to answer it; the call is\nrefused up front when no assistant plane is configured, because a call that\nconnects to silence has already cost the person who answered it.",
@@ -50,7 +50,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/tel/messages", zip.Doc{
-		Description: "Sends one message. `from` must be a number this org holds -- the carrier\nwill send from any number it routes, so without that check one tenant could\noriginate traffic on another's number, and the bill and the reputation would\nfollow the number rather than the sender.",
+		Description: "Sends a message from one of this org's own numbers.\n\n`from` must be a number the org HOLDS, checked against the store rather than\ntaken on trust — a caller that could send from any number could impersonate\none, and the carrier would deliver it. `to` is required, and the body needs\ntext or media, because a message with neither is delivered as nothing and\nbilled as something.",
 		Fields: map[string]string{
 			"SMS.status": "queued | sent | delivered | failed",
 		},

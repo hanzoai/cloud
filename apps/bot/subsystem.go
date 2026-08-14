@@ -214,7 +214,7 @@ func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 	// status a typed op can declare or a value it can return.
 	app.Get("/v1/bot/connect", cloud.Terminal(cloud.Handle(s, func(_ *cloud.Service[state], c *zip.Ctx) error {
 		if _, ok := principal.Org(c); !ok {
-			return zip.ErrForbidden("X-Org-Id required")
+			return principal.Refused(c)
 		}
 		return ws(c)
 	})))
@@ -396,7 +396,7 @@ type nodesQuery struct{}
 // may actually be asked to do is decided at the socket against the deployment's
 // allowlist.
 func (o ops) listNodes(ctx context.Context, _ *nodesQuery) (*nodesView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -458,7 +458,7 @@ type deniedView struct {
 func invokeNode(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	nodeID := strings.TrimSpace(c.Param("id"))
 	if nodeID == "" {

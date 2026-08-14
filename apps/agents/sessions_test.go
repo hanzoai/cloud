@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -71,7 +72,7 @@ func TestSessionEventSeqAndCounts(t *testing.T) {
 	_ = s.CreateSession(ctx, mkSession("acme", "root", "", "root"))
 	_ = s.CreateSession(ctx, mkSession("acme", "child", "root", "root"))
 	for i := range 3 {
-		e, err := s.AppendEvent(ctx, Event{ID: genIDMust(t), SessionID: "root", Org: "acme", Kind: KindLog, CreatedAt: time.Now().Unix()})
+		e, err := s.AppendEvent(ctx, Event{ID: mint.ID("evt"), SessionID: "root", Org: "acme", Kind: KindLog, CreatedAt: time.Now().Unix()})
 		if err != nil {
 			t.Fatalf("append: %v", err)
 		}
@@ -79,7 +80,7 @@ func TestSessionEventSeqAndCounts(t *testing.T) {
 			t.Fatalf("seq want %d, got %d", i+1, e.Seq)
 		}
 	}
-	_, _ = s.AppendEvent(ctx, Event{ID: genIDMust(t), SessionID: "child", Org: "acme", Kind: KindSpawn, CreatedAt: time.Now().Unix()})
+	_, _ = s.AppendEvent(ctx, Event{ID: mint.ID("evt"), SessionID: "child", Org: "acme", Kind: KindSpawn, CreatedAt: time.Now().Unix()})
 	counts, err := s.EventCountsByRoot(ctx, "acme", "root")
 	if err != nil {
 		t.Fatalf("counts: %v", err)
@@ -118,13 +119,8 @@ func TestSessionEventSeqConcurrent(t *testing.T) {
 	for i := range n {
 		go func(i int) {
 			defer wg.Done()
-			id, err := genID("evt")
-			if err != nil {
-				errs[i] = err
-				return
-			}
 			e, err := s.AppendEvent(ctx, Event{
-				ID: id, SessionID: "root", Org: "acme", Kind: KindLog,
+				ID: mint.ID("evt"), SessionID: "root", Org: "acme", Kind: KindLog,
 				CreatedAt: time.Now().Unix(),
 			})
 			if err != nil {
@@ -153,15 +149,6 @@ func TestSessionEventSeqConcurrent(t *testing.T) {
 	if got, _ := s.CountEvents(ctx, "acme", "root"); got != n {
 		t.Fatalf("persisted event count want %d, got %d", n, got)
 	}
-}
-
-func genIDMust(t *testing.T) string {
-	t.Helper()
-	id, err := genID("evt")
-	if err != nil {
-		t.Fatalf("genID: %v", err)
-	}
-	return id
 }
 
 // ---- HTTP: helpers ----

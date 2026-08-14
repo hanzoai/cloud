@@ -133,12 +133,19 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 			if gotOwner != owner || key == "" {
 				continue
 			}
+			// IAM puts the row's PUBLIC half in accessKey for BOTH classes and masks
+			// the confidential sk- out of the listing entirely, so a secret row on
+			// the wire is a pk- accessKey with an empty scope — the scope is the only
+			// field that says which class it is. Modelling a secret row as carrying
+			// its sk- here is what let a listing that typed keys from this prefix
+			// pass its tests while mislabelling every real secret key in production.
 			row := map[string]any{
 				"owner": owner, "name": "cloud-api", "user": user,
-				"accessKey": key, "updatedTime": "2026-01-02T03:04:05Z",
+				"accessKey":   "pk-" + strings.ReplaceAll(ref.id, "/", "-") + "-PUBHALF",
+				"updatedTime": "2026-01-02T03:04:05Z",
 			}
 			if ref.typ == "publishable" {
-				row["name"], row["scope"] = "publishable", "publish"
+				row["name"], row["scope"], row["accessKey"] = "publishable", "publish", key
 			}
 			rows = append(rows, row)
 		}
@@ -403,8 +410,11 @@ func TestKeys_MintGetRevoke_ScopedToCaller(t *testing.T) {
 	if code != http.StatusOK || len(st.Keys) != 1 {
 		t.Fatalf("get post-mint: want the minted key listed, got %d %s", code, body)
 	}
-	if st.Keys[0].Type != "secret" || st.Keys[0].Prefix != "sk-acme-ali" {
-		t.Fatalf("get post-mint: want a secret key by prefix, got %+v", st.Keys[0])
+	// Typed from the SCOPE, and carrying no prefix: the row's accessKey is its pk-
+	// half, not a head of the sk- the holder pastes into their code, so naming it
+	// "your key starts with…" would name a different string than the one they hold.
+	if st.Keys[0].Type != "secret" || st.Keys[0].Prefix != "" || st.Keys[0].Key != "" {
+		t.Fatalf("get post-mint: want a secret key with no prefix and no value, got %+v", st.Keys[0])
 	}
 	if strings.Contains(string(body), "SECRET") {
 		t.Fatalf("GET /v1/keys leaked the secret: %s", body)

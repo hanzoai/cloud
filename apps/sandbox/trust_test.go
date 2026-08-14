@@ -351,7 +351,7 @@ func TestResumeCannotCrossTheTrustBoundary(t *testing.T) {
 	// two different facts and this test is about the first. The org names WHOSE
 	// store a row lives in; the SuperAdmin attestation says who the caller is. A
 	// test that conflated them would pass for the wrong reason.
-	got, err := Lease(s, ctx, authz.AdminOrg, false, Spec{ID: m.ID})
+	got, err := Lease(s, ctx, authz.AdminOrg, authz.AdminOrg, false, Spec{ID: m.ID})
 	if err != nil || got.ID != m.ID {
 		t.Fatalf("Lease(admin, resume) = %+v, %v — the control did not resume", got, err)
 	}
@@ -359,7 +359,7 @@ func TestResumeCannotCrossTheTrustBoundary(t *testing.T) {
 	// ANOTHER ORG NAMING THE SAME ID gets a sandbox of its own, never ours. It
 	// fails at the cluster (there is none here), which is already past the point
 	// where a resume would have handed over a running pod.
-	if _, err = Lease(s, ctx, "acme", false, Spec{ID: m.ID}); err == nil {
+	if _, err = Lease(s, ctx, "acme", "acme", false, Spec{ID: m.ID}); err == nil {
 		t.Fatal("Lease(acme) resumed a sandbox belonging to the reserved org")
 	}
 	if !strings.Contains(err.Error(), "start sandbox") {
@@ -391,27 +391,27 @@ func TestConfineRequiresAPoolOfItsOwn(t *testing.T) {
 	}{
 		{"no such class", nil, false},
 		{"a class with no scheduling at all",
-			[]*unstructured.Unstructured{class("runc", nil, nil)}, false},
+			[]*unstructured.Unstructured{runtimeClass("runc", nil, nil)}, false},
 		{"a pool with no taint — anything may join it",
-			[]*unstructured.Unstructured{class("runc", pool("pool", "sandbox"), nil)}, false},
+			[]*unstructured.Unstructured{runtimeClass("runc", pool("pool", "sandbox"), nil)}, false},
 		{"a taint with no pool — it may still land anywhere",
-			[]*unstructured.Unstructured{class("runc", nil, taint)}, false},
+			[]*unstructured.Unstructured{runtimeClass("runc", nil, taint)}, false},
 		{"a pool of its own",
-			[]*unstructured.Unstructured{class("runc", pool("pool", "sandbox"), taint)}, true},
+			[]*unstructured.Unstructured{runtimeClass("runc", pool("pool", "sandbox"), taint)}, true},
 		{"a pool it shares with a boundary other tenants take",
 			[]*unstructured.Unstructured{
-				class("runc", pool("pool", "code-exec"), taint),
-				class("gvisor", pool("pool", "code-exec"), taint),
+				runtimeClass("runc", pool("pool", "code-exec"), taint),
+				runtimeClass("gvisor", pool("pool", "code-exec"), taint),
 			}, false},
 		{"its own pool, beside a boundary on another",
 			[]*unstructured.Unstructured{
-				class("runc", pool("pool", "sandbox"), taint),
-				class("gvisor", pool("pool", "code-exec"), taint),
+				runtimeClass("runc", pool("pool", "sandbox"), taint),
+				runtimeClass("gvisor", pool("pool", "code-exec"), taint),
 			}, true},
 		{"its own pool, beside a boundary pinned nowhere",
 			[]*unstructured.Unstructured{
-				class("runc", pool("pool", "sandbox"), taint),
-				class("kata-clh", nil, nil),
+				runtimeClass("runc", pool("pool", "sandbox"), taint),
+				runtimeClass("kata-clh", nil, nil),
 			}, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -462,8 +462,8 @@ func TestLiveConfineReadsTheRealTopology(t *testing.T) {
 		map[bool]string{true: "contained", false: "NOT contained — nothing will select it"}[r.bare != ""])
 }
 
-// class builds a RuntimeClass as the apiserver stores it.
-func class(name string, sel map[string]any, tol []any) *unstructured.Unstructured {
+// runtimeClass builds a RuntimeClass as the apiserver stores it.
+func runtimeClass(name string, sel map[string]any, tol []any) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "node.k8s.io/v1",
 		"kind":       "RuntimeClass",

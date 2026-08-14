@@ -3,6 +3,8 @@ package projects
 import (
 	"archive/zip"
 	"bytes"
+	"maps"
+	"slices"
 	"testing"
 )
 
@@ -27,13 +29,7 @@ func buildZip(t *testing.T, files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-func siteKeys(st *site) []string {
-	out := make([]string, 0, len(st.files))
-	for k := range st.files {
-		out = append(out, k)
-	}
-	return out
-}
+func siteKeys(st *site) []string { return slices.Collect(maps.Keys(st.files)) }
 
 func TestWalkZip(t *testing.T) {
 	files := map[string]string{

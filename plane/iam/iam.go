@@ -31,6 +31,7 @@ const App = "iam"
 // plane_registry_test.go.
 var Ops = []string{
 	plane.IAMApproval,
+	plane.IAMEmail,
 	plane.IAMMailable,
 	plane.IAMProjects,
 }
@@ -40,6 +41,13 @@ var Ops = []string{
 // Calls plane.IAMApproval on iam over the peer plane.
 func IAMApproval(ctx context.Context) (*plane.Approval, error) {
 	return plane.Ask[struct{}, plane.Approval](ctx, App, plane.IAMApproval, &struct{}{})
+}
+
+// IAMEmail the caller's address, and whether they have proved it.
+//
+// Calls plane.IAMEmail on iam over the peer plane.
+func IAMEmail(ctx context.Context) (*plane.Email, error) {
+	return plane.Ask[struct{}, plane.Email](ctx, App, plane.IAMEmail, &struct{}{})
 }
 
 // IAMMailable who this org may mail.

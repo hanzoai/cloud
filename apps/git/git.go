@@ -44,8 +44,6 @@ package git
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -256,9 +254,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// the reactor that pushes them. Registered above for the co-resident case, and
 	// published here for the split one (mirror_control.go).
 	exposeMirror()
-	// Delegate ONE ref write to a process running untrusted work, so it does not
-	// have to hold a credential that opens the rest of the tenant (grant.go).
-	exposeGrant()
 	// What the org keeps in git, as headline numbers — the read a caller makes
 	// when it does not yet know a repo's name (figures_rpc.go).
 	exposeFigures()
@@ -778,15 +773,6 @@ func projectScope(c *zip.Ctx) string {
 		return ""
 	}
 	return p
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // Shutdown stops the SSH listener and closes every open store (per-org repo

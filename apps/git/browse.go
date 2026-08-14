@@ -23,6 +23,7 @@
 package git
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -233,7 +234,7 @@ func (o ops) browseRefs(ctx context.Context, in *repoRef) (*refsJSON, error) {
 	if !found {
 		return nil, zip.ErrNotFound("repo not found")
 	}
-	out := refsJSON{Branches: []refJSON{}, Tags: []refJSON{}, Default: firstNonEmptyStr(r.DefaultBranch, defaultBranchName)}
+	out := refsJSON{Branches: []refJSON{}, Tags: []refJSON{}, Default: cmp.Or(strings.TrimSpace(r.DefaultBranch), defaultBranchName)}
 	if repo, err := openRepository(o.s, r); err == nil {
 		branches, tags, _ := repo.Refs(ctx)
 		out.Branches, out.Tags = refsToJSON(branches), refsToJSON(tags)

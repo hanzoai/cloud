@@ -3,6 +3,7 @@
 package cloud
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"time"
@@ -90,7 +91,7 @@ func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage, posted fu
 		Amount:  plane.Amount(u.Money().Unwrap()),
 		Usage: plane.Usage{
 			Project: u.Project,
-			Service: firstNonEmpty(u.Service, rm.provider),
+			Service: cmp.Or(u.Service, rm.provider),
 			// THE ACT'S NAME CROSSES WITH IT. The receiver keys the debit on this ref
 			// and mints a fresh one when it is absent (apps/finance RecordUsage), so a
 			// crossing that drops it turns every re-drive of ONE act into a SECOND
@@ -115,11 +116,4 @@ func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage, posted fu
 				"org", org, "kind", kind, "amount", u.Money().String(), "err", err)
 		}
 	}()
-}
-
-func firstNonEmpty(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }

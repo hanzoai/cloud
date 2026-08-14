@@ -44,12 +44,14 @@ package sandbox
 // assumption stops holding, it refuses.
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"net/http"
 	"strings"
@@ -94,11 +96,30 @@ const ticketTTL = 30 * time.Second
 // a caller its session names, not its terminal.
 func shell(session string) []string {
 	if session == "" {
-		return []string{"/bin/sh", "-lc", plain}
+		return []string{"/bin/sh", "-lc", term + plain}
 	}
 	return []string{"/bin/sh", "-lc",
-		"command -v tmux >/dev/null 2>&1 && exec tmux new -A -s " + shellQuote(session) + "; " + plain}
+		term + "command -v tmux >/dev/null 2>&1 && exec tmux new -A -s " + shellQuote(session) + "; " + plain}
 }
+
+// term names the terminal to the programs running in it, and NOTHING ELSE DOES.
+//
+// The exec subresource opens a pty and stops there — Kubernetes sets no
+// environment on it, so TERM arrives unset, and a pty whose type is unknown is
+// one a full-screen program refuses to draw on. tmux says so exactly: "open
+// terminal failed: terminal does not support clear", and then exits.
+//
+// That single missing variable took the whole terminal down rather than costing
+// it tmux, because the fallback beside it cannot run: `exec` has already replaced
+// the shell, so a tmux that STARTS and fails leaves nothing behind to fall back
+// to and the socket closes. The named session was never created, every reconnect
+// repeated it, and what a person saw was a terminal that opened and immediately
+// said the connection had closed.
+//
+// xterm-256color is the truth about the other end: every surface frames the same
+// xterm.js page. `:-` and not a bare assignment, so a caller that has already
+// said which terminal it is keeps its answer.
+const term = "export TERM=${TERM:-xterm-256color}; "
 
 const plain = "exec zsh -l 2>/dev/null || exec bash -l 2>/dev/null || exec sh -l"
 
@@ -224,52 +245,77 @@ func (t *tickets) sweep(now time.Time) {
 // The routes
 // ─────────────────────────────────────────────────────────────────────────────
 
-// open mints the ticket for one terminal. Gated exactly like its siblings — a
+// open mints the ticket for one DOOR. Gated exactly like its siblings — a
 // validated principal, resolved to the org whose sandboxes may be addressed —
 // and it resolves the sandbox before minting, so a ticket never names a sandbox
 // the caller does not own or one that is not running.
-func open(s *Service, c *zip.Ctx) error {
-	o, ok := orgOf(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+//
+// THE DOOR IS THE ADDRESS AND NOT THE GRANT. A ticket says which org and which
+// sandbox, and the terminal and the screen are two views of that one machine —
+// a caller holding the authority to type in a sandbox holds the authority to
+// look at it. Binding the door into the token would be a second gate answering
+// a question the first one already closed, and a gate that decides nothing is
+// one somebody later has to reason about anyway. What the door decides is the
+// URL a caller is handed back, which is the only part that differs.
+func open(door string) func(*Service, *zip.Ctx) error {
+	return func(s *Service, c *zip.Ctx) error {
+		o, ok := orgOf(c)
+		if !ok {
+			return principal.Refused(c)
+		}
+		id := idParam(c)
+		m, _, err := find(s, c.Context(), o, id)
+		if err != nil {
+			return err
+		}
+		if m.Status != "running" {
+			return zip.Errorf(http.StatusConflict, "sandbox is %s", cmp.Or(m.Status, "unknown"))
+		}
+		tok, err := s.State.tickets.mint(time.Now(), o, m.ID)
+		if err != nil {
+			return zip.Errorf(http.StatusInternalServerError, "ticket: %v", err)
+		}
+		return c.JSON(http.StatusCreated, map[string]any{
+			"ticket":    tok,
+			"expiresIn": int(ticketTTL / time.Second),
+			// The PATH, not a URL. Which host this address wears in public is the
+			// edge's answer and not ours — behind the gateway this process only ever
+			// sees an internal name — so handing back an absolute URL would hand back
+			// a guess. The client already knows the host it is talking to.
+			//
+			// It names the PAGE, because that is what a caller embeds; the page finds
+			// its own socket. A caller that wants the raw socket adds `/ws`, which is
+			// exactly what the page does.
+			"url": "/v1/sandboxes/" + m.ID + "/" + door + "?ticket=" + tok,
+		})
 	}
-	id := idParam(c)
-	m, _, err := find(s, c.Context(), o, id)
-	if err != nil {
-		return err
-	}
-	if m.Status != "running" {
-		return zip.Errorf(http.StatusConflict, "sandbox is %s", firstNonEmpty(m.Status, "unknown"))
-	}
-	tok, err := s.State.tickets.mint(time.Now(), o, m.ID)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "ticket: %v", err)
-	}
-	return c.JSON(http.StatusCreated, map[string]any{
-		"ticket":    tok,
-		"expiresIn": int(ticketTTL / time.Second),
-		// The PATH, not a URL. Which host this address wears in public is the
-		// edge's answer and not ours — behind the gateway this process only ever
-		// sees an internal name — so handing back an absolute URL would hand back
-		// a guess. The client already knows the host it is talking to.
-		//
-		// It names the PAGE, because that is what a caller embeds; the page finds
-		// its own socket. A caller that wants the raw socket adds `/ws`, which is
-		// exactly what the page does.
-		"url": "/v1/sandboxes/" + m.ID + "/terminal?ticket=" + tok,
-	})
 }
 
-// attach serves one terminal. The ticket is spent BEFORE the upgrade, so a
-// request that presents nothing gets an ordinary 401 with a body a client can
-// read, rather than a socket that opens and immediately closes for reasons the
-// browser will not tell it.
-func attach(s *Service, c *zip.Ctx) error {
-	id := idParam(c)
+// pty serves one terminal: a shell on a pseudo-terminal, for as long as
+// somebody is typing.
+func pty(s *Service, c *zip.Ctx) error {
 	name, err := session(c)
 	if err != nil {
 		return err
 	}
+	return attach(s, c, func(ctx context.Context, m Sandbox, in *pipe, out *frames, w *window) error {
+		return s.State.rt.tty(ctx, m, shell(name), in, out, w)
+	})
+}
+
+// attach serves one interactive session over one socket, whatever the session
+// shows. The ticket is spent BEFORE the upgrade, so a request that presents
+// nothing gets an ordinary 401 with a body a client can read, rather than a
+// socket that opens and immediately closes for reasons the browser will not
+// tell it.
+//
+// EVERYTHING BUT `run` IS THE SAME FOR EVERY SESSION — the ticket, the sandbox,
+// the lease that bounds it, the attention that keeps it from being reaped, the
+// upgrade — so it is written once. The screen and the terminal differ in what
+// runs inside the socket and in nothing else, and a second copy of this
+// lifecycle is a second place for a session to outlive its lease.
+func attach(s *Service, c *zip.Ctx, run func(context.Context, Sandbox, *pipe, *frames, *window) error) error {
+	id := idParam(c)
 	org, ok := s.State.tickets.redeem(time.Now(), c.Query("ticket"), id)
 	if !ok {
 		return zip.ErrUnauthorized("terminal ticket is missing, expired or already spent")
@@ -279,7 +325,7 @@ func attach(s *Service, c *zip.Ctx) error {
 		return err
 	}
 	if m.Status != "running" {
-		return zip.Errorf(http.StatusConflict, "sandbox is %s", firstNonEmpty(m.Status, "unknown"))
+		return zip.Errorf(http.StatusConflict, "sandbox is %s", cmp.Or(m.Status, "unknown"))
 	}
 	touched(c.Context(), store, m)
 
@@ -304,9 +350,9 @@ func attach(s *Service, c *zip.Ctx) error {
 	serve := wsx.Upgrade(func(conn *wsx.Conn) error {
 		defer stop()
 		if err := bridge(ctx, conn, attend, func(ctx context.Context, in *pipe, out *frames, w *window) error {
-			return s.State.rt.tty(ctx, m, shell(name), in, out, w)
+			return run(ctx, m, in, out, w)
 		}); err != nil {
-			log.Debug("terminal ended", "sandbox", m.ID, "err", err)
+			log.Debug("session ended", "sandbox", m.ID, "err", err)
 		}
 		return nil
 	})
@@ -610,7 +656,7 @@ func (w *window) Next() *remotecommand.TerminalSize {
 // spent ONCE: a page that redeemed it would be a page holding a credential that
 // no longer opens anything.
 func terminal(g zip.Router, s *Service) {
-	g.Post("/:id/terminal/ticket", cloud.Handle(s, open))
-	g.Get("/:id/terminal", cloud.Handle(s, serve))
-	g.Get("/:id/terminal/ws", cloud.Handle(s, attach))
+	g.Post("/:id/terminal/ticket", cloud.Handle(s, open("terminal")))
+	g.Get("/:id/terminal", cloud.Handle(s, serve(document)))
+	g.Get("/:id/terminal/ws", cloud.Handle(s, pty))
 }
