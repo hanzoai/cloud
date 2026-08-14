@@ -80,6 +80,16 @@ var allowedRequestUses = map[string]string{
 		"the vhost the caller reached, read only to pick the brand the summary renders for.",
 	"apps/admin/core/typed.go": "Admit / AdmitScoped — the SuperAdmin and white-label tenant gates. " +
 		"Both read validated identity beyond the org (IsAdmin, the WL allowlist), which principal.OrgFrom does not carry.",
+	"apps/taxonomy/ops.go": "editor — the SuperAdmin gate on the product catalogue, and an identity gate " +
+		"reading strictly more than the org. The taxonomy is ONE list for the whole platform rather than " +
+		"a per-tenant one, so the question is cloud.Super (validated AND platform sudo) and never the " +
+		"caller's org: an org admin who could rename a category would rename it for every other tenant. " +
+		"Admin-ness is a claim the identity boundary mints into a header, which principal.OrgFrom does " +
+		"not carry, and it can never be an In field — a caller that could name itself an editor would be " +
+		"one. ONE function, which all five ops ask: the four writes refuse without it, and the read only " +
+		"widens with it (unpublished entries are served to an editor alone). It fails closed off the HTTP " +
+		"path, where there is no request and so no attested caller — a CLI LocalInvoke edits nothing and " +
+		"sees only what a signed-out visitor sees.",
 	"apps/account/account.go": "requestCaller — account IS the signed-in caller's own account, and resolving " +
 		"them needs more of the validated principal than the org: the user id (X-User-Id), the IAM username " +
 		"(X-User-Name) that IAM's user-key ops parse, and validated-ness itself, none of which principal.OrgFrom " +
