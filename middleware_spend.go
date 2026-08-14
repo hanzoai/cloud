@@ -150,19 +150,10 @@ func standing(c *zip.Ctx, method, path string, plans PlanChecker) string {
 	case s == Unknown:
 		return unresolved(c, "billing authority unreadable", path)
 	default:
-		// BEFORE REFUSING, FUND. This is the last point at which an account that has
-		// simply never been funded can still be told apart from one that will not pay,
-		// and the only point at which the difference matters — so the plan's included
-		// credit is provisioned HERE (starter.go) rather than on some earlier pass that
-		// would have to guess whether it was needed.
-		//
-		// It is asked after Unpaid is PROVEN, which is what lets it be cheap and what
-		// lets it be safe: both authorities have answered, so the rung inherits "no
-		// subscription and no credit" as a finding instead of re-reading it, and it can
-		// never fire for a caller who already has either.
-		if fund(c, w) {
-			return "" // funded on this request; the wallet the debit writes now holds money.
-		}
+		// No subscription and no credit is a refusal. An account is free to make;
+		// the models are what cost. A tier's free allowance is
+		// tier.Config.DailyCreditsCents, which replenishes on a clock and so is
+		// bounded per day rather than per signup.
 		c.Log().Info("spend: no subscription and no credit", "org", w.Ledger, "account", w.Account, "path", path)
 		return ReasonUnpaid
 	}
