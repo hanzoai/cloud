@@ -61,14 +61,11 @@ var Apps = []App{
 	// route the three and nothing more. They were in manifest/router_test.go's
 	// `unreachable` ledger until now — a relying party's FIRST call, reaching no app.
 	{Name: "iam", Prefixes: []string{"/.well-known/jwks", "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration", "/login/oauth", "/v1/iam"}},
-	// /rest/v1 is the org's OWN Base under its other rendering, not a second door:
-	// Base binds that path on its root router (outside the api prefix, because a
-	// REST client appends it to whatever host it is given) and answers it by
-	// running the same recordsList as /v1/base/collections — same list rule, same
-	// rate limit. It reaches the same per-org handler, so the org still comes from
-	// the validated principal. It sits outside /v1 by the client's convention, not
-	// by ours, which is why it needs its own prefix here.
-	{Name: "base", Prefixes: []string{"/rest/v1", "/v1/base", "/v1/waitlist"}},
+	// One prefix for the org's Base, because everything it serves is under it now.
+	// The table wire used to need a second one at /rest/v1, outside /v1 by a REST
+	// client's convention rather than by ours; Base moved it beneath the mount
+	// prefix, so it is /v1/base/rest/{collection} and this row covers it.
+	{Name: "base", Prefixes: []string{"/v1/base", "/v1/waitlist"}},
 	// /v1/summary is the PUBLIC platform status document (apps/o11y/summary.go),
 	// the outward projection of the fleet health probes o11y already runs. It has
 	// to be listed here or the host never routes it to this app and it falls to
