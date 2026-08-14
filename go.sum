@@ -984,6 +984,8 @@ github.com/hanzo-ds/sqlbuilder v1.42.2 h1:739sudcAav513tsIj57CUjADCcEUzrztpOPYHy
 github.com/hanzo-ds/sqlbuilder v1.42.2/go.mod h1:Nk+F+SDxtsqAeI63jT7JPACZQ60top3rQCmKXUhfKQw=
 github.com/hanzo-ds/sqlparser v0.4.16 h1:OeWiLSL6u/I/RzhUKHHbE33MevQ2b0QVyDgSJur6OTs=
 github.com/hanzo-ds/sqlparser v0.4.16/go.mod h1:b+9oCGF3WYGz4FfVo9eZ4wJiF7fiLa9aCWFGCcbqQbY=
+github.com/hanzo-ds/sqlparser v0.4.17 h1:yTBikkYx2NI2Fpd6lCp4GVEj/rMaV7w6N4R7PLJmoag=
+github.com/hanzo-ds/sqlparser v0.4.17/go.mod h1:b+9oCGF3WYGz4FfVo9eZ4wJiF7fiLa9aCWFGCcbqQbY=
 github.com/hanzoai/account v0.3.1 h1:4YMVe0EdoudbskP9TzDv7rNj5ACvno+7jh7p1fm6Ahw=
 github.com/hanzoai/account v0.3.1/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
 github.com/hanzoai/agent v1.0.5 h1:RWe4cSyie+5wAt2s0kAIqxQ4m6ID5JlqI/xUEUxhFEI=
