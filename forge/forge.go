@@ -114,31 +114,19 @@ const repoPage = 5
 // the same 2,500 repositories the issue walk allows.
 const maxRepoPages = 2500 / repoPage
 
+// fanout bounds the concurrent requests one walk makes. Unbounded, a large org
+// would open hundreds of sockets at once and the walk would read as a
+// denial-of-service against our own forge.
+//
+// 16 rather than 8: a wave of 8 pages completes in ~0.8s (measured on
+// git.hanzo.ai), and halving the number of waves is most of the wall time on a
+// cold read. Still small enough that a walk is a handful of sockets, not a flood.
+const fanout = 16
+
 // maxBody bounds a single response read. The forge is a trusted service, but
 // "trusted" is a statement about intent and not about compromise, and an
 // unbounded io.ReadAll on a remote body is an OOM one bad response away.
 const maxBody = 32 << 20 // 32 MiB
-
-// fanout bounds the concurrent per-repo requests an org rollup makes. The forge
-// has no org-level milestones API, so a rollup is N repo calls; unbounded, a
-// large org would open hundreds of sockets at once and the rollup would read as
-// a denial-of-service against our own forge.
-//
-// 16 rather than 8: a single milestone call costs 0.3-1.3s and a wave of 8
-// completes in ~0.8s (measured on git.hanzo.ai), so the fan-out is cheap next to
-// the repository list that opens the rollup, and halving the number of waves
-// takes the cold rollup for a 64-repo org from ~8s to ~4s. Still small enough
-// that a rollup is a handful of sockets, not a flood.
-const fanout = 16
-
-// maxRollup bounds the repositories one org rollup will fan out over.
-//
-// It is a REFUSAL threshold, not a truncation: see [Client.Milestones]. Set far
-// above any real org here (the largest is 64) because the honest use of this
-// number is to stop a runaway — a forge that answers a repo list wrongly, or an
-// org that has genuinely outgrown a synchronous rollup — rather than to trim a
-// working org down to a partial answer.
-const maxRollup = 300
 
 // Errors a caller must be able to tell apart. They are distinguished because the
 // right answer differs: no actor is a bug in the CALLER (it forgot to scope),
@@ -194,8 +182,7 @@ type Client struct {
 	// why it is not a second source of truth, and why keying it by org alone
 	// would be a cross-user read. As() shares them, which is the point: the
 	// cache belongs to the FORGE CONNECTION, not to one request's actor.
-	repos  *cache[[]Repo]
-	rollup *cache[[]Milestone]
+	repos *cache[[]Repo]
 }
 
 // New builds a client for the forge at `host` authenticating with `token`.
@@ -234,8 +221,7 @@ func New(host, token string) (*Client, error) {
 		// request; this only stops a call made WITHOUT one (a CLI invoke, a
 		// background refresh whose budget is longer) from hanging forever.
 		http:   &http.Client{Timeout: 30 * time.Second},
-		repos:  newCache[[]Repo](),
-		rollup: newCache[[]Milestone](),
+		repos: newCache[[]Repo](),
 	}, nil
 }
 
@@ -257,9 +243,6 @@ func (c *Client) Reuse(prev *Client) {
 	}
 	if prev.repos != nil {
 		c.repos = prev.repos
-	}
-	if prev.rollup != nil {
-		c.rollup = prev.rollup
 	}
 }
 
@@ -427,7 +410,7 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, out any) (h
 
 // ── the wire shapes ──────────────────────────────────────────────────────────
 //
-// Only the fields the tracker renders are declared. A struct that mirrored every
+// Only the fields the todo renders are declared. A struct that mirrored every
 // forge field would be a second schema to maintain against an upstream we do not
 // control, and would publish fields our surface never promised.
 
@@ -477,15 +460,17 @@ type User struct {
 	Avatar string `json:"avatar_url"`
 }
 
-// Label is a forge label. It carries the board's column: the tracker's status is
+// Label is a forge label. It carries the board's column: the todo's status is
 // a label set on the forge, not a column in a table here (see [Issues]).
 type Label struct {
 	Name  string `json:"name"`
 	Color string `json:"color"`
 }
 
-// Milestone is a forge milestone, always repo-scoped — the forge has no
-// org-level milestone. [Client.Milestones] is the org rollup.
+// Milestone is a forge milestone, always repo-scoped. It reaches us only as a
+// field on an [Issue], where its due date IS that issue's deadline — which is
+// the one thing a milestone is, and the reason there is no second resource for
+// it here or upstream.
 type Milestone struct {
 	ID     int64  `json:"id"`
 	Title  string `json:"title"`
@@ -494,10 +479,6 @@ type Milestone struct {
 	Closed int    `json:"closed_issues"`
 	Due    string `json:"due_on,omitempty"`
 
-	// Repo is the repository this milestone belongs to. The forge does not send
-	// it — a repo-scoped list has no reason to — and the rollup fills it in, so a
-	// caller merging N repos' milestones can still tell them apart.
-	Repo string `json:"repo"`
 }
 
 // Issue is one work item. The forge's issues-search answers labels, milestone
@@ -518,7 +499,7 @@ type Issue struct {
 	Updated   string     `json:"updated_at"`
 
 	// PullRequest is non-nil when the row is a PR rather than an issue. The forge
-	// returns both from one search; the tracker's Kind is read from this.
+	// returns both from one search; the todo's Kind is read from this.
 	PullRequest *struct {
 		Merged bool `json:"merged"`
 	} `json:"pull_request,omitempty"`
@@ -629,7 +610,7 @@ func (c *Client) listRepos(ctx context.Context, org string) ([]Repo, error) {
 				// One page's failure fails the walk. A repository list silently
 				// missing the pages that errored is a wrong answer presented as a
 				// complete one, and downstream it reads as "those boards do not
-				// exist" — the same rule the milestone rollup follows.
+				// exist".
 				once.Do(func() {
 					mu.Lock()
 					bad = err
@@ -695,6 +676,41 @@ func (c *Client) Repo(ctx context.Context, org, name string) (Repo, error) {
 	var r Repo
 	err := c.do(ctx, "/repos/"+url.PathEscape(org)+"/"+url.PathEscape(name), nil, &r)
 	return r, err
+}
+
+// Issue reads ONE work item by its repository and per-repo number.
+//
+// The org-wide [Client.Issues] search can find it, and that is what reading a
+// single row used to cost: a fan-out over every repository the actor can see, to
+// keep one of the rows it returns. This charges for the one.
+//
+// An issue the actor cannot see is 404 and surfaces as [ErrUnknownActor], the
+// same as one that does not exist — which is the right answer for a named row
+// and does not tell a caller whether a private one is there.
+func (c *Client) Issue(ctx context.Context, org, repo string, number int64) (Issue, error) {
+	if err := validOrg(org); err != nil {
+		return Issue{}, err
+	}
+	if err := validOrg(repo); err != nil {
+		return Issue{}, fmt.Errorf("forge: issue: %w", err)
+	}
+	if number <= 0 {
+		return Issue{}, fmt.Errorf("forge: issue: bad number %d", number)
+	}
+	var i Issue
+	err := c.do(ctx, "/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+
+		"/issues/"+strconv.FormatInt(number, 10), nil, &i)
+	// The single-issue endpoint answers the row without the repository stamp the
+	// search puts on it, so fill it in here: every caller reads Repo to know which
+	// board the row is on, and one that arrives blank is a row on no board.
+	if err == nil && i.Repository == nil {
+		i.Repository = &struct {
+			Name     string `json:"name"`
+			FullName string `json:"full_name"`
+			Owner    string `json:"owner"`
+		}{Name: repo, FullName: org + "/" + repo, Owner: org}
+	}
+	return i, err
 }
 
 // ReposWarm returns the repository inventory ONLY if it is already held, and
@@ -786,114 +802,6 @@ func (c *Client) Issues(ctx context.Context, org string, f IssueFilter) ([]Issue
 		}
 	}
 	return all, nil
-}
-
-// Milestones is the ORG ROLLUP the forge does not offer.
-//
-// Forgejo scopes milestones to a repository and publishes no org-level list, so
-// the rollup is a fan-out: list the org's repos, ask each for its milestones,
-// merge. It runs HERE, server-side, rather than in the browser, for three
-// reasons — a client-side fan-out would issue N cross-origin requests per board
-// load, would need the forge reachable from the browser (and therefore a
-// browser-held credential, which is the thing this design refuses), and would
-// make the actor's visibility a client-side filter instead of a server-side ACL.
-//
-// Concurrency is bounded by [fanout], and one repo's failure fails the rollup:
-// a milestone list silently missing the repos that errored is a wrong answer
-// presented as a complete one.
-//
-// The whole rollup is cached like [Client.Repos] and on the same key, because
-// it is the same shape of expense: its opening move IS that call, and the
-// fan-out behind it is another N requests. Cold, the two together are the
-// slowest read this package makes.
-func (c *Client) Milestones(ctx context.Context, org string) ([]Milestone, error) {
-	if err := validOrg(org); err != nil {
-		return nil, err
-	}
-	if c.actor == "" {
-		return nil, ErrNoActor
-	}
-	got, err := c.rollup.do(ctx, c.key(org), func(ctx context.Context) ([]Milestone, error) {
-		return c.rollupMilestones(ctx, org)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return append([]Milestone(nil), got...), nil
-}
-
-// rollupMilestones is the uncached fan-out.
-func (c *Client) rollupMilestones(ctx context.Context, org string) ([]Milestone, error) {
-	repos, err := c.Repos(ctx, org)
-	if err != nil {
-		return nil, err
-	}
-	live := 0
-	for _, r := range repos {
-		if !r.Archived {
-			live++
-		}
-	}
-	// REFUSE rather than truncate. An org past this cannot be rolled up inside
-	// any sane request budget, and returning the first [maxRollup] repos'
-	// milestones would be a partial answer presented as a complete one — the
-	// same wrong answer the fail-on-first-error rule above exists to prevent,
-	// arrived at by a different route. The message names the cap so the operator
-	// reading it knows what to change.
-	if live > maxRollup {
-		return nil, fmt.Errorf("forge: org %s has %d live repositories, past the %d this rollup fans out over", org, live, maxRollup)
-	}
-	// Cancel the remaining fan-out as soon as one leg fails; without this a large
-	// org keeps issuing requests whose result is already discarded.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	var (
-		mu   sync.Mutex
-		out  []Milestone
-		bad  error
-		sem  = make(chan struct{}, fanout)
-		wg   sync.WaitGroup
-		once sync.Once
-	)
-	for _, r := range repos {
-		if r.Archived {
-			continue // an archived repo's milestones are not live work
-		}
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-ctx.Done():
-				return
-			}
-			var ms []Milestone
-			q := url.Values{"state": {"all"}, "limit": {strconv.Itoa(page)}}
-			path := "/repos/" + url.PathEscape(org) + "/" + url.PathEscape(name) + "/milestones"
-			if err := c.do(ctx, path, q, &ms); err != nil {
-				once.Do(func() {
-					mu.Lock()
-					bad = fmt.Errorf("milestones %s/%s: %w", org, name, err)
-					mu.Unlock()
-					cancel()
-				})
-				return
-			}
-			mu.Lock()
-			for i := range ms {
-				ms[i].Repo = name
-				out = append(out, ms[i])
-			}
-			mu.Unlock()
-		}(r.Name)
-	}
-	wg.Wait()
-	if bad != nil {
-		return nil, bad
-	}
-	return out, nil
 }
 
 // ── the writes ───────────────────────────────────────────────────────────────

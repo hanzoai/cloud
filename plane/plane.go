@@ -219,10 +219,10 @@ const (
 	// is the sync app. Three processes, one of which has the engine.
 	SyncRun = "sync_run"
 
-	// TrackerUpsert mirrors one external work item into the native tracker. The
-	// feeder is integrations (it holds the GitHub App); the store is the tracker
+	// TodoUpsert mirrors one external work item into the native todo. The
+	// feeder is integrations (it holds the GitHub App); the store is the todo
 	// app's.
-	TrackerUpsert = "tracker_upsert"
+	TodoUpsert = "todo_upsert"
 
 	// PlatformPush turns a landed push into a build. The push lands on git's
 	// embedded server and the builder belongs to platform — the single most
@@ -1895,15 +1895,15 @@ type SyncRan struct {
 	Skipped int `json:"skipped"`
 }
 
-// ---- tracker ---------------------------------------------------------------
+// ---- todo ---------------------------------------------------------------
 
-// IssueIn is one external work item to mirror into the native tracker, keyed
+// IssueIn is one external work item to mirror into the native todo, keyed
 // idempotently by ExtRef so a webhook redelivery updates the same row. No Org:
 // the tenant is the caller's, resolved from the signed installation at the edge.
 type IssueIn struct {
 	// Project is the IAM project scope; empty means the org's default store.
 	Project string `json:"project,omitempty"`
-	// Key is the tracker team the item files under, e.g. "GH"; ensured on first use.
+	// Key is the todo team the item files under, e.g. "GH"; ensured on first use.
 	Key string `json:"key,omitempty"`
 	// TeamName is the display name used when that team is first created.
 	TeamName string `json:"teamName,omitempty"`
@@ -1918,7 +1918,7 @@ type IssueIn struct {
 	Source      string `json:"source,omitempty"`
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
-	// State is the upstream open/closed state; the tracker maps it to a column.
+	// State is the upstream open/closed state; the todo maps it to a column.
 	State    string   `json:"state,omitempty"`
 	Assignee string   `json:"assignee,omitempty"`
 	Labels   []string `json:"labels,omitempty"`
@@ -1928,7 +1928,7 @@ type IssueIn struct {
 type IssueUpserted struct {
 	// Created distinguishes a new row from an update.
 	Created bool `json:"created"`
-	// Number is the tracker's own item number.
+	// Number is the todo's own item number.
 	Number int `json:"number"`
 	// Identifier is KEY-<number>.
 	Identifier string `json:"identifier,omitempty"`
@@ -2369,7 +2369,7 @@ type EndIn struct {
 // A coding run (`@hanzo code: <repo> <task>`) is the most cross-app act in the
 // estate: it opens an agents SESSION, resolves and gates an agents TARGET, reads
 // git's CLONE URL, verifies in git that the pushed branch LANDED, and files the
-// PR row in tracker. Five apps, and since the fused monolith went away, five
+// PR row in todo. Five apps, and since the fused monolith went away, five
 // PROCESSES.
 //
 // It was written as five direct Go calls. Each of those reads a package global
@@ -2414,8 +2414,8 @@ const (
 	// that hands it out have to be the same process, and that process is agents.
 	AgentsRouteRun = "agents_route_run"
 
-	// TrackerAgentPR opens the native PR work item for a finished run.
-	TrackerAgentPR = "tracker_agent_pr"
+	// TodoAgentPR opens the native PR work item for a finished run.
+	TodoAgentPR = "todo_agent_pr"
 
 	// CodingStart is the ONE door onto a coding run, for a caller in another
 	// process.

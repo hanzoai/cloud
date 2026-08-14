@@ -242,7 +242,7 @@ func startCodingJob(s *cloud.Service[state], org, userSub, channel, threadTS, re
 
 	// STATE THE TENANT, ON A CONTEXT WITH NO REQUEST BEHIND IT. Both halves are
 	// load-bearing and this is the exact pairing whose absence made every coding
-	// run fail: the engine's balance gate, session store, git reads and tracker
+	// run fail: the engine's balance gate, session store, git reads and todo
 	// write all authorize on the CALLER's org, and a stated caller is only
 	// readable off a detached context.
 	ctx, cancel := codingCallContext(org)

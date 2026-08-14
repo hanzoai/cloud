@@ -12,7 +12,7 @@ package coding
 //
 // A run is a long chain of cross-process calls: open the session (agents), read
 // the clone URL (git), dispatch the sandbox (bot), verify the pushed ref (git),
-// file the PR (tracker). Every one of those authorizes on the CALLER's org,
+// file the PR (todo). Every one of those authorizes on the CALLER's org,
 // never on an argument, because a caller able to name the org could name
 // somebody else's.
 //

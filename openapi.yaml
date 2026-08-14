@@ -25067,23 +25067,6 @@ components:
             $ref: '#/components/schemas/seriesLine'
           type: array
       type: object
-    milestoneView:
-      properties:
-        closed:
-          type: integer
-        dueAt:
-          type: integer
-        id:
-          type: integer
-        open:
-          type: integer
-        repo:
-          type: string
-        state:
-          type: string
-        title:
-          type: string
-      type: object
     mintedKey:
       properties:
         accessKey:
@@ -46011,6 +45994,23 @@ components:
         httpStatus:
           type: integer
       type: object
+    todoProject:
+      properties:
+        createdAt:
+          type: integer
+        description:
+          type: string
+        id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        org:
+          type: string
+        updatedAt:
+          type: integer
+      type: object
     toolCall:
       properties:
         arguments:
@@ -46179,23 +46179,6 @@ components:
           description: Timestamp is the trace's own clock, equal to StartTime for
             a timed call.
           type: string
-      type: object
-    trackerProject:
-      properties:
-        createdAt:
-          type: integer
-        description:
-          type: string
-        id:
-          type: string
-        key:
-          type: string
-        name:
-          type: string
-        org:
-          type: string
-        updatedAt:
-          type: integer
       type: object
     trailPage:
       properties:
@@ -48224,106 +48207,6 @@ paths:
           type: string
       summary: Not served by the tasks console
       x-app: tasks
-  /tracker:
-    delete:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: delete_tracker_app
-      summary: Not served by the Hanzo Todo board
-      x-app: tracker
-    get:
-      description: |-
-        Serves the application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tracker/.
-
-        This is the Hanzo Todo board itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request.
-      operationId: get_tracker_app
-      summary: The Hanzo Todo board
-      x-app: tracker
-    patch:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: patch_tracker_app
-      summary: Not served by the Hanzo Todo board
-      x-app: tracker
-    post:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: post_tracker_app
-      summary: Not served by the Hanzo Todo board
-      x-app: tracker
-    put:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: put_tracker_app
-      summary: Not served by the Hanzo Todo board
-      x-app: tracker
-  /tracker/{wildcard1}:
-    delete:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: delete_tracker_app_assets
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the Hanzo Todo board
-      x-app: tracker
-    get:
-      description: |-
-        Serves the static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link is a shell load, not a 404.
-
-        The one exception is /tracker/assets/, which holds only content-addressed build output: a name that is not there is a purged chunk, never a route, and answers 404. Everywhere else a path that looks like a missing file answers 200 with the shell, so read the content type rather than the status when a resource seems to be missing.
-
-        A bundle that was never built answers 503 under its own name on every path, which is a failed deploy rather than a missing page.
-
-        This is the Hanzo Todo board itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request.
-      operationId: get_tracker_app_assets
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: The Hanzo Todo board's assets and client-side routes
-      x-app: tracker
-    patch:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: patch_tracker_app_assets
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the Hanzo Todo board
-      x-app: tracker
-    post:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: post_tracker_app_assets
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the Hanzo Todo board
-      x-app: tracker
-    put:
-      description: 'Published because this address accepts every method, but a static
-        bundle has no writes: the request is refused 405 and nothing is read or changed.'
-      operationId: put_tracker_app_assets
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served by the Hanzo Todo board
-      x-app: tracker
   /v1/admin/affiliates:
     get:
       description: |-
@@ -71802,7 +71685,7 @@ paths:
   /v1/connector/github/webhook:
     post:
       description: |-
-        The address the GitHub App delivers events to. A push is handed to the repository sync engine, and an issue or issue-comment event is mirrored into the native tracker — idempotently, so the same issue re-syncs to one row however many times it is edited, closed or reopened.
+        The address the GitHub App delivers events to. A push is handed to the repository sync engine, and an issue or issue-comment event is mirrored into the native todo — idempotently, so the same issue re-syncs to one row however many times it is edited, closed or reopened.
 
         It answers a benign 200 for everything it does not act on — the ping, other event types, an unknown installation — deliberately, so GitHub does not enter a retry storm over events that were never going to do anything. Only a bad signature and a genuine sync failure are non-200, and an oversized payload is refused outright.
 
@@ -75855,7 +75738,7 @@ paths:
 
         THE CREDENTIAL IS A SENTRY DSN KEY, NOT A HANZO PRINCIPAL. This is one of the few writes on the platform that carries no bearer and no org header by design — a Sentry SDK has neither — and it is exempt from the principal gate for that reason. The observability plane verifies the DSN key itself, fail-closed: a request without a valid one is refused there, never admitted here. Presenting a Hanzo bearer instead does nothing.
 
-        `project` IS THE DSN'S PROJECT ID — the identifier in the DSN the SDK was configured with, and what the tenant is derived from. It is NOT a Hanzo IAM project and NOT a tracker project key. Only these two ingest paths map through: no observability READ API is reachable by any other suffix under this prefix.
+        `project` IS THE DSN'S PROJECT ID — the identifier in the DSN the SDK was configured with, and what the tenant is derived from. It is NOT a Hanzo IAM project and NOT a todo project key. Only these two ingest paths map through: no observability READ API is reachable by any other suffix under this prefix.
       operationId: post_event_by_project_envelope
       parameters:
       - in: path
@@ -75883,7 +75766,7 @@ paths:
 
         THE CREDENTIAL IS A SENTRY DSN KEY, NOT A HANZO PRINCIPAL. This is one of the few writes on the platform that carries no bearer and no org header by design — a Sentry SDK has neither — and it is exempt from the principal gate for that reason. The observability plane verifies the DSN key itself, fail-closed: a request without a valid one is refused there, never admitted here. Presenting a Hanzo bearer instead does nothing.
 
-        `project` IS THE DSN'S PROJECT ID — the identifier in the DSN the SDK was configured with, and what the tenant is derived from. It is NOT a Hanzo IAM project and NOT a tracker project key. Only these two ingest paths map through: no observability READ API is reachable by any other suffix under this prefix.
+        `project` IS THE DSN'S PROJECT ID — the identifier in the DSN the SDK was configured with, and what the tenant is derived from. It is NOT a Hanzo IAM project and NOT a todo project key. Only these two ingest paths map through: no observability READ API is reachable by any other suffix under this prefix.
       operationId: post_event_by_project_store
       parameters:
       - in: path
@@ -86290,7 +86173,7 @@ paths:
   /v1/integrations/github/issues/backfill:
     post:
       description: |-
-        Seeds the native tracker with the EXISTING issues across the
+        Seeds the native todo with the EXISTING issues across the
         org's granted repos (default state=open); the webhook keeps them live thereafter.
         Org-scoped by the validated principal — a caller only ever backfills its OWN org.
         Synchronous + bounded (a total time budget and an issue cap) so it returns the
@@ -86318,8 +86201,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/githubBackfillResult'
           description: ok
-      summary: Seeds the native tracker with the EXISTING issues across the org's
-        granted repos (default state=open); the webhook keeps them live thereafter.
+      summary: Seeds the native todo with the EXISTING issues across the org's granted
+        repos (default state=open); the webhook keeps them live thereafter.
       tags:
       - integrations
       x-app: integrations
@@ -114742,6 +114625,536 @@ paths:
       tags:
       - templates
       x-app: templates
+  /v1/todo/board:
+    get:
+      description: |-
+        Returns a board's issues — work items with their column, priority,
+        assignee, labels and schedule.
+
+        WHICH board is a filter, not an address. Bound to a repository (the key from
+        the path) it is that project's board; left unbound it is the org's whole
+        board; narrowed by label it is a board smaller than any repository — which is
+        the only way an app that lives as a directory inside a shared repository can
+        have one. Every combination is the same rows through the same projection, so
+        no two boards can disagree about what a column means.
+
+        The column is a LABEL on the forge, so the board and the forge web UI are the
+        same object seen twice: relabelling in either moves the card in both. A closed
+        issue reads as done whatever its labels say.
+      operationId: get_todo_board
+      parameters:
+      - description: |-
+          Key is the project whose issues to list, from the path. EMPTY means every
+          project in the org — the global board. It is a filter like the rest of
+          this struct rather than an address, which is what lets one op answer both
+          "this board" and "all the work" without a second surface disagreeing with
+          the first about what a column is.
+        in: query
+        name: key
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Status keeps only issues in that board column: backlog, todo, in_progress,
+          done or canceled. An unknown value is refused with 400.
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Kind keeps only work items of that shape: issue, pr or epic. An unknown
+          value is refused with 400.
+        in: query
+        name: kind
+        required: false
+        schema:
+          type: string
+      - description: Repo keeps only issues bound to that git repository.
+        in: query
+        name: repo
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Label keeps only issues carrying that label, compared case-insensitively.
+
+          This is how a board narrows to something SMALLER than a repository — the
+          one mechanism for it. An estate whose apps are directories inside one
+          repository (hanzoai/cloud carries ~140 of them) has no repository per app
+          to address, so the app is a label: `label=app/meet` is the meet board.
+          Nothing is provisioned to make one exist; a board is the query.
+        in: query
+        name: label
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Source keeps only issues opened from that surface: team, git, crm,
+          helpdesk, cms or agent. An unknown value is refused with 400.
+        in: query
+        name: source
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Scheduled keeps only issues that carry a date — a start, a due date or
+          both. This is the timeline's slice of the board: pass scheduled=true to
+          get exactly the rows a gantt has somewhere to draw, instead of fetching
+          every issue and discarding the undated ones client-side.
+        in: query
+        name: scheduled
+        required: false
+        schema:
+          type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/issueView'
+                type: array
+          description: ok
+      summary: Returns a board's issues — work items with their column, priority,
+        assignee, labels and schedule.
+      tags:
+      - todo
+      x-app: todo
+  /v1/todo/issues:
+    get:
+      description: |-
+        Answers across every project in the org.
+
+        The org comes from the validated principal and never from the request: a
+        caller able to name the org could read another tenant's backlog, and a search
+        is exactly the shape that would quietly return it.
+      operationId: get_todo_issues
+      parameters:
+      - description: |-
+          Q matches an issue's title or description. A word from the issue, which is
+          what someone remembers — not its number, which is what they are looking up.
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Project narrows to one team key; "" searches every project in the org,
+          which is the point of this op.
+        in: query
+        name: project
+        required: false
+        schema:
+          type: string
+      - description: 'Status keeps one board column: backlog, todo, in_progress, done,
+          canceled.'
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: 'Kind keeps one shape: issue, pr, epic.'
+        in: query
+        name: kind
+        required: false
+        schema:
+          type: string
+      - description: Repo keeps issues bound to one git repository.
+        in: query
+        name: repo
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Source keeps one origin: team, git, crm, helpdesk, cms, agent. "git" is
+          how you ask for the mirrored GitHub issues specifically.
+        in: query
+        name: source
+        required: false
+        schema:
+          type: string
+      - description: Assignee keeps issues held by one person. Pass "me" for yourself.
+        in: query
+        name: assignee
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps the answer; 0 means the default, and anything above the ceiling
+          is clamped rather than refused — a search that errors on being too broad
+          teaches people to guess.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/issueHits'
+          description: ok
+      summary: Answers across every project in the org.
+      tags:
+      - todo
+      x-app: todo
+  /v1/todo/projects:
+    get:
+      description: |-
+        Returns the boards of your org — the places your work actually
+        is. The key addresses the board's issues.
+
+        A BOARD IS A PLACE WORK IS, not an object somebody provisioned. So the list is
+        assembled from the work itself: the repositories your org has filed issues on,
+        plus the boards the index holds. A repository with nothing on it is not in the
+        list and is still perfectly addressable — GET /projects/<name> reads it and a
+        create files into it — so nothing is lost by leaving it out.
+
+        Measured, which is why: reading the forge's whole repository inventory put 745
+        boards here, of which all but a handful were vendored forks and mirrors
+        (.github, .profile, DOMPurify, BoatAttack) that will never carry this org's
+        work. A list that long is not a list — the estate's real roadmap was in it
+        somewhere and no one could see it.
+
+        The forge half is the FORGE's answer for your own account, so two people in
+        one org can legitimately see different boards.
+      operationId: get_todo_projects
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/todoProject'
+                type: array
+          description: ok
+      summary: Returns the boards of your org — the places your work actually is.
+      tags:
+      - todo
+      x-app: todo
+    post:
+      description: |-
+        Answers 405. A todo board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
+
+        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
+
+        What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and read the schedule a milestone is. Those are the routes beside this one.
+      operationId: post_todo_projects
+      summary: Refused — a board is a repository on the forge
+      tags:
+      - todo
+      x-app: todo
+  /v1/todo/projects/{key}:
+    delete:
+      description: |-
+        Answers 405. A todo board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
+
+        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
+
+        What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and read the schedule a milestone is. Those are the routes beside this one.
+      operationId: delete_todo_projects_by_key
+      parameters:
+      - in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      summary: Refused — a board is a repository on the forge
+      tags:
+      - todo
+      x-app: todo
+    get:
+      description: |-
+        Returns one board of your org by its key — the repository name.
+        404 when your org has no repository under that key, or when your own forge
+        account cannot see it.
+      operationId: get_todo_projects_by_key
+      parameters:
+      - description: |-
+          Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting
+          with a letter ("ENG", "OPS2"). Matched case-insensitively.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/todoProject'
+          description: ok
+      summary: Returns one board of your org by its key — the repository name.
+      tags:
+      - todo
+      x-app: todo
+    patch:
+      description: |-
+        Answers 405. A todo board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
+
+        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
+
+        What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and read the schedule a milestone is. Those are the routes beside this one.
+      operationId: patch_todo_projects_by_key
+      parameters:
+      - in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      summary: Refused — a board is a repository on the forge
+      tags:
+      - todo
+      x-app: todo
+  /v1/todo/projects/{key}/issues:
+    get:
+      description: |-
+        Returns a board's issues — work items with their column, priority,
+        assignee, labels and schedule.
+
+        WHICH board is a filter, not an address. Bound to a repository (the key from
+        the path) it is that project's board; left unbound it is the org's whole
+        board; narrowed by label it is a board smaller than any repository — which is
+        the only way an app that lives as a directory inside a shared repository can
+        have one. Every combination is the same rows through the same projection, so
+        no two boards can disagree about what a column means.
+
+        The column is a LABEL on the forge, so the board and the forge web UI are the
+        same object seen twice: relabelling in either moves the card in both. A closed
+        issue reads as done whatever its labels say.
+      operationId: get_todo_projects_by_key_issues
+      parameters:
+      - description: |-
+          Key is the project whose issues to list, from the path. EMPTY means every
+          project in the org — the global board. It is a filter like the rest of
+          this struct rather than an address, which is what lets one op answer both
+          "this board" and "all the work" without a second surface disagreeing with
+          the first about what a column is.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      - description: |-
+          Status keeps only issues in that board column: backlog, todo, in_progress,
+          done or canceled. An unknown value is refused with 400.
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Kind keeps only work items of that shape: issue, pr or epic. An unknown
+          value is refused with 400.
+        in: query
+        name: kind
+        required: false
+        schema:
+          type: string
+      - description: Repo keeps only issues bound to that git repository.
+        in: query
+        name: repo
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Label keeps only issues carrying that label, compared case-insensitively.
+
+          This is how a board narrows to something SMALLER than a repository — the
+          one mechanism for it. An estate whose apps are directories inside one
+          repository (hanzoai/cloud carries ~140 of them) has no repository per app
+          to address, so the app is a label: `label=app/meet` is the meet board.
+          Nothing is provisioned to make one exist; a board is the query.
+        in: query
+        name: label
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Source keeps only issues opened from that surface: team, git, crm,
+          helpdesk, cms or agent. An unknown value is refused with 400.
+        in: query
+        name: source
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Scheduled keeps only issues that carry a date — a start, a due date or
+          both. This is the timeline's slice of the board: pass scheduled=true to
+          get exactly the rows a gantt has somewhere to draw, instead of fetching
+          every issue and discarding the undated ones client-side.
+        in: query
+        name: scheduled
+        required: false
+        schema:
+          type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/issueView'
+                type: array
+          description: ok
+      summary: Returns a board's issues — work items with their column, priority,
+        assignee, labels and schedule.
+      tags:
+      - todo
+      x-app: todo
+    post:
+      description: |-
+        Opens a work item on the board — an issue on that repository on
+        the deployment's forge, filed as YOU.
+
+        The column and priority are written as LABELS, which is what makes the card
+        and the forge issue the same object: someone relabelling in the forge web UI
+        has moved your card.
+      operationId: post_todo_projects_by_key_issues
+      parameters:
+      - description: Key is the board — the repository name, from the path.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/newIssue'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/issueView'
+          description: ok
+      summary: Opens a work item on the board — an issue on that repository on the
+        deployment's forge, filed as YOU.
+      tags:
+      - todo
+      x-app: todo
+  /v1/todo/projects/{key}/issues/{num}:
+    get:
+      description: |-
+        Returns ONE work item in full — its description included.
+
+        The list reads answer a board, and a board is a summary: the description is
+        where the actual content of a work item lives — what an issue asks for, what
+        an epic's acceptance criteria are — and no read on this surface returned it.
+        The address is the one PATCH already accepts, so an item you can move is now
+        an item you can read.
+
+        It reads the forge directly rather than filtering the org fan-out, then falls
+        back to the index for a board the forge has never heard of — the same order,
+        and the same reason, as GetProject: a row is one kind of thing however it came
+        to exist, so a caller does not have to know which store it is in to fetch it.
+      operationId: get_todo_projects_by_key_issues_by_num
+      parameters:
+      - description: Key is the board — the repository name, or an index board's key.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      - description: Num is the issue's number on that board.
+        in: path
+        name: num
+        required: true
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/issueView'
+          description: ok
+      summary: Returns ONE work item in full — its description included.
+      tags:
+      - todo
+      x-app: todo
+    patch:
+      description: |-
+        Edits a work item — rename it, rewrite it, move it to another
+        column, or re-prioritise it. Absent fields are left alone.
+
+        MOVING A CARD IS A RELABEL. The column lives in the forge's label set, so the
+        move replaces that set rather than writing a status column here that a
+        forge-side change could contradict. Moving to `done` also CLOSES the issue on
+        the forge, because a done card and an open issue are a contradiction.
+      operationId: patch_todo_projects_by_key_issues_by_num
+      parameters:
+      - description: Key is the board — the repository name, from the path.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      - description: Num is the issue number on that repository, from the path.
+        in: path
+        name: num
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/issueEdit'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/issueView'
+          description: ok
+      summary: Edits a work item — rename it, rewrite it, move it to another column,
+        or re-prioritise it.
+      tags:
+      - todo
+      x-app: todo
+  /v1/todo/projects/{key}/issues/{num}/claim:
+    post:
+      description: |-
+        Takes an issue: it becomes yours and it moves to in_progress.
+
+        The holder is the CALLER, never an argument. "Assign this to someone else" is
+        a different act with different authority, and it already exists as a PATCH;
+        conflating them would let anyone hand work to anyone by naming them.
+
+        Claiming something already held by someone else is refused rather than
+        silently taken — two agents on one issue is the failure this prevents, and a
+        claim that quietly wins a race is worse than one that says no.
+      operationId: post_todo_projects_by_key_issues_by_num_claim
+      parameters:
+      - in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: num
+        required: true
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/issueHit'
+          description: ok
+      summary: 'Takes an issue: it becomes yours and it moves to in_progress.'
+      tags:
+      - todo
+      x-app: todo
   /v1/tokens/{chain}/{address}:
     get:
       description: |-
@@ -115122,522 +115535,6 @@ paths:
       tags:
       - traces
       x-app: metrics
-  /v1/tracker/board:
-    get:
-      description: |-
-        Returns a board's issues — work items with their column, priority,
-        assignee, labels and schedule.
-
-        WHICH board is a filter, not an address. Bound to a repository (the key from
-        the path) it is that project's board; left unbound it is the org's whole
-        board; narrowed by label it is a board smaller than any repository — which is
-        the only way an app that lives as a directory inside a shared repository can
-        have one. Every combination is the same rows through the same projection, so
-        no two boards can disagree about what a column means.
-
-        The column is a LABEL on the forge, so the board and the forge web UI are the
-        same object seen twice: relabelling in either moves the card in both. A closed
-        issue reads as done whatever its labels say.
-      operationId: get_tracker_board
-      parameters:
-      - description: |-
-          Key is the project whose issues to list, from the path. EMPTY means every
-          project in the org — the global board. It is a filter like the rest of
-          this struct rather than an address, which is what lets one op answer both
-          "this board" and "all the work" without a second surface disagreeing with
-          the first about what a column is.
-        in: query
-        name: key
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Status keeps only issues in that board column: backlog, todo, in_progress,
-          done or canceled. An unknown value is refused with 400.
-        in: query
-        name: status
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Kind keeps only work items of that shape: issue, pr or epic. An unknown
-          value is refused with 400.
-        in: query
-        name: kind
-        required: false
-        schema:
-          type: string
-      - description: Repo keeps only issues bound to that git repository.
-        in: query
-        name: repo
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Label keeps only issues carrying that label, compared case-insensitively.
-
-          This is how a board narrows to something SMALLER than a repository — the
-          one mechanism for it. An estate whose apps are directories inside one
-          repository (hanzoai/cloud carries ~140 of them) has no repository per app
-          to address, so the app is a label: `label=app/meet` is the meet board.
-          Nothing is provisioned to make one exist; a board is the query.
-        in: query
-        name: label
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Source keeps only issues opened from that surface: team, git, crm,
-          helpdesk, cms or agent. An unknown value is refused with 400.
-        in: query
-        name: source
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Scheduled keeps only issues that carry a date — a start, a due date or
-          both. This is the timeline's slice of the board: pass scheduled=true to
-          get exactly the rows a gantt has somewhere to draw, instead of fetching
-          every issue and discarding the undated ones client-side.
-        in: query
-        name: scheduled
-        required: false
-        schema:
-          type: boolean
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/issueView'
-                type: array
-          description: ok
-      summary: Returns a board's issues — work items with their column, priority,
-        assignee, labels and schedule.
-      tags:
-      - tracker
-      x-app: tracker
-  /v1/tracker/issues:
-    get:
-      description: |-
-        Answers across every project in the org.
-
-        The org comes from the validated principal and never from the request: a
-        caller able to name the org could read another tenant's backlog, and a search
-        is exactly the shape that would quietly return it.
-      operationId: get_tracker_issues
-      parameters:
-      - description: |-
-          Q matches an issue's title or description. A word from the issue, which is
-          what someone remembers — not its number, which is what they are looking up.
-        in: query
-        name: q
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Project narrows to one team key; "" searches every project in the org,
-          which is the point of this op.
-        in: query
-        name: project
-        required: false
-        schema:
-          type: string
-      - description: 'Status keeps one board column: backlog, todo, in_progress, done,
-          canceled.'
-        in: query
-        name: status
-        required: false
-        schema:
-          type: string
-      - description: 'Kind keeps one shape: issue, pr, epic.'
-        in: query
-        name: kind
-        required: false
-        schema:
-          type: string
-      - description: Repo keeps issues bound to one git repository.
-        in: query
-        name: repo
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Source keeps one origin: team, git, crm, helpdesk, cms, agent. "git" is
-          how you ask for the mirrored GitHub issues specifically.
-        in: query
-        name: source
-        required: false
-        schema:
-          type: string
-      - description: Assignee keeps issues held by one person. Pass "me" for yourself.
-        in: query
-        name: assignee
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Limit caps the answer; 0 means the default, and anything above the ceiling
-          is clamped rather than refused — a search that errors on being too broad
-          teaches people to guess.
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/issueHits'
-          description: ok
-      summary: Answers across every project in the org.
-      tags:
-      - tracker
-      x-app: tracker
-  /v1/tracker/milestones:
-    get:
-      description: |-
-        Returns every milestone across your org's repositories, each
-        stamped with the repository it belongs to.
-
-        The forge scopes milestones to a repository and publishes no org-level list,
-        so this is a server-side fan-out over the repositories you can see. It runs
-        here rather than in the browser because a client-side fan-out would need the
-        forge reachable from the page and a credential held there.
-      operationId: get_tracker_milestones
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/milestoneView'
-                type: array
-          description: ok
-      summary: Returns every milestone across your org's repositories, each stamped
-        with the repository it belongs to.
-      tags:
-      - tracker
-      x-app: tracker
-  /v1/tracker/projects:
-    get:
-      description: |-
-        Returns the boards of your org — the places your work actually
-        is. The key addresses the board's issues.
-
-        A BOARD IS A PLACE WORK IS, not an object somebody provisioned. So the list is
-        assembled from the work itself: the repositories your org has filed issues on,
-        plus the boards the index holds. A repository with nothing on it is not in the
-        list and is still perfectly addressable — GET /projects/<name> reads it and a
-        create files into it — so nothing is lost by leaving it out.
-
-        Measured, which is why: reading the forge's whole repository inventory put 745
-        boards here, of which all but a handful were vendored forks and mirrors
-        (.github, .profile, DOMPurify, BoatAttack) that will never carry this org's
-        work. A list that long is not a list — the estate's real roadmap was in it
-        somewhere and no one could see it.
-
-        The forge half is the FORGE's answer for your own account, so two people in
-        one org can legitimately see different boards.
-      operationId: get_tracker_projects
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/trackerProject'
-                type: array
-          description: ok
-      summary: Returns the boards of your org — the places your work actually is.
-      tags:
-      - tracker
-      x-app: tracker
-    post:
-      description: |-
-        Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
-
-        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
-
-        What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.
-      operationId: post_tracker_projects
-      summary: Refused — a board is a repository on the forge
-      tags:
-      - tracker
-      x-app: tracker
-  /v1/tracker/projects/{key}:
-    delete:
-      description: |-
-        Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
-
-        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
-
-        What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.
-      operationId: delete_tracker_projects_by_key
-      parameters:
-      - in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      summary: Refused — a board is a repository on the forge
-      tags:
-      - tracker
-      x-app: tracker
-    get:
-      description: |-
-        Returns one board of your org by its key — the repository name.
-        404 when your org has no repository under that key, or when your own forge
-        account cannot see it.
-      operationId: get_tracker_projects_by_key
-      parameters:
-      - description: |-
-          Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting
-          with a letter ("ENG", "OPS2"). Matched case-insensitively.
-        in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/trackerProject'
-          description: ok
-      summary: Returns one board of your org by its key — the repository name.
-      tags:
-      - tracker
-      x-app: tracker
-    patch:
-      description: |-
-        Answers 405. A tracker board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
-
-        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
-
-        What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and roll milestones up across the org. Those are the routes beside this one.
-      operationId: patch_tracker_projects_by_key
-      parameters:
-      - in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      summary: Refused — a board is a repository on the forge
-      tags:
-      - tracker
-      x-app: tracker
-  /v1/tracker/projects/{key}/issues:
-    get:
-      description: |-
-        Returns a board's issues — work items with their column, priority,
-        assignee, labels and schedule.
-
-        WHICH board is a filter, not an address. Bound to a repository (the key from
-        the path) it is that project's board; left unbound it is the org's whole
-        board; narrowed by label it is a board smaller than any repository — which is
-        the only way an app that lives as a directory inside a shared repository can
-        have one. Every combination is the same rows through the same projection, so
-        no two boards can disagree about what a column means.
-
-        The column is a LABEL on the forge, so the board and the forge web UI are the
-        same object seen twice: relabelling in either moves the card in both. A closed
-        issue reads as done whatever its labels say.
-      operationId: get_tracker_projects_by_key_issues
-      parameters:
-      - description: |-
-          Key is the project whose issues to list, from the path. EMPTY means every
-          project in the org — the global board. It is a filter like the rest of
-          this struct rather than an address, which is what lets one op answer both
-          "this board" and "all the work" without a second surface disagreeing with
-          the first about what a column is.
-        in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      - description: |-
-          Status keeps only issues in that board column: backlog, todo, in_progress,
-          done or canceled. An unknown value is refused with 400.
-        in: query
-        name: status
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Kind keeps only work items of that shape: issue, pr or epic. An unknown
-          value is refused with 400.
-        in: query
-        name: kind
-        required: false
-        schema:
-          type: string
-      - description: Repo keeps only issues bound to that git repository.
-        in: query
-        name: repo
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Label keeps only issues carrying that label, compared case-insensitively.
-
-          This is how a board narrows to something SMALLER than a repository — the
-          one mechanism for it. An estate whose apps are directories inside one
-          repository (hanzoai/cloud carries ~140 of them) has no repository per app
-          to address, so the app is a label: `label=app/meet` is the meet board.
-          Nothing is provisioned to make one exist; a board is the query.
-        in: query
-        name: label
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Source keeps only issues opened from that surface: team, git, crm,
-          helpdesk, cms or agent. An unknown value is refused with 400.
-        in: query
-        name: source
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Scheduled keeps only issues that carry a date — a start, a due date or
-          both. This is the timeline's slice of the board: pass scheduled=true to
-          get exactly the rows a gantt has somewhere to draw, instead of fetching
-          every issue and discarding the undated ones client-side.
-        in: query
-        name: scheduled
-        required: false
-        schema:
-          type: boolean
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/issueView'
-                type: array
-          description: ok
-      summary: Returns a board's issues — work items with their column, priority,
-        assignee, labels and schedule.
-      tags:
-      - tracker
-      x-app: tracker
-    post:
-      description: |-
-        Opens a work item on the board — an issue on that repository on
-        the deployment's forge, filed as YOU.
-
-        The column and priority are written as LABELS, which is what makes the card
-        and the forge issue the same object: someone relabelling in the forge web UI
-        has moved your card.
-      operationId: post_tracker_projects_by_key_issues
-      parameters:
-      - description: Key is the board — the repository name, from the path.
-        in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/newIssue'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/issueView'
-          description: ok
-      summary: Opens a work item on the board — an issue on that repository on the
-        deployment's forge, filed as YOU.
-      tags:
-      - tracker
-      x-app: tracker
-  /v1/tracker/projects/{key}/issues/{num}:
-    patch:
-      description: |-
-        Edits a work item — rename it, rewrite it, move it to another
-        column, or re-prioritise it. Absent fields are left alone.
-
-        MOVING A CARD IS A RELABEL. The column lives in the forge's label set, so the
-        move replaces that set rather than writing a status column here that a
-        forge-side change could contradict. Moving to `done` also CLOSES the issue on
-        the forge, because a done card and an open issue are a contradiction.
-      operationId: patch_tracker_projects_by_key_issues_by_num
-      parameters:
-      - description: Key is the board — the repository name, from the path.
-        in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      - description: Num is the issue number on that repository, from the path.
-        in: path
-        name: num
-        required: true
-        schema:
-          type: integer
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/issueEdit'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/issueView'
-          description: ok
-      summary: Edits a work item — rename it, rewrite it, move it to another column,
-        or re-prioritise it.
-      tags:
-      - tracker
-      x-app: tracker
-  /v1/tracker/projects/{key}/issues/{num}/claim:
-    post:
-      description: |-
-        Takes an issue: it becomes yours and it moves to in_progress.
-
-        The holder is the CALLER, never an argument. "Assign this to someone else" is
-        a different act with different authority, and it already exists as a PATCH;
-        conflating them would let anyone hand work to anyone by naming them.
-
-        Claiming something already held by someone else is refused rather than
-        silently taken — two agents on one issue is the failure this prevents, and a
-        claim that quietly wins a race is worse than one that says no.
-      operationId: post_tracker_projects_by_key_issues_by_num_claim
-      parameters:
-      - in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: num
-        required: true
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/issueHit'
-          description: ok
-      summary: 'Takes an issue: it becomes yours and it moves to in_progress.'
-      tags:
-      - tracker
-      x-app: tracker
   /v1/traffic/globe:
     get:
       description: |-
@@ -118117,6 +118014,9 @@ tags:
 - description: Package templates is a gallery of starter kits you can deploy as they
     come.
   name: templates
+- description: 'Package todo is Hanzo Todo: boards, the work items on them, and the
+    filters that make a board.'
+  name: todo
 - description: 'Package web3 is the chain-access surface: which chains this deployment
     can reach, a JSON-RPC door onto each, and the two token reads every wallet UI
     needs.'
@@ -118125,9 +118025,6 @@ tags:
     actions, functions, agents, skills and your own MCP servers.'
   name: tools
 - name: traces
-- description: 'Package tracker is Hanzo Todo: boards, the work items on them, and
-    the filters that make a board.'
-  name: tracker
 - description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
     /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
     a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
