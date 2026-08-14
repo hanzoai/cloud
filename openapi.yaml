@@ -111794,6 +111794,47 @@ paths:
       tags:
       - sites
       x-app: projects
+  /v1/sites/{slug}:
+    get:
+      description: |-
+        Returns one site — the same row ListSites carries, for one slug.
+
+        Every sub-resource under a site already answered: deployments, releases,
+        publish. The site itself did not, and a route that is never registered
+        answers 404 for a LIVE site exactly as it does for one that was never
+        created. So the one call a client makes to ask "is it there yet?" could only
+        ever say no, and a CI lane watching for its own publish would wait forever on
+        a success it had already achieved.
+
+        The org is the caller's, never a path segment. A slug is unique within an org
+        and two orgs may both own `tel`; taking the org from the validated principal
+        instead of the URL means a caller cannot read another org's site by editing a
+        path, and it is the same scope ListProjects and ListSites already use.
+
+        A site that exists but is not live is NOT found here, matching ListSites,
+        which keeps only `live` rows so a draft or a failed build is never advertised
+        as a site. One definition of "is a site", used by both.
+      operationId: get_sites_by_slug
+      parameters:
+      - description: |-
+          Slug is the project to act on, from the path. It is unique within the
+          caller's org and nowhere else, so another tenant's slug is a 404.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsSite'
+          description: ok
+      summary: Returns one site — the same row ListSites carries, for one slug.
+      tags:
+      - sites
+      x-app: projects
   /v1/sites/{slug}/deployments:
     get:
       description: |-
