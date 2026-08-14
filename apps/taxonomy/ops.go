@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -69,20 +69,97 @@ func routes(app cloud.Router, s *service) {
 	zip.Delete(g, "/taxa/:id", o.deleteTaxon)
 }
 
-// editor reports whether the caller may change the catalogue, and is the ONE
-// place this package asks. It is the platform's one authorization rule
-// (cloud.Scope.Admits over cloud.AuthorityOf) applied at cloud.Super — platform
-// sudo — because there is one catalogue for the whole platform and an org admin
-// who could rename a category would rename it for every other tenant.
+// audience is the org whose rows the caller may SEE beside the platform's, and
+// empty for a signed-out visitor. It is the read half of tenancy and it reads one
+// value: the org on the validated principal, which the identity boundary mints
+// and a client cannot supply.
+func audience(ctx context.Context) string {
+	org, _ := principal.OrgFrom(ctx)
+	return org
+}
+
+// writable is the org whose rows the caller may CHANGE, or a refusal. It is the
+// ONE place this package decides authority, and it decides between exactly the two
+// scopes the platform already has — never a third notion of its own:
 //
-// It reads the REQUEST rather than the tenant because admin-ness is a claim the
-// identity boundary mints into a header, which principal.OrgFrom does not carry.
-// False off the HTTP path, where there is no request and so no attested caller —
-// which fails closed, since every write below gates on it and the read only ever
-// widens what it shows.
-func editor(ctx context.Context) bool {
+//	SuperAdmin (cloud.Super: validated AND a member of the reserved admin org)
+//	           writes the PLATFORM catalogue, the rows every tenant sees.
+//	an ORG ADMIN (principal.IsOrgAdmin — "admin of my own org", which
+//	           SanitizeIdentity strips on ingress and re-mints only from a
+//	           validated claim) writes THEIR OWN org's rows and no others.
+//
+// The two are kept apart deliberately, because conflating them is a privilege
+// escalation and not a shortcut: an org admin reaching the platform rows would
+// rename a category for every other tenant, so an admin whose own org IS the
+// platform org is refused here too unless they are also platform sudo. That
+// refusal is the escalation case, and it is one line.
+//
+// The owner is DERIVED and never named by the caller. There is no request field
+// that says whose catalogue to write, so "write org B's row" is not a request this
+// API can express — the worst a caller can do by naming B's id is write their own.
+//
+// It reads the REQUEST because admin-ness is a claim carried in a header, which
+// principal.OrgFrom does not carry. It fails closed off the HTTP path, where there
+// is no attested caller at all.
+func writable(ctx context.Context) (string, error) {
 	c, ok := cloud.Request(ctx)
-	return ok && cloud.Super.Admits(cloud.AuthorityOf(c))
+	if !ok {
+		return "", cloud.Super.Refusal()
+	}
+	if cloud.Super.Admits(cloud.AuthorityOf(c)) {
+		return platformOrg, nil
+	}
+	org, ok := principal.Org(c)
+	if !ok || !principal.IsOrgAdmin(c) {
+		return "", zip.ErrForbidden("an org admin edits their own catalogue; the platform's needs a SuperAdmin")
+	}
+	if org == platformOrg {
+		return "", zip.ErrForbidden("the platform catalogue is edited by a SuperAdmin, not by an admin of the platform's own org")
+	}
+	return org, nil
+}
+
+// mine reports whether the caller may change this row, which is also the rule for
+// SHOWING an unpublished one: staging is only useful to whoever can unstage it, and
+// a row nobody can see is not staged, it is lost. One predicate, both questions.
+func mine(writer, owner string) bool { return writer != "" && writer == owner }
+
+// keyed is a row that knows whose it is and what it is called — the two halves of
+// its primary key. Both tables answer it, so the projection below is written once.
+type keyed interface{ key() (owner, id string) }
+
+func (c Category) key() (string, string) { return c.Owner, c.ID }
+func (t Taxon) key() (string, string)    { return t.Owner, t.ID }
+
+// own settles a collision between the caller's org and the platform on the same
+// id, in the caller's favour, preserving order. It is the ONE place that rule
+// lives, applied identically to categories and to taxa, so a console can never see
+// one id twice and never has to guess which of two rows it is looking at.
+//
+// Ids are unique per ORG rather than globally, and that is deliberate: a global id
+// would make one customer's write fail because ANOTHER customer already used the
+// name, and that refusal would be an observation of a tenant they may not observe.
+// The price of keeping tenants blind to each other is that a collision with the
+// platform is possible, so this decides it — rather than leaving the console to
+// take whichever row it read last.
+func own[T keyed](rows []T, org string) []T {
+	if org == "" || org == platformOrg {
+		return rows
+	}
+	shadowed := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		if owner, id := r.key(); owner == org {
+			shadowed[id] = true
+		}
+	}
+	out := make([]T, 0, len(rows))
+	for _, r := range rows {
+		if owner, id := r.key(); owner != org && shadowed[id] {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // ── the wire ────────────────────────────────────────────────────────────────
@@ -97,6 +174,10 @@ type Taxonomy struct {
 // Category is one grouping of products — the sections the console's navigation and
 // the marketing landing are built from.
 type Category struct {
+	// Owner is the org this category belongs to: the platform's own org for a
+	// category every tenant sees, or your org for one you added. It tells a console
+	// which rows it may offer to edit.
+	Owner string `json:"owner"`
 	// ID is the stable slug this category is addressed by, e.g. "observe".
 	ID string `json:"id"`
 	// Label is the display name, e.g. "Observe".
@@ -116,6 +197,10 @@ type Category struct {
 // Taxon is one product in the catalogue: what it is called, where it sits, and how
 // it opens.
 type Taxon struct {
+	// Owner is the org this product belongs to: the platform's own org for one
+	// every tenant sees, or your org for one you added. Where two rows share an id,
+	// yours is the one served.
+	Owner string `json:"owner"`
 	// ID is the stable slug this taxon is addressed by, e.g. "vector".
 	ID string `json:"id"`
 	// Name is the display name, e.g. "Vector".
@@ -216,31 +301,44 @@ type taxonIn struct {
 
 // ── handlers ────────────────────────────────────────────────────────────────
 
-// Read returns the whole product catalogue: every category in display order, each
-// carrying the products filed under it in theirs. This is what the console's
-// navigation and the marketing landing page are rendered from, and it is readable
-// signed out — it holds no tenant data, only the same list of products every
-// visitor sees.
+// Read returns the product catalogue as this caller sees it: the PLATFORM
+// catalogue — Hanzo's own products, the part that is true for everyone — plus the
+// caller's own org's rows, every category in display order and each carrying the
+// products filed under it in theirs. Another customer's rows are never in it. It
+// is readable signed out, and a signed-out visitor gets the platform catalogue
+// alone, which is what the marketing landing renders from.
+//
+// Where the caller's org and the platform hold the same id, the caller's own row
+// is the one served. That rule exists because ids are unique per ORG and not
+// globally — two customers may each have a "crm", and refusing the second would
+// tell one of them the other exists — so a collision with the platform is possible
+// by construction and something has to win deterministically. Yours does: your own
+// catalogue is the one you edited.
 //
 // `?brand=` narrows it the way a brand's own console does: only the categories
-// that brand admits, and within them only the taxa scoped to it. Unpublished
-// taxa are served to a platform SuperAdmin alone, so the editor can see what it
-// has staged while nobody else can.
+// that brand admits, and within them only the taxa scoped to it. An unpublished
+// row is served only to whoever may edit it — a SuperAdmin for the platform's, an
+// org admin for their own — so a product can be staged before anyone sees it
+// without becoming invisible to the person staging it.
 func (o ops) read(ctx context.Context, in *readIn) (*Taxonomy, error) {
-	staged := editor(ctx)
-	cats, err := o.s.store.Categories(ctx)
+	org := audience(ctx)
+	// A refusal here is "you may edit nothing", which is a perfectly good answer for
+	// a reader: it means no unpublished row is shown. The read never fails on it.
+	writer, _ := writable(ctx)
+
+	cats, err := o.s.store.Categories(ctx, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "read taxonomy: %v", err)
 	}
-	taxa, err := o.s.store.Taxa(ctx, "")
+	taxa, err := o.s.store.Taxa(ctx, org, "")
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "read taxonomy: %v", err)
 	}
 	brand := strings.TrimSpace(in.Brand)
 
 	filed := make(map[string][]Taxon, len(cats))
-	for _, e := range taxa {
-		if !e.Published && !staged {
+	for _, e := range own(taxa, org) {
+		if !e.Published && !mine(writer, e.Owner) {
 			continue
 		}
 		if !shows(brand, e.Brands) {
@@ -249,7 +347,7 @@ func (o ops) read(ctx context.Context, in *readIn) (*Taxonomy, error) {
 		filed[e.Category] = append(filed[e.Category], e)
 	}
 	out := &Taxonomy{Categories: make([]Category, 0, len(cats))}
-	for _, c := range cats {
+	for _, c := range own(cats, org) {
 		if !shows(brand, c.Brands) {
 			continue
 		}
@@ -272,8 +370,9 @@ func (o ops) read(ctx context.Context, in *readIn) (*Taxonomy, error) {
 //
 // Example: {"label": "Observe", "summary": "Traces, metrics, logs and alerts.", "order": 6}
 func (o ops) putCategory(ctx context.Context, in *categoryIn) (*Category, error) {
-	if !editor(ctx) {
-		return nil, cloud.Super.Refusal()
+	owner, err := writable(ctx)
+	if err != nil {
+		return nil, err
 	}
 	id, err := slug(in.ID)
 	if err != nil {
@@ -291,14 +390,14 @@ func (o ops) putCategory(ctx context.Context, in *categoryIn) (*Category, error)
 	if err != nil {
 		return nil, err
 	}
-	c := Category{ID: id, Label: label, Summary: summary, Order: in.Order, Brands: brands}
+	c := Category{Owner: owner, ID: id, Label: label, Summary: summary, Order: in.Order, Brands: brands}
 	if err := o.s.store.PutCategory(ctx, c); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "put category: %v", err)
 	}
 	// Read back what is filed under it rather than answering with an empty list.
 	// Renaming a category that holds 37 products and being told it holds none is a
 	// lie the editor would render.
-	if c.Taxa, err = o.s.store.Taxa(ctx, id); err != nil {
+	if c.Taxa, err = o.s.store.Taxa(ctx, owner, id); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "put category: %v", err)
 	}
 	if c.Taxa == nil {
@@ -313,14 +412,15 @@ func (o ops) putCategory(ctx context.Context, in *categoryIn) (*Category, error)
 // rows naming a category that no longer exists — is a catalogue that cannot be
 // rendered. Move or delete its taxa first. An id no category holds is a 404.
 func (o ops) deleteCategory(ctx context.Context, in *idIn) (*deleted, error) {
-	if !editor(ctx) {
-		return nil, cloud.Super.Refusal()
+	owner, err := writable(ctx)
+	if err != nil {
+		return nil, err
 	}
 	id, err := slug(in.ID)
 	if err != nil {
 		return nil, err
 	}
-	n, err := o.s.store.CountTaxa(ctx, id)
+	n, err := o.s.store.CountTaxa(ctx, owner, id)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "delete category: %v", err)
 	}
@@ -328,7 +428,7 @@ func (o ops) deleteCategory(ctx context.Context, in *idIn) (*deleted, error) {
 		return nil, zip.Errorf(http.StatusConflict,
 			"category %q still holds %d taxa; move or delete them first", id, n)
 	}
-	removed, err := o.s.store.DeleteCategory(ctx, id)
+	removed, err := o.s.store.DeleteCategory(ctx, owner, id)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "delete category: %v", err)
 	}
@@ -351,8 +451,9 @@ func (o ops) deleteCategory(ctx context.Context, in *idIn) (*deleted, error) {
 //
 // Example: {"name": "Vector", "description": "Managed vector search.", "category": "data", "icon": "Database", "route": "/vector", "tags": ["search"], "order": 3}
 func (o ops) putTaxon(ctx context.Context, in *taxonIn) (*Taxon, error) {
-	if !editor(ctx) {
-		return nil, cloud.Super.Refusal()
+	owner, err := writable(ctx)
+	if err != nil {
+		return nil, err
 	}
 	id, err := slug(in.ID)
 	if err != nil {
@@ -403,7 +504,7 @@ func (o ops) putTaxon(ctx context.Context, in *taxonIn) (*Taxon, error) {
 	if err != nil {
 		return nil, err
 	}
-	known, err := o.s.store.HasCategory(ctx, category)
+	known, err := o.s.store.HasCategory(ctx, owner, category)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "put taxon: %v", err)
 	}
@@ -411,7 +512,7 @@ func (o ops) putTaxon(ctx context.Context, in *taxonIn) (*Taxon, error) {
 		return nil, zip.ErrBadRequest("no such category: " + category)
 	}
 	e := Taxon{
-		ID: id, Name: name, Description: description, Category: category,
+		Owner: owner, ID: id, Name: name, Description: description, Category: category,
 		Tags: tags, Icon: icon, Route: route, Href: href, Brands: brands,
 		Order: in.Order, Published: in.Published == nil || *in.Published,
 	}
@@ -425,14 +526,15 @@ func (o ops) putTaxon(ctx context.Context, in *taxonIn) (*Taxon, error) {
 // 404. To take a product out of view without losing what was written about it, set
 // `published` to false instead.
 func (o ops) deleteTaxon(ctx context.Context, in *idIn) (*deleted, error) {
-	if !editor(ctx) {
-		return nil, cloud.Super.Refusal()
+	owner, err := writable(ctx)
+	if err != nil {
+		return nil, err
 	}
 	id, err := slug(in.ID)
 	if err != nil {
 		return nil, err
 	}
-	removed, err := o.s.store.DeleteTaxon(ctx, id)
+	removed, err := o.s.store.DeleteTaxon(ctx, owner, id)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "delete taxon: %v", err)
 	}

@@ -5,22 +5,28 @@ package taxonomy
 // (born encrypted under the key cek derives from the process master, and returned
 // with the single-connection cap that serializes writes against the file lock).
 //
-// There is no tenancy key, and that absence is the design. This is ONE catalogue
-// for the whole platform — the same categories and the same products for every
-// caller of every brand — so a per-org column would invite 400 divergent copies of
-// a list whose whole value is that it is the same one. Per-BRAND visibility is a
-// property of a row (Brands), not a separate store: a brand sees a subset of the
-// one catalogue, never a catalogue of its own.
+// EVERY ROW BELONGS TO AN ORG, and (owner, id) is the primary key. That composite
+// is forced by tenancy rather than chosen for convenience: a global id would make
+// one org's write fail because a DIFFERENT org already used that name, and a
+// refusal is an observation — org A would learn that org B holds "crm" without
+// ever reading a row. Two customers may each have a "crm", and neither may learn
+// the other exists.
+//
+// ONE table, two audiences. The platform's own catalogue is the rows owned by the
+// hanzo org; a customer's rows are owned by that customer. There is deliberately
+// no second table for "customer taxonomy": one record, projected per audience, so
+// the two answers cannot drift apart.
 //
 // NO SECRETS. A category label, a product name, an icon name and a route are all
-// public by construction — the read serves them to a signed-out visitor. Nothing
-// here needs custody, and anything that did would not belong in this table.
+// public within the audience that may see them — the platform rows are served to a
+// signed-out visitor. Nothing here needs custody, and anything that did would not
+// belong in this table.
 //
 // Lists (Tags, Brands) are stored as JSON text. SQLite has no array type, the
 // lists are a handful of short slugs, and the alternative — a join table per list
 // — would triple the schema to answer a question nobody asks (nothing here selects
-// "every taxon with tag X" from the database; the whole catalogue is one small
-// read the caller filters).
+// "every taxon with tag X" from the database; a caller's whole catalogue is one
+// small read).
 
 import (
 	"context"
@@ -59,14 +65,17 @@ func openStore(dir string) (*Store, error) {
 func (s *Store) migrate() error {
 	const ddl = `
 CREATE TABLE IF NOT EXISTS category (
-  id      TEXT NOT NULL PRIMARY KEY,
+  owner   TEXT NOT NULL,
+  id      TEXT NOT NULL,
   label   TEXT NOT NULL,
   summary TEXT NOT NULL DEFAULT '',
   display INTEGER NOT NULL DEFAULT 0,
-  brands  TEXT NOT NULL DEFAULT '[]'
+  brands  TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY (owner, id)
 );
 CREATE TABLE IF NOT EXISTS taxon (
-  id          TEXT NOT NULL PRIMARY KEY,
+  owner       TEXT NOT NULL,
+  id          TEXT NOT NULL,
   name        TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   category    TEXT NOT NULL,
@@ -76,9 +85,10 @@ CREATE TABLE IF NOT EXISTS taxon (
   href        TEXT NOT NULL DEFAULT '',
   brands      TEXT NOT NULL DEFAULT '[]',
   display     INTEGER NOT NULL DEFAULT 0,
-  published   INTEGER NOT NULL DEFAULT 1
+  published   INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (owner, id)
 );
-CREATE INDEX IF NOT EXISTS taxon_by_category ON taxon (category, display, id);`
+CREATE INDEX IF NOT EXISTS taxon_by_owner ON taxon (owner, category, display, id);`
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
@@ -88,13 +98,26 @@ CREATE INDEX IF NOT EXISTS taxon_by_category ON taxon (category, display, id);`
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-// Categories returns every category in display order. The id breaks a tie, so two
-// categories a person gave the same position to are still listed the same way on
-// every read — a catalogue that reshuffled itself between two loads would read as
-// a bug in the console.
-func (s *Store) Categories(ctx context.Context) ([]Category, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, label, summary, display, brands FROM category ORDER BY display, id`)
+// owners is the audience of one read: the platform's rows, plus the caller's own
+// when they have an org. It is the ONE place a read's visible set is decided, and
+// it is built from the VALIDATED principal's org — never from a request field, so
+// there is no argument a caller can pass to widen it.
+func owners(org string) []any {
+	if org == "" || org == platformOrg {
+		return []any{platformOrg}
+	}
+	return []any{platformOrg, org}
+}
+
+// Categories returns the categories visible to org, in display order. The id
+// breaks a tie, so two categories a person gave the same position to are still
+// listed the same way on every read — a catalogue that reshuffled itself between
+// two loads would read as a bug in the console.
+func (s *Store) Categories(ctx context.Context, org string) ([]Category, error) {
+	who := owners(org)
+	q := `SELECT owner, id, label, summary, display, brands FROM category
+	       WHERE owner IN (` + marks(len(who)) + `) ORDER BY display, id`
+	rows, err := s.db.QueryContext(ctx, q, who...)
 	if err != nil {
 		return nil, fmt.Errorf("list categories: %w", err)
 	}
@@ -103,7 +126,7 @@ func (s *Store) Categories(ctx context.Context) ([]Category, error) {
 	for rows.Next() {
 		var c Category
 		var brands string
-		if err := rows.Scan(&c.ID, &c.Label, &c.Summary, &c.Order, &brands); err != nil {
+		if err := rows.Scan(&c.Owner, &c.ID, &c.Label, &c.Summary, &c.Order, &brands); err != nil {
 			return nil, fmt.Errorf("scan category: %w", err)
 		}
 		c.Brands = decodeList(brands)
@@ -112,19 +135,21 @@ func (s *Store) Categories(ctx context.Context) ([]Category, error) {
 	return out, rows.Err()
 }
 
-// Taxa returns the taxa, grouped by category and in display order within it. An
-// empty category returns all of them; naming one narrows to it. ONE method, because
-// it is one question — a second name for "the same read, filtered" is a second
-// place the ordering has to stay right.
-func (s *Store) Taxa(ctx context.Context, category string) ([]Taxon, error) {
-	const q = `SELECT id, name, description, category, tags, icon, route, href, brands, display, published
-	             FROM taxon`
-	rows, err := func() (*sql.Rows, error) {
-		if category == "" {
-			return s.db.QueryContext(ctx, q+` ORDER BY category, display, id`)
-		}
-		return s.db.QueryContext(ctx, q+` WHERE category=? ORDER BY display, id`, category)
-	}()
+// Taxa returns the taxa visible to org, grouped by category and in display order
+// within it. An empty category returns all of them; naming one narrows to it. ONE
+// method, because it is one question — a second name for "the same read, filtered"
+// is a second place the ordering has to stay right.
+func (s *Store) Taxa(ctx context.Context, org, category string) ([]Taxon, error) {
+	who := owners(org)
+	q := `SELECT owner, id, name, description, category, tags, icon, route, href, brands, display, published
+	        FROM taxon WHERE owner IN (` + marks(len(who)) + `)`
+	args := who
+	if category != "" {
+		q += ` AND category=?`
+		args = append(append([]any{}, who...), category)
+	}
+	q += ` ORDER BY category, display, id`
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list taxa: %w", err)
 	}
@@ -133,7 +158,7 @@ func (s *Store) Taxa(ctx context.Context, category string) ([]Taxon, error) {
 	for rows.Next() {
 		var e Taxon
 		var tags, brands string
-		if err := rows.Scan(&e.ID, &e.Name, &e.Description, &e.Category, &tags, &e.Icon,
+		if err := rows.Scan(&e.Owner, &e.ID, &e.Name, &e.Description, &e.Category, &tags, &e.Icon,
 			&e.Route, &e.Href, &brands, &e.Order, &e.Published); err != nil {
 			return nil, fmt.Errorf("scan taxon: %w", err)
 		}
@@ -143,28 +168,28 @@ func (s *Store) Taxa(ctx context.Context, category string) ([]Taxon, error) {
 	return out, rows.Err()
 }
 
-// PutCategory creates or replaces one category.
+// PutCategory creates or replaces one category in its owner's catalogue.
 func (s *Store) PutCategory(ctx context.Context, c Category) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO category (id, label, summary, display, brands) VALUES (?,?,?,?,?)
-		 ON CONFLICT(id) DO UPDATE SET label=excluded.label, summary=excluded.summary,
+		`INSERT INTO category (owner, id, label, summary, display, brands) VALUES (?,?,?,?,?,?)
+		 ON CONFLICT(owner, id) DO UPDATE SET label=excluded.label, summary=excluded.summary,
 		   display=excluded.display, brands=excluded.brands`,
-		c.ID, c.Label, c.Summary, c.Order, encodeList(c.Brands))
+		c.Owner, c.ID, c.Label, c.Summary, c.Order, encodeList(c.Brands))
 	if err != nil {
 		return fmt.Errorf("put category: %w", err)
 	}
 	return nil
 }
 
-// PutTaxon creates or replaces one taxon.
+// PutTaxon creates or replaces one taxon in its owner's catalogue.
 func (s *Store) PutTaxon(ctx context.Context, e Taxon) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO taxon (id, name, description, category, tags, icon, route, href, brands, display, published)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?)
-		 ON CONFLICT(id) DO UPDATE SET name=excluded.name, description=excluded.description,
+		`INSERT INTO taxon (owner, id, name, description, category, tags, icon, route, href, brands, display, published)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+		 ON CONFLICT(owner, id) DO UPDATE SET name=excluded.name, description=excluded.description,
 		   category=excluded.category, tags=excluded.tags, icon=excluded.icon, route=excluded.route,
 		   href=excluded.href, brands=excluded.brands, display=excluded.display, published=excluded.published`,
-		e.ID, e.Name, e.Description, e.Category, encodeList(e.Tags), e.Icon,
+		e.Owner, e.ID, e.Name, e.Description, e.Category, encodeList(e.Tags), e.Icon,
 		e.Route, e.Href, encodeList(e.Brands), e.Order, e.Published)
 	if err != nil {
 		return fmt.Errorf("put taxon: %w", err)
@@ -172,44 +197,56 @@ func (s *Store) PutTaxon(ctx context.Context, e Taxon) error {
 	return nil
 }
 
-// HasCategory reports whether a category exists, which is what makes a taxon's
-// category a REFERENCE rather than a free-text field.
-func (s *Store) HasCategory(ctx context.Context, id string) (bool, error) {
+// HasCategory reports whether org can file a taxon under this category id — its
+// own, or the platform's. That is the same audience the read projects, so a taxon
+// can never be filed somewhere its own catalogue cannot render it.
+func (s *Store) HasCategory(ctx context.Context, org, id string) (bool, error) {
+	who := owners(org)
 	var n int
-	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM category WHERE id=?`, id).Scan(&n); err != nil {
+	q := `SELECT COUNT(*) FROM category WHERE id=? AND owner IN (` + marks(len(who)) + `)`
+	if err := s.db.QueryRowContext(ctx, q, append([]any{id}, who...)...).Scan(&n); err != nil {
 		return false, fmt.Errorf("has category: %w", err)
 	}
 	return n > 0, nil
 }
 
-// CountTaxa reports how many taxa are filed under a category. The delete op
-// asks before removing one: a category is a label on a group, and deleting the
-// label must neither silently delete the products wearing it nor leave them naming
-// a category that no longer exists.
-func (s *Store) CountTaxa(ctx context.Context, category string) (int, error) {
+// CountTaxa reports how many taxa stand in the way of deleting a category, and
+// WHOSE it asks about is the tenancy rule again. Deleting an org's own category
+// counts that org's taxa alone — counting another tenant's would answer a question
+// about data the caller may not observe. Deleting a PLATFORM category counts every
+// org's, because a platform category is one a customer may have filed under, and
+// only platform sudo can delete one — a scope that is cross-tenant by definition.
+func (s *Store) CountTaxa(ctx context.Context, owner, category string) (int, error) {
+	q, args := `SELECT COUNT(*) FROM taxon WHERE category=? AND owner=?`, []any{category, owner}
+	if owner == platformOrg {
+		q, args = `SELECT COUNT(*) FROM taxon WHERE category=?`, []any{category}
+	}
 	var n int
-	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM taxon WHERE category=?`, category).Scan(&n); err != nil {
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count taxa: %w", err)
 	}
 	return n, nil
 }
 
-// DeleteCategory removes one category and reports whether it existed. Emptiness is
-// the caller's precondition (CountTaxa), asked there because the refusal it
-// produces is an answer about the request, not about the table.
-func (s *Store) DeleteCategory(ctx context.Context, id string) (bool, error) {
-	return s.delete(ctx, `DELETE FROM category WHERE id=?`, id)
+// DeleteCategory removes one category from its owner's catalogue and reports
+// whether it existed. Emptiness is the caller's precondition (CountTaxa), asked
+// there because the refusal it produces is an answer about the request, not about
+// the table.
+func (s *Store) DeleteCategory(ctx context.Context, owner, id string) (bool, error) {
+	return s.delete(ctx, `DELETE FROM category WHERE owner=? AND id=?`, owner, id)
 }
 
-// DeleteTaxon removes one taxon and reports whether it existed.
-func (s *Store) DeleteTaxon(ctx context.Context, id string) (bool, error) {
-	return s.delete(ctx, `DELETE FROM taxon WHERE id=?`, id)
+// DeleteTaxon removes one taxon from its owner's catalogue and reports whether it
+// existed. The owner predicate is mandatory and comes from the validated
+// principal, so a delete can only ever reach the caller's own row: naming another
+// org's id deletes nothing of theirs, and answers 404 because the CALLER holds no
+// such row.
+func (s *Store) DeleteTaxon(ctx context.Context, owner, id string) (bool, error) {
+	return s.delete(ctx, `DELETE FROM taxon WHERE owner=? AND id=?`, owner, id)
 }
 
-func (s *Store) delete(ctx context.Context, q, id string) (bool, error) {
-	res, err := s.db.ExecContext(ctx, q, id)
+func (s *Store) delete(ctx context.Context, q string, args ...any) (bool, error) {
+	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return false, fmt.Errorf("delete: %w", err)
 	}
@@ -242,16 +279,16 @@ func (s *Store) Seed(ctx context.Context, cats []Category, taxa []Taxon) (bool, 
 	}
 	for _, c := range cats {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO category (id, label, summary, display, brands) VALUES (?,?,?,?,?)`,
-			c.ID, c.Label, c.Summary, c.Order, encodeList(c.Brands)); err != nil {
+			`INSERT INTO category (owner, id, label, summary, display, brands) VALUES (?,?,?,?,?,?)`,
+			c.Owner, c.ID, c.Label, c.Summary, c.Order, encodeList(c.Brands)); err != nil {
 			return false, fmt.Errorf("seed category %q: %w", c.ID, err)
 		}
 	}
 	for _, e := range taxa {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO taxon (id, name, description, category, tags, icon, route, href, brands, display, published)
-			 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-			e.ID, e.Name, e.Description, e.Category, encodeList(e.Tags), e.Icon,
+			`INSERT INTO taxon (owner, id, name, description, category, tags, icon, route, href, brands, display, published)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+			e.Owner, e.ID, e.Name, e.Description, e.Category, encodeList(e.Tags), e.Icon,
 			e.Route, e.Href, encodeList(e.Brands), e.Order, e.Published); err != nil {
 			return false, fmt.Errorf("seed taxon %q: %w", e.ID, err)
 		}
@@ -260,6 +297,19 @@ func (s *Store) Seed(ctx context.Context, cats []Category, taxa []Taxon) (bool, 
 		return false, fmt.Errorf("commit: %w", err)
 	}
 	return true, nil
+}
+
+// marks renders n bind placeholders. The owner set is built here, never
+// interpolated from a caller's string, so the only thing this shapes is arity.
+func marks(n int) string {
+	if n <= 1 {
+		return "?"
+	}
+	s := "?"
+	for range n - 1 {
+		s += ",?"
+	}
+	return s
 }
 
 // encodeList stores a list of short slugs. A nil list and an empty one are the
