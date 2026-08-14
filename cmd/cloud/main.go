@@ -439,15 +439,9 @@ func mount(app *zip.App, a manifest.App, eager bool, absent map[string]string) e
 // already answers for them; asking for one by name would report a permanent
 // outage for a subsystem that is serving perfectly.
 func routed(composed []string) []string {
-	co := map[string]bool{}
-	for _, a := range manifest.Apps {
-		if a.Coresident {
-			co[a.Name] = true
-		}
-	}
 	out := make([]string, 0, len(composed))
 	for _, name := range composed {
-		if !co[name] {
+		if !manifest.Coresident(name) {
 			out = append(out, name)
 		}
 	}
