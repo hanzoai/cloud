@@ -38,7 +38,7 @@ const teamAccount = "550e8400-e29b-41d4-a716-446655440000"
 // against now. TestTeamWireKeepsIdentityOnFullLane computes a fresh value for that.
 const teamWire = `[
   {"event":"error","properties":{"error_message":"boom","error_type":"TypeError","error_stack":"at f (app.js:1)\nBearer sk-live-DEADBEEF","analytics_collector":true,"$anonymous_id":"anon_1"},"timestamp":1750000000000,"distinct_id":"user@hanzo.ai"},
-  {"event":"navigation","properties":{"path":"/tracker"},"timestamp":1750000001000,"distinct_id":"user@hanzo.ai"}
+  {"event":"navigation","properties":{"path":"/todo"},"timestamp":1750000001000,"distinct_id":"user@hanzo.ai"}
 ]`
 
 // postBody issues a POST with a raw body and optional Authorization header.

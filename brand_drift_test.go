@@ -90,7 +90,7 @@ func shippedArtifacts(t *testing.T) []string {
 // identity host named by anything this repo ships must be an issuer the brand
 // registry declares.
 //
-// It fails on the bundle that was live at tracker.hanzo.ai — its brand table
+// It fails on the bundle that was live at todo.hanzo.ai — its brand table
 // said zoo -> https://zoo.id while brand.go said https://zoolabs.id.
 func TestShippedArtifactsNameOnlyRegisteredIssuers(t *testing.T) {
 	declared := map[string]bool{}

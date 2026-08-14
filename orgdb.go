@@ -60,7 +60,7 @@ func OrgDB(dataDir string, ns namespace.Namespace, subsystem string) (*sql.DB, e
 
 // openOrgDB opens the SQLite file under the single-writer discipline every org
 // store shares: one connection, which serializes writes against the file lock and
-// makes a read-modify-write such as tracker's per-project issue-number allocation
+// makes a read-modify-write such as todo's per-project issue-number allocation
 // a safe transaction. The WAL/foreign-key/busy-timeout pragmas this used to set by
 // hand are the driver's, applied per connection (see sqlpool).
 func openOrgDB(ns namespace.Namespace, subsystem, dir string) (*sql.DB, error) {

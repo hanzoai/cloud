@@ -14,17 +14,17 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// github_issues.go mirrors GitHub issues into the native tracker (cloud.UpsertIssue):
+// github_issues.go mirrors GitHub issues into the native todo (cloud.UpsertIssue):
 // the App webhook keeps them LIVE (`issues` / `issue_comment` events), and the
 // backfill endpoint seeds the EXISTING issues across an org's granted repos. Both
-// build the SAME cloud.IssueUpsert and go through the ONE tracker sink — no second
-// path, no tracker import (the tracker_seam inversion).
+// build the SAME cloud.IssueUpsert and go through the ONE todo sink — no second
+// path, no todo import (the todo_seam inversion).
 
-// The tracker team every mirrored GitHub issue files under (repo is the per-issue
+// The todo team every mirrored GitHub issue files under (repo is the per-issue
 // discriminator within it).
 const (
-	githubTrackerProjectKey  = "GH"
-	githubTrackerProjectName = "GitHub"
+	githubTodoProjectKey  = "GH"
+	githubTodoProjectName = "GitHub"
 )
 
 // githubIssueEvent is the slice of GitHub's `issues` / `issue_comment` webhook
@@ -76,7 +76,7 @@ func assigneeOf(is githubIssue) string {
 	return ""
 }
 
-// mirrorGitHubIssue upserts one GitHub issue into org's tracker via the seam,
+// mirrorGitHubIssue upserts one GitHub issue into org's todo via the seam,
 // returning (created, error). The ExtRef ("github:owner/repo#N") anchors idempotency
 // across webhook redeliveries and backfill re-runs.
 func mirrorGitHubIssue(ctx context.Context, org, repo, fullName string, is githubIssue) (bool, error) {
@@ -88,8 +88,8 @@ func mirrorGitHubIssue(ctx context.Context, org, repo, fullName string, is githu
 	}
 	res, err := cloud.UpsertIssue(ctx, cloud.IssueUpsert{
 		Org:         org,
-		ProjectKey:  githubTrackerProjectKey,
-		ProjectName: githubTrackerProjectName,
+		ProjectKey:  githubTodoProjectKey,
+		ProjectName: githubTodoProjectName,
 		Repo:        repo,
 		ExtRef:      fmt.Sprintf("github:%s#%d", strings.TrimSpace(fullName), is.Number),
 		Kind:        "issue",
@@ -207,7 +207,7 @@ const (
 	backfillMaxIssues = 5000
 )
 
-// githubIssuesBackfill seeds the native tracker with the EXISTING issues across the
+// githubIssuesBackfill seeds the native todo with the EXISTING issues across the
 // org's granted repos (default state=open); the webhook keeps them live thereafter.
 // Org-scoped by the validated principal — a caller only ever backfills its OWN org.
 // Synchronous + bounded (a total time budget and an issue cap) so it returns the

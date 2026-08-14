@@ -661,9 +661,9 @@ func init() {
 		"Slack Events API webhook",
 		"The address a Slack app posts workspace events to. It answers Slack's "+
 			"url_verification handshake with the challenge, and routes an @mention or a "+
-			"direct message to an agent turn that replies in the same thread. A prompt "+
-			"beginning with `code:` is routed to the coding flow instead, which runs under "+
-			"its own pool.\n\n"+
+			"direct message to an agent turn that replies in the same thread. The turn holds "+
+			"the product's own tools, so a request to change code starts a sandbox run "+
+			"because the model chose to — there is no prefix and no second path.\n\n"+
 			"The raw body and its timestamp are verified against the app's signing secret "+
 			"before anything is read from them. Hanzo's own bot messages are dropped, so a "+
 			"reply cannot trigger another reply."+vendorCall+asyncTurn)
@@ -715,7 +715,7 @@ func init() {
 		"GitHub App webhook",
 		"The address the GitHub App delivers events to. A push is handed to the repository "+
 			"sync engine, and an issue or issue-comment event is mirrored into the native "+
-			"tracker — idempotently, so the same issue re-syncs to one row however many "+
+			"todo — idempotently, so the same issue re-syncs to one row however many "+
 			"times it is edited, closed or reopened.\n\n"+
 			"It answers a benign 200 for everything it does not act on — the ping, other "+
 			"event types, an unknown installation — deliberately, so GitHub does not enter a "+
@@ -896,7 +896,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// 202: the import runs in a bounded background worker, so the op DECLARES the
 	// status it has always answered rather than setting it per request.
 	zip.Post(zapp, "/v1/integrations/github/repos/import", o.githubImport, zip.WithStatus(http.StatusAccepted))
-	// Seed the native tracker with the org's EXISTING GitHub issues (the webhook
+	// Seed the native todo with the org's EXISTING GitHub issues (the webhook
 	// keeps them live thereafter). Org-authed via the principal; bounded + idempotent.
 	zip.Post(zapp, "/v1/integrations/github/issues/backfill", o.githubIssuesBackfill)
 	// GitHub Pages management (github_pages.go), one repo as a resource. Registered

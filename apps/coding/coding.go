@@ -4,7 +4,7 @@
 // git, open a native "PR" work item, and return a Result the caller renders.
 //
 // It is a LIBRARY, not an app: no route, no plugin, no manifest row. Its one
-// caller is apps/integrations (the Slack `code:` trigger). It touches its
+// caller is plugin/agents, which registers the one door. It touches its
 // collaborators only through interface seams (Sessions, PR, Runner) plus two
 // git functions (CloneURL, VerifyRef), so the whole orchestration is unit-testable
 // with fakes and — critically — coding does NOT import apps/git: git imports
@@ -13,7 +13,7 @@
 // it into the trigger surface.
 //
 // ISOLATION: org is the ONLY tenant key and is threaded to every seam call
-// (session, tracker, git, and the bot-gateway X-Org-Id). A run for org A can only
+// (session, todo, git, and the bot-gateway X-Org-Id). A run for org A can only
 // ever open A's session, read/verify A's repo, and file A's PR. The clone URL is
 // built from (org, repo) so the sandbox is pointed only at this org's namespace,
 // and the credential (write-only) is scoped by IAM to this org at the edge.
@@ -100,12 +100,12 @@ type Runner interface {
 	Run(ctx context.Context, org, userID string, req RunRequest, onStep func(Step)) (RunResult, error)
 }
 
-// PRInput / PRRef mirror tracker's agent-PR shape without leaking its types into
+// PRInput / PRRef mirror todo's agent-PR shape without leaking its types into
 // the seam (the adapter bridges).
 type PRInput struct {
 	Org string
 	// Actor is the forge login the proposal is opened as — the person the run
-	// acts for. It is not Assignee: that is who the tracker row is assigned to
+	// acts for. It is not Assignee: that is who the todo row is assigned to
 	// (the agent), and the two are different facts.
 	Actor    string
 	Project  string
@@ -191,7 +191,7 @@ type Req struct {
 	UserID   string // linked Hanzo subject — session attribution + X-User-Id
 	AgentRef string // agent label (e.g. "hanzo")
 	Repo     string
-	Project  string // IAM project slug (tracker + git scope); "" = org default
+	Project  string // IAM project slug (todo + git scope); "" = org default
 	Base     string // base branch; "" = repo default
 	Prompt   string
 	// Remote, Key and Known are the run's checkout: where the repository is, the
@@ -462,7 +462,7 @@ type completion struct {
 // pushed branch LANDED in native git (integrity — trust the tips we can read, not a
 // self-report), open the native PR work item, mirror the done status, and close the
 // session done. Fail-closed: when the verify seam is wired and the ref is absent, the
-// session closes ERROR and NO PR is filed. A tracker failure is recorded but does not
+// session closes ERROR and NO PR is filed. A todo failure is recorded but does not
 // fail the run (the branch is pushed + verified). ctx is the cancel-immune terminal
 // context. Used by the local path (Run) and the routed completion (finalizeRouted).
 func (d Dispatcher) completeChanged(ctx context.Context, c completion, res Result) Result {

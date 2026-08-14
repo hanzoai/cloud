@@ -41,7 +41,7 @@ func productOf(md map[string]any) string {
 	case "security.scan":
 		return "security"
 	default:
-		return p // functions, s3, automations, tracker, compute, ...
+		return p // functions, s3, automations, todo, compute, ...
 	}
 }
 

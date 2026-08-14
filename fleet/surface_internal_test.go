@@ -125,8 +125,8 @@ var survivors = []struct{ name, why string }{
 	{"get_o11y_deployments_attribute_keys", "metric label names"},
 	{"delete_pubsub_kv_bucket_key", "DELETE /v1/pubsub/kv/{bucket}/{key}"},
 	{"delete_flags_defs_key", "a feature-flag key"},
-	{"delete_tracker_projects_key", "a tracker project key, e.g. CLOUD-1"},
-	{"patch_tracker_projects_key_issues_num", "…and an issue under it"},
+	{"delete_todo_projects_key", "a todo project key, e.g. CLOUD-1"},
+	{"patch_todo_projects_key_issues_num", "…and an issue under it"},
 	{"delete_store_by_storeid_listing_by_key", "the `by_` filler must not become the key's context"},
 	{"delete_cloudflare_kv_namespaces_namespace_values_key", "a KV value"},
 

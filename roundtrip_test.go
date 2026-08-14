@@ -140,24 +140,24 @@ func TestSyncReachesEngine(t *testing.T) {
 	}
 }
 
-// TestUpsertReachesTracker — integrations holds the GitHub App, tracker holds the
+// TestUpsertReachesTodo — integrations holds the GitHub App, todo holds the
 // store, so every mirrored issue was refused.
-func TestUpsertReachesTracker(t *testing.T) {
+func TestUpsertReachesTodo(t *testing.T) {
 	alone(t)
 	cloud.RegisterIssueSink(nil)
 	t.Cleanup(func() { cloud.RegisterIssueSink(nil) })
 
-	serve(t, "tracker", func(app *zip.App) {
-		zip.Post[plane.IssueIn, plane.IssueUpserted](app, "/tracker/upsert",
+	serve(t, "todo", func(app *zip.App) {
+		zip.Post[plane.IssueIn, plane.IssueUpserted](app, "/todo/upsert",
 			func(ctx context.Context, in *plane.IssueIn) (*plane.IssueUpserted, error) {
 				if cloud.Who(ctx).Org != "acme" {
-					return nil, zip.ErrForbidden("tracker upsert: wrong org")
+					return nil, zip.ErrForbidden("todo upsert: wrong org")
 				}
 				if in.ExtRef != "github:acme/site#42" {
-					return nil, zip.ErrBadRequest("tracker upsert: ExtRef did not cross intact")
+					return nil, zip.ErrBadRequest("todo upsert: ExtRef did not cross intact")
 				}
 				return &plane.IssueUpserted{Created: true, Number: 42, Identifier: "GH-42"}, nil
-			}, zip.WithOperationID(plane.TrackerUpsert))
+			}, zip.WithOperationID(plane.TodoUpsert))
 	})
 
 	res, err := cloud.UpsertIssue(context.Background(), cloud.IssueUpsert{
@@ -169,7 +169,7 @@ func TestUpsertReachesTracker(t *testing.T) {
 		t.Fatalf("UpsertIssue over the plane: %v", err)
 	}
 	if !res.Created || res.Number != 42 || res.Identifier != "GH-42" {
-		t.Fatalf("UpsertIssue = %+v, want the tracker's own {Created:true Number:42 GH-42}", res)
+		t.Fatalf("UpsertIssue = %+v, want the todo's own {Created:true Number:42 GH-42}", res)
 	}
 }
 

@@ -2,7 +2,7 @@ package forge
 
 // source.go is how a process GETS a client, and it is the only way.
 //
-// It moved here from the one app that first needed a forge (apps/tracker). That
+// It moved here from the one app that first needed a forge (apps/todo). That
 // was fine while there was one caller and wrong the moment there were several:
 // the credential's KMS coordinate, its refresh window, the derivation of the
 // host from the deployment's own domain, and the IAM-org → forge-org

@@ -1030,6 +1030,8 @@ github.com/hanzoai/commerce v1.50.46 h1:1qpZI1p480OMXM/7icZJUzyeapuK35WlS2nE0HPJ
 github.com/hanzoai/commerce v1.50.46/go.mod h1:jvKM48o/fC2GDioCAF4LkDNC3vJtOelmeHTlNUSDUIA=
 github.com/hanzoai/commerce v1.50.47 h1:tXNm3zy+8hm2UxZhnDjFLzy+3nJJcHQmAndr124S/Vo=
 github.com/hanzoai/commerce v1.50.47/go.mod h1:jvKM48o/fC2GDioCAF4LkDNC3vJtOelmeHTlNUSDUIA=
+github.com/hanzoai/commerce v1.50.48 h1:22dlu82/xgWZBAcfALj7SuqF7cAGyD7WWBlKnKOLbUM=
+github.com/hanzoai/commerce v1.50.48/go.mod h1:jvKM48o/fC2GDioCAF4LkDNC3vJtOelmeHTlNUSDUIA=
 github.com/hanzoai/csqlite v0.1.2 h1:4DzdgUfKADhzEP66Y30/HwepuBLrwt7NsemJMfrPGl4=
 github.com/hanzoai/csqlite v0.1.2/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
@@ -1076,6 +1078,8 @@ github.com/hanzoai/iam v1.34.51 h1:zvkCjU6Qs1xzQUKCJCSZ5yEmMLQ3mYD4WFuWRsgeEfQ=
 github.com/hanzoai/iam v1.34.51/go.mod h1:qfUXW8LhH+BkgBt1csXfJrDebFvNWgvL/7i1ZP7N42A=
 github.com/hanzoai/kafka v1.3.1 h1:wGzQZyz4SXlTwIhDoguE+lJbTSjxC7f8AeIppJr4++c=
 github.com/hanzoai/kafka v1.3.1/go.mod h1:bKmdzWPqZ5vjtpD7pOCd1qgC6iVJjKczrPKHib0vlQQ=
+github.com/hanzoai/kafka v1.3.2 h1:oiU77wsU7lWuXAOmCfzkcaT2RTX4PdLqzw1vRMHM44A=
+github.com/hanzoai/kafka v1.3.2/go.mod h1:bKmdzWPqZ5vjtpD7pOCd1qgC6iVJjKczrPKHib0vlQQ=
 github.com/hanzoai/licensing v0.1.10 h1:0z6A+g5/lJbBDb+6AyrwkDmL7UkVagkvCaupET0k8aM=
 github.com/hanzoai/licensing v0.1.10/go.mod h1:GT+YjWptmDkXnFJ6F9qkdQPCEfC97HpOs0YMrZirkhk=
 github.com/hanzoai/licensing v0.1.15 h1:On6EUb/SPE2m0llTI21Nka08hgtw1oNzhh2RKF17mqg=

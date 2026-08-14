@@ -24,7 +24,7 @@ import (
 //	projects      answers /v1/sites; only /v1/projects was listed.
 //	venue         answers /v1/cloud; absent entirely.
 //	tools         answers /v1/skills, /v1/plugins, /v1/mcp/servers beside /v1/tools.
-//	ask auto automations content flow platform tracker translate — missing outright.
+//	ask auto automations content flow platform todo translate — missing outright.
 //
 // Price is a SOURCE fact: each plugin/<name>/main.go is its own composition root, so
 // there is no list to walk at runtime. This reads the source, exactly as
@@ -274,13 +274,13 @@ var meteredByAIWrapper = map[string]bool{
 // charges nothing at all. They are not free by decision; nobody has priced them. The
 // list must only ever shrink.
 //
-// It was EMPTY, and tracker is the one entry. auto and flow were the last two to
+// It was EMPTY, and todo is the one entry. auto and flow were the last two to
 // leave — both are typed passthroughs whose RUN op schedules real compute, so each
 // grew the meter its declaration had been claiming (apps/auto/billing.go,
 // apps/flow/billing.go: gate before the upstream call, debit after it succeeds, one
 // ResourceFeeCents knob read by both).
 //
-// tracker's board moved to the forge, and its meter did not move with it. The
+// todo's board moved to the forge, and its meter did not move with it. The
 // Bill.Gate/Bill.Meter pair lived in the store-backed ops (updateProject, listIssues,
 // getIssue and their siblings), which lost their routes in that move and kept their
 // code — so the meter that satisfied this test sat behind addresses nobody served,
@@ -289,7 +289,7 @@ var meteredByAIWrapper = map[string]bool{
 // it. Pricing a write that lands in git.hanzo.ai rather than in a local store is the
 // open question, and it is a pricing decision, not a typing one.
 var meteredWithoutAMeter = map[string]bool{
-	"tracker": true,
+	"todo": true,
 }
 
 // packageCharges reports whether dir's non-test sources call a meter, and whether
