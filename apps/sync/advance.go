@@ -72,6 +72,10 @@ type outcome struct {
 	// NoOp — nothing to do: the tips were already equal (the loop echo), or the
 	// source does not have the ref at all.
 	NoOp bool
+	// Absent — a refinement of NoOp: the SOURCE does not have the ref. The
+	// destination keeps whatever it holds (nothing here removes a ref), and
+	// nothing was learned about whether the two ends agree.
+	Absent bool
 	// Conflict — the destination has commits the source does not, so the update
 	// is not a fast-forward. THE DESTINATION WAS NOT CHANGED.
 	Conflict bool
@@ -85,11 +89,21 @@ type outcome struct {
 // reason is what a caller records about an advance: the conflict's detail, or ""
 // when there is none — so a clean advance and a resolved conflict are the SAME
 // write, and there is no way to record one without clearing the other.
-func (o outcome) reason() string {
-	if o.Conflict {
-		return o.Detail
+//
+// ok is FALSE when the advance learned nothing and there is nothing to write. A
+// ref the source no longer has is the case, and it is not the same as agreement:
+// an upstream that deletes a branch it had diverged on would otherwise clear the
+// conflict it never resolved — the console goes green while the forge still
+// holds the split history. Silence about a ref nobody offered is the honest
+// record.
+func (o outcome) reason() (string, bool) {
+	if o.Absent {
+		return "", false
 	}
-	return ""
+	if o.Conflict {
+		return o.Detail, true
+	}
+	return "", true
 }
 
 // nonFFRE matches git's refusal to move a ref backwards or sideways.
@@ -218,7 +232,7 @@ func openTransit(ctx context.Context, parent, org, repo string) (*work, error) {
 	}
 	// init is idempotent on an existing repository, which is what makes "open or
 	// create" one call rather than a stat and a branch.
-	cmd, err := gitCmd(ctx, nil, "init", "--bare", "--quiet", dir)
+	cmd, err := gitCmd(ctx, nil, nil, "init", "--bare", "--quiet", dir)
 	if err != nil {
 		release()
 		return nil, err
@@ -268,7 +282,8 @@ func scratch(side, ref string) string { return "refs/transit/" + side + "/" + re
 // complete moves nothing.
 func (w *work) advance(ctx context.Context, from, to remote, ref, before, want string) (outcome, error) {
 	if want == "" {
-		return outcome{NoOp: true, Before: before, After: before, Detail: "the source does not have " + ref}, nil
+		return outcome{NoOp: true, Absent: true, Before: before, After: before,
+			Detail: "the source does not have " + ref}, nil
 	}
 	if before == want {
 		// ALREADY OURS. This is the loop echo — the ref we just sent the other way
@@ -285,6 +300,15 @@ func (w *work) advance(ctx context.Context, from, to remote, ref, before, want s
 		if err := w.fetch(ctx, to, ref, scratch("dst", ref)); err != nil {
 			return outcome{}, fmt.Errorf("read %s from the destination: %w", ref, err)
 		}
+		// WHAT THE DESTINATION ACTUALLY HOLDS, not what its advertisement said. The
+		// caller read that advertisement once for a whole repository and the
+		// destination moves on its own; this value is what a deployment diffs FROM,
+		// so a stale one describes a change that never happened.
+		held, err := w.oid(ctx, scratch("dst", ref))
+		if err != nil {
+			return outcome{}, err
+		}
+		before = held
 	}
 	src := scratch("src", ref)
 	if err := w.fetch(ctx, from, ref, src); err != nil {
@@ -297,6 +321,13 @@ func (w *work) advance(ctx context.Context, from, to remote, ref, before, want s
 	landed, err := w.oid(ctx, src)
 	if err != nil {
 		return outcome{}, err
+	}
+	if landed == before {
+		// The two ends agree after all — the advertisements were read a moment apart
+		// and something moved in between. Pushing here would earn git's "Everything
+		// up-to-date", which exits zero and moves nothing, and reporting THAT as an
+		// advance hands push-to-deploy an empty diff to build.
+		return outcome{NoOp: true, Before: before, After: before}, nil
 	}
 
 	rejected, err := w.push(ctx, to, src, ref)
@@ -316,7 +347,7 @@ func (w *work) advance(ctx context.Context, from, to remote, ref, before, want s
 // oid reads what a local ref points at. A ref the fetch just wrote is always
 // there, so an unreadable one is a real failure rather than an absence.
 func (w *work) oid(ctx context.Context, ref string) (string, error) {
-	cmd, err := gitCmd(ctx, nil, "--git-dir="+w.dir, "rev-parse", "--verify", "--quiet", ref)
+	cmd, err := gitCmd(ctx, nil, nil, "--git-dir="+w.dir, "rev-parse", "--verify", "--quiet", ref)
 	if err != nil {
 		return "", err
 	}
@@ -349,11 +380,9 @@ func (w *work) fetch(ctx context.Context, r remote, ref, into string) error {
 	if err := w.drop(ctx, into); err != nil {
 		return err
 	}
-	args := append(packConfigArgs(),
-		"-c", "protocol.version=2", "-c", "credential.helper=",
+	cmd, err := gitCmd(ctx, &r, nil,
 		"--git-dir="+w.dir, "fetch", "--no-write-fetch-head", "--no-tags",
 		r.URL, ref+":"+into)
-	cmd, err := gitCmd(ctx, mirrorGitEnv(r.URL, r.Cred), args...)
 	if err != nil {
 		return err
 	}
@@ -368,7 +397,7 @@ func (w *work) fetch(ctx context.Context, r remote, ref, into string) error {
 // drop removes a scratch ref if it is there, so the next fetch into it is a
 // create. Deleting a ref that does not exist is not an error.
 func (w *work) drop(ctx context.Context, ref string) error {
-	cmd, err := gitCmd(ctx, nil, "--git-dir="+w.dir, "update-ref", "-d", ref)
+	cmd, err := gitCmd(ctx, nil, nil, "--git-dir="+w.dir, "update-ref", "-d", ref)
 	if err != nil {
 		return err
 	}
@@ -395,14 +424,10 @@ func (w *work) push(ctx context.Context, r remote, src, ref string) (string, err
 	// open but going nowhere.
 	ctx, cancel := context.WithTimeout(ctx, pushTimeout())
 	defer cancel()
-	env := mirrorGitEnv(r.URL, r.Cred,
+	cmd, err := gitCmd(ctx, &r, []string{
 		"http.lowSpeedLimit=1000", // under 1 KB/s ...
 		"http.lowSpeedTime=30",    // ... for 30s, and git gives up
-	)
-	args := append(packConfigArgs(),
-		"-c", "protocol.version=2", "-c", "credential.helper=",
-		"--git-dir="+w.dir, "push", r.URL, src+":"+ref)
-	cmd, err := gitCmd(ctx, env, args...)
+	}, "--git-dir="+w.dir, "push", r.URL, src+":"+ref)
 	if err != nil {
 		return "", err
 	}
@@ -432,11 +457,7 @@ func (w *work) push(ctx context.Context, r remote, src, ref string) (string, err
 // for: one full ref name, matched exactly by the server. It is the same function
 // either way, so there is one place that knows how an advertisement is read.
 func refs(ctx context.Context, r remote, only ...string) (map[string]string, string, error) {
-	args := append([]string{
-		"-c", "protocol.version=2", "-c", "credential.helper=",
-		"ls-remote", "--symref", r.URL,
-	}, only...)
-	cmd, err := gitCmd(ctx, mirrorGitEnv(r.URL, r.Cred), args...)
+	cmd, err := gitCmd(ctx, &r, nil, append([]string{"ls-remote", "--symref", r.URL}, only...)...)
 	if err != nil {
 		return nil, "", err
 	}
