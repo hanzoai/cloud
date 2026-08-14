@@ -95,7 +95,7 @@ func read(t *testing.T, app *zip.App, path string, who map[string]string) Taxono
 // ── the seed round-trips ────────────────────────────────────────────────────
 
 // TestTheConsoleRegistryArrivesWhole is the reason this app exists: the console's
-// hardcoded registry — 184 products across 14 categories — has to come out of the
+// hardcoded registry — 186 products across 14 categories — has to come out of the
 // API exactly as it went in, or the move lost data. It counts what the seed
 // document declares and what the SURFACE serves, and requires them equal, so a
 // store or a projection that silently drops rows fails here rather than in the
@@ -105,8 +105,8 @@ func TestTheConsoleRegistryArrivesWhole(t *testing.T) {
 	if err := json.Unmarshal(seedJSON, &doc); err != nil {
 		t.Fatalf("decode seed: %v", err)
 	}
-	if len(doc.Categories) != 14 || len(doc.Taxa) != 184 {
-		t.Fatalf("the seed carries %d categories / %d taxa, not the 14 / 184 lifted from the registry",
+	if len(doc.Categories) != 14 || len(doc.Taxa) != 186 {
+		t.Fatalf("the seed carries %d categories / %d taxa, not the 14 / 186 lifted from the registry",
 			len(doc.Categories), len(doc.Taxa))
 	}
 
@@ -118,12 +118,12 @@ func TestTheConsoleRegistryArrivesWhole(t *testing.T) {
 	for _, c := range got.Categories {
 		served += len(c.Taxa)
 	}
-	if served != 184 {
-		t.Fatalf("the surface serves %d taxa, want 184", served)
+	if served != 186 {
+		t.Fatalf("the surface serves %d taxa, want 186", served)
 	}
 
 	// Category BY category, not just the total: two categories that swapped 3
-	// taxa each would sum to 184 and still be wrong.
+	// taxa each would sum to 186 and still be wrong.
 	want := map[string]int{}
 	for _, e := range doc.Taxa {
 		want[e.Category]++
@@ -184,8 +184,8 @@ func TestSeedingIsFirstBootOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	if n != 184 {
-		t.Fatalf("first seed wrote %d taxa, want 184", n)
+	if n != 186 {
+		t.Fatalf("first seed wrote %d taxa, want 186", n)
 	}
 	if _, err := store.DeleteTaxon(t.Context(), platformOrg, "overview"); err != nil {
 		t.Fatalf("delete: %v", err)
@@ -201,8 +201,8 @@ func TestSeedingIsFirstBootOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("taxa: %v", err)
 	}
-	if len(taxa) != 183 {
-		t.Fatalf("after a delete + re-seed the store holds %d taxa, want 183 — the seed undid an edit", len(taxa))
+	if len(taxa) != 185 {
+		t.Fatalf("after a delete + re-seed the store holds %d taxa, want 185 — the seed undid an edit", len(taxa))
 	}
 	_ = store.Close()
 }
@@ -252,7 +252,7 @@ func TestAWriteNeedsAnAdmin(t *testing.T) {
 	}
 	// Nothing above changed anything, for anyone.
 	got := read(t, app, "/v1/taxonomy", anon)
-	if len(got.Categories) != 14 || len(taxaOf(got)) != 184 {
+	if len(got.Categories) != 14 || len(taxaOf(got)) != 186 {
 		t.Fatalf("a refused write still landed: %d categories / %d taxa",
 			len(got.Categories), len(taxaOf(got)))
 	}
@@ -364,7 +364,7 @@ func TestDeletingAFullCategoryIsRefused(t *testing.T) {
 	for _, c := range got.Categories {
 		n += len(c.Taxa)
 	}
-	if n != 184 {
+	if n != 186 {
 		t.Fatalf("the refused delete still removed rows: %d taxa", n)
 	}
 }
@@ -552,8 +552,8 @@ func TestACategoryWriteAnswersWithWhatIsFiledUnderIt(t *testing.T) {
 	if got.Label != "Data (renamed)" {
 		t.Fatalf("label not stored: %q", got.Label)
 	}
-	if len(got.Taxa) != 9 {
-		t.Fatalf("the write answered with %d taxa; data holds 9", len(got.Taxa))
+	if len(got.Taxa) != 8 {
+		t.Fatalf("the write answered with %d taxa; data holds 8", len(got.Taxa))
 	}
 }
 
@@ -792,7 +792,7 @@ func TestStagingIsScopedToWhoeverCanUnstageIt(t *testing.T) {
 	}
 }
 
-// TestThePlatformCatalogueStillRoundTrips — the 184/14 property from the original
+// TestThePlatformCatalogueStillRoundTrips — the 186/14 property from the original
 // move, now asserted for a caller who has an org but no rows of their own. Adding
 // tenancy must not have narrowed what the platform serves.
 func TestThePlatformCatalogueStillRoundTrips(t *testing.T) {
@@ -802,9 +802,9 @@ func TestThePlatformCatalogueStillRoundTrips(t *testing.T) {
 		who  map[string]string
 		want int
 	}{
-		{"signed out", anon, 184},
-		{"a tenant with no rows of its own", map[string]string{"X-User-Id": "zed", "X-Org-Id": "initech"}, 184},
-		{"acme, which has one", adminA, 185},
+		{"signed out", anon, 186},
+		{"a tenant with no rows of its own", map[string]string{"X-User-Id": "zed", "X-Org-Id": "initech"}, 186},
+		{"acme, which has one", adminA, 187},
 	} {
 		got := read(t, app, "/v1/taxonomy", tc.who)
 		if len(got.Categories) != 14 {

@@ -357,6 +357,84 @@ func repoProject(org string, r forge.Repo) trackerProject {
 	}
 }
 
+// ident is the human handle for a work item: the board it is on, then its number
+// on that board. ONE spelling, used by both projections below — a board whose
+// forge rows read `cli#1` and whose index rows read `OPS-3` is two products in
+// one list, and a person cannot tell that the difference is about where we
+// happen to store the row rather than about the work.
+func ident(key string, number int) string { return fmt.Sprintf("%s#%d", key, number) }
+
+// indexProject renders a board the INDEX holds as the same view a repository
+// renders as. A board is one kind of thing — an org-scoped, key-addressed set of
+// work items — and which source fills it is a fact about the row, not about the
+// board.
+func indexProject(p Project) trackerProject {
+	return trackerProject{
+		ID: p.ID, Org: p.Org, Key: p.Key, Name: p.Name,
+		Description: p.Description, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+	}
+}
+
+// indexIssue renders an index row as the same view a forge issue renders as, so
+// a caller cannot tell which source answered from the shape of the answer — the
+// property tracker.go already states for the search, now holding for the board.
+func indexIssue(key string, i Issue) issueView {
+	labels := []string{}
+	for _, l := range strings.Split(i.Labels, ",") {
+		if l = strings.TrimSpace(l); l != "" {
+			labels = append(labels, l)
+		}
+	}
+	return issueView{
+		ID: i.ID, Identifier: ident(key, i.Number), ProjectKey: key, Number: i.Number,
+		Kind: i.Kind, Source: i.Source, Repo: i.Repo, ExtRef: i.ExtRef,
+		Title: i.Title, Description: i.Description, Status: i.Status,
+		Priority: i.Priority, Assignee: i.Assignee, Labels: labels,
+		StartAt: i.StartAt, DueAt: i.DueAt,
+		CreatedAt: i.CreatedAt, UpdatedAt: i.UpdatedAt,
+	}
+}
+
+// index opens the caller's work-item index — the org's default project store,
+// which is where every source that is not the forge lands (github_sink.go, the
+// plane upsert, an agent filing its own work). It returns the store and the
+// validated IAM org, which is the tenant key every query below filters on.
+//
+// The IAM org, NOT forgeOwner(org): the index is keyed by the tenant IAM named,
+// while the forge is asked about the org that tenant's work lives under. Passing
+// the forge spelling here would open a different file — one nothing writes.
+func (o ops) index(ctx context.Context) (*Store, string, error) {
+	org, err := principal.RequireOrg(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	st, err := storeFor(o.s, org, principal.DefaultProject)
+	if err != nil {
+		return nil, "", err
+	}
+	return st, org, nil
+}
+
+// boardKeys maps the index's project ids to the KEY that addresses each board.
+//
+// The wire carries the key and never the id, because an id is not an address:
+// GET /projects/prj_b4b4bd4c… answers "no such project", and that is exactly what
+// the search used to hand back for every row it found. A result you cannot open
+// is a listing, not a tool — tracker.go says a search must return rows a caller
+// can act on, and returning the id quietly broke that for the only issues the
+// index holds.
+func boardKeys(ctx context.Context, st *Store, org string) (map[string]string, error) {
+	ps, err := st.ListProjects(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]string, len(ps))
+	for _, p := range ps {
+		m[p.ID] = p.Key
+	}
+	return m, nil
+}
+
 // forgeIssue renders a forge issue as a tracker issue.
 //
 // Status and priority are LIFTED OUT of the label set rather than sitting beside
@@ -385,7 +463,7 @@ func forgeIssue(i forge.Issue) issueView {
 	}
 	v := issueView{
 		ID:         fmt.Sprintf("%d", i.ID),
-		Identifier: fmt.Sprintf("%s#%d", repo, i.Number),
+		Identifier: ident(repo, int(i.Number)),
 		ProjectKey: repo,
 		Number:     int(i.Number),
 		Kind:       kind,
@@ -491,13 +569,23 @@ func forgeMilestone(m forge.Milestone) milestoneView {
 
 // ── the reads ────────────────────────────────────────────────────────────────
 
-// ListProjects returns the boards of your org — one per repository on the
-// deployment's forge that you can see. The key is the repository name, and it is
-// what addresses the board's issues.
+// ListProjects returns the boards of your org — the places your work actually
+// is. The key addresses the board's issues.
 //
-// Archived repositories are omitted: they are not live work. The set is the
-// FORGE's answer for your own account, so two people in one org can legitimately
-// see different boards.
+// A BOARD IS A PLACE WORK IS, not an object somebody provisioned. So the list is
+// assembled from the work itself: the repositories your org has filed issues on,
+// plus the boards the index holds. A repository with nothing on it is not in the
+// list and is still perfectly addressable — GET /projects/<name> reads it and a
+// create files into it — so nothing is lost by leaving it out.
+//
+// Measured, which is why: reading the forge's whole repository inventory put 745
+// boards here, of which all but a handful were vendored forks and mirrors
+// (.github, .profile, DOMPurify, BoatAttack) that will never carry this org's
+// work. A list that long is not a list — the estate's real roadmap was in it
+// somewhere and no one could see it.
+//
+// The forge half is the FORGE's answer for your own account, so two people in
+// one org can legitimately see different boards.
 func (o ops) forgeProjects(ctx context.Context, _ *noInput) (*projectList, error) {
 	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, owner string) (*projectList, error) {
 		// The board list is assembled from ISSUES, not from the org's repository
@@ -522,24 +610,29 @@ func (o ops) forgeProjects(ctx context.Context, _ *noInput) (*projectList, error
 			}
 			seen[strings.ToLower(r.Repository.Name)] = forge.Repo{Name: r.Repository.Name, FullName: full}
 		}
-		// A repository with no work on it yet is still a board you can file
-		// against, and only the inventory knows about it. So the inventory is read
-		// WARM-ONLY: present, it completes the list; absent, it fills behind this
-		// request and the next load has it. Waiting for it would put the 21s back
-		// to add boards that are, by definition, empty.
-		if repos, ok := cl.ReposWarm(ctx, owner); ok {
-			for _, r := range repos {
-				if r.Archived {
-					continue
-				}
-				if _, dup := seen[strings.ToLower(r.Name)]; !dup {
-					seen[strings.ToLower(r.Name)] = r
-				}
-			}
-		}
-		out := make(projectList, 0, len(seen))
+		out := make(projectList, 0, len(seen)+8)
 		for _, r := range seen {
 			out = append(out, repoProject(owner, r))
+		}
+		// AND THE BOARDS THE INDEX HOLDS. A board filled by an agent, a mirror or
+		// the helpdesk is the same kind of thing as a board filled by a repository
+		// — an org-scoped, key-addressed set of work items — so it belongs in the
+		// same list rather than behind a second endpoint. Measured before this
+		// existed: the org's real roadmap was 15 rows under two project ids that
+		// this list did not contain, so the board UI could not address them at all
+		// and `GET /projects/<that id>` answered 404.
+		st, org, err := o.index(ctx)
+		if err != nil {
+			return nil, err
+		}
+		boards, err := st.ListProjects(ctx, org)
+		if err != nil {
+			return nil, err
+		}
+		for _, b := range boards {
+			if _, dup := seen[strings.ToLower(b.Key)]; !dup {
+				out = append(out, indexProject(b))
+			}
 		}
 		// Sorted, because the list is assembled from a map and two identical reads
 		// must not answer in two different orders.
@@ -557,21 +650,30 @@ func (o ops) forgeProject(ctx context.Context, in *projectRef) (*trackerProject,
 		// board whose name we already have is what made this page cost twenty
 		// seconds on a large org; the forge will simply hand it over for ~1s.
 		r, err := cl.Repo(ctx, owner, in.Key)
-		if err != nil {
-			// The forge answers 404 for "no such repository" and for "your account
-			// cannot see it" alike, and for a board addressed BY NAME those are one
-			// answer — which also declines to tell a caller that a private board is
-			// there.
-			if errors.Is(err, forge.ErrUnknownActor) {
-				return nil, zip.ErrNotFound("no such project")
+		if err == nil && !r.Archived {
+			v := repoProject(owner, r)
+			return &v, nil
+		}
+		// Not a repository, or not one you can see — so try the INDEX, which holds
+		// the other boards this org files against. Same URL, because a board is one
+		// kind of thing however it came to exist; the alternative is a caller that
+		// has to know which store a key lives in before it can address it, which is
+		// exactly the split this surface no longer has.
+		if st, iamOrg, ierr := o.index(ctx); ierr == nil {
+			if p, perr := st.GetProject(ctx, iamOrg, strings.ToUpper(in.Key)); perr == nil {
+				v := indexProject(p)
+				return &v, nil
 			}
+		}
+		// The forge answers 404 for "no such repository" and for "your account
+		// cannot see it" alike, and for a board addressed BY NAME those are one
+		// answer — which also declines to tell a caller that a private board is
+		// there. A forge that FAILED, rather than declined, is still reported as
+		// the failure it was.
+		if err != nil && !errors.Is(err, forge.ErrUnknownActor) {
 			return nil, o.answer(err)
 		}
-		if r.Archived {
-			return nil, zip.ErrNotFound("no such project")
-		}
-		v := repoProject(owner, r)
-		return &v, nil
+		return nil, zip.ErrNotFound("no such project")
 	})
 }
 
@@ -607,18 +709,60 @@ func (o ops) forgeIssues(ctx context.Context, in *issueQuery) (*issueList, error
 		if err != nil {
 			return nil, o.answer(err)
 		}
-		out := make(issueList, 0, len(rows))
+		// TWO SOURCES, ONE BOARD. The forge answers for the work filed on its
+		// repositories; the index answers for everything else that files against
+		// this estate — an agent's own roadmap, a mirrored GitHub issue, a
+		// helpdesk escalation. Reading only the first is what made the product
+		// show three bot pull requests while the actual roadmap, fifteen rows
+		// assigned to named agents, was unreachable from every board in the UI.
+		//
+		// They are unioned HERE, before the filters, rather than behind two
+		// endpoints a caller has to know to ask twice: Source is already the field
+		// that says where a row came from (contract.go), so where it is stored is
+		// not a second question anyone should have to ask. One list, one filter
+		// pass, and no way for the two halves to disagree about what a column is.
+		st, iamOrg, err := o.index(ctx)
+		if err != nil {
+			return nil, err
+		}
+		key, err := boardKeys(ctx, st, iamOrg)
+		if err != nil {
+			return nil, err
+		}
+		indexed, err := st.ListIssues(ctx, iamOrg, "", IssueFilter{})
+		if err != nil {
+			return nil, err
+		}
+		all := make([]issueView, 0, len(rows)+len(indexed))
 		for _, r := range rows {
-			v := forgeIssue(r)
-			// The board is addressed by repository, and issues-search spans the org, so
-			// the repo IS the project filter. Compared case-insensitively for the same
-			// reason getProject is.
+			all = append(all, forgeIssue(r))
+		}
+		for _, r := range indexed {
+			all = append(all, indexIssue(key[r.ProjectID], r))
+		}
+
+		out := make(issueList, 0, len(all))
+		seen := make(map[string]bool, len(all))
+		for _, v := range all {
+			// One card per handle. The two sources address different keyspaces —
+			// repository names, and the index's uppercase board keys — so a
+			// collision takes a repository named exactly like a board. Rare, and a
+			// card drawn twice is a worse answer than the one dropped here.
+			h := strings.ToLower(v.Identifier)
+			if seen[h] {
+				continue
+			}
+			seen[h] = true
+			// WHICH board is a filter, and it filters on the BOARD KEY. For a forge
+			// row that key is the repository, which is why this used to read the
+			// repo field and still worked; for an index row the two are different
+			// facts and only the key addresses the board.
 			//
 			// AN EMPTY KEY KEEPS EVERYTHING. The fan-out above is already org-wide and
 			// every row not on the requested board was being discarded here; leaving
 			// the filter unbound is therefore the global board, at no extra cost and
 			// with no second endpoint to drift from this one.
-			if in.Key != "" && !strings.EqualFold(v.Repo, in.Key) {
+			if in.Key != "" && !strings.EqualFold(v.ProjectKey, in.Key) {
 				continue
 			}
 			if in.Repo != "" && !strings.EqualFold(v.Repo, in.Repo) {
@@ -628,6 +772,17 @@ func (o ops) forgeIssues(ctx context.Context, in *issueQuery) (*issueList, error
 				continue
 			}
 			if in.Status != "" && v.Status != in.Status {
+				continue
+			}
+			// Kind and Source are narrowed at the forge for the forge's half (f.Type
+			// above) and nowhere at all for the index's, so both are applied here.
+			// `source` was declared on this query, documented, and silently ignored
+			// while every row on the surface carried the same value — a filter that
+			// cannot change the answer reads as a filter that agrees with you.
+			if in.Kind != "" && v.Kind != in.Kind {
+				continue
+			}
+			if in.Source != "" && v.Source != in.Source {
 				continue
 			}
 			if in.Scheduled && v.DueAt == 0 && v.StartAt == 0 {
@@ -724,7 +879,7 @@ func (o ops) forgeCreateIssue(ctx context.Context, in *newIssue) (*issueView, er
 		// not, because the repo was the address. Fill it so the card knows its board.
 		if v.Repo == "" {
 			v.Repo, v.ProjectKey = in.Key, in.Key
-			v.Identifier = fmt.Sprintf("%s#%d", in.Key, got.Number)
+			v.Identifier = ident(in.Key, int(got.Number))
 		}
 		return &v, nil
 	})
