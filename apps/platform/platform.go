@@ -55,6 +55,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/brand"
+	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/hanzoai/namespace"
@@ -95,6 +96,8 @@ type state struct {
 	appLock     appMutex           // per-app serialization of apply-CR→finalize-live (applylive.go, RED LOW-1)
 	deployGate  inflightGate       // per-org in-flight synchronous-deploy cap (deploy.go, RED LOW L1)
 	resolver    fqdn.Resolver      // custom-domain ownership verification (domains.go); nil ⇒ system resolver
+	hook        secret             // the forge's webhook key, held for a window (hook.go)
+	landed      seen               // pushes already fired, so a redelivery builds once (hook.go)
 }
 
 // mounted is the active service so Shutdown can release the store.
@@ -181,16 +184,34 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// with no list to maintain per brand.
 	selfGitHost = brand.Apex(deps.Domain)
 
+	// The forge, by the same reasoning and from the ONE derivation of it. It is
+	// what makes an application's github.com RepoURL and a delivery's git.hanzo.ai
+	// clone URL the same repository while the migration runs (normRepo).
+	forgeHost = forge.Host(deps.Domain)
+
 	// git-push-to-deploy: a push landed on the embedded git server (clients/git)
 	// triggers a build for every app tracking that repo+branch. Inverted so git
 	// never imports platform — build.go RegisterPushBuilder ⇄ OnGitPush (push.go).
-	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) error { return buildFromPush(mounted, ctx, ev) })
+	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) (int, error) {
+		return buildFromPush(mounted, ctx, ev)
+	})
 
 	// The same trigger on the plane. git and platform are separate processes, so
 	// the registration above is nil in the process where pushes actually land —
 	// which made OnGitPush's nil-when-unregistered a silent no-op for every push
 	// the fleet has ever served.
 	exposePush()
+
+	// The same trigger from the FORGE. Pushes land on git.hanzo.ai, a separate
+	// server whose refs never touch this fleet's receive-pack, so the two seams
+	// above are reached from there by a signed delivery (hook.go) — registered here,
+	// in the process holding the builder, which is the whole reason the door apps/git
+	// used to serve could accept a push and build nothing.
+	//
+	// Raw, not a typed op: the HMAC covers the bytes and has to run before the
+	// decode. Terminal keeps its 401/413 intact under an outer /v1 error filter,
+	// exactly as the GitHub webhook does.
+	app.Post(hookPath, cloud.Terminal(cloud.Handle(s, hook)))
 
 	// Own the git build→deploy handoff: a background reconciler that applies the
 	// Service CR once a build Job succeeds (reconcile.go). Restart-safe — it reads
@@ -1111,6 +1132,18 @@ func genID(prefix string) string {
 // Shutdown closes the platform store. Idempotent. Mirrors the projects
 // Shutdown contract so the serve layer releases subsystem resources uniformly.
 func Shutdown() error {
+	// UNREGISTER FIRST, because the registration outlives the thing it reaches.
+	// The push builder is a closure over `mounted`, which the last line of this
+	// function sets to nil — so a push arriving after a shutdown (a co-resident git
+	// server draining, a rolling deploy) dispatched buildFromPush(nil, …) and
+	// dereferenced a nil Service. A self-inflicted panic in the process that owns
+	// builds, on the one path that is meant to be best-effort.
+	//
+	// Unregistered, OnGitPush falls to the plane and gets an honest failure from a
+	// platform that is going away, which is what a caller can act on. Before the
+	// guard below: an unregistration is correct whether or not a store was ever
+	// opened, and Register is the one thing Mount does that has no other undo.
+	cloud.RegisterPushBuilder(nil)
 	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}

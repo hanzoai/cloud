@@ -11,6 +11,10 @@ import (
 // release of the image the entire fleet runs.
 func TestIsReleasePush(t *testing.T) {
 	const sha = "65e8c5bd75ee0e1db5385caf5ea6541810bcfafa"
+	prev := forgeHost
+	forgeHost = "git.hanzo.ai"
+	t.Cleanup(func() { forgeHost = prev })
+
 	for _, tc := range []struct {
 		name string
 		ev   cloud.GitPushEvent
@@ -18,6 +22,11 @@ func TestIsReleasePush(t *testing.T) {
 	}{
 		{"merge to cloud main", cloud.GitPushEvent{
 			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud"}, true},
+		// The forge is where that merge lands now. One repository, two spellings,
+		// for as long as the migration runs — and while these compared unequal a
+		// merge on the canonical host cut no release at all.
+		{"the same merge on the forge", cloud.GitPushEvent{
+			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://git.hanzo.ai/hanzoai/cloud.git"}, true},
 		{"clone url with .git suffix", cloud.GitPushEvent{
 			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud.git"}, true},
 		{"clone url cased differently", cloud.GitPushEvent{
@@ -31,6 +40,15 @@ func TestIsReleasePush(t *testing.T) {
 			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud-docs"}, false},
 		{"an impostor host", cloud.GitPushEvent{
 			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://evil.example.com/hanzoai/cloud"}, false},
+		// THE ONE THAT MAKES THE HOST-BLIND COMPARE SAFE. The embedded git server's
+		// clone URL ends in a path a TENANT names: a project `hanzoai` holding a
+		// repo `cloud` spells the release repository's own coordinate. Compared by
+		// its last two segments that push would publish the binary the whole fleet
+		// runs; compared whole, /v1/git/... is simply a different repository.
+		{"a tenant project that spells the release coordinate", cloud.GitPushEvent{
+			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://api.hanzo.ai/v1/git/acme/hanzoai/cloud.git"}, false},
+		{"the same, served at the forge's own host", cloud.GitPushEvent{
+			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://git.hanzo.ai/v1/git/acme/hanzoai/cloud.git"}, false},
 		{"no commit pinned", cloud.GitPushEvent{
 			Ref: "refs/heads/main", Commit: "", CloneURL: "https://github.com/hanzoai/cloud"}, false},
 		{"a tag is never a release push, even one named main", cloud.GitPushEvent{
