@@ -248,11 +248,17 @@ func answer(ctx context.Context, s *cloud.Service[state], org string, m Message)
 		// nothing once, and the whole failure was therefore invisible: the op
 		// answered 200 and the bridge posted its generic sentence. The run id is
 		// here so the row is findable.
-		status, id := "", ""
+		status, id, why := "", "", ""
 		if run != nil {
-			status, id = run.Status, run.RunID
+			status, id, why = run.Status, run.RunID, run.Error
 		}
-		s.Log.Error("channels: agent run did not succeed", "channel", m.Channel, "org", org, "status", status, "run_id", id)
+		// `why` is the run's OWN account of the failure, and dropping it is what
+		// made this branch unreadable: status and id say a run failed and which
+		// row it is, never what went wrong, so diagnosing a broken agent meant
+		// finding that row by hand — the exact cost RunOnBehalfOut.Error was
+		// added to remove. Carried and then discarded is worse than absent,
+		// because the field reads as covered.
+		s.Log.Error("channels: agent run did not succeed", "channel", m.Channel, "org", org, "status", status, "run_id", id, "why", why)
 		return "The agent did not finish that run. This is on our side — please try again.", false, id,
 			fmt.Errorf("run %s status %q", id, status)
 	}
