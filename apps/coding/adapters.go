@@ -12,11 +12,11 @@ import (
 // adapters.go binds coding's seams to the apps that OWN them — across the
 // process boundary, because that is where they are.
 //
-// It used to bind them to agents and tracker in-process, which was right while
+// It used to bind them to agents and todo in-process, which was right while
 // one binary held every subsystem. It is not right now: each app is its own
 // process, and every one of those calls reads the callee's `mounted` package
 // global. A package global is per-PROCESS, so in the process that runs a coding
-// run they are all nil and each seam answered its zero value — "tracker: not
+// run they are all nil and each seam answered its zero value — "todo: not
 // mounted", an empty clone URL the dispatcher reads as "git is not available",
 // and a VerifyRef that reports every pushed branch absent and fails the run
 // closed with no PR. The chat turn died of exactly this shape one file over.
@@ -118,7 +118,7 @@ func (planeSessions) Close(ctx context.Context, org, sessionID, status string) e
 	return err
 }
 
-// planePR opens the pull request: the work item on our board (tracker), and the
+// planePR opens the pull request: the work item on our board (todo), and the
 // proposal where the code lives (git — a GitHub pull request for a repository
 // that mirrors there, the branch's page here otherwise).
 //
@@ -138,7 +138,7 @@ func (planePR) Open(ctx context.Context, in PRInput) (PRRef, error) {
 	// A body field would arrive unchecked — which is what made this a
 	// cross-tenant write. Same shape as cloud.UpsertIssue's Ask.
 	ctx = plane.For(ctx, in.Org)
-	out, err := plane.Ask[plane.AgentPRIn, plane.AgentPROut](ctx, trackerApp, plane.TrackerAgentPR,
+	out, err := plane.Ask[plane.AgentPRIn, plane.AgentPROut](ctx, todoApp, plane.TodoAgentPR,
 		&plane.AgentPRIn{
 			Project: in.Project, Repo: in.Repo, Base: in.Base,
 			Head: in.Head, Title: in.Title, Body: in.Body, Assignee: in.Assignee,
@@ -147,7 +147,7 @@ func (planePR) Open(ctx context.Context, in PRInput) (PRRef, error) {
 		return PRRef{}, err
 	}
 	if out == nil {
-		return PRRef{}, fmt.Errorf("coding: tracker filed no PR")
+		return PRRef{}, fmt.Errorf("coding: todo filed no PR")
 	}
 	ref := PRRef{Identifier: out.Identifier, ProjectKey: out.ProjectKey, Number: out.Number}
 
@@ -252,6 +252,6 @@ var enqueueOnce sync.Once
 
 // The peers, spelled once.
 const (
-	agentsApp  = "agents"
-	trackerApp = "tracker"
+	agentsApp = "agents"
+	todoApp   = "todo"
 )

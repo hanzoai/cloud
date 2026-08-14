@@ -44,7 +44,7 @@ import (
 // what ARRIVED on the far side rather than what was sent.
 type peers struct {
 	sessions *fakeSessions
-	tracker  *fakePR
+	todo     *fakePR
 	tip      string
 	found    bool
 	gated    []string
@@ -151,12 +151,12 @@ func servePeers(t *testing.T, p *peers) {
 			return &plane.Secret{Value: []byte("forge-machine-token")}, nil
 		}, zip.WithOperationID(plane.KMSGet))
 
-	trackerApp := zip.New(zip.Config{AppName: "tracker", DisableStartupMessage: true})
-	zip.Post[plane.AgentPRIn, plane.AgentPROut](trackerApp, "/tracker/agent-pr",
+	todoApp := zip.New(zip.Config{AppName: "todo", DisableStartupMessage: true})
+	zip.Post[plane.AgentPRIn, plane.AgentPROut](todoApp, "/todo/agent-pr",
 		func(ctx context.Context, in *plane.AgentPRIn) (*plane.AgentPROut, error) {
 			// No in.Org: the org is the caller's plane identity, mirroring the real
-			// handler (plugin/tracker/seams.go) after the cross-tenant write was closed.
-			ref, err := p.tracker.Open(ctx, PRInput{
+			// handler (plugin/todo/seams.go) after the cross-tenant write was closed.
+			ref, err := p.todo.Open(ctx, PRInput{
 				Org: zip.CallerOf(ctx).Org, Project: in.Project, Repo: in.Repo, Base: in.Base,
 				Head: in.Head, Title: in.Title, Body: in.Body, Assignee: in.Assignee,
 			})
@@ -164,9 +164,9 @@ func servePeers(t *testing.T, p *peers) {
 				return nil, err
 			}
 			return &plane.AgentPROut{Identifier: ref.Identifier, ProjectKey: ref.ProjectKey, Number: ref.Number}, nil
-		}, zip.WithOperationID(plane.TrackerAgentPR))
+		}, zip.WithOperationID(plane.TodoAgentPR))
 
-	for name, app := range map[string]*zip.App{"agents": agentsApp, "kms": kmsApp, "tracker": trackerApp} {
+	for name, app := range map[string]*zip.App{"agents": agentsApp, "kms": kmsApp, "todo": todoApp} {
 		plane.Bind()
 		go func(path string) { _ = app.Listen(path) }(zip.SocketPath(name))
 		t.Cleanup(func() { _ = app.Shutdown() })
@@ -199,7 +199,7 @@ func planeDispatcher(run *fakeRunner) Dispatcher {
 func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 	p := &peers{
 		sessions: &fakeSessions{id: "sess_abc123def456"},
-		tracker:  &fakePR{ref: PRRef{Identifier: "API-7", ProjectKey: "API", Number: 7}},
+		todo:     &fakePR{ref: PRRef{Identifier: "API-7", ProjectKey: "API", Number: 7}},
 		tip:      "verifiedsha", found: true,
 	}
 	servePeers(t, p)
@@ -219,7 +219,7 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 		t.Fatalf("run must complete over the plane: %+v", res)
 	}
 	if res.PR.Identifier != "API-7" {
-		t.Fatalf("the PR must be filed through tracker's door, got %q", res.PR.Identifier)
+		t.Fatalf("the PR must be filed through todo's door, got %q", res.PR.Identifier)
 	}
 	// ONE seam, both backends: the row landed on the board AND git answered where
 	// the proposal is read. A run whose result carries no address gives a person
@@ -276,7 +276,7 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 func TestRun_OverThePlane_UnverifiedRefFilesNoPR(t *testing.T) {
 	p := &peers{
 		sessions: &fakeSessions{id: "sess_abc123def456"},
-		tracker:  &fakePR{ref: PRRef{Identifier: "API-8"}},
+		todo:     &fakePR{ref: PRRef{Identifier: "API-8"}},
 		found:    false,
 	}
 	servePeers(t, p)
@@ -290,7 +290,7 @@ func TestRun_OverThePlane_UnverifiedRefFilesNoPR(t *testing.T) {
 	if res.OK || !strings.Contains(res.Error, "not found in native git") {
 		t.Fatalf("an unverified ref must fail closed, got %+v", res)
 	}
-	if len(p.tracker.inputs) != 0 {
+	if len(p.todo.inputs) != 0 {
 		t.Fatal("no PR may be filed for a branch git cannot see")
 	}
 	if len(p.sessions.closes) != 1 || p.sessions.closes[0].status != statusError {

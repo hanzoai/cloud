@@ -90,14 +90,14 @@ func (f *countingForge) client(t *testing.T) *Client {
 	return c
 }
 
-// clock installs a movable clock on both caches of c and returns the mover.
+// clock installs a movable clock on c's read cache and returns the mover.
 // Installed BEFORE any goroutine exists so the assignment cannot race the
 // background refresh that later reads it.
 func clock(c *Client) func(time.Duration) {
 	var off atomic.Int64
 	base := time.Now()
 	now := func() time.Time { return base.Add(time.Duration(off.Load())) }
-	c.repos.now, c.rollup.now = now, now
+	c.repos.now = now
 	return func(d time.Duration) { off.Store(int64(d)) }
 }
 
@@ -138,27 +138,6 @@ func TestReposCache_KeyedByActorSoOneUserNeverSeesAnothersRepositories(t *testin
 		if r.Private {
 			t.Fatalf("bob was served the private repo %q", r.FullName)
 		}
-	}
-}
-
-// The rollup is cached on the same key and needs the same property.
-func TestMilestonesCache_KeyedByActorToo(t *testing.T) {
-	s := newStub(t)
-	s.visible["alice"] = []string{"acme"}
-	s.visible["bob"] = []string{"othercorp"}
-	s.repos["acme"] = []Repo{{Name: "api", FullName: "acme/api"}}
-	s.milestones["acme/api"] = []Milestone{{ID: 1, Title: "v1", State: "open"}}
-	c := s.client(t)
-
-	if _, err := c.As("alice").Milestones(t.Context(), "acme"); err != nil {
-		t.Fatalf("alice Milestones: %v", err)
-	}
-	bob, err := c.As("bob").Milestones(t.Context(), "acme")
-	if err != nil {
-		t.Fatalf("bob Milestones: %v", err)
-	}
-	if len(bob) != 0 {
-		t.Fatalf("CROSS-USER ROLLUP READ: bob got %d of acme's milestones: %+v", len(bob), bob)
 	}
 }
 
@@ -375,46 +354,6 @@ func TestReuse_KeepsTheWarmListAcrossACredentialRotation(t *testing.T) {
 	}
 }
 
-// ── the rollup refuses rather than truncating ────────────────────────────────
-
-func TestMilestones_RefusesAnOrgPastTheRollupCapRatherThanTruncating(t *testing.T) {
-	s := newStub(t)
-	s.visible["alice"] = []string{"acme"}
-	for i := range maxRollup + 1 {
-		name := fmt.Sprintf("repo%d", i)
-		s.repos["acme"] = append(s.repos["acme"], Repo{Name: name, FullName: "acme/" + name})
-	}
-
-	got, err := s.client(t).As("alice").Milestones(t.Context(), "acme")
-	if err == nil {
-		t.Fatalf("want a refusal past the cap, got %d milestones — a partial rollup presented as a complete one", len(got))
-	}
-	// The message must name the cap, so whoever reads it knows what to change.
-	if !strings.Contains(err.Error(), fmt.Sprint(maxRollup)) {
-		t.Fatalf("the refusal should name the cap %d: %v", maxRollup, err)
-	}
-}
-
-// An org AT the cap is served: the cap is a runaway guard, not a limit real orgs
-// are expected to bump into.
-func TestMilestones_AnOrgAtTheCapIsStillServed(t *testing.T) {
-	s := newStub(t)
-	s.visible["alice"] = []string{"acme"}
-	for i := range maxRollup {
-		name := fmt.Sprintf("repo%d", i)
-		s.repos["acme"] = append(s.repos["acme"], Repo{Name: name, FullName: "acme/" + name})
-	}
-	s.milestones["acme/repo0"] = []Milestone{{ID: 1, Title: "v1", State: "open"}}
-
-	got, err := s.client(t).As("alice").Milestones(t.Context(), "acme")
-	if err != nil {
-		t.Fatalf("an org at the cap must still be served: %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("got %d milestones, want 1", len(got))
-	}
-}
-
 // An unscoped client refuses BEFORE it can take a slot in the cache, so a
 // missing actor can never be cached as an answer under an empty key.
 func TestReposCache_UnscopedClientRefusesWithoutCaching(t *testing.T) {
@@ -423,9 +362,6 @@ func TestReposCache_UnscopedClientRefusesWithoutCaching(t *testing.T) {
 
 	if _, err := c.Repos(t.Context(), "acme"); !errors.Is(err, ErrNoActor) {
 		t.Fatalf("want ErrNoActor, got %v", err)
-	}
-	if _, err := c.Milestones(t.Context(), "acme"); !errors.Is(err, ErrNoActor) {
-		t.Fatalf("want ErrNoActor from the rollup, got %v", err)
 	}
 	if n := f.calls.Load(); n != 0 {
 		t.Fatalf("an unscoped client reached the forge %d times", n)
