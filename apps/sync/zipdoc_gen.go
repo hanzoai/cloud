@@ -48,6 +48,50 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"sync_1","direction":"pull"}`),
 	})
+	zip.Describe("POST /git/import", zip.Doc{
+		Description: "Creates the repo on the forge and advances the upstream into it,\nfor the CALLER's org.\n\nThe org is never read off the argument: it is the identity the edge minted and\nthe plane carried, so a caller holding one org's context cannot create a repo\nin another's namespace.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"ImportIn.cloneUrl":  "CloneURL is the upstream to mirror from.",
+			"ImportIn.mirrorUrl": "MirrorURL registers an outbound mirror target; empty registers none.",
+			"ImportIn.project":   "Project is the sub-scope the repo lives in — the provider-side account for\nan import, so two upstreams of the same name stay distinct.",
+			"ImportIn.repo":      "Repo is the repository name to create locally.",
+			"ImportIn.token":     "Token authenticates the fetch. It rides the internal socket only, and is\npresented to git out of band (env-fed http.extraHeader), never argv.",
+			"Imported.repo":      "Repo names what was imported.",
+		},
+	})
+	zip.Describe("POST /git/inbound", zip.Doc{
+		Description: "Advances ONE ref of the CALLER's repo from an upstream push.\n\nThe forge is canonical: the push that carries the update is non-forcing, so a\ndivergence comes back as Conflict with the forge untouched rather than as an\nerror — the caller needs to know it diverged, not to retry into an overwrite.\nThe org is the caller's plane identity, so a push routed to one org can never\nadvance another's refs.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"InboundIn.cloneUrl": "CloneURL is the upstream to fetch the ref from.",
+			"InboundIn.origin":   "Origin is the source host, so the outbound mirror suppresses the echo.",
+			"InboundIn.project":  "Project is the sub-scope — the provider-side account.",
+			"InboundIn.ref":      "Ref is the FULL ref, e.g. refs/heads/main or refs/tags/v1.2.3.",
+			"InboundIn.repo":     "Repo is the native repository name.",
+			"InboundIn.token":    "Token authenticates the fetch; env-fed downstream, never argv.",
+			"Synced.applied":     "Applied is true when native fast-forwarded.",
+			"Synced.before":      "Before and After are the native tips around an Applied fetch.",
+			"Synced.conflict":    "Conflict is true when native had diverged and was NOT overwritten.",
+			"Synced.detail":      "Detail is the human reason for a conflict or a skip.",
+			"Synced.noOp":        "NoOp is true when native was already at that tip.",
+		},
+	})
+	zip.Describe("POST /git/mirror", zip.Doc{
+		Description: "Declares (Enabled) or withdraws (!Enabled) one outbound mirror\ntarget on a repo of the CALLER's org, idempotently either way.\n\nIt declares the target and nothing more: the pushing happens on the next\nadvance of that repository, so a target that exists is a fact about the repo\nrather than a job somebody has to keep running. EnsureMirror is the same func\nthe in-process controller exposes, so a URL crossing the plane passes the\nidentical gate — https, no userinfo, on the outbound allowlist — and a remote\ncaller cannot declare a push a local one could not.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"MirrorIn.enabled": "Enabled registers the target when true and removes it when false.",
+			"MirrorIn.url":     "URL is the outbound target to push to.",
+		},
+	})
+	zip.Describe("POST /git/status", zip.Doc{
+		Description: "Reports which of the named repos the forge holds for the CALLER's\norg and which a prior advance left in conflict.\n\nThe app that DRAWS the repo list is integrations (it has the provider's\ncatalogue of what could be imported); the app that knows what WAS is this one.\n\nThe reply is a SLICE, not a map: a map cannot cross this wire, so each row\ncarries the name it answers for. A name with nothing to say is ABSENT rather\nthan a false row — the caller reads absence as not-imported, which is the same\nvalue the in-process leg's zero entry yields, so neither leg can be told from\nthe other by its result.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"RepoStatus.conflict":     "Conflict is true when a branch diverged on a prior inbound sync and native\nwas preserved.",
+			"RepoStatus.imported":     "Imported is true when a native repo exists for this name.",
+			"RepoStatus.lastSyncedAt": "LastSyncedAt is unix seconds of the last import/sync; 0 means never.",
+			"StatusIn.names":          "Names are the repo names to report on.",
+			"StatusIn.project":        "Project is the sub-scope; empty means the org's default store.",
+		},
+	})
 	zip.Describe("POST /sync/run", zip.Doc{
 		Description: "Reconciles every sync of the CALLER's org whose source matches the\nevent, answering how many changed and how many were skipped.\n\nThe org is the caller's plane identity and never the argument — plane.SyncIn has\nno org field, deliberately, because a trigger able to state the org could\nreconcile another tenant's repositories. Anonymous is refused rather than\ndefaulted: an event arriving with no principal must fail, not sync somebody's\nrepos.\n\nIt calls reconcileEvent, never cloud.Sync. cloud.Sync now falls through to THIS\nop when the local one is nil, so a process serving it that dispatched through\nit would dial its own socket and answer itself, forever.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
