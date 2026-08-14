@@ -90,10 +90,17 @@
       } catch (e) {}
     }
     try {
+      // No credentials mode. The publishable key IS the credential, and asking
+      // for cookies costs the send: a credentialed cross-origin request is only
+      // read once the response carries Access-Control-Allow-Credentials, which
+      // is granted to exact first-party origins alone. This tag's whole job is
+      // to run on a customer's own domain, which is not one of them — the
+      // preflight would fail and every event would be dropped, on their site
+      // and on ours. Cookies also have no business riding along on a page that
+      // is not ours.
       fetch(url, {
         method: 'POST',
         keepalive: true,
-        credentials: 'include',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
         body: body
       }).catch(noop)
