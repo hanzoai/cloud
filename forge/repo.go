@@ -112,46 +112,6 @@ func (c *Client) Ensure(ctx context.Context, owner, repo, description string) (R
 	return out, nil
 }
 
-// Delete removes org/repo, and CONFIRMS that it is gone.
-//
-// It is the inverse of [Client.Ensure] and exists because Ensure is idempotent
-// BY NAME: a repository left behind by whatever it was made for is one the next
-// caller of that name adopts, commits and all. Closing it is not the same
-// answer — a closed repository is still there to be adopted and re-opened — so
-// the caller that owns the name for good asks for this.
-//
-// A repository that is NOT THERE is success. Absence is the state asked for, and
-// a delete that has to be retried must be able to say so by trying again.
-//
-// The verdict comes from a READ, for the same reason [Client.SetPublic]'s does:
-// a 2xx says the forge accepted the request, and the only statement that the
-// repository is gone is the forge failing to find it afterwards.
-//
-// It acts as THIS CLIENT'S identity, machine or sudoed. Forgejo requires repo
-// admin to delete, so a sudoed caller gets its own answer rather than the
-// platform's — a caller that wants the platform's authority asks for it with
-// [Client.Machine], in writing.
-func (c *Client) Delete(ctx context.Context, owner, repo string) error {
-	if err := validOrg(owner); err != nil {
-		return err
-	}
-	if err := validOrg(repo); err != nil {
-		return fmt.Errorf("forge: repo: %w", err)
-	}
-	path := "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo)
-	if err := c.send(ctx, sendOpts{method: http.MethodDelete, path: path}); err != nil && !isMissing(err) {
-		return fmt.Errorf("forge: delete %s/%s: %w", owner, repo, err)
-	}
-	_, err := c.Repo(ctx, owner, repo)
-	switch {
-	case isMissing(err):
-		return nil
-	case err != nil:
-		return fmt.Errorf("forge: confirm delete %s/%s: %w", owner, repo, err)
-	}
-	return fmt.Errorf("forge: %s/%s is still there after a delete", owner, repo)
-}
-
 // Tip is the commit a branch points at, and whether the branch is there at all.
 //
 // found is carried separately from the sha because the two absences must not be
