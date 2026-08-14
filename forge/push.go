@@ -14,7 +14,7 @@ package forge
 // caller deriving either one itself is a second spelling of the one thing that
 // has to be right.
 //
-// # Born empty, and born writable
+// # Born empty, born writable, born advance-only
 //
 // [Client.Init] is deliberately not [Client.Ensure]. Ensure makes a repository
 // for a coding run: it auto-inits a first commit so a clone has a HEAD, and it
@@ -28,8 +28,12 @@ package forge
 //     (enable_push false is read for everyone, site administrator included), so
 //     the sync could never land the branch it exists to land.
 //
-// So a sync's repository is created empty and unprotected, and the two creation
-// paths stay separate rather than one growing flags.
+// So a sync's repository is created empty and pushable, and the two creation
+// paths stay separate rather than one growing flags. What it is NOT is
+// unguarded: every branch is made advance-only ([Client.monotone]), which leaves
+// the push open and refuses the two things that lose history — a force and a
+// delete. The client that fills this repository never asks for either; the
+// server refusing them is what makes that true of every OTHER client too.
 
 import (
 	"context"
@@ -92,13 +96,21 @@ func (c *Client) Remote(owner, repo string) (Remote, error) {
 	}, nil
 }
 
-// Init ensures an EMPTY, unprotected repository exists at owner/repo.
+// Init ensures an EMPTY, pushable, advance-only repository exists at owner/repo.
 //
 // Empty because its content arrives by push and an auto-init commit would put a
 // commit in it that the upstream does not have — see the file comment. Private
 // because a repository is born closed and opening it is a decision. Idempotent:
 // a repository that is already there is the state the caller wanted, which the
-// forge reports as 409.
+// forge reports as 409, and the rule is (re)stated either way — a repository
+// created before this deployment learned to ask for it is brought into line by
+// the next import rather than staying open forever.
+//
+// ADVANCE-ONLY is the second half of the same sentence and not an extra: a
+// synced repository holds a canonical copy whose whole value is that it only
+// ever gains history. The client that writes it never forces and never deletes,
+// but a client's discipline protects nothing from the next client — so the forge
+// is asked to refuse both. See [Client.monotone].
 //
 // It acts as the MACHINE. There is no human behind a sync — it runs on a
 // schedule and on a webhook — and sudoing as whoever last touched the sync would
@@ -126,7 +138,7 @@ func (c *Client) Init(ctx context.Context, owner, repo, description string) erro
 	if err != nil && !errors.Is(err, ErrExists) {
 		return fmt.Errorf("forge: create %s/%s: %w", owner, repo, err)
 	}
-	return nil
+	return c.monotone(ctx, owner, repo)
 }
 
 // Default points owner/repo's HEAD at branch, so a clone resolves the same
