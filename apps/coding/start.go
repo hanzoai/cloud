@@ -2,8 +2,8 @@ package coding
 
 // start.go is the ONE way a coding run begins.
 //
-// Every door — the Slack `code:` trigger, `POST /v1/coding`, and anything added
-// later — arrives here. That is not tidiness: a door that assembled its own
+// `POST /v1/coding` is the door, and anything added later arrives here too. That
+// is not tidiness: a door that assembled its own
 // Dispatcher would be a second ENGINE with its own pool and its own in-flight
 // set, and a run started from chat would be invisible to the app that shares
 // its name. One Start, one pool, one process.
@@ -12,7 +12,7 @@ package coding
 //
 // A run is a long chain of cross-process calls: open the session (agents), read
 // the clone URL (git), dispatch the sandbox (bot), verify the pushed ref (git),
-// file the PR (tracker). Every one of those authorizes on the CALLER's org,
+// file the PR (todo). Every one of those authorizes on the CALLER's org,
 // never on an argument, because a caller able to name the org could name
 // somebody else's.
 //

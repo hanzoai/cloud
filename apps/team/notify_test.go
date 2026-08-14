@@ -156,14 +156,14 @@ func TestAssigneeChangeProducesActivityNotification(t *testing.T) {
 
 	issueID := "issue-42"
 	putDoc(t, s.server, org, ws, map[string]any{
-		"_id": issueID, "_class": "tracker:class:Issue", "space": "tracker:project:X",
+		"_id": issueID, "_class": "tracker:class:Issue", "space": "todo:project:X",
 		"title": "Fix the thing", "assignee": nil,
 	})
 
 	// The assignment update, authored by `author`, setting assignee → carol.
 	s.applyRaw(t, map[string]any{
 		"_class": clTxUpdate, "objectId": issueID, "objectClass": "tracker:class:Issue",
-		"objectSpace": "tracker:project:X", "modifiedBy": "hanzo:" + author,
+		"objectSpace": "todo:project:X", "modifiedBy": "hanzo:" + author,
 		"modifiedOn": time.Now().UnixMilli(),
 		"operations": map[string]any{"assignee": PersonRef(carol)},
 	})
@@ -187,7 +187,7 @@ func TestAssigneeChangeProducesActivityNotification(t *testing.T) {
 	// Self-assignment notifies no one.
 	s.applyRaw(t, map[string]any{
 		"_class": clTxUpdate, "objectId": issueID, "objectClass": "tracker:class:Issue",
-		"objectSpace": "tracker:project:X", "modifiedBy": "hanzo:" + author,
+		"objectSpace": "todo:project:X", "modifiedBy": "hanzo:" + author,
 		"modifiedOn": time.Now().UnixMilli(),
 		"operations": map[string]any{"assignee": PersonRef(author)},
 	})
@@ -207,10 +207,10 @@ func TestCommentOnSubscribedDocNotifies(t *testing.T) {
 
 	issueID := "issue-7"
 	putDoc(t, s.server, org, ws, map[string]any{
-		"_id": issueID, "_class": "tracker:class:Issue", "space": "tracker:project:X", "title": "T",
+		"_id": issueID, "_class": "tracker:class:Issue", "space": "todo:project:X", "title": "T",
 	})
 	// watcher is subscribed to the issue (a prior assignment/collab gave them a context).
-	s.ensureNotifyContext(watcher, issueID, "tracker:class:Issue", "tracker:project:X", time.Now().UnixMilli())
+	s.ensureNotifyContext(watcher, issueID, "tracker:class:Issue", "todo:project:X", time.Now().UnixMilli())
 
 	s.applyRaw(t, chatCreate(issueID, "tracker:class:Issue", "hanzo:"+author, "<p>looks good</p>"))
 

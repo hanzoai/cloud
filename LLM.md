@@ -4515,9 +4515,9 @@ mutation that breaks the direct path and shows the call fail.
 **The gate only enforces on a kind that costs something.** `ResourceMeter.Gate`
 short-circuits to allow for `costCents <= 0`, and most per-kind fees default to 0, so a
 suite that does not price a kind proves nothing about billing. `e2e/run.sh` prices one
-(`CLOUD_TRACKER_FEE_CENTS`) and passes the SAME number to the suite as
-`E2E_TRACKER_FEE_CENTS`; spec 136 refuses to run at 0 rather than passing emptily.
-`tracker` is the seam because its gated create depends on nothing but the local store —
+(`CLOUD_TODO_FEE_CENTS`) and passes the SAME number to the suite as
+`E2E_TODO_FEE_CENTS`; spec 136 refuses to run at 0 rather than passing emptily.
+`todo` is the seam because its gated create depends on nothing but the local store —
 a 402 there is the billing gate, not object storage or an exec runtime answering first
 (both of which precede the gate on the deploy and invoke paths).
 
@@ -5242,8 +5242,8 @@ Every rung is an existing surface. Nothing here is new machinery.
 |---|---|---|
 | annotate | o11y annotation / `event.fact` | automatic |
 | notify | `apps/notify` | automatic |
-| open an issue | `apps/tracker` | automatic |
-| open a **draft** PR | `tracker.CreateAgentPR` (`Kind:"pr"`, `Source:"agent"`) | automatic, bar met, our repos only |
+| open an issue | `apps/todo` | automatic |
+| open a **draft** PR | `todo.CreateAgentPR` (`Kind:"pr"`, `Source:"agent"`) | automatic, bar met, our repos only |
 | **enqueue for review** | `POST /v1/o11y/reviews/:id/items` | **← the human stands here** |
 | reply to the customer | `apps/help` ticket thread | human first time, automatic on recurrence |
 | merge | forge | **human, always** |
@@ -5395,7 +5395,7 @@ is attributed to the org whose error triggered it.
   object storage. Reading the summary from the warehouse gets the loop what it
   needs and keeps that property.
 - **No second scrubber.** One scrub site; extend it or route through it.
-- **No new queue, no new tracker, no new notifier.** Reviews, tracker and notify
+- **No new queue, no new todo, no new notifier.** Reviews, todo and notify
   exist.
 - **No new auth, no new "gate".** IAM principal + `tenantOf` on every read, as
   every typed op already does.
@@ -5480,7 +5480,7 @@ or forgotten. Two properties come free and both matter here:
 
 Every rung of § 4 is already on that door: `analytics` publishes
 `get_v1_errors`, `o11y` publishes 318 ops including the review queues,
-and `tracker` and `help` are both projected. So the ladder needs no
+and `todo` and `help` are both projected. So the ladder needs no
 new tool surface — only the policy about which rung may be pulled without a
 human, which is § 4's job and not the door's.
 

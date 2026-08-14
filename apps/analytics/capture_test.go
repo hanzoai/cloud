@@ -377,7 +377,7 @@ func TestFactColumnsMatchArgsWidth(t *testing.T) {
 // ── HTTP contract (datastore is DOWN in this harness) ────────────────────────
 
 // canonDoor is the ONE path the canonical wire is served on. The three name-aliases
-// this file used to sweep (/v1/analytics{,/batch}, /v1/tracker) are retired, and
+// this file used to sweep (/v1/analytics{,/batch}, /v1/todo) are retired, and
 // doors_test.go holds them shut on both surfaces. The properties below are the
 // canonical door's own; the per-wire generalisation over every declared door lives
 // in doors_test.go, which builds each door's body from its own decoder.

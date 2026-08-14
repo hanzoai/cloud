@@ -84,8 +84,8 @@ const DefaultModel = "enso-flash"
 // for is a reply nobody reads.
 //
 // Escalation is a pin, not a guess. Anyone who needs more depth selects it in App
-// Home and that choice wins here; `code:` runs are a different path entirely and
-// carry their own model. Defaulting the cheap fast tier and letting the rare hard
+// Home and that choice wins here; a coding run is a different path entirely and
+// carries its own model. Defaulting the cheap fast tier and letting the rare hard
 // turn be asked for is the right way round — the reverse makes every greeting pay
 // for the hardest question anyone might ask.
 const ChatModel = "enso-flash"
