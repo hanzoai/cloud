@@ -24,7 +24,7 @@ import (
 // These databases are single-writer by construction, and two facts depend on the
 // cap rather than merely benefiting from it:
 //
-//   - A read-modify-write spanning two statements (tracker's per-project issue
+//   - A read-modify-write spanning two statements (todo's per-project issue
 //     number, agents' MAX(seq)+1 event allocation) is atomic ONLY because no
 //     second connection can interleave. Widen the pool and those become races
 //     that a UNIQUE index turns into errors instead of corruption — on a good day.

@@ -4,7 +4,7 @@ package coding
 // two halves of why that is not obvious — the same pair apps/integrations keeps
 // for the chat turn, kept here because this is the other place it shipped wrong.
 //
-// Every seam a run touches (session, git, tracker, the balance gate behind them)
+// Every seam a run touches (session, git, todo, the balance gate behind them)
 // authorizes on the CALLER's org and never on an argument, so no caller can name
 // the tenant it acts for. The org therefore rides the caller. But zip reads a
 // STATED caller only where there is NO REQUEST behind the context

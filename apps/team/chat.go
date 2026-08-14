@@ -90,7 +90,7 @@ type chatMsg struct {
 }
 
 // parseChatMessage returns the chatMsg for an applied tx iff it is a create of a
-// chunter:class:ChatMessage. Every other applied tx (roster txes, tracker/docs
+// chunter:class:ChatMessage. Every other applied tx (roster txes, todo/docs
 // writes, updates, removes) returns ok=false and is ignored. It reads the FLATTENED
 // applied tx, so a create wrapped in TxCollectionCUD (which applyTx unwraps, setting
 // attachedTo/attachedToClass/collection on the inner tx) is recognized identically

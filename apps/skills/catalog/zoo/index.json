@@ -5,7 +5,7 @@
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
-  "skill_count": 528,
+  "skill_count": 526,
   "skills": [
     {
       "description": "Read admin affiliates: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents..",
@@ -3944,6 +3944,14 @@
       "version": "8.0.0"
     },
     {
+      "description": "Read todo projects: Returns the boards of your org — one per repository on the deployment's forge that you can see., Returns one board of your org by its key — the repository name., Returns one board's issues — the work items of that repository on the forge, with their column,",
+      "name": "todo_projects",
+      "path": "todo_projects/SKILL.md",
+      "service": "todo",
+      "sha256": "0b4d77638bbe26a350591bbfc7b7ba6f87edac804857ef2acd5046123b968ed4",
+      "version": "8.0.0"
+    },
+    {
       "description": "Read tools activation: Reports which tools are switched on for the caller's org and project..",
       "name": "tools_activation",
       "path": "tools_activation/SKILL.md",
@@ -3989,30 +3997,6 @@
       "path": "traces_trace/SKILL.md",
       "service": "traces",
       "sha256": "6ca63ee789e7d4840b9630975a9e31dac2c96f29f4fe87379c3d98013e424cf2",
-      "version": "8.0.0"
-    },
-    {
-      "description": "Read tracker milestones: Returns every milestone across your org's repositories, each stamped with the repository it belongs to..",
-      "name": "tracker_milestones",
-      "path": "tracker_milestones/SKILL.md",
-      "service": "tracker",
-      "sha256": "b0a10c887b6660e591aa38412a7bd3b3ccee97b839ca82f5628a0aaf18fc1c68",
-      "version": "8.0.0"
-    },
-    {
-      "description": "Read tracker projects: Returns the boards of your org — one per repository on the deployment's forge that you can see., Returns one board of your org by its key — the repository name., Returns one board's issues — the work items of that repository on the forge, with their column,",
-      "name": "tracker_projects",
-      "path": "tracker_projects/SKILL.md",
-      "service": "tracker",
-      "sha256": "ee0698d7f539b4ea09ef1380f0aca614a53ec6fc62bc7be0ab678651a7d7c6df",
-      "version": "8.0.0"
-    },
-    {
-      "description": "Read tracker tracker: The tracker board, The tracker board's assets and client-side routes.",
-      "name": "tracker_tracker",
-      "path": "tracker_tracker/SKILL.md",
-      "service": "tracker",
-      "sha256": "f2f46d75af4714fbb073a014c7a4e69920e374babd1bdd72d8340c64fb735d1c",
       "version": "8.0.0"
     },
     {

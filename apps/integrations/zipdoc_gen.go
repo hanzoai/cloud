@@ -315,7 +315,7 @@ func init() {
 		Response: json.RawMessage(`{"full_name":"acme/widgets","html_url":"https://github.com/acme/widgets","clone_url":"https://github.com/acme/widgets.git","default_branch":"main","existing":false}`),
 	})
 	zip.Describe("POST /v1/integrations/github/issues/backfill", zip.Doc{
-		Description: "Seeds the native tracker with the EXISTING issues across the\norg's granted repos (default state=open); the webhook keeps them live thereafter.\nOrg-scoped by the validated principal — a caller only ever backfills its OWN org.\nSynchronous + bounded (a total time budget and an issue cap) so it returns the\ncounts directly; idempotent by ExtRef, so a re-run continues where a truncated\npass left off and never duplicates.",
+		Description: "Seeds the native todo with the EXISTING issues across the\norg's granted repos (default state=open); the webhook keeps them live thereafter.\nOrg-scoped by the validated principal — a caller only ever backfills its OWN org.\nSynchronous + bounded (a total time budget and an issue cap) so it returns the\ncounts directly; idempotent by ExtRef, so a re-run continues where a truncated\npass left off and never duplicates.",
 		Fields: map[string]string{
 			"githubBackfillIn.state":         "State is the GitHub issue state to walk: \"open\" (the default), \"closed\" or\n\"all\". Anything else is a 400.",
 			"githubBackfillResult.created":   "Created is how many native issues this pass created.",

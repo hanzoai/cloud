@@ -21,7 +21,7 @@ func collabDocID(ws, objClass, objID, attr string) string {
 // TestCollabRPCRoundTrip proves the REAL collaborator-client contract end to end:
 // createContent stores the markup snapshot and returns a timestamped blob ref
 // (makeCollabJsonId shape "<objectId>-<field>-<ms>"), and getContent with that
-// ref as source returns the exact markup — the read the tracker/description
+// ref as source returns the exact markup — the read the todo/description
 // preview lane does.
 func TestCollabRPCRoundTrip(t *testing.T) {
 	app := mountTeam(t)
@@ -77,7 +77,7 @@ func TestCollabRPCRoundTrip(t *testing.T) {
 	}
 }
 
-// TestCollabCreateContentSeedsYLog is the tracker "description dropped on create"
+// TestCollabCreateContentSeedsYLog is the todo "description dropped on create"
 // bar: the New-Issue dialog's createContent must seed the live-editing update log
 // (the one collabws.go replays), not only the snapshot blob — else the freshly
 // created issue's collaborative editor shows empty. updateContent must NEVER touch

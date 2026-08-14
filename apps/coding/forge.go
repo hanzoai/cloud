@@ -120,7 +120,7 @@ func client(ctx context.Context) (*forge.Client, error) {
 // resolveActor is the forge login this run acts as.
 //
 // The resolution itself is forge.Client.Caller — subject to confirmed address to
-// the login the forge agrees is theirs — and it lives there because the TRACKER
+// the login the forge agrees is theirs — and it lives there because the TODO
 // asks the same question of the same forge. Two spellings of "who is this
 // person here" is one of them drifting, and the one that drifted would be a
 // privilege escalation: this path spent four passes closing exactly that.
