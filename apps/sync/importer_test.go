@@ -511,6 +511,110 @@ func TestAnAccountsRefsStayInItsOwnReplica(t *testing.T) {
 	}
 }
 
+// ── a namespace that nests ───────────────────────────────────────────────────
+
+// TestNestedNamespacesDoNotCollapse: a GitLab namespace nests, and the forge's
+// does not. group/sub1/widgets and group/sub2/widgets are two repositories that
+// the flat forge — one owner, one name — cannot spell apart, so both are REFUSED
+// and nothing is written.
+//
+// It drives the provider rather than the importer, because the defect was in
+// deriving the coordinate FROM THE URL, not in checking one handed over: reading
+// only the namespace's top segment called both of them group's `widgets`, so
+// they took one name on the forge and the second import walked into the first's
+// refs and its HEAD — the account collision again, one level down.
+//
+// Refusing is the answer this seam already gives an account carrying the
+// separator [repo.flat] joins on. The case it must NOT refuse — a flat group,
+// with a repository directly in it — goes down the same path here, and lands.
+func TestNestedNamespacesDoNotCollapse(t *testing.T) {
+	up := newHost(t)
+	fg := newStand(t, forgeOwner)
+	mountForge(t)
+
+	// One name under two subgroups of one group, sharing a base commit — so a
+	// mix-up between them LANDS rather than bouncing off git's own refusal, which
+	// is the only version of this that could lose anything.
+	a := up.seed("group/sub1", repoName, "sub1's work")
+	up.init("group/sub2", repoName)
+	nested := []string{
+		up.URL + "/group/sub1/" + repoName + ".git",
+		up.URL + "/group/sub2/" + repoName + ".git",
+	}
+	git(t, a.dir, "push", "--quiet", nested[1], "HEAD:"+mainRef)
+
+	for _, src := range nested {
+		changed, err := (gitProvider{}).Reconcile(context.Background(), gitlabSync(src, repoName), Event{
+			Manual: true, Provider: provGitLab, Org: forgeOrg,
+		})
+		if err == nil {
+			t.Fatalf("%s was imported; a nested namespace has no forge coordinate to import it to", src)
+		}
+		if changed {
+			t.Error("a refused import reported a change, which stamps 'last synced' on it")
+		}
+		if !strings.Contains(err.Error(), "group/sub") {
+			t.Errorf("the refusal does not name the namespace it refused: %v", err)
+		}
+	}
+
+	// NOTHING was written: not under the name the truncated namespace produced,
+	// not under either subgroup's own, not under the bare name.
+	for _, name := range []string{"group_" + repoName, repoName, "sub1_" + repoName, "sub2_" + repoName} {
+		if _, err := os.Stat(fg.bare(forgeOwner, name)); err == nil {
+			t.Errorf("the forge holds %q; a refused import writes nothing", name)
+		}
+	}
+
+	// And a FLAT group still syncs — the refusal is of what cannot be spelled, not
+	// of GitLab.
+	flat := up.seed("group", "gadgets", "the group's own work")
+	if _, err := (gitProvider{}).Reconcile(context.Background(),
+		gitlabSync(up.URL+"/group/gadgets.git", "gadgets"), Event{
+			Manual: true, Provider: provGitLab, Org: forgeOrg,
+		}); err != nil {
+		t.Fatalf("a flat group is a coordinate the forge can hold: %v", err)
+	}
+	if got := tip(t, fg.bare(forgeOwner, "group_gadgets"), mainRef); got != git(t, flat.dir, "rev-parse", "HEAD") {
+		t.Errorf("group/gadgets landed at %q on the forge", got)
+	}
+}
+
+// gitlabSync is a pulling sync from one GitLab URL onto native, which is the
+// target the API derives for it — the source's own short name.
+func gitlabSync(src, native string) Sync {
+	return Sync{
+		Kind: "git", Direction: dirPull, Actor: "hanzo-sync", Org: forgeOrg,
+		Source: Endpoint{Provider: provGitLab, Locator: src},
+		Target: Endpoint{Provider: provNative, Locator: native},
+	}
+}
+
+// TestAnImportThatTookNothingInIsNotASync: every ref refused means the canonical
+// store did not move. The reconcile stamps "last synced, just now" on this
+// returning nil, so a fully-refused import that reports success is a green
+// console over a repository taking nothing in.
+func TestAnImportThatTookNothingInIsNotASync(t *testing.T) {
+	_, fg, src, cloneURL := imported(t)
+	bare := fg.bare(forgeOwner, widgets.flat())
+
+	forgeTip := diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "somebody's work")
+	src.commit("upstream's work")
+
+	err := (importer{}).ImportRepo(context.Background(), cloud.GitImportReq{
+		Org: forgeOrg, Project: upOwner, Repo: repoName, CloneURL: cloneURL,
+	})
+	if err == nil {
+		t.Fatal("an import that took nothing in reported success; the reconcile stamps 'last synced' on that")
+	}
+	if !strings.Contains(err.Error(), widgets.flat()) {
+		t.Errorf("the failure does not name the repository: %v", err)
+	}
+	if now := tip(t, bare, mainRef); now != forgeTip {
+		t.Fatalf("THE FORGE WAS OVERWRITTEN: main = %q, want %q", now, forgeTip)
+	}
+}
+
 // TestAPushWithNoTargetIsNotASync: a push-only reconcile whose repository has no
 // declared target moved no bytes, and says so. Reporting success there is what
 // stamps "synced, just now" on a repository nothing is being pushed from.

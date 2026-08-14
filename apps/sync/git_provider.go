@@ -237,21 +237,33 @@ func hostOf(raw string) string {
 	return strings.ToLower(u.Hostname())
 }
 
-// accountOf reads the ACCOUNT out of a clone URL — the first path segment of
-// https://host/<account>/<repo>.git. Empty when the URL names none, which lets
-// the single-connection case resolve as before.
+// accountOf reads the ACCOUNT out of a clone URL: everything ahead of the
+// repository's own name in https://host/<account>/<repo>.git. Empty when the URL
+// names none, which lets the single-connection case resolve as before.
 //
 // It is one function because it answers one question in two places: WHOSE
 // installation token to mint, and WHICH repository this is (a name is unique
 // only within an account — see [newRepo]).
+//
+// EVERYTHING ahead of the name, not the first segment of it. A GitLab namespace
+// nests, and reading only its top said group/sub1/widgets and group/sub2/widgets
+// were both group's `widgets`: two repositories, one coordinate, the second
+// import walking into the first's refs and HEAD. Reading the whole namespace
+// makes them different values again, and a value the flat forge cannot spell is
+// then refused by [newRepo] rather than truncated onto somebody else's
+// repository.
+//
+// It is the SAME cut [repoNameFromLocator] takes the name from — the last
+// separator — so the two halves of a clone URL always come apart in one place.
 func accountOf(source string) string {
 	u, err := url.Parse(strings.TrimSpace(source))
 	if err != nil {
 		return ""
 	}
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) == 0 {
+	path := strings.Trim(u.Path, "/")
+	i := strings.LastIndexByte(path, '/')
+	if i < 0 {
 		return ""
 	}
-	return parts[0]
+	return path[:i]
 }
