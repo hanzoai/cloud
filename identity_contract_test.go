@@ -20,6 +20,38 @@ import (
 // The test greps the source rather than exercising a request because the hazard is a
 // write that no test happens to reach. A literal is what it catches; using the
 // constants is what makes it pass.
+// ...AND EVERY NAME THE ESTATE WRITES IS ONE THIS BINARY DELETES — the converse, and
+// the half that actually protects a reader.
+//
+// The property below points one way: it catches a header cloud WRITES under a name
+// nobody strips. It says nothing about a name the ESTATE writes that cloud fails to
+// strip, and that is the direction with teeth. cloud is reachable in-cluster at its
+// Service address, so ingress here is the only thing between a pod and a header the
+// edge would have written; a name that arrives unstripped is a value the first
+// consumer to read it believes.
+//
+// Asserted against authz's own list rather than a local one, so a name the estate adds
+// fails this test until ingress sweeps it.
+func TestEveryHeaderTheEstateWritesIsStripped(t *testing.T) {
+	swept := map[string]bool{}
+	for _, h := range stripped {
+		swept[strings.ToLower(h)] = true
+	}
+	for _, h := range append(append([]string{}, authz.Headers...), authz.Retired...) {
+		// The one correlation id a caller legitimately sets; it carries no authority.
+		if h == authz.HeaderRequestID {
+			if swept[strings.ToLower(h)] {
+				t.Errorf("%s is swept — it is the caller's correlation id and must survive", h)
+			}
+			continue
+		}
+		if !swept[strings.ToLower(h)] {
+			t.Errorf("the estate writes %q and this binary does not strip it — "+
+				"a written-but-unstripped name is one a client can set", h)
+		}
+	}
+}
+
 func TestEveryHeaderWrittenIsAName(t *testing.T) {
 	known := map[string]bool{}
 	for _, h := range append(append([]string{}, authz.Headers...), authz.Retired...) {
