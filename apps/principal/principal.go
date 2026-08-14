@@ -400,7 +400,7 @@ type brandKey struct{}
 // key space.
 //
 // ok is false when there is nothing to compare — no validated principal, or a
-// principal with no issuer to resolve (an hk-/sk- key, minted by this
+// principal with no issuer to resolve (an sk- key, minted by this
 // deployment's own IAM). A caller must read that as "no second fact", never as
 // a brand.
 func Brand(c *zip.Ctx) (string, bool) {
