@@ -230,25 +230,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// LANE 2 — per-org Base hosting (authenticated /v1/base/*). Raw for the same
 	// reason as the waitlist lane: each request is served by the org's own Base
 	// app's mux verbatim, so there is no shape here for a typed op to state.
-	p := newPool(root, deps)
-	orgHandler := func(c *zip.Ctx) error { return serveOrg(p, log, c) }
-	app.All("/v1/base/*", orgHandler)
-
-	// The SAME engine's other rendering. Base binds /rest/v1/{collection} on its
-	// ROOT router, deliberately outside the api prefix, because a REST client
-	// appends that path to whatever host it is given — so serving it is what lets
-	// one reach a Base by naming a hostname and nothing else. Base's own note is
-	// the part worth keeping: it "is a rendering of the SAME read, not a second
-	// one" — the door rewrites the query into Base's dialect and then runs the
-	// same recordsList, with the same collection lookup, list rule, rate limit
-	// and field resolver. Only the final write differs (a bare array with the
-	// count in Content-Range, rather than the {items,page,…} envelope).
+	// ONE registration, because the org's Base now answers everything it serves
+	// under one root. Base's table wire moved beneath the mount prefix, so it is
+	// /v1/base/rest/{collection} and arrives here with the collections API rather
+	// than needing its own route at /rest/v1 outside it. Both are the same engine
+	// over the same rows — the table wire is a rendering of the SAME read, running
+	// the same recordsList with the same list rule and rate limit, differing only
+	// in what it writes back (a bare array with the count in Content-Range).
 	//
-	// It reaches the same per-org handler, so the org comes from the validated
-	// principal exactly as it does above and this dialect is per-org too. cloud
-	// already claims /rest/v1 for this app in manifest.Apps; this is what makes
-	// the claim true.
-	app.All("/rest/v1/*", orgHandler)
+	// So the org still comes from the validated principal, for both, because there
+	// is one handler and one prefix.
+	p := newPool(root, deps)
+	app.All("/v1/base/*", func(c *zip.Ctx) error { return serveOrg(p, log, c) })
 
 	mounted = &subsystem{pool: p, platform: platformApp}
 

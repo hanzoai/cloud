@@ -689,7 +689,7 @@ require (
 	github.com/hanzoai/agent v1.0.5
 	github.com/hanzoai/ai v1.833.27
 	github.com/hanzoai/authz v1.10.29
-	github.com/hanzoai/base v1.5.44
+	github.com/hanzoai/base v1.5.61
 	github.com/hanzoai/licensing v0.1.15
 	github.com/hanzoai/metrics v1.110.6
 	github.com/hanzoai/o11y v1.5.63
