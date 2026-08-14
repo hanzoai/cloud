@@ -29,6 +29,7 @@ import (
 	// cek is the ONE opener: the database is born encrypted under the key cek
 	// derives from the process master and this namespace.
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/sqlpool"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
@@ -152,6 +153,35 @@ func VisibleCatalog(full []Model, snap map[string]Overlay, org string, isAdmin b
 			merged["_overlay"] = modelAdminState(mo, mok, po, pok)
 		}
 		out = append(out, merged)
+	}
+	return out
+}
+
+// Reachable narrows a catalog to what one CREDENTIAL may reach, and it is a
+// SECOND narrowing rather than a wider VisibleCatalog.
+//
+// The two answer different questions and must not be braided: VisibleCatalog
+// asks what this ORG may see (an overlay a platform admin curates), Reachable
+// asks how much of that the KEY in the caller's hand carries. Folding the second
+// into the first would make one function that cannot say which rule hid a model,
+// and would tempt the isAdmin branch — which deliberately shows an admin every
+// model — into also widening a limited key.
+//
+// It narrows an ADMIN's listing too. The limit belongs to the credential, so a
+// platform admin holding a key limited to one model reaches one model; the
+// alternative is a limit any admin can shed by being one.
+//
+// Empty grant returns the input untouched, which is every session and every key
+// minted before limits existed.
+func Reachable(models []Model, g cloud.Grant) []Model {
+	if len(g) == 0 {
+		return models
+	}
+	out := make([]Model, 0, len(models))
+	for _, m := range models {
+		if g.Covers("model", modelID(m)) {
+			out = append(out, m)
+		}
 	}
 	return out
 }
