@@ -36,14 +36,39 @@
   var status = document.getElementById('s')
   var message = document.getElementById('m')
 
+  // A host that frames this page cannot see inside it, so anything it is not
+  // TOLD it has to infer — and the only inference that fits every silence is a
+  // timeout, which reads as "the credential went stale" whatever actually
+  // happened. That is why a refused socket came back as an endless run of fresh
+  // tickets. One channel, both outcomes.
+  function post(msg) {
+    if (window.parent !== window) window.parent.postMessage(msg, '*')
+  }
+
+  var told = false
+
   function stopped(why) {
     status.hidden = false
     message.textContent = why
+    // Once. onerror and onclose both land here for a single failure, and a host
+    // that is told twice has to work out that it is one event.
+    if (!told) {
+      told = true
+      post({ source: 'hanzo-term', ready: false, why: why })
+    }
     if (document.getElementById('r')) return
     var again = document.createElement('button')
     again.id = 'r'
     again.textContent = 'Reconnect'
-    again.onclick = function () { location.reload() }
+    // A ticket is spent by the socket that presents it, so reloading this
+    // document re-presents a dead one and is refused for a reason that has
+    // nothing to do with the first failure. The parent is what holds the
+    // identity to mint another, so where there is a parent, ask it; standalone,
+    // a reload is the only thing this page can do for itself.
+    again.onclick = function () {
+      if (window.parent !== window) post({ source: 'hanzo-term', retry: true })
+      else location.reload()
+    }
     status.appendChild(again)
   }
 
@@ -73,9 +98,8 @@
     // The readiness handshake. A host that frames this page has no other way to
     // tell "the terminal is up" from "the page 404'd into a sign-in", and a host
     // that guesses gets a blank pane it cannot explain.
-    if (window.parent !== window) {
-      window.parent.postMessage({ source: 'hanzo-term', ready: true }, '*')
-    }
+    told = true
+    post({ source: 'hanzo-term', ready: true })
   }
   ws.onmessage = function (e) {
     term.write(typeof e.data === 'string' ? e.data : new Uint8Array(e.data))

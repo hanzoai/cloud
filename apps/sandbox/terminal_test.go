@@ -462,6 +462,49 @@ func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 	}
 }
 
+// THE PAGE REPORTS BOTH OUTCOMES, NOT ONLY THE GOOD ONE.
+//
+// It announced `ready` on open and said NOTHING on any failure, so a framing
+// host had one signal and one absence — and an absence has no cause written on
+// it. Every way of failing (a refused socket, a gate, a CSP refusal, a page that
+// never loaded) arrived as the same silence, the host waited out its deadline,
+// and the only explanation that fits an unexplained silence is a stale
+// credential. So it minted a fresh ticket for a socket that was failing for its
+// own reasons, and did it again, and again.
+//
+// That silence is what made the sandbox terminal's 502 read as an expired
+// ticket for as long as it did. The page knows what happened; this is it saying so.
+func TestThePageReportsAFailureAndNotOnlyReadiness(t *testing.T) {
+	page := document()
+
+	// The success half, unchanged.
+	if !strings.Contains(page, "ready: true") {
+		t.Error("the page no longer announces readiness — every framed pane reads as dead")
+	}
+	// The half that did not exist.
+	if !strings.Contains(page, "ready: false") {
+		t.Error("the page never tells its host that it FAILED, so a failure is " +
+			"indistinguishable from a slow start and gets answered with a new ticket")
+	}
+	// Carrying the reason, which is the whole difference between "it did not come
+	// up" and something a person can act on.
+	if !strings.Contains(page, "why: why") {
+		t.Error("the failure carries no reason; the host can only guess at one")
+	}
+	// Both outcomes leave by the same door, so a host has one message to parse.
+	if n := strings.Count(page, "source: 'hanzo-term'"); n != 3 {
+		t.Errorf("found %d messages to the host, want 3 (ready, failed, retry) — "+
+			"one channel, or a host has to learn a second", n)
+	}
+	// A spent ticket cannot be re-presented, so the page must not answer its own
+	// Reconnect by reloading itself when there is a parent holding the identity
+	// that can mint another.
+	if !strings.Contains(page, "retry: true") {
+		t.Error("the page's Reconnect reloads with a ticket the socket already " +
+			"spent, which is refused for a reason unrelated to the first failure")
+	}
+}
+
 // Who may FRAME the terminal is derived from the brand registry, so adding a
 // brand admits its hosts and nothing else has to be edited. It is defence in
 // depth against a clickjack — the ticket is the gate — but a policy that admits
