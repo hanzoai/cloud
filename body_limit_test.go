@@ -16,6 +16,13 @@ import "testing"
 //
 // This pins the ceiling above a real 1M-token prompt so the regression cannot
 // come back silently.
+//
+// IT PINS THE VALUE, NOT THE WIRE, and that distinction cost a live outage: zip
+// requires >= v1.28.3, because before it the HTTP transport applied everything
+// in zip.Config EXCEPT BodyLimit, so the socket stayed on the framework's 4 MiB
+// while this test read the configured 100 MiB and passed. The wire assertion is
+// zip's own TestHTTPTransport_BodyLimitReachesTheSocket, which drives a real
+// listener; nothing reachable from this package can observe the transport.
 
 // oneMillionTokenBody is a conservative byte estimate for a 1M-token prompt.
 // Measured ~4.5 bytes/token; 4.3 keeps the floor conservative.
