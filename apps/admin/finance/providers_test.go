@@ -1,6 +1,9 @@
 package finance
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // TestFundingClass locks the provider-level funding classification the
 // /v1/admin/usage/funding endpoint derives from the credit ledger.
@@ -71,4 +74,39 @@ func TestExhaustedCreditClassifiesAsPaid(t *testing.T) {
 	if got := fundingClass(spent); got == "credit" {
 		t.Error("an EXHAUSTED grant must never classify as credit — every later call is cash")
 	}
+}
+
+// TestWindowReadsTheDatesItWasGiven: the funding board is a money read, and it
+// used to answer the last 24 hours whatever dates were asked for — the bounds
+// were passed to a parser that only reads them for a custom window, so a
+// question about July was answered with yesterday and labelled July.
+func TestWindowReadsTheDatesItWasGiven(t *testing.T) {
+	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	jul1 := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	jul27 := time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC)
+
+	t.Run("both bounds", func(t *testing.T) {
+		start, end := window("2026-07-01T00:00:00Z", "2026-07-27T00:00:00Z", now)
+		if !start.Equal(jul1) || !end.Equal(jul27) {
+			t.Fatalf("window = [%v, %v), want [%v, %v)", start, end, jul1, jul27)
+		}
+	})
+
+	t.Run("open end runs to now", func(t *testing.T) {
+		start, end := window("2026-07-01T00:00:00Z", "", now)
+		if !start.Equal(jul1) || !end.Equal(now) {
+			t.Fatalf("window = [%v, %v), want [%v, %v)", start, end, jul1, now)
+		}
+	})
+
+	// The documented fallback, and the reason this is not a 400: a typo in a date
+	// must not blank the board.
+	t.Run("nothing readable falls back to thirty days", func(t *testing.T) {
+		for _, tc := range [][2]string{{"", ""}, {"nonsense", ""}, {"2026-07-27T00:00:00Z", "2026-07-01T00:00:00Z"}} {
+			start, end := window(tc[0], tc[1], now)
+			if !end.Equal(now) || !start.Equal(now.AddDate(0, 0, -30)) {
+				t.Errorf("window(%q, %q) = [%v, %v), want the last 30 days", tc[0], tc[1], start, end)
+			}
+		}
+	})
 }
