@@ -3990,16 +3990,37 @@ Two consequences, both load-bearing:
 **Three transports, one trigger.** A push reaches `cloud.OnGitPush` — the
 single-registrant seam, never a second CI — from the embedded git server
 (`apps/git/smart_http.go`), the GitHub App (`/v1/connector/github/webhook`), and
-the canonical forge (`/v1/git/webhook`, `apps/git/webhook.go`). The third exists
-because git.hanzo.ai is a SEPARATE process: its pushes never touch our receive-pack,
-so without that door the host we call canonical builds nothing and only the mirror
-releases. Both webhook transports HMAC-verify fail-closed and drop bot-authored
-pushes through the one `cloud.IsBotActor`, so a release cannot retrigger itself.
-`apps/platform` is the only place that decides what a push MEANS: an app tracking
-the repo rebuilds, and cloud's own upstream cuts a release. Cloud is the machine, so it calls the
-release in-process and the build token is never handed to a caller. The trigger runs
-BEFORE the token mint and the mirror, because a build reads from GitHub and must not
-be lost to a sync outage.
+the canonical forge (`POST /v1/git-webhook`, `apps/platform/hook.go`). The third
+exists because git.hanzo.ai is a SEPARATE process: its pushes never touch our
+receive-pack, so without that door the host we call canonical builds nothing and
+only the mirror releases. It lives in **platform** because the builder does —
+served from `apps/git` it verified every delivery, answered 204, and dispatched to
+a registrant that is nil in that process forever (`apps/git/webhook.go` is the 410
+naming the new address). Both webhook transports HMAC-verify fail-closed and drop
+bot-authored pushes through the one `cloud.IsBotActor`, so a release cannot
+retrigger itself. `apps/platform` is the only place that decides what a push
+MEANS: an app tracking the repo rebuilds, and cloud's own upstream cuts a release.
+Cloud is the machine, so it calls the release in-process and the build token is
+never handed to a caller. The trigger runs BEFORE the token mint and the mirror,
+because a build reads from GitHub and must not be lost to a sync outage.
+
+**The forge does not retry, so the answer is the recovery.** hanzoai/git marks a
+delivery delivered before it attempts it; the only redelivery is a person clicking
+Replay. So the door records a push as landed only after a SUCCESSFUL dispatch
+(`seen.hold` / `seen.drop`) and answers a failed one non-2xx — a Replay then
+reaches a fresh attempt instead of "already landed", and the delivery page shows
+red where it used to show a green `fired`. The answer also carries the number of
+builds launched (`OnGitPush` returns it now, on both legs), because "accepted" and
+"built" are different facts and most pushes track no application at all.
+
+**One repository, two spellings.** `normRepo` drops the HOST on the mirrored pair
+— the upstream and this deployment's forge — so `github.com/hanzoai/cloud` and
+`git.hanzo.ai/hanzoai/cloud` are the same repository while the migration runs.
+Without it every forge delivery matched no application, built nothing, and looked
+green. The path is compared WHOLE and never by its last two segments: the embedded
+git server's clone URL is `/v1/git/<org>/<project>/<repo>`, whose tail a tenant
+names, and a project `hanzoai` holding a repo `cloud` would otherwise spell the
+release repository's own coordinate.
 
 `isReleasePush` is narrow on purpose: the release repo BY URL (an org does not
 identify a repo), `main` only, a pinned commit only. Single-flight, because the
