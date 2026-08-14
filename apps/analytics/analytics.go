@@ -518,7 +518,7 @@ func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, erro
 	where, args := llmWhere(org, start, end)
 	llmSQL := "SELECT count() AS requests, sum(total_tokens) AS tokens, " +
 		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
-		"sum(cost_cents) AS cost_cents, uniqExact(model) AS models, uniqExact(provider) AS providers, " +
+		datastore.Spend + " AS cost_cents, uniqExact(model) AS models, uniqExact(provider) AS providers, " +
 		"countIf(status = 'error') AS errors FROM " + llmTable + " WHERE " + where
 	llmRows, err := datastore.Query(ctx, llmSQL, args...)
 	if err != nil {
@@ -591,7 +591,7 @@ func (o readOps) timeseries(ctx context.Context, in *windowQuery) (*Timeseries, 
 	}
 	where, args := llmWhere(org, start, end)
 	seriesSQL := fmt.Sprintf("SELECT toStartOf%s(timestamp, 'UTC') AS bucket, count() AS requests, "+
-		"sum(total_tokens) AS tokens, sum(cost_cents) AS cost_cents FROM %s WHERE %s GROUP BY bucket ORDER BY bucket",
+		"sum(total_tokens) AS tokens, "+datastore.Spend+" AS cost_cents FROM %s WHERE %s GROUP BY bucket ORDER BY bucket",
 		bucketFn, llmTable, where)
 	rows, err := datastore.Query(ctx, seriesSQL, args...)
 	if err != nil {
@@ -646,7 +646,7 @@ func (o readOps) top(ctx context.Context, in *topQuery) (*Top, error) {
 	// org + time stay bound parameters.
 	where, args := llmWhere(org, start, end)
 	modelSQL := fmt.Sprintf("SELECT model, any(provider) AS provider, count() AS requests, "+
-		"sum(total_tokens) AS tokens, sum(cost_cents) AS cost_cents FROM %s WHERE %s "+
+		"sum(total_tokens) AS tokens, "+datastore.Spend+" AS cost_cents FROM %s WHERE %s "+
 		"GROUP BY model ORDER BY cost_cents DESC, requests DESC LIMIT %d", llmTable, where, limit)
 	modelRows, err := datastore.Query(ctx, modelSQL, args...)
 	if err != nil {

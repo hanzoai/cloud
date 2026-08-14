@@ -72,7 +72,8 @@ var cloudUsageColumnMigrations = []string{
 	`ALTER TABLE hanzo.cloud_usage ADD COLUMN IF NOT EXISTS account String`,
 	// Nano-USD margin ledger (money-of-record): cost_nano = provider COGS,
 	// billed_nano = org debit, margin_nano = billed_nano − cost_nano. cost_cents
-	// stays the derived spend column the console reads.
+	// is that ONE row rendered in cents; spend over a SET of rows comes from
+	// cost_nano through Spend, never from adding the renderings.
 	`ALTER TABLE hanzo.cloud_usage ADD COLUMN IF NOT EXISTS cost_nano Int64`,
 	`ALTER TABLE hanzo.cloud_usage ADD COLUMN IF NOT EXISTS billed_nano Int64`,
 	`ALTER TABLE hanzo.cloud_usage ADD COLUMN IF NOT EXISTS margin_nano Int64`,
@@ -84,6 +85,26 @@ var cloudUsageColumnMigrations = []string{
 	// carries '' (the org's default project == whole-org view).
 	`ALTER TABLE hanzo.cloud_usage ADD COLUMN IF NOT EXISTS project String`,
 }
+
+// Spend is the spend of a SET of usage rows in whole US cents, and the ONE place
+// that answer is written. Every board that reports money — analytics, the admin
+// ledger, evals, per-org usage, the leaderboard rollup — selects this, so they
+// cannot disagree about what a window cost.
+//
+// It sums the money first and rounds ONCE, half a cent up. The order is the whole
+// point. cost_nano is the money of record and a served call routinely costs a
+// fraction of a cent, so rounding each row and adding the roundings charges a whole
+// cent for a call that cost a tenth of one: an error that grows with the number of
+// calls rather than with the money, which is why it reads worst exactly where
+// traffic is cheapest and highest. Summed first, the same rows round to what they
+// cost, and the most a window can be off by is half a cent.
+//
+// The rounding is integer, not round(x/1e7): ClickHouse's round() is float and
+// banker's at the midpoint, and this must match the writer's nanoToCents.
+//
+// It reads the ledger's cost_nano and the rollup's, which carry the same name, so
+// one expression serves both.
+const Spend = "intDiv(sum(cost_nano) + 5000000, 10000000)"
 
 // createDatabase makes the target database idempotently, the same first step
 // clients/sbom takes. ai's version omits it because ai's write path only ever

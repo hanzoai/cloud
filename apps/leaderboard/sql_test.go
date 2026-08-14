@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/apps/datastore"
 )
 
 // hostileOrg is a slug that WOULD break out of the query if it were ever
@@ -25,7 +27,10 @@ func argsHave(args []any, v string) bool {
 }
 
 func TestResolveMetric_Allowlist(t *testing.T) {
-	ok := map[string]string{"tokens": "total_tokens", "requests": "requests", "cost": "cost_cents", "": "total_tokens", "COST": "cost_cents"}
+	ok := map[string]string{
+		"tokens": "sum(total_tokens)", "requests": "sum(requests)", "cost": datastore.Spend,
+		"": "sum(total_tokens)", "COST": datastore.Spend,
+	}
 	for in, want := range ok {
 		got, valid := resolveMetric(in)
 		if !valid || got != want {
@@ -53,9 +58,9 @@ func TestBuilders_OrgBoundNeverInterpolated(t *testing.T) {
 		sql  string
 		args []any
 	}
-	s1, a1 := buildUserBoardSQL(hostileOrg, w, "total_tokens", 10)
+	s1, a1 := buildUserBoardSQL(hostileOrg, w, "sum(total_tokens)", 10)
 	s2, a2 := buildSelfAggSQL(hostileOrg, hostileOrg+"/eve", w)
-	s3, a3 := buildAboveCountSQL(hostileOrg, w, "cost_cents", 999)
+	s3, a3 := buildAboveCountSQL(hostileOrg, w, datastore.Spend, 999)
 	s4, a4 := buildUserCountSQL(hostileOrg, w)
 	s5, a5 := buildActivitySQL(hostileOrg, hostileOrg+"/eve", w)
 	s6, a6 := buildOrgAggSQL(hostileOrg, w)
@@ -85,7 +90,7 @@ func TestBuilders_OrgBoundNeverInterpolated(t *testing.T) {
 // never interpolated — even a hostile org in the visibility set stays in args.
 func TestOrgBoardSQL_InListBound(t *testing.T) {
 	w, _ := resolvePeriod("all", day(2026, 6, 1))
-	sql, args := buildOrgBoardSQL(w, "cost_cents", 5, []string{hostileOrg, "beta"})
+	sql, args := buildOrgBoardSQL(w, datastore.Spend, 5, []string{hostileOrg, "beta"})
 	if strings.Contains(sql, hostileOrg) || strings.Contains(sql, "DROP TABLE") {
 		t.Fatalf("hostile org interpolated: %s", sql)
 	}
@@ -103,7 +108,7 @@ func TestOrgBoardSQL_InListBound(t *testing.T) {
 		t.Fatalf("upper day bound missing: %s", sql)
 	}
 	// nil orgs (SuperAdmin) → no IN restriction at all.
-	sqlAll, _ := buildOrgBoardSQL(w, "requests", 5, nil)
+	sqlAll, _ := buildOrgBoardSQL(w, "sum(requests)", 5, nil)
 	if strings.Contains(sqlAll, " IN (") {
 		t.Fatalf("nil orgs must not restrict: %s", sqlAll)
 	}
@@ -112,7 +117,7 @@ func TestOrgBoardSQL_InListBound(t *testing.T) {
 // TestAboveCount_ThresholdBound proves the self-rank threshold is a bound param.
 func TestAboveCount_ThresholdBound(t *testing.T) {
 	w, _ := resolvePeriod("week", day(2026, 3, 15))
-	sql, args := buildAboveCountSQL("acme", w, "total_tokens", 123456)
+	sql, args := buildAboveCountSQL("acme", w, "sum(total_tokens)", 123456)
 	if !strings.Contains(sql, "HAVING sum(total_tokens) > ?") {
 		t.Fatalf("threshold not bound: %s", sql)
 	}
@@ -129,7 +134,7 @@ func TestAboveCount_ThresholdBound(t *testing.T) {
 		t.Fatalf("threshold not in args: %#v", args)
 	}
 	// org-restricted org-above-count binds each org too.
-	os2, oa2 := buildOrgAboveCountSQL(w, "cost_cents", 7, []string{hostileOrg})
+	os2, oa2 := buildOrgAboveCountSQL(w, datastore.Spend, 7, []string{hostileOrg})
 	if strings.Contains(os2, hostileOrg) {
 		t.Fatalf("hostile org interpolated in org-above-count: %s", os2)
 	}
@@ -213,6 +218,32 @@ func TestClampLimit(t *testing.T) {
 	for in, want := range cases {
 		if got := clampLimit(in, 10); got != want {
 			t.Fatalf("clampLimit(%d) = %d; want %d", in, got, want)
+		}
+	}
+}
+
+// TestBuilders_SpendFromNano: no board adds up per-row renderings. Every builder
+// that reports spend derives it from the rollup's cost_nano through the ONE
+// definition, and none of them sums a cents column — which is the whole reason the
+// rollup carries nano rather than cents.
+func TestBuilders_SpendFromNano(t *testing.T) {
+	w, _ := resolvePeriod("month", day(2026, 1, 31))
+	s1, _ := buildUserBoardSQL("acme", w, datastore.Spend, 10)
+	s2, _ := buildOrgBoardSQL(w, datastore.Spend, 10, nil)
+	s3, _ := buildSelfAggSQL("acme", "acme/alice", w)
+	s4, _ := buildOrgAggSQL("acme", w)
+	s5, _ := buildActivitySQL("acme", "acme/alice", w)
+	s6, _ := buildAboveCountSQL("acme", w, datastore.Spend, 40)
+	s7, _ := buildOrgAboveCountSQL(w, datastore.Spend, 40, nil)
+	for name, sql := range map[string]string{
+		"userBoard": s1, "orgBoard": s2, "selfAgg": s3, "orgAgg": s4,
+		"activity": s5, "aboveCount": s6, "orgAboveCount": s7,
+	} {
+		if !strings.Contains(sql, datastore.Spend) {
+			t.Fatalf("%s does not derive spend from the money column: %s", name, sql)
+		}
+		if strings.Contains(sql, "sum(cost_cents)") {
+			t.Fatalf("%s adds up per-row renderings: %s", name, sql)
 		}
 	}
 }
