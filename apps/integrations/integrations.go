@@ -57,6 +57,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -1942,4 +1943,16 @@ func (f *flight) lock(key string) (unlock func()) {
 		}
 		f.mu.Unlock()
 	}
+}
+
+// truncate bounds a value to n bytes and says so, because a silently clipped
+// string reads as the whole of it.
+func truncate(s string, n int) string {
+	if len(s) > n {
+		// shorten.To, not s[:n]: a byte slice can cut a multi-byte rune in half and
+		// emit invalid UTF-8 into a Slack message. The fleet has one way to bound a
+		// length and this is it.
+		return shorten.To(s, n) + "…"
+	}
+	return s
 }

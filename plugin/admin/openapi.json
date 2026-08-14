@@ -2575,7 +2575,7 @@
             "name": "org",
             "in": "query",
             "required": false,
-            "description": "Org reads ONE tenant's month-to-date total instead of the fleet sum. Honoured\nfor a SuperAdmin only — a white-label admin always reads their own org.",
+            "description": "Org reads ONE tenant's trailing-30-day total instead of the fleet sum. Honoured\nfor a SuperAdmin only — a white-label admin always reads their own org.\n\nThe window is the one core.OrgMoney returns, and it is what the operator board\nbeside this already labelled (\"Daily, last 30 days\"). The wire used to say\nmonth-to-date while that UI said 30 days; they agree now. This comment is\nREGENERATED into plugin/admin/openapi.json and openapi.yaml as the ?org\nparameter description, so a stale word here ships as a contradiction inside\none spec file — which is the drift this whole change set exists to remove.",
             "schema": {
               "type": "string"
             },
