@@ -658,8 +658,9 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body project
 	// a Base hiccup is logged and swallowed — it never fails the create.
 	provisionSpace(s, c.Context(), &p)
 	// Give it a canonical repo at git.hanzo.ai, world-readable exactly when the
-	// project is.
-	share(s, c.Context(), p)
+	// project is — on a name that STARTS OVER, so a reclaimed slug inherits
+	// nothing from the project that held it before (visibility.go).
+	born(s, c.Context(), p)
 	out := toProject(p)
 	return &out, nil
 }

@@ -594,3 +594,56 @@ func TestInventory_UnscopedRefuses(t *testing.T) {
 		t.Fatalf("%d requests reached the forge from an unscoped client", n)
 	}
 }
+
+// ── 6. the walk that must not end quietly ────────────────────────────────────
+
+// A namespace larger than the walk reads is REFUSED, not truncated.
+//
+// The caller that most needs to know is the one that cannot tell. The
+// visibility audit walks a namespace asking which repositories are open that no
+// live project permits; handed the first 2,500 of a longer list it reports a
+// clean sweep, and every repository past the ceiling is invisible to it forever
+// — including the ones a tenant minted to push them there. Same doctrine as the
+// milestone rollup, which has refused rather than trimmed since it was written.
+func TestListRepos_RefusesANamespacePastTheCeiling(t *testing.T) {
+	const over = maxRepoPages*repoPage + 1
+	page := make([]Repo, repoPage)
+	for i := range page {
+		page[i] = Repo{Name: fmt.Sprintf("r%d", i), FullName: "acme/r"}
+	}
+
+	for _, tc := range []struct {
+		name  string
+		count bool // does this forge count its lists?
+	}{
+		{"a forge that counts its lists", true},
+		{"a forge that does not", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.count {
+					w.Header().Set("X-Total-Count", strconv.Itoa(over))
+				}
+				// Every page is FULL, so the list never ends: the serial fallback
+				// runs out of pages rather than out of repositories.
+				writeJSON(w, page)
+			}))
+			t.Cleanup(srv.Close)
+
+			c, err := New(srv.URL, "machine-token")
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			got, err := c.Machine().Inventory(t.Context(), "acme")
+			if err == nil {
+				t.Fatalf("a namespace past the ceiling was answered with %d repositories; it must refuse", len(got))
+			}
+			if got != nil {
+				t.Fatalf("a refusal must carry no list, got %d repositories", len(got))
+			}
+			if cap := fmt.Sprint(maxRepoPages * repoPage); !strings.Contains(err.Error(), cap) {
+				t.Fatalf("the refusal should name the cap %s: %v", cap, err)
+			}
+		})
+	}
+}

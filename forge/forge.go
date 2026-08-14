@@ -112,6 +112,16 @@ const repoPage = 5
 // maxRepoPages bounds the repository walk. Stated in pages of [repoPage] so that
 // shrinking the page size did not quietly shrink the ceiling with it: this is
 // the same 2,500 repositories the issue walk allows.
+//
+// It is a REFUSAL threshold and not a truncation, for the same reason
+// [maxRollup] is: a list cut off at the ceiling is a partial answer presented as
+// a complete one, and the caller that most needs to know is the one that cannot
+// tell. The visibility audit walks a namespace asking which repositories are
+// open that no live project permits; truncated, every repository past the
+// ceiling is invisible to it FOREVER, and a tenant that can mint projects can
+// put one there on purpose. So a namespace past this fails loudly, naming the
+// cap, and nothing downstream ever reasons about a list that silently ended
+// early.
 const maxRepoPages = 2500 / repoPage
 
 // maxBody bounds a single response read. The forge is a trusted service, but
@@ -625,7 +635,11 @@ func (c *Client) listRepos(ctx context.Context, org string) ([]Repo, error) {
 
 	pages := (total + repoPage - 1) / repoPage
 	if pages > maxRepoPages {
-		pages = maxRepoPages
+		// REFUSE rather than truncate: see [maxRepoPages]. The forge has already
+		// said how many there are, so this is the one place that can tell the
+		// difference between a complete list and the first 2,500 of one.
+		return nil, fmt.Errorf("forge: org %s has %d repositories, past the %d this walk reads",
+			org, total, maxRepoPages*repoPage)
 	}
 	// Page 1 is already in hand; the rest go out together.
 	out := make([][]Repo, pages)
@@ -684,6 +698,10 @@ func (c *Client) listRepos(ctx context.Context, org string) ([]Repo, error) {
 // walkRepos finishes the list one page at a time, for a forge that does not send
 // X-Total-Count. Correct and slow: it is what the concurrent walk above replaced,
 // kept only for the case that makes the fast path impossible.
+//
+// A SHORT PAGE is the end of the list, and it is the only thing that is. Running
+// out of pages first means the list goes on past the ceiling, which is the one
+// answer this must not return quietly — see [maxRepoPages].
 func (c *Client) walkRepos(ctx context.Context, path string, first []Repo) ([]Repo, error) {
 	all := first
 	for p := 2; p <= maxRepoPages; p++ {
@@ -694,10 +712,11 @@ func (c *Client) walkRepos(ctx context.Context, path string, first []Repo) ([]Re
 		}
 		all = append(all, batch...)
 		if len(batch) < repoPage {
-			break
+			return all, nil
 		}
 	}
-	return all, nil
+	return nil, fmt.Errorf("forge: %s has at least %d repositories, past the %d this walk reads",
+		path, len(all), maxRepoPages*repoPage)
 }
 
 // Repo reads ONE repository by name.
