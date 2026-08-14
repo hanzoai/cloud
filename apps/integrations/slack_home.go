@@ -32,21 +32,16 @@ import (
 	zip "github.com/zap-proto/zip"
 )
 
-// The two action ids the Home's controls carry. Slack echoes these back in the
-// block_actions payload, so they ARE the routing key for a setting change and
-// are worth naming once.
-const (
-	homeActionModel   = "hanzo_model"
-	homeActionRouting = "hanzo_routing"
-)
-
-// Routing modes. `chat` answers; `code` additionally lets a message start a
-// coding run. Default is chat: a person who has changed nothing must never have
-// a message they meant as a question spawn a sandbox and push a branch.
-const (
-	routingChat = "chat"
-	routingCode = "code"
-)
+// The action id the Home's one control carries. Slack echoes it back in the
+// block_actions payload, so it IS the key for a setting change and is worth
+// naming once.
+//
+// There used to be a second: a Mode select offering "Chat only" / "Chat + Code".
+// It stored a value nothing ever read. What decided whether a message started a
+// run was the `code:` prefix, not this preference, so "Chat only" never stopped
+// anything and "Chat + Code" never enabled anything. A control that decides
+// nothing is worse than a missing one: it tells a person they are safe.
+const homeActionModel = "hanzo_model"
 
 // homeModels is the model menu: three tiers, each labelled with what it actually
 // is, default first.
@@ -132,11 +127,6 @@ func homeView(s *cloud.Service[state], org, user string, link userLink, linked b
 		// than no Home at all.
 		model = cloud.ChatModel
 	}
-	routing := strings.TrimSpace(link.Routing)
-	if routing != routingCode {
-		routing = routingChat
-	}
-
 	blocks = append(blocks,
 		// The selected option must be stated as initial_option or Slack renders the
 		// menu blank and the person's own saved choice looks lost.
@@ -145,11 +135,6 @@ func homeView(s *cloud.Service[state], org, user string, link userLink, linked b
 			"text":      map[string]any{"type": "mrkdwn", "text": "*Model*\nWhich model answers your messages."},
 			"accessory": modelSelect(model),
 		},
-		map[string]any{
-			"type":      "section",
-			"text":      map[string]any{"type": "mrkdwn", "text": "*Mode*\nWhat a message is allowed to start."},
-			"accessory": routingSelect(routing),
-		},
 		divider(),
 		section("*Connected*\n"+linkedAs(link, org)),
 		divider(),
@@ -157,7 +142,7 @@ func homeView(s *cloud.Service[state], org, user string, link userLink, linked b
 			"• Send me a direct message — no mention needed\n"+
 			"• `@Hanzo` in any channel you have invited me to\n"+
 			"• `/hanzo <question>` anywhere, without inviting me\n"+
-			"• `@Hanzo code: <repo> <task>` starts a coding run: I work the repo in a sandbox, push a branch and open a PR, and report back in the thread"),
+			"• Ask me to change code — \"fix the failing auth test in cloud\" — and I work the repo in a sandbox, push a branch, open a PR, and report back in the thread"),
 		section("_I only post in channels I am a member of — invite me with_ `/invite @Hanzo`_. That is deliberate: I hold no permission to post anywhere uninvited._"),
 		map[string]any{"type": "context", "elements": []map[string]any{
 			{"type": "mrkdwn", "text": "<https://hanzo.ai|hanzo.ai>  ·  <https://docs.hanzo.ai|Docs>  ·  <https://cloud.hanzo.ai|Console>"},
@@ -193,35 +178,6 @@ func modelSelect(selected string) map[string]any {
 	sel := map[string]any{
 		"type":      "static_select",
 		"action_id": homeActionModel,
-		"options":   opts,
-	}
-	if initial != nil {
-		sel["initial_option"] = initial
-	}
-	return sel
-}
-
-func routingSelect(selected string) map[string]any {
-	modes := []struct{ Value, Label, Note string }{
-		{routingChat, "Chat only", "Answer questions; never start a coding run"},
-		{routingCode, "Chat + Code", "Also let `code:` start a sandbox run and open a PR"},
-	}
-	opts := make([]map[string]any, 0, len(modes))
-	var initial map[string]any
-	for _, m := range modes {
-		o := map[string]any{
-			"text":        map[string]any{"type": "plain_text", "text": m.Label, "emoji": true},
-			"description": map[string]any{"type": "plain_text", "text": m.Note},
-			"value":       m.Value,
-		}
-		opts = append(opts, o)
-		if m.Value == selected {
-			initial = o
-		}
-	}
-	sel := map[string]any{
-		"type":      "static_select",
-		"action_id": homeActionRouting,
 		"options":   opts,
 	}
 	if initial != nil {
@@ -312,10 +268,6 @@ func slackHandleInteraction(s *cloud.Service[state], c *zip.Ctx, raw []byte) err
 		case homeActionModel:
 			if validHomeModel(v) {
 				link.Model, changed = v, true
-			}
-		case homeActionRouting:
-			if v == routingChat || v == routingCode {
-				link.Routing, changed = v, true
 			}
 		}
 	}

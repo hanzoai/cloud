@@ -310,12 +310,12 @@ func TestRun_PRFailure_DoesNotFailRun(t *testing.T) {
 
 	res := d.Run(context.Background(), baseReq())
 	if !res.OK { // branch is pushed+verified; a PR-row failure is a side-effect, not a run failure
-		t.Fatalf("tracker failure must not fail the run, got %+v", res)
+		t.Fatalf("todo failure must not fail the run, got %+v", res)
 	}
 	if res.PR.Identifier != "" {
-		t.Fatalf("no PR ref when tracker failed")
+		t.Fatalf("no PR ref when todo failed")
 	}
 	if sess.closes[0].status != statusDone {
-		t.Fatalf("run still done despite tracker failure")
+		t.Fatalf("run still done despite todo failure")
 	}
 }

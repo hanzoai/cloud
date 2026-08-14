@@ -16,12 +16,12 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.3.1
 	github.com/hanzoai/cek v0.2.7
-	github.com/hanzoai/commerce v1.50.47
+	github.com/hanzoai/commerce v1.50.48
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/iam v1.34.51
-	github.com/hanzoai/kafka v1.3.1
+	github.com/hanzoai/kafka v1.3.2
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
 	github.com/hanzoai/notify v1.7.2

@@ -26,7 +26,7 @@ func TestApplyEmbedEnvDefaultsDisablesMetricsReader(t *testing.T) {
 		t.Fatalf("sqlite path = %q, want under the data dir", got)
 	}
 	if got := os.Getenv("O11Y_PROMETHEUS_ACTIVE__QUERY__TRACKER_PATH"); got != dir {
-		t.Fatalf("tracker path = %q, want %q", got, dir)
+		t.Fatalf("todo path = %q, want %q", got, dir)
 	}
 }
 

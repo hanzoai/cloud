@@ -600,7 +600,7 @@ func projectKey(c *zip.Ctx) string {
 // and doors (event.go) is the only list that binds them.
 //
 // There is no 'capture' tag: rows carrying it were written by the retired
-// /v1/analytics{,/batch} and /v1/tracker name-aliases of the canonical wire. Those
+// /v1/analytics{,/batch} and /v1/todo name-aliases of the canonical wire. Those
 // rows keep their value in the warehouse — history is not rewritten — but no code
 // path can mint another, which is what makes the retirement a fact rather than a
 // convention.

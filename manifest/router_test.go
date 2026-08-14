@@ -75,7 +75,7 @@ import (
 //     unnamed in Apps the collaborative editor got the console shell while the
 //     typed RPC — published in openapi.yaml, in every generated SDK and in the MCP
 //     tool list — reached no app at all. team's row names /collaborator now.)
-//   - ONE NAME, TWO OWNERS (0). /v1/tracker was the last; analytics dropped
+//   - ONE NAME, TWO OWNERS (0). /v1/todo was the last; analytics dropped
 //     the claim and the entry with it.
 //
 // Regenerating it is mechanical: the failure below prints the current list, in
@@ -87,12 +87,12 @@ var unreachable = []string{
 	// events at 2026-07-29 04:15:29 — eighteen seconds after the ReplicaSet running
 	// the first image where manifest.Apps is the actual router. Routed now.
 	//
-	// /v1/tracker is no longer here. apps/analytics published it as the
-	// @hanzo/capture unload beacon while apps/tracker owned the name for the issue
-	// tracker and got there first, so the beacon 405'd in the fleet and passed in
+	// /v1/todo is no longer here. apps/analytics published it as the
+	// @hanzo/capture unload beacon while apps/todo owned the name for the issue
+	// todo and got there first, so the beacon 405'd in the fleet and passed in
 	// analytics' own single-app tests — a name with two claimants, recorded rather
 	// than resolved. It is resolved now: analytics dropped the claim (its wire is
-	// /v1/event), the tracker product keeps the name, and this ledger records only
+	// /v1/event), the todo product keeps the name, and this ledger records only
 	// paths that are still owned twice.
 	// /v1/billing/methods is no longer here either, and it went the same
 	// way. apps/commerce registered a POST at an address manifest.Apps gives to the

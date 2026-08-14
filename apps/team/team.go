@@ -47,7 +47,7 @@ var mounted *cloud.Service[state]
 //
 // The uniform /v1/team/health liveness route is provided by the compose root
 // (serve.go registers GET /v1/<name>/health for every enabled subsystem BEFORE
-// MountAll, HIP-0106) — the SAME contract clients/tracker, clients/crm and
+// MountAll, HIP-0106) — the SAME contract apps/todo, clients/crm and
 // clients/agents rely on. Mount does NOT re-register it (a second identical route
 // is dead — Fiber matches the first-registered — and violates one-way).
 func Mount(app cloud.Router, deps cloud.Deps) error {

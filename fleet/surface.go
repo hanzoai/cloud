@@ -177,7 +177,7 @@ func mutates(w []string) bool {
 //     entry in a store or a name in a schema. That direction is deliberate: an
 //     inclusion list ("api key, ssh key, signing key, …") fails OPEN on the
 //     credential nobody thought of, and this clause must fail closed. So
-//     `delete_v1_pubsub_kv_bucket_key` and `patch_v1_tracker_projects_key_issues_num`
+//     `delete_v1_pubsub_kv_bucket_key` and `patch_v1_todo_projects_key_issues_num`
 //     survive on their neighbours, while `delete_v1_git_keys_id`,
 //     `post_v1_agents_targets_id_key` and `delete_v1_keys` do not.
 //

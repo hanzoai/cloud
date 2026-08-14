@@ -132,7 +132,7 @@ func init() {
 
 	// The two UI addresses, declared by the ONE helper every embedded SPA uses —
 	// see openapi.DescribeSPA. Written out here it was the same forty lines meet
-	// and tracker would each need, and the copy in this file had already drifted:
+	// and todo would each need, and the copy in this file had already drifted:
 	// it promised that a missing asset answers "200 with HTML rather than 404"
 	// after spa.Handler had begun answering 404 under assets/.
 	openapi.DescribeSPA("/tasks", "tasks console")
