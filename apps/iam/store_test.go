@@ -12,6 +12,11 @@ import (
 	"github.com/hanzoai/iam/pkg/model"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	"github.com/hanzoai/orm"
+
+	// The store is keyed now, so this test binary needs a master before it opens
+	// one. devmaster mints a per-process key; production resolves the real one
+	// through credz.Boot from KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
 // seedIdentity writes one user into the identity store at path, the way IAM's own
@@ -76,11 +81,11 @@ func TestTheGraftOpensTheStoreThatHoldsTheIdentities(t *testing.T) {
 	path := StorePath(dir)
 	seedIdentity(t, path, "hanzo", "z")
 
-	db, err := openStore(dir)
+	db, conn, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("openStore refused the data dir holding the identity store: %v", err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = conn.Close() })
 
 	users, err := orm.TypedQuery[model.User](db).GetAll(ctx)
 	if err != nil {
@@ -112,59 +117,84 @@ func TestTheStorePathIsTheOneIAMWrites(t *testing.T) {
 	// store that exists; if the volume holding it is missing or mounted elsewhere,
 	// creating one here would mint an empty identity service and serve it —
 	// every account gone, jwks {"keys":[]}, and nothing failing to say so.
-	if _, err := openStore(dir); err == nil {
+	if _, _, err := openStore(dir); err == nil {
 		t.Fatal("openStore CREATED an identity store that was not there — a missing mount would silently replace identity with an empty database")
 	}
 
 	// Present and openable: the path is exactly the file the standalone iam writes,
 	// so the two binaries read one store rather than two.
 	seedIdentity(t, want, "hanzo", "z")
-	db, err := openStore(dir)
+	_, conn, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("openStore on an existing store: %v", err)
 	}
-	_ = db.Close()
+	_ = conn.Close()
 }
 
 // sqliteMagic is the 16-byte header every unencrypted SQLite file starts with.
 var sqliteMagic = []byte("SQLite format 3\x00")
 
-// THE IDENTITY STORE IS PLAINTEXT AT REST. This records it rather than discovering it
-// again later from a volume read.
+// THE IDENTITY STORE IS ENCRYPTED AT REST, and a store that arrives plaintext is
+// converted by the act of opening it.
 //
-// It is not a preference. The file that holds every identity already exists and is
-// plaintext; cek derives a key unconditionally and refuses a plaintext database at
-// open, so it cannot be pointed at that file; and re-keying an existing file is a
-// migration, which is forbidden here — one store, pointed at, never converted. The
-// only shape that changes this without a migration is a NEW store born encrypted with
-// the old one retired, and that is a decision above this package.
+// This is the assertion that used to run the other way. It recorded plaintext as a
+// named cost, on the reasoning that cek could not be pointed at this file and that
+// re-keying an existing one was a migration nobody had signed up for. Both halves
+// have since been answered — cek.OpenAt keys a file wherever it is mounted, and
+// cek.Convert re-keys one without losing a row — so what was a cost is now a gate.
 //
-// So this asserts the posture rather than pretending otherwise. If it ever fails,
-// something has started encrypting the identity store and this comment is the thing
-// to read first: the standalone iam, the iam CLI and the migrator all open it plain,
-// and any one of them would then be locked out of the fleet's own database.
-func TestTheIdentityStoreIsPlaintextAndThatIsRecorded(t *testing.T) {
+// It matters because of what is IN this file: internal/oidc/jwks.go reads
+// cert.PrivateKey out of it, so a lifted volume used to yield the token-signing keys
+// for the whole fleet, along with every user, every org and every provider secret.
+//
+// The precondition is production's: seedIdentity writes the store with IAM's own
+// plain opener, which is exactly the file a deployment has on disk today.
+func TestTheIdentityStoreIsEncryptedAtRest(t *testing.T) {
+	ctx := context.Background()
 	dir := t.TempDir()
 	path := StorePath(dir)
-	seedIdentity(t, path, "hanzo", "z")
 
+	seedIdentity(t, path, "hanzo", "z")
 	head, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	// What this pins is AGREEMENT, not plaintext: every consumer of this file — the
-	// standalone iam, the iam CLI, the migrator and this graft — must open it the
-	// same way, and today they all open it plain. Encrypting it is an IMPROVEMENT
-	// this test must not stand in the way of, so the day the other consumers move
-	// to a keyed opener, this assertion moves with them rather than blocking them.
-	//
-	// It is recorded because it is a real, named cost: internal/oidc/jwks.go reads
-	// cert.PrivateKey out of this store, so a lifted volume yields the
-	// token-signing keys, and this is the one cloud store outside the cek envelope
-	// every other app's store is born inside. The forward shape is a NEW store born
-	// encrypted with this one retired — not a re-key of this file, which would be
-	// the migration the directive forbids.
-	if len(head) < len(sqliteMagic) || !bytes.Equal(head[:len(sqliteMagic)], sqliteMagic) {
-		t.Skip("this store is no longer plain — if every consumer now agrees on a keyed opener, delete this test; if they do not, they are locked out")
+	if !bytes.HasPrefix(head, sqliteMagic) {
+		t.Fatal("the precondition is wrong: the seed is not a plaintext SQLite database, so this test is not proving a conversion")
+	}
+
+	db, conn, err := openStore(dir)
+	if err != nil {
+		t.Fatalf("openStore: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	head, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("re-read %s: %v", path, err)
+	}
+	if bytes.HasPrefix(head, sqliteMagic) {
+		t.Fatal("the identity store is STILL a plaintext SQLite file after being opened — a lifted volume yields every identity and the token-signing keys")
+	}
+
+	// A conversion that leaves a readable copy beside the store has not removed the
+	// exposure, it has moved it.
+	for _, leftover := range []string{".plain.bak", ".cek.tmp"} {
+		if _, err := os.Stat(path + leftover); err == nil {
+			t.Errorf("a plaintext copy was left at %s", path+leftover)
+		}
+	}
+
+	// And it is the SAME store: encrypting it is worth nothing if the identities
+	// did not come with it.
+	users, err := orm.TypedQuery[model.User](db).GetAll(ctx)
+	if err != nil {
+		t.Fatalf("read users from the encrypted store: %v", err)
+	}
+	if len(users) != 1 {
+		t.Fatalf("the encrypted store holds %d users, want the 1 that was in the plaintext one", len(users))
+	}
+	if got := users[0].Owner + "/" + users[0].Name; got != "hanzo/z" {
+		t.Errorf("read %q, want hanzo/z", got)
 	}
 }

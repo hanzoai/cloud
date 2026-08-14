@@ -165,28 +165,19 @@ type usagePoint struct {
 	Requests   int64  `json:"requests"`
 }
 
-type usageByProduct struct {
-	Product    string `json:"product"`
+// usageByModel is one model's slice of the window. The ledger's revenue-bearing
+// dimension IS the model — there is no product column, and naming one implied a split
+// this plane cannot make.
+type usageByModel struct {
+	Model      string `json:"model"`
 	SpendCents int64  `json:"spendCents"`
 	Tokens     int64  `json:"tokens"`
 }
 
 type usageData struct {
-	Totals    usageTotals      `json:"totals"`
-	Series    []usagePoint     `json:"series"`
-	ByProduct []usageByProduct `json:"byProduct"`
-	// Sources names a money read that did NOT answer, on the SAME core.SourceStatus
-	// channel /overview, /revenue and /finance already report freshness on — one
-	// vocabulary for one fact, rather than a second spelling invented here.
-	//
-	// It is ADDITIVE and absent when every read answered, so a healthy response is
-	// byte-identical to what this endpoint has always sent and no consumer changes to
-	// keep working. What changes is that `spendCents: 0` is now a REAL zero unless
-	// this says otherwise: a fleet that spent nothing and a fleet whose ledger could
-	// not be reached were the same three bytes on the wire, and the second is what
-	// production was sending. Rows counts the orgs that DID answer, so the reader can
-	// see how much of the fleet the total actually covers.
-	Sources []core.SourceStatus `json:"sources,omitempty"`
+	Totals  usageTotals    `json:"totals"`
+	Series  []usagePoint   `json:"series"`
+	ByModel []usageByModel `json:"byModel"`
 }
 
 // usageIn is the GET /v1/admin/usage query.

@@ -2,29 +2,33 @@ package account
 
 import "testing"
 
-// A KEY'S TYPE IS WHAT THE DOORS ENFORCE, NOT WHAT THE RECORD SAYS.
+// A KEY'S TYPE IS ITS SCOPE, BECAUSE ACCESSKEY IS NOT THE CREDENTIAL.
 //
-// cloud.IsPublishableKey reads the prefix, and it decides whether a key may
-// become a principal at all: a pk- returns nil at the identity middleware and
-// authenticates nothing, whatever any other field claims. So a listing that types
-// a key from IAM's stored scope can hand a holder a key labelled `secret` that
-// every gate treats as publishable — a credential the console presents as working
-// which silently works for nothing.
+// This used to type a row from the AccessKey prefix, reasoning that the doors
+// dispatch on the prefix so the prefix is the fact. The doors do — on the
+// credential a HOLDER PRESENTS. AccessKey is not that credential: IAM mints both
+// classes with a pk- AccessKey and puts the secret key's sk- in AccessSecret,
+// which the listing masks (iam keys.MintUserKey). The rows below are the shapes
+// IAM actually writes, which is what the previous table got wrong — it modelled a
+// secret row as carrying an sk- AccessKey, so it never exercised a real one, and
+// "prefix first" was true for every production row alike.
 //
-// Not hypothetical. Measured on this cluster the day this was written: two rows
-// scoped non-publish carrying pk- prefixes, one minted that morning.
-func TestKeyTypeFollowsThePrefixThatEnforces(t *testing.T) {
+// Measured before the fix: a freshly minted SECRET key came back from
+// GET /v1/keys typed "publishable" with its pk- half printed, and the console —
+// which looks for the secret row — offered "create your Cloud API key" to a user
+// who already held a working one.
+func TestKeyTypeIsTheScope(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		row  userKey
 		want bool
 	}{
 		{
-			// THE BUG. Scope says one thing, the prefix says another, and the prefix
-			// is what the identity middleware obeys.
-			name: "a pk- scoped non-publish is publishable, because every door says so",
-			row:  userKey{AccessKey: "pk-live-7ad0000000", Scope: "read"},
-			want: true,
+			// THE BUG, in the shape IAM writes it: this is what every secret key
+			// looks like on the wire. Its holder presents the masked sk-.
+			name: "a secret row carries a pk- AccessKey and is still secret",
+			row:  userKey{AccessKey: "pk-live-7ad0000000", Scope: ""},
+			want: false,
 		},
 		{
 			name: "the ordinary publishable row",
@@ -32,14 +36,9 @@ func TestKeyTypeFollowsThePrefixThatEnforces(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "the ordinary secret row",
-			row:  userKey{AccessKey: "sk-live-0000000000", Scope: "read"},
-			want: false,
-		},
-		{
-			// THE OPPOSITE DISAGREEMENT, and it must NOT resolve the same way. Calling
-			// this publishable would print a confidential key's full value into a
-			// listing, so the scope may never promote an sk- on its own.
+			// THE DISAGREEMENT THAT STILL MATTERS. Calling this publishable would
+			// print a confidential key's full value into a listing, so a scope may
+			// never promote an sk- on its own.
 			name: "an sk- scoped publish stays secret — a label cannot expose a secret",
 			row:  userKey{AccessKey: "sk-live-0000000001", Scope: iamScopePublish},
 			want: false,

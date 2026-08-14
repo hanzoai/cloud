@@ -25,13 +25,15 @@ package sandbox
 // have to be kept in step.
 
 import (
+	"cmp"
 	"context"
-	"github.com/hanzoai/cloud/apps/metering"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/apps/metering"
 
 	"github.com/zap-proto/zip"
 )
@@ -74,6 +76,11 @@ type Cmd struct {
 	// sees the work happen instead of a blank pause with a verdict at the end.
 	// Empty means nothing is watching, and then nothing is sent — see work.go.
 	Session string
+	// Blind are the caller's secrets, hidden from BOTH doors this command's bytes
+	// leave by — the narration above and the result returned. Redaction has to
+	// happen here rather than at the caller because the narration never passes
+	// through the caller: see blind.go.
+	Blind []string
 }
 
 // Entry is what a path IS: a file's bytes, or a directory's entries. One read
@@ -133,7 +140,7 @@ func ResourceFee(class string) int64 {
 
 const feeEnv = "SANDBOX_FEE_CENTS"
 
-func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (Sandbox, error) {
+func Lease(s *Service, ctx context.Context, org, ledger string, super bool, spec Spec) (Sandbox, error) {
 	if strings.TrimSpace(org) == "" {
 		return Sandbox{}, zip.ErrForbidden("org required")
 	}
@@ -159,8 +166,11 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	if class == "" {
 		class = "exec"
 	}
-	if !classes[class] {
-		return Sandbox{}, zip.ErrBadRequest("class must be one of exec, dev, desktop")
+	// The refusal ENUMERATES from the table rather than repeating it. Written out,
+	// the message named three classes for as long as the table held three, and
+	// then went on naming three.
+	if _, ok := classes[class]; !ok {
+		return Sandbox{}, zip.ErrBadRequest("class must be one of " + strings.Join(classNames(), ", "))
 	}
 	// A caller-supplied image is spent against OUR pull secret, so the namespace
 	// is checked before it reaches a pod spec. See image.go — unchecked, this
@@ -221,10 +231,14 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	// cannot be honoured must leave nothing behind. Refusing after store.Put would
 	// bill nobody and strand a row and a PVC.
 	//
-	// The org is the one this function was HANDED, never a field on Spec: it is the
-	// caller's tenant, resolved by the adapter from principal.Org, and it is what the
-	// ledger is keyed by. Personal and org spend separate inside it, because the
-	// payer carries IAM's signed billing_account claim.
+	// THE LEDGER IS NOT THE NAMESPACE. org says whose DATA this is; ledger says whose
+	// BOOKS pay, and the two differ in exactly one case — a platform SuperAdmin acting
+	// in somebody else's org spends its own, which is what platform sudo means. Keying
+	// the gate on org would have charged the tenant being inspected for the operator
+	// inspecting it. Both arrive as arguments, resolved by the adapter (principal.Ledger
+	// on the request, principal.LedgerFrom on the plane), because this core reads no
+	// identity of its own. Personal and org spend separate INSIDE the ledger, because
+	// the payer carries IAM's signed billing_account claim.
 	//
 	// ("", false) for the project scope is the documented no-principal answer: this
 	// core takes identity as arguments and reads none, so it cannot state whether a
@@ -232,7 +246,7 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	// a value it cannot vouch for.
 	fee := ResourceFee(class)
 	if fee > 0 {
-		if err := s.Bill.Gate(ctx, org, "", false, "sandbox", fee); err != nil {
+		if err := s.Bill.Gate(ctx, ledger, "", false, "sandbox", fee); err != nil {
 			return Sandbox{}, err
 		}
 	}
@@ -256,7 +270,7 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	now := time.Now().Unix()
 	m := Sandbox{
 		ID: id, Org: org, Kind: KindSandbox, Class: class, Project: project,
-		Image: firstNonEmpty(spec.Image, s.State.rt.imageFor(class, super)),
+		Image: cmp.Or(strings.TrimSpace(spec.Image), s.State.rt.imageFor(class, super)),
 		Pod:   podName(id), Status: "pending",
 		CreatedAt: now, LastUsedAt: now,
 	}
@@ -279,7 +293,7 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	// our nodes, so an unset ttl takes the class default rather than forever.
 	ttl := spec.TTLSec
 	if ttl <= 0 {
-		ttl = defaultTTL[class]
+		ttl = classes[class].ttl
 	}
 	if ttl > maxTTL {
 		ttl = maxTTL
@@ -302,7 +316,7 @@ func Lease(s *Service, ctx context.Context, org string, super bool, spec Spec) (
 	// could not cover it, and metering a lease that failed to start would bill for
 	// a pod nobody got. Class is the unit — an exec is not a desktop — so the meter
 	// says which was leased rather than that one more thing happened.
-	s.Bill.MeterUsage(org, "sandbox", metering.Usage{
+	s.Bill.MeterUsage(ledger, "sandbox", metering.Usage{
 		Model:       class + "/" + m.Runtime,
 		AmountCents: fee,
 	})
@@ -364,9 +378,14 @@ func Run(s *Service, ctx context.Context, org, id string, cmd Cmd) (ExecResult, 
 	defer stop()
 	forget := s.State.work.start(m.ID, stop)
 	defer forget()
-	say := newTell(org, cmd.Session)
+	// The secrets this command must never publish, applied at BOTH doors it
+	// leaves by: the narration below as it is produced, and the result returned
+	// to the caller. See blind.go.
+	blind := newBlinder(cmd.Blind)
+	say := newTell(org, cmd.Session, blind)
 
 	r, err := s.State.rt.exec(ctx, m, argv, strings.NewReader(cmd.Stdin), cmd.TimeoutSec, say)
+	r = blind.result(r)
 	// The last word is said on EVERY path, including the one a stop took. A run
 	// that vanishes mid-sentence leaves a watcher reading "working…" forever.
 	say.done(r.ExitCode, err)
@@ -425,7 +444,7 @@ func Read(s *Service, ctx context.Context, org, id, path string) (Entry, error) 
 	case dirExit:
 		return Entry{Path: p, Dir: true, Entries: lines(r.Stdout)}, nil
 	}
-	return Entry{}, zip.ErrNotFound(strings.TrimSpace(firstNonEmpty(r.Stderr, "no such path")))
+	return Entry{}, zip.ErrNotFound(cmp.Or(strings.TrimSpace(r.Stderr), "no such path"))
 }
 
 // Write writes data to one file, creating parent directories. It answers the

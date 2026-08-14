@@ -25,6 +25,7 @@ package sandbox
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/apps/principal"
 	"sync/atomic"
 
 	"github.com/hanzoai/cloud"
@@ -102,7 +103,7 @@ func planeLease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
 	// the plane already carries — cloud.Who is how this door spells identity, and
 	// zip.Caller.Admin is the same attestation X-User-IsAdmin carries. One rule,
 	// stated once in imageFor; each door names the caller in its own vocabulary.
-	m, err := Lease(s, ctx, org, cloud.Who(ctx).Admin, Spec{ID: in.ID, Class: in.Class,
+	m, err := Lease(s, ctx, org, principal.LedgerFrom(ctx), cloud.Who(ctx).Admin, Spec{ID: in.ID, Class: in.Class,
 		Project: in.Project, Runtime: in.Runtime, TTLSec: in.TTLSec})
 	if err != nil {
 		return nil, err
@@ -131,7 +132,8 @@ func planeRun(ctx context.Context, in *plane.RunIn) (*plane.Ran, error) {
 		return nil, err
 	}
 	r, err := Run(s, ctx, org, in.ID, Cmd{Argv: in.Argv, Command: in.Command,
-		Stdin: in.Stdin, Dir: in.Dir, TimeoutSec: in.TimeoutSec, Session: in.Session})
+		Stdin: in.Stdin, Dir: in.Dir, TimeoutSec: in.TimeoutSec, Session: in.Session,
+		Blind: in.Blind})
 	if err != nil {
 		return nil, err
 	}

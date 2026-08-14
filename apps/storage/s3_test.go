@@ -187,7 +187,7 @@ func TestHealthOwnedByS3NotGenericLiveness(t *testing.T) {
 // static GET /v1/s3/buckets (order 118). A request to /v1/s3/buckets must reach
 // the s3 handler (which requires an org → 403 without one), NOT provisioning's
 // list-resource-by-name handler (which would treat "buckets" as a resource name).
-// The s3 403 body says "X-Org-Id required" from the s3 guard; provisioning's
+// The s3 403 body names the missing principal from the s3 guard; provisioning's
 // :name GET with a valid org would 404 "resource not found" for name "buckets".
 // We assert the s3 path wins by checking the WITHOUT-org 403 (s3's guard fires
 // first) — provisioning's GET /v1/s3/:name also 403s without org, so to
@@ -196,7 +196,7 @@ func TestHealthOwnedByS3NotGenericLiveness(t *testing.T) {
 func TestBucketsRouteReachesS3NotProvisioning(t *testing.T) {
 	app := newApp(t, true)
 
-	// Without org: s3 guard → 403 "X-Org-Id required".
+	// Without org: s3 guard → 403.
 	resp := do(t, app, "GET", "/v1/s3/buckets", "", "", false)
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("GET /v1/s3/buckets (no org) = %d, want 403", resp.StatusCode)

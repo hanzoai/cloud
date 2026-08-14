@@ -30,8 +30,8 @@ package tools
 // Every resolver FAILS CLOSED off the HTTP path — the CLI projection's
 // LocalInvoke runs an op with no request at all. No request means no attested
 // caller: no project narrowing, no actor, and no audit record (an unattributable
-// record is worse than none). tenantOf refuses outright, so an org-scoped op
-// never runs without a tenant.
+// record is worse than none). principal.Acting refuses outright, so an
+// org-scoped op never runs without a tenant.
 
 import (
 	"context"
@@ -65,22 +65,11 @@ type noInput struct{}
 // "200 with a body" about a route that answers 204 with none.
 type noContent = struct{}
 
-// tenantOf is the validated org for a typed op — the one the gateway asserted
-// and cloud.Bridge parked on the context, never a field of In. The 403 text is
-// the one every untyped tools handler answered with, so the wire is unchanged.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	return org, nil
-}
-
 // projectOf is principal.Project for a typed op: the org's sub-scope, from the
 // server-minted X-Project-Id. It needs the REQUEST because principal.OrgFrom
 // carries the org alone. Off the HTTP path it answers the default project, which
 // is what an absent header has always meant — and no op reaches it there, since
-// tenantOf refuses first.
+// principal.Acting refuses first.
 func projectOf(ctx context.Context) string {
 	if c, ok := cloud.Request(ctx); ok {
 		return principal.Project(c)
@@ -88,10 +77,10 @@ func projectOf(ctx context.Context) string {
 	return principal.DefaultProject
 }
 
-// scopeOf is the (org, project) a listing resolves for — tenantOf AND-ed with
-// projectOf, so the project can only ever narrow the caller's OWN org.
+// scopeOf is the (org, project) a listing resolves for — principal.Acting
+// AND-ed with projectOf, so the project can only ever narrow the caller's OWN org.
 func scopeOf(ctx context.Context) (Scope, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return Scope{}, err
 	}
@@ -101,8 +90,8 @@ func scopeOf(ctx context.Context) (Scope, error) {
 // adminOf reports that the caller is a platform SuperAdmin — principal's own
 // named predicate, which is the reserved "admin" org proven by X-User-IsAdmin.
 // It needs the REQUEST because admin-ness lives in a header principal.OrgFrom
-// does not carry. FALSE off the HTTP path, for the reason tenantOf refuses
-// there: no request, no attested caller, no authority.
+// does not carry. FALSE off the HTTP path, for the reason principal.Acting
+// refuses there: no request, no attested caller, no authority.
 func adminOf(ctx context.Context) bool {
 	c, ok := cloud.Request(ctx)
 	return ok && principal.IsSuperAdmin(c)
@@ -120,10 +109,10 @@ func callerOf(ctx context.Context) string {
 
 // principalOf is the whole validated caller a DISPATCH needs — org, project,
 // user, owner, admin-ness and the credential headers a provider replays — which
-// is strictly more than tenantOf's org. It comes off the REQUEST because the
+// is strictly more than the org alone. It comes off the REQUEST because the
 // credential set does, and it fails closed off the HTTP path for the same reason
-// tenantOf does: no request means no attested caller, and a dispatch with no
-// caller has no scope to be confined to.
+// principal.Acting does: no request means no attested caller, and a dispatch
+// with no caller has no scope to be confined to.
 func principalOf(ctx context.Context) (Principal, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {

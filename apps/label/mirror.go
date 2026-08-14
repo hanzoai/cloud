@@ -276,7 +276,7 @@ func deletion(t tenant.Key, ids []string) (string, []any) {
 	return `DELETE FROM hanzo.risk_label WHERE org = ? AND id IN (` + strings.Join(holes, ",") + `)`, args
 }
 
-// Order is the precedence rule rendered as a ClickHouse ordering tuple, for the
+// Order is the precedence rule rendered as a Datastore ordering tuple, for the
 // dataset materialiser to resolve labels IN the warehouse — `argMin(disposition,
 // `+label.Order()+`)` picks the same winner the Go comparator would.
 //

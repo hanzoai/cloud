@@ -2,7 +2,9 @@ package wallets
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -275,10 +277,5 @@ func TestFailsClosedWithoutAValidatedPrincipal(t *testing.T) {
 }
 
 func sortedOps(m map[string]bool) string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return strings.Join(out, ", ")
+	return strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }

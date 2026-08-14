@@ -23,7 +23,7 @@ func TestPersistenceCRUD(t *testing.T) {
 	requireSharedStore(t) // reopens the workspace store on a fresh handle mid-test
 	s := newTestSession(t)
 
-	// create a tracker Project
+	// create a todo Project
 	s.applyTx(json.RawMessage(`{"_class":"core:class:TxCreateDoc","objectId":"proj1",
 		"objectClass":"tracker:class:Project","objectSpace":"core:space:Space",
 		"modifiedBy":"acc-test","modifiedOn":1,

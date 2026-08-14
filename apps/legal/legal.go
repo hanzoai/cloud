@@ -1,8 +1,6 @@
 package legal
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -157,7 +155,7 @@ func init() {
 func completeSign(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	doc, err := s.State.store.GetDocument(c.Context(), org, c.Param("id"))
 	if err == errNotFound {
@@ -276,7 +274,7 @@ func bodyCap() zip.Handler {
 			return c.Continue()
 		}
 		if _, ok := principal.Org(c); !ok {
-			return zip.ErrForbidden("X-Org-Id required")
+			return principal.Refused(c)
 		}
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "request body too large")
 	}
@@ -316,11 +314,3 @@ func decode(c *zip.Ctx, v any) error {
 func clientIP(c *zip.Ctx) string { return cloud.ClientIP(c) }
 
 func nowUnix() int64 { return time.Now().Unix() }
-
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}

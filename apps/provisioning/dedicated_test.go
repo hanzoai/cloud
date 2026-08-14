@@ -10,7 +10,9 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -181,7 +183,7 @@ func TestDedicated_CreateLaunchesInstance(t *testing.T) {
 	// The Datastore CR landed in the tenant namespace with the right shape.
 	ds := orch.datastores[ns+"/"+inst]
 	if ds == nil {
-		t.Fatalf("no Datastore CR applied at %s/%s; have %v", ns, inst, keys(orch.datastores))
+		t.Fatalf("no Datastore CR applied at %s/%s; have %v", ns, inst, slices.Collect(maps.Keys(orch.datastores)))
 	}
 	if got, _, _ := unstructured.NestedString(ds.Object, "kind"); got != "Datastore" {
 		t.Fatalf("CR kind = %q, want Datastore (writes status.phase)", got)
@@ -400,12 +402,4 @@ func TestDedicated_PricingPure(t *testing.T) {
 	if got := gbDayCents(0); got != 0 {
 		t.Fatalf("gbDayCents(0) = %d, want 0", got)
 	}
-}
-
-func keys(m map[string]*unstructured.Unstructured) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }

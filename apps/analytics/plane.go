@@ -13,8 +13,9 @@ import (
 //
 // This door serves api.hanzo.ai; the key is a column on a project row. In
 // production those are never the same process — the pod boots ~25 single-app
-// processes — so the registry projects.Mount writes is nil here. Installed at
-// build() as the FALLBACK, so a co-resident store still answers with no hop.
+// processes — so the registry projects.Mount writes is nil here. It is the package
+// DEFAULT (attribution.go) and a co-resident store still answers with no hop,
+// because currentKeyResolver prefers the in-process one.
 //
 // It lives in this package rather than at the compose root because the root
 // cannot import it: analytics imports cloud, so cloud importing analytics is a

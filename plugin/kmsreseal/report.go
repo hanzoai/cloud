@@ -8,8 +8,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -63,11 +64,7 @@ func printInventory(inv Inventory) {
 }
 
 func sortedCounts(m map[string]int) string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(m))
 	var b strings.Builder
 	for i, k := range keys {
 		if i > 0 {

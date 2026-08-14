@@ -33,6 +33,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/shorten"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -51,18 +53,11 @@ type config struct {
 
 func loadConfig() config {
 	return config{
-		searchURL: getenv("searchEndpoint", "http://search.hanzo.svc.cluster.local:7700"),
+		searchURL: environ.Or("searchEndpoint", "http://search.hanzo.svc.cluster.local:7700"),
 		searchKey: os.Getenv("searchApiKey"),
-		vectorURL: getenv("vectorEndpoint", "http://vector.hanzo.svc.cluster.local:6333"),
+		vectorURL: environ.Or("vectorEndpoint", "http://vector.hanzo.svc.cluster.local:6333"),
 		vectorKey: os.Getenv("vectorApiKey"),
 	}
-}
-
-func getenv(key, dflt string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return dflt
 }
 
 var httpClient = &http.Client{Timeout: 15 * time.Second}
@@ -448,16 +443,9 @@ func getJSON(url, hdrKey, hdrVal string, into any) error {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s: status %d: %s", url, resp.StatusCode, truncate(body, 200))
+		return fmt.Errorf("%s: status %d: %s", url, resp.StatusCode, shorten.To(string(body), 200))
 	}
 	return json.Unmarshal(body, into)
-}
-
-func truncate(b []byte, n int) string {
-	if len(b) > n {
-		return string(b[:n])
-	}
-	return string(b)
 }
 
 func nullableTS(s string) *string {

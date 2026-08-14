@@ -28,7 +28,7 @@
       "post": {
         "operationId": "post_sandboxes",
         "summary": "Lease a sandbox",
-        "description": "Creates a sandbox and returns it. `class` is one of `exec`, `dev` or `desktop`; `dev` and `desktop` are attached to a `project`, which is required for them and names the volume the work persists on. `ttlSec` bounds the lease, and `image` overrides the class default.\n\nThis is the ONLY path that creates cluster objects. The isolation boundary is the pod's runtime class, one field, so what a sandbox is confined by is a deployment decision rather than anything this operation negotiates.",
+        "description": "Creates a sandbox and returns it. `class` is one of `exec`, `dev`, `desktop` or `android`; `dev` and `desktop` are attached to a `project`, which is required for them and names the volume the work persists on. `ttlSec` bounds the lease, and `image` overrides the class default.\n\nThis is the ONLY path that creates cluster objects. The isolation boundary is the pod's runtime class, one field, so what a sandbox is confined by is a deployment decision rather than anything this operation negotiates.",
         "tags": [
           "sandboxes"
         ]
@@ -315,6 +315,66 @@
         ]
       }
     },
+    "/v1/sandboxes/{id}/screen": {
+      "get": {
+        "operationId": "get_sandboxes_by_id_screen",
+        "summary": "The screen, as a page",
+        "description": "A complete, self-contained desktop — noVNC inline, no other origin — that opens its own socket and draws this sandbox's display. Embed it in an iframe and there is nothing else to build.\n\n`ticket` is the credential from the POST above, carried through to the socket. The page is NOT gated: it is inert markup and does not redeem the ticket, because a ticket is spent once and a page that spent it would hold a credential that no longer opens anything. `frame-ancestors` admits our own brands' hosts and nothing further.\n\nIt is served for every class, not only for `desktop`. The class is a fact about the image, and a sandbox with no VNC server already fails exactly — the connection is refused and the page says so — where a check here would be a second opinion about what is running inside a pod, formed from a label rather than from the pod.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandboxes/{id}/screen/ticket": {
+      "post": {
+        "operationId": "post_sandboxes_by_id_screen_ticket",
+        "summary": "Open a screen",
+        "description": "Mints a SINGLE-USE ticket for this sandbox's DISPLAY and returns `{ticket, expiresIn, url}`, where url is the desktop PAGE with the ticket already on it. The same ticket as the terminal's, minted for a different door.\n\nA ticket says which org and which sandbox, and the terminal and the screen are two views of one machine: a caller who may type in a sandbox may look at it. What the door decides is the URL handed back, which is the only part that differs.\n\nMint one per screen, and mint a fresh one to reconnect.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sandboxes/{id}/screen/ws": {
+      "get": {
+        "operationId": "get_sandboxes_by_id_screen_ws",
+        "summary": "The screen, as a socket",
+        "description": "Upgrades to a WebSocket carrying RFB — the VNC wire protocol — from the sandbox's display, for a host that brings its own client. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.\n\nTHE WIRE IS RFB, in BINARY frames both ways, and it is not interpreted here: this is a pipe between the caller's client and the server inside the pod.\n\nTHE PIXELS COME OUT THROUGH THE EXEC CHANNEL. The display binds 127.0.0.1 only and deliberately nothing else, so there is no address to dial — `socat` joins the stream to that loopback port over the same Kubernetes exec subresource every other call into a sandbox uses. One way in, one thing to authorize, nothing further exposed.\n\nThe window size is ignored. A browser pane is not the X server's geometry, and the client scales what it is given rather than asking a server with no RandR to resize itself.",
+        "tags": [
+          "sandboxes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/sandboxes/{id}/terminal": {
       "get": {
         "operationId": "get_sandboxes_by_id_terminal",
@@ -415,7 +475,7 @@
       "LeaseIn": {
         "properties": {
           "class": {
-            "description": "Class is what KIND of computer to lease, and the set is closed:\n\n\texec     a throwaway one that keeps nothing. Seconds to minutes.\n\tdev      a coding one, with the project's own disk attached. Hours.\n\tdesktop  a dev one that also has a screen.\n\nEmpty leases an `exec`, which is the right answer for running a program and\nthe wrong one for working on a repository, because it keeps nothing.",
+            "description": "Class is what KIND of computer to lease, and the set is closed:\n\n\texec     a throwaway one that keeps nothing. Seconds to minutes.\n\tdev      a coding one, with the project's own disk attached. Hours.\n\tdesktop  a dev one that also has a screen.\n\tandroid  a desktop with a phone running on that screen.\n\nEmpty leases an `exec`, which is the right answer for running a program and\nthe wrong one for working on a repository, because it keeps nothing.\n\nAn `android` needs a node that can virtualise a CPU, so it is the one class\na deployment may not be able to place. Where the fleet has none, the lease\nsucceeds and the pod stays Pending naming the device it is waiting for —\nwhich is the honest answer, because the alternative is an emulator running\non an interpreted CPU and never finishing its boot.",
             "type": "string"
           },
           "id": {
@@ -489,6 +549,13 @@
         "properties": {
           "argv": {
             "description": "Argv is the program and its arguments, already split — the form no shell can\nmisread. Give this or Command, not both.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "blind": {
+            "description": "Blind is the set of secrets this command must never publish.\n\nIt exists because output is redacted where it is PRODUCED or not at all. A\ncaller that scrubbed the returned result would still have streamed the\nunredacted bytes into the session as they were written — to a durable event\nstore, an SSE feed and a chat thread — because the narration leaves the\nsandbox by a different door from the result. Nothing downstream can take a\nsecret back out of a message that has already been delivered.\n\nThe sandbox holds these only for the life of the one command, applies them\nto every stream leaving it, and never logs or stores them.",
             "items": {
               "type": "string"
             },

@@ -13,6 +13,8 @@ package admin
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -326,11 +328,7 @@ func computeRetention(acts []core.CustActivity, now time.Time, maxCohorts int) r
 	}
 
 	// Sorted cohort months, newest last, capped.
-	cohorts := make([]string, 0, len(byCohort))
-	for k := range byCohort {
-		cohorts = append(cohorts, k)
-	}
-	sort.Strings(cohorts)
+	cohorts := slices.Sorted(maps.Keys(byCohort))
 	if len(cohorts) > maxCohorts {
 		cohorts = cohorts[len(cohorts)-maxCohorts:]
 	}

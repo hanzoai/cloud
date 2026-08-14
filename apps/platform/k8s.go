@@ -18,6 +18,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -28,6 +29,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/namespace"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -822,7 +825,7 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	// the reason (never a fabricated success).
 	ref := gitRef
 	if strings.TrimSpace(ref) == "" {
-		ref = firstNonEmpty(a.RepoBranch, "main")
+		ref = cmp.Or(a.RepoBranch, "main")
 	}
 	cleanURL, cleanDockerfile, cleanRef, cleanImage, err := validateBuildInputs(a.RepoURL, a.Dockerfile, ref, image)
 	if err != nil {
@@ -838,29 +841,8 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	// privileged Jobs in the shared build namespace. Counted just-in-time from the
 	// live Jobs the org owns; refuse with errTooManyBuilds (→ HTTP 429) when at
 	// the ceiling.
-	// The ceiling is SOFT, and that is a decision rather than an oversight.
-	//
-	// This is check-then-act: two requests that count concurrently both see room
-	// and both create, so the true bound is the ceiling plus the number of
-	// requests in flight. Making it hard needs an atomic reservation, and the only
-	// atom available here is the Job NAME — which is already spent on idempotency
-	// (jobIDSuffix(buildID), so a retry of one build collides at 409 instead of
-	// building twice). A name cannot carry both properties, and a counter object
-	// with optimistic concurrency would be a second source of truth about how many
-	// builds are running, which drifts from the Jobs it counts.
-	//
-	// The overrun is bounded and CONFINED: the label is the caller's own org, so
-	// an org can only ever exceed ITS OWN share and never take another's. What a
-	// soft ceiling does not do is bound the cluster, and that bound belongs where
-	// bounds are enforced atomically — a ResourceQuota on the build namespace,
-	// which the apiserver applies at admission and no race can widen. This check
-	// stays as the fast, attributable refusal; the quota is the wall behind it.
-	active, err := k.countActiveBuilds(ctx, org)
-	if err != nil {
-		return "", fmt.Errorf("count active builds: %w", err)
-	}
-	if active >= k.limits.maxConcurrentBuilds() {
-		return "", errTooManyBuilds
+	if err := k.admitBuild(ctx, org); err != nil {
+		return "", err
 	}
 
 	// Deterministic Job name (arcd model): pf-build-<org>-<app>-<buildID[:12]>.
@@ -925,22 +907,6 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 // from — and an image that can name a different commit than it was built from is
 // the one lie the whole digest-pinned lane exists to prevent.
 func buildFrontendCmdArgs(buildCtx, dockerfile, image, revision string, args map[string]string) ([]any, error) {
-	// AN ABBREVIATED SHA IS A MISTAKE; A BRANCH NAME IS NOT.
-	//
-	// A build context may legitimately name a branch, and a branch is not a
-	// revision — stamping "main" would make the label look populated while
-	// answering a different question, so those builds correctly ship an image that
-	// says `revision: unknown`. That is honest and stays.
-	//
-	// A value that is hex and SHORTER than a commit is a different thing: a caller
-	// who believes it is stamping a revision and is not. It silently produced an
-	// image that cannot say what it is — /v1/health answers "unknown" forever, and
-	// nobody can ask a running fleet which commit it serves. That is how a rollback
-	// went unnoticed here: the tag said one thing, the image knew nothing, and only
-	// a per-file check told the truth. Refusing names the reason at the door.
-	if isAbbreviatedCommit(revision) {
-		return nil, fmt.Errorf("revision %q is an abbreviated commit, so the image it builds could not name itself: pass the full 40-character sha", revision)
-	}
 	cmd := buildFrontendCmdRev(buildCtx, dockerfile, image, revision)
 	declared := make(map[string]string, len(args))
 	for k, v := range args {
@@ -975,23 +941,6 @@ func buildFrontendCmdArgs(buildCtx, dockerfile, image, revision string, args map
 // release that lost had already been pinned. A version is only a receipt if the
 // image can name its own commit, so the arg is passed here and the label is true
 // no matter which builder ran.
-// isAbbreviatedCommit reports a value that is hex but too short to BE a commit —
-// the shape of a caller who meant to pass a revision and passed a prefix of one.
-//
-// Deliberately narrow. A branch name is not caught (it is a legitimate build
-// context, and cloud.IsCommit already declines to stamp it), and neither is the
-// empty string. Only the mistake is.
-func isAbbreviatedCommit(s string) bool {
-	if len(s) < 7 || len(s) >= 40 {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if c := s[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return false
-		}
-	}
-	return true
-}
 
 func buildFrontendCmdRev(buildCtx, dockerfile, image, revision string) []any {
 	cmd := []any{"buildctl-daemonless.sh", "build"}
@@ -1113,9 +1062,9 @@ const cacheBucket = "buildcache"
 // hanzo-build ingress to the s3 service, set the endpoint, and the cache moves
 // with no code change. Until then the registry backend is what works.
 func cacheArgs(repo string) []string {
-	if ep := strings.TrimSpace(getenv("BUILD_CACHE_S3_ENDPOINT", "")); ep != "" {
-		common := "type=s3,bucket=" + getenv("BUILD_CACHE_S3_BUCKET", cacheBucket) +
-			",region=" + getenv("S3_REGION", "us-east-1") +
+	if ep := environ.Or("BUILD_CACHE_S3_ENDPOINT", ""); ep != "" {
+		common := "type=s3,bucket=" + environ.Or("BUILD_CACHE_S3_BUCKET", cacheBucket) +
+			",region=" + environ.Or("S3_REGION", "us-east-1") +
 			",endpoint_url=" + s3CacheEndpoint(ep) +
 			",use_path_style=true,name=" + cacheKey(repo)
 		// mode=min, for the reason spelled out on the registry branch below: max
@@ -1169,7 +1118,7 @@ func s3CacheEndpoint(ep string) string {
 	if strings.HasPrefix(ep, "http://") || strings.HasPrefix(ep, "https://") {
 		return ep
 	}
-	if strings.EqualFold(getenv("S3_ADMIN_SECURE", "false"), "true") {
+	if strings.EqualFold(environ.Or("S3_ADMIN_SECURE", "false"), "true") {
 		return "https://" + ep
 	}
 	return "http://" + ep
@@ -1460,29 +1409,8 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, im
 		return "", fmt.Errorf("invalid build input: %w", err)
 	}
 	image = cleanImage
-	// The ceiling is SOFT, and that is a decision rather than an oversight.
-	//
-	// This is check-then-act: two requests that count concurrently both see room
-	// and both create, so the true bound is the ceiling plus the number of
-	// requests in flight. Making it hard needs an atomic reservation, and the only
-	// atom available here is the Job NAME — which is already spent on idempotency
-	// (jobIDSuffix(buildID), so a retry of one build collides at 409 instead of
-	// building twice). A name cannot carry both properties, and a counter object
-	// with optimistic concurrency would be a second source of truth about how many
-	// builds are running, which drifts from the Jobs it counts.
-	//
-	// The overrun is bounded and CONFINED: the label is the caller's own org, so
-	// an org can only ever exceed ITS OWN share and never take another's. What a
-	// soft ceiling does not do is bound the cluster, and that bound belongs where
-	// bounds are enforced atomically — a ResourceQuota on the build namespace,
-	// which the apiserver applies at admission and no race can widen. This check
-	// stays as the fast, attributable refusal; the quota is the wall behind it.
-	active, err := k.countActiveBuilds(ctx, org)
-	if err != nil {
-		return "", fmt.Errorf("count active builds: %w", err)
-	}
-	if active >= k.limits.maxConcurrentBuilds() {
-		return "", errTooManyBuilds
+	if err := k.admitBuild(ctx, org); err != nil {
+		return "", err
 	}
 	jobName := truncate("pf-runner-"+jobIDSuffix(buildID), 63)
 	buildCtx := strings.TrimSuffix(cleanURL, ".git") + ".git#" + cleanRef
@@ -1635,6 +1563,40 @@ func (k *k8sClient) smokeJobSpec(jobName, image, kmsKey string) *unstructured.Un
 			},
 		},
 	}}
+}
+
+// admitBuild refuses a build when the org already holds as many as it may.
+//
+// Every door that starts a build asks here — the two container lanes and the
+// artifact lane — so the ceiling is one rule and cannot mean different things
+// depending on which one a caller reached.
+//
+// The ceiling is SOFT, and that is a decision rather than an oversight.
+//
+// This is check-then-act: two requests that count concurrently both see room
+// and both create, so the true bound is the ceiling plus the number of
+// requests in flight. Making it hard needs an atomic reservation, and the only
+// atom available here is the Job NAME — which is already spent on idempotency
+// (jobIDSuffix(buildID), so a retry of one build collides at 409 instead of
+// building twice). A name cannot carry both properties, and a counter object
+// with optimistic concurrency would be a second source of truth about how many
+// builds are running, which drifts from the Jobs it counts.
+//
+// The overrun is bounded and CONFINED: the label is the caller's own org, so
+// an org can only ever exceed ITS OWN share and never take another's. What a
+// soft ceiling does not do is bound the cluster, and that bound belongs where
+// bounds are enforced atomically — a ResourceQuota on the build namespace,
+// which the apiserver applies at admission and no race can widen. This check
+// stays as the fast, attributable refusal; the quota is the wall behind it.
+func (k *k8sClient) admitBuild(ctx context.Context, org string) error {
+	active, err := k.countActiveBuilds(ctx, org)
+	if err != nil {
+		return fmt.Errorf("count active builds: %w", err)
+	}
+	if active >= k.limits.maxConcurrentBuilds() {
+		return errTooManyBuilds
+	}
+	return nil
 }
 
 // countActiveBuilds returns how many build Jobs the org currently has that are
@@ -1850,15 +1812,6 @@ func portOr(p int) int {
 	return p
 }
 
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 // jobIDSuffix derives a DNS-1123-safe, ≤12-char suffix from a build ID for a
 // deterministic Job name. Strips the "bld_" prefix and any non-label chars.
 func jobIDSuffix(buildID string) string {
@@ -1881,8 +1834,5 @@ func jobIDSuffix(buildID string) string {
 
 // truncate caps a DNS-1123 name at n chars, trimming a trailing '-'.
 func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return strings.TrimRight(s[:n], "-")
+	return strings.TrimRight(shorten.To(s, n), "-")
 }

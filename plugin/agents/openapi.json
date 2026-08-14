@@ -1151,7 +1151,7 @@
       "post": {
         "operationId": "post_coding",
         "summary": "Start one autonomous coding run against a repo in the caller's org",
-        "description": "Is the app's door. It answers 202 with the run's handle the\nmoment the run is ADMITTED — not when it finishes. A coding run takes minutes;\nholding a request open for one would tie a connection to a model loop and give\nthe caller nothing it cannot get better from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis door does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.",
+        "description": "Runs a coding task on a repository: clones it into a sandbox, lets a model read\nand edit the code, run the tests, and push the work to a branch. Say the thing\nyou want done — \"fix the failing auth test in hanzoai/cloud\" — and the run\ninfers the repo, the branch and the plan. No prefix, no ceremony.\n\nIt answers 202 with the run's handle the moment the run is ADMITTED — not when\nit finishes. A coding run takes minutes; holding a request open for one would\ntie a connection to a model loop and give the caller nothing it cannot get\nbetter from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis door does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.\n\nIt is also how work CONTINUES. Pass an earlier run's session as `after` and\nthis one starts from where that one stopped, so \"now add tests for it\" builds\non the branch already pushed instead of a fresh clone. The follow-up still gets\nits own branch and its own session — one run, one branch, always reviewable on\nits own.",
         "tags": [
           "coding"
         ],
@@ -1184,6 +1184,10 @@
     "schemas": {
       "CodingStartIn": {
         "properties": {
+          "after": {
+            "description": "After names a previous run's session, and starts this one from where that\none stopped instead of from the repository's default. It is how a follow-up\ninstruction — \"now add tests for it\" — builds on work already done rather\nthan beginning again on a fresh clone.\n\nIt sets the base and nothing else, so this run still writes its OWN branch.\nOne run, one branch: a run that wrote back onto an earlier run's branch\nwould break the rule the forge's ref policy is built on, and would leave\ntwo turns of work with one name to review.\n\nA caller who already knows the branch may pass Base directly; this exists\nbecause the branch is derived from a session id and nobody should have to\nknow how. Base wins if both are given.",
+            "type": "string"
+          },
           "agentRef": {
             "description": "AgentRef names a configured agent to run as, which is how an org pins a\nharness, a model and a prompt to a name. Empty runs the default agent.",
             "type": "string"
@@ -1193,6 +1197,7 @@
             "type": "string"
           },
           "desktop": {
+            "description": "Desktop asks for a run with a SCREEN — an image carrying an X server — for a\ntask that has to drive a browser or another windowed program. False, the\ndefault, is a headless checkout, which is what writing code needs.",
             "type": "boolean"
           },
           "project": {
@@ -1214,10 +1219,6 @@
             "description": "Repo is what to work on, as `owner/name` in the caller's own org. The engine\nresolves the clone URL and the push credential from the org itself, so this\nsays WHICH repository and never how to reach it.",
             "type": "string"
           },
-          "subject": {
-            "description": "Subject is the person the run is attributed to — a linked Hanzo identity the\ndoor already proved, never a name the caller picks. Empty is refused rather\nthan defaulted: a run that lost its human must not execute as the org.",
-            "type": "string"
-          },
           "targetId": {
             "description": "TargetID routes the run to a registered machine the org has claimed instead\nof to a sandbox in our cluster. Empty runs it here, which is the usual case.",
             "type": "string"
@@ -1236,18 +1237,23 @@
       "CodingStarted": {
         "properties": {
           "branch": {
+            "description": "Branch is the ref the run will push its work to, and the ONLY ref it is\npermitted to write. It exists before the work does, so it is safe to tell\nsomebody where to look while the run is still going.",
             "type": "string"
           },
           "repo": {
+            "description": "Repo is the repository the run was admitted against, echoed back as the\nengine resolved it.",
             "type": "string"
           },
           "routed": {
+            "description": "Routed says the run went to one of the org's own registered machines rather\nthan to a sandbox in our cluster. False is the ordinary case.",
             "type": "boolean"
           },
           "sessionId": {
+            "description": "SessionID is the run's handle: its durable record, and the id its live\nprogress streams under at /v1/agents/sessions/{sessionId}/stream. Every\nlater question about this run is asked with it.",
             "type": "string"
           },
           "targetId": {
+            "description": "TargetID names that machine when Routed is true, and is empty otherwise.",
             "type": "string"
           }
         },

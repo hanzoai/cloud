@@ -158,7 +158,7 @@ func TestDeploymentVersioning(t *testing.T) {
 		if v != i {
 			t.Fatalf("version expected %d, got %d", i, v)
 		}
-		id, _ := genID("dep")
+		id := genID("dep")
 		if err := s.InsertDeployment(ctx, Deployment{
 			ID: id, ProjectID: p.ID, Org: "hanzo", Version: v, Status: "live",
 			Source: "upload", CreatedAt: int64(i), UpdatedAt: int64(i),

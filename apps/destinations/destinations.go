@@ -1,6 +1,7 @@
 package destinations
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/hanzoai/cloud/apps/analytics"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -205,9 +208,9 @@ type ops struct{ s *cloud.Service[state] }
 // caller asserted for itself. It applies the same validOrg custody check the
 // untyped handlers do, because the org is folded into the KMS secret path.
 func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return "", err
 	}
 	if !validOrg(org) {
 		return "", zip.ErrBadRequest("org must be a DNS-1123 label")
@@ -291,7 +294,7 @@ func (o ops) list(ctx context.Context, _ *noInput) (*destinationList, error) {
 		byPlatform[r.Platform] = r
 	}
 	out := make([]DestinationStatus, 0, len(o.s.State.dests))
-	for _, id := range sortedIDs(o.s.State.dests) {
+	for _, id := range slices.Sorted(maps.Keys(o.s.State.dests)) {
 		dest := o.s.State.dests[id]
 		if r, ok := byPlatform[id]; ok {
 			out = append(out, statusOf(o.s, ctx, org, dest, &r))
@@ -443,11 +446,7 @@ func validOrg(org string) bool {
 
 // clip trims + bounds a non-secret text field.
 func clip(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > maxField {
-		return s[:maxField]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), maxField)
 }
 
 // toStr coerces a decoded JSON value to a trimmed string (numbers → their literal;
@@ -622,7 +621,7 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	secrets := map[string]string{}
 	for _, name := range spec.Secrets {
-		v := strings.TrimSpace(firstNonEmpty(toStr(body[camelOf(name)]), toStr(body[name])))
+		v := cmp.Or(toStr(body[camelOf(name)]), toStr(body[name]))
 		if v == "" {
 			continue
 		}
@@ -735,7 +734,7 @@ func List(ctx context.Context, org string) ([]DestinationStatus, error) {
 		byPlatform[r.Platform] = r
 	}
 	out := make([]DestinationStatus, 0, len(s.State.dests))
-	for _, id := range sortedIDs(s.State.dests) {
+	for _, id := range slices.Sorted(maps.Keys(s.State.dests)) {
 		dest := s.State.dests[id]
 		if r, ok := byPlatform[id]; ok {
 			out = append(out, statusOf(s, ctx, org, dest, &r))

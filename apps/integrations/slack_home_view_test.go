@@ -26,9 +26,22 @@ func TestHomeShowsSelectedModel(t *testing.T) {
 	if !strings.Contains(js, `"enso-ultra"`) {
 		t.Error("the selected model must appear in the view")
 	}
-	for _, want := range []string{homeActionModel, homeActionRouting} {
-		if !strings.Contains(js, want) {
-			t.Errorf("the view must carry the %q control", want)
+	if !strings.Contains(js, homeActionModel) {
+		t.Errorf("the view must carry the %q control", homeActionModel)
+	}
+}
+
+// The Home offers no Mode control, and this is asserted rather than left to the
+// absence of a test. It offered one for months — "Chat only" / "Chat + Code" —
+// storing a value no code path ever read: what actually decided whether a
+// message started a run was the `code:` prefix. So "Chat only" never stopped a
+// run and "Chat + Code" never permitted one. A person reading "never start a
+// coding run" was being told something untrue by a control that did nothing.
+func TestHomeOffersNoModeControl(t *testing.T) {
+	js := strings.ToLower(viewJSON(t, homeView(nil, "acme", "U1", userLink{Subject: "acme/z"}, true)))
+	for _, gone := range []string{"hanzo_routing", "chat only", "chat + code", "code:"} {
+		if strings.Contains(js, gone) {
+			t.Errorf("the Home still shows %q; it decides nothing and says otherwise", gone)
 		}
 	}
 }

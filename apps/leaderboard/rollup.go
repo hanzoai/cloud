@@ -7,9 +7,14 @@
 // is a pure SUM (requests, tokens, cost); distinct-user / distinct-model counts fall
 // out of the (org,user,model,day) grain at read time. SummingMergeTree is the
 // simplest engine that does exactly "collapse rows with the same sort key by summing
-// the rest", stores plain UInt64 (read with a normal sum(), no -Merge), and is the
+// the rest", stores plain integers (read with a normal sum(), no -Merge), and is the
 // established house pattern (commerce.daily_sales_mv). AggregatingMergeTree would only
 // earn its keep for non-sum aggregate states (uniq/quantile) — we have none.
+//
+// MONEY. The rollup carries cost_nano, the ledger's own money column, NOT cents. A
+// rollup of cents would be a rounding per (org, user, model, day), and the reads add
+// those up — so the board would show the sum of the roundings rather than what was
+// spent. Cents are derived once, at the read, by datastore.Spend.
 //
 // INCREMENTAL MV. rollupMV is attached to hanzo.cloud_usage: every INSERT into the
 // ledger fires it, pre-aggregating THAT block into the rollup. The MV SELECT is pure
@@ -43,7 +48,7 @@ const (
 			prompt_tokens UInt64,
 			completion_tokens UInt64,
 			total_tokens UInt64,
-			cost_cents UInt64
+			cost_nano Int64
 		) ENGINE = SummingMergeTree()
 		PARTITION BY toYYYYMM(day)
 		ORDER BY (organization, user_id, model, day)
@@ -63,15 +68,20 @@ const (
 			toUInt64(sum(prompt_tokens)) AS prompt_tokens,
 			toUInt64(sum(completion_tokens)) AS completion_tokens,
 			toUInt64(sum(total_tokens)) AS total_tokens,
-			toUInt64(sum(cost_cents)) AS cost_cents
+			toInt64(sum(cost_nano)) AS cost_nano
 		FROM hanzo.cloud_usage
 		GROUP BY day, organization, user_id, model`
 
 	// backfillDDL seeds pre-MV history from the ledger. `WHERE timestamp < ?` (the MV
 	// creation watermark / a cutoff) avoids double-counting the rows the live MV already
 	// captured. Same grain + same type-exact projection as the MV.
+	//
+	// The target columns are NAMED. A bare INSERT ... SELECT matches by position, so a
+	// column added to the rollup ahead of the money would land the money in it.
 	backfillDDL = `
 		INSERT INTO hanzo.usage_rollup_daily
+			(day, organization, user_id, model, requests,
+			 prompt_tokens, completion_tokens, total_tokens, cost_nano)
 		SELECT
 			toDate(timestamp) AS day,
 			organization,
@@ -81,11 +91,38 @@ const (
 			toUInt64(sum(prompt_tokens)) AS prompt_tokens,
 			toUInt64(sum(completion_tokens)) AS completion_tokens,
 			toUInt64(sum(total_tokens)) AS total_tokens,
-			toUInt64(sum(cost_cents)) AS cost_cents
+			toInt64(sum(cost_nano)) AS cost_nano
 		FROM hanzo.cloud_usage
 		WHERE timestamp < ?
 		GROUP BY day, organization, user_id, model`
 )
+
+// rollupColumnMigrations bring an ALREADY-CREATED rollup up to the current shape,
+// exactly as apps/datastore does for the ledger: CREATE TABLE IF NOT EXISTS is a
+// no-op on a table that already exists, so an additive column needs its own
+// idempotent ALTER. Additive only — nothing here rewrites or drops, so it is safe
+// on every boot.
+//
+// The MATERIALIZED VIEW is NOT in reach of this list, and that is the thing to know
+// about a cluster that already has one. CREATE MATERIALIZED VIEW IF NOT EXISTS is a
+// no-op once the view exists, and a view's SELECT cannot be altered, so editing
+// rollupMVDDL above changes NOTHING there — the old view keeps filling the old
+// column, and every read of the money answers 0. On such a cluster this file is a
+// promise until an operator swaps the view by hand, in this order:
+//
+//	DROP VIEW hanzo.usage_rollup_daily_mv;                              -- stop the old fill
+//	TRUNCATE TABLE hanzo.usage_rollup_daily;                            -- derived; rebuilt below
+//	ALTER TABLE hanzo.usage_rollup_daily DROP COLUMN IF EXISTS cost_cents;
+//	<restart, so EnsureUsageRollup recreates the view from rollupMVDDL>
+//	POST /v1/usage/rollup/backfill?before=<today, UTC midnight>         -- re-seed history
+//
+// It stays a hand step because it stops capture and empties a table, and nothing
+// should decide that about itself on a boot. Rows written between the DROP and the
+// restart reach the ledger but not the rollup, and the seed only lays down WHOLE
+// days, so run it just after 00:00 UTC and that gap is minutes of the current day.
+var rollupColumnMigrations = []string{
+	`ALTER TABLE hanzo.usage_rollup_daily ADD COLUMN IF NOT EXISTS cost_nano Int64`,
+}
 
 var rollupReady atomic.Bool
 
@@ -104,6 +141,11 @@ func EnsureUsageRollup(ctx context.Context) error {
 	}
 	if err := execDatastore(ctx, rollupTableDDL); err != nil {
 		return fmt.Errorf("create rollup table: %w", err)
+	}
+	for _, stmt := range rollupColumnMigrations {
+		if err := execDatastore(ctx, stmt); err != nil {
+			return fmt.Errorf("migrate rollup table: %w", err)
+		}
 	}
 	if err := execDatastore(ctx, rollupMVDDL); err != nil {
 		return fmt.Errorf("create rollup mv: %w", err)

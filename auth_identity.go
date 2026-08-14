@@ -56,6 +56,15 @@ type idClaims struct {
 	// rule the identity headers follow: never decoded from the request, only written
 	// from something verified.
 	subjectOrg string
+
+	// grant is what the CREDENTIAL may reach — the key row's own limit, read from
+	// IAM alongside the principal it resolves. Distinct from what the holder may
+	// reach, which is what every other field here describes.
+	//
+	// UNEXPORTED AND UNTAGGED for the same reason subjectOrg is: no token can
+	// carry it and no caller can forge it. A limit a request could state for
+	// itself would be a limit that widens.
+	grant Grant
 }
 
 // renderProject returns the project id to stamp into X-Project-Id, or "" when the

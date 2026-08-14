@@ -4,8 +4,8 @@
 // Package base is managed Hanzo Base: a hosted backend for your app —
 // collections, records, access rules and sign-in.
 //
-// It serves that engine per org at /v1/base and /v1/collections, plus the
-// platform's public waitlist at /v1/waitlist.
+// It serves that engine per org at /v1/base, plus the platform's public
+// waitlist at /v1/waitlist.
 //
 // It is the in-binary replacement for the standalone `ghcr.io/hanzoai/superbase`
 // pod, whose whole job was `base.New()` + serve. cloud already links
@@ -28,12 +28,16 @@
 // The two lanes are deliberately NOT one app: the waitlist is a public, single,
 // brand-level instance; hosted Bases are private, per-org, and many.
 //
-// A THIRD prefix, /v1/collections, is served by neither engine above: it is a
-// principal-gated forward to the SEPARATE managed Base deployment that owns the
-// cross-instance `tenants` registry (collections.go). It answers the same
-// question the embed lane does — an org's collections and their records — from a
-// different store, so the two are not interchangeable and one of them is
-// eventually redundant.
+// There was a THIRD prefix, /v1/collections, forwarding to a SEPARATE managed
+// Base deployment for the sake of a cross-instance `tenants` registry — one row
+// per Base instance, each on its own subdomain. It is gone, and the registry is
+// why: it could only ever answer anonymously, because an authenticated request
+// is scoped to the caller's org and opens that org's own Base, which has no
+// `tenants` collection. So a registry of every org's Bases could not be read by
+// anyone who had signed in, and it held zero rows for its whole life. What
+// remained was two engines answering one question — an org's collections and
+// their records — from two disks, where a record written through one was
+// invisible through the other. LANE 2 below is the answer.
 //
 // MOUNT PREFIX. Base's REST router honours BASE_API_PREFIX (default /v1); this
 // package pins it to /v1/base so the per-org engine serves its collections API
@@ -93,6 +97,44 @@ const apiPrefix = "/v1/base"
 // with any org's per-org directory.
 const platformSeg = "_platform"
 
+// Placement answers where one Base keeps its data. A Base is embedded SQLite,
+// so the empty answer — which is also what no placement at all gives — is the
+// right one for every Base until a host says otherwise.
+//
+// cloud answers this because cloud is the host. Whether an org's Base belongs
+// on a server, and which one, follows from what cloud provisioned for that org
+// (apps/provisioning already mints exactly such a postgres:// DSN for its `sql`
+// add-on) and from who runs that server. Base cannot know either, which is why
+// it stopped reading the answer from the process environment: one Base per
+// tenant means the answer is per tenant, and only the host holds it.
+//
+// Asked with the org for a tenant's Base, and with the empty org for the
+// platform's own — the one Base here that belongs to no tenant. An empty org is
+// already refused wherever a tenant is expected (pool.acquire), so the two can
+// never be confused.
+type Placement func(org string) (dataDSN, auxDSN string)
+
+// placement is the host's answer, nil until a host gives one. Package-level
+// like sites.SetBaseHostHandler, because it is one deployment-wide policy
+// rather than a per-request choice.
+var placement Placement
+
+// SetPlacement binds the resolver consulted whenever a Base is opened. Call it
+// before Mount. Nil — the default — leaves every Base embedded, which is what
+// every Base is today.
+func SetPlacement(p Placement) { placement = p }
+
+// appConfig builds the config for one Base, asking the host where that Base
+// keeps its data. It is the ONE place this package constructs a baseapp.Config,
+// so no Base can be opened without the question being put.
+func appConfig(dir, org string) baseapp.Config {
+	cfg := baseapp.Config{DefaultDataDir: dir, HideStartBanner: true}
+	if placement != nil {
+		cfg.DataDSN, cfg.AuxDSN = placement(org)
+	}
+	return cfg
+}
+
 func embedEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(embedEnv))) {
 	case "1", "true", "yes":
@@ -136,14 +178,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// as clients/plan + clients/pricing).
 	zip.Get(zapp, "/v1/base/health", health)
 
-	// Base data-plane forward /v1/collections[/*] → the managed Base orchestrator
-	// (collections.go). Always on, BEFORE the embed gate: the console's Base product
-	// (Bases manager + Records) reaches its collections/records here regardless of
-	// whether this binary also hosts per-org Bases at /v1/base/*. This is the
-	// in-binary replacement for the go:embed-pruned console BFF (app/v1/superbase).
-	if err := mountCollections(app); err != nil {
-		return err
-	}
+	// There is no second door. /v1/collections used to reverse-proxy this same
+	// concept to a separate Base deployment, and its stated reason for existing was
+	// the cross-instance `tenants` registry that deployment held — one row per Base,
+	// each on its own subdomain. That registry cannot work: an authenticated request
+	// is scoped to the caller's org and opens THAT org's Base, which has no `tenants`
+	// collection, so the registry answered only anonymously and only ever held zero
+	// rows. What it left behind was two engines writing the same concept to two
+	// disks, where a record created through one was invisible through the other.
+	//
+	// An org HAS a Base, and it is the one below.
 
 	if !embedEnabled() {
 		log.Info("base embed disabled; /v1/base + /v1/waitlist off (set CLOUD_BASE_EMBED=1 to enable)")
@@ -186,6 +230,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// LANE 2 — per-org Base hosting (authenticated /v1/base/*). Raw for the same
 	// reason as the waitlist lane: each request is served by the org's own Base
 	// app's mux verbatim, so there is no shape here for a typed op to state.
+	// ONE registration, because the org's Base now answers everything it serves
+	// under one root. Base's table wire moved beneath the mount prefix, so it is
+	// /v1/base/rest/{collection} and arrives here with the collections API rather
+	// than needing its own route at /rest/v1 outside it. Both are the same engine
+	// over the same rows — the table wire is a rendering of the SAME read, running
+	// the same recordsList with the same list rule and rate limit, differing only
+	// in what it writes back (a bare array with the count in Content-Range).
+	//
+	// So the org still comes from the validated principal, for both, because there
+	// is one handler and one prefix.
 	p := newPool(root, deps)
 	app.All("/v1/base/*", func(c *zip.Ctx) error { return serveOrg(p, log, c) })
 
@@ -233,7 +287,7 @@ func publicHostEnabled() bool {
 func serveOrg(p *pool, log interface{ Error(string, ...any) }, c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	h, release, err := p.acquire(org)
 	if err != nil {
@@ -254,7 +308,7 @@ func newPlatformApp(dir string) (*baseapp.Base, http.Handler, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	bapp := baseapp.NewWithConfig(baseapp.Config{DefaultDataDir: dir, HideStartBanner: true})
+	bapp := baseapp.NewWithConfig(appConfig(dir, ""))
 	waitlist.MustRegister(bapp, waitlist.Config{Enabled: true})
 	if err := bapp.Bootstrap(); err != nil {
 		return nil, nil, fmt.Errorf("bootstrap: %w", err)

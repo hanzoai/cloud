@@ -81,7 +81,7 @@ var survivors = []struct{ name, why string }{
 	{"post_v1_responses", "POST /v1/responses"},
 	{"post_v1_embeddings", "POST /v1/embeddings"},
 	{"post_v1_rerank", "POST /v1/rerank"},
-	{"get_v1_models", "GET /v1/models"},
+	{"get_models", "GET /v1/models"},
 	{"post_v1_messages_count_tokens", "POST /v1/messages/count_tokens — `token` is a UNIT here; the counting neighbour says so"},
 	{"get_validators_tokenId", "a chain token id, not a bearer token"},
 
@@ -125,8 +125,8 @@ var survivors = []struct{ name, why string }{
 	{"get_o11y_deployments_attribute_keys", "metric label names"},
 	{"delete_pubsub_kv_bucket_key", "DELETE /v1/pubsub/kv/{bucket}/{key}"},
 	{"delete_flags_defs_key", "a feature-flag key"},
-	{"delete_tracker_projects_key", "a tracker project key, e.g. CLOUD-1"},
-	{"patch_tracker_projects_key_issues_num", "…and an issue under it"},
+	{"delete_todo_projects_key", "a todo project key, e.g. CLOUD-1"},
+	{"patch_todo_projects_key_issues_num", "…and an issue under it"},
 	{"delete_store_by_storeid_listing_by_key", "the `by_` filler must not become the key's context"},
 	{"delete_cloudflare_kv_namespaces_namespace_values_key", "a KV value"},
 
@@ -290,8 +290,8 @@ func TestWords_ReadsBothNamingConventions(t *testing.T) {
 		{"GetRolesByUserID", []string{"get", "roles", "by", "user", "id"}},
 		{"delete_v1_ai_signin-sessions_by_owner_by_name",
 			[]string{"delete", "v1", "ai", "signin", "sessions", "by", "owner", "by", "name"}},
-		{"post_v1_git_by_org_by_repo_git-upload-pack",
-			[]string{"post", "v1", "git", "by", "org", "by", "repo", "git", "upload", "pack"}},
+		{"post_git_by_org_by_repo_git-upload-pack",
+			[]string{"post", "git", "by", "org", "by", "repo", "git", "upload", "pack"}},
 	} {
 		got := words(c.in)
 		if strings.Join(got, " ") != strings.Join(c.want, " ") {
@@ -332,5 +332,57 @@ func TestRank_TheCodingRunIsAProduct(t *testing.T) {
 	// folding one into the other would let a stem match a name it does not name.
 	if rank("post_coding") == rank("post_code_ask") {
 		t.Error("the coding run and code intelligence share a bucket — they are two products")
+	}
+}
+
+// TestAParentIdDoesNotQualifyASecret is the hole this pair of sets was opened by.
+//
+// `id` marks a token as NAMED rather than presented — `tokenId` on a chain is an
+// asset's number, not a bearer secret. But the neighbour test read either side,
+// and in a REST path the id before a subresource names the PARENT:
+//
+//	GET /v1/connectors/{id}/token   →  get | connectors | by | id | token
+//
+// The id there is the connector's. The token is exactly what it says, and the
+// door projected it to every model as `get_connector_token` — a live OAuth
+// bearer for a customer's connector, one tools/call away, offered by the gate
+// whose whole job is to withhold it. Measured against the deployed fleet, it was
+// one of two ops carrying a secret noun that survived; the other is the counted
+// one this asserts still survives.
+//
+// So an asset's field qualifies only when it FOLLOWS. A quantity still reads
+// either way, because English puts it on both sides — "count tokens" and "token
+// count" are the same claim.
+func TestAParentIdDoesNotQualifyASecret(t *testing.T) {
+	for name, want := range map[string]bool{
+		"get_connectors_by_id_token": true,  // the parent's id; the token is the object
+		"post_messages_count_tokens": false, // counted, not presented
+		"get_token_count":            false, // the same claim, the other way round
+		"get_validators_by_token_id": false, // an asset's number on a chain
+		"get_token_symbol":           false,
+		"post_iam_oauth_token":       true, // the thing this file exists for
+	} {
+		if got := refuse(name); got != want {
+			verb := map[bool]string{true: "must be refused", false: "must be projected"}[want]
+			t.Errorf("%s %s, but refuse() said %v — words=%v", name, verb, got, words(name))
+		}
+	}
+}
+
+// TestNoSecretNounSurvivesTheRealFleet judges the fleet that exists rather than
+// names invented here, so an op written tomorrow is measured by the same rule.
+// The one admitted exception is named, not counted: a rule that allowed "some"
+// survivors would pass while the wrong one survived.
+func TestNoSecretNounSurvivesTheRealFleet(t *testing.T) {
+	counted := map[string]bool{"post_messages_count_tokens": true}
+	for _, op := range Corpus(t) {
+		if refuse(op.ID) || counted[op.ID] {
+			continue
+		}
+		for _, w := range words(op.ID) {
+			if w == "token" || w == "tokens" || secretNoun[w] {
+				t.Errorf("%s/%s carries %q and is projected to every model", op.App, op.ID, w)
+			}
+		}
 	}
 }

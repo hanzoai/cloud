@@ -22,6 +22,7 @@ package share
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -121,16 +122,9 @@ func newController() *httpController {
 	return &httpController{
 		base:       controllerBase(),
 		adminToken: envTrim("ZROK_ADMIN_TOKEN"),
-		secret:     []byte(firstNonEmpty(envTrim("SHARE_ACCOUNT_SECRET"), envTrim("ZROK_ADMIN_TOKEN"))),
+		secret:     []byte(cmp.Or(envTrim("SHARE_ACCOUNT_SECRET"), envTrim("ZROK_ADMIN_TOKEN"))),
 		cc:         &http.Client{Timeout: 20 * time.Second},
 	}
-}
-
-func firstNonEmpty(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }
 
 // configured reports whether the admin credential is present. Absent it every

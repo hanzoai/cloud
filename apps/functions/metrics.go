@@ -119,7 +119,7 @@ func buildMetrics(invs []Invocation, spec metricsRange, now time.Time) usage {
 // and reporting a number computed some other way would be a guess presented as a
 // measurement. Requires a validated principal; the read is scoped to its org.
 func (o ops) metrics(ctx context.Context, in *metricsQuery) (*usage, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

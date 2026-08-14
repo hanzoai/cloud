@@ -263,14 +263,16 @@
             "type": "string"
           },
           "kind": {
+            "description": "Kind names a different kind of sync, and is refused, for the same reason.",
             "type": "string"
           },
           "source": {
             "$ref": "#/components/schemas/endpointReq",
-            "description": "Source, Target and Kind are DECLARED HERE IN ORDER TO BE REFUSED.\n\nThey are immutable by design — re-pointing a sync is a delete and a create, so\na link can never silently start syncing somewhere else — but an UNDECLARED\nfield is dropped by the binder before the handler sees it, so a request asking\nto repoint answered 200, changed nothing, and said nothing. The operator then\nbelieves a moved repository has been repointed and it has not.\n\nLive: a sync still naming github.com/hanzoai/cloud after the repository moved\nto hanzo-inc/cloud failed every reconcile with \"Repository not found\", and the\nPATCH that appeared to fix it did nothing at all. Declaring the fields is what\nlets the documented immutability actually answer."
+            "description": "Source, Target and Kind are DECLARED HERE IN ORDER TO BE REFUSED.\n\nThey are immutable by design — re-pointing a sync is a delete and a create, so\na link can never silently start syncing somewhere else — but an UNDECLARED\nfield is dropped by the binder before the handler sees it, so a request asking\nto repoint answered 200, changed nothing, and said nothing. The operator then\nbelieves a moved repository has been repointed and it has not.\n\nLive: a sync still naming github.com/hanzoai/cloud after the repository moved\nto hanzo-inc/cloud failed every reconcile with \"Repository not found\", and the\nPATCH that appeared to fix it did nothing at all. Declaring the fields is what\nlets the documented immutability actually answer.\nSource names a new upstream, and is refused. Delete this sync and create the\none you want."
           },
           "target": {
-            "$ref": "#/components/schemas/endpointReq"
+            "$ref": "#/components/schemas/endpointReq",
+            "description": "Target names a new native repository, and is refused, for the same reason."
           },
           "trigger": {
             "description": "Trigger is webhook, poll or manual. Omitted, the stored trigger stands.",

@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/internal/datadir"
 	"github.com/hanzoai/cloud/internal/edge"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/role"
 )
 
@@ -51,7 +53,15 @@ type Config struct {
 	// Domain is the deployment's primary public domain.
 	Domain string
 
-	// IAMIssuer is the JWKS issuer for JWT validation (usually iam.hanzo.ai).
+	// IAMIssuer is the JWKS issuer for JWT validation, and it MUST equal the
+	// `iss` IAM actually stamps: hanzo.id for hanzo, and each brand's own .id
+	// otherwise (brand/brand.go is the registry and the reasoning).
+	//
+	// Not iam.hanzo.ai. That host answers discovery and reports
+	// issuer=https://hanzo.id — it is a routing alias rather than an issuer, so
+	// pinning it here fails the issuer check on every real token and anonymizes
+	// every principal. Left unset, issuerFor derives it from the brand, which is
+	// the path to prefer.
 	IAMIssuer string
 
 	// AdminOrg is the IAM org slug whose members are SuperAdmins (IAM's
@@ -299,7 +309,7 @@ var flagsOnce sync.Once
 // LoadConfig reads flags + env into a Config. Flags override env.
 func LoadConfig() *Config {
 	cfg := &Config{
-		ListenAddr: getenv("CLOUD_LISTEN", ":8080"),
+		ListenAddr: environ.Or("CLOUD_LISTEN", ":8080"),
 		// LOOPBACK BY DEFAULT, and the reason is what sits behind these two ports.
 		// The ZAP door serves the IDENTICAL route surface as HTTP over plaintext TCP
 		// — including /v1/functions/{name}/invoke, which is arbitrary process
@@ -316,15 +326,15 @@ func LoadConfig() *Config {
 		//
 		// CLOUD_LISTEN was already honoured for HTTP while these two were not, which
 		// is how binding the front door to 127.0.0.1 still left two doors open.
-		ZAPListenAddr:           getenv("CLOUD_ZAP_LISTEN", "127.0.0.1:9653"),
-		HealthListenAddr:        getenv("CLOUD_HEALTH_LISTEN", "127.0.0.1:9090"),
-		AdminListenAddr:         getenv("CLOUD_ADMIN_LISTEN", ":8081"),
+		ZAPListenAddr:           environ.Or("CLOUD_ZAP_LISTEN", "127.0.0.1:9653"),
+		HealthListenAddr:        environ.Or("CLOUD_HEALTH_LISTEN", "127.0.0.1:9090"),
+		AdminListenAddr:         environ.Or("CLOUD_ADMIN_LISTEN", ":8081"),
 		ReadBufferSize:          edge.ReadBufferSize(),
 		BodyLimit:               edge.BodyLimit(),
-		MarkdownDefaultPrefixes: splitTrim(getenv("CLOUD_MARKDOWN_DEFAULT_PREFIXES", "")),
-		Brand:                   getenv("CLOUD_BRAND", DefaultBrand),
+		MarkdownDefaultPrefixes: splitTrim(environ.Or("CLOUD_MARKDOWN_DEFAULT_PREFIXES", "")),
+		Brand:                   environ.Or("CLOUD_BRAND", DefaultBrand),
 		Version:                 resolveVersion(),
-		Env:                     getenv("CLOUD_ENV", ""),
+		Env:                     environ.Or("CLOUD_ENV", ""),
 		Role:                    role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
 
 		Replicas: getenvInt("CLOUD_REPLICAS", 0),
@@ -332,32 +342,32 @@ func LoadConfig() *Config {
 		// literal "api.hanzo.ai" default used to live here, which meant a lux
 		// deployment that pinned nothing answered with Hanzo's host in every URL
 		// it built about itself.
-		Domain: getenv("CLOUD_DOMAIN", ""),
+		Domain: environ.Or("CLOUD_DOMAIN", ""),
 		// IAMIssuer left empty here; resolved from Brand below unless pinned.
-		IAMIssuer:         getenv("CLOUD_IAM_ISSUER", ""),
-		AdminOrg:          getenv("IAM_ADMIN_ORG", "admin"),
-		JWKSURL:           getenv("CLOUD_JWKS_URL", ""),
+		IAMIssuer:         environ.Or("CLOUD_IAM_ISSUER", ""),
+		AdminOrg:          environ.Or("IAM_ADMIN_ORG", "admin"),
+		JWKSURL:           environ.Or("CLOUD_JWKS_URL", ""),
 		KMSMasterKeyRef:   rootKeyRef(),
-		KMSMPCAddr:        getenv("CLOUD_KMS_MPC_ADDR", ""),
-		KMSMPCVaultID:     getenv("CLOUD_KMS_MPC_VAULT_ID", ""),
+		KMSMPCAddr:        environ.Or("CLOUD_KMS_MPC_ADDR", ""),
+		KMSMPCVaultID:     environ.Or("CLOUD_KMS_MPC_VAULT_ID", ""),
 		DataDir:           DataDir(),
-		WriterURL:         strings.TrimRight(getenv("CLOUD_WRITER_URL", ""), "/"),
+		WriterURL:         strings.TrimRight(environ.Or("CLOUD_WRITER_URL", ""), "/"),
 		ReaderRetryBudget: getenvDuration("CLOUD_READER_RETRY_BUDGET", 25*time.Second),
-		ShardPeers:        getenv("CLOUD_PEERS", ""),
-		ShardSelf:         firstNonEmptyStr(getenv("CLOUD_POD_NAME", ""), getenv("POD_NAME", "")),
-		PeerSelector:      getenv("CLOUD_PEER_SELECTOR", ""),
+		ShardPeers:        environ.Or("CLOUD_PEERS", ""),
+		ShardSelf:         cmp.Or(environ.Or("CLOUD_POD_NAME", ""), environ.Or("POD_NAME", "")),
+		PeerSelector:      environ.Or("CLOUD_PEER_SELECTOR", ""),
 		// Billing gate (KMS-backed COMMERCE_SERVICE_TOKEN; never plaintext).
-		CommerceHTTPURL:      getenv("CLOUD_COMMERCE_HTTP_URL", ""),
-		CommerceServiceToken: getenv("COMMERCE_SERVICE_TOKEN", ""),
+		CommerceHTTPURL:      environ.Or("CLOUD_COMMERCE_HTTP_URL", ""),
+		CommerceServiceToken: environ.Or("COMMERCE_SERVICE_TOKEN", ""),
 		BillingFailOpen:      getenvBool("BILLING_FAIL_OPEN"),
 		// AI inference gateway. CLOUD_AI_API_KEY (KMS-backed) is an optional static
 		// override; absent it, the AI client authenticates via M2M using the
 		// binary's own IAM identity (IAM_CLIENT_ID / IAM_CLIENT_SECRET) — no static
 		// key, no expiry cliff. Never plaintext.
-		AIBaseURL:          getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1"),
-		AIAPIKey:           getenv("CLOUD_AI_API_KEY", ""),
-		AIAuthClientID:     getenv("IAM_CLIENT_ID", ""),
-		AIAuthClientSecret: getenv("IAM_CLIENT_SECRET", ""),
+		AIBaseURL:          environ.Or("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1"),
+		AIAPIKey:           environ.Or("CLOUD_AI_API_KEY", ""),
+		AIAuthClientID:     environ.Or("IAM_CLIENT_ID", ""),
+		AIAuthClientSecret: environ.Or("IAM_CLIENT_SECRET", ""),
 	}
 
 	// THE BINARY KNOWS WHICH APP IT IS; a deployment does not restate it.
@@ -410,7 +420,7 @@ func LoadConfig() *Config {
 
 	// Browser ZAP-over-WS Origin allowlist. Default to the console SPA hosts so
 	// the console can connect cross-origin; override with CLOUD_ZAP_WEB_ORIGINS.
-	zapOrigins := getenv("CLOUD_ZAP_WEB_ORIGINS",
+	zapOrigins := environ.Or("CLOUD_ZAP_WEB_ORIGINS",
 		"console.hanzo.ai,cloud.hanzo.ai,localhost:4000")
 	for o := range strings.SplitSeq(zapOrigins, ",") {
 		if s := strings.TrimSpace(o); s != "" {
@@ -421,7 +431,7 @@ func LoadConfig() *Config {
 	// Edge policy (middleware_edge.go). CORS default OFF (ingress owns it on the
 	// recommended rollout — see Config.CORSOrigins); the per-IP flood cap default
 	// ON at gateway-parity 100/1s so a protection is never dropped silently.
-	cfg.CORSOrigins = splitTrim(getenv("CLOUD_CORS_ORIGINS", ""))
+	cfg.CORSOrigins = splitTrim(environ.Or("CLOUD_CORS_ORIGINS", ""))
 	cfg.EdgeRateEnabled = getenvBoolDefault("CLOUD_EDGE_RATELIMIT", true)
 	cfg.EdgeRatePerIP = getenvInt("CLOUD_EDGE_RATELIMIT_PER_IP", 100)
 	cfg.EdgeRateWindowSec = getenvInt("CLOUD_EDGE_RATELIMIT_WINDOW_SEC", 1)
@@ -435,18 +445,7 @@ func (c *Config) Enabled(name string) bool {
 	if len(c.Enable) == 0 {
 		return true
 	}
-	return contains(c.Enable, name)
-}
-
-func contains(list []string, name string) bool {
-	return slices.Contains(list, name)
-}
-
-func getenv(key, dflt string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return dflt
+	return slices.Contains(c.Enable, name)
 }
 
 // DefaultDataDir is the on-disk data root when CLOUD_DATA_DIR is unset.
@@ -471,7 +470,7 @@ func rootKeyRef() string {
 	if b64 := MasterB64(); b64 != "" {
 		return b64
 	}
-	return getenv(MasterEnv, "")
+	return environ.Or(MasterEnv, "")
 }
 
 // resolveVersion is the single source of Config.Version, so the test and the
@@ -482,7 +481,7 @@ func rootKeyRef() string {
 // report the build it actually is; without it the binary answers the link-time
 // default and a rollout cannot be verified from outside.
 func resolveVersion() string {
-	return getenv("CLOUD_VERSION", getenv("HANZO_VERSION", Version))
+	return environ.Or("CLOUD_VERSION", environ.Or("HANZO_VERSION", Version))
 }
 
 // domainFor is THE resolution of the deployment's own public API host: an

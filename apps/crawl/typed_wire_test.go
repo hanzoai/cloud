@@ -40,7 +40,7 @@ func post(t *testing.T, app *zip.App, path, body string) (int, string) {
 //
 // POST /v1/crawl was a raw handler for two measured reasons, and both were real:
 // it is BODY-TOLERANT with a DOMAIN refusal body, and it bounds the request at
-// 1 MiB. The cost of that was the whole point of tracker #190 — a raw route is in
+// 1 MiB. The cost of that was the whole point of todo #190 — a raw route is in
 // no registry, so this subsystem projected NO MCP tool and the fleet's one way to
 // read a web page was unreachable by the agent that needed it.
 //

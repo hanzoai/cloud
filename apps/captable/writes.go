@@ -42,7 +42,7 @@ import (
 // tenant with the assembled body, and decode the 2xx answer into out. A non-2xx
 // is the BUNDLE's, relayed through goja.BundleErr exactly as the reads do.
 func (o ops) write(ctx context.Context, route string, size goja.SizedIn, params map[string]string, fields map[string]goja.BodyField, out any) error {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return err
 	}

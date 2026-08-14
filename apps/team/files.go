@@ -23,6 +23,7 @@ package team
 //     independent layers; every denial is a 404 (no member/existence oracle).
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io"
@@ -267,7 +268,7 @@ func (s *filesService) deleteBlob(ctx context.Context, in *blobRef) (*none, erro
 	}
 	// deleteFile calls getFileUrl(ws, file) with no filename → path segment == the
 	// blob id; ?file= carries it too. Accept either, prefer the explicit ?file=.
-	blobID := strings.TrimSpace(firstNonEmpty(in.File, in.Filename))
+	blobID := strings.TrimSpace(cmp.Or(in.File, in.Filename))
 	if blobID == "" {
 		return nil, zip.ErrBadRequest("file (blob id) required")
 	}
