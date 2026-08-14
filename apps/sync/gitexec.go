@@ -76,20 +76,6 @@ func withPackSlot(ctx context.Context, fn func() error) error {
 	return fn()
 }
 
-// packConfigArgs returns the `-c` config flags for a pack subprocess: memory
-// bounds on every op (single-threaded delta search with capped window and delta
-// cache, and a big-file threshold) so index-pack / pack-objects cannot balloon
-// the cgroup during a multi-GB sync. These are main git options, before the
-// subcommand.
-func packConfigArgs() []string {
-	return []string{
-		"-c", "pack.threads=1",
-		"-c", "pack.windowMemory=64m",
-		"-c", "pack.deltaCacheSize=64m",
-		"-c", "core.bigFileThreshold=16m",
-	}
-}
-
 // baseGitEnv is the hardened, MINIMAL environment EVERY git subprocess runs
 // under. It inherits NONE of the server's environment — no KMS material, no
 // forge token leaking to a child — only PATH plus the isolation knobs:
@@ -101,10 +87,9 @@ func packConfigArgs() []string {
 //   - GIT_TERMINAL_PROMPT=0: never block on an interactive credential prompt.
 //   - GIT_NO_REPLACE_OBJECTS=1: ignore refs/replace remaps.
 //   - LC_ALL=C: stable, parseable output — the rejection classifier reads it.
-//   - GIT_CONFIG_COUNT pack/mmap bounds: pack generation is proportional to
-//     REPO size, not request size, and an unbounded allocation there is one the
-//     Go runtime cannot govern (GOMEMLIMIT bounds only the Go heap), landing as
-//     a kernel OOM kill of the whole process.
+//
+// The git CONFIG rides separately ([baseConfig]), because config is counted
+// rather than named and a count can only be written once — see [gitCmd].
 //
 // PATH is passed through (it is not a secret) so git can find its helper
 // executables (git-remote-https); the binary itself is resolved to an absolute
@@ -118,25 +103,65 @@ func baseGitEnv() []string {
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_NO_REPLACE_OBJECTS=1",
 		"LC_ALL=C",
-		"GIT_CONFIG_COUNT=5",
-		"GIT_CONFIG_KEY_0=pack.windowMemory", "GIT_CONFIG_VALUE_0=64m",
-		"GIT_CONFIG_KEY_1=pack.threads", "GIT_CONFIG_VALUE_1=2",
-		"GIT_CONFIG_KEY_2=core.packedGitLimit", "GIT_CONFIG_VALUE_2=256m",
-		"GIT_CONFIG_KEY_3=core.packedGitWindowSize", "GIT_CONFIG_VALUE_3=32m",
-		"GIT_CONFIG_KEY_4=pack.deltaCacheSize", "GIT_CONFIG_VALUE_4=64m",
 	}
 }
 
-// gitCmd builds a hardened git subprocess: `git <args...>` under baseGitEnv +
-// extraEnv. The ONE constructor, so the env hardening and the arg-slice
-// discipline live in exactly one place.
-func gitCmd(ctx context.Context, extraEnv []string, args ...string) (*exec.Cmd, error) {
+// baseConfig is the git config EVERY subprocess here runs with.
+//
+// Memory bounds, and they are bounds on the two costs the Go runtime cannot see:
+// pack generation (index-pack / pack-objects hold O(object-count) state plus
+// delta caches in the pod's cgroup) and the object MMAP window. Both are
+// proportional to REPOSITORY size rather than to the request, and an unbounded
+// allocation in either is one GOMEMLIMIT does not govern — it lands as a kernel
+// OOM kill of the whole process rather than as a failed sync.
+//
+// credential.helper is emptied here rather than on argv: no helper may run, on
+// any invocation, including the ones that reach no remote.
+func baseConfig() []string {
+	return []string{
+		"credential.helper=",
+		"pack.threads=1",
+		"pack.windowMemory=64m",
+		"pack.deltaCacheSize=64m",
+		"core.bigFileThreshold=16m",
+		"core.packedGitLimit=256m",
+		"core.packedGitWindowSize=32m",
+	}
+}
+
+// gitCmd builds a hardened git subprocess: `git <args...>` under the base
+// environment and the base config. The ONE constructor, so the env hardening and
+// the arg-slice discipline live in exactly one place.
+//
+// r is the remote this call reaches, or nil for a purely local one. A remote
+// call additionally restricts the transport to http/https, refuses redirects
+// (so a source can neither smuggle another transport nor bounce the transfer
+// onto an internal address, nor carry the credential to a second host), and
+// carries the credential as an env-injected header — never argv, never a URL.
+//
+// cfg is extra config for this one call, which is how the push adds its
+// low-speed abort without a second environment builder — and a second builder is
+// exactly what must not exist. git reads its env config BY COUNT
+// (GIT_CONFIG_COUNT + KEY_n/VALUE_n) and os/exec keeps the LAST of a duplicated
+// variable, so two builders each writing a count leaves only the last one's
+// keys: the mmap bounds above were being dropped by a per-call builder that
+// wrote GIT_CONFIG_COUNT=1. One list, numbered once, and that cannot recur.
+func gitCmd(ctx context.Context, r *remote, cfg []string, args ...string) (*exec.Cmd, error) {
 	bin, err := gitBinary()
 	if err != nil {
 		return nil, fmt.Errorf("git binary not found: %w", err)
 	}
+	env := baseGitEnv()
+	all := append(baseConfig(), cfg...)
+	if r != nil {
+		env = append(env, "GIT_ALLOW_PROTOCOL=http:https")
+		all = append(all, "protocol.version=2", "http.followRedirects=false")
+		if hdr := credAuthHeader(r.URL, r.Cred); hdr != "" {
+			all = append(all, "http.extraHeader=Authorization: Basic "+hdr)
+		}
+	}
 	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Env = append(baseGitEnv(), extraEnv...)
+	cmd.Env = append(env, gitConfigEnv(all...)...)
 	return cmd, nil
 }
 
@@ -166,27 +191,15 @@ const mirrorTokenStem = "GIT_MIRROR_TOKEN"
 // allowlist; empty ⇒ {github.com, gitlab.com}.
 const mirrorOutAllowHostsEnv = "GIT_MIRROR_OUT_ALLOW_HOSTS"
 
+// mirrorInAllowHostsEnv (comma-separated) overrides the INBOUND source
+// allowlist — the hosts a CALLER-SUPPLIED credential may be offered to; empty ⇒
+// {github.com, gitlab.com}.
+const mirrorInAllowHostsEnv = "GIT_MIRROR_IN_ALLOW_HOSTS"
+
 // mirrorAllowPrivateEnv (comma-separated) allowlists hosts that may resolve into
 // an otherwise-blocked internal range — for tests and deliberate internal
 // sources. Empty ⇒ every internal target is refused.
 const mirrorAllowPrivateEnv = "GIT_MIRROR_ALLOW_PRIVATE_HOSTS"
-
-// mirrorGitEnv builds the git subprocess environment for reaching remoteURL:
-// GIT_ALLOW_PROTOCOL restricts outbound to http/https; http.followRedirects=
-// false stops a redirect from carrying the token to another host or bouncing
-// the transfer onto an internal address; and the credential rides an env-only
-// git-config http.extraHeader — never argv, never a log.
-//
-// extra is more "key=value" git config for the one call, which is how the push
-// adds its low-speed abort without a second environment builder.
-func mirrorGitEnv(remoteURL string, cred gitCred, extra ...string) []string {
-	env := []string{"GIT_ALLOW_PROTOCOL=http:https"}
-	cfg := append([]string{"http.followRedirects=false"}, extra...)
-	if hdr := credAuthHeader(remoteURL, cred); hdr != "" {
-		cfg = append(cfg, "http.extraHeader=Authorization: Basic "+hdr)
-	}
-	return append(env, gitConfigEnv(cfg...)...)
-}
 
 // credAuthHeader resolves the basic-auth credential attached to one call. An
 // EXPLICIT per-call cred wins — but only over https, so a token can never ride
@@ -337,11 +350,42 @@ func validateMirrorTarget(raw string) (canonical, host string, err error) {
 // deliberately excludes the forge's own host. GIT_MIRROR_OUT_ALLOW_HOSTS
 // overrides for a deployment that mirrors elsewhere.
 func mirrorOutHostAllowed(host string) bool {
-	if v := strings.TrimSpace(os.Getenv(mirrorOutAllowHostsEnv)); v != "" {
-		return hostInList(host, mirrorOutAllowHostsEnv)
+	return hostAllowed(host, mirrorOutAllowHostsEnv, "github.com", "gitlab.com")
+}
+
+// mirrorInHostAllowed reports whether host may be OFFERED the caller's own
+// credential on a fetch.
+//
+// The outbound half of this seam has always been allowlisted, because a host we
+// push tenant code to is an obvious question. The inbound half is the same
+// question and it was not asked: the credential a fetch carries is a live GitHub
+// App installation token, minted for the org, and the URL it travels to is an
+// ARGUMENT — the /v1/sync door pins its own source host, but the internal plane
+// takes CloneURL and Token straight off the request. Offering that token to a
+// host of the caller's choosing hands a working credential to whoever answers
+// there, on the way to a fetch that would have failed anyway.
+//
+// So possession is not enough for an EXPLICIT credential: the host has to be one
+// we mint credentials for. The per-host env token needs no such list — holding
+// GIT_MIRROR_TOKEN_<HOST> at all IS the allowlist, and a URL to another host
+// finds nothing.
+func mirrorInHostAllowed(host string) bool {
+	return hostAllowed(host, mirrorInAllowHostsEnv, "github.com", "gitlab.com")
+}
+
+// hostAllowed reports whether host is in the allowlist held in envName, or — for
+// a deployment that set none — in def.
+func hostAllowed(host, envName string, def ...string) bool {
+	if v := strings.TrimSpace(os.Getenv(envName)); v != "" {
+		return hostInList(host, envName)
 	}
-	host = strings.ToLower(host)
-	return host == "github.com" || host == "gitlab.com"
+	host = strings.ToLower(strings.TrimSpace(host))
+	for _, d := range def {
+		if host == d {
+			return true
+		}
+	}
+	return false
 }
 
 // mirrorGuardHost is the SSRF gate: it resolves host and rejects any address in

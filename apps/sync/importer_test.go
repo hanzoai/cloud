@@ -27,6 +27,11 @@ const (
 	repoName   = "widgets"
 )
 
+// widgets is the repository every case here syncs: upOwner's `widgets`. It is a
+// PAIR, because a repository name means one repository only within an account,
+// and `widgets.flat()` is the one name it takes on the forge.
+var widgets = repo{account: upOwner, name: repoName}
+
 // imported mounts the app against a fresh upstream and forge, seeds the upstream
 // with one commit, and imports it — the state every inbound case starts from.
 func imported(t *testing.T) (up *host, fg *stand, src *tree, cloneURL string) {
@@ -37,7 +42,7 @@ func imported(t *testing.T) (up *host, fg *stand, src *tree, cloneURL string) {
 	src = up.seed(upOwner, repoName, "one")
 	cloneURL = up.URL + "/" + upOwner + "/" + repoName + ".git"
 	if err := (importer{}).ImportRepo(context.Background(), cloud.GitImportReq{
-		Org: forgeOrg, Repo: repoName, CloneURL: cloneURL,
+		Org: forgeOrg, Project: upOwner, Repo: repoName, CloneURL: cloneURL,
 	}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
@@ -48,7 +53,8 @@ func imported(t *testing.T) (up *host, fg *stand, src *tree, cloneURL string) {
 func inbound(t *testing.T, cloneURL string) cloud.GitSyncResult {
 	t.Helper()
 	res, err := (importer{}).InboundSync(context.Background(), cloud.GitInboundReq{
-		Org: forgeOrg, Repo: repoName, Ref: mainRef, CloneURL: cloneURL, Origin: "127.0.0.1",
+		Org: forgeOrg, Project: upOwner, Repo: repoName, Ref: mainRef,
+		CloneURL: cloneURL, Origin: "127.0.0.1",
 	})
 	if err != nil {
 		t.Fatalf("inbound: %v", err)
@@ -89,11 +95,11 @@ func TestImportLandsTheRepository(t *testing.T) {
 	cloneURL := up.URL + "/" + upOwner + "/" + repoName + ".git"
 
 	if err := (importer{}).ImportRepo(context.Background(), cloud.GitImportReq{
-		Org: forgeOrg, Repo: repoName, CloneURL: cloneURL,
+		Org: forgeOrg, Project: upOwner, Repo: repoName, CloneURL: cloneURL,
 	}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	bare := fg.bare(forgeOwner, repoName)
+	bare := fg.bare(forgeOwner, widgets.flat())
 	for _, ref := range []string{mainRef, "refs/heads/release/1", "refs/tags/v1"} {
 		if got := tip(t, bare, ref); got != head {
 			t.Errorf("%s = %q, want %q", ref, got, head)
@@ -106,7 +112,7 @@ func TestImportLandsTheRepository(t *testing.T) {
 	// Idempotent, and cheap: nothing has moved, so nothing is transferred.
 	packs := up.counts() + fg.counts()
 	if err := (importer{}).ImportRepo(context.Background(), cloud.GitImportReq{
-		Org: forgeOrg, Repo: repoName, CloneURL: cloneURL,
+		Org: forgeOrg, Project: upOwner, Repo: repoName, CloneURL: cloneURL,
 	}); err != nil {
 		t.Fatalf("re-import: %v", err)
 	}
@@ -122,7 +128,7 @@ func TestImportLandsTheRepository(t *testing.T) {
 // the advance is announced with the source host so the echo can be suppressed.
 func TestInboundAdvanceApplies(t *testing.T) {
 	_, fg, src, cloneURL := imported(t)
-	before := tip(t, fg.bare(forgeOwner, repoName), mainRef)
+	before := tip(t, fg.bare(forgeOwner, widgets.flat()), mainRef)
 
 	after := src.commit("two")
 	landed := make(chan cloud.LifecycleEvent, 4)
@@ -139,7 +145,7 @@ func TestInboundAdvanceApplies(t *testing.T) {
 	if !res.Applied || res.After != after || res.Before != before {
 		t.Fatalf("want applied %s→%s, got %+v", before, after, res)
 	}
-	if now := tip(t, fg.bare(forgeOwner, repoName), mainRef); now != after {
+	if now := tip(t, fg.bare(forgeOwner, widgets.flat()), mainRef); now != after {
 		t.Fatalf("forge main = %q, want %q", now, after)
 	}
 	select {
@@ -157,9 +163,9 @@ func TestInboundAdvanceApplies(t *testing.T) {
 // which is exactly what makes it safe and exactly why somebody has to remember.
 func TestInboundConflictIsRecorded(t *testing.T) {
 	_, fg, src, cloneURL := imported(t)
-	bare := fg.bare(forgeOwner, repoName)
+	bare := fg.bare(forgeOwner, widgets.flat())
 
-	forgeTip := diverge(t, fg.URL+"/"+forgeOwner+"/"+repoName+".git", "somebody's work")
+	forgeTip := diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "somebody's work")
 	src.commit("upstream's work")
 
 	res := inbound(t, cloneURL)
@@ -177,20 +183,20 @@ func TestInboundConflictIsRecorded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !states[repoName].Conflict || states[repoName].At == 0 {
-		t.Fatalf("conflict not recorded: %+v", states[repoName])
+	if !states[widgets].Conflict || states[widgets].At == 0 {
+		t.Fatalf("conflict not recorded: %+v", states[widgets])
 	}
 
 	// Resolving is the same write: the upstream takes the forge's commit on, and
 	// the next advance is a fast-forward that clears the record.
 	dir := t.TempDir()
-	git(t, "", "clone", "--quiet", fg.URL+"/"+forgeOwner+"/"+repoName+".git", dir)
+	git(t, "", "clone", "--quiet", fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", dir)
 	git(t, dir, "push", "--quiet", "--force", cloneURL, "HEAD:"+mainRef)
 	if res := inbound(t, cloneURL); !res.NoOp {
 		t.Fatalf("want a no-op once the two agree, got %+v", res)
 	}
 	states, _ = st.States(context.Background(), forgeOrg)
-	if states[repoName].Conflict {
+	if states[widgets].Conflict {
 		t.Error("the conflict survived a clean advance")
 	}
 }
@@ -204,7 +210,7 @@ func TestInboundNeverProvisions(t *testing.T) {
 	up.seed(upOwner, "ghost", "one")
 
 	res, err := (importer{}).InboundSync(context.Background(), cloud.GitInboundReq{
-		Org: forgeOrg, Repo: "ghost", Ref: mainRef,
+		Org: forgeOrg, Project: upOwner, Repo: "ghost", Ref: mainRef,
 		CloneURL: up.URL + "/" + upOwner + "/ghost.git",
 	})
 	if err != nil {
@@ -213,7 +219,7 @@ func TestInboundNeverProvisions(t *testing.T) {
 	if !res.NoOp || res.Detail != "repo not imported" {
 		t.Fatalf("want a no-op for an un-imported repo, got %+v", res)
 	}
-	if _, err := os.Stat(fg.bare(forgeOwner, "ghost")); err == nil {
+	if _, err := os.Stat(fg.bare(forgeOwner, upOwner+"_ghost")); err == nil {
 		t.Error("the webhook created a repository on the forge")
 	}
 }
@@ -226,7 +232,7 @@ func TestTheMachineNamespaceIsNeverSynced(t *testing.T) {
 	agent := "refs/heads/agent/session-1"
 
 	res, err := (importer{}).InboundSync(context.Background(), cloud.GitInboundReq{
-		Org: forgeOrg, Repo: repoName, Ref: agent, CloneURL: cloneURL,
+		Org: forgeOrg, Project: upOwner, Repo: repoName, Ref: agent, CloneURL: cloneURL,
 	})
 	if err != nil {
 		t.Fatalf("inbound: %v", err)
@@ -235,11 +241,11 @@ func TestTheMachineNamespaceIsNeverSynced(t *testing.T) {
 		t.Fatalf("the machine namespace must not be synced, got %+v", res)
 	}
 	if err := (importer{}).ImportRepo(context.Background(), cloud.GitImportReq{
-		Org: forgeOrg, Repo: repoName, CloneURL: cloneURL,
+		Org: forgeOrg, Project: upOwner, Repo: repoName, CloneURL: cloneURL,
 	}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	if tip(t, fg.bare(forgeOwner, repoName), agent) != "" {
+	if tip(t, fg.bare(forgeOwner, widgets.flat()), agent) != "" {
 		t.Error("an import carried a machine-namespace branch")
 	}
 }
@@ -248,14 +254,14 @@ func TestTheMachineNamespaceIsNeverSynced(t *testing.T) {
 // recorded; every other branch still lands.
 func TestImportConflictSparesTheOtherBranches(t *testing.T) {
 	_, fg, src, cloneURL := imported(t)
-	bare := fg.bare(forgeOwner, repoName)
+	bare := fg.bare(forgeOwner, widgets.flat())
 
-	forgeTip := diverge(t, fg.URL+"/"+forgeOwner+"/"+repoName+".git", "somebody's work")
+	forgeTip := diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "somebody's work")
 	src.commit("upstream's work")
 	side := src.branch("release/2")
 
 	if err := (importer{}).ImportRepo(context.Background(), cloud.GitImportReq{
-		Org: forgeOrg, Repo: repoName, CloneURL: cloneURL,
+		Org: forgeOrg, Project: upOwner, Repo: repoName, CloneURL: cloneURL,
 	}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
@@ -273,7 +279,7 @@ func TestImportConflictSparesTheOtherBranches(t *testing.T) {
 func TestStatusReadsBothSides(t *testing.T) {
 	_, fg, src, cloneURL := imported(t)
 
-	st, err := (importer{}).RepoStatus(context.Background(), forgeOrg, "", []string{repoName, "absent"})
+	st, err := (importer{}).RepoStatus(context.Background(), forgeOrg, upOwner, []string{repoName, "absent"})
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
@@ -284,12 +290,12 @@ func TestStatusReadsBothSides(t *testing.T) {
 		t.Errorf("a repo the forge does not hold = %+v, want zero", st["absent"])
 	}
 
-	diverge(t, fg.URL+"/"+forgeOwner+"/"+repoName+".git", "somebody's work")
+	diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "somebody's work")
 	src.commit("upstream's work")
 	if res := inbound(t, cloneURL); !res.Conflict {
 		t.Fatalf("want conflict, got %+v", res)
 	}
-	got, err := (importer{}).RepoStatus(context.Background(), forgeOrg, "", []string{repoName})
+	got, err := (importer{}).RepoStatus(context.Background(), forgeOrg, upOwner, []string{repoName})
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
@@ -321,7 +327,7 @@ func TestTheForgeCredentialTravelsByHeader(t *testing.T) {
 func TestPushOutIsAlsoFastForwardOnly(t *testing.T) {
 	up, fg, src, cloneURL := imported(t)
 	upBare := up.bare(upOwner, repoName)
-	forgeURL := fg.URL + "/" + forgeOwner + "/" + repoName + ".git"
+	forgeURL := fg.URL + "/" + forgeOwner + "/" + widgets.flat() + ".git"
 
 	// The target is declared straight into the store: validateMirrorTarget
 	// requires https and an allowlisted host, which the loopback stand is not, and
@@ -331,13 +337,13 @@ func TestPushOutIsAlsoFastForwardOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.SetMirror(context.Background(), forgeOrg, repoName, "127.0.0.1", cloneURL); err != nil {
+	if err := st.SetMirror(context.Background(), forgeOrg, widgets, "127.0.0.1", cloneURL); err != nil {
 		t.Fatal(err)
 	}
 
 	// The forge moves ahead: the downstream follows.
 	forgeTip := diverge(t, forgeURL, "canonical work")
-	if err := pushOut(context.Background(), forgeOrg, repoName); err != nil {
+	if err := pushOut(context.Background(), forgeOrg, upOwner, repoName); err != nil {
 		t.Fatalf("push out: %v", err)
 	}
 	if got := tip(t, upBare, mainRef); got != forgeTip {
@@ -345,16 +351,271 @@ func TestPushOutIsAlsoFastForwardOnly(t *testing.T) {
 	}
 
 	// Now both move on from THAT commit, independently. The downstream must
-	// survive: it is a place people push, not a replica to be overwritten.
+	// survive: it is a place people push, not a replica to be overwritten — and
+	// the caller must be TOLD, because a push that landed nothing is not a sync.
 	git(t, src.dir, "fetch", "--quiet", "origin", "main")
 	git(t, src.dir, "reset", "--quiet", "--hard", "FETCH_HEAD")
 	downTip := src.commit("the downstream's own work")
 	diverge(t, forgeURL, "more canonical work")
-	if err := pushOut(context.Background(), forgeOrg, repoName); err != nil {
-		t.Fatalf("push out: %v", err)
+	err = pushOut(context.Background(), forgeOrg, upOwner, repoName)
+	if err == nil {
+		t.Fatal("a push nothing accepted reported success; the engine stamps 'last synced' on that")
+	}
+	if !strings.Contains(err.Error(), "127.0.0.1") || !strings.Contains(err.Error(), mainRef) {
+		t.Errorf("the failure does not name the target and the ref: %v", err)
 	}
 	if got := tip(t, upBare, mainRef); got != downTip {
 		t.Fatalf("THE DOWNSTREAM WAS OVERWRITTEN: main = %q, want %q", got, downTip)
+	}
+	// And it is written down against THAT host, so the console says this
+	// repository is not in step rather than only a log line saying so.
+	states, err := st.States(context.Background(), forgeOrg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !states[widgets].Conflict {
+		t.Error("a refused outbound push left no conflict for the console to render")
+	}
+}
+
+// ── one name, two accounts ───────────────────────────────────────────────────
+
+// otherOwner is a SECOND upstream account holding a repository of the same name.
+// hanzoai/ai, hanzo-apps/ai and hanzo-docs/ai are the real instance of this.
+const otherOwner = "other-gh"
+
+// other is that second repository — same name, different account.
+var other = repo{account: otherOwner, name: repoName}
+
+// twoAccounts seeds ONE name under TWO upstream accounts, sharing a base commit,
+// and imports both.
+//
+// The shared base is deliberate: two repositories with unrelated histories would
+// refuse each other's pushes anyway, so a mix-up between them would bounce off
+// git and prove nothing. Sharing a commit is the case where one's refs LAND in
+// the other, which is what the account in the coordinate has to prevent.
+func twoAccounts(t *testing.T) (up *host, fg *stand, base, urlA, urlB string) {
+	t.Helper()
+	up = newHost(t)
+	fg = newStand(t, forgeOwner)
+	mountForge(t)
+
+	a := up.seed(upOwner, repoName, "shared")
+	base = git(t, a.dir, "rev-parse", "HEAD")
+	up.init(otherOwner, repoName)
+	urlA = up.URL + "/" + upOwner + "/" + repoName + ".git"
+	urlB = up.URL + "/" + otherOwner + "/" + repoName + ".git"
+	git(t, a.dir, "push", "--quiet", urlB, "HEAD:"+mainRef)
+
+	for _, im := range []struct{ account, url string }{{upOwner, urlA}, {otherOwner, urlB}} {
+		if err := (importer{}).ImportRepo(context.Background(), cloud.GitImportReq{
+			Org: forgeOrg, Project: im.account, Repo: repoName, CloneURL: im.url,
+		}); err != nil {
+			t.Fatalf("import %s: %v", im.account, err)
+		}
+	}
+	return up, fg, base, urlA, urlB
+}
+
+// TestTwoAccountsAreTwoRepositories: a repository name means one repository only
+// within one account, so the same name from two accounts must be two
+// repositories on the forge — separate refs, separate HEAD, separate status.
+//
+// Sharing one, each import overwrites the last one's branches and re-points the
+// HEAD they share, and the console draws one row for both.
+func TestTwoAccountsAreTwoRepositories(t *testing.T) {
+	up, fg, base, urlA, _ := twoAccounts(t)
+
+	if _, err := os.Stat(fg.bare(forgeOwner, repoName)); err == nil {
+		t.Fatalf("the forge holds a repository at the bare name %q, so the account is not in the coordinate", repoName)
+	}
+	for _, r := range []repo{widgets, other} {
+		if got := tip(t, fg.bare(forgeOwner, r.flat()), mainRef); got != base {
+			t.Fatalf("%s main = %q, want %q", r.flat(), got, base)
+		}
+	}
+
+	// One of them moves. The other must not.
+	srcA := &tree{t: t, dir: t.TempDir(), bare: up.bare(upOwner, repoName)}
+	git(t, "", "clone", "--quiet", urlA, srcA.dir)
+	moved := srcA.commit("only A's work")
+	if res := inbound(t, urlA); !res.Applied {
+		t.Fatalf("want applied, got %+v", res)
+	}
+	if got := tip(t, fg.bare(forgeOwner, widgets.flat()), mainRef); got != moved {
+		t.Fatalf("A's forge repo = %q, want %q", got, moved)
+	}
+	if got := tip(t, fg.bare(forgeOwner, other.flat()), mainRef); got != base {
+		t.Fatalf("B's forge repo followed A's push: %q, want %q", got, base)
+	}
+
+	// And the console reads them apart: both imported, and the one that synced is
+	// the one with a sync time.
+	st, err := (importer{}).RepoStatus(context.Background(), forgeOrg, upOwner, []string{repoName})
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	stB, err := (importer{}).RepoStatus(context.Background(), forgeOrg, otherOwner, []string{repoName})
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if !st[repoName].Imported || !stB[repoName].Imported {
+		t.Errorf("both accounts' repositories are imported, got %+v and %+v", st[repoName], stB[repoName])
+	}
+	if st[repoName].LastSyncedAt == 0 {
+		t.Error("A synced and its status says never")
+	}
+}
+
+// TestAnAccountsRefsStayInItsOwnReplica: each repository's declared outbound
+// target is ITS OWN, so one account's commits can never be pushed into another
+// account's repository — which is what happens when the target is remembered
+// against a bare name: two same-named repositories replicating to the same HOST
+// share one row, the second declaration takes the first's place, and the first's
+// refs are then pushed to the second's address under the org's own credential.
+func TestAnAccountsRefsStayInItsOwnReplica(t *testing.T) {
+	up, fg, base, urlA, urlB := twoAccounts(t)
+
+	st, err := storeFor(mounted.Load(), forgeOrg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both declare a target on the SAME host — the collision, stated as data.
+	for _, m := range []struct {
+		r   repo
+		url string
+	}{{widgets, urlA}, {other, urlB}} {
+		if err := st.SetMirror(context.Background(), forgeOrg, m.r, "127.0.0.1", m.url); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A's canonical copy moves ahead, and is pushed out.
+	ahead := diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "A's own work")
+	if err := pushOut(context.Background(), forgeOrg, upOwner, repoName); err != nil {
+		t.Fatalf("push out: %v", err)
+	}
+	if got := tip(t, up.bare(upOwner, repoName), mainRef); got != ahead {
+		t.Fatalf("A's own replica = %q, want %q", got, ahead)
+	}
+	if got := tip(t, up.bare(otherOwner, repoName), mainRef); got != base {
+		t.Fatalf("ACCOUNT A'S WORK LANDED IN ACCOUNT B'S REPOSITORY: %q, want %q", got, base)
+	}
+	// And B still has its own target rather than A's.
+	urls, err := st.Mirrors(context.Background(), forgeOrg, other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(urls) != 1 || urls[0] != urlB {
+		t.Fatalf("B's declared targets = %v, want [%s]", urls, urlB)
+	}
+}
+
+// TestAPushWithNoTargetIsNotASync: a push-only reconcile whose repository has no
+// declared target moved no bytes, and says so. Reporting success there is what
+// stamps "synced, just now" on a repository nothing is being pushed from.
+func TestAPushWithNoTargetIsNotASync(t *testing.T) {
+	imported(t)
+	err := pushOut(context.Background(), forgeOrg, upOwner, repoName)
+	if err == nil {
+		t.Fatal("a push with nowhere to push reported success")
+	}
+	if !strings.Contains(err.Error(), "no declared outbound target") {
+		t.Errorf("the failure does not say what is missing: %v", err)
+	}
+}
+
+// TestACredentialGoesOnlyToASourceWeMintFor: the token a caller hands in is
+// offered only to a host this deployment mints credentials for, and a call that
+// would send it elsewhere is REFUSED rather than quietly downgraded.
+//
+// The outbound half has always been allowlisted. The inbound half carries a live
+// installation token to a URL that is an argument on the internal plane, which
+// is the same question with a worse answer.
+func TestACredentialGoesOnlyToASourceWeMintFor(t *testing.T) {
+	// The SSRF gate is not what is under test here, so the invented hosts are
+	// allowed past it deliberately.
+	t.Setenv("GIT_MIRROR_ALLOW_PRIVATE_HOSTS", "evil.example,github.com")
+
+	if _, err := upstream("https://evil.example/a/b.git", "installation-token"); err == nil {
+		t.Error("a credential was offered to a host we mint nothing for")
+	}
+	from, err := upstream("https://github.com/a/b.git", "installation-token")
+	if err != nil {
+		t.Fatalf("github is a source we mint for: %v", err)
+	}
+	if from.Cred.Token != "installation-token" {
+		t.Error("the credential did not reach the source it was minted for")
+	}
+	// Without a token there is nothing to leak, so any source is fetchable.
+	if _, err := upstream("https://evil.example/a/b.git", ""); err != nil {
+		t.Errorf("an anonymous fetch needs no allowlist: %v", err)
+	}
+	// The plane door says the same thing with a status, so a caller learns it
+	// asked for something it may not have.
+	if err := sourceOK("https://evil.example/a/b.git", "installation-token"); err == nil {
+		t.Error("the plane door accepted a credential for a host the advance refuses")
+	}
+	if err := sourceOK("https://github.com/a/b.git", "installation-token"); err != nil {
+		t.Errorf("the plane door refused a source we mint for: %v", err)
+	}
+}
+
+// TestADeletedRefDoesNotResolveADivergence: an upstream that DELETES a branch it
+// had diverged on has not resolved anything — the forge still holds the split
+// history — so the record must survive. Writing "in step" for a ref nobody
+// offered is a green console over an unresolved divergence.
+func TestADeletedRefDoesNotResolveADivergence(t *testing.T) {
+	up, fg, src, cloneURL := imported(t)
+
+	diverge(t, fg.URL+"/"+forgeOwner+"/"+widgets.flat()+".git", "somebody's work")
+	src.commit("upstream's work")
+	if res := inbound(t, cloneURL); !res.Conflict {
+		t.Fatalf("want a conflict to start from, got %+v", res)
+	}
+
+	// The upstream drops the branch.
+	git(t, "", "--git-dir="+up.bare(upOwner, repoName), "update-ref", "-d", mainRef)
+	if res := inbound(t, cloneURL); !res.NoOp {
+		t.Fatalf("a ref the source no longer has is a no-op, got %+v", res)
+	}
+	st, err := storeFor(mounted.Load(), forgeOrg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states, err := st.States(context.Background(), forgeOrg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !states[widgets].Conflict {
+		t.Error("deleting the branch cleared the conflict it never resolved")
+	}
+}
+
+// TestOneSpellingOfAnOrg: an org is folded at the door, so a caller that spells
+// it differently reaches the same store and the same namespace.
+//
+// [forge.Owner] folds on its own, so a variant spelling already reached the same
+// forge namespace — while the store name it took was a different SQLite file.
+// One import, two records, and a console that reads whichever it asked for.
+func TestOneSpellingOfAnOrg(t *testing.T) {
+	up := newHost(t)
+	newStand(t, forgeOwner)
+	mountForge(t)
+	up.seed(upOwner, repoName, "one")
+	cloneURL := up.URL + "/" + upOwner + "/" + repoName + ".git"
+
+	if err := (importer{}).ImportRepo(context.Background(), cloud.GitImportReq{
+		Org: " HANZO ", Project: upOwner, Repo: repoName, CloneURL: cloneURL,
+	}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	st, err := (importer{}).RepoStatus(context.Background(), forgeOrg, upOwner, []string{repoName})
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if !st[repoName].Imported || st[repoName].LastSyncedAt == 0 {
+		t.Fatalf("a differently-spelled org wrote somewhere else: %+v", st[repoName])
 	}
 }
 
@@ -371,13 +632,13 @@ func TestMirrorTargetsMustBeAllowed(t *testing.T) {
 		"https://10.0.0.5/x.git",             // internal
 		"ssh://git@github.com/a/b.git",       // not a git-over-https URL
 	} {
-		if err := (mirrorControl{}).EnsureMirror(ctx, forgeOrg, "", repoName, bad, true); err == nil {
+		if err := (mirrorControl{}).EnsureMirror(ctx, forgeOrg, upOwner, repoName, bad, true); err == nil {
 			t.Errorf("%s was accepted as an outbound target", bad)
 		}
 	}
 	// Userinfo is STRIPPED rather than refused; what must never happen is that a
 	// credential is written down.
-	if err := (mirrorControl{}).EnsureMirror(ctx, forgeOrg, "", repoName,
+	if err := (mirrorControl{}).EnsureMirror(ctx, forgeOrg, upOwner, repoName,
 		"https://user:pw@github.com/a/b.git", true); err != nil {
 		t.Fatalf("a userinfo URL should be accepted with the credential stripped: %v", err)
 	}
@@ -385,7 +646,7 @@ func TestMirrorTargetsMustBeAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	urls, err := st.Mirrors(ctx, forgeOrg, repoName)
+	urls, err := st.Mirrors(ctx, forgeOrg, widgets)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,11 +654,11 @@ func TestMirrorTargetsMustBeAllowed(t *testing.T) {
 		t.Fatalf("stored targets = %v; a credential must never be written down", urls)
 	}
 	// And withdrawing is idempotent both ways.
-	if err := (mirrorControl{}).EnsureMirror(ctx, forgeOrg, "", repoName,
+	if err := (mirrorControl{}).EnsureMirror(ctx, forgeOrg, upOwner, repoName,
 		"https://github.com/a/b.git", false); err != nil {
 		t.Fatalf("withdraw: %v", err)
 	}
-	if urls, _ := st.Mirrors(ctx, forgeOrg, repoName); len(urls) != 0 {
+	if urls, _ := st.Mirrors(ctx, forgeOrg, widgets); len(urls) != 0 {
 		t.Errorf("withdraw left %v", urls)
 	}
 }
