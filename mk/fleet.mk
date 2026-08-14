@@ -377,6 +377,20 @@ check: describe ## Regenerate every document + openapi.yaml FROM SOURCE and fail
 	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi OUT=$(ROOT)/openapi.yaml 2>&1) \
 	  || { echo "$$out"; echo "!! the compose refused; nothing was written"; exit 1; }
 	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml public.yaml openapi/floor.json openapi/closure.json plugin/); \
+	only_witness=$$(printf '%s\n' "$$stale" | grep -vc 'openapi/closure.json' 2>/dev/null || true); \
+	if [ -n "$$stale" ] && [ "$$only_witness" = "0" ]; then \
+	  echo ">> the witness moved and no document did: a dependency changed, and every one of"; \
+	  echo "   the documents generated from it regenerated IDENTICAL. Commit"; \
+	  echo "   openapi/closure.json to record what they were built from."; \
+	  echo ""; \
+	  echo "   Not a failure HERE, and only here: this target just regenerated the whole"; \
+	  echo "   fleet from source, so 'the surface is unchanged' is a measurement it took"; \
+	  echo "   rather than a claim it inherited. 'make closure-check' regenerates nothing,"; \
+	  echo "   so there the same drift stays fatal — a witness refreshed beside documents"; \
+	  echo "   nobody rebuilt is exactly how a partial rebuild gets laundered as fresh."; \
+	  echo ""; \
+	  stale=""; \
+	fi; \
 	if [ -n "$$stale" ]; then \
 	  echo "$$stale"; \
 	  git -C $(ROOT) diff --stat -- openapi.yaml public.yaml plugin/; \
