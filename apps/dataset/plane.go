@@ -89,7 +89,7 @@ const (
 // The lifecycle, as both a name and a rank.
 //
 // The rank IS the ReplacingMergeTree version column, which is what makes
-// immutability structural rather than merely policed: ClickHouse keeps the row
+// immutability structural rather than merely policed: Datastore keeps the row
 // with the GREATEST version among duplicates, so no later write of a LOWER stage
 // can displace a published version. The door refuses a second `ready` for one
 // version; the engine refuses everything below it. Two layers, and the weaker one
