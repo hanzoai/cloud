@@ -47,9 +47,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"maps"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	ds "github.com/hanzo-ds/go"
@@ -88,6 +90,32 @@ const (
 	// This sink is the production span writer, so this sink owes the partial.
 	planeTraceTable = "event.trace"
 
+	// event.log_resource is the RESOURCE IDENTITY every log read narrows through,
+	// and it is fed BY THE LOG WRITER for the same reason event.trace is fed by
+	// the span writer: nothing else knows what a row's resource was.
+	//
+	// AN EMPTY RESOURCE TABLE IS NOT A MISSING INDEX, IT IS EVERY LOG QUERY
+	// ANSWERING EMPTY. The read plane does not filter `service` on event.log at
+	// all. It compiles a resource-context predicate into a CTE over THIS table and
+	// leaves the main query with `resource_fingerprint GLOBAL IN (…)` and nothing
+	// else — hanzoai/o11y's own golden pins that shape
+	// (pkg/telemetrylogs/stmt_builder_test.go), and the visitor deliberately
+	// STRIPS the resource key from the main WHERE once the CTE carries it
+	// (pkg/querybuilder/where_clause_visitor.go). So a row whose fingerprint names
+	// no resource row is unreachable by any filter a console panel can express.
+	//
+	// Measured before this: 65 rows in event.log_resource, all written 2026-08-01
+	// to 08-02 by the o11y module's own writer, and none since this sink replaced
+	// it; `resource_fingerprint` was empty on all 122M rows of a day. Every
+	// per-product Logs view in the console was therefore empty for every product,
+	// which read as "the service ships no logs" and was never that.
+	planeLogResourceTable = "event.log_resource"
+
+	// resourceBucket is the width event.log_resource is partitioned and read on:
+	// the reader bounds its CTE by seen_at_ts_bucket_start, so a resource must be
+	// re-stated in every bucket it is still logging in, not once when first seen.
+	resourceBucket = 1800
+
 	// The ZAP wire addresses, unchanged from the embedded collector: 4317 is
 	// the canonical span wire every Hanzo service sends to, 4318 the log wire.
 	// This sink binds ONLY these two sockets — cloud owns its own HTTP and
@@ -123,7 +151,14 @@ var (
 	planeSpanColumns = []string{"org", "time", "id", "name", "kind", "service",
 		"trace_id", "span_id", "parent", "duration", "status", "attributes"}
 	planeLogColumns = []string{"org", "time", "id", "name", "kind", "service",
-		"severity_text", "severity_number", "body", "trace_id", "span_id", "attributes"}
+		"severity_text", "severity_number", "body", "trace_id", "span_id", "attributes",
+		"resource_fingerprint"}
+
+	// The identity row the fingerprint above points at. seen_at_ts_bucket_start is
+	// bound here and NOT left to a default, unlike ingested_at: it is not a clock,
+	// it is which 30-minute window this resource was observed logging in, and the
+	// reader matches on it.
+	planeLogResourceColumns = []string{"org", "fingerprint", "labels", "seen_at_ts_bucket_start"}
 
 	// event.trace's full column list — the table has FIVE columns and no
 	// ingested_at, so the rule above has nothing to omit here. Its retention and
@@ -153,6 +188,56 @@ type planeSink struct {
 	sink    *datastoreSink
 	spanRcv *zapreceiver.Receiver
 	logRcv  *zaplogreceiver.Receiver
+
+	// seen is which (org, fingerprint, bucket) identities have already been
+	// stated, so a resource is written ONCE per 30-minute bucket instead of once
+	// per batch. Without it this is one INSERT per batch into a seven-table
+	// fan-out, which is the write amplification that has taken this datastore
+	// down before ("Too many parts"); with it the rate is the number of distinct
+	// resources per half hour, measured at ~150 for this fleet.
+	mu   sync.Mutex
+	seen map[string]struct{}
+}
+
+// rememberResource states a batch's resource identity at most once per bucket.
+//
+// Fail-soft and SAID, like every other branch of this sink: a resource that does
+// not land makes its rows unreadable, which is exactly the failure this whole
+// change exists to end, so it must never pass silently. The key is only marked
+// once the write succeeded — a failed attempt is retried by the next batch rather
+// than remembered as done.
+func (ps *planeSink) rememberResource(ctx context.Context, log luxlog.Logger, row []any) {
+	if len(row) == 0 {
+		return
+	}
+	key := fmt.Sprint(row[0], "\x00", row[1], "\x00", row[3])
+
+	ps.mu.Lock()
+	if ps.seen == nil {
+		ps.seen = map[string]struct{}{}
+	}
+	_, done := ps.seen[key]
+	ps.mu.Unlock()
+	if done {
+		return
+	}
+
+	if err := ps.sink.Insert(ctx, planeLogResourceTable, planeLogResourceColumns, [][]any{row}); err != nil {
+		log.Warn("plane log resource identity not stated — rows in this batch are unreachable by a resource filter until it is",
+			"table", planeLogResourceTable, "err", err)
+		return
+	}
+
+	ps.mu.Lock()
+	// Buckets roll every 30 minutes and the fleet has a bounded number of
+	// resources, so this map is small. The clear is the floor under a pathological
+	// sender inventing resources: it costs one repeated write per bucket, never
+	// unbounded memory.
+	if len(ps.seen) > 8192 {
+		ps.seen = map[string]struct{}{}
+	}
+	ps.seen[key] = struct{}{}
+	ps.mu.Unlock()
 }
 
 var embeddedPlaneSink *planeSink
@@ -196,6 +281,11 @@ func mountPlaneIngest(deps cloud.Deps) error {
 			if len(rows) == 0 {
 				return nil
 			}
+			// The IDENTITY first. A log row whose fingerprint names no resource
+			// row is unreadable by any filter; a resource row nothing points at
+			// yet is merely early. Ordering the pair this way means a crash
+			// between the two never loses something a reader could have seen.
+			ps.rememberResource(ctx, log, logResourceRowOf(b, time.Now().UTC()))
 			return ps.sink.Insert(ctx, planeLogTable, planeLogColumns, rows)
 		},
 	})
@@ -320,12 +410,74 @@ func spanRowsOf(b *zapreceiver.SpanBatch) [][]any {
 	return rows
 }
 
+// planeResource is a batch's resource as the read plane needs it: the LABELS it
+// matches on, and the FINGERPRINT that joins those labels to the rows.
+//
+// service.name is written INTO the labels rather than left to whatever the sender
+// happened to put there, because the label is what the reader matches
+// (simpleJSONExtractString(labels, 'service.name')) while `service` on the row is
+// what it displays, and the two disagreeing is a row that renders under a name no
+// filter can reach. planeService already decides what a service IS for every row
+// on this plane, so this states the SAME answer in the second place the reader
+// looks — one resolution, written twice, rather than two resolutions.
+//
+// The fingerprint is FNV-1a-64 of the canonical JSON, as a decimal string.
+// encoding/json sorts map keys, so equal resources hash equal across batches and
+// processes. It is an opaque JOIN KEY, not a checksum anyone verifies: the reader
+// never recomputes it, it only follows it from a row to this table, so the whole
+// requirement is that BOTH writes here derive it from the same bytes.
+func planeResource(resource map[string]string, service string) (fingerprint, labels string) {
+	attrs := make(map[string]string, len(resource)+1)
+	maps.Copy(attrs, resource)
+	if service != "" {
+		attrs["service.name"] = service
+	}
+	b, err := json.Marshal(attrs)
+	if err != nil {
+		// A map[string]string cannot fail to marshal; if it somehow did, an empty
+		// identity would silently unreach every row in the batch, so say so.
+		return "", ""
+	}
+	h := fnv.New64a()
+	_, _ = h.Write(b)
+	return strconv.FormatUint(h.Sum64(), 10), string(b)
+}
+
+// logResourceRowOf is the identity row for a batch, in the bucket it was observed
+// in. One row per batch; the table is a ReplacingMergeTree keyed by the identity,
+// so re-stating a resource each bucket costs one collapsed row rather than growth.
+func logResourceRowOf(b *zaplogreceiver.LogBatch, at time.Time) []any {
+	if b == nil || len(b.Records) == 0 {
+		return nil
+	}
+	service := planeService(b.Resource, b.AppName)
+	fp, labels := planeResource(b.Resource, service)
+	if fp == "" {
+		return nil
+	}
+	org := planeOrg(b.Resource)
+	if len(b.Records) > 0 {
+		// The org a log row lands under is per-RECORD (planeOrg reads hanzo.org off
+		// the record), and the resource row has to be reachable from the rows it
+		// identifies, so take the first record's org rather than the batch's.
+		attrs := make(map[string]string, len(b.Resource)+len(b.Records[0].Attributes))
+		maps.Copy(attrs, b.Resource)
+		for k, v := range b.Records[0].Attributes {
+			attrs[k] = attrString(v)
+		}
+		org = planeOrg(attrs)
+	}
+	bucket := at.Unix() / resourceBucket * resourceBucket
+	return []any{org, fp, labels, bucket}
+}
+
 // logRowsOf renders one wire LogBatch as event.log rows.
 func logRowsOf(b *zaplogreceiver.LogBatch) [][]any {
 	if b == nil || len(b.Records) == 0 {
 		return nil
 	}
 	service := planeService(b.Resource, b.AppName)
+	fingerprint, _ := planeResource(b.Resource, service)
 	rows := make([][]any, 0, len(b.Records))
 	for i, r := range b.Records {
 		attrs := make(map[string]string, len(b.Resource)+len(r.Attributes))
@@ -358,6 +510,7 @@ func logRowsOf(b *zaplogreceiver.LogBatch) [][]any {
 			r.TraceID,
 			r.SpanID,
 			attrs,
+			fingerprint,
 		})
 	}
 	return rows
