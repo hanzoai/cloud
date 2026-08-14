@@ -133,5 +133,14 @@ func (t treeSource) render(ctx context.Context) ([]*unstructured.Unstructured, s
 		}
 		objs = append(objs, items...)
 	}
+	if len(objs) == 0 {
+		// An empty desired set deletes every object this source manages, so a read
+		// that resolved to no manifests is refused rather than reconciled. The cause
+		// is almost always a wrong path or a read that returned nothing, not an
+		// intent to remove everything — and "remove everything" is not a sentence a
+		// source tree should be able to say by accident. Same fail-closed stance as
+		// the truncation refusal above.
+		return nil, "", fmt.Errorf("no manifests under %q in %s/%s at %s — refusing an empty desired set", t.path, t.org, t.repo, tree.Rev)
+	}
 	return objs, tree.Rev, nil
 }
