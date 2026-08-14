@@ -960,11 +960,12 @@ func (o ops) update(ctx context.Context, in *projectsUpdate) (*projectsProject, 
 // The metadata delete is authoritative and everything after it is best-effort,
 // in this order: the public `<slug>` subdomain binding is released so the slug is
 // free to reclaim, the release rows are dropped so a reclaimed slug never
-// inherits the previous owner's rollback menu, the S3 origin is purged under
-// BOTH `<org>/<slug>/` and the site's sibling release space, and the edge
-// cache-tag is flushed. A failure in any of those is logged and the delete still
-// answers 204 — resurrecting a project because a purge missed would be worse
-// than a leaked prefix.
+// inherits the previous owner's rollback menu, the git source is retired on
+// every copy it has so a reclaimed slug never adopts a repository left behind
+// (visibility.go), the S3 origin is purged under BOTH `<org>/<slug>/` and the
+// site's sibling release space, and the edge cache-tag is flushed. A failure in
+// any of those is logged and the delete still answers 204 — resurrecting a
+// project because a purge missed would be worse than a leaked prefix.
 //
 // Scope: a validated principal is required (403 without one) and the project is
 // resolved within that principal's org, so another tenant's slug is a 404 and
