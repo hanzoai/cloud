@@ -19,8 +19,8 @@
     "/v1/taxonomy": {
       "get": {
         "operationId": "get_taxonomy",
-        "summary": "Read returns the whole product catalogue: every category in display order, each carrying the products filed under it in theirs.",
-        "description": "Read returns the whole product catalogue: every category in display order, each\ncarrying the products filed under it in theirs. This is what the console's\nnavigation and the marketing landing page are rendered from, and it is readable\nsigned out — it holds no tenant data, only the same list of products every\nvisitor sees.\n\n`?brand=` narrows it the way a brand's own console does: only the categories\nthat brand admits, and within them only the taxa scoped to it. Unpublished\ntaxa are served to a platform SuperAdmin alone, so the editor can see what it\nhas staged while nobody else can.",
+        "summary": "Read returns the product catalogue as this caller sees it: the PLATFORM catalogue — Hanzo's own products, the part that is true for everyone — plus the caller's own org's rows, every category in display order and each carrying the products filed under it in theirs.",
+        "description": "Read returns the product catalogue as this caller sees it: the PLATFORM\ncatalogue — Hanzo's own products, the part that is true for everyone — plus the\ncaller's own org's rows, every category in display order and each carrying the\nproducts filed under it in theirs. Another customer's rows are never in it. It\nis readable signed out, and a signed-out visitor gets the platform catalogue\nalone, which is what the marketing landing renders from.\n\nWhere the caller's org and the platform hold the same id, the caller's own row\nis the one served. That rule exists because ids are unique per ORG and not\nglobally — two customers may each have a \"crm\", and refusing the second would\ntell one of them the other exists — so a collision with the platform is possible\nby construction and something has to win deterministically. Yours does: your own\ncatalogue is the one you edited.\n\n`?brand=` narrows it the way a brand's own console does: only the categories\nthat brand admits, and within them only the taxa scoped to it. An unpublished\nrow is served only to whoever may edit it — a SuperAdmin for the platform's, an\norg admin for their own — so a product can be staged before anyone sees it\nwithout becoming invisible to the person staging it.",
         "tags": [
           "taxonomy"
         ],
@@ -237,6 +237,10 @@
             "description": "Order is where the category sits among its siblings, ascending.",
             "type": "integer"
           },
+          "owner": {
+            "description": "Owner is the org this category belongs to: the platform's own org for a\ncategory every tenant sees, or your org for one you added. It tells a console\nwhich rows it may offer to edit.",
+            "type": "string"
+          },
           "summary": {
             "description": "Summary is the one line describing what the category groups, shown as the\nheader copy on its landing page.",
             "type": "string"
@@ -287,6 +291,10 @@
           "order": {
             "description": "Order is where the taxon sits within its category, ascending.",
             "type": "integer"
+          },
+          "owner": {
+            "description": "Owner is the org this product belongs to: the platform's own org for one\nevery tenant sees, or your org for one you added. Where two rows share an id,\nyours is the one served.",
+            "type": "string"
           },
           "published": {
             "description": "Published is whether the taxon is shown. An unpublished taxon is served only\nto an editor, so a product can be staged before anyone sees it.",

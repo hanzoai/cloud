@@ -1,6 +1,7 @@
 {
  "categories": [
   {
+   "owner": "hanzo",
    "id": "ai",
    "label": "AI",
    "summary": "Models, providers, inference, agents, embeddings, prompts, and the playground — the hub for everything you build and ship with AI.",
@@ -12,6 +13,7 @@
    ]
   },
   {
+   "owner": "hanzo",
    "id": "compute",
    "label": "Compute",
    "summary": "Kubernetes, containers, functions, GPUs, machines, and tasks — the infrastructure your workloads run on.",
@@ -23,6 +25,7 @@
    ]
   },
   {
+   "owner": "hanzo",
    "id": "training",
    "label": "Training",
    "summary": "Fine-tuning and ML pipelines — build, tune, and improve your own models.",
@@ -34,6 +37,7 @@
    ]
   },
   {
+   "owner": "hanzo",
    "id": "data",
    "label": "Data",
    "summary": "Vector, SQL, key-value, object, document, and memory stores — managed data primitives for your apps.",
@@ -45,6 +49,7 @@
    ]
   },
   {
+   "owner": "hanzo",
    "id": "network",
    "label": "Network",
    "summary": "Gateway, DNS, CDN, load balancing, VPC, and service mesh — connect, route, and expose your services.",
@@ -52,6 +57,7 @@
    "brands": []
   },
   {
+   "owner": "hanzo",
    "id": "security",
    "label": "Security",
    "summary": "IAM, authorization, KMS, HSM, secrets, MPC, and audit — identity and secrets for your organization.",
@@ -59,6 +65,7 @@
    "brands": []
   },
   {
+   "owner": "hanzo",
    "id": "observe",
    "label": "Observe",
    "summary": "Traces, metrics, logs, dashboards, alerts, evals, and LLM research — observe and evaluate what your models and workloads do.",
@@ -70,6 +77,7 @@
    ]
   },
   {
+   "owner": "hanzo",
    "id": "platform",
    "label": "Platform",
    "summary": "Projects, environments, builds, registry, releases, and pipelines — ship and run your applications.",
@@ -81,6 +89,7 @@
    ]
   },
   {
+   "owner": "hanzo",
    "id": "dev",
    "label": "Dev",
    "summary": "API, SDKs, CLI, IDE, desktop, and keys — the developer tools to build against the cloud.",
@@ -88,6 +97,7 @@
    "brands": []
   },
   {
+   "owner": "hanzo",
    "id": "web3",
    "label": "Web3",
    "summary": "Networks, tokens, wallets, oracles, indexer, and settlement — the on-chain surface.",
@@ -95,6 +105,7 @@
    "brands": []
   },
   {
+   "owner": "hanzo",
    "id": "apps",
    "label": "Apps",
    "summary": "Chat, bot, search, marketplace, and studio — end-user AI applications.",
@@ -106,6 +117,7 @@
    ]
   },
   {
+   "owner": "hanzo",
    "id": "commerce",
    "label": "Commerce",
    "summary": "Products, orders, customers, inventory, and promotions — run your store on Hanzo Commerce (payments via Square in Billing).",
@@ -117,6 +129,7 @@
    ]
   },
   {
+   "owner": "hanzo",
    "id": "billing",
    "label": "Billing",
    "summary": "Balance, credits, usage-based spend, invoices, payment methods, revenue, and grants — your account's money, metering, and the Square-backed billing console.",
@@ -128,6 +141,7 @@
    ]
   },
   {
+   "owner": "hanzo",
    "id": "settings",
    "label": "Settings",
    "summary": "Team, organization, and profile — administer your account and members.",
@@ -137,6 +151,7 @@
  ],
  "taxa": [
   {
+   "owner": "hanzo",
    "id": "overview",
    "name": "Overview",
    "description": "Real-time usage, performance, and spend across your AI workloads.",
@@ -149,6 +164,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "ai-accounts",
    "name": "AI Accounts",
    "description": "Link your AI provider accounts and see unified usage across desktop, mobile, web, and CLI.",
@@ -161,6 +177,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "overlord",
    "name": "Overlord",
    "description": "God-view of the whole platform — every product’s health, tenants, and usage across all orgs.",
@@ -173,6 +190,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "business",
    "name": "Business",
    "description": "MRR, revenue, usage & cost, customers, and top agents across the whole platform.",
@@ -185,6 +203,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "finance",
    "name": "Finance",
    "description": "DigitalOcean credit burn-down, spend, revenue, gross margin, and runway across the platform.",
@@ -197,6 +216,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "catalog",
    "name": "Catalog & Pricing",
    "description": "Edit the platform product and pricing catalog — infra tiers, plans, and every product surface.",
@@ -209,6 +229,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "plan-catalog",
    "name": "Subscription Plans",
    "description": "Edit the platform subscription and DNS plan authority — prices, tiers, and features.",
@@ -221,6 +242,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "launch-control",
    "name": "Launch Control",
    "description": "Remove the waitlist from hosted services one at a time, and approve users off the waitlist.",
@@ -233,6 +255,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "fleet-o11y",
    "name": "Fleet Observability",
    "description": "Cross-org requests, tokens, cost, latency, errors, logs and traces across the whole platform.",
@@ -245,6 +268,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "research",
    "name": "Research",
    "description": "Falsifiable R&D experiments across the platform — every proof and every refutation, first-class.",
@@ -257,6 +281,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "infra",
    "name": "Infrastructure",
    "description": "DigitalOcean fleet — droplets, block-storage volumes (with fill % and near-full warnings), DOKS clusters and load balancers, with monthly cost and what is safely reclaimable.",
@@ -269,6 +294,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "saas-metrics",
    "name": "SaaS Metrics",
    "description": "MRR/ARR, subscription mix, metered revenue, and top customers across the whole platform.",
@@ -281,6 +307,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "usage-caps-promo",
    "name": "Usage Caps & Promo",
    "description": "Set the platform plan promo, and oversee or override any organization’s usage caps.",
@@ -293,6 +320,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "fleet-customers",
    "name": "Customers",
    "description": "Every organization on the platform — balances, usage, keys, access. Grant credit, suspend, reactivate.",
@@ -305,6 +333,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "fleet-revenue",
    "name": "Revenue",
    "description": "Balances held, realized spend, MRR, ARPU, and per-customer revenue across the fleet.",
@@ -317,6 +346,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "fleet-grants",
    "name": "Grants",
    "description": "Every credit grant issued across the platform — comps, welcome/starter, support. Issue new grants.",
@@ -329,6 +359,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "fleet-projects",
    "name": "Projects",
    "description": "Every org’s deployed apps across all clusters — health, cluster, and live URL. Read-only.",
@@ -341,6 +372,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "retention",
    "name": "Analytics",
    "description": "Cohort retention, growth, churn, active customers, and revenue analytics across the customer base.",
@@ -353,6 +385,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "enablement",
    "name": "Enablement",
    "description": "Turn models, providers, and features off · beta · ga across the fleet, and grant betas to orgs.",
@@ -365,6 +398,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "beta-features",
    "name": "Beta features",
    "description": "Enable early-access models and features for your organization.",
@@ -377,6 +411,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "bots",
    "name": "Bots",
    "description": "Every @hanzo/bot agent booted across the platform, and its spend — grouped org → app → project.",
@@ -389,6 +424,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "vms",
    "name": "Machines",
    "description": "Raw compute machines visor opens across every org, and their spend — grouped org → app → project.",
@@ -401,6 +437,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "cluster-fleet",
    "name": "Clusters",
    "description": "Every DOKS cluster visor manages across every org — grouped org → app → project.",
@@ -413,6 +450,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "function-fleet",
    "name": "Functions",
    "description": "Every serverless function invoked across every org — grouped org → app → project.",
@@ -425,6 +463,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "models",
    "name": "Models",
    "description": "Browse the live model catalog and configure routing policy.",
@@ -437,6 +476,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "router",
    "name": "AI Usage & Training",
    "description": "See all your org’s AI usage (requests, tokens, spend, per-model), track training contribution and routing quality, and configure task pools and cost ceiling.",
@@ -449,6 +489,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "providers",
    "name": "Providers",
    "description": "Model, storage, and embedding providers and credentials.",
@@ -461,6 +502,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "provider-admin",
    "name": "AI Providers",
    "description": "Enable, disable, and set the primary upstream AI provider for the shared gateway.",
@@ -473,6 +515,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "provider-billing",
    "name": "Provider Billing",
    "description": "Per-provider credit balance, burn, and runway, plus the credit-vs-paid usage split across the fleet.",
@@ -485,6 +528,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "growth",
    "name": "Growth",
    "description": "Observe and operate the Zen-of-Hanzo Guide engine — the authored blueprint, the ~888-tactic corpus, and the live growth read (stage · signals · next-best moves).",
@@ -497,6 +541,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "ai-economics",
    "name": "AI Economics",
    "description": "Model request mix, unit economics (margin + runway), and the eval → training flywheel across the fleet.",
@@ -509,6 +554,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "routing",
    "name": "Routing",
    "description": "Set the platform auto-routing default and per-org overrides as data — the config-as-Base settings editor.",
@@ -521,6 +567,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "connections",
    "name": "Connections",
    "description": "Connect your OpenAI, Anthropic, or Google account by API key or sign-in — sealed to Hanzo KMS.",
@@ -533,6 +580,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "agents",
    "name": "Agents",
    "description": "Build, deploy, and run autonomous agents.",
@@ -545,6 +593,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "mission-control",
    "name": "Mission Control",
    "description": "See and drive every agent session from one swipeable board — pause, resume, stop, message.",
@@ -557,6 +606,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "automations",
    "name": "Automations",
    "description": "Build and run automation flows — 706 connectors on the native /v1/automations engine.",
@@ -571,6 +621,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "inference",
    "name": "Inference",
    "description": "Online and batch inference for deployed models.",
@@ -583,6 +634,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "finetuning",
    "name": "Fine-tuning",
    "description": "Fine-tune and train models on your own data.",
@@ -595,6 +647,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "embeddings",
    "name": "Embeddings",
    "description": "Generate, store, and search vector embeddings at scale.",
@@ -607,6 +660,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "knowledge",
    "name": "Knowledge",
    "description": "Your wiki, agent memory, and sources as one force-directed graph.",
@@ -619,6 +673,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "evals",
    "name": "Evals",
    "description": "Evaluate model and agent outputs with scored runs.",
@@ -631,6 +686,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "map",
    "name": "Map",
    "description": "Every app, database, and domain in your org on one live canvas.",
@@ -643,6 +699,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "gpus",
    "name": "GPUs",
    "description": "GPU clusters, utilization, and cost — on-demand H100/A100 compute.",
@@ -655,6 +712,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "machines",
    "name": "Machines",
    "description": "Compute machines and capacity across regions (your cluster nodes).",
@@ -667,6 +725,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "containers",
    "name": "Containers",
    "description": "Run containers as managed, autoscaling services.",
@@ -679,6 +738,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "functions",
    "name": "Functions",
    "description": "Event-driven serverless functions.",
@@ -691,6 +751,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "edge",
    "name": "Edge",
    "description": "Compute at the edge, close to your users.",
@@ -703,6 +764,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "applications",
    "name": "Applications",
    "description": "Deployed application services.",
@@ -715,6 +777,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "app-platform",
    "name": "App Platform",
    "description": "Deploy and manage your container apps — projects, deploys, logs, secrets, domains.",
@@ -727,6 +790,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "vector",
    "name": "Vector",
    "description": "Managed vector database — embeddings & semantic search.",
@@ -739,6 +803,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "sql",
    "name": "SQL",
    "description": "Managed SQL — databases, branches, replicas.",
@@ -751,6 +816,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "kv",
    "name": "KV",
    "description": "Managed key-value store — cache & queues.",
@@ -763,6 +829,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "s3",
    "name": "S3",
    "description": "Managed S3-compatible object storage — buckets and objects, scoped to your org.",
@@ -775,6 +842,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "datastore",
    "name": "Datastore",
    "description": "Managed wide-column analytics store.",
@@ -787,6 +855,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "base",
    "name": "Base",
    "description": "Realtime backends for your org — spin up a Base with content types, records, and auth.",
@@ -799,6 +868,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "records",
    "name": "Records",
    "description": "Browse and edit any Base collection as a CRM/CMS — from its own schema.",
@@ -811,6 +881,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "docdb",
    "name": "DocDB",
    "description": "Managed document database.",
@@ -823,6 +894,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "gateway",
    "name": "Gateway",
    "description": "The unified, gated, priced API gateway — api.hanzo.ai.",
@@ -835,6 +907,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "nodes",
    "name": "Nodes",
    "description": "Blockchain node infrastructure — validators and peers across networks.",
@@ -847,6 +920,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "vpc",
    "name": "VPC",
    "description": "Private networks, subnets, and peering.",
@@ -859,6 +933,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "dns",
    "name": "DNS",
    "description": "Managed authoritative DNS.",
@@ -871,6 +946,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "domains",
    "name": "Domains",
    "description": "Search, register, and renew domain names.",
@@ -883,6 +959,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "cloudflare",
    "name": "Cloudflare",
    "description": "Manage your connected Cloudflare Pages, Workers, and routes.",
@@ -895,6 +972,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "cdn",
    "name": "CDN",
    "description": "Global content delivery and edge caching.",
@@ -907,6 +985,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "load-balancer",
    "name": "Load Balancer",
    "description": "Layer 4/7 load balancing across services.",
@@ -919,6 +998,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "service-mesh",
    "name": "Service Mesh",
    "description": "Service-to-service routing, mTLS, and policy.",
@@ -931,6 +1011,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "iam",
    "name": "IAM",
    "description": "Organizations, users, and roles (RBAC) — Hanzo IAM.",
@@ -943,6 +1024,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "authz",
    "name": "Authz",
    "description": "Fine-grained authorization policies and checks.",
@@ -955,6 +1037,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "kms",
    "name": "KMS",
    "description": "Encryption keys and cryptographic operations — Hanzo KMS.",
@@ -967,6 +1050,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "hsm",
    "name": "HSM",
    "description": "Hardware-backed key protection.",
@@ -979,6 +1063,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "secrets",
    "name": "Secrets",
    "description": "Store and rotate secrets — zero-knowledge, on Hanzo KMS.",
@@ -991,6 +1076,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "mpc",
    "name": "MPC",
    "description": "Threshold signing & multi-party computation — Hanzo MPC.",
@@ -1003,6 +1089,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "audit",
    "name": "Audit",
    "description": "Audit log of identity and access events.",
@@ -1015,6 +1102,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "zero-trust",
    "name": "Zero Trust",
    "description": "Private service access: routers, identities, policies, and sessions.",
@@ -1027,6 +1115,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "cli",
    "name": "CLI",
    "description": "The hanzo command-line interface.",
@@ -1039,6 +1128,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "sdks",
    "name": "SDKs",
    "description": "Python, TypeScript, Go, and Rust SDKs.",
@@ -1051,6 +1141,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "api",
    "name": "API",
    "description": "The REST API reference for every service.",
@@ -1063,6 +1154,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "webhooks",
    "name": "Webhooks",
    "description": "Deliver platform events to your endpoints — signed, retried, logged.",
@@ -1075,6 +1167,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "integrations",
    "name": "Integrations",
    "description": "Connect Slack, GitHub, and more so Hanzo AI can work across your tools.",
@@ -1087,6 +1180,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "playground",
    "name": "Playground",
    "description": "Try models and prompts interactively.",
@@ -1099,6 +1193,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "code",
    "name": "Code",
    "description": "Browse every repo, search across your code, and get cited answers — the unified hub over native git.",
@@ -1111,6 +1206,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "ide",
    "name": "IDE",
    "description": "The Hanzo AI development environment.",
@@ -1123,6 +1219,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "desktop",
    "name": "Desktop",
    "description": "The Hanzo desktop app.",
@@ -1135,6 +1232,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "platform",
    "name": "Platform",
    "description": "Create, deploy, and ship your projects — drop a build, bind a domain, and edit or chat about the same project across hanzo.app and hanzo.chat.",
@@ -1147,6 +1245,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "store",
    "name": "App Store",
    "description": "Deploy 1000+ open-source apps — Postgres, n8n, Grafana, and more — to your cloud in one click.",
@@ -1159,6 +1258,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "gitops",
    "name": "Deploy",
    "description": "The fleet deploy map — every operator App CR as a live node with reconciled health, sync, resource topology, CI builds, logs, and one-click rollback. The Hanzo operator reconciles.",
@@ -1171,6 +1271,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "projects",
    "name": "Projects",
    "description": "Projects organize resources under your org — the scope for o11y, API keys, datasets, and deploys.",
@@ -1183,6 +1284,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "tracker",
    "name": "Tracker",
    "description": "Track work as issues grouped by status — projects, a grouped List, and a Board.",
@@ -1195,6 +1297,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "tenants",
    "name": "Tenants",
    "description": "White-label tenants + resold sub-orgs — brand, domain, IAM scope, packages, and billing.",
@@ -1207,6 +1310,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "apps",
    "name": "Apps",
    "description": "The sites you build and publish in hanzo.app — live URL, deploy history, and one-click editing.",
@@ -1219,6 +1323,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "environments",
    "name": "Environments",
    "description": "Promote builds across dev, staging, and prod.",
@@ -1231,6 +1336,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "builds",
    "name": "Builds",
    "description": "Build images and artifacts from source.",
@@ -1243,6 +1349,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "registry",
    "name": "Registry",
    "description": "Container images and artifacts — ghcr.io/hanzoai.",
@@ -1255,6 +1362,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "releases",
    "name": "Releases",
    "description": "Versioned releases and rollbacks.",
@@ -1267,6 +1375,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "pipelines",
    "name": "Pipelines",
    "description": "CI/CD pipelines from commit to deploy.",
@@ -1279,6 +1388,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "clusters",
    "name": "Clusters",
    "description": "Provision and manage your Kubernetes clusters and node pools.",
@@ -1291,6 +1401,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "kubernetes",
    "name": "Kubernetes",
    "description": "Your unified compute fleet — clusters, GPUs, and connected machines.",
@@ -1303,6 +1414,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "usage",
    "name": "Usage",
    "description": "Your organization's total footprint — spend by category, LLM usage, and compute — in one place, with CSV export.",
@@ -1315,6 +1427,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "logs",
    "name": "Logs",
    "description": "Structured logs across all services.",
@@ -1327,6 +1440,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "errors",
    "name": "Errors",
    "description": "Grouped exceptions and crashes across your services.",
@@ -1339,6 +1453,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "sentry",
    "name": "Sentry",
    "description": "Sentry-class error, log and trace monitoring — issues, discover, logs, traces, monitor, and projects.",
@@ -1351,6 +1466,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "metrics",
    "name": "Metrics",
    "description": "Live platform service health and infrastructure metrics.",
@@ -1363,6 +1479,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "o11y",
    "name": "Traces",
    "description": "End-to-end LLM and agent traces.",
@@ -1375,6 +1492,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "service-map",
    "name": "Service Map",
    "description": "Per-service RED metrics and the live dependency graph.",
@@ -1387,6 +1505,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "ai-metrics",
    "name": "AI Metrics",
    "description": "Requests, tokens, spend, and per-model usage for your org.",
@@ -1399,6 +1518,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "open-edition",
    "name": "Open Edition",
    "description": "Run open-source workloads for pay — spend billed at cost + 25%, tokens, and per-model usage.",
@@ -1411,6 +1531,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "analytics",
    "name": "Analytics",
    "description": "Per-org web, commerce, and LLM analytics over the unified warehouse.",
@@ -1423,6 +1544,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "dashboards",
    "name": "Dashboards",
    "description": "Product analytics and observability dashboards.",
@@ -1435,6 +1557,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "alerts",
    "name": "Alerts",
    "description": "Alerting rules and notification policies.",
@@ -1447,6 +1570,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "billing",
    "name": "Billing",
    "description": "Balance, spend, budgets, invoices, subscriptions, and payment methods.",
@@ -1459,6 +1583,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "finance-center",
    "name": "Finance",
    "description": "Your organization’s ledger, spend, credits, invoices, and payment methods.",
@@ -1471,6 +1596,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "status",
    "name": "Status",
    "description": "Live health of every Hanzo service across your clusters.",
@@ -1483,6 +1609,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "plans",
    "name": "Plans & Pricing",
    "description": "Compare plans and pricing for every cloud service.",
@@ -1495,6 +1622,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "trading",
    "name": "Trading",
    "description": "Deploy and manage the Lux DEX market-maker and trader bots — live quote quality, order book, and controls.",
@@ -1507,6 +1635,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "markets",
    "name": "Markets",
    "description": "The Lux DEX economy — TVL/depth, 24h volume, fees, per-market price and liquidity, and recent trades from the on-chain indexer.",
@@ -1519,6 +1648,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "settlement",
    "name": "Settlement",
    "description": "On-chain settlement for compute and payouts.",
@@ -1531,6 +1661,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "wallet",
    "name": "Wallets",
    "description": "Connect a wallet and top up cloud credit with HUSD.",
@@ -1543,6 +1674,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "referrals",
    "name": "Referrals",
    "description": "Share your referral link and earn cloud credit when teams get started.",
@@ -1555,6 +1687,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "referrals-admin",
    "name": "Referrals",
    "description": "Fleet-wide referral program — invites, qualification, and credit granted.",
@@ -1567,6 +1700,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "affiliates",
    "name": "Affiliates",
    "description": "Partner with Hanzo — earn ongoing commission on the customers you refer.",
@@ -1579,6 +1713,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "affiliates-admin",
    "name": "Affiliates",
    "description": "Partner-commission program — applications, accrual, and payouts.",
@@ -1591,6 +1726,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "authors",
    "name": "Authors",
    "description": "Earn when your open-source project is deployed on Hanzo.",
@@ -1603,6 +1739,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "authors-admin",
    "name": "Authors",
    "description": "OSS-author royalty program — verifications, deploys, accruals, payouts.",
@@ -1615,6 +1752,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "entitlements",
    "name": "Entitlements",
    "description": "Manage which products the active organization has enabled.",
@@ -1627,6 +1765,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "treasury",
    "name": "Treasury",
    "description": "Platform reserve fund — revenue-share policy, backed growth-loop payouts, double-entry journal, Hanzo L1 anchor.",
@@ -1639,6 +1778,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "tokens",
    "name": "Tokens",
    "description": "Issue and manage tokens and balances.",
@@ -1651,6 +1791,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "networks",
    "name": "Networks",
    "description": "Blockchain networks — chain, nodes, status, and RPC.",
@@ -1663,6 +1804,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "indexer",
    "name": "Indexer",
    "description": "Index and query on-chain data.",
@@ -1675,6 +1817,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "oracles",
    "name": "Oracles",
    "description": "Bring off-chain data on-chain.",
@@ -1687,6 +1830,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "attestations",
    "name": "Attestations",
    "description": "Verifiable attestations and proofs.",
@@ -1699,6 +1843,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "lux-network",
    "name": "Lux Network",
    "description": "Live validators, node and pod memory, and Lux service health across the fleet — real telemetry.",
@@ -1713,6 +1858,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "lux-explorer",
    "name": "Explorer",
    "description": "Lux Network block explorer — search transactions, addresses, and contracts.",
@@ -1727,6 +1873,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "lux-exchange",
    "name": "Exchange",
    "description": "Trade digital assets on the Lux exchange.",
@@ -1741,6 +1888,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "lux-bridge",
    "name": "Bridge",
    "description": "Bridge assets across chains on the Lux Network.",
@@ -1755,6 +1903,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "lux-faucet",
    "name": "Faucet",
    "description": "Claim testnet tokens for building on Lux.",
@@ -1769,6 +1918,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "lux-safe",
    "name": "Safe",
    "description": "Multisig smart-contract wallet on Lux (Safe).",
@@ -1783,6 +1933,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "lux-dex",
    "name": "DEX",
    "description": "Swap tokens on the Lux on-chain decentralized exchange.",
@@ -1797,6 +1948,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "lux-wallet",
    "name": "Wallet",
    "description": "Manage your assets across the Lux C, P, and X chains.",
@@ -1811,6 +1963,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "zoo-explorer",
    "name": "Explorer",
    "description": "Zoo Network block explorer — search transactions, addresses, and contracts.",
@@ -1825,6 +1978,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "zoo-exchange",
    "name": "Exchange",
    "description": "Trade digital assets on the Zoo exchange.",
@@ -1839,6 +1993,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "zoo-bridge",
    "name": "Bridge",
    "description": "Bridge assets across chains on the Zoo Network.",
@@ -1853,6 +2008,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "chat",
    "name": "Chat",
    "description": "AI chat with Zen models, third-party models, and MCP tools.",
@@ -1865,6 +2021,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "bot",
    "name": "Bot",
    "description": "Agent gateway — channels, skills, and an OpenAI-compatible API.",
@@ -1877,6 +2034,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "guide",
    "name": "Guide",
    "description": "Your interactive launch checklist — the Business AI can do each step for you.",
@@ -1889,6 +2047,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "crm",
    "name": "CRM",
    "description": "Companies, contacts, and opportunities — your Business-OS CRM, per org.",
@@ -1901,6 +2060,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "company",
    "name": "Company",
    "description": "Incorporate your company — an 8-step formation wizard, from entity to equity genesis.",
@@ -1913,6 +2073,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "captable",
    "name": "Cap Table",
    "description": "Your capitalization ledger — stakeholders, share classes, issued equity, SAFEs, and rounds.",
@@ -1925,6 +2086,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "marketing",
    "name": "Marketing",
    "description": "Campaigns across channels (email, social, ads) — your marketing surface, per org.",
@@ -1937,6 +2099,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "ads",
    "name": "Ads",
    "description": "Ad campaigns across platforms (Meta, Google, TikTok, X) — your ads surface, per org.",
@@ -1949,6 +2112,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "social",
    "name": "Publish",
    "description": "Queue and publish your content everywhere — schedule and post across networks (X, Instagram, LinkedIn, TikTok), per org.",
@@ -1961,6 +2125,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "startups",
    "name": "Startups",
    "description": "Startup Program applications — AI-screened pipeline board, per org.",
@@ -1973,6 +2138,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "cms",
    "name": "Content",
    "description": "Native CMS — pages, posts, articles, media, and navigation as DocTypes on the Hanzo Framework, per organization.",
@@ -1985,6 +2151,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "erp",
    "name": "ERP",
    "description": "Native ERP on the Hanzo Framework — items, sales, purchasing, accounting, and HR as DocTypes, per organization.",
@@ -1997,6 +2164,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "helpdesk",
    "name": "Help Center",
    "description": "Native support desk on the Hanzo Framework — tickets, agents, teams, and SLAs as DocTypes, per organization.",
@@ -2009,6 +2177,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "accessibility",
    "name": "Accessibility",
    "description": "Scan the current page for WCAG accessibility issues — axe-core, in your browser.",
@@ -2021,6 +2190,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "marketplace",
    "name": "Marketplace",
    "description": "Browse and deploy AI models & providers — real pricing, live availability.",
@@ -2033,6 +2203,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "search",
    "name": "Search",
    "description": "Managed search — full-text & hybrid indexes.",
@@ -2045,6 +2216,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "websearch",
    "name": "Web Search",
    "description": "Search and crawl the web for your agents — self-hosted, no third-party keys.",
@@ -2057,6 +2229,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "crawl",
    "name": "Crawl",
    "description": "Crawl and extract the web to clean markdown for your agents — self-hosted (Crawl4AI).",
@@ -2069,6 +2242,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "studio",
    "name": "Studio",
    "description": "Build AI apps and pipelines visually.",
@@ -2081,6 +2255,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "templates",
    "name": "Templates",
    "description": "Production-ready starter kits — fork a template and deploy.",
@@ -2093,6 +2268,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "console",
    "name": "Console",
    "description": "The unified cloud console — this app.",
@@ -2105,6 +2281,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "products",
    "name": "Products",
    "description": "Your store catalog — items customers can buy.",
@@ -2117,6 +2294,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "orders",
    "name": "Orders",
    "description": "Purchases placed in your store — status, customer, and total.",
@@ -2129,6 +2307,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "customers",
    "name": "Customers",
    "description": "People who order from or have an account with your store.",
@@ -2141,6 +2320,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "inventory",
    "name": "Inventory",
    "description": "Stock on hand per SKU across your catalog.",
@@ -2153,6 +2333,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "promotions",
    "name": "Promotions",
    "description": "Discount codes and promotions customers apply at checkout.",
@@ -2165,6 +2346,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "storefront",
    "name": "Store settings",
    "description": "Storefront configuration and how payments are processed.",
@@ -2177,6 +2359,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "api-keys",
    "name": "API Keys",
    "description": "The cloud API credential for your account — SDKs, CLI, gateway.",
@@ -2189,6 +2372,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "settings",
    "name": "Settings",
    "description": "Organization and account settings — name, defaults, and branding.",
@@ -2201,6 +2385,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "contact",
    "name": "Contact",
    "description": "Reach support, sales, and the Hanzo community — the in-console assistant answers first.",
@@ -2213,6 +2398,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "prompts",
    "name": "Prompts",
    "description": "Versioned prompts with labels and history.",
@@ -2225,6 +2411,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "datasets",
    "name": "Datasets",
    "description": "Curate evaluation datasets and items.",
@@ -2237,6 +2424,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "experiments",
    "name": "Experiments",
    "description": "Dataset runs, comparisons, and experiment analytics.",
@@ -2249,6 +2437,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "sessions",
    "name": "Sessions",
    "description": "Traces grouped into multi-turn sessions.",
@@ -2261,6 +2450,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "scores",
    "name": "Scores",
    "description": "Evaluation scores from feedback, graders, and review.",
@@ -2273,6 +2463,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "score-configs",
    "name": "Score Configs",
    "description": "Score definitions — data types, ranges, and categories.",
@@ -2285,6 +2476,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "annotation-queues",
    "name": "Annotation Queues",
    "description": "Review queues for scoring traces and observations.",
@@ -2297,6 +2489,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "observations",
    "name": "Observations",
    "description": "Spans, generations, and events inside traces.",
@@ -2309,6 +2502,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "users",
    "name": "Users",
    "description": "Per-user analytics — trace volume, tokens, and cost.",
@@ -2321,6 +2515,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "memory",
    "name": "Memory",
    "description": "Your personal memory — searchable, editable, in one place.",
@@ -2333,6 +2528,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "tasks",
    "name": "Tasks",
    "description": "Durable workflows and schedules — every running and finished task.",
@@ -2345,6 +2541,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "team",
    "name": "Team",
    "description": "Organization members and roles — invite, assign roles, remove.",
@@ -2357,6 +2554,7 @@
    "published": true
   },
   {
+   "owner": "hanzo",
    "id": "profile",
    "name": "Profile",
    "description": "Your account — identity, security, and personal API keys.",

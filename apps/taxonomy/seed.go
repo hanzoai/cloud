@@ -2,11 +2,17 @@ package taxonomy
 
 // The FIRST-BOOT contents.
 //
-// seed.json is the console's hardcoded product registry, lifted out of it:
-// 184 products across 14 categories, in the order and under the categories the
+// seed.json is the console's hardcoded product registry, lifted out of it: 184
+// products across 14 categories, in the order and under the categories the
 // registry already used, with each category's one-line summary and per-brand scope
 // taken from the same place. Nothing here is invented — every field is the value
 // the TypeScript held, which is what makes the move a MOVE and not a rewrite.
+//
+// Every row is stamped `"owner": "hanzo"`. These are Hanzo's OWN products, so
+// they are the PLATFORM catalogue, and the seed says whose they are on each row
+// rather than leaving it to a default somewhere else — the check below refuses
+// any row that claims otherwise. A customer's rows are written by that customer
+// and are never seeded.
 //
 // TAGS SEED EMPTY, on purpose. The registry has no tags to carry; tags are the new
 // editable axis, and filling them from some other field (a product's Google Cloud
@@ -51,11 +57,17 @@ func seed(ctx context.Context, store *Store) (int, error) {
 		if c.ID == "" || c.Label == "" {
 			return 0, fmt.Errorf("seed category %q: id and label are required", c.ID)
 		}
+		if c.Owner != platformOrg {
+			return 0, fmt.Errorf("seed category %q is owned by %q; the seed is the PLATFORM catalogue and every row belongs to %q", c.ID, c.Owner, platformOrg)
+		}
 		known[c.ID] = true
 	}
 	for _, e := range doc.Taxa {
 		if e.ID == "" || e.Name == "" {
 			return 0, fmt.Errorf("seed taxon %q: id and name are required", e.ID)
+		}
+		if e.Owner != platformOrg {
+			return 0, fmt.Errorf("seed taxon %q is owned by %q; the seed is the PLATFORM catalogue and every row belongs to %q", e.ID, e.Owner, platformOrg)
 		}
 		if !known[e.Category] {
 			return 0, fmt.Errorf("seed taxon %q names category %q, which the seed does not define", e.ID, e.Category)
