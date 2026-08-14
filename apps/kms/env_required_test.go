@@ -32,7 +32,7 @@ func TestRESTPutSecret_RequiresEnv(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{
 		"name": "Z_PASSWORD", "path": "iam-passwords", "value": "irrelevant",
 	})
-	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil)
+	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, asOrgAdmin)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("omitted-env write = %d, want 400", resp.StatusCode)
 	}
@@ -58,7 +58,7 @@ func TestRESTPutSecret_EnvProd_ProjectEnvPath(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{
 		"name": "Z_PASSWORD", "path": "iam-passwords", "env": "prod", "value": secret,
 	})
-	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil)
+	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, asOrgAdmin)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("explicit-env write = %d, want 200: %s", resp.StatusCode, readAll(resp.Body))
 	}
