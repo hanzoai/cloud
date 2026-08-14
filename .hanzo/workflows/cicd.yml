@@ -136,10 +136,27 @@ jobs:
         run: |
           set -euo pipefail
           base="${{ github.event.before }}"
-          # A new branch, or a forge that reports no predecessor, arrives as the
-          # zero sha. Fall back to the first parent; a merge is reviewed against
-          # the line it lands on, which is the change this release actually adds.
-          case "$base" in ""|0000000*) base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)";; esac
+          # This forge reports no predecessor, so the fallback below is the rule
+          # in practice and not the exception it reads as.
+          #
+          # The first parent is the WRONG base for a merge. `git merge main` on a
+          # branch records that branch as parent 1, so HEAD~1 walks away from the
+          # line being landed on and the diff becomes every commit main took while
+          # the branch sat still — 4.78MB of already-released code, refused at the
+          # 400KB bound, blocking a release whose tree was identical to the one
+          # already shipped. The bound was right; it was reading the wrong change.
+          #
+          # The last release reachable from HEAD is the honest base: what this push
+          # ADDS to what shipped. A merge is then measured by what it brings rather
+          # than by which side of it git happened to record first, and it reads a
+          # SUPERSET of what `before` would have — a commit that landed without a
+          # release stays in the diff until a release carries it out. More is
+          # reviewed, never less, which is the only direction this may move in.
+          case "$base" in ""|0000000*)
+            base="$(git describe --tags --abbrev=0 --match 'v*' HEAD 2>/dev/null \
+                 || git rev-parse HEAD~1 2>/dev/null \
+                 || git rev-parse HEAD)";;
+          esac
           bash .hanzo/review/review.sh "$base" "${{ github.sha }}"
 
   # ══ CAR 0 ══ THE DOCUMENT EQUALS THE CODE. Everything below `needs:` this.
