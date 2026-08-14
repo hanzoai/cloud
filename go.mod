@@ -77,7 +77,7 @@ require (
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
-	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
+	github.com/hanzo-ds/sqlparser v0.4.17 // indirect
 	github.com/hanzoai/csqlite v0.1.2 // indirect
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
