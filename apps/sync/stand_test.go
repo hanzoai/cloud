@@ -233,10 +233,22 @@ func newHost(t *testing.T) *host {
 const forgeToken = "stand-machine-token"
 
 // stand is a git host that ALSO answers the forge REST calls this seam makes, on
-// the same origin — create a repository, read one, list them, point HEAD.
+// the same origin — create a repository, read one, list them, point HEAD, and
+// state a branch rule.
 type stand struct {
 	*host
 	owner string
+
+	rulesMu sync.Mutex
+	rules   map[string]map[string]any // repo → the last branch rule asked for
+}
+
+// rule returns the branch-protection rule the seam asked this stand to write on
+// repo, or nil if it asked for none.
+func (s *stand) rule(repo string) map[string]any {
+	s.rulesMu.Lock()
+	defer s.rulesMu.Unlock()
+	return s.rules[repo]
 }
 
 // newStand serves a forge stand-in and points the deployment at it.
@@ -261,8 +273,8 @@ func newStand(t *testing.T, owner string) *stand {
 	return s
 }
 
-// rest answers the four forge endpoints this seam uses. Every one of them checks
-// the machine credential, so a call that lost it fails here rather than silently
+// rest answers the forge endpoints this seam uses. Every one of them checks the
+// machine credential, so a call that lost it fails here rather than silently
 // succeeding against an open stub.
 func (s *stand) rest(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Authorization") != "token "+forgeToken {
@@ -271,6 +283,22 @@ func (s *stand) rest(w http.ResponseWriter, r *http.Request) {
 	}
 	seg := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/"), "/"), "/")
 	switch {
+	// POST /v1/repos/{owner}/{repo}/branch_protections — state a branch rule.
+	//
+	// The rule is REMEMBERED rather than enforced: this stand serves real
+	// git-http-backend, which knows nothing of the forge's pre-receive, so what a
+	// test can prove here is that the seam asked for the right rule. That it is
+	// the rule the forge acts on is the forge's own contract (protect.go).
+	case r.Method == http.MethodPost && len(seg) == 4 && seg[0] == "repos" && seg[3] == "branch_protections":
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		s.rulesMu.Lock()
+		if s.rules == nil {
+			s.rules = map[string]map[string]any{}
+		}
+		s.rules[seg[2]] = in
+		s.rulesMu.Unlock()
+		s.reply(w, in)
 	// POST /v1/orgs/{owner}/repos — create.
 	case r.Method == http.MethodPost && len(seg) == 3 && seg[0] == "orgs" && seg[2] == "repos":
 		var in struct {
