@@ -206,23 +206,30 @@ type planeSink struct {
 // change exists to end, so it must never pass silently. The key is only marked
 // once the write succeeded — a failed attempt is retried by the next batch rather
 // than remembered as done.
-func (ps *planeSink) rememberResource(ctx context.Context, log luxlog.Logger, row []any) {
-	if len(row) == 0 {
-		return
-	}
-	key := fmt.Sprint(row[0], "\x00", row[1], "\x00", row[3])
-
+func (ps *planeSink) rememberResource(ctx context.Context, log luxlog.Logger, rows [][]any) {
+	pending := make([][]any, 0, len(rows))
+	keys := make([]string, 0, len(rows))
 	ps.mu.Lock()
 	if ps.seen == nil {
 		ps.seen = map[string]struct{}{}
 	}
-	_, done := ps.seen[key]
+	for _, row := range rows {
+		if len(row) != len(planeLogResourceColumns) {
+			continue
+		}
+		key := fmt.Sprint(row[0], "\x00", row[1], "\x00", row[3])
+		if _, done := ps.seen[key]; done {
+			continue
+		}
+		pending = append(pending, row)
+		keys = append(keys, key)
+	}
 	ps.mu.Unlock()
-	if done {
+	if len(pending) == 0 {
 		return
 	}
 
-	if err := ps.sink.Insert(ctx, planeLogResourceTable, planeLogResourceColumns, [][]any{row}); err != nil {
+	if err := ps.sink.Insert(ctx, planeLogResourceTable, planeLogResourceColumns, pending); err != nil {
 		log.Warn("plane log resource identity not stated — rows in this batch are unreachable by a resource filter until it is",
 			"table", planeLogResourceTable, "err", err)
 		return
@@ -236,7 +243,9 @@ func (ps *planeSink) rememberResource(ctx context.Context, log luxlog.Logger, ro
 	if len(ps.seen) > 8192 {
 		ps.seen = map[string]struct{}{}
 	}
-	ps.seen[key] = struct{}{}
+	for _, key := range keys {
+		ps.seen[key] = struct{}{}
+	}
 	ps.mu.Unlock()
 }
 
@@ -285,7 +294,7 @@ func mountPlaneIngest(deps cloud.Deps) error {
 			// row is unreadable by any filter; a resource row nothing points at
 			// yet is merely early. Ordering the pair this way means a crash
 			// between the two never loses something a reader could have seen.
-			ps.rememberResource(ctx, log, logResourceRowOf(b, time.Now().UTC()))
+			ps.rememberResource(ctx, log, logResourceRowsOf(b, time.Now().UTC()))
 			return ps.sink.Insert(ctx, planeLogTable, planeLogColumns, rows)
 		},
 	})
@@ -443,10 +452,20 @@ func planeResource(resource map[string]string, service string) (fingerprint, lab
 	return strconv.FormatUint(h.Sum64(), 10), string(b)
 }
 
-// logResourceRowOf is the identity row for a batch, in the bucket it was observed
-// in. One row per batch; the table is a ReplacingMergeTree keyed by the identity,
-// so re-stating a resource each bucket costs one collapsed row rather than growth.
-func logResourceRowOf(b *zaplogreceiver.LogBatch, at time.Time) []any {
+// logResourceRowsOf is the identity of a batch's resource, in the bucket it was
+// observed in and under EVERY tenant whose rows point at it.
+//
+// One row per distinct org, not one per batch, because org is a per-RECORD fact
+// here (planeOrg reads hanzo.org off the record) and one process serves many
+// tenants: the ai binary answers for every org that calls it, so a single batch
+// routinely carries several. The identity table is keyed (org, bucket,
+// fingerprint), so an identity written under one tenant does not resolve for
+// another — naming only the first record's org would leave every other tenant in
+// the batch exactly as unreachable as writing nothing.
+//
+// The table is a ReplacingMergeTree on that key, so re-stating a resource every
+// bucket collapses rather than accumulates.
+func logResourceRowsOf(b *zaplogreceiver.LogBatch, at time.Time) [][]any {
 	if b == nil || len(b.Records) == 0 {
 		return nil
 	}
@@ -455,20 +474,24 @@ func logResourceRowOf(b *zaplogreceiver.LogBatch, at time.Time) []any {
 	if fp == "" {
 		return nil
 	}
-	org := planeOrg(b.Resource)
-	if len(b.Records) > 0 {
-		// The org a log row lands under is per-RECORD (planeOrg reads hanzo.org off
-		// the record), and the resource row has to be reachable from the rows it
-		// identifies, so take the first record's org rather than the batch's.
-		attrs := make(map[string]string, len(b.Resource)+len(b.Records[0].Attributes))
+	bucket := at.Unix() / resourceBucket * resourceBucket
+
+	rows := make([][]any, 0, 1)
+	seen := make(map[string]struct{}, 1)
+	for _, r := range b.Records {
+		attrs := make(map[string]string, len(b.Resource)+len(r.Attributes))
 		maps.Copy(attrs, b.Resource)
-		for k, v := range b.Records[0].Attributes {
+		for k, v := range r.Attributes {
 			attrs[k] = attrString(v)
 		}
-		org = planeOrg(attrs)
+		org := planeOrg(attrs)
+		if _, dup := seen[org]; dup {
+			continue
+		}
+		seen[org] = struct{}{}
+		rows = append(rows, []any{org, fp, labels, bucket})
 	}
-	bucket := at.Unix() / resourceBucket * resourceBucket
-	return []any{org, fp, labels, bucket}
+	return rows
 }
 
 // logRowsOf renders one wire LogBatch as event.log rows.

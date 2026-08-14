@@ -554,7 +554,11 @@ func TestLogRowsCarryTheirResourceIdentity(t *testing.T) {
 		t.Fatal("row carries no resource_fingerprint — nothing a resource filter selects can reach it")
 	}
 
-	res := logResourceRowOf(b, time.Now().UTC())
+	all := logResourceRowsOf(b, time.Now().UTC())
+	if len(all) != 1 {
+		t.Fatalf("got %d identity rows, want 1", len(all))
+	}
+	res := all[0]
 	if len(res) != len(planeLogResourceColumns) {
 		t.Fatalf("resource row has %d values, want %d", len(res), len(planeLogResourceColumns))
 	}
@@ -582,9 +586,34 @@ func TestLogRowsCarryTheirResourceIdentity(t *testing.T) {
 		t.Errorf("identity org = %v, want acme (the record's hanzo.org)", res[0])
 	}
 
+	// A batch from a multi-tenant process carries several orgs, and the identity
+	// has to be reachable in EVERY one of them — the table is keyed (org, bucket,
+	// fingerprint), so a tenant whose identity was never stated is exactly as
+	// unreachable as one whose rows were never written.
+	multi := &zaplogreceiver.LogBatch{
+		AppName:  "ai",
+		Resource: map[string]string{"deployment.environment": "production"},
+		Records: []zaplogreceiver.LogRecord{
+			{TimeUnixNs: time.Now().UnixNano(), Body: "a", Attributes: map[string]any{"hanzo.org": "acme"}},
+			{TimeUnixNs: time.Now().UnixNano(), Body: "b", Attributes: map[string]any{"hanzo.org": "globex"}},
+			{TimeUnixNs: time.Now().UnixNano(), Body: "c", Attributes: map[string]any{"hanzo.org": "acme"}},
+		},
+	}
+	rowsMulti := logResourceRowsOf(multi, time.Now().UTC())
+	if len(rowsMulti) != 2 {
+		t.Fatalf("got %d identity rows for a 2-tenant batch, want 2 (one per distinct org)", len(rowsMulti))
+	}
+	orgs := map[any]bool{rowsMulti[0][0]: true, rowsMulti[1][0]: true}
+	if !orgs["acme"] || !orgs["globex"] {
+		t.Errorf("identity orgs = %v, want acme and globex", orgs)
+	}
+	if rowsMulti[0][1] != rowsMulti[1][1] {
+		t.Error("one resource must have one fingerprint across tenants")
+	}
+
 	// The bucket is the 30-minute window the reader bounds its CTE by.
 	at := time.Unix(1786672000, 0).UTC()
-	if got := logResourceRowOf(b, at)[3].(int64); got != 1786671000 {
+	if got := logResourceRowsOf(b, at)[0][3].(int64); got != 1786671000 {
 		t.Errorf("bucket = %d, want 1786671000 (floor to %ds)", got, resourceBucket)
 	}
 }
