@@ -141,7 +141,11 @@ func ensure(ctx context.Context, org, slug, description string, listed bool) (st
 	}
 	ghOrg := owner()
 	repoURL := fmt.Sprintf("https://github.com/%s/%s.git", ghOrg, name)
-	api := fmt.Sprintf("%s/repos/%s/%s", api,
+	// Named for what it addresses, and NOT `api`: shadowing the root here built
+	// the create endpoint out of the repo endpoint, so a create went to
+	// /repos/<org>/<name>/orgs/<org>/repos — a path GitHub answers 404, on the
+	// one call that has to work before any replica exists at all.
+	endpoint := fmt.Sprintf("%s/repos/%s/%s", api,
 		url.PathEscape(ghOrg), url.PathEscape(name))
 
 	// Visibility is the ONE field this owns. Description is sent only at create
@@ -153,7 +157,7 @@ func ensure(ctx context.Context, org, slug, description string, listed bool) (st
 	// live hanzo-community org — with `private` here, creates would have worked
 	// and every RETRACTION would have silently failed, which is precisely the
 	// direction that cannot be allowed to fail.
-	code, err := call(ctx, http.MethodPatch, api, map[string]any{"visibility": visibility(listed)})
+	code, err := call(ctx, http.MethodPatch, endpoint, map[string]any{"visibility": visibility(listed)})
 	if err != nil {
 		return "", fmt.Errorf("github: patch %s/%s: %w", ghOrg, name, err)
 	}
@@ -167,7 +171,7 @@ func ensure(ctx context.Context, org, slug, description string, listed bool) (st
 	// Not there yet: create it, born with the right visibility so a private
 	// project is never briefly public. auto_init stays false — the first mirror
 	// push carries the real history, and an initial commit would collide with it.
-	create := fmt.Sprintf("%s/orgs/%s/repos", api, url.PathEscape(ghOrg))
+	create := fmt.Sprintf("%s/orgs/%s/repos", api, url.PathEscape(ghOrg)) // the API root, not the repo
 	code, err = call(ctx, http.MethodPost, create, map[string]any{
 		"name": name, "description": description,
 		"private": !listed, "auto_init": false, "has_wiki": false,

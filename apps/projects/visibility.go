@@ -149,8 +149,9 @@ const community = "hanzo-community"
 // alphabet either half is allowed and `_` is not in it. A `-` would not have
 // that property — org `a` slug `b-c` and org `a-b` slug `c` both spell `a-b-c`,
 // and the second tenant would be publishing, and un-publishing, the first
-// tenant's source. That is the same collision the GitHub replica's `<org>-<slug>`
-// carries, and it is not carried here.
+// tenant's source. The GitHub replica carried exactly that collision until it
+// was minted by this rule too (apps/git: name), so one name now means one
+// project on every host.
 //
 // So the name is INVERTIBLE, which is what lets the audit read a repository back
 // to the one project that can have minted it — see [parts].
@@ -306,12 +307,24 @@ func apply(ctx context.Context, m *forge.Client, name string, w want, p Project)
 // the caller's plane identity as the tenant, so a caller that could name an org
 // would be publishing — and un-publishing — into another tenant's repositories.
 //
+// Which is why the identity is CHECKED here before anything crosses. The tenant
+// is stated once, where the work leaves the request ([detach]), and a context
+// that acts for anyone else cannot have got here honestly: an inbound request
+// outranks a stated caller, so a ctx that still carries one would send the git
+// app whatever the request's headers say — the wrong tenant's repositories, or
+// (from a request already answered and recycled) nobody's, which the git app
+// refuses and which would silently leave a retraction unmade. Refusing is loud,
+// retried, and cannot act on the wrong tenant.
+//
 // A failure is RETURNED and not swallowed. Logging it and moving on is exactly
 // how a project ends up private in the row, closed on the forge and readable on
 // github.com with nothing left that will ever notice; the caller retries, and
 // past the retries it is an ERROR naming the repository.
 func tell(ctx context.Context, org, slug string, w want, p Project) error {
-	_, err := gitplane.GitPublish(cloud.For(ctx, org), &plane.Visibility{
+	if who := cloud.Who(ctx).Org; who != org {
+		return fmt.Errorf("git: %s %s/%s: this call acts for %q", w, org, slug, who)
+	}
+	_, err := gitplane.GitPublish(ctx, &plane.Visibility{
 		Slug: slug, Name: p.Name, Description: p.Description, State: string(w),
 	})
 	if err != nil {
@@ -401,33 +414,59 @@ const (
 	vet
 )
 
+// emptied is which copies of one name have ALREADY been destroyed, carried from
+// one attempt of a [renew] to the next.
+//
+// The emptying is a one-time act and not a converge, which is the difference
+// between it and everything else here. A retry that repeated it would delete
+// what the attempt before it created — the author's repository, seconds old,
+// with whatever they have pushed into it — and it would do that once per rung of
+// the retry ladder for as long as the OTHER half keeps failing. So a copy is
+// emptied while it has not been, and never again.
+//
+// It is per copy because the copies fail independently: a delete that landed on
+// the forge and not on the git app must be re-attempted THERE and nowhere else.
+type emptied struct {
+	forge bool // the repository this name held on the forge is gone
+	git   bool // and the two the git app holds
+}
+
 // run makes one attempt at bringing one project's repository — every copy of it
-// — into line.
+// — into line, and reports what it has emptied so the attempt after it does not
+// empty it again.
 //
 // The two halves are kept apart on purpose. Each copy's converge is GATED ON ITS
 // OWN destruction, so a leftover that could not be destroyed is never opened;
 // and neither half is held back by the other's failure, so a git app that is
 // away cannot stop the forge from closing and a forge that is away cannot stop
 // the other two. Both answers are reported, the step fails if either did, and
-// the retry re-runs both — every half is idempotent.
-func (st step) run(s *cloud.Service[state], ctx context.Context, org, slug, name string) error {
+// the retry re-runs what did not land.
+func (st step) run(s *cloud.Service[state], ctx context.Context, org, slug, name string, done emptied) (emptied, error) {
 	m, err := machine(s, ctx)
 	if err != nil {
-		return err
+		return done, err
 	}
 	// wrote is the forge's copy; told is the git app's two.
 	var wrote, told error
 	if st == renew {
-		wrote = apply(ctx, m, name, gone, Project{})
-		told = tell(ctx, org, slug, gone, Project{})
+		if !done.forge {
+			if wrote = apply(ctx, m, name, gone, Project{}); wrote == nil {
+				done.forge = true
+			}
+		}
+		if !done.git {
+			if told = tell(ctx, org, slug, gone, Project{}); told == nil {
+				done.git = true
+			}
+		}
 	}
 	w, p, err := wanted(s, ctx, org, slug)
 	if err != nil {
-		return errors.Join(wrote, told, err)
+		return done, errors.Join(wrote, told, err)
 	}
 	if st == vet {
 		if w == open {
-			return nil // a live row permits it: not the audit's business
+			return done, nil // a live row permits it: not the audit's business
 		}
 		// CLOSED, and only closed: never opened and never deleted, on any copy. Nor
 		// is one built on the forge — the audit acts on repositories it found open,
@@ -435,18 +474,21 @@ func (st step) run(s *cloud.Service[state], ctx context.Context, org, slug, name
 		// makes of a copy it does not have is its own call, and the worst it can
 		// cost is a closed repository, which is the half this is allowed to spend.
 		_, err := retract(ctx, m, name)
-		return errors.Join(err, tell(ctx, org, slug, shut, p))
+		return done, errors.Join(err, tell(ctx, org, slug, shut, p))
 	}
 	if st == renew && w == gone {
-		return errors.Join(wrote, told) // emptied above, and nobody has claimed it
+		return done, errors.Join(wrote, told) // emptied above, and nobody claimed it
 	}
+	// Each copy converges only if ITS OWN leftover is gone — now or on an earlier
+	// attempt. A copy whose deletion is still outstanding is left alone rather
+	// than opened over.
 	if wrote == nil {
 		wrote = apply(ctx, m, name, w, p)
 	}
 	if told == nil {
 		told = tell(ctx, org, slug, w, p)
 	}
-	return errors.Join(wrote, told)
+	return done, errors.Join(wrote, told)
 }
 
 // ── running a step ───────────────────────────────────────────────────────────
@@ -462,8 +504,8 @@ func (st step) run(s *cloud.Service[state], ctx context.Context, org, slug, name
 //
 // That is a create-only move. It is the moment a name changes hands, and the
 // only moment at which destroying what the name holds is right.
-func born(s *cloud.Service[state], ctx context.Context, p Project) {
-	enqueue(s, ctx, p.Org, p.Slug, renew)
+func born(s *cloud.Service[state], p Project) {
+	enqueue(s, p.Org, p.Slug, renew)
 }
 
 // share brings a project's repository into step with its row, behind the write.
@@ -476,15 +518,16 @@ func born(s *cloud.Service[state], ctx context.Context, p Project) {
 // rather than created, and the visibility is set rather than toggled — so a
 // redundant firing costs a read.
 //
-// It does not run on the caller's request. The row is already committed and is
-// what anyone reads; the forge is downstream of it, costs several round trips,
-// and must not be able to fail, slow or cancel a project write. That last one is
-// not a nicety: the request's context dies when the browser tab does, and a
-// close that inherited it would be abandoned halfway by a publisher who clicked
-// "private" and then closed the tab — which is precisely the state that must
-// never be left behind.
-func share(s *cloud.Service[state], ctx context.Context, p Project) {
-	enqueue(s, ctx, p.Org, p.Slug, reconcile)
+// It does not run on the caller's request, and it does not run on the caller's
+// CONTEXT either ([detach]). The row is already committed and is what anyone
+// reads; the forge is downstream of it, costs several round trips, and must not
+// be able to fail, slow or cancel a project write. That last one is not a
+// nicety: the request's context dies when the browser tab does, and a close that
+// inherited it would be abandoned halfway by a publisher who clicked "private"
+// and then closed the tab — which is precisely the state that must never be left
+// behind.
+func share(s *cloud.Service[state], p Project) {
+	enqueue(s, p.Org, p.Slug, reconcile)
 }
 
 // forget takes a deleted project's source off every copy, BEFORE the delete
@@ -503,16 +546,19 @@ func share(s *cloud.Service[state], ctx context.Context, p Project) {
 // failure is retried behind the answer, on a context the closing tab cannot
 // cancel, and past that it is caught by [sweep] — which finds an open repository
 // no row permits.
-func forget(s *cloud.Service[state], ctx context.Context, p Project) {
+func forget(s *cloud.Service[state], p Project) {
 	name, ok := repoName(p.Org, p.Slug)
 	if !ok {
 		return // it was never published: see repoName
 	}
-	ctx = context.WithoutCancel(ctx)
+	// Its own context, even here where the caller's is still alive: the tenant
+	// this acts for is the project's, never the request's headers ([detach]).
+	ctx := detach(p.Org)
 	var err error
+	var done emptied
 	run := func() {
 		one, cancel := context.WithTimeout(ctx, hurry)
-		err = renew.run(s, one, p.Org, p.Slug, name)
+		done, err = renew.run(s, one, p.Org, p.Slug, name, done)
 		cancel()
 	}
 	if held := s.State.queue.hold(p.Org+"/"+p.Slug, run); !held {
@@ -537,12 +583,14 @@ func forget(s *cloud.Service[state], ctx context.Context, p Project) {
 	// while that create's run went on to OPEN the repository behind it: an open
 	// repository, no row, and a delete that answered 204. Queued behind that run,
 	// the follow-up is the one that sees what it left.
-	enqueue(s, ctx, p.Org, p.Slug, renew)
+	enqueue(s, p.Org, p.Slug, renew)
 }
 
 // enqueue runs one step for one project: one at a time per project, retried, and
-// on a context the caller's request cannot cancel.
-func enqueue(s *cloud.Service[state], ctx context.Context, org, slug string, do step) {
+// on a context of its own.
+//
+// It takes no context from its caller, which is the tenancy (see [detach]).
+func enqueue(s *cloud.Service[state], org, slug string, do step) {
 	name, ok := repoName(org, slug)
 	if !ok {
 		// Said once, here, rather than discovered five attempts later: a name this
@@ -552,8 +600,37 @@ func enqueue(s *cloud.Service[state], ctx context.Context, org, slug string, do 
 			"org", org, "slug", slug)
 		return
 	}
-	ctx = context.WithoutCancel(ctx)
+	ctx := detach(org)
 	s.State.queue.add(org+"/"+slug, do, func() { settle(s, ctx, org, slug, name, do) })
+}
+
+// detach is the context every step here runs on: BACKGROUND, carrying the
+// project's own tenant and nothing else.
+//
+// It is built from background rather than from the request, and that is the
+// whole of the tenancy. [tell] names the tenant with cloud.For, which zip reads
+// ONLY where no request is behind the context — an inbound request always wins
+// (zip.CallerOf is acting, then request, then stated). A step that carried the
+// handler's context would therefore ignore the org named here and send the git
+// app whatever the inbound headers say instead.
+//
+// And the request does not survive its handler. The server resets that context
+// and returns it to a pool the moment the answer goes out, so a step running a
+// moment later reads the org off a recycled buffer: EMPTY, which the git app
+// refuses outright, or — once the buffer is refilled — ANOTHER TENANT'S, which
+// it would not. Either way the retraction never reaches the two copies the git
+// app holds, and the audit walks the forge and never learns of it.
+// context.WithoutCancel is not enough: it drops the deadline and KEEPS every
+// value, the request pointer among them.
+//
+// Nothing is lost by starting from background. A step reads its row from this
+// process's own store, resolves the forge credential from KMS by a ref that
+// carries its own tenant, and states the org to the git app; none of that came
+// from the request. What is dropped is cancellation, which is deliberate and was
+// already the case — a publisher who clicks "private" and closes the tab must
+// not abandon the close halfway.
+func detach(org string) context.Context {
+	return cloud.For(context.Background(), org)
 }
 
 // tries is how long a step keeps trying before it gives up and says so.
@@ -565,7 +642,8 @@ func enqueue(s *cloud.Service[state], ctx context.Context, org, slug string, do 
 // made private, may be never.
 //
 // Each attempt re-reads the row, so a retry applies whatever is true when it
-// runs and never resurrects the state it started with.
+// runs and never resurrects the state it started with. What an attempt does NOT
+// repeat is a destruction that already landed — see [emptied].
 var tries = []time.Duration{0, 2 * time.Second, 8 * time.Second, 30 * time.Second, 90 * time.Second}
 
 const (
@@ -587,20 +665,25 @@ const (
 // that point the deployment holds a repository whose visibility disagrees with
 // the row, and the only two things that will fix it are the next write to that
 // project and [sweep].
+//
+// What one attempt EMPTIED is carried into the next, so the retries converge
+// rather than starting the step over: a destruction is a one-time act, and
+// repeating it would destroy what the attempt before it built (see [emptied]).
 func settle(s *cloud.Service[state], ctx context.Context, org, slug, name string, do step) {
 	var err error
+	var done emptied
 	for _, wait := range tries {
 		if wait > 0 {
 			time.Sleep(wait)
 		}
 		attempt, cancel := context.WithTimeout(ctx, budget)
-		err = do.run(s, attempt, org, slug, name)
+		done, err = do.run(s, attempt, org, slug, name, done)
 		cancel()
 		if err == nil {
 			return
 		}
 	}
-	s.Log.Error("a project's source never reached the forge",
+	s.Log.Error("a project's source never reached every copy",
 		"org", org, "slug", slug, "repo", community+"/"+name, "err", err)
 }
 
@@ -749,9 +832,19 @@ func sweep(s *cloud.Service[state], ctx context.Context) error {
 	// The forge's answer NOW, not through its read cache: a list minutes old
 	// would have the audit act on a repository that has since changed, and skip
 	// one that has since been opened.
-	repos, err := m.Inventory(ctx, community)
+	repos, whole, err := m.Inventory(ctx, community)
 	if err != nil {
 		return err
+	}
+	if !whole {
+		// The namespace outgrew one walk. This closes what it CAN see and says so
+		// at ERROR, because the alternative — refusing to sweep a list that is not
+		// complete — is an audit that stops running for good, which is worse than
+		// one that runs short and is also something a tenant could arrange by
+		// minting projects. Every project takes a repository here, private ones
+		// included, so this is a count of projects and not of public ones.
+		s.Log.Error("visibility audit: the community namespace is larger than one walk reads; the repositories past it are NOT audited",
+			"walked", len(repos), "namespace", community)
 	}
 	readable := 0
 	for _, r := range repos {
@@ -784,7 +877,7 @@ func sweep(s *cloud.Service[state], ctx context.Context) error {
 		}
 		s.Log.Error("visibility audit: an open repository no live project permits",
 			"org", org, "slug", slug, "repo", community+"/"+r.Name)
-		enqueue(s, ctx, org, slug, vet)
+		enqueue(s, org, slug, vet)
 	}
 	s.Log.Info("visibility audit", "repos", len(repos), "readable", readable)
 	return nil

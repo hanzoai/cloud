@@ -344,6 +344,7 @@ func (v vault) Sign(context.Context, string, []byte) ([]byte, error) {
 type scribe struct {
 	mu   sync.Mutex
 	said []said
+	away bool // refuse everything, as an app that is down or redeploying does
 }
 
 // said is one fact AND the tenant it arrived for. The org is not a field of the
@@ -356,6 +357,12 @@ type said struct {
 
 // listen serves git.publish on git's own socket. Registration is process-global,
 // so it also gives this test its own run dir.
+//
+// It REFUSES an anonymous call, exactly as the real handler does (apps/git,
+// planePublish: "git publish: org required"). That refusal is the whole reason
+// the tenant has to be carried rather than inherited: a stand-in that accepted
+// an empty org would be green over a seam whose every retraction the real git
+// app throws away.
 func listen(t *testing.T) *scribe {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
@@ -363,9 +370,16 @@ func listen(t *testing.T) *scribe {
 	app := zip.New(zip.Config{AppName: "git"})
 	zip.Post[plane.Visibility, struct{}](app, "/git/publish",
 		func(ctx context.Context, ev *plane.Visibility) (*struct{}, error) {
+			org := cloud.Who(ctx).Org
 			sc.mu.Lock()
 			defer sc.mu.Unlock()
-			sc.said = append(sc.said, said{Visibility: *ev, Org: cloud.Who(ctx).Org})
+			sc.said = append(sc.said, said{Visibility: *ev, Org: org})
+			switch {
+			case org == "":
+				return nil, zip.ErrForbidden("git publish: org required")
+			case sc.away:
+				return nil, zip.Errorf(http.StatusBadGateway, "git publish: away")
+			}
 			return nil, nil
 		}, zip.WithOperationID(plane.GitPublish))
 	go func() { _ = app.Listen(zip.SocketPath("git")) }()
@@ -403,6 +417,54 @@ func (sc *scribe) heard(slug, state string) bool {
 		}
 	}
 	return false
+}
+
+// forOrg fails unless EVERY fact stated for a slug arrived for want, and unless
+// something was stated at all.
+//
+// The org is not a field of the fact — the far side reads it off the caller — so
+// this is the only place the tenancy of this seam is visible, and it has to be
+// asked on every path rather than on the one that happens to work. An empty org
+// is the git app's 403; another tenant's is that tenant's repositories.
+func (sc *scribe) forOrg(t *testing.T, slug, want string) {
+	t.Helper()
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	said := 0
+	for _, s := range sc.said {
+		if s.Slug != slug {
+			continue
+		}
+		said++
+		if s.Org != want {
+			t.Fatalf("the %q fact for %s arrived for org %q, want %q: the tenant did not survive the hop",
+				s.State, slug, s.Org, want)
+		}
+	}
+	if said == 0 {
+		t.Fatalf("nothing was ever stated to the git app for %s", slug)
+	}
+}
+
+// leave makes the git app refuse everything, as one that is down or redeploying
+// does. It answers AFTER recording, so a test can still count the attempts.
+func (sc *scribe) leave() {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.away = true
+}
+
+// heardOf is how many facts crossed for a slug, refused ones included.
+func (sc *scribe) heardOf(slug string) int {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	n := 0
+	for _, s := range sc.said {
+		if s.Slug == slug {
+			n++
+		}
+	}
+	return n
 }
 
 // states is every state stated for a slug, IN ORDER — which is the half that
@@ -664,10 +726,8 @@ func TestEveryCopyFollowsTheRow(t *testing.T) {
 		})
 		// The TENANT RIDES THE CALL and is not a field of the fact: a caller that
 		// could name an org would be publishing into another tenant's repositories.
+		sc.forOrg(t, "board", "acme")
 		ev, _ := sc.last("board")
-		if ev.Org != "acme" {
-			t.Fatalf("the fact arrived for org %q, want acme", ev.Org)
-		}
 		if ev.Name != "board" || ev.Description != "" {
 			t.Fatalf("the repository seed must carry the project's own name: %+v", ev)
 		}
@@ -686,6 +746,9 @@ func TestEveryCopyFollowsTheRow(t *testing.T) {
 			ev, ok := sc.last("secret")
 			return ok && ev.State == plane.Shut && !f.readable(t, "acme_secret")
 		})
+		// On the RETRACTION path too, which is where a tenant read off the inbound
+		// request rather than the project is a close the git app throws away.
+		sc.forOrg(t, "secret", "acme")
 	})
 
 	t.Run("moderation", func(t *testing.T) {
@@ -701,6 +764,7 @@ func TestEveryCopyFollowsTheRow(t *testing.T) {
 			ev, ok := sc.last("spam")
 			return ok && ev.State == plane.Shut && !f.readable(t, "acme_spam")
 		})
+		sc.forOrg(t, "spam", "acme")
 	})
 
 	t.Run("the project is deleted", func(t *testing.T) {
@@ -719,7 +783,43 @@ func TestEveryCopyFollowsTheRow(t *testing.T) {
 		if !sc.heard("board", plane.Gone) {
 			t.Fatalf("the delete answered before the other copies were retired: %v", sc.states("board"))
 		}
+		sc.forOrg(t, "board", "acme")
 	})
+}
+
+// A RETRY MUST NOT DESTROY THE AUTHOR'S REPOSITORY.
+//
+// The create empties the name before it fills it, and emptying is a ONE-TIME
+// ACT. A step that repeated it on every attempt would delete what the attempt
+// before it created — once per rung of the retry ladder, for as long as the
+// other half keeps failing — and anything the author pushed in that window is
+// gone. So the destruction that landed is carried across the attempts, and what
+// retries is the half that did not.
+func TestARetryDoesNotDestroyTheAuthorsRepository(t *testing.T) {
+	app, f, sc := mountShared(t)
+	sc.leave() // the git app is away for every attempt, so the step keeps failing
+
+	create(t, app, "board")
+	settled(t, "the author's repository to exist", func() bool { return f.exists("acme_board") })
+	first := f.mark(t, "acme_board")
+
+	// Watch it across the first rungs of the ladder (0s, +2s). The repository must
+	// stay the SAME repository — a new mark is a repository that was destroyed and
+	// rebuilt under the author.
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		if f.exists("acme_board") {
+			if got := f.mark(t, "acme_board"); got != first {
+				t.Fatalf("the author's repository was destroyed and replaced (#%d → #%d): a retry repeated the emptying",
+					first, got)
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	// And the retries really did run — otherwise this proves nothing.
+	if n := sc.heardOf("board"); n < 2 {
+		t.Fatalf("the git app was asked %d time(s); the retry ladder did not run", n)
+	}
 }
 
 // A git app that is AWAY can neither fail a project write nor hold back the
@@ -1188,7 +1288,7 @@ func TestTheAuditNeverOpens(t *testing.T) {
 		t.Fatal("the audit opened a repository")
 	}
 	// Nor does its per-repository check, reached directly.
-	if err := vet.run(s, t.Context(), "acme", "board", "acme_board"); err != nil {
+	if _, err := vet.run(s, t.Context(), "acme", "board", "acme_board", emptied{}); err != nil {
 		t.Fatalf("vet: %v", err)
 	}
 	if f.readable(t, "acme_board") {
@@ -1224,7 +1324,7 @@ func TestTheAuditLetsGoAProjectThatGoesPublicMidWalk(t *testing.T) {
 
 	// And the same one level further in: the check that DECIDES runs behind the
 	// queue, long after the walk, and re-reads the row there too.
-	if err := vet.run(s, t.Context(), "acme", "board", "acme_board"); err != nil {
+	if _, err := vet.run(s, t.Context(), "acme", "board", "acme_board", emptied{}); err != nil {
 		t.Fatalf("vet: %v", err)
 	}
 	if !f.readable(t, "acme_board") {
