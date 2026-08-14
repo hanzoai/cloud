@@ -435,8 +435,13 @@ func validateGitSource(e endpointReq) (Endpoint, error) {
 		return Endpoint{}, zip.ErrBadRequest("source.locator host must be " + host)
 	}
 	u.User = nil // credentials ride env-only at fetch time, never a stored value
-	if repoNameFromLocator(u.String()) == "" {
-		return Endpoint{}, zip.ErrBadRequest("source.locator must name a repository")
+	// Which repository this is, asked at the door with the SAME rule the import
+	// answers to ([newRepo]): an account and a name the flat forge can spell. A
+	// source it could never hold — a nested GitLab namespace, a name outside the
+	// fold — is refused here with a status, rather than accepted and then refused
+	// by every reconcile into a log nobody reads.
+	if _, err := newRepo(accountOf(u.String()), repoNameFromLocator(u.String())); err != nil {
+		return Endpoint{}, zip.ErrBadRequest(err.Error())
 	}
 	return Endpoint{Connector: strings.TrimSpace(e.Connector), Provider: provider, Locator: u.String()}, nil
 }
@@ -462,8 +467,12 @@ func deriveGitTarget(e endpointReq, src Endpoint) Endpoint {
 // never fatal to the CRUD op (a webhook / re-run reconciles). push=false removes the
 // target; push=true ensures it.
 func reconcileOutboundMirror(ctx context.Context, s *cloud.Service[state], sy Sync, push bool) {
-	native := normalizeGitName(sy.Target.Locator)
-	if err := cloud.EnsureGitMirror(ctx, sy.Org, "", native, sy.Source.Locator, push); err != nil {
+	native := fold(sy.Target.Locator)
+	// The target is declared for THIS repository, which is (account, name) and not
+	// a name alone — the sync's own source URL says which account, and without it
+	// a second sync of a same-named repository from another account would take
+	// this one's target over.
+	if err := cloud.EnsureGitMirror(ctx, sy.Org, accountOf(sy.Source.Locator), native, sy.Source.Locator, push); err != nil {
 		s.Log.Warn("sync: outbound mirror", "sync", sy.ID, "push", push, "err", err)
 	}
 }
