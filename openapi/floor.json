@@ -1,6 +1,6 @@
 {
-  "paths": 1813,
-  "operations": 2485,
+  "paths": 1814,
+  "operations": 2486,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -177,7 +177,7 @@
     "tokens": 1,
     "tools": 8,
     "traces": 4,
-    "tracker": 11,
+    "tracker": 12,
     "traffic": 1,
     "translate": 3,
     "upload": 1,
