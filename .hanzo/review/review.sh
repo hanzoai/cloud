@@ -49,7 +49,12 @@ fi
 
 [ -n "$KEY" ] || die "no REVIEW_API_KEY — the reviewer cannot run, so the change cannot pass"
 
-diff_file=$(mktemp); trap 'rm -f "$diff_file" "$req" "$resp" 2>/dev/null' EXIT
+# The trap names three files and only one of them exists yet, so it expands
+# `req` and `resp` with a default: under `set -u` an EXIT before line 64 dies
+# INSIDE the trap, and a trap that fails overwrites the exit status the script
+# chose. The empty-diff path below exits 0 and reached the pipeline as a 1 —
+# so the reviewer refused every release whose diff it had decided to allow.
+diff_file=$(mktemp); trap 'rm -f "$diff_file" "${req:-}" "${resp:-}" 2>/dev/null' EXIT
 git diff --no-color "$BASE".."$HEAD" > "$diff_file" 2>/dev/null || die "could not read the diff $BASE..$HEAD"
 
 bytes=$(wc -c < "$diff_file")
