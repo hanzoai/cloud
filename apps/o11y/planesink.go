@@ -189,6 +189,13 @@ type planeSink struct {
 	spanRcv *zapreceiver.Receiver
 	logRcv  *zaplogreceiver.Receiver
 
+	// logs and spans coalesce rows so the store takes a few statements a second
+	// instead of one per wire batch. See planebuffer.go for the arithmetic: this
+	// path's ceiling is set by STATEMENTS, and one INSERT per batch put ~9 of
+	// them resident at all times against an idle store.
+	logs  *rowBuffer
+	spans *rowBuffer
+
 	// seen is which (org, fingerprint, bucket) identities have already been
 	// stated, so a resource is written ONCE per 30-minute bucket instead of once
 	// per batch. Without it this is one INSERT per batch into a seven-table
@@ -269,6 +276,17 @@ func mountPlaneIngest(deps cloud.Deps) error {
 	}
 	ps := &planeSink{sink: sink}
 
+	// One second bounds staleness and the crash window; the row caps bound
+	// memory. 10k log rows is ~10 MB against this pod's 11 Gi ceiling, and it is
+	// reached only by a burst — the steady state is one flush of whatever the
+	// fleet produced in the last second.
+	ps.logs = newRowBuffer("event.log", func(ctx context.Context, rows [][]any) error {
+		return ps.sink.Insert(ctx, planeLogTable, planeLogColumns, rows)
+	}, time.Second, 10000, log)
+	ps.spans = newRowBuffer("event.span", func(ctx context.Context, rows [][]any) error {
+		return ps.writeSpans(ctx, log, rows)
+	}, time.Second, 10000, log)
+
 	spanRcv, err := zapreceiver.New(zapreceiver.Config{
 		Listen: planeSpanListen,
 		NodeID: "cloud-o11y-plane",
@@ -295,7 +313,7 @@ func mountPlaneIngest(deps cloud.Deps) error {
 			// yet is merely early. Ordering the pair this way means a crash
 			// between the two never loses something a reader could have seen.
 			ps.rememberResource(ctx, log, logResourceRowsOf(b, time.Now().UTC()))
-			return ps.sink.Insert(ctx, planeLogTable, planeLogColumns, rows)
+			return ps.logs.add(ctx, rows)
 		},
 	})
 	if err != nil {
@@ -338,6 +356,15 @@ func shutdownPlaneIngest(context.Context) error {
 	if ps.logRcv != nil {
 		ps.logRcv.Stop()
 	}
+	// Listeners first, buffers second, connection last. Closing a buffer flushes
+	// it, and that final write needs the sink still open — this is the ordering
+	// that makes a graceful shutdown lose nothing rather than lose the buffer.
+	if ps.logs != nil {
+		ps.logs.Close()
+	}
+	if ps.spans != nil {
+		ps.spans.Close()
+	}
 	return ps.sink.Close()
 }
 
@@ -356,6 +383,19 @@ func shutdownPlaneIngest(context.Context) error {
 // and absorb the repeat; the count is a sum and does not). Failing soft costs a
 // stale summary; failing hard corrupts it.
 func (ps *planeSink) insertSpans(ctx context.Context, log luxlog.Logger, rows [][]any) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	return ps.spans.add(ctx, rows)
+}
+
+// writeSpans is the statement half of insertSpans: the buffer hands it whatever
+// accumulated and it writes the facts and then the summary they imply. Deriving
+// the partials from the COALESCED rows is not merely equivalent to deriving them
+// per batch, it is cheaper for the same answer: event.trace folds them over
+// min/max/sum, so one partial per trace per flush sums to exactly what one
+// partial per trace per batch summed to.
+func (ps *planeSink) writeSpans(ctx context.Context, log luxlog.Logger, rows [][]any) error {
 	if len(rows) == 0 {
 		return nil
 	}
