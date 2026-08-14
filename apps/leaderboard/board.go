@@ -59,7 +59,7 @@ func (o boardOps) leaderboard(ctx context.Context, in *boardQuery) (*Leaderboard
 	if metricLabel == "" {
 		metricLabel = "tokens"
 	}
-	metricCol, ok := resolveMetric(metricLabel)
+	rank, ok := resolveMetric(metricLabel)
 	if !ok {
 		return nil, zip.ErrBadRequest("metric must be tokens|requests|cost")
 	}
@@ -94,16 +94,16 @@ func (o boardOps) leaderboard(ctx context.Context, in *boardQuery) (*Leaderboard
 
 	switch scope {
 	case "personal", "org":
-		return userBoard(ctx, o.s, base, org, scope, metricLabel, metricCol, w, limit)
+		return userBoard(ctx, o.s, base, org, scope, metricLabel, rank, w, limit)
 	case "global":
-		return orgBoard(ctx, o.s, base, org, metricLabel, metricCol, w, limit)
+		return orgBoard(ctx, o.s, base, org, metricLabel, rank, w, limit)
 	default:
 		return nil, zip.ErrBadRequest("scope must be personal|org|global")
 	}
 }
 
 // userBoard ranks the users of the caller's own org (scope personal|org).
-func userBoard(ctx context.Context, s *cloud.Service[state], base LeaderboardView, org, scope, metricLabel, metricCol string, w window, limit int) (*LeaderboardView, error) {
+func userBoard(ctx context.Context, s *cloud.Service[state], base LeaderboardView, org, scope, metricLabel, rank string, w window, limit int) (*LeaderboardView, error) {
 	base.Subject = "user"
 
 	// NAMED disclosure only for an admin viewing the ORG board; personal is always the
@@ -113,7 +113,7 @@ func userBoard(ctx context.Context, s *cloud.Service[state], base LeaderboardVie
 	// admin; otherwise cost is withheld for everyone but self.
 	costVisible := metricLabel == "cost" || named
 
-	sqlStr, args := buildUserBoardSQL(org, w, metricCol, limit)
+	sqlStr, args := buildUserBoardSQL(org, w, rank, limit)
 	rows, err := queryDatastore(ctx, sqlStr, args...)
 	if err != nil {
 		s.Log.Debug("user board query failed; honest-empty", "org", org, "err", err)
@@ -142,14 +142,14 @@ func userBoard(ctx context.Context, s *cloud.Service[state], base LeaderboardVie
 		base.Total = n
 	}
 	if selfID != "" {
-		base.Self = userSelfRank(ctx, s, org, selfID, selfHandle, selfListed, metricLabel, metricCol, w, base.Total)
+		base.Self = userSelfRank(ctx, s, org, selfID, selfHandle, selfListed, metricLabel, rank, w, base.Total)
 	}
 	return &base, nil
 }
 
 // userSelfRank computes the caller's own standing even when they fall outside the
 // top-N page. Rank = (users whose metric strictly exceeds the caller's) + 1.
-func userSelfRank(ctx context.Context, s *cloud.Service[state], org, selfID, selfHandle string, selfListed bool, metricLabel, metricCol string, w window, total int64) *SelfRank {
+func userSelfRank(ctx context.Context, s *cloud.Service[state], org, selfID, selfHandle string, selfListed bool, metricLabel, rank string, w window, total int64) *SelfRank {
 	sqlStr, args := buildSelfAggSQL(org, selfID, w)
 	rows, err := queryDatastore(ctx, sqlStr, args...)
 	if err != nil {
@@ -169,7 +169,7 @@ func userSelfRank(ctx context.Context, s *cloud.Service[state], org, selfID, sel
 	if self.Metric <= 0 {
 		return self // no usage in the window → unranked (client shows "—")
 	}
-	aboveSQL, aboveArgs := buildAboveCountSQL(org, w, metricCol, self.Metric)
+	aboveSQL, aboveArgs := buildAboveCountSQL(org, w, rank, self.Metric)
 	if above, e := scalar(ctx, aboveSQL, aboveArgs); e == nil {
 		self.Rank = int(above) + 1
 		self.Ranked = true
@@ -178,7 +178,7 @@ func userSelfRank(ctx context.Context, s *cloud.Service[state], org, selfID, sel
 }
 
 // orgBoard ranks organizations (scope global).
-func orgBoard(ctx context.Context, s *cloud.Service[state], base LeaderboardView, org, metricLabel, metricCol string, w window, limit int) (*LeaderboardView, error) {
+func orgBoard(ctx context.Context, s *cloud.Service[state], base LeaderboardView, org, metricLabel, rank string, w window, limit int) (*LeaderboardView, error) {
 	base.Subject = "org"
 	super := superOf(ctx)
 
@@ -219,13 +219,13 @@ func orgBoard(ctx context.Context, s *cloud.Service[state], base LeaderboardView
 
 	// The caller's OWN org rank (self) — the gamification hook. Ranked within the same
 	// universe the board shows.
-	base.Self = orgSelfRank(ctx, s, org, metricLabel, metricCol, w, super, orgs, callerOrgListed, base.Total)
+	base.Self = orgSelfRank(ctx, s, org, metricLabel, rank, w, super, orgs, callerOrgListed, base.Total)
 
 	if !super && len(orgs) == 0 {
 		return &base, nil // no org opted in yet → empty board, self-rank only
 	}
 
-	sqlStr, args := buildOrgBoardSQL(w, metricCol, limit, orgs)
+	sqlStr, args := buildOrgBoardSQL(w, rank, limit, orgs)
 	rows, err := queryDatastore(ctx, sqlStr, args...)
 	if err != nil {
 		s.Log.Debug("org board query failed; honest-empty", "err", err)
@@ -240,7 +240,7 @@ func orgBoard(ctx context.Context, s *cloud.Service[state], base LeaderboardView
 // orgSelfRank computes the caller's own org standing. For a regular caller whose org
 // is NOT on the public board, it stays unranked (Listed=false) — a prompt to opt in
 // rather than a leak of where the org sits in a set it didn't join.
-func orgSelfRank(ctx context.Context, s *cloud.Service[state], org, metricLabel, metricCol string, w window, super bool, orgs []string, callerOrgListed bool, total int64) *SelfRank {
+func orgSelfRank(ctx context.Context, s *cloud.Service[state], org, metricLabel, rank string, w window, super bool, orgs []string, callerOrgListed bool, total int64) *SelfRank {
 	sqlStr, args := buildOrgAggSQL(org, w)
 	rows, err := queryDatastore(ctx, sqlStr, args...)
 	if err != nil {
@@ -259,7 +259,7 @@ func orgSelfRank(ctx context.Context, s *cloud.Service[state], org, metricLabel,
 	if !super && !callerOrgListed {
 		return self
 	}
-	aboveSQL, aboveArgs := buildOrgAboveCountSQL(w, metricCol, self.Metric, orgs)
+	aboveSQL, aboveArgs := buildOrgAboveCountSQL(w, rank, self.Metric, orgs)
 	if above, e := scalar(ctx, aboveSQL, aboveArgs); e == nil {
 		self.Rank = int(above) + 1
 		self.Ranked = true

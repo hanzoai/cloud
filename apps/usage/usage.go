@@ -418,7 +418,7 @@ func buildAnalyticsBlock(s *cloud.Service[state], ctx context.Context, org strin
 	// `, sum(byo_tokens) AS byo_tokens, sum(fee_cents) AS fee_cents` and add the
 	// matching ProviderRow fields — a one-line projection, NOT a second datastore.
 	sql := "SELECT provider, count() AS requests, sum(total_tokens) AS tokens, " +
-		"sum(cost_cents) AS cost_cents FROM " + llmTable +
+		datastore.Spend + " AS cost_cents FROM " + llmTable +
 		" WHERE timestamp >= ? AND timestamp < ? AND organization = ? " +
 		"GROUP BY provider ORDER BY tokens DESC"
 	rows, err := datastore.Query(ctx, sql, tsLiteral(start), tsLiteral(end), org)
@@ -516,7 +516,7 @@ func buildLLMBlock(s *cloud.Service[state], ctx context.Context, org string, sta
 	// and a caller can never read another org's usage.
 	sql := "SELECT count() AS requests, sum(total_tokens) AS tokens, " +
 		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
-		"sum(cost_cents) AS cost_cents, uniqExact(model) AS models " +
+		datastore.Spend + " AS cost_cents, uniqExact(model) AS models " +
 		"FROM " + llmTable + " WHERE timestamp >= ? AND timestamp < ? AND organization = ?"
 	rows, err := datastore.Query(ctx, sql, tsLiteral(start), tsLiteral(end), org)
 	if err != nil {

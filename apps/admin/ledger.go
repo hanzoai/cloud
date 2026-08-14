@@ -71,7 +71,7 @@ func ledgerTotals(s ledgerScope) ledgerQuery {
 	return ledgerQuery{
 		SQL: "SELECT count() AS requests, sum(total_tokens) AS tokens, " +
 			"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
-			"sum(cost_cents) AS cost_cents, countIf(status = 'error') AS errors, " +
+			datastore.Spend + " AS cost_cents, countIf(status = 'error') AS errors, " +
 			"uniqExact(organization) AS orgs, uniqExact(model) AS models " +
 			"FROM " + ledgerTable + w,
 		Args: args,
@@ -84,7 +84,7 @@ func ledgerSeries(s ledgerScope, interval string) ledgerQuery {
 	w, args := s.where()
 	return ledgerQuery{
 		SQL: "SELECT toStartOfInterval(timestamp, INTERVAL " + interval + ") AS ts, " +
-			"count() AS requests, sum(total_tokens) AS tokens, sum(cost_cents) AS cost_cents, " +
+			"count() AS requests, sum(total_tokens) AS tokens, " + datastore.Spend + " AS cost_cents, " +
 			"countIf(status = 'error') AS errors " +
 			"FROM " + ledgerTable + w + " GROUP BY ts ORDER BY ts",
 		Args: args,
@@ -97,7 +97,7 @@ func ledgerByOrg(s ledgerScope, cap int) ledgerQuery {
 	w, args := s.where()
 	return ledgerQuery{
 		SQL: "SELECT organization AS org, count() AS requests, sum(total_tokens) AS tokens, " +
-			"sum(cost_cents) AS cost_cents FROM " + ledgerTable + w +
+			datastore.Spend + " AS cost_cents FROM " + ledgerTable + w +
 			" GROUP BY org ORDER BY requests DESC" + ledgerCap(cap),
 		Args: args,
 	}
@@ -109,7 +109,7 @@ func ledgerByModel(s ledgerScope, cap int) ledgerQuery {
 	w, args := s.where()
 	return ledgerQuery{
 		SQL: "SELECT model, count() AS requests, sum(total_tokens) AS tokens, " +
-			"sum(cost_cents) AS cost_cents FROM " + ledgerTable + w +
+			datastore.Spend + " AS cost_cents FROM " + ledgerTable + w +
 			" AND model != '' GROUP BY model ORDER BY requests DESC" + ledgerCap(cap),
 		Args: args,
 	}
@@ -123,7 +123,7 @@ func ledgerByActor(s ledgerScope, cap int) ledgerQuery {
 	w, args := s.where()
 	return ledgerQuery{
 		SQL: "SELECT user_id AS actor, count() AS requests, sum(total_tokens) AS tokens, " +
-			"sum(cost_cents) AS cost_cents FROM " + ledgerTable + w +
+			datastore.Spend + " AS cost_cents FROM " + ledgerTable + w +
 			" AND user_id != '' GROUP BY actor ORDER BY cost_cents DESC, requests DESC" + ledgerCap(cap),
 		Args: args,
 	}
