@@ -88,7 +88,8 @@ func slackBridgeReady(s *cloud.Service[state]) {
 // https://{domain}/v1/integrations/slack/events). It HMAC-verifies the raw body,
 // answers the url_verification challenge, and routes @mentions / DMs — acking FAST
 // (empty 200) and doing the billed work async on the channel under the bounded pool,
-// deduped durably on event_id. A `code:` prompt branches to the coding flow.
+// deduped durably on event_id. There is one flow: the turn's own tools reach the
+// sandbox when the model picks that tool.
 func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	slackBridgeReady(s)
 	secret := slackSigningSecret()
