@@ -5013,7 +5013,7 @@ they understated a control that exists, which invites building a redundant one.
 So, by claim class:
 
 - **§ "The plane, in numbers", § 1 trigger, § 2 join, § 3 evidence, § 5 privacy** —
-  verified against the LIVE warehouse (`datastore-0`, ClickHouse) and are
+  verified against the LIVE warehouse (`datastore-0`) and are
   line-independent: the DDL owner is the sibling repo `hanzoai/o11y`, not either
   cloud line.
 - **§ 6 containment, § 9 composition** — verified against the LIVE door
