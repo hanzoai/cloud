@@ -7,7 +7,7 @@
 // runs on, read through /v1/engine.
 //
 // PRODUCT-REPO MODEL. The product lives in github.com/hanzoai/engine (Rust —
-// the LLM inference engine: `hanzo serve`, the OpenAI- and Anthropic-
+// the LLM inference engine: `hanzo-engine serve`, the OpenAI- and Anthropic-
 // compatible server, quantization, multimodality). This subsystem does NOT
 // reimplement any of it: every op is a TYPED PASSTHROUGH to the engine
 // deployment over an HTTP seam, the posture apps/flow takes for its Python
@@ -65,7 +65,7 @@ import (
 // port is 36900 because that is the port the deployed Service actually exposes
 // (svc/engine in namespace hanzo: name http, port 36900, target 36900).
 //
-// IT WAS 1234, WHICH IS A DIFFERENT ENGINE. 1234 is standalone `hanzo serve`'s
+// IT WAS 1234, WHICH IS A DIFFERENT ENGINE. 1234 is standalone `hanzo-engine serve`'s
 // default; 36900 is the port the engine binds when it runs as the node's engine,
 // and 36900 is what is deployed. The cloud Deployment sets no ENGINE_UPSTREAM, so
 // the default WAS the production value, and it named a port the Service does not
@@ -78,7 +78,7 @@ import (
 // other. One value, resolved against what is deployed.
 //
 // Overridable via ENGINE_UPSTREAM — tests point it at an httptest server; a dev
-// box points it at a local `hanzo serve`, which is where 1234 is right.
+// box points it at a local `hanzo-engine serve`, which is where 1234 is right.
 const defaultUpstream = "http://engine.hanzo.svc.cluster.local:36900"
 
 func upstream() string {
@@ -91,7 +91,7 @@ func upstream() string {
 // key is the platform's service credential for the engine deployment,
 // presented as a bearer token on every upstream call. KMS-synced into the pod
 // env as ENGINE_API_KEY (the FLOW_API_KEY custody pattern). Empty is a valid
-// dev posture: a bare `hanzo serve` enforces no credential, and a locked
+// dev posture: a bare `hanzo-engine serve` enforces no credential, and a locked
 // deployment answers 401/403 which this subsystem reports as 503
 // (misconfiguration, not caller auth).
 func key() string { return strings.TrimSpace(os.Getenv("ENGINE_API_KEY")) }
