@@ -122,11 +122,11 @@ func TestWebhookRefusalNamesTheDoorThatBuilds(t *testing.T) {
 func TestWebhookDispatchesNothing(t *testing.T) {
 	var mu sync.Mutex
 	var fired []cloud.GitPushEvent
-	cloud.RegisterPushBuilder(func(_ context.Context, ev cloud.GitPushEvent) error {
+	cloud.RegisterPushBuilder(func(_ context.Context, ev cloud.GitPushEvent) (int, error) {
 		mu.Lock()
 		fired = append(fired, ev)
 		mu.Unlock()
-		return nil
+		return 0, nil
 	})
 	t.Cleanup(func() { cloud.RegisterPushBuilder(nil) })
 
