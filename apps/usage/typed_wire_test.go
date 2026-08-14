@@ -169,7 +169,17 @@ func statusOf(t *testing.T, app *zip.App, path, user, org string) int {
 // the one value the OpenAPI operation, the MCP tool, the CLI command and the generated
 // SDK method all come from — so an operation missing from that registry is invisible to
 // all four. Addresses are written the way the DOCUMENT writes them.
-var untypedByDesign = map[string]string{}
+var untypedByDesign = map[string]string{
+	"POST /v1/usage/openrouter": "the OpenRouter Broadcast door. Its credential is a HEADER — a " +
+		"publishable ingest key, because Broadcast signs nothing and its only authentication is the " +
+		"Headers map it sends verbatim — and a typed op holds a CONTEXT, not a request, so it cannot " +
+		"read one (apps/principal). Every inbound webhook in this repo is raw for that reason. It " +
+		"DECLARES the operation through openapi.Register and openapi.Describe, with both bodies " +
+		"free-form and their shape in the prose — the request is OpenTelemetry's OTLP/JSON and this " +
+		"package decodes only the subset a usage row needs, so publishing that subset as the schema " +
+		"would document a wire nobody sends. The cost of staying untyped is the MCP tool and the SDK " +
+		"method, never the document.",
+}
 
 // usageOps reads BOTH projections of the live router at their one shared address form:
 // what the document says is served, and which of those carry a typed registry entry.

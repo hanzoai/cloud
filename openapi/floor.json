@@ -1,6 +1,6 @@
 {
-  "paths": 1812,
-  "operations": 2477,
+  "paths": 1813,
+  "operations": 2478,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -182,7 +182,7 @@
     "traffic": 1,
     "translate": 3,
     "upload": 1,
-    "usage": 11,
+    "usage": 12,
     "validators": 4,
     "vector": 6,
     "videos": 3,
