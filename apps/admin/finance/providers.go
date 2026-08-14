@@ -149,7 +149,7 @@ func providerBurnCents(ctx context.Context) map[string]int64 {
 		return burn
 	}
 	rows, err := datastore.Query(ctx,
-		"SELECT provider, sum(cost_cents) AS burn FROM "+usageTable+" GROUP BY provider")
+		"SELECT provider, "+datastore.Spend+" AS burn FROM "+usageTable+" GROUP BY provider")
 	if err != nil {
 		return burn
 	}
@@ -264,7 +264,7 @@ func (o ops) UsageFunding(ctx context.Context, in *UsageFundingIn) (*UsageFundin
 		if err := datastore.EnsureCloudUsage(ctx); err == nil {
 			rows, qerr := datastore.Query(ctx,
 				"SELECT provider, model, count() AS requests, sum(total_tokens) AS tokens, "+
-					"sum(cost_cents) AS cost_cents FROM "+usageTable+
+					datastore.Spend+" AS cost_cents FROM "+usageTable+
 					" WHERE timestamp >= ? AND timestamp < ? GROUP BY provider, model ORDER BY cost_cents DESC",
 				tsLit(start), tsLit(end))
 			if qerr == nil {

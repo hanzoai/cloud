@@ -359,6 +359,11 @@ func buildOrgRows(aggs []aggRow, metric string, super bool, displays map[string]
 // gap-filled series over the window — the continuous calendar the heatmap + timeline
 // render. Pure. Totals carry the heatmap-scaling ceilings (busiest day) and the
 // active-day count.
+//
+// The window total adds the DAYS, each already rounded to the cent by the query,
+// because a calendar whose squares do not add up to the figure beside them is a bug
+// report waiting to happen. That costs at most half a cent per day shown, against a
+// row-level rounding's half cent per CALL — and the days and the total agree.
 func buildActivitySeries(w window, rows []map[string]any) ([]ActivityPoint, ActivityTotals) {
 	type agg struct{ req, tok, cost int64 }
 	idx := make(map[string]agg, len(rows))
