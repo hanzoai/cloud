@@ -653,3 +653,13 @@ func plain(v any) any {
 	}
 	return out
 }
+
+// slackEscape neutralizes the three mrkdwn-meaningful characters (&, <, >) so
+// agent- or user-derived content can never inject a link or a <!channel>
+// broadcast. & first so the entities aren't double-escaped.
+func slackEscape(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
+}
