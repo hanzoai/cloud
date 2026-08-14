@@ -19,7 +19,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/ha"
 	"github.com/hanzoai/metrics"
-	s3 "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzos3/go"
 	sqlitedrv "github.com/hanzoai/sqlite"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"

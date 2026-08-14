@@ -97,7 +97,7 @@ help: ## Show this help.
 
 setup: ## One-time dev setup: make the hanzoai/* Go modules resolvable.
 	@# The hanzoai/* modules are NAMED github.com/hanzoai/... and do not live there —
-	@# github.com/hanzoai/s3-go is "Repository not found" over both HTTPS and a dev's
+	@# github.com/hanzoai/zen is "Repository not found" over both HTTPS and a dev's
 	@# SSH key. They live on git.hanzo.ai. A fresh clone therefore fails at
 	@# `go mod download` with an error that reads like a deleted repo rather than a
 	@# missing route, and the only reason existing machines work is a warm module
@@ -112,13 +112,13 @@ setup: ## One-time dev setup: make the hanzoai/* Go modules resolvable.
 	@git config --global --unset-all url."git@github-zeekay:hanzoai/".insteadOf 2>/dev/null || true
 	@git config --global --unset-all url."git@github.com:hanzoai/".insteadOf 2>/dev/null || true
 	@echo "  rewrote github.com/hanzoai/ -> git.hanzo.ai/hanzoai/"
-	@if git ls-remote https://git.hanzo.ai/hanzoai/s3-go >/dev/null 2>&1; then \
+	@if git ls-remote https://git.hanzo.ai/hanzoai/zen >/dev/null 2>&1; then \
 	  echo "  forge reachable — go mod download will work"; \
 	else \
 	  echo "  forge needs credentials. Sign in once at https://git.hanzo.ai/user/oauth2/hanzo"; \
 	  echo "  (your Hanzo account), then let git store the credential:"; \
 	  echo "      git config --global credential.helper store"; \
-	  echo "      git ls-remote https://git.hanzo.ai/hanzoai/s3-go"; \
+	  echo "      git ls-remote https://git.hanzo.ai/hanzoai/zen"; \
 	fi
 
 
