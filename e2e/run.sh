@@ -124,17 +124,17 @@ export E2E_CLIENT_SECRET="$CLIENT_SECRET"        # ${VAR} substitution in init_d
 export E2E_REDIRECT_URI="$BASE/auth/callback"
 
 # The prepaid gate only enforces on a kind that COSTS something: ResourceMeter.Gate
-# short-circuits to allow for costCents<=0, and every tracker fee defaults to 0. Price
+# short-circuits to allow for costCents<=0, and every todo fee defaults to 0. Price
 # it here so spec 136 exercises a real refusal, and hand the SAME number to the suite
 # so the fee has one source of truth rather than two that can drift.
-export CLOUD_TRACKER_FEE_CENTS=500
-export E2E_TRACKER_FEE_CENTS="$CLOUD_TRACKER_FEE_CENTS"
+export CLOUD_TODO_FEE_CENTS=500
+export E2E_TODO_FEE_CENTS="$CLOUD_TODO_FEE_CENTS"
 
 say "booting cloud on $BASE (data: $DATA_DIR)"
-# commerce carries the money plane the billing surface reads, and tracker supplies a
+# commerce carries the money plane the billing surface reads, and todo supplies a
 # gated create that depends on nothing but the local store — so a 402 in spec 136 is
 # the billing gate and not some absent upstream answering first.
-./bin/cloud --enable=iam,base,kms,marketing,notify,billing,commerce,tracker --brand=hanzo --listen=":$HTTP_PORT" >"$LOG" 2>&1 &
+./bin/cloud --enable=iam,base,kms,marketing,notify,billing,commerce,todo --brand=hanzo --listen=":$HTTP_PORT" >"$LOG" 2>&1 &
 CLOUD_PID=$!
 
 # Readiness is the HOST answering /healthz on its own app port. Liveness belongs to

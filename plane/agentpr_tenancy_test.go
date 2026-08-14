@@ -9,9 +9,9 @@ import (
 // The two ops that file work items share ONE socket, and they must not disagree
 // about where tenancy comes from.
 //
-// AgentPRIn used to carry an Org field which plugin/tracker/seams.go read off
+// AgentPRIn used to carry an Org field which plugin/todo/seams.go read off
 // the wire and passed straight into the per-tenant store selector
-// (apps/tracker/agentpr.go storeFor), so a caller on the plane could file a work
+// (apps/todo/agentpr.go storeFor), so a caller on the plane could file a work
 // item onto ANOTHER tenant's board simply by naming it. Its sibling IssueIn has
 // never had one, and says why in its own doc comment.
 //
@@ -31,7 +31,7 @@ func TestWorkItemInputsCarryNoTenancy(t *testing.T) {
 				if isTenancy(f.Name) {
 					t.Fatalf("%s has a %s field: the org is the CALLER's plane identity "+
 						"(cloud.Who), never an argument — a caller able to state the tenant "+
-						"can write into another tenant's tracker",
+						"can write into another tenant's todo",
 						tc.name, f.Name)
 				}
 				if tag := f.Tag.Get("json"); isTenancy(strings.Split(tag, ",")[0]) {

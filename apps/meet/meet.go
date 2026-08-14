@@ -334,7 +334,7 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	// declare a non-JSON response.
 	// THE GROUP EXISTS FOR THE GATE. Every /v1/meet route hangs off it, so the
 	// anti-CSRF check is written ONCE and cannot be forgotten by the next route
-	// added here — the same reason apps/tracker puts it on its group rather than
+	// added here — the same reason apps/todo puts it on its group rather than
 	// on each of its six writes.
 	g := app.Group("/v1/meet", requireCSRFOnWrites())
 
@@ -373,7 +373,7 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	// still serves the UI, which then renders the honest refusal from /v1/meet/session
 	// instead of a blank 404 that says nothing about what is wrong.
 	// On the ROOT router, not the group: /meet is the bundle and /v1/meet is the
-	// API, and a GET of an HTML shell has nothing to forge. tracker registers its
+	// API, and a GET of an HTML shell has nothing to forge. todo registers its
 	// SPA the same way, outside its own gate.
 	ui := zip.AdaptNetHTTP(http.StripPrefix("/meet", meetui.Handler()))
 	app.All("/meet", ui)
@@ -780,7 +780,7 @@ var unsafe = map[string]bool{
 // page reading it) and must echo in a CUSTOM header, which a simple form POST
 // cannot set without a preflight we do not grant.
 //
-// This is apps/tracker's gate verbatim, over apps/account's one implementation —
+// This is apps/todo's gate verbatim, over apps/account's one implementation —
 // the estate has ONE anti-CSRF token, minted by GET /v1/csrf and bound to the
 // caller's validated identity. A second answer to a solved question is how two
 // surfaces end up disagreeing about what a valid token is.
