@@ -13,6 +13,7 @@ import (
 	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/internal/writerlease"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/role"
 	"github.com/hanzoai/cloud/webui"
@@ -586,11 +587,50 @@ func listenOn(cfg *Config) (addrs []string, ops string) {
 // host that mounts several is "cloud". It exists so per-process resources (the
 // durable engine's port and store) can say whose they are instead of contending for
 // one global name.
+// procName is what this program calls itself: the name in its diagnostics, and
+// the AppName its telemetry ships under — which is the `service` a per-app logs
+// view keys on, and the ZAP node identity its exporter connects with.
+//
+// A CO-RESIDENT app routes no prefix of its own (manifest.Coresident): it mounts
+// as middleware on a sibling's router, so it cannot be its own process and rides
+// inside the binary of the app it wraps. It is a passenger, and a passenger does
+// not make this program the fused host — the one ROUTED app it travels with is
+// what this program IS.
+//
+// COUNTING plugins said otherwise, and plugin/ai is the only main in the fleet
+// that carries a passenger (zen), so the ai process alone called itself "cloud".
+// Both costs were measured on 866M live log rows:
+//
+//   - Its records shipped with AppName "cloud", so they stored under service
+//     `cloud`, and console's Models logs view — which asks for service `ai` —
+//     was empty for as long as it has existed, while ai served every inference
+//     request. `service='ai'` held 46 rows ever, all /health lines from a pod
+//     retired on 2026-08-09.
+//   - Worse, its exporter claimed node identity `o11y-cloud-logs`, which the
+//     front door already held. The wire admits ONE connection per identity, so
+//     the second is refused: the records were dropped, not merely mislabelled.
+//
+// ai and zen were the only two of ~40 subsystems with zero log rows; every
+// sibling that passes a single plugin was correct all along. So this is not a
+// new rule, it is the existing one stated over what a plugin IS rather than over
+// how many were passed.
 func procName(plugins []Plugin) string {
-	if len(plugins) == 1 {
-		return plugins[0].Name
+	name := ""
+	for _, p := range plugins {
+		if manifest.Coresident(p.Name) {
+			continue
+		}
+		if name != "" {
+			// Two apps that both route, in one process: that is the fused host,
+			// and no single app's name would be honest for it.
+			return "cloud"
+		}
+		name = p.Name
 	}
-	return "cloud"
+	if name == "" {
+		return "cloud"
+	}
+	return name
 }
 
 // healthBody is THE health payload — the one shape every liveness surface in
