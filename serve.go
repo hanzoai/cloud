@@ -566,21 +566,26 @@ func listenOn(cfg *Config) (addrs []string, ops string) {
 	// ZIP_RUNTIME_DIR, so this only fills in the default the plane already assumes.
 	bindRuntimeDir()
 	if sock := zip.Addr(""); sock != "" {
-		// TWO addresses, because a plugin answers two kinds of caller.
+		// ONE address, and the plain HTTP sibling beside it is zip's to make.
 		//
-		// The socket carries ZAP: one framed request, one framed reply, which is
-		// every typed op and every mounted route. An UPGRADED connection is
-		// neither — after the handshake there are no more requests, only bytes —
-		// so a websocket cannot cross that framing, and the terminal's first
-		// frame arrived at an HTTP header parser as nonsense. The session the
-		// plugin meant to run after the handshake therefore never started, and
-		// what a person saw was a terminal that opened and immediately closed.
+		// A plugin answers two kinds of caller. The socket carries ZAP: one framed
+		// request, one framed reply, which is every typed op and every mounted
+		// route. An UPGRADED connection is neither — after the handshake there are
+		// no more requests, only bytes — so a websocket cannot cross that framing,
+		// and a terminal's first frame reaches an HTTP header parser as nonsense.
 		//
-		// So a plugin listens a second time in plain HTTP, beside the first, and
-		// the host relays an upgrade there. The name is DERIVED and not
-		// configured (zip's plain()): one address is still the whole of what a
-		// mount is told, and there is no second value to keep in step.
-		return []string{sock, "http://" + sock + ".http"}, ""
+		// So a plugin listens a second time in plain HTTP and the host relays the
+		// upgrade there. zip already does exactly that: plain(addr) is addr+".http"
+		// for a unix address and plainSibling serves it (transport.go:375). Naming
+		// it here as well asked for the same listener twice — the second bind of
+		// <sock>.http fails "address already in use", and the explicit entry is
+		// itself a unix address, so zip derived <sock>.http.http from it too.
+		//
+		// A plugin that cannot bind exits before listening, and the ones that hold
+		// the bus go first: pubsub, then kafka and catalogsync fail closed behind
+		// it, then the host exits. So the derivation has one home, which is where
+		// it always was.
+		return []string{sock}, ""
 	}
 	// ONE app, TWO transports here, both serving the identical route surface so
 	// /v1/* answers over either and WS/SSE keep working on the HTTP one:
