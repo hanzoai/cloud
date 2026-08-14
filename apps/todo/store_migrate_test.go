@@ -12,7 +12,7 @@ import (
 
 // legacyIssuesDDL is the issues table as it existed BEFORE the polymorphic-spine
 // columns (kind/source/repo/ext_ref) were introduced — the shape a production
-// todo.db carries today. A migrate() that indexes repo/kind before ALTER-adding
+// the store carries today. A migrate() that indexes repo/kind before ALTER-adding
 // them fails here with "no such column", which fails mount and crashloops the pod.
 const legacyIssuesDDL = `
 CREATE TABLE issues (
@@ -31,7 +31,7 @@ CREATE TABLE issues (
 );`
 
 // TestMigrateOverLegacyIssuesTable reproduces the deploy crashloop: opening a
-// todo.db whose issues table predates the spine columns must migrate cleanly,
+// a store whose issues table predates the spine columns must migrate cleanly,
 // not error on "CREATE INDEX ix_issues_org_repo ... no such column: repo".
 func TestMigrateOverLegacyIssuesTable(t *testing.T) {
 	migratetest.Case{
