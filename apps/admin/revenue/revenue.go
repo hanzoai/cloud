@@ -86,6 +86,9 @@ func (o ops) Revenue(ctx context.Context, _ *core.None) (*RevenueOut, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Money is read per org, and three of these folds run their orgs in parallel, so
+	// the principal is lifted off the request ONCE here and re-pointed per tenant.
+	ctx = core.Acting(c)
 	data, err := Compute(o.s, ctx, core.CallerCreds(c))
 	if err != nil {
 		return &RevenueOut{Status: core.Err, Msg: err.Error()}, nil
