@@ -404,7 +404,7 @@ func indexIssue(key string, i Issue) issueView {
 // while the forge is asked about the org that tenant's work lives under. Passing
 // the forge spelling here would open a different file — one nothing writes.
 func (o ops) index(ctx context.Context) (*Store, string, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, "", err
 	}
