@@ -146,6 +146,12 @@ func init() {
 	zip.Describe("GET /v1/sites", zip.Doc{
 		Description: "Returns the org's deployed sites at the pretty URLs they serve at.\n\nIt reads the SAME org-scoped store as /v1/projects and keeps only the projects\nthat are actually `live`, so a draft or a failed build is not advertised as a\nsite.\n\nScope: a validated principal is required (403 without one) and the list is\nkeyed by that principal's org.",
 	})
+	zip.Describe("GET /v1/sites/:slug", zip.Doc{
+		Description: "Returns one site — the same row ListSites carries, for one slug.\n\nEvery sub-resource under a site already answered: deployments, releases,\npublish. The site itself did not, and a route that is never registered\nanswers 404 for a LIVE site exactly as it does for one that was never\ncreated. So the one call a client makes to ask \"is it there yet?\" could only\never say no, and a CI lane watching for its own publish would wait forever on\na success it had already achieved.\n\nThe org is the caller's, never a path segment. A slug is unique within an org\nand two orgs may both own `tel`; taking the org from the validated principal\ninstead of the URL means a caller cannot read another org's site by editing a\npath, and it is the same scope ListProjects and ListSites already use.\n\nA site that exists but is not live is NOT found here, matching ListSites,\nwhich keeps only `live` rows so a draft or a failed build is never advertised\nas a site. One definition of \"is a site\", used by both.",
+		Fields: map[string]string{
+			"projectsRef.slug": "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
+		},
+	})
 	zip.Describe("GET /v1/sites/:slug/deployments", zip.Doc{
 		Description: "Returns a project's deploy history, newest version first.\n\nEvery deploy of the project is a row — uploads, generated sites, and git/CI\nbuilds alike — carrying its version, status, source, commit, live URL, file\ncount and byte count. The short-lived upload grant a queued git deployment was\nhanded is NOT replayed here: it exists only on the 202 that minted it, so a\ngrant cannot outlive its build by being fetched again.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
