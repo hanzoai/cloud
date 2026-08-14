@@ -238,7 +238,7 @@ func TestRESTRoundtripOrgScoped(t *testing.T) {
 
 	// hanzo caller stores a secret in its own org.
 	body, _ := json.Marshal(map[string]string{"name": "API_KEY", "value": "sk-abc123", "env": "main"})
-	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil)
+	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, asOrgAdmin)
 	if resp.StatusCode != 200 {
 		t.Fatalf("POST secret (own org) = %d, want 200: %s", resp.StatusCode, readAll(resp.Body))
 	}
@@ -306,7 +306,7 @@ func TestRESTSecretOpsFailClosedWithoutKey(t *testing.T) {
 	// env is required on writes; supply it so the request reaches the
 	// master-key gate this test exercises (rather than 400-ing on input).
 	body, _ := json.Marshal(map[string]string{"name": "X", "value": "y", "env": "main"})
-	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil)
+	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, asOrgAdmin)
 	if resp.StatusCode != 503 {
 		t.Fatalf("POST secret (no key) = %d, want 503 (fail-closed)", resp.StatusCode)
 	}
@@ -317,7 +317,20 @@ func TestRESTSecretOpsFailClosedWithoutKey(t *testing.T) {
 // do drives an in-process request, setting the identity headers SanitizeIdentity
 // would set for a validated principal (org, isAdmin). An empty org + admin=false
 // simulates an unauthenticated caller.
-func do(t *testing.T, app *zip.App, method, path, org, body string, admin bool, _ any) *http.Response {
+// asOrgAdmin is the authority a WRITE to one's own org carries: admin OF THAT ORG.
+// Deliberately NOT platform sudo — the two admin scopes stay apart, so a fixture that
+// seeds its own tenant never borrows cross-tenant authority to do it.
+var asOrgAdmin = map[string]string{"X-User-IsOrgAdmin": "true"}
+
+// do issues a request as a principal assembled from its arguments: org membership
+// from org, platform sudo from admin, and anything further from extra — which is how
+// a caller presents the org-admin authority the mutating routes require (asOrgAdmin).
+//
+// These requests are injected BEHIND the identity boundary, so the headers stand as
+// written; that is what makes this a faithful test of the GATE. The boundary's own
+// job — that no client copy of any of these names survives ingress — is a different
+// property, asserted where it lives (cloud's identity contract).
+func do(t *testing.T, app *zip.App, method, path, org, body string, admin bool, extra map[string]string) *http.Response {
 	t.Helper()
 	var rdr io.Reader
 	if body != "" {
@@ -333,6 +346,9 @@ func do(t *testing.T, app *zip.App, method, path, org, body string, admin bool, 
 	}
 	if admin {
 		req.Header.Set("X-User-IsAdmin", "true")
+	}
+	for k, v := range extra {
+		req.Header.Set(k, v)
 	}
 	resp, err := app.Test(req)
 	if err != nil {
