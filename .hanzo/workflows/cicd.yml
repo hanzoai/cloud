@@ -1128,19 +1128,29 @@ jobs:
           # them is not a thing that can succeed. Mirror them to the forge and
           # add them back; leaving them in would fail every release for two repos
           # nothing can deliver to.
+          # repo:workflow — the workflow name is NOT uniform, and assuming it was
+          # would fail every release on the one that differs. hanzo-docs/docs has
+          # no cicd.yml at all (probed: 404 `workflow "cicd.yml" doesn't exist`);
+          # its spec-consuming lane is deploy.yml. The six SDKs do use cicd.yml.
+          #
+          # hanzo-kotlin/sdk and hanzo-cpp/sdk are absent on purpose: both 404 on
+          # git.hanzo.ai, so there is nothing to poke. Mirror them and add them.
           PROJECTIONS: >-
-            hanzoai/python-sdk hanzoai/js-sdk hanzo-go/sdk hanzo-rs/sdk
-            hanzoai/java-sdk hanzoai/cli hanzo-docs/docs
+            hanzoai/python-sdk:cicd.yml hanzoai/js-sdk:cicd.yml
+            hanzo-go/sdk:cicd.yml hanzo-rs/sdk:cicd.yml
+            hanzoai/java-sdk:cicd.yml hanzoai/cli:cicd.yml
+            hanzo-docs/docs:deploy.yml
         run: |
           set -euo pipefail
           [ -n "${FORGE_TOKEN:-}" ] || { echo "::error::FORGE_TOKEN is empty — the same secret rollout uses to read this repo's tags"; exit 1; }
           T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           ok=0; bad=""
-          for repo in $PROJECTIONS; do
+          for entry in $PROJECTIONS; do
+            repo="${entry%%:*}"; wf="${entry##*:}"
             CODE=$(curl -s -o /tmp/d.json -w '%{http_code}' -X POST \
               -H "Authorization: token ${FORGE_TOKEN}" \
               -H 'Content-Type: application/json' \
-              "https://git.hanzo.ai/v1/repos/${repo}/actions/workflows/cicd.yml/dispatches" \
+              "https://git.hanzo.ai/v1/repos/${repo}/actions/workflows/${wf}/dispatches" \
               -d '{"ref":"main"}')
             if [ "$CODE" = "204" ]; then
               ok=$(( ok + 1 )); echo "  poked     ${repo}"
@@ -1158,7 +1168,8 @@ jobs:
           started=""; pending="first"
           while [ -n "$pending" ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
             pending=""
-            for repo in $PROJECTIONS; do
+            for entry in $PROJECTIONS; do
+              repo="${entry%%:*}"
               case " $started " in *" $repo "*) continue ;; esac
               S=$(curl -s -H "Authorization: token ${FORGE_TOKEN}" \
                     "https://git.hanzo.ai/v1/repos/${repo}/actions/runs?limit=5" \
