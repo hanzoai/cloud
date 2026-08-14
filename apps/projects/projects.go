@@ -497,6 +497,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Post(r, "/v1/sites", o.buildSite)
 	zip.Post(r, "/v1/sites/deploy", o.deploySite)
 	zip.Get(r, "/v1/sites", o.listSites)
+	// One site, by slug. Every sub-resource under a site answered — deployments,
+	// releases, publish — and the site itself did not, so the one call a client
+	// makes to ask "is it live yet?" returned 404 for a LIVE site exactly as for
+	// one that never existed. A CI lane watching for its own publish waited
+	// forever on a success it had already achieved.
+	zip.Get(r, "/v1/sites/:slug", o.getSite)
 
 	// The deployment lifecycle, on the SITES noun. It was missing here, and that
 	// omission is what made a CI client straddle two nouns: deployments existed
