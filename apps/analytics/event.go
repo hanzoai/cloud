@@ -204,27 +204,24 @@ func eventTenant(c *zip.Ctx) (admission, bool) {
 	return admission{}, false
 }
 
-// keyAdmission resolves ONE presented key, on either carrier, to what it names.
-// Both carriers call it so they cannot drift into meaning different things by the
-// same string.
+// keyAdmission resolves ONE presented key, on either carrier, to what it names and
+// what it may do. Both carriers call it so they cannot drift into meaning different
+// things by the same string.
 //
-// Two issuers, and they are DISJOINT rather than a fallback chain: a project key
-// exists only in the project store and an IAM key only in IAM, so a lookup in one
-// can never shadow the other and the order costs nothing but a miss. Projects are
-// asked first because they answer a strictly narrower question — org AND site,
-// where IAM can only ever say org, having no project to scope to.
+// WHAT the key names is Admit (attribution.go) — both issuers, asked in one place,
+// so this door and every other door that admits a key answer the same key the same
+// way. All this adds is the capability, which is an event write's question and not a
+// key's: a resolved credential writes unprojected into its org.
 //
 // A project key is the credential a site's own beacon carries, so it also carries
 // the property the whole change is for: it stops resolving the moment the project
 // stops existing.
 func keyAdmission(c *zip.Ctx, key string) (admission, bool) {
-	if sc, ok := resolveAttribution(c.Context(), key); ok {
-		return admission{org: sc.Org, project: sc.Project, full: true}, true
+	at, ok := Admit(c.Context(), key)
+	if !ok {
+		return admission{}, false
 	}
-	if org, ok := resolveKeyOrg(c.Context(), key); ok {
-		return admission{org: org, full: true}, true
-	}
-	return admission{}, false
+	return admission{org: at.Org, project: at.Project, full: true}, true
 }
 
 // firstNonWS returns the index of the first non-JSON-whitespace byte, or len(body)

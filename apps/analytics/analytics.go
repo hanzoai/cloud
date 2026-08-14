@@ -125,10 +125,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // records the informative mount line and brings up the event sink.
 func build(b cloud.Base) (state, error) {
 	b.Log.Info("analytics surface", "warehouse", "hanzo", "brand", b.Brand)
-	// The key→project resolver this door refuses without. The FALLBACK only:
-	// projects.Mount installs the in-process one when it shares this process, and
-	// currentKeyResolver prefers it.
-	SetFallbackKeyResolver(planeKeys{})
 	startSink(b.Log)
 	// The event door for a peer in another process, published beside the HTTP
 	// doors and reaching the same write core — see event_rpc.go.
