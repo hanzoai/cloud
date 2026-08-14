@@ -12,6 +12,7 @@ func init() {
 	zip.Describe("DELETE /v1/keys", zip.Doc{
 		Description: "Revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
 		Fields: map[string]string{
+			"keyTypeIn.limit": "Limit narrows what the minted key may reach, as `kind:name` entries:\n`model:zen5`, `project:acme`, `product:commerce`, or `model:*` for a whole\nkind. It only ever NARROWS — a key can never reach further than the person\nwho minted it — so an unrecognised kind costs availability, never privilege.\n\nOmitted mints an unrestricted key, because that is what every key in the\nestate is today and a default that restricted would revoke all of them.\n\nExample: {\"type\": \"secret\", \"limit\": [\"model:zen5\", \"project:acme\"]}",
 			"keyTypeIn.type":  "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
 			"revokedKey.ok":   "OK is true when the key was revoked. A failure is an error status, never a\nfalse here.",
 			"revokedKey.type": "Type is the key class that was revoked, resolved — so a caller that named\nnothing can see it revoked the secret key.",
@@ -54,6 +55,7 @@ func init() {
 		Fields: map[string]string{
 			"apiKey.createdAt": "CreatedAt is when the key last changed, as IAM records it.",
 			"apiKey.key":       "Key is the FULL value, and is present for a publishable key only: it is\npublic by construction and useless to its holder if it cannot be read back.",
+			"apiKey.limit":     "Limit is what this key may reach, as `kind:name` entries — `model:zen5`,\n`project:acme`, `product:commerce`. Absent means the key reaches whatever\nits holder does, which is what every key minted before limits existed does\nand must keep doing.",
 			"apiKey.prefix":    "Prefix is the recognizable, non-secret head of the key — enough to tell two\nkeys apart, never enough to use one.",
 			"apiKey.type":      "Type is the key class: secret (sk-) or publishable (pk-).",
 			"apiKeyList.keys":  "Keys is every key the caller holds, at most one per type.",
@@ -74,9 +76,11 @@ func init() {
 	zip.Describe("POST /v1/keys", zip.Doc{
 		Description: "Creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
 		Fields: map[string]string{
+			"keyTypeIn.limit":     "Limit narrows what the minted key may reach, as `kind:name` entries:\n`model:zen5`, `project:acme`, `product:commerce`, or `model:*` for a whole\nkind. It only ever NARROWS — a key can never reach further than the person\nwho minted it — so an unrecognised kind costs availability, never privilege.\n\nOmitted mints an unrestricted key, because that is what every key in the\nestate is today and a default that restricted would revoke all of them.\n\nExample: {\"type\": \"secret\", \"limit\": [\"model:zen5\", \"project:acme\"]}",
 			"keyTypeIn.type":      "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
 			"mintedKey.accessKey": "AccessKey is the same value under its predecessor name, carried so callers\nwritten against the older field keep working. One value, two names.",
 			"mintedKey.key":       "Key is the credential, returned ONCE — a secret key is unreadable afterwards.",
+			"mintedKey.limit":     "Limit is what the minted key may reach, echoed back so the caller can see\nthe narrowing took. Absent means unrestricted.",
 			"mintedKey.type":      "Type is the class of key that was minted.",
 		},
 		Example: json.RawMessage(`{"type":"publishable"}`),
