@@ -129,6 +129,55 @@ func TestHealthNoEmbed(t *testing.T) {
 	}
 }
 
+// TestTableWireIsTheSameEngine proves the claim the one registration rests on:
+// the table wire and the collections API are two RENDERINGS of one read, not two
+// doors. Both are reached under the ONE prefix, both refuse the same way without a
+// principal, and a record written through one is read back through the other — off
+// the same org's Base, since a second engine would answer an empty list here.
+//
+// It pins the ADDRESS as much as the behaviour. The wire used to sit at the root,
+// /rest/v1/{collection}, which needed its own route and its own manifest prefix; it
+// is under the api prefix now, so a change that moved it back would take this red
+// rather than 404ing a caller in production.
+func TestTableWireIsTheSameEngine(t *testing.T) {
+	app, _ := mountApp(t)
+	seedPublicNotes(t, "acme")
+
+	const wire = "/v1/base/rest/notes"
+
+	// The org gate is the collections API's, because it is the same handler.
+	if code, _ := req(t, app, http.MethodGet, wire, "", nil); code != http.StatusForbidden {
+		t.Fatalf("no-org table wire want 403, got %d", code)
+	}
+
+	// Written through the collections API...
+	if code, body := req(t, app, http.MethodPost, "/v1/base/collections/notes/records", "acme",
+		map[string]any{"title": "one-engine"}); code >= 300 {
+		t.Fatalf("create want <300, got %d (%s)", code, body)
+	}
+
+	// ...read back through the table wire, which answers a BARE ARRAY rather than
+	// the {items,page,…} envelope. That difference is the whole of the rendering.
+	code, body := req(t, app, http.MethodGet, wire, "acme", nil)
+	if code != http.StatusOK {
+		t.Fatalf("table wire want 200, got %d (%s)", code, body)
+	}
+	var rows []struct {
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal(body, &rows); err != nil {
+		t.Fatalf("table wire should answer a bare array: %v (%s)", err, body)
+	}
+	if len(rows) != 1 || rows[0].Title != "one-engine" {
+		t.Fatalf("table wire = %v, want one row titled one-engine (%s)", rows, body)
+	}
+
+	// The address it left answers nothing here — one scheme, not two.
+	if code, _ := req(t, app, http.MethodGet, "/rest/v1/notes", "acme", nil); code != http.StatusNotFound {
+		t.Fatalf("retired root address want 404, got %d", code)
+	}
+}
+
 // TestPerOrgIsolatedCRUD is the wire proof of the per-org hosting lane: the
 // health route, the principal gate, a collection record create→read-back, and —
 // the crux — that a record written under one org is INVISIBLE to another (each
