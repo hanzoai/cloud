@@ -217,7 +217,7 @@ func decodeLabels(v any) map[string]string {
 	return out
 }
 
-// asFloat64 narrows whatever numeric type the driver hands back. ClickHouse
+// asFloat64 narrows whatever numeric type the driver hands back. Datastore
 // returns Float64 for these columns, but the driver's `any` may carry several
 // widths depending on the column's declared type, and a status page must not
 // depend on which.

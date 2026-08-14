@@ -20,7 +20,7 @@ import (
 // It is OPT-IN (skipped unless DATASTORE_ADDR names one) so CI, which has no
 // warehouse, stays green:
 //
-//	docker run -d --name ch -p 19000:9000 clickhouse/clickhouse-server:latest
+//	docker run -d --name datastore -p 19000:9000 ghcr.io/hanzoai/datastore:latest
 //	DATASTORE_ADDR=127.0.0.1:19000 go test ./clients/samples -run TestLive -v
 //
 // It WRITES, so it refuses any non-loopback address: pointing it at a real
