@@ -137,6 +137,28 @@ var (
 	// a refusal, never a fallback to the machine identity.
 	ErrNoActor = errors.New("forge: no actor — a user-facing call must be scoped with As() or Machine()")
 
+	// ErrBadName is a NAME THE CALLER CHOSE that cannot be a URL path segment —
+	// an org or a repository carrying a slash, a traversal, a control character
+	// or surrounding space. It is refused before any request is built, so it is
+	// the caller's error and never the forge's.
+	//
+	// It is a sentinel so a surface can SAY SO. Without it every one of these
+	// was indistinguishable from an upstream failure and reached the wire as
+	// "502 forge read failed" — a message that blames a service which was never
+	// asked, sends the reader to the wrong system, and counts a client's typo
+	// against an availability budget.
+	ErrBadName = errors.New("forge: name is not a path segment")
+
+	// ErrCredentialRejected means the forge refused OUR MACHINE TOKEN (401). It is
+	// the only read failure that should invalidate the cached client: re-minting
+	// the credential is what fixes it.
+	ErrCredentialRejected = errors.New("forge: credential rejected")
+
+	// ErrRefused means the forge refused the ACTOR (403) — its own ACL, applied to
+	// the human we sudoed as. Our credential is fine and re-minting it fixes
+	// nothing, so this must never invalidate anything.
+	ErrRefused = errors.New("forge: refused")
+
 	// ErrUnknownActor means the forge does not know the actor we sudoed as.
 	ErrUnknownActor = errors.New("forge: unknown actor — no forge identity for this user")
 
@@ -220,7 +242,7 @@ func New(host, token string) (*Client, error) {
 		// binds the call tighter than this and is what actually bounds a
 		// request; this only stops a call made WITHOUT one (a CLI invoke, a
 		// background refresh whose budget is longer) from hanging forever.
-		http:   &http.Client{Timeout: 30 * time.Second},
+		http:  &http.Client{Timeout: 30 * time.Second},
 		repos: newCache[[]Repo](),
 	}, nil
 }
@@ -376,9 +398,22 @@ func (c *Client) open(ctx context.Context, path string, q url.Values, accept str
 			return nil, fmt.Errorf("%w: %s", ErrNotFound, path)
 		}
 		return nil, fmt.Errorf("%w: %s", ErrUnknownActor, c.actor)
-	case http.StatusUnauthorized, http.StatusForbidden:
+	case http.StatusUnauthorized:
+		// 401 is about OUR TOKEN: the forge does not accept the credential at all.
+		// Re-minting it is the fix, so this is the one status that should cost the
+		// deployment its cached client.
 		resp.Body.Close()
-		return nil, fmt.Errorf("forge: %s: credential rejected (%d)", path, resp.StatusCode)
+		return nil, fmt.Errorf("%w: %s", ErrCredentialRejected, path)
+	case http.StatusForbidden:
+		// 403 on a SUDOED read is the forge enforcing the ACTOR's ACL — which is
+		// the whole point of Sudo, and says nothing about our token. Folding it in
+		// with 401 made one ordinary refusal (a read-only collaborator, a repo with
+		// issues disabled) throw away the process-wide machine credential and the
+		// warm repository list with it, so every tenant then paid a KMS read and a
+		// cold walk. send() has always kept the two apart on the write path; this
+		// is the read path catching up.
+		resp.Body.Close()
+		return nil, fmt.Errorf("%w: %s", ErrRefused, path)
 	default:
 		resp.Body.Close()
 		return nil, fmt.Errorf("forge: %s: unexpected status %d", path, resp.StatusCode)
@@ -478,7 +513,6 @@ type Milestone struct {
 	Open   int    `json:"open_issues"`
 	Closed int    `json:"closed_issues"`
 	Due    string `json:"due_on,omitempty"`
-
 }
 
 // Issue is one work item. The forge's issues-search answers labels, milestone
@@ -981,13 +1015,13 @@ func isMissing(err error) bool {
 // forgot.
 func validOrg(org string) error {
 	if strings.TrimSpace(org) == "" {
-		return errors.New("forge: empty org")
+		return fmt.Errorf("%w: empty", ErrBadName)
 	}
 	if org != strings.TrimSpace(org) {
-		return fmt.Errorf("forge: org %q has surrounding space", org)
+		return fmt.Errorf("%w: %q has surrounding space", ErrBadName, org)
 	}
 	if strings.ContainsAny(org, "/\\?#%") || strings.Contains(org, "..") {
-		return fmt.Errorf("forge: org %q is not a path segment", org)
+		return fmt.Errorf("%w: %q is not a path segment", ErrBadName, org)
 	}
 	return nil
 }
