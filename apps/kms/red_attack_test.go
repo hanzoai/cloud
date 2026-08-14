@@ -26,7 +26,7 @@ func TestVector1_OrgCaseFoldCollision(t *testing.T) {
 
 	// Tenant A: validated org "hanzo" writes a secret in its own org.
 	body, _ := json.Marshal(map[string]string{"name": "STRIPE_KEY", "value": "sk-tenantA-owns-this", "env": "prod"})
-	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil)
+	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, asOrgAdmin)
 	if resp.StatusCode != 200 {
 		t.Fatalf("tenantA POST = %d, want 200: %s", resp.StatusCode, readAll(resp.Body))
 	}
@@ -68,7 +68,7 @@ func TestVector1b_ExactOrgMatchNoSplit(t *testing.T) {
 
 	// Mixed-case owner writes in its own namespace.
 	body, _ := json.Marshal(map[string]string{"name": "K", "value": "written-mixedcase", "env": "default"})
-	if r := do(t, app, "POST", "/v1/kms/secrets", owner, string(body), false, nil); r.StatusCode != 200 {
+	if r := do(t, app, "POST", "/v1/kms/secrets", owner, string(body), false, asOrgAdmin); r.StatusCode != 200 {
 		t.Fatalf("POST exact-case = %d, want 200", r.StatusCode)
 	}
 	// …and reads it back. There is no casing to mismatch: the org came from the
@@ -96,7 +96,7 @@ func TestVector1b_ExactOrgMatchNoSplit(t *testing.T) {
 	// The converse: the lowercase tenant's own write must not overwrite or shadow
 	// the mixed-case tenant's record at the same coordinate.
 	lowBody, _ := json.Marshal(map[string]string{"name": "K", "value": "written-lowercase", "env": "default"})
-	if r := do(t, app, "POST", "/v1/kms/secrets", lower, string(lowBody), false, nil); r.StatusCode != 200 {
+	if r := do(t, app, "POST", "/v1/kms/secrets", lower, string(lowBody), false, asOrgAdmin); r.StatusCode != 200 {
 		t.Fatalf("POST lowercase tenant = %d, want 200", r.StatusCode)
 	}
 	for _, tc := range []struct{ org, want string }{{owner, "written-mixedcase"}, {lower, "written-lowercase"}} {
@@ -167,7 +167,7 @@ func TestVector2b_NoAPIControlledPathSplit(t *testing.T) {
 		"env":   "default",
 		"path":  "../a", // attempt to climb to another org — must be rejected
 	})
-	r := do(t, app, "POST", "/v1/kms/secrets", "b", string(body), false, nil)
+	r := do(t, app, "POST", "/v1/kms/secrets", "b", string(body), false, asOrgAdmin)
 	if r.StatusCode != 400 {
 		t.Fatalf("path='../a' climb = %d, want 400 (validSubpath must reject '..'): %s", r.StatusCode, readAll(r.Body))
 	}
@@ -242,7 +242,7 @@ func TestDeepB_SiblingOrgListPrefix(t *testing.T) {
 	// Seed secrets in org "x", "xy", and "x-attacker".
 	for _, org := range []string{"x", "xy", "x-attacker"} {
 		body, _ := json.Marshal(map[string]string{"name": "S", "value": "v-" + org, "env": "default"})
-		if r := do(t, app, "POST", "/v1/kms/secrets", org, string(body), false, nil); r.StatusCode != 200 {
+		if r := do(t, app, "POST", "/v1/kms/secrets", org, string(body), false, asOrgAdmin); r.StatusCode != 200 {
 			t.Fatalf("seed %s = %d", org, r.StatusCode)
 		}
 	}
@@ -278,7 +278,7 @@ func TestDeepC_RESTListNoPrefixEscalation(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
 	// victim xy stores a secret.
 	body, _ := json.Marshal(map[string]string{"name": "VICT", "value": "secret", "env": "default"})
-	if r := do(t, app, "POST", "/v1/kms/secrets", "xy", string(body), false, nil); r.StatusCode != 200 {
+	if r := do(t, app, "POST", "/v1/kms/secrets", "xy", string(body), false, asOrgAdmin); r.StatusCode != 200 {
 		t.Fatalf("seed = %d", r.StatusCode)
 	}
 	// attacker "x" lists — it can only ever list /orgs/x, and that is empty.
@@ -355,7 +355,7 @@ func TestVector4_NoCrossOrgExistenceOracle(t *testing.T) {
 
 	// victim org stores a secret.
 	body, _ := json.Marshal(map[string]string{"name": "REAL", "value": "v", "env": "default"})
-	if r := do(t, app, "POST", "/v1/kms/secrets", "victim", string(body), false, nil); r.StatusCode != 200 {
+	if r := do(t, app, "POST", "/v1/kms/secrets", "victim", string(body), false, asOrgAdmin); r.StatusCode != 200 {
 		t.Fatalf("seed = %d", r.StatusCode)
 	}
 
@@ -393,7 +393,7 @@ func TestVector7_NameWithSlashKeyShapeConfusion(t *testing.T) {
 
 	// Caller in org "x" PUTs a secret whose NAME contains a slash and env-like tail.
 	body, _ := json.Marshal(map[string]string{"name": "sub/EVIL", "value": "slash-in-name", "env": "default"})
-	r := do(t, app, "POST", "/v1/kms/secrets", "x", string(body), false, nil)
+	r := do(t, app, "POST", "/v1/kms/secrets", "x", string(body), false, asOrgAdmin)
 	if r.StatusCode != 200 {
 		t.Logf("POST name-with-slash rejected: %d (%s) — good, name is validated", r.StatusCode, readAll(r.Body))
 		return
@@ -434,7 +434,7 @@ func TestVector7b_DegenerateNames(t *testing.T) {
 	}
 	for _, tc := range cases {
 		body, _ := json.Marshal(map[string]string{"name": tc.name, "value": "v"})
-		r := do(t, app, "POST", "/v1/kms/secrets", "x", string(body), false, nil)
+		r := do(t, app, "POST", "/v1/kms/secrets", "x", string(body), false, asOrgAdmin)
 		t.Logf("[%s] name=%.20q... → status=%d (expected ~%d)", tc.note, tc.name, r.StatusCode, tc.want)
 	}
 }
