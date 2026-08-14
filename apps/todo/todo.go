@@ -116,6 +116,22 @@ type state struct {
 // mounted is the active service so Shutdown can release the stores.
 var mounted *cloud.Service[state]
 
+// store is where this app's per-tenant rows live, and it is NOT the app's name.
+//
+// cek derives each database's encryption key with HKDF over the namespace AND
+// this string (cek.DeriveKey), and namespace.Path renders it into the filename.
+// So it is a KEY BINDING, and changing it is a re-key of every tenant's database
+// rather than a rename. What actually happens is worse than an error: the old
+// file stays on disk untouched, a NEW empty one opens beside it, and the board
+// comes up blank with nothing logged. Measured, on the rename that produced this
+// constant — `tracker.db` intact, the read answering "no such table: issues".
+//
+// It therefore keeps the spelling the rows were written under, and the product's
+// name is the value that moved. Migrating it would be a full logical copy per
+// tenant under two keys, at open, with no rollback — real risk for a filename
+// nobody sees. TestStoreKeepsTheNameItsRowsWereWrittenUnder pins it.
+const store = "tracker"
+
 // storeFor is the ONE way this package reaches a todo store. It names the
 // database through cloud.OrgNamespace — the single door a validated org walks
 // through — and asks the registry for that name, so "which file does this
@@ -146,7 +162,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "todo")
 	s := &cloud.Service[state]{Base: b, State: state{
-		stores: cloud.NewOrgStore(b, "todo", openStore),
+		stores: cloud.NewOrgStore(b, store, openStore),
 		forge:  &forgeSource{},
 	}}
 	mounted = s
