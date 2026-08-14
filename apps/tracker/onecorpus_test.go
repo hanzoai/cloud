@@ -25,23 +25,23 @@ import (
 // Every assertion below fails if either source is dropped from either read.
 func TestOneCorpus_TheIndexIsOnTheSameBoardAsTheForge(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
-	f.repo("acme", "api", issue(1, "api work", "open", "todo"))
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api", issue(1, "api work", "open", "todo"))
 	app := mountForge(t, f)
 
 	// A board the forge has never heard of: an agent's own roadmap, filed into
 	// the index exactly as the mirror and the plane upsert file into it.
-	st, err := storeFor(mounted, "acme", principal.DefaultProject)
+	st, err := storeFor(mounted, "hanzo", principal.DefaultProject)
 	if err != nil {
 		t.Fatalf("storeFor: %v", err)
 	}
 	ctx, now := context.Background(), time.Now().Unix()
-	board := Project{ID: "prj_b4b4bd4c", Org: "acme", Key: "OPS", Name: "Roadmap", CreatedAt: now, UpdatedAt: now}
+	board := Project{ID: "prj_b4b4bd4c", Org: "hanzo", Key: "OPS", Name: "Roadmap", CreatedAt: now, UpdatedAt: now}
 	if err := st.CreateProject(ctx, board); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	if _, err := st.CreateIssue(ctx, Issue{
-		ID: "iss_track0", ProjectID: board.ID, Org: "acme", Kind: "epic", Source: "team",
+		ID: "iss_track0", ProjectID: board.ID, Org: "hanzo", Kind: "epic", Source: "team",
 		Title: "Track 0 — ACCESS", Status: "todo", Priority: "high", Assignee: "neo",
 		CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
@@ -50,7 +50,7 @@ func TestOneCorpus_TheIndexIsOnTheSameBoardAsTheForge(t *testing.T) {
 
 	get := func(path string) []map[string]any {
 		t.Helper()
-		code, raw := asUser(t, app, http.MethodGet, path, "acme", "alice", nil)
+		code, raw := asUser(t, app, http.MethodGet, path, "hanzo", "alice", nil)
 		if code != http.StatusOK {
 			t.Fatalf("%s = %d %s", path, code, raw)
 		}
@@ -95,7 +95,7 @@ func TestOneCorpus_TheIndexIsOnTheSameBoardAsTheForge(t *testing.T) {
 
 	// THE INDEX BOARD IS ADDRESSABLE — by the same URL shape as a repository
 	// board, because a caller must not have to know which store a key lives in.
-	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/OPS", "acme", "alice", nil)
+	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/OPS", "hanzo", "alice", nil)
 	if code != http.StatusOK {
 		t.Errorf("GET the index board = %d %s, want 200 — an unaddressable board is invisible to the UI", code, raw)
 	}
@@ -120,7 +120,7 @@ func TestOneCorpus_TheIndexIsOnTheSameBoardAsTheForge(t *testing.T) {
 	// A SEARCH HIT IS AN ADDRESS. The wire carries the board KEY, never the
 	// internal id — returning the id is what made every agent-filed row a result
 	// you could find and could not open.
-	code, raw = asUser(t, app, http.MethodGet, "/v1/tracker/issues", "acme", "alice", nil)
+	code, raw = asUser(t, app, http.MethodGet, "/v1/tracker/issues", "hanzo", "alice", nil)
 	if code != http.StatusOK {
 		t.Fatalf("search = %d %s", code, raw)
 	}
