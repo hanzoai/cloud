@@ -948,7 +948,7 @@
     "slug": "crypto-portfolio",
     "title": "Crypto Portfolio",
     "category": "Web3",
-    "description": "Crypto portfolio todo on @hanzo/ui — holdings, performance and transaction history.",
+    "description": "Crypto portfolio tracker on @hanzo/ui — holdings, performance and transaction history.",
     "framework": "Next.js 14.2 + TS",
     "features": [],
     "useCase": "",
