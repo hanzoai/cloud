@@ -259,7 +259,20 @@ func (s *scope) Group(prefix string, handlers ...zip.Handler) zip.Router {
 
 // under reports whether path is p or lives inside it. Shared by the two gates so
 // "inside my subtree" has ONE meaning.
+//
+// Both sides fold through RoutePath, because the ROUTER matches case-insensitively
+// and this comparison decides whether a subsystem's middleware runs. Fiber delivers
+// /V1/EXEC to the handler registered at /v1/exec, so a raw prefix test answers "not
+// my subtree" for a request the subsystem is about to serve — the route runs and the
+// gate in front of it does not. Where that middleware is a credential check rather
+// than a decorator, one capital letter is the whole of the bypass, which is how
+// POST /V1/EXEC once ran code with no credential at all.
+//
+// Compare what the ROUTER matched, never what the client typed. RoutePath is the one
+// normalisation; the abuse and rate-limit gates already read it, and a second spelling
+// of "same path" is how two gates come to disagree about one request.
 func under(path, p string) bool {
+	path, p = RoutePath(path), RoutePath(p)
 	return path == p || strings.HasPrefix(path, strings.TrimSuffix(p, "/")+"/")
 }
 
