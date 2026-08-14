@@ -19,6 +19,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -151,10 +152,7 @@ func nextDeployment(s *cloud.Service[state], ctx context.Context, appID string) 
 	if err != nil {
 		return "", 0, fmt.Errorf("version: %w", err)
 	}
-	depID, err := genID("dep")
-	if err != nil {
-		return "", 0, fmt.Errorf("rng: %w", err)
-	}
+	depID := genID("dep")
 	return depID, version, nil
 }
 
@@ -163,7 +161,7 @@ func nextDeployment(s *cloud.Service[state], ctx context.Context, appID string) 
 // the /deploy response — 202 + the deployment view on success, the honest status +
 // message on failure.
 func deployImage(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, org, project string, a Application, depID string, version int, now int64, body deployReq, clusterErr error) (*deploymentView, error) {
-	tag := firstNonEmpty(strings.TrimSpace(body.Tag), a.ImageTag, "latest")
+	tag := cmp.Or(strings.TrimSpace(body.Tag), a.ImageTag, "latest")
 	image := a.ImageRepo + ":" + tag
 	d, status, err := deployTagCore(s, ctx, org, project, a, depID, version, now, image, tag, "image", "", clusterErr)
 	if err != nil {
@@ -247,13 +245,10 @@ func startGitBuild(s *cloud.Service[state], ctx context.Context, org string, a A
 	if strings.TrimSpace(a.RepoURL) == "" {
 		return Deployment{}, "", http.StatusBadRequest, fmt.Errorf("git application has no repo URL")
 	}
-	ref := firstNonEmpty(strings.TrimSpace(commit), a.RepoBranch, "main")
+	ref := cmp.Or(strings.TrimSpace(commit), a.RepoBranch, "main")
 	image := s.State.k8s.buildImageRef(org, a.Slug, shortTag(ref))
 
-	bldID, err := genID("bld")
-	if err != nil {
-		return Deployment{}, "", http.StatusInternalServerError, fmt.Errorf("rng: %v", err)
-	}
+	bldID := genID("bld")
 	b := Build{ID: bldID, Org: org, ApplicationID: a.ID, DeploymentID: depID, Status: "queued", Image: image, CreatedAt: now, UpdatedAt: now}
 	if err := s.State.store.InsertBuild(ctx, b); err != nil {
 		return Deployment{}, "", http.StatusInternalServerError, fmt.Errorf("persist build: %v", err)
@@ -311,7 +306,7 @@ func emitDeployLifecycle(ctx context.Context, kind cloud.LifecycleKind, org stri
 	}
 	cloud.EmitLifecycle(ctx, cloud.LifecycleEvent{
 		Kind: kind, Org: org, Project: project, Repo: cloud.RepoFromCloneURL(a.RepoURL),
-		Branch: firstNonEmpty(a.RepoBranch, "main"), After: d.Commit,
+		Branch: cmp.Or(a.RepoBranch, "main"), After: d.Commit,
 		DeployID: d.ID, Detail: detail,
 	})
 }

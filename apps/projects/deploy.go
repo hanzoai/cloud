@@ -1,11 +1,13 @@
 package projects
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -140,10 +142,7 @@ func publishSite(s *cloud.Service[state], ctx context.Context, org string, p Pro
 	if err != nil {
 		return Deployment{}, fmt.Errorf("version: %w", err)
 	}
-	id, err := genID("dep")
-	if err != nil {
-		return Deployment{}, fmt.Errorf("rng: %w", err)
-	}
+	id := genID("dep")
 	d := Deployment{
 		ID: id, ProjectID: p.ID, Org: org, Version: version, Status: "uploading",
 		Source: source, Bucket: s.State.blob.bucket, Prefix: sitePrefix(org, p.Slug),
@@ -186,43 +185,42 @@ func publishSite(s *cloud.Service[state], ctx context.Context, org string, p Pro
 	return d, nil
 }
 
-// deploy ships a project live. Two modes, one endpoint:
+// deploy uploads a BUILT site as one archive and serves it immediately.
 //
-//   - Artifact (default): the request body is a zip OR tar(.gz) of the BUILT site
-//     (must contain index.html at the root, or a single wrapper directory that
-//     does). It arrives as either a multipart file upload (a browser <input
-//     type=file>) or the raw request body (a curl one-liner). The handler unpacks
-//     it to OUR S3 under "<org>/<slug>/", marks the bucket public-read, and
-//     records a "live" deployment. This is the builder/console one-click deploy
-//     (small artifacts, bounded by the app/gateway BodyLimit) — no CI round-trip.
+// The request body is a zip OR tar(.gz) of the built site (index.html at the
+// root, or a single wrapper directory that holds it), sent either as a multipart
+// file part (a browser <input type=file>) or as the raw body (a curl one-liner).
+// It unpacks to OUR S3 under "<org>/<slug>/" and records a live deployment.
 //
-//   - Git (Content-Type: application/json, {"source":"git", ...}): records a
-//     "queued" deployment and returns 202. CI (the reusable build workflow)
-//     checks out the linked repo, builds it, syncs dist/ to the SAME S3 prefix,
-//     then calls .../deployments/:id/complete to flip it live. This is the
-//     "link repo → build (CI, never local) → deploy" path for large sites.
+// It stays UNTYPED because its body is BYTES. zip decodes every non-empty typed
+// body with jsonenc.Unmarshal before the handler runs, so an In on this route
+// would answer a zip archive with 400 — the conversion would not mis-describe
+// the route, it would break it. Its shape is declared instead, at its
+// registration, with openapi.Register + openapi.Binary, so the archive request
+// and the deployment it answers with both reach the document and the SDKs.
+//
+// It is ONE operation. It used to be two, disambiguated by Content-Type: an
+// `application/json` body enqueued a deployment and answered 202 instead. Two
+// operations at one address is what kept the whole route untypeable — a typed op
+// declares ONE input and ONE success status — so the enqueue is its own typed
+// operation now, POST .../deployments (startDeployment), and this route answers
+// only 200 for the archive it just published.
 func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	p, err := loadProject(s, c.Context(), org, slugParam(c))
 	if err != nil {
 		return err
 	}
 
-	// Fail-closed hosting gate BEFORE any deploy work (both modes are billable):
-	// an unfunded org is 402, an unreachable commerce is 503, and nothing is
-	// uploaded or enqueued. The debit lands later — after the work succeeds.
+	// Fail-closed hosting gate BEFORE any deploy work: an unfunded org is 402, an
+	// unreachable commerce is 503, and nothing is uploaded. The debit lands later
+	// — after the upload succeeds.
 	fee, gErr := gateHosting(s, c)
 	if gErr != nil {
 		return cloud.DenyResource(c, gErr)
-	}
-
-	if strings.Contains(strings.ToLower(c.Header("Content-Type")), "application/json") {
-		// Git/CI path: enqueue now (gated), debit on the CI completion that flips
-		// the deployment live — never on a queued/failed build.
-		return deployGit(s, c, org, p)
 	}
 	if err := deployArtifact(s, c, org, p); err != nil {
 		return err // failed deploy — surface it, do NOT bill failed work.
@@ -231,55 +229,94 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	return nil
 }
 
-type gitDeployReq struct {
-	Source string `json:"source"`
-	Commit string `json:"commit"`
-	Branch string `json:"branch"`
+// projectsDeployStart is the body of a deployment start: which build this is.
+type projectsDeployStart struct {
+	// Slug is the site to deploy, from the path.
+	Slug string `json:"slug"`
+	// Commit is the git sha this build was produced from, recorded on the
+	// deployment so a released site can be traced back to its source. Optional.
+	//
+	// It is the ONLY field here, and deliberately: the predecessor also accepted
+	// `source` and `branch`. `source` was the Content-Type discriminator this
+	// split removed. `branch` was accepted and DISCARDED — there is no branch
+	// column on a deployment, and the lifecycle event derives the branch from the
+	// project's own linked one — so declaring it would publish a settable field
+	// that does nothing into the document, every generated SDK and the MCP input
+	// schema. A field that is read by nothing is not described as if it were.
+	//
+	// `url:"-"` because zip binds the query string OVER a decoded body, so
+	// without it a `?commit=` the caller never sent would outrank the one it did.
+	Commit string `json:"commit" url:"-"`
 }
 
-func deployGit(s *cloud.Service[state], c *zip.Ctx, org string, p Project) error {
-	var body gitDeployReq
-	if err := c.Bind(&body); err != nil {
-		return err
+// StartDeployment opens a deployment and hands back a short-lived, prefix-scoped
+// grant to write its bytes straight to object storage. Answers 202.
+//
+// This is the path for a site too large to send as one archive: a real export is
+// hundreds of megabytes against a 16 MiB body limit, so the bytes deliberately do
+// NOT pass through the API. The answer carries `bucket`, `prefix` and `upload` —
+// a presigned POST policy that S3 itself confines to this site's prefix
+// (starts-with `<org>/<slug>/`), expires in 30 minutes and bounds each object.
+// So a build writes its own files and holds no standing bucket credential; there
+// is nothing to rotate and nothing that leaks between tenants. Never guess the
+// prefix — it is server-derived, and a guessed one lands where nothing is served.
+//
+// The deployment is `queued` until POST .../deployments/{id}/complete flips it
+// live (or error). That completion is also where DELETION happens: the grant
+// authorizes writes only, so a build cannot remove a file, and cloud reconciles
+// the prefix against the `keys` manifest the completion carries. A build that
+// dies before completing leaves the deployment queued rather than a half-live
+// site.
+//
+// The grant is on the 202 and NOWHERE else — it is never stored and never
+// replayed on a later read, so it cannot outlive the build it was minted for. A
+// deployment whose grant could not be minted is still created and still
+// completable; it simply carries no `upload`, and a caller with no other way to
+// write should treat that as the failure it is.
+//
+// Billing: the hosting gate runs BEFORE anything is created (402 unfunded, 503
+// commerce unreachable), and the debit lands on the completion that goes live —
+// never on a queued or failed build.
+//
+// Scope: a validated principal is required (403 without one) and the site is
+// resolved within that principal's org, so another tenant's slug is a 404.
+func (o ops) startDeployment(ctx context.Context, in *projectsDeployStart) (*projectsDeployment, error) {
+	c, org, p, err := o.siteOf(ctx, in.Slug)
+	if err != nil {
+		return nil, err
 	}
-	if p.RepoURL == "" {
-		return zip.ErrBadRequest("project has no linked repo; link a repo or deploy an artifact")
+	s := o.s
+	if _, gErr := gateHosting(s, c); gErr != nil {
+		return nil, cloud.Denied(gErr)
 	}
 	now := time.Now().Unix()
-	version, err := s.State.store.NextVersion(c.Context(), p.ID)
+	version, err := s.State.store.NextVersion(ctx, p.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "version: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "version: %v", err)
 	}
-	id, err := genID("dep")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := genID("dep")
 	d := Deployment{
 		ID: id, ProjectID: p.ID, Org: org, Version: version, Status: "queued",
-		Source: "git", Commit: strings.TrimSpace(body.Commit), Bucket: s.State.blob.bucket,
+		Source: "git", Commit: strings.TrimSpace(in.Commit), Bucket: s.State.blob.bucket,
 		Prefix: sitePrefix(org, p.Slug), CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.State.store.InsertDeployment(c.Context(), d); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist deployment: %v", err)
+	if err := s.State.store.InsertDeployment(ctx, d); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist deployment: %v", err)
 	}
 	p.Status = "building"
 	p.UpdatedAt = now
-	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
+	if err := s.State.store.UpdateProject(ctx, p); err != nil {
 		s.Log.Warn("set building failed (continuing)", "slug", p.Slug, "err", err)
 	}
-	emitProjectLifecycle(c.Context(), cloud.LifecycleBuildStarted, org, p, d, "building "+p.Slug)
+	emitProjectLifecycle(ctx, cloud.LifecycleBuildStarted, org, p, d, "building "+p.Slug)
 
-	// Hand CI a prefix-scoped, short-lived write grant with the 202, so it needs no
-	// bucket credential of its own (grant.go). Best-effort: a deployment whose
-	// grant could not be minted is still queued and still completable — the caller
-	// just has to have its own way to write, and sees no `upload` in the response.
 	view := toDeployment(d)
-	grant, gErr := mintGrant(c.Context(), s.State.blob, d.Prefix, time.Now())
+	grant, gErr := mintGrant(ctx, s.State.blob, d.Prefix, time.Now())
 	if gErr != nil {
 		s.Log.Warn("mint upload grant failed (deployment still queued)", "slug", p.Slug, "err", gErr)
 	}
 	view.Upload = grant
-	return c.JSON(http.StatusAccepted, view)
+	return &view, nil
 }
 
 // emitProjectLifecycle fans a site-deploy transition onto the cloud lifecycle
@@ -500,7 +537,7 @@ func (o ops) completeDeployment(ctx context.Context, in *projectsComplete) (*pro
 		// completion is the one billable success, an "error" completion bills nothing.
 		meterDeploy(s, c, cloud.ResourceFeeCents(deployFeeEnvPrefix, deployKind))
 	} else {
-		emitProjectLifecycle(ctx, cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+nonEmptyStr(d.Message, "deploy failed"))
+		emitProjectLifecycle(ctx, cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+cmp.Or(d.Message, "deploy failed"))
 	}
 	out := toDeployment(d)
 	return &out, nil
@@ -528,14 +565,6 @@ func (o ops) completeDeployment(ctx context.Context, in *projectsComplete) (*pro
 // the health of a site that is up.
 func failureOwnsProject(currentDeploy, deployID string) bool {
 	return currentDeploy == "" || currentDeploy == deployID
-}
-
-// nonEmptyStr returns s trimmed, or fallback when blank.
-func nonEmptyStr(s, fallback string) string {
-	if strings.TrimSpace(s) == "" {
-		return fallback
-	}
-	return s
 }
 
 // ListDeployments returns a project's deploy history, newest version first.
@@ -590,10 +619,14 @@ func (o ops) getDeployment(ctx context.Context, in *projectsDeploymentRef) (*pro
 }
 
 // genID returns "<prefix>_<22-char-url-safe-token>" (96 bits of entropy).
-func genID(prefix string) (string, error) {
+// genID mints this package's ids: sixteen random bytes in base64url, which is the
+// shape its rows already carry — shorter than the hex mint.ID makes, and not
+// interchangeable with it for that reason.
+//
+// No error. crypto/rand.Read fills the buffer or panics; since Go 1.24 it cannot
+// report a short read, so there was never a failure for a caller to handle.
+func genID(prefix string) string {
 	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return prefix + "_" + base64.RawURLEncoding.EncodeToString(b), nil
+	_, _ = rand.Read(b)
+	return prefix + "_" + base64.RawURLEncoding.EncodeToString(b)
 }

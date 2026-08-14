@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hanzoai/cloud/apps/k8s"
 	"strings"
 	"sync"
+
+	"github.com/hanzoai/cloud/apps/k8s"
 
 	"testing"
 
@@ -21,17 +22,40 @@ import (
 // models the embedded KMS closely enough for the platform seal path: PutSecret
 // stores by ref, GetSecret reads it back. `fail` models an unconfigured KMS
 // (master key missing) so the fail-closed path is exercised.
+//
+// `down` and `panics` model a KMS that is REACHABLE-then-not: a read that errors,
+// and a client that does not return at all. Both are read paths, so they are
+// distinct from `fail` — a deployment can hold a key it read cleanly and then
+// lose the ability to read the next one.
 type fakeKMS struct {
-	mu   sync.Mutex
-	data map[string][]byte
-	fail bool
+	mu     sync.Mutex
+	data   map[string][]byte
+	fail   bool
+	down   error
+	panics bool
+	reads  int
 }
 
 func newFakeKMS() *fakeKMS { return &fakeKMS{data: map[string][]byte{}} }
 
+// readCount is how many times the secret has actually been fetched — the whole
+// measurement behind "a flood costs one read per window, not one per request".
+func (f *fakeKMS) readCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.reads
+}
+
 func (f *fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.reads++
+	if f.panics {
+		panic("kms: the client did not return")
+	}
+	if f.down != nil {
+		return nil, f.down
+	}
 	v, ok := f.data[ref]
 	if !ok {
 		return nil, fmt.Errorf("kms: secret not found")

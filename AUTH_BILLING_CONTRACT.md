@@ -145,7 +145,7 @@ Metering+gating coverage (each meters its OWN org, debits on success):
 | compute / GPU | `compute` | provision knobs | `apps/ml/ml.go`, `apps/visor/*` |
 | provisioning (sql/kv/vector/docdb) | `provisioning` | `CLOUD_PROVISION_FEE_CENTS[_KIND]` | `apps/provisioning/*` |
 | automations | `automations` | `CLOUD_AUTOMATIONS_FEE_CENTS` | `apps/automations/automations.go` |
-| tracker | `tracker` | fee knob | `apps/tracker/tracker.go` |
+| todo | `todo` | fee knob | `apps/todo/todo.go` |
 | security | `security.scan` | — | `apps/security/security.go` |
 
 **Product/agent read axes.** The console's per-product Metrics dashboard groups on

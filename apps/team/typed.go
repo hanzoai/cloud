@@ -29,7 +29,6 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 )
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
@@ -46,19 +45,6 @@ import (
 // resolve, which would file every doc comment under the wrong path).
 func unavailable() error {
 	return zip.Errorf(http.StatusServiceUnavailable, "team: signing secret not configured")
-}
-
-// tenant is the VALIDATED org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. It IS principal.Org, read at the one seam that
-// cannot call it, so the trust decision stays in one function.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("validated org required")
-	}
-	return org, nil
 }
 
 // admin reports that the caller is a platform SuperAdmin (c.IsAdmin() — the

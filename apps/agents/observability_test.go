@@ -472,7 +472,8 @@ func TestToolSubsystemReadsTheNameNotAnIndex(t *testing.T) {
 		"get_agents_sessions": "agents",
 		"http":                "", // a registry-local tool owns no subsystem
 		"":                    "",
-		"v1":                  "", // "v1" with nothing after it names nothing
+		"v1":                  "",       // "v1" with nothing after it names nothing
+		"post_v1_coding":      "coding", // an explicit operation id may still spell it
 	}
 	for in, want := range cases {
 		if got := toolSubsystem(in); got != want {

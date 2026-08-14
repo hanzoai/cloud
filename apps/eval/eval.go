@@ -56,7 +56,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"regexp"
 	"slices"
 
@@ -66,6 +65,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -497,7 +498,7 @@ type none struct{}
 // validated owner claim, never from a client X-Org-Id, so a dataset can only ever
 // be written under the caller's own tenant. A description over 64 KiB is 400.
 func (s *service) createDataset(ctx context.Context, in *datasetReq) (*datasetView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -512,12 +513,8 @@ func (s *service) createDataset(ctx context.Context, in *datasetReq) (*datasetVi
 	if len(in.Description) > maxContent {
 		return nil, zip.ErrBadRequest("description too large")
 	}
-	id, err := genID("ds")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	d, err := s.store.UpsertDataset(ctx, Dataset{
-		ID: id, Org: org, Name: name, Description: in.Description, Metadata: meta,
+		ID: mint.ID("ds"), Org: org, Name: name, Description: in.Description, Metadata: meta,
 		UpdatedAt: time.Now().Unix(),
 	})
 	if err != nil {
@@ -535,7 +532,7 @@ func (s *service) createDataset(ctx context.Context, in *datasetReq) (*datasetVi
 // there is no parameter that reaches another tenant's datasets. The item count is
 // NOT populated here — read one dataset to get it.
 func (s *service) listDatasets(ctx context.Context, in *page) (*datasetList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -556,7 +553,7 @@ func (s *service) listDatasets(ctx context.Context, in *page) (*datasetList, err
 // A name this org does not have is 404, which is also what another tenant's
 // dataset looks like from here. Requires a validated principal; 403 without one.
 func (s *service) getDataset(ctx context.Context, in *datasetRef) (*datasetView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -586,7 +583,7 @@ func (s *service) getDataset(ctx context.Context, in *datasetRef) (*datasetView,
 // validated principal; 403 without one. Runs and scores already recorded against
 // the dataset are telemetry events and are NOT deleted with it.
 func (s *service) deleteDataset(ctx context.Context, in *datasetRef) (*none, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -641,7 +638,7 @@ type itemPage struct {
 // That dataset MUST already exist for this org: an unknown one is 404, never a
 // silent create. Requires a validated principal; 403 without one.
 func (s *service) createItem(ctx context.Context, in *itemReq) (*itemView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -674,9 +671,7 @@ func (s *service) createItem(ctx context.Context, in *itemReq) (*itemView, error
 	}
 	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		if id, err = genID("item"); err != nil {
-			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-		}
+		id = mint.ID("item")
 	} else if !nameRE.MatchString(id) {
 		return nil, zip.ErrBadRequest("id must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
@@ -702,7 +697,7 @@ func (s *service) createItem(ctx context.Context, in *itemReq) (*itemView, error
 // the read is filtered on the validated org, so naming another tenant's dataset
 // returns nothing rather than its contents.
 func (s *service) listItems(ctx context.Context, in *itemPage) (*itemList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -740,7 +735,7 @@ type evaluatorReq struct {
 // Like a dataset, the NAME is the key: re-posting a name edits that judge rather
 // than adding a second one. Requires a validated principal; 403 without one.
 func (s *service) createEvaluator(ctx context.Context, in *evaluatorReq) (*evaluatorView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -757,12 +752,8 @@ func (s *service) createEvaluator(ctx context.Context, in *evaluatorReq) (*evalu
 	} else if !nameRE.MatchString(scoreName) {
 		return nil, zip.ErrBadRequest("scoreName must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
-	id, err := genID("eval")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	e, err := s.store.UpsertEvaluator(ctx, Evaluator{
-		ID: id, Org: org, Name: name, Model: strings.TrimSpace(in.Model),
+		ID: mint.ID("eval"), Org: org, Name: name, Model: strings.TrimSpace(in.Model),
 		Criteria: in.Criteria, ScoreName: scoreName, UpdatedAt: time.Now().Unix(),
 	})
 	if err != nil {
@@ -778,7 +769,7 @@ func (s *service) createEvaluator(ctx context.Context, in *evaluatorReq) (*evalu
 // Requires a validated principal; 403 without one, and the listing is filtered on
 // the validated org.
 func (s *service) listEvaluators(ctx context.Context, in *page) (*evaluatorList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -825,7 +816,7 @@ type scoreConfigReq struct {
 // A CATEGORICAL rubric with no categories is 400, as is a non-finite bound or a
 // minValue above maxValue. Requires a validated principal; 403 without one.
 func (s *service) createScoreConfig(ctx context.Context, in *scoreConfigReq) (*scoreConfigView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -853,12 +844,8 @@ func (s *service) createScoreConfig(ctx context.Context, in *scoreConfigReq) (*s
 	if dt == "CATEGORICAL" && len(cats) == 0 {
 		return nil, zip.ErrBadRequest("CATEGORICAL config requires at least one category")
 	}
-	id, err := genID("sc")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
 	cfg, err := s.store.UpsertScoreConfig(ctx, ScoreConfig{
-		ID: id, Org: org, Name: name, DataType: dt,
+		ID: mint.ID("sc"), Org: org, Name: name, DataType: dt,
 		MinValue: in.MinValue, MaxValue: in.MaxValue, Categories: cats,
 		UpdatedAt: time.Now().Unix(),
 	})
@@ -875,7 +862,7 @@ func (s *service) createScoreConfig(ctx context.Context, in *scoreConfigReq) (*s
 // Requires a validated principal; 403 without one, and the listing is filtered on
 // the validated org.
 func (s *service) listScoreConfigs(ctx context.Context, in *page) (*scoreConfigList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -935,7 +922,7 @@ type scoreReq struct {
 // Requires a validated principal; 403 without one, and the org is stamped from
 // the validated claim rather than read off the body.
 func (s *service) createScore(ctx context.Context, in *scoreReq) (*scoreView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -986,13 +973,9 @@ func (s *service) validateScore(ctx context.Context, org, name string, body scor
 		Org: org, Name: name, DataType: dt,
 		TraceID: strings.TrimSpace(body.TraceID), RunName: strings.TrimSpace(body.RunName),
 		Dataset: strings.TrimSpace(body.Dataset), ItemID: strings.TrimSpace(body.ItemID),
-		Comment: truncate(body.Comment, maxComment),
+		Comment: shorten.To(body.Comment, maxComment),
 	}
-	id, err := genID("score")
-	if err != nil {
-		return ScoreEvent{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	ev.ID = id
+	ev.ID = mint.ID("score")
 
 	switch dt {
 	case "NUMERIC":
@@ -1023,7 +1006,7 @@ func (s *service) validateScore(ctx context.Context, org, name string, body scor
 		if len(label) > 256 {
 			return ScoreEvent{}, zip.ErrBadRequest("stringValue too long")
 		}
-		if hasCfg && !containsStr(cfg.Categories, label) {
+		if hasCfg && !slices.Contains(cfg.Categories, label) {
 			return ScoreEvent{}, zip.ErrBadRequest("stringValue not in the configured category set")
 		}
 		ev.StringValue = label
@@ -1062,7 +1045,7 @@ type traceFilter struct {
 // datastore, so a deployment with none wired answers 503 rather than an empty
 // page that would read as "no scores".
 func (s *service) listScores(ctx context.Context, in *scoreFilter) (*scoreList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1095,7 +1078,7 @@ func (s *service) listScores(ctx context.Context, in *scoreFilter) (*scoreList, 
 // principal; 403 without one. Traces live in the datastore, so a deployment with
 // none wired answers 503 rather than an empty page.
 func (s *service) listTraces(ctx context.Context, in *traceFilter) (*traceList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1266,7 +1249,7 @@ type runs struct {
 // produces, so a deployment with no datastore wired is 503 up front. Requires a
 // validated principal; 403 without one.
 func (s *service) runHandler(ctx context.Context, in *runRequest) (*runSummary, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1352,14 +1335,12 @@ func (s *service) runHandler(ctx context.Context, in *runRequest) (*runSummary, 
 
 	// Persist the durable run record (metastore), best-effort — a metastore write
 	// failure is logged, never masks the run result.
-	if id, gerr := genID("run"); gerr == nil {
-		if _, uerr := s.store.UpsertRun(ctx, DatasetRun{
-			ID: id, Org: org, Dataset: in.Dataset, Name: runName, Model: in.Model,
-			JudgeModel: judge.Model, Items: summary.Items, Scored: summary.Scored,
-			AvgScore: summary.AvgScore, UpdatedAt: time.Now().Unix(),
-		}); uerr != nil {
-			s.log.Warn("run record not persisted", "run", runName, "err", uerr)
-		}
+	if _, uerr := s.store.UpsertRun(ctx, DatasetRun{
+		ID: mint.ID("run"), Org: org, Dataset: in.Dataset, Name: runName, Model: in.Model,
+		JudgeModel: judge.Model, Items: summary.Items, Scored: summary.Scored,
+		AvgScore: summary.AvgScore, UpdatedAt: time.Now().Unix(),
+	}); uerr != nil {
+		s.log.Warn("run record not persisted", "run", runName, "err", uerr)
 	}
 	return &summary, nil
 }
@@ -1388,7 +1369,7 @@ func (s *service) runItem(ctx context.Context, org, authz, runName, model string
 		res.Error = "model: " + err.Error()
 		return res
 	}
-	res.Output = truncate(output, maxComment)
+	res.Output = shorten.To(output, maxComment)
 
 	traceID := genUUID()
 	res.TraceID = traceID
@@ -1412,11 +1393,10 @@ func (s *service) runItem(ctx context.Context, org, authz, runName, model string
 	}
 	res.Score = score
 	if s.tel != nil {
-		id, _ := genID("score")
 		if err := s.tel.RecordScore(ctx, ScoreEvent{
-			ID: id, Org: org, Name: judge.Name, TraceID: traceID, RunName: runName,
+			ID: mint.ID("score"), Org: org, Name: judge.Name, TraceID: traceID, RunName: runName,
 			Dataset: it.Dataset, ItemID: it.ID, DataType: "NUMERIC", Value: score,
-			Comment: truncate(reasoning, maxComment), Timestamp: time.Now().UTC(),
+			Comment: shorten.To(reasoning, maxComment), Timestamp: time.Now().UTC(),
 		}); err != nil {
 			res.Error = "score: " + err.Error()
 			return res
@@ -1434,7 +1414,7 @@ func (s *service) runItem(ctx context.Context, org, authz, runName, model string
 // so they are readable on a deployment with no telemetry wired — but a run's
 // traces and scores are not.
 func (s *service) listRuns(ctx context.Context, in *runFilter) (*runs, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1621,10 +1601,6 @@ func cleanCategories(xs []string) []string {
 	return out
 }
 
-func containsStr(xs []string, target string) bool {
-	return slices.Contains(xs, target)
-}
-
 // normalizeJudge fills a judge spec: the judge model defaults to the model under
 // test; name/criteria have safe defaults. The judge NAME becomes a stored score
 // name, so a name that fails nameRE is rejected in favor of the safe default
@@ -1643,19 +1619,10 @@ func normalizeJudge(j *judgeSpec, model string) judgeSpec {
 			out.Name = v
 		}
 		if v := strings.TrimSpace(j.Criteria); v != "" {
-			out.Criteria = truncate(v, maxContent)
+			out.Criteria = shorten.To(v, maxContent)
 		}
 	}
 	return out
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // genUUID returns a v4 UUID (trace ids follow the OTel trace-id shape).
@@ -1673,12 +1640,3 @@ func rfc3339(unix int64) string {
 	}
 	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }
-
-func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
-}
-
-func getenv(key string) string { return strings.TrimSpace(os.Getenv(key)) }

@@ -16,6 +16,7 @@ package books
 //	TRANSFER          → NO voucher; recorded for audit            (own-account move, no P&L)
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -204,7 +205,7 @@ func containsAny(hay string, needles ...string) bool {
 // descOf is the human description for a voucher: the merchant, else the description, else
 // the connector-scoped source id — never empty.
 func descOf(bt BankTxn) string {
-	return firstNonEmpty(strings.TrimSpace(bt.Merchant), strings.TrimSpace(bt.Description), bankSourceID(bt))
+	return cmp.Or(strings.TrimSpace(bt.Merchant), strings.TrimSpace(bt.Description), bankSourceID(bt))
 }
 
 // questionPrompt is the clarifying question for an unmatched inflow — it asks WHAT the

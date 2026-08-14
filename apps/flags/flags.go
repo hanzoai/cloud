@@ -50,6 +50,7 @@
 package flags
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -60,6 +61,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // Type is the switch kind the cockpit renders (and how the value is decoded).
@@ -465,7 +467,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	log := b.Log
 	c := &Client{
 		stores:     cloud.NewOrgStore[*Store](b, "flags", openStore),
-		distinctID: firstNonEmpty(os.Getenv("FLAGS_PLATFORM_DISTINCT_ID"), "hanzo-platform:"+firstNonEmpty(deps.Brand, "hanzo")),
+		distinctID: environ.Or("FLAGS_PLATFORM_DISTINCT_ID", "hanzo-platform:"+cmp.Or(strings.TrimSpace(deps.Brand), "hanzo")),
 		ttl:        ttlFromEnv(),
 	}
 	mounted = c
@@ -495,13 +497,4 @@ func ttlFromEnv() time.Duration {
 		}
 	}
 	return 15 * time.Second
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }

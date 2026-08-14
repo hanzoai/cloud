@@ -3,6 +3,7 @@
 package commerce
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -134,9 +135,9 @@ func (o meterOps) record(ctx context.Context, in *plane.RecordIn) (*plane.Record
 	if _, rerr := o.m.Record(ctx, metering.Usage{
 		User: subject, Org: org,
 		Amount:   credit.FromDecimal(amount.Decimal()),
-		Model:    firstNonEmpty(in.Usage.Model, in.Usage.Service),
+		Model:    cmp.Or(in.Usage.Model, in.Usage.Service),
 		Project:  in.Usage.Project,
-		Provider: firstNonEmpty(in.Usage.Provider, in.Usage.Service),
+		Provider: cmp.Or(in.Usage.Provider, in.Usage.Service),
 		Service:  in.Usage.Service,
 		// The act's name crosses as the act's name and the correlation id as the
 		// correlation id. Folding the second into the first is what let a client's
@@ -158,11 +159,4 @@ func (o meterOps) record(ctx context.Context, in *plane.RecordIn) (*plane.Record
 		return nil, fmt.Errorf("record: %w", rerr)
 	}
 	return &plane.Recorded{Amount: in.Amount}, nil
-}
-
-func firstNonEmpty(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }

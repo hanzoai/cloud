@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/iam"
-	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/plane"
+	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	"github.com/zap-proto/zip"
 )
 
 // MaxCustomerConcurrency bounds the per-org enrichment fan-out so a large fleet does
@@ -36,72 +39,95 @@ func ListOrgs(s *cloud.Service[State], ctx context.Context, cr iam.Creds) ([]iam
 	return orgs, nil
 }
 
-// OrgMoney returns (spendCents, creditsCents, ok) for one org — the ONE per-org money read
-// every fleet aggregator (overview, orgs, revenue) folds over. ok is false ONLY when a read
-// FAILED, so a caller folds the per-org failure into a PARTIAL/degraded source rather than
-// presenting the resulting undercount as authoritative. An org that simply has no money yet
-// reads a clean (0, 0, true), never a failure.
+// OrgMoney returns one org's consumption and wallet — the ONE per-org money read every
+// fleet aggregator (overview, orgs, customers, revenue, finance) folds over. The error is
+// non-nil ONLY when a read FAILED, so a caller folds the per-org failure into a degraded
+// source rather than presenting the resulting undercount as authoritative. An org that
+// simply has no money yet reads a clean (0, 0, nil), never a failure.
 //
-// CO-RESIDENCE (the money-plane trap). Commerce's own /v1/billing/* routes are behind
-// `//go:build cloud` and are NOT compiled into this binary, so the admin commerce client's
-// S2S reads self-dispatch by PATH into cloud's OWN handlers: GET /v1/billing/balance
-// re-enters the customer balance handler with no principal (401) and GET
-// /v1/billing/usage/rollup is unrouted (404). Reading commerce over HTTP would therefore
-// fail for EVERY org and falsely mark the money source DOWN while real money sits in the
-// co-resident ledger. So — exactly as clients/billing.balance()/usage() and
-// core.grantDeposit already resolve it — prefer the co-resident finance ledger
-// (finance.Current()); the commerce S2S read stays only as the split-deploy fallback.
+// IT ASKS THE LEDGER BY NAME. The money lives in a SQLite file that only the process
+// mounting commerce may open, and admin is a different process, so this was an HTTP read
+// against commerce's own /v1/billing/* — routes that are behind `//go:build cloud` and
+// are compiled into no binary here. GET /v1/billing/usage/rollup is registered nowhere
+// and answered 404 for every org on every load, which is what marked the money source
+// degraded on a fleet whose money was fine. That is the same 404 the referral, affiliate,
+// author and usage surfaces each hit, and they were moved to plane.FinanceSpend; admin
+// was the last caller left on the dead path.
 //
-// NO LEDGER AND NO ENDPOINT IS NO READ, not a zero. Commerce.Spend/Credits answer
-// (0, nil) when the endpoint is unwired — deliberately, so a partial deploy degrades
-// quietly — and quiet is exactly the failure this signature exists to end. Apps are
-// their own binaries now, so the process serving /v1/admin/* publishes no finance
-// ledger and, with commerce not co-resident, resolves no base either: BOTH sources are
-// absent at once, and without the refusal below that pair reads as a clean, confident
-// (0, 0, true) for every org in the fleet. Told apart HERE, once, so no caller has to
-// hold a second copy of "can money be read at all".
-func OrgMoney(s *cloud.Service[State], ctx context.Context, org string) (spend, credits int64, ok bool) {
-	if fin := finance.Current(); fin != nil {
-		return orgMoneyFromFinance(ctx, fin, org)
+// So there is one way now, and it holds wherever commerce runs: ask the process that owns
+// the ledger. ONE call answers both halves — the ledger reports the window's consumption
+// beside the wallet it is drawn from — so a spend and a balance shown side by side can no
+// longer come from two reads that disagreed. No URL, no service token, nothing a
+// deployment can set wrong.
+//
+// ABSENCE IS THE ROUTER'S WORD. ErrNoLedger — and only it — means this deployment runs
+// no commerce, which is a clean answer rather than an outage. The predicate it replaces
+// asked whether a base URL and a service token were set; neither exists for a peer
+// reached by name, and both were set on a deployment whose every read was 404ing, so the
+// money source could read healthy while nothing had been read at all.
+func OrgMoney(s *cloud.Service[State], as Delegated, org string) (spend, credits int64, err error) {
+	money, err := commercepeer.FinanceSpend(as.at(org),
+		&plane.SpendIn{Since: time.Now().UTC().AddDate(0, 0, -spendWindowDays).Unix()})
+	switch {
+	case errors.Is(err, cloud.ErrNoPeer):
+		return 0, 0, ErrNoLedger
+	case err != nil:
+		return 0, 0, fmt.Errorf("money: %s: %w", org, err)
+	case money == nil:
+		// A void reply is not a zero month. Nothing was read, so nothing is known.
+		return 0, 0, fmt.Errorf("money: %s: the ledger answered nothing", org)
 	}
-	if !s.State.Commerce.Ready() {
-		return 0, 0, false
+	// Per-token debits are routinely finer than a cent; the rounding is explicit here
+	// rather than an exactness guard turning a real ledger into an error.
+	spend, serr := money.Consumed.RoundMinor()
+	credits, cerr := money.Balance.RoundMinor()
+	if serr != nil || cerr != nil {
+		return 0, 0, fmt.Errorf("money: %s: unreadable amount", org)
 	}
-	ok = true
-	if sp, err := s.State.Commerce.Spend(ctx, org); err == nil {
-		spend = int64(sp.Consumed)
-	} else {
-		ok = false
-	}
-	if c, err := s.State.Commerce.Credits(ctx, org); err == nil {
-		credits = int64(c)
-	} else {
-		ok = false
-	}
-	return spend, credits, ok
+	return spend, credits, nil
 }
 
-// orgMoneyFromFinance reads (spend30d, credits, ok) for one org from the co-resident finance
-// ledger — the SAME wallet the ai prepaid gate debits and clients/billing shows. credits =
-// the org-pool AVAILABLE prepaid balance; spend = the org's metered usage over the trailing
-// 30 days (SumUsageSince — the windowed usage source the rolling AI-spend cap already reads,
-// matching the SpendCents30d field the overview + orgs surfaces render). ok is false only on
-// a REAL read failure, so a no-activity org reads (0, 0, true) and never marks the money
-// source degraded.
-func orgMoneyFromFinance(ctx context.Context, fin finance.Client, org string) (spend, credits int64, ok bool) {
-	ok = true
-	if bal, err := fin.Balance(ctx, org, org, "usd", false); err == nil {
-		credits = bal.Cents()
-	} else {
-		ok = false
+// Delegated is THIS request's authority, carried onto a context with no request behind
+// it and ready to be pointed at any tenant. A money read takes one instead of a plain
+// context, so the delegation cannot be skipped: the compiler asks for it.
+//
+// It exists because building it READS the request's headers, and fasthttp's header store
+// shares one scratch buffer across reads — so a dozen goroutines each building their own
+// race on it, which -race proves on the overview's twelve-wide read. Delegate once, ahead
+// of the fan-out; each per-tenant read is then a cheap re-pointing of a value nobody
+// else holds.
+type Delegated struct{ ctx context.Context }
+
+// Delegate carries this request's principal off the request. Call it ONCE per read,
+// ahead of any fan-out.
+func Delegate(ctx context.Context) Delegated {
+	if c, ok := cloud.Request(ctx); ok {
+		return Delegated{cloud.As(c, "")} // the principal whole, the tenant still the caller's own
 	}
-	if sum, err := fin.SumUsageSince(ctx, org, false, time.Now().AddDate(0, 0, -30).Unix()); err == nil {
-		spend = sum
-	} else {
-		ok = false
-	}
-	return spend, credits, ok
+	return Delegated{ctx}
 }
+
+// at points the delegated authority at one tenant — the operator acting on someone
+// else's books, which is exactly what a fleet read is. The tenant has to ride the call:
+// a read that named no tenant would be answered, correctly, with the operator's own
+// books every time.
+func (d Delegated) at(org string) context.Context {
+	who := zip.CallerOf(d.ctx)
+	who.Org = org
+	return zip.WithCaller(d.ctx, who)
+}
+
+// ErrNoLedger reports that this deployment runs no commerce at all, so there is no money
+// to read and none missing. It is the ONE absence a fleet board may fold into a zero.
+var ErrNoLedger = errors.New("this deployment runs no commerce")
+
+// MoneyFailed reports whether an OrgMoney error is an OUTAGE — the rule stated once, so
+// the boards that fold this read cannot disagree about which absences are failures.
+func MoneyFailed(err error) bool { return err != nil && !errors.Is(err, ErrNoLedger) }
+
+// spendWindowDays is the trailing window every fleet money surface means by "spend":
+// thirty days, which is what the SpendCents30d field it feeds is named for.
+const spendWindowDays = 30
 
 // FindOrg returns the IAM org by slug (nil, nil when it does not exist) so a management
 // action can validate its target before acting — never credit or suspend an org that

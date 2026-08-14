@@ -6,9 +6,9 @@
 // INJECTION SAFETY (the bar). The tenant key (organization) and every user-
 // supplied value (subject id, day bounds, self-rank threshold) is ALWAYS a bound
 // `?` parameter, appended to the args slice — NEVER string-interpolated into the
-// SQL. The only tokens interpolated are (a) the metric column, taken from the
-// closed `metricColumn` allowlist (a caller's `metric=` can only ever select one
-// of three fixed column names, or be rejected), and (b) the LIMIT, a server-
+// SQL. The only tokens interpolated are (a) the ranked metric, taken from the
+// closed `metrics` allowlist (a caller's `metric=` can only ever select one of
+// three fixed aggregates, or be rejected), and (b) the LIMIT, a server-
 // clamped int. This mirrors the proven house pattern (ai/object cloud_usage.go
 // whereClause, apps/analytics query.go llmWhere): org bound positionally, the
 // bucket/limit a closed enum / validated int. The builders return (sql, args) so
@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/apps/datastore"
 )
 
 // rollupTable is the ONE derived per-day usage rollup the leaderboard + activity
@@ -30,26 +32,30 @@ import (
 // path. See rollup.go for its DDL.
 const rollupTable = "hanzo.usage_rollup_daily"
 
-// metricColumn is the CLOSED allowlist mapping a caller's `metric=` to the exact
-// rollup column ranked/ordered on. A value outside this map is REJECTED (never
-// interpolated). This is the only user-influenced token that reaches the SQL text,
-// and it can only ever be one of these three fixed identifiers.
-var metricColumn = map[string]string{
-	"tokens":   "total_tokens",
-	"requests": "requests",
-	"cost":     "cost_cents",
+// metrics is the CLOSED allowlist mapping a caller's `metric=` to the exact
+// aggregate a board is ranked and ordered by. A value outside this map is REJECTED
+// (never interpolated). This is the only user-influenced token that reaches the SQL
+// text, and it can only ever be one of these three fixed expressions.
+//
+// They are whole aggregates rather than bare column names because spend is one:
+// cents are derived from the rollup's cost_nano (datastore.Spend), so ranking by
+// cost ranks by the money, not by a column that holds it.
+var metrics = map[string]string{
+	"tokens":   "sum(total_tokens)",
+	"requests": "sum(requests)",
+	"cost":     datastore.Spend,
 }
 
-// resolveMetric maps a caller's metric label to its rollup column. Empty → the
-// tokens default. An unknown label → ("", false) so the handler answers 400
+// resolveMetric maps a caller's metric label to the aggregate to rank by. Empty →
+// the tokens default. An unknown label → ("", false) so the handler answers 400
 // (fail closed) rather than guessing.
-func resolveMetric(metric string) (column string, ok bool) {
+func resolveMetric(metric string) (rank string, ok bool) {
 	m := strings.ToLower(strings.TrimSpace(metric))
 	if m == "" {
-		return "total_tokens", true
+		return "sum(total_tokens)", true
 	}
-	col, ok := metricColumn[m]
-	return col, ok
+	r, ok := metrics[m]
+	return r, ok
 }
 
 // maxLeaderboardRows bounds a leaderboard page. The rollup is small (org × user ×
@@ -169,30 +175,30 @@ func dayBounds(w window, where []string, args []any) ([]string, []any) {
 //
 // Every builder puts `organization = ?` FIRST for the org-scoped reads (the
 // tenant gate and the leading ORDER BY column of the rollup, so it is also the
-// index-efficient predicate). metricCol is pre-resolved from the allowlist;
+// index-efficient predicate). rank is pre-resolved from the allowlist;
 // limit is pre-clamped.
 
-// buildUserBoardSQL ranks the users of ONE org over the window by metricCol. The
+// buildUserBoardSQL ranks the users of ONE org over the window by rank. The
 // org is the leading bound predicate — a caller can never read another org's rows.
-func buildUserBoardSQL(org string, w window, metricCol string, limit int) (string, []any) {
+func buildUserBoardSQL(org string, w window, rank string, limit int) (string, []any) {
 	where := []string{"organization = ?"}
 	args := []any{org}
 	where, args = dayBounds(w, where, args)
 	sql := "SELECT user_id, sum(requests) AS requests, sum(total_tokens) AS total_tokens, " +
 		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
-		"sum(cost_cents) AS cost_cents FROM " + rollupTable +
+		datastore.Spend + " AS cost_cents FROM " + rollupTable +
 		" WHERE " + strings.Join(where, " AND ") +
-		" GROUP BY user_id ORDER BY " + metricCol + " DESC, requests DESC LIMIT " + strconv.Itoa(limit)
+		" GROUP BY user_id ORDER BY " + rank + " DESC, requests DESC LIMIT " + strconv.Itoa(limit)
 	return sql, args
 }
 
-// buildOrgBoardSQL ranks organizations over the window by metricCol. `orgs` is the
+// buildOrgBoardSQL ranks organizations over the window by rank. `orgs` is the
 // visibility restriction: nil = no restriction (SuperAdmin sees every org); a
 // non-empty slice restricts to those opted-in orgs (each bound `?`); an EMPTY
 // slice means "no orgs are visible" and the caller short-circuits to an empty
 // board WITHOUT running this (guarded by the caller). Org-level aggregates only —
 // no user identity ever appears in an org board.
-func buildOrgBoardSQL(w window, metricCol string, limit int, orgs []string) (string, []any) {
+func buildOrgBoardSQL(w window, rank string, limit int, orgs []string) (string, []any) {
 	var where []string
 	var args []any
 	where, args = dayBounds(w, where, args)
@@ -205,9 +211,9 @@ func buildOrgBoardSQL(w window, metricCol string, limit int, orgs []string) (str
 		where = append(where, "organization IN ("+strings.Join(ph, ",")+")")
 	}
 	sql := "SELECT organization, sum(requests) AS requests, sum(total_tokens) AS total_tokens, " +
-		"sum(cost_cents) AS cost_cents FROM " + rollupTable +
+		datastore.Spend + " AS cost_cents FROM " + rollupTable +
 		" WHERE " + strings.Join(where, " AND ") +
-		" GROUP BY organization ORDER BY " + metricCol + " DESC, requests DESC LIMIT " + strconv.Itoa(limit)
+		" GROUP BY organization ORDER BY " + rank + " DESC, requests DESC LIMIT " + strconv.Itoa(limit)
 	return sql, args
 }
 
@@ -219,20 +225,20 @@ func buildSelfAggSQL(org, userID string, w window) (string, []any) {
 	where, args = dayBounds(w, where, args)
 	sql := "SELECT sum(requests) AS requests, sum(total_tokens) AS total_tokens, " +
 		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
-		"sum(cost_cents) AS cost_cents FROM " + rollupTable +
+		datastore.Spend + " AS cost_cents FROM " + rollupTable +
 		" WHERE " + strings.Join(where, " AND ")
 	return sql, args
 }
 
 // buildAboveCountSQL counts the users in `org` whose windowed metric STRICTLY
-// exceeds `threshold` — so the caller's rank is that count + 1. metricCol is
+// exceeds `threshold` — so the caller's rank is that count + 1. rank is
 // allowlisted; org, the day bounds, and threshold are all bound params.
-func buildAboveCountSQL(org string, w window, metricCol string, threshold int64) (string, []any) {
+func buildAboveCountSQL(org string, w window, rank string, threshold int64) (string, []any) {
 	where := []string{"organization = ?"}
 	args := []any{org}
 	where, args = dayBounds(w, where, args)
 	inner := "SELECT user_id FROM " + rollupTable + " WHERE " + strings.Join(where, " AND ") +
-		" GROUP BY user_id HAVING sum(" + metricCol + ") > ?"
+		" GROUP BY user_id HAVING " + rank + " > ?"
 	args = append(args, threshold)
 	return "SELECT count() AS above FROM (" + inner + ")", args
 }
@@ -270,16 +276,16 @@ func buildOrgAggSQL(org string, w window) (string, []any) {
 	args := []any{org}
 	where, args = dayBounds(w, where, args)
 	return "SELECT sum(requests) AS requests, sum(total_tokens) AS total_tokens, " +
-		"sum(cost_cents) AS cost_cents FROM " + rollupTable + " WHERE " + strings.Join(where, " AND "), args
+		datastore.Spend + " AS cost_cents FROM " + rollupTable + " WHERE " + strings.Join(where, " AND "), args
 }
 
 // buildOrgAboveCountSQL counts the orgs whose windowed metric STRICTLY exceeds
 // threshold — a bare count (no identity) yielding the caller's own org rank. `orgs`
 // restricts the universe identically to buildOrgBoardSQL: nil = all orgs (a platform
 // admin's global rank); a non-empty set = rank only within the opted-in public board
-// (so a regular caller never learns the platform-wide org universe). metricCol is
+// (so a regular caller never learns the platform-wide org universe). rank is
 // allowlisted; the day bounds, each org, and threshold are bound params.
-func buildOrgAboveCountSQL(w window, metricCol string, threshold int64, orgs []string) (string, []any) {
+func buildOrgAboveCountSQL(w window, rank string, threshold int64, orgs []string) (string, []any) {
 	var where []string
 	var args []any
 	where, args = dayBounds(w, where, args)
@@ -292,7 +298,7 @@ func buildOrgAboveCountSQL(w window, metricCol string, threshold int64, orgs []s
 		where = append(where, "organization IN ("+strings.Join(ph, ",")+")")
 	}
 	inner := "SELECT organization FROM " + rollupTable + " WHERE " + strings.Join(where, " AND ") +
-		" GROUP BY organization HAVING sum(" + metricCol + ") > ?"
+		" GROUP BY organization HAVING " + rank + " > ?"
 	args = append(args, threshold)
 	return "SELECT count() AS above FROM (" + inner + ")", args
 }
@@ -310,7 +316,7 @@ func buildActivitySQL(org, subjectUser string, w window) (string, []any) {
 	}
 	where, args = dayBounds(w, where, args)
 	sql := "SELECT day, sum(requests) AS requests, sum(total_tokens) AS total_tokens, " +
-		"sum(cost_cents) AS cost_cents FROM " + rollupTable +
+		datastore.Spend + " AS cost_cents FROM " + rollupTable +
 		" WHERE " + strings.Join(where, " AND ") +
 		" GROUP BY day ORDER BY day"
 	return sql, args

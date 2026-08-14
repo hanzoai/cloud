@@ -57,14 +57,13 @@
 package campaign
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -175,22 +174,9 @@ func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
 
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
-}
-
 // clip trims and bounds a text field to maxField.
 func clip(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > maxField {
-		return s[:maxField]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), maxField)
 }
 
 func nonNeg(n int64) int64 {

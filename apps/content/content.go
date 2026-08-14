@@ -157,26 +157,13 @@ type contentOps struct{ s *cloud.Service[state] }
 // nothing off the wire. ONE of these for the whole package.
 type noInput struct{}
 
-// tenantOf is the validated org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the caller
-// asserted for itself. It IS the principal.Org gate the raw handlers use, refusing
-// with the same 403 and the same message.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("valid principal required")
-	}
-	return org, nil
-}
-
 // GetLifecycle returns the ONE marketing-content state machine: the ordered
 // lifecycle states, which state a fresh document starts in, which one is publicly
 // live, and the legal successors of every state. The console builds its board
 // columns and its per-item action buttons from this single answer, so the UI and
 // the write-time enforcement hook can never disagree about what is legal.
 func (o contentOps) getLifecycle(ctx context.Context, _ *noInput) (*stateGraph, error) {
-	if _, err := tenantOf(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	g := lifecycleGraph()
@@ -215,7 +202,7 @@ type boardPage struct {
 //
 // Example: {"status": "queued", "limit": 50}
 func (o contentOps) getBoard(ctx context.Context, in *boardQuery) (*boardPage, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +259,7 @@ type channelList struct {
 // social integrations a publish can target. A deployment with no distribution edge
 // wired answers 503 rather than an empty list that would read as "no channels".
 func (o contentOps) getChannels(ctx context.Context, _ *noInput) (*channelList, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +279,7 @@ func (o contentOps) getChannels(ctx context.Context, _ *noInput) (*channelList, 
 //
 // Example: {"doctype": "SocialPost", "name": "spring-teaser"}
 func (o contentOps) postPublish(ctx context.Context, in *PublishInput) (*PublishResult, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +320,7 @@ type transitionIn struct {
 //
 // Example: {"doctype": "SocialPost", "name": "spring-teaser", "to": "published"}
 func (o contentOps) postTransition(ctx context.Context, in *transitionIn) (*TransitionResult, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

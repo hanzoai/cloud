@@ -74,7 +74,7 @@ func defaultPipeline() Pipeline {
 func scope(c *zip.Ctx) (org, project string, err error) {
 	org, ok := principal.Org(c)
 	if !ok {
-		return "", "", zip.ErrForbidden("X-Org-Id required")
+		return "", "", principal.Refused(c)
 	}
 	project = principal.Project(c)
 	if q := strings.TrimSpace(c.Query("project")); q != "" && q != project {
@@ -99,7 +99,7 @@ func scope(c *zip.Ctx) (org, project string, err error) {
 func scopeOf(ctx context.Context) (org, project string, err error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return "", "", zip.ErrForbidden("X-Org-Id required")
+		return "", "", principal.RefusedFrom(ctx)
 	}
 	return scope(c)
 }

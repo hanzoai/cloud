@@ -215,7 +215,7 @@ func TestHTTPDomainLifecycle(t *testing.T) {
 	_, body = do(t, app, http.MethodGet, "/v1/platform/projects/web/apps/api", "maxpower", nil)
 	var av appView
 	_ = json.Unmarshal(body, &av)
-	if !contains(av.Domains, "app.yourco.com") {
+	if !slices.Contains(av.Domains, "app.yourco.com") {
 		t.Fatalf("verified custom host must be an active ingress host, got %v", av.Domains)
 	}
 
@@ -283,7 +283,7 @@ func TestServiceCRRendersCustomIngress(t *testing.T) {
 	a := Application{Slug: "api", Port: 8080, Replicas: 1, DomainsJSON: `["api.maxpower.hanzo.app","app.yourco.com"]`}
 	cr := serviceCR("tenant-maxpower", "maxpower", "web", a, "ghcr.io/hanzoai/nginx:1")
 	hosts, _, _ := unstructured.NestedStringSlice(cr.Object, "spec", "ingress", "hosts")
-	if !contains(hosts, "app.yourco.com") || !contains(hosts, "api.maxpower.hanzo.app") {
+	if !slices.Contains(hosts, "app.yourco.com") || !slices.Contains(hosts, "api.maxpower.hanzo.app") {
 		t.Fatalf("ingress hosts must include both the default and the verified custom host, got %v", hosts)
 	}
 	tls, _, _ := unstructured.NestedBool(cr.Object, "spec", "ingress", "tls")
@@ -295,8 +295,4 @@ func TestServiceCRRendersCustomIngress(t *testing.T) {
 	if ingressSpec(nil) != nil {
 		t.Fatal("ingressSpec(nil) must be nil (no ingress)")
 	}
-}
-
-func contains(xs []string, x string) bool {
-	return slices.Contains(xs, x)
 }

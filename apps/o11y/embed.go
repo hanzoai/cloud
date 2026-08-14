@@ -6,6 +6,7 @@
 package o11y
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"net/http"
@@ -27,7 +28,7 @@ import (
 // runtime in-process; empty (local dev / tests, no datastore) ⇒ buildEmbeddedHandler
 // no-ops and /v1/o11y/* uses the reverse-proxy fallback. ONE knob, no separate flag.
 func embeddedDSN() string {
-	return firstNonEmpty(os.Getenv("O11Y_DATASTORE_DSN"), os.Getenv("O11Y_TELEMETRYSTORE_DATASTORE_DSN"))
+	return cmp.Or(os.Getenv("O11Y_DATASTORE_DSN"), os.Getenv("O11Y_TELEMETRYSTORE_DATASTORE_DSN"))
 }
 
 // embeddedRuntime / embeddedServer pin the ONE in-process o11y runtime for the
@@ -80,7 +81,7 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 	// both under cloud's data root and create it eagerly so o11y.New's migrations
 	// don't fail on a missing parent. The standalone pod used an emptyDir at
 	// /var/lib/o11y — this is the in-process equivalent, owned by cloud.
-	dataDir := filepath.Join(firstNonEmpty(deps.DataDir, "/var/lib/cloud"), "o11y")
+	dataDir := filepath.Join(cmp.Or(deps.DataDir, "/var/lib/cloud"), "o11y")
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, err
 	}
@@ -150,16 +151,6 @@ func applyEmbedEnvDefaults(dataDir string) {
 	// telemetry read. Same enforced policy, tuples kept in-process. See
 	// o11y/pkg/authz/localauthz. Operator-overridable like every other embed default.
 	setenvDefault("O11Y_AUTHZ_PROVIDER", "local")
-}
-
-// firstNonEmpty returns the first non-empty string, else "".
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // setenvDefault sets key=val only if key is currently unset, so an operator-pinned

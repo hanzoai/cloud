@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -65,12 +66,8 @@ func (gitMirrorController) EnsureMirror(ctx context.Context, org, project, repo,
 	}
 	switch {
 	case enabled && existing == nil:
-		id, err := genID("mir")
-		if err != nil {
-			return err
-		}
 		if err := store.CreateMirror(ctx, MirrorTarget{
-			ID: id, Org: org, Project: project, Repo: name,
+			ID: mint.ID("mir"), Org: org, Project: project, Repo: name,
 			Host: host, URL: canonical, CreatedAt: time.Now().Unix(),
 		}); err != nil && !errors.Is(err, errConflict) {
 			return err

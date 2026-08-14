@@ -25,14 +25,16 @@ package explorer
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -52,24 +54,16 @@ const graphQLPath = "/v1/explorer/graphql"
 // ballooning memory.
 const maxBody = 8 << 20
 
-func envTrim(k string) string { return strings.TrimSpace(os.Getenv(k)) }
-
 func indexerBase() string {
-	if v := envTrim("INDEXER_URL"); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	return defaultIndexerBase
+	return strings.TrimRight(environ.Or("INDEXER_URL", defaultIndexerBase), "/")
 }
 
 func graphBase() string {
-	if v := envTrim("GRAPH_URL"); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	return defaultGraphBase
+	return strings.TrimRight(environ.Or("GRAPH_URL", defaultGraphBase), "/")
 }
 
 // serviceToken is the optional KMS-injected read token applied to both upstreams.
-func serviceToken() string { return envTrim("CHAIN_DATA_TOKEN") }
+func serviceToken() string { return environ.Or("CHAIN_DATA_TOKEN", "") }
 
 // client is the read-only chain-data HTTP client. Bases have no trailing slash.
 type client struct {
@@ -179,7 +173,9 @@ func (cl *client) priceFeeds(ctx context.Context, auth string) ([]map[string]any
 		return nil, zip.Errorf(http.StatusBadGateway, "explorer: decode graphql response: %v", err)
 	}
 	if len(out.Errors) > 0 {
-		return nil, zip.Errorf(http.StatusBadGateway, "explorer: %s", firstNonEmpty(out.Errors[0].Message, "graphql error"))
+		// The message is the upstream's, so an all-whitespace one is no message at
+		// all: trim it so the fallback wins and the error is never blank text.
+		return nil, zip.Errorf(http.StatusBadGateway, "explorer: %s", cmp.Or(strings.TrimSpace(out.Errors[0].Message), "graphql error"))
 	}
 	return out.Data.PriceFeeds, nil
 }
@@ -199,18 +195,5 @@ func authorize(req *http.Request, auth string) {
 }
 
 func snippet(b []byte) string {
-	s := strings.TrimSpace(string(b))
-	if len(s) > 200 {
-		return s[:200]
-	}
-	return s
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
+	return shorten.To(strings.TrimSpace(string(b)), 200)
 }

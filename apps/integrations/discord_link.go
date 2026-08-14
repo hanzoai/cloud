@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -256,7 +257,7 @@ func discordExchangeIdentify(ctx context.Context, code, redirectURI string) (dis
 		return "", fmt.Errorf("discord token decode: %w", err)
 	}
 	if tok.Error != "" || tok.AccessToken == "" {
-		return "", fmt.Errorf("discord token: %s", nonEmpty(tok.Error, "no access_token"))
+		return "", fmt.Errorf("discord token: %s", cmp.Or(tok.Error, "no access_token"))
 	}
 	meReq, err := http.NewRequestWithContext(ctx, http.MethodGet, discordAPIBase+"/users/@me", nil)
 	if err != nil {

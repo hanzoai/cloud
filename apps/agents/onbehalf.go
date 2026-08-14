@@ -10,6 +10,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -99,7 +100,7 @@ func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub
 		a.Model = m
 	}
 	actor := billingActor(org, userSub)
-	reqID, _ := genID("obh")
+	reqID := mint.ID("obh")
 	return runAgent(s, ctx, a, input, history, actor, reqID, "")
 }
 
@@ -214,12 +215,12 @@ const builtinAgentInstructions = "" +
 	// is the one a model reaches for first. Asked what issues someone had filed on
 	// our repositories, it searched the WEB for a GitHub profile, met the login wall
 	// every logged-out scrape meets, and reported the absence as a fact about the
-	// person. It holds `tracker`, whose issues are GitHub's — the App mirrors them
+	// person. It holds `todo`, whose issues are GitHub's — the App mirrors them
 	// in (apps/integrations/github_issues.go) — so the tool was there and the fact
 	// connecting the question to it was not.
 	"Issues, pull requests and epics — INCLUDING the ones on our GitHub repositories, " +
-	"which are mirrored in — live in `tracker`, not on the open web. Use it and never " +
-	"a web search for them: `get_tracker_issues` answers across every project in the " +
+	"which are mirrored in — live in `todo`, not on the open web. Use it and never " +
+	"a web search for them: `get_todo_issues` answers across every project in the " +
 	"org at once, and filters by project, assignee and kind. A public page for a " +
 	"private repository is a login wall, so what a search can see there is nothing, " +
 	"and nothing is not an answer about what exists.\n\n" +

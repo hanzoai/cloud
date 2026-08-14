@@ -119,7 +119,7 @@ func DeliverRoutedRunActivity(ctx context.Context, in agents.RoutedRun) (agents.
 // routedFinalizer is the completion seam the delivery activity runs when a routed run
 // reports terminal: verify the pushed ref, file the PR, and close the session. It is
 // injected once at the composition root (NewDispatcher binds it to THIS dispatcher's
-// git/tracker/session seams), so the free-function activity reaches those seams
+// git/todo/session seams), so the free-function activity reaches those seams
 // without coding holding global Dispatcher state — the same injected-seam shape
 // index_on_push uses. Nil (unwired, e.g. a direct-Dispatcher unit test that fakes the
 // Route seam) simply skips the cloud-side completion.
@@ -135,7 +135,7 @@ func (d Dispatcher) finalizeRoutedDurable(ctx context.Context, in agents.RoutedR
 	d.finalizeRouted(ctx, RoutedRun{
 		Org: in.Org, TargetID: in.TargetID, SessionID: in.SessionID, Repo: in.Repo,
 		Project: in.Project, Base: in.Base, Branch: in.Branch, Prompt: in.Prompt,
-		Actor: in.Actor, AgentRef: in.AgentRef,
+		Actor: in.Actor, AgentRef: in.AgentRef, ForgeActor: in.ForgeActor,
 	}, RoutedResult{
 		OK: res.OK, Changed: res.Changed, Branch: res.Branch,
 		CommitSha: res.CommitSha, Diffstat: res.Diffstat, Error: res.Error,
@@ -196,7 +196,7 @@ func enqueueRoutedRun(ctx context.Context, run RoutedRun) error {
 		Org: run.Org, TargetID: run.TargetID, SessionID: run.SessionID,
 		Repo: run.Repo, Project: run.Project, Base: run.Base, Branch: run.Branch,
 		Prompt: run.Prompt, CloneURL: run.CloneURL, TimeoutSeconds: run.TimeoutSeconds,
-		Actor: run.Actor, AgentRef: run.AgentRef,
+		Actor: run.Actor, AgentRef: run.AgentRef, ForgeActor: run.ForgeActor,
 	}
 	_, err = cli.ExecuteWorkflow(ctx, tasksclient.StartWorkflowOptions{
 		ID:        run.SessionID,

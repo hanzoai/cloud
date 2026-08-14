@@ -61,7 +61,7 @@ var dangerous = []string{
 }
 
 var useful = []string{
-	"post_v1_chat_completions", "get_v1_models", "post_v1_embeddings",
+	"post_chat_completions", "get_models", "post_embeddings",
 	"post_agents_sessions_by_id_message", "post_code_ask", "post_git_repos",
 	"post_deploy_applications_by_name_sync", "GetUser", "GetUserPreference",
 }
@@ -110,7 +110,7 @@ func TestTheDoorDoesNotProjectACredentialOpItsChildServes(t *testing.T) {
 // calls a tool that DOES exist in the child, with no tools/list first, so the
 // door must refuse it on the discovery path rather than from a stale table.
 func TestARefusedToolIsNotCALLABLE(t *testing.T) {
-	kid := startNamed(t, "console", "CreateServiceAccountKey", "post_v1_chat_completions")
+	kid := startNamed(t, "console", "CreateServiceAccountKey", "post_chat_completions")
 	h := host(t, []string{"console"}, map[string]*child{"console": kid})
 
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":3,"method":"tools/call",`+
@@ -132,14 +132,14 @@ func TestARefusedToolIsNotCALLABLE(t *testing.T) {
 	// …and the surviving sibling still runs, so the test is not passing because
 	// the door is broken.
 	ok := rpc(t, h, `{"jsonrpc":"2.0","id":4,"method":"tools/call",`+
-		`"params":{"name":"post_v1_chat_completions","arguments":{"which":"hello"}}}`)
+		`"params":{"name":"post_chat_completions","arguments":{"which":"hello"}}}`)
 	content, _ := ok["content"].([]any)
 	if len(content) == 0 {
 		t.Fatalf("the product tool did not run: %v", ok)
 	}
 	first, _ := content[0].(map[string]any)
 	if text, _ := first["text"].(string); !strings.Contains(text, `"which":"hello"`) {
-		t.Fatalf("tools/call post_v1_chat_completions lost its arguments: %q", text)
+		t.Fatalf("tools/call post_chat_completions lost its arguments: %q", text)
 	}
 }
 
@@ -151,14 +151,14 @@ func TestARefusedToolIsNotCALLABLE(t *testing.T) {
 func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 	kid := startNamed(t, "console",
 		"AgentCheckIn", "GetAlerts", "GetUser", "GetUserPreference", "AuthzCheck",
-		"post_v1_chat_completions", "get_v1_models", "post_code_ask")
+		"post_chat_completions", "get_models", "post_code_ask")
 	h := host(t, []string{"console"}, map[string]*child{"console": kid})
 
 	got := order(t, h)
 	if len(got) == 0 {
 		t.Fatal("the door listed nothing")
 	}
-	if got[0] != fleet.Phrase("post_v1_chat_completions") {
+	if got[0] != fleet.Phrase("post_chat_completions") {
 		t.Errorf("the first tool is %q; chat leads the product surface", got[0])
 	}
 	// Ranking reads the ROUTE and the enum carries the phrase, so a lookup names
@@ -173,7 +173,7 @@ func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 		t.Fatalf("%q (offered as %q) is missing from %v", id, fleet.Phrase(id), got)
 		return -1
 	}
-	for _, product := range []string{"post_v1_chat_completions", "get_v1_models", "post_code_ask"} {
+	for _, product := range []string{"post_chat_completions", "get_models", "post_code_ask"} {
 		for _, console := range []string{"AgentCheckIn", "GetAlerts", "GetUser", "GetUserPreference", "AuthzCheck"} {
 			if at(product) > at(console) {
 				t.Errorf("%q (%d) comes after %q (%d) — a truncating client keeps the console, not the product",
@@ -219,7 +219,7 @@ func TestTheDoorSAYSHowMuchItWithheld(t *testing.T) {
 // facts about one answer and must not overwrite each other. They did, in the
 // first draft of this change — one map literal, assigned twice.
 func TestRefusalAndOutageAreREPORTEDTOGETHER(t *testing.T) {
-	kids := map[string]*child{"console": startNamed(t, "console", "CreateUser", "post_v1_chat_completions")}
+	kids := map[string]*child{"console": startNamed(t, "console", "CreateUser", "post_chat_completions")}
 	h := host(t, []string{"console", "beta"}, kids) // beta has no instance
 
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
@@ -235,7 +235,7 @@ func TestRefusalAndOutageAreREPORTEDTOGETHER(t *testing.T) {
 // TestAQuietFleetReportsNoMetaAtAll: the keys appear only when they say
 // something. A `_meta` present on every answer is noise a client learns to skip.
 func TestAQuietFleetReportsNoMetaAtAll(t *testing.T) {
-	kids := map[string]*child{"ai": startNamed(t, "ai", "post_v1_chat_completions", "get_v1_models")}
+	kids := map[string]*child{"ai": startNamed(t, "ai", "post_chat_completions", "get_models")}
 	h := host(t, []string{"ai"}, kids)
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 	if m, present := res["_meta"]; present {

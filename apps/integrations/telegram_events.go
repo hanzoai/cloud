@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"cmp"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -210,7 +211,7 @@ func telegramSend(ctx context.Context, chatID, replyTo int64, text string) error
 	}
 	_ = json.Unmarshal(body, &r)
 	if !r.OK {
-		return fmt.Errorf("telegram sendMessage failed: %s", nonEmpty(r.Description, "unknown"))
+		return fmt.Errorf("telegram sendMessage failed: %s", cmp.Or(r.Description, "unknown"))
 	}
 	return nil
 }

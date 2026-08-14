@@ -148,8 +148,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // usageWindowQuery is the window every money read shares: the SAME grammar
 // /v1/analytics/* uses, so the two surfaces cannot drift.
 type usageWindowQuery struct {
-	// Range is the window: 24h, 7d, 30d, or custom. Empty means 24h. A label this
-	// surface does not know is refused rather than silently replaced.
+	// Range is the window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d —
+	// or day, week, month, all, custom. Empty means 24h. A label this surface
+	// does not know, or one reaching past the 730-day horizon, is refused rather
+	// than silently replaced.
 	Range string `json:"range"`
 	// Start is the inclusive window start, RFC3339. Read only when Range is
 	// custom.
@@ -269,7 +271,9 @@ type usageAnalyticsQuery struct {
 	// cloud has no org-to-plan resolver yet, so the caller names the plan; when
 	// that resolver lands this becomes the caller org's own plan.
 	Plan string `json:"plan"`
-	// Range is the window: 24h, 7d, 30d, or custom. Empty means 24h.
+	// Range is the window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d —
+	// or day, week, month, all, custom. Empty means 24h. The window is then
+	// clamped forward to the plan's retention entitlement.
 	Range string `json:"range"`
 	// Start is the inclusive window start, RFC3339. Read only when Range is
 	// custom, and clamped forward to the plan's retention floor.
@@ -347,7 +351,10 @@ type usageAnalyticsView struct {
 	Scope usageScope `json:"scope"`
 	// Plan echoes the plan id the entitlement was resolved from.
 	Plan string `json:"plan"`
-	// Range is the window label that was served, which is what was asked for.
+	// Range is the label that was ASKED for. A plan whose retention is shorter
+	// than that window is served the retention instead, so read start and end for
+	// the window the rows actually cover and retentionDays for the reason — on a
+	// clamped read the label is longer than what was served.
 	Range string `json:"range"`
 	// Start is the window's inclusive start, RFC3339 UTC, AFTER the retention
 	// clamp — so it may be later than the start that was asked for.
@@ -411,7 +418,7 @@ func buildAnalyticsBlock(s *cloud.Service[state], ctx context.Context, org strin
 	// `, sum(byo_tokens) AS byo_tokens, sum(fee_cents) AS fee_cents` and add the
 	// matching ProviderRow fields — a one-line projection, NOT a second datastore.
 	sql := "SELECT provider, count() AS requests, sum(total_tokens) AS tokens, " +
-		"sum(cost_cents) AS cost_cents FROM " + llmTable +
+		datastore.Spend + " AS cost_cents FROM " + llmTable +
 		" WHERE timestamp >= ? AND timestamp < ? AND organization = ? " +
 		"GROUP BY provider ORDER BY tokens DESC"
 	rows, err := datastore.Query(ctx, sql, tsLiteral(start), tsLiteral(end), org)
@@ -509,7 +516,7 @@ func buildLLMBlock(s *cloud.Service[state], ctx context.Context, org string, sta
 	// and a caller can never read another org's usage.
 	sql := "SELECT count() AS requests, sum(total_tokens) AS tokens, " +
 		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
-		"sum(cost_cents) AS cost_cents, uniqExact(model) AS models " +
+		datastore.Spend + " AS cost_cents, uniqExact(model) AS models " +
 		"FROM " + llmTable + " WHERE timestamp >= ? AND timestamp < ? AND organization = ?"
 	rows, err := datastore.Query(ctx, sql, tsLiteral(start), tsLiteral(end), org)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/namespace"
 )
 
@@ -61,14 +62,6 @@ var (
 	kbAI    cloud.AIClient // set once in Mount; the AI client the lazy index() embeds through
 )
 
-// getenv returns the env value for key, or dflt when unset/empty.
-func getenv(key, dflt string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return dflt
-}
-
 // index resolves the process-wide indexer, configured once from env. Endpoints
 // default to the same in-cluster service DNS clients/product uses; the embedding
 // model + dims are operator-tunable but MUST be stable for a collection's life
@@ -83,10 +76,10 @@ func index() *indexer {
 			}
 		}
 		idx = &indexer{
-			vectorURL:   strings.TrimRight(getenv("vectorEndpoint", "http://vector.hanzo.svc.cluster.local:6333"), "/"),
+			vectorURL:   strings.TrimRight(environ.Or("vectorEndpoint", "http://vector.hanzo.svc.cluster.local:6333"), "/"),
 			vectorKey:   os.Getenv("vectorApiKey"),
 			ai:          kbAI,
-			embedModel:  getenv("CLOUD_EMBED_MODEL", "zen-embedding"), // the served SKU; raw "bge-m3" 400s at the gateway
+			embedModel:  environ.Or("CLOUD_EMBED_MODEL", "zen-embedding"), // the served SKU; raw "bge-m3" 400s at the gateway
 			dims:        dims,
 			http:        &http.Client{Timeout: 20 * time.Second},
 			ensuredOrgs: map[string]bool{},

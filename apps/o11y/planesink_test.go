@@ -15,6 +15,7 @@ package o11y
 
 import (
 	"context"
+	jsonpkg "encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -54,8 +55,15 @@ func TestPlaneColumns_CountsAreFixed(t *testing.T) {
 	if len(planeSpanColumns) != 12 {
 		t.Errorf("planeSpanColumns = %d cols, want 12: %v", len(planeSpanColumns), planeSpanColumns)
 	}
-	if len(planeLogColumns) != 12 {
-		t.Errorf("planeLogColumns = %d cols, want 12: %v", len(planeLogColumns), planeLogColumns)
+	// 13, not 12: resource_fingerprint joins a row to its identity in
+	// event.log_resource, which is the ONLY thing a resource-context filter
+	// (service.name, host.name, every k8s.*) can select on — the reader never
+	// touches `service` on this table.
+	if len(planeLogColumns) != 13 {
+		t.Errorf("planeLogColumns = %d cols, want 13: %v", len(planeLogColumns), planeLogColumns)
+	}
+	if len(planeLogResourceColumns) != 4 {
+		t.Errorf("planeLogResourceColumns = %d cols, want 4: %v", len(planeLogResourceColumns), planeLogResourceColumns)
 	}
 }
 
@@ -515,5 +523,97 @@ func TestPlaneTablesAreQualified(t *testing.T) {
 		if db != "event" {
 			t.Errorf("plane table %q names database %q, want the canonical `event`", table, db)
 		}
+	}
+}
+
+// TestLogRowsCarryTheirResourceIdentity pins the JOIN the read plane depends on.
+//
+// A logs filter never reaches `service` on event.log. It compiles to a CTE over
+// event.log_resource and leaves the main query with `resource_fingerprint GLOBAL
+// IN (…)`, so two things must hold or every log query answers empty over a full
+// table: the row must CARRY a fingerprint, and the identity row must be findable
+// by the label the reader matches on. This writer owes both, and for a while it
+// wrote neither.
+func TestLogRowsCarryTheirResourceIdentity(t *testing.T) {
+	b := &zaplogreceiver.LogBatch{
+		AppName:  "ai",
+		Resource: map[string]string{"deployment.environment": "production"},
+		Records: []zaplogreceiver.LogRecord{{
+			TimeUnixNs: time.Now().UnixNano(), Severity: 9, SeverityText: "info",
+			Body: "request", TraceID: "t1", SpanID: "s1",
+			Attributes: map[string]any{"hanzo.org": "acme"},
+		}},
+	}
+
+	rows := logRowsOf(b)
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	fp, _ := logCol(t, rows[0], "resource_fingerprint").(string)
+	if fp == "" {
+		t.Fatal("row carries no resource_fingerprint — nothing a resource filter selects can reach it")
+	}
+
+	all := logResourceRowsOf(b, time.Now().UTC())
+	if len(all) != 1 {
+		t.Fatalf("got %d identity rows, want 1", len(all))
+	}
+	res := all[0]
+	if len(res) != len(planeLogResourceColumns) {
+		t.Fatalf("resource row has %d values, want %d", len(res), len(planeLogResourceColumns))
+	}
+	if res[1] != fp {
+		t.Errorf("identity fingerprint %v != row fingerprint %v — the join cannot resolve", res[1], fp)
+	}
+
+	// The reader matches simpleJSONExtractString(labels,'service.name'), and the
+	// row renders `service`. They have to be the same answer.
+	var labels map[string]string
+	if err := jsonpkg.Unmarshal([]byte(res[2].(string)), &labels); err != nil {
+		t.Fatalf("labels are not JSON: %v", err)
+	}
+	svc, _ := logCol(t, rows[0], "service").(string)
+	if labels["service.name"] != svc {
+		t.Errorf("labels[service.name] = %q but row service = %q — the row renders under a name no filter reaches", labels["service.name"], svc)
+	}
+	if svc != "ai" {
+		t.Errorf("service = %q, want \"ai\" (the batch's app name)", svc)
+	}
+
+	// The org has to follow the RECORD, so the identity is reachable in the same
+	// tenant its rows landed in.
+	if res[0] != "acme" {
+		t.Errorf("identity org = %v, want acme (the record's hanzo.org)", res[0])
+	}
+
+	// A batch from a multi-tenant process carries several orgs, and the identity
+	// has to be reachable in EVERY one of them — the table is keyed (org, bucket,
+	// fingerprint), so a tenant whose identity was never stated is exactly as
+	// unreachable as one whose rows were never written.
+	multi := &zaplogreceiver.LogBatch{
+		AppName:  "ai",
+		Resource: map[string]string{"deployment.environment": "production"},
+		Records: []zaplogreceiver.LogRecord{
+			{TimeUnixNs: time.Now().UnixNano(), Body: "a", Attributes: map[string]any{"hanzo.org": "acme"}},
+			{TimeUnixNs: time.Now().UnixNano(), Body: "b", Attributes: map[string]any{"hanzo.org": "globex"}},
+			{TimeUnixNs: time.Now().UnixNano(), Body: "c", Attributes: map[string]any{"hanzo.org": "acme"}},
+		},
+	}
+	rowsMulti := logResourceRowsOf(multi, time.Now().UTC())
+	if len(rowsMulti) != 2 {
+		t.Fatalf("got %d identity rows for a 2-tenant batch, want 2 (one per distinct org)", len(rowsMulti))
+	}
+	orgs := map[any]bool{rowsMulti[0][0]: true, rowsMulti[1][0]: true}
+	if !orgs["acme"] || !orgs["globex"] {
+		t.Errorf("identity orgs = %v, want acme and globex", orgs)
+	}
+	if rowsMulti[0][1] != rowsMulti[1][1] {
+		t.Error("one resource must have one fingerprint across tenants")
+	}
+
+	// The bucket is the 30-minute window the reader bounds its CTE by.
+	at := time.Unix(1786672000, 0).UTC()
+	if got := logResourceRowsOf(b, at)[0][3].(int64); got != 1786671000 {
+		t.Errorf("bucket = %d, want 1786671000 (floor to %ds)", got, resourceBucket)
 	}
 }

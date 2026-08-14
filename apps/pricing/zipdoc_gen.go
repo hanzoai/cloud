@@ -125,7 +125,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"zen4"}`),
 	})
 	zip.Describe("GET /v1/pricing/models", zip.Doc{
-		Description: "Returns the whole model catalog — Hanzo's own Zen models and every\nthird-party model — filtered to what the caller's org may see. A model an\nadmin has disabled is absent; one in beta appears only for an org granted it.\nA SuperAdmin sees every model, each annotated with its enablement state.",
+		Description: "Returns the whole model catalog — every model the gateway serves,\nZen and third-party alike — filtered to what the caller's org may see. A\nmodel an admin has disabled is absent; one in beta appears only for an org\ngranted it. A SuperAdmin sees every model, each annotated with its\nenablement state.",
 		Fields: map[string]string{
 			"pricingModelList.models":  "Models are the catalog entries visible to the caller, each an opaque\nobject exactly as the pricing source emits it, with any admin override\nmerged on top. An admin additionally sees hidden entries, each annotated\nunder \"_overlay\".",
 			"pricingModelList.total":   "Total is how many models this answer carries — recounted over the visible\nset, not the catalog's own total.",

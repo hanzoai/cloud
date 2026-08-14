@@ -18,6 +18,7 @@ package venue
 // the ARM API, at httptest stubs; AZURE_FEDERATED_TOKEN supplies the WIF assertion.
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -128,7 +129,7 @@ func (azureDriver) verify(ctx context.Context, cr cred) (identity, error) {
 	if _, err := azureToken(ctx, cr); err != nil {
 		return identity{}, err
 	}
-	return identity{ExternalID: cr.TenantID, Display: firstNonEmpty(cr.SubscriptionIDs[0], cr.TenantID)}, nil
+	return identity{ExternalID: cr.TenantID, Display: cmp.Or(strings.TrimSpace(cr.SubscriptionIDs[0]), strings.TrimSpace(cr.TenantID))}, nil
 }
 
 // aksCluster is the subset of a managedClusters entry we need.
@@ -170,7 +171,7 @@ func (azureDriver) discover(ctx context.Context, cr cred) ([]discovered, error) 
 			}
 			out = append(out, discovered{
 				ID:         cl.ID,
-				Name:       firstNonEmpty(cl.Name, cl.ID),
+				Name:       cmp.Or(cl.Name, cl.ID),
 				Region:     cl.Location,
 				Endpoint:   "https://" + strings.TrimPrefix(strings.TrimPrefix(cl.Properties.Fqdn, "https://"), "http://"),
 				Kubeconfig: kube,

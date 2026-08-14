@@ -21,8 +21,6 @@ package prompts
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -31,6 +29,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -304,7 +303,7 @@ type promptReq struct {
 // Example: {"name": "greeting", "prompt": "You are a helpful assistant.", "tags": ["support"]}
 func (o promptOps) create(ctx context.Context, in *promptReq) (*promptDetail, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -328,10 +327,7 @@ func (o promptOps) create(ctx context.Context, in *promptReq) (*promptDetail, er
 	if len(body.Prompt) > maxContent {
 		return nil, zip.ErrBadRequest("prompt content too large (max 64KiB)")
 	}
-	id, err := genID("prompt")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("prompt")
 	now := time.Now().Unix()
 	p := Prompt{
 		ID: id, Org: org, Name: name, Type: typ, Content: body.Prompt,
@@ -354,7 +350,7 @@ func (o promptOps) create(ctx context.Context, in *promptReq) (*promptDetail, er
 // template bodies are deliberately absent — fetch one prompt to read its text.
 func (o promptOps) list(ctx context.Context, _ *noInput) (*promptList, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +377,7 @@ func (o promptOps) list(ctx context.Context, _ *noInput) (*promptList, error) {
 // Example: {"name": "greeting"}
 func (o promptOps) get(ctx context.Context, in *promptRef) (*promptDetail, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +403,7 @@ func (o promptOps) get(ctx context.Context, in *promptRef) (*promptDetail, error
 //
 // Example: {"name": "greeting"}
 func (o promptOps) del(ctx context.Context, in *promptRef) (*noContent, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +445,7 @@ type metricRow struct {
 // Every number is counted from the store — nothing here is estimated or fabricated.
 func (o promptOps) metrics(ctx context.Context, _ *noInput) (*metricList, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -490,15 +486,6 @@ func cleanList(xs []string) []string {
 		}
 	}
 	return out
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // Shutdown closes the prompts store. Idempotent.

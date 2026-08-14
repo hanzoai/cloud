@@ -15,7 +15,7 @@ func TestListSecretsBareRouteReachable(t *testing.T) {
 	// Seed two secrets in the org so the list has content.
 	for _, n := range []string{"API_KEY", "DB_URL"} {
 		body, _ := json.Marshal(map[string]string{"name": n, "value": "v-" + n, "env": "main"})
-		if resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil); resp.StatusCode != 200 {
+		if resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, asOrgAdmin); resp.StatusCode != 200 {
 			t.Fatalf("POST %s = %d, want 200: %s", n, resp.StatusCode, readAll(resp.Body))
 		}
 	}

@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 // trigger.go is the IFTTT inbound plane: it turns an external event (a provider
@@ -118,11 +120,7 @@ func Deliver(ctx context.Context, org string, ev TriggerEvent) (started int, err
 // it is a fresh random id, so every delivery is its own run.
 func deliverRunID(org, flowID string, ev TriggerEvent) string {
 	if ev.DedupeKey == "" {
-		if id, err := genID("run"); err == nil {
-			return id
-		}
-		// genID only fails if the process RNG is broken; fall through to a content id so
-		// Deliver still makes progress and stays idempotent on a retry.
+		return mint.ID("run")
 	}
 	sum := sha256.Sum256([]byte(org + "\x00" + flowID + "\x00" + ev.Source + "\x00" + ev.Name + "\x00" + ev.DedupeKey))
 	return "evt_" + hex.EncodeToString(sum[:16])

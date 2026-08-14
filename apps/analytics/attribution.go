@@ -55,7 +55,13 @@ type KeyResolver interface {
 var (
 	keyMu       sync.RWMutex
 	keyResolver KeyResolver
-	keyFallback KeyResolver
+	// keyFallback is the cross-process answer, and it is a DEFAULT rather than a line
+	// some Mount runs: a key names the same org in every process. While build()
+	// owned that line, only the analytics binary could turn a project key into an
+	// org — every other binary that admits a key (the OpenRouter webhook serves from
+	// apps/integrations) resolved it to nothing, and no test in this package could
+	// see that, because the package is correct either way.
+	keyFallback KeyResolver = planeKeys{}
 )
 
 // SetKeyResolver installs the in-process resolver. projects.Mount calls it with
@@ -66,23 +72,13 @@ func SetKeyResolver(r KeyResolver) {
 	keyMu.Unlock()
 }
 
-// SetFallbackKeyResolver installs the cross-process resolver. The composition
-// root calls it with a plane client, for every process that does NOT own the
-// project store — which in production is the one serving this door.
+// SetFallbackKeyResolver replaces the cross-process resolver. Nothing has to call
+// it to be correct — planeKeys is the default — so it is what a caller reaches for
+// to substitute one, which in practice is a test with no fleet to ask.
 func SetFallbackKeyResolver(r KeyResolver) {
 	keyMu.Lock()
 	keyFallback = r
 	keyMu.Unlock()
-}
-
-// HasFallbackKeyResolver reports whether a cross-process resolver is installed,
-// so the host can prove it wired the door. An unwired seam refuses every beacon
-// on the fleet and no test inside this package can see it, because the package
-// is correct either way.
-func HasFallbackKeyResolver() bool {
-	keyMu.RLock()
-	defer keyMu.RUnlock()
-	return keyFallback != nil
 }
 
 func currentKeyResolver() KeyResolver {
@@ -110,6 +106,28 @@ func resolveAttribution(ctx context.Context, key string) (Attribution, bool) {
 		return Attribution{}, false
 	}
 	return at, true
+}
+
+// Admit answers what a presented key names — the org whose rows it writes, and the
+// project that minted it when a project did. It is the ONE sequence any door admits
+// a key by: /v1/event through keyAdmission (event.go), which adds the capability an
+// event write also needs, and the OpenRouter webhook (apps/integrations) on its own,
+// because a webhook has nothing to grant.
+//
+// TWO ISSUERS, disjoint rather than a fallback chain: a project key exists only in
+// the project store and an IAM key only in IAM, so a lookup in one can never shadow
+// the other and the order costs nothing but a miss. Projects are asked first because
+// they answer the strictly narrower question — org AND project, where IAM can only
+// ever say org, having no project to scope to. A door that asks one issuer refuses
+// every key the other minted.
+func Admit(ctx context.Context, key string) (Attribution, bool) {
+	if at, ok := resolveAttribution(ctx, key); ok {
+		return at, true
+	}
+	if org, ok := resolveKeyOrg(ctx, key); ok {
+		return Attribution{Org: org}, true
+	}
+	return Attribution{}, false
 }
 
 // attributeProject stamps the resolved project onto every event, replacing

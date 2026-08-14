@@ -18,6 +18,7 @@ package venue
 // endpoint; GCP_CONTAINER_ENDPOINT redirects the container API at an httptest stub.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -65,7 +66,7 @@ func gcpTokenSource(ctx context.Context, cr cred) (oauth2.TokenSource, string, e
 	if err != nil {
 		return nil, "", fmt.Errorf("gcp credentials rejected")
 	}
-	return creds.TokenSource, firstNonEmpty(proj, creds.ProjectID), nil
+	return creds.TokenSource, cmp.Or(proj, strings.TrimSpace(creds.ProjectID)), nil
 }
 
 // validateGoogleCredential fail-closes the customer-supplied google credentials
@@ -175,7 +176,7 @@ func (gcpDriver) discover(ctx context.Context, cr cred) ([]discovered, error) {
 				continue
 			}
 			out = append(out, discovered{
-				ID:         firstNonEmpty(cl.SelfLink, cl.Name),
+				ID:         cmp.Or(cl.SelfLink, cl.Name),
 				Name:       cl.Name,
 				Region:     cl.Location,
 				Endpoint:   endpoint,

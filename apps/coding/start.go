@@ -2,8 +2,8 @@ package coding
 
 // start.go is the ONE way a coding run begins.
 //
-// Every door — the Slack `code:` trigger, `POST /v1/coding`, and anything added
-// later — arrives here. That is not tidiness: a door that assembled its own
+// `POST /v1/coding` is the door, and anything added later arrives here too. That
+// is not tidiness: a door that assembled its own
 // Dispatcher would be a second ENGINE with its own pool and its own in-flight
 // set, and a run started from chat would be invisible to the app that shares
 // its name. One Start, one pool, one process.
@@ -12,7 +12,7 @@ package coding
 //
 // A run is a long chain of cross-process calls: open the session (agents), read
 // the clone URL (git), dispatch the sandbox (bot), verify the pushed ref (git),
-// file the PR (tracker). Every one of those authorizes on the CALLER's org,
+// file the PR (todo). Every one of those authorizes on the CALLER's org,
 // never on an argument, because a caller able to name the org could name
 // somebody else's.
 //
@@ -47,6 +47,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -61,11 +62,6 @@ const (
 	// others out of sandbox capacity.
 	defaultConcurrency    = 8
 	defaultOrgConcurrency = 2
-
-	// agentCredUser is the basic-auth username a git client must send beside the
-	// grant. git ignores it — the password is the whole credential — but it must
-	// be something, and naming it here means the sandbox is not inventing one.
-	agentCredUser = "x-access-token"
 
 	// maxRunBudget is the longest run the engine will admit, whatever a caller
 	// asks for. Without it TimeoutSeconds was unbounded: a caller could hold a
@@ -109,15 +105,18 @@ func Engine(log func(msg string, kv ...any)) Dispatcher {
 
 // Start admits one coding run and returns its handle.
 //
-// org is the CALLER's tenant, read off the caller by the door and never taken
-// from the request body. Everything the run then does happens in that org and
-// nowhere else: its session, its repo, its credential, its PR.
+// org and subject are the CALLER's, read off the caller by the door and never
+// taken from the request body — the two are parameters for exactly that reason,
+// and the symmetry is the contract: a door that can name one can name the other,
+// and neither is nameable. Everything the run then does happens in that org and
+// nowhere else: its session, its repo, its credential, its PR; and it is
+// attributed to that person.
 //
 // It is synchronous up to the point the run is admitted — validate, resolve the
 // credential, open the session — and detached after it. That split is what lets
 // a door answer immediately with a real handle instead of an empty promise, and
 // it is why the session is opened HERE rather than inside Run.
-func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg string, kv ...any)) (Accepted, error) {
+func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log func(msg string, kv ...any)) (Accepted, error) {
 	org = strings.TrimSpace(org)
 	if !OrgRE.MatchString(org) {
 		// Shape-checked, not merely non-empty. The org becomes a git namespace and
@@ -127,12 +126,16 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 		// side that would actually be harmed if the first ever failed.
 		return Accepted{}, fmt.Errorf("coding: a run needs a tenant")
 	}
-	subject := strings.TrimSpace(in.Subject)
+	subject = strings.TrimSpace(subject)
 	if subject == "" {
 		// A run that lost its human must not execute AS THE ORG: that bills the
 		// tenant for an unattributable act and hands an unlinked caller the org's
 		// agent and its repos. Refused, never defaulted.
-		return Accepted{}, fmt.Errorf("coding: a run needs a linked subject")
+		//
+		// It says "person", not "linked subject": linking is how ONE surface gets
+		// here (a Slack sender resolving to a hanzo user), and this refusal now
+		// reaches every surface. An API caller holding a token has nothing to link.
+		return Accepted{}, fmt.Errorf("coding: a run needs the person it is for")
 	}
 	repo := strings.TrimSpace(in.Repo)
 	prompt := strings.TrimSpace(in.Prompt)
@@ -154,7 +157,7 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 	// makes git run a command of the caller's choosing on the executor. BaseRE
 	// is git's own branch shape, which is alnum-led and therefore cannot begin
 	// with a dash; that is the property doing the work, not the length bound.
-	base := strings.TrimSpace(in.Base)
+	base := BaseOf(in.Base, in.After)
 	if base != "" && !BaseRE.MatchString(base) {
 		return Accepted{}, fmt.Errorf("coding: %q is not a branch name", base)
 	}
@@ -200,29 +203,45 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 	branch := BranchFor(sessionID)
 
 	// THE CREDENTIAL IS RESOLVED HERE AND NOWHERE ELSE, and it is resolved AFTER
-	// the session, because the session id is what names the branch and the branch
-	// is what the grant is FOR. A credential that had to be fetched before we knew
-	// what it was for is a credential that could not have been bounded.
+	// the session, because the session id NAMES the key on the forge — it is what
+	// an operator reading the repository's settings sees, and what ties a live
+	// credential back to the run holding it.
 	//
-	// A routed run needs none — the machine authenticates git with its own — so
-	// the request is skipped and a workspace whose repo the forge does not hold
-	// can still route. A sandbox run without one fails closed: an empty token is
-	// an error, never a run that proceeds and discovers at push time it cannot
-	// write.
-	var credHandle string
+	// It carries the REMOTE with it. A grant is a key registered on one
+	// repository, so "which repository" and "the right to push to it" are one
+	// fact and are resolved together; asking a separate seam where to clone from
+	// would be a second answer that could disagree with the credential.
+	//
+	// A ROUTED RUN NEEDS NO CREDENTIAL — the machine authenticates git with its
+	// own — BUT IT STILL NEEDS THE ACTOR, and that is the distinction this used to
+	// get wrong. The credential is what the sandbox path takes from here; the
+	// ENTITLEMENT is what both paths take, because both act on a repository.
+	//
+	// Without it, a routed run was a confused deputy with a longer reach than the
+	// sandbox one: cloud confirmed the repository as a site administrator, handed
+	// the address to a machine holding the org's own broad credentials, and
+	// streamed what it found back into the caller's session. Naming a repository
+	// you cannot read was enough.
+	//
+	// So the actor is resolved ONCE, for every run, before either path.
+	actor, aerr := resolveActor(ctx)
+	if aerr != nil {
+		_ = d.Sessions.Close(ctx, org, sessionID, statusError)
+		pool.release(org)
+		return Accepted{}, aerr
+	}
+	req.Actor = actor
+
+	var granted forge.Grant
 	if req.TargetID == "" {
-		// The grant lasts exactly as long as the run may — the run's own bounded
-		// budget, plus a minute so a push at the very end of it still lands. Tying
-		// the two together is what makes "the capability dies with the run" true
-		// even when nothing gets to withdraw it.
-		token, handle, err := agentCredential(ctx, repo, project, "refs/heads/"+branch,
-			budget(req.TimeoutSeconds)+time.Minute)
+		g, err := delegate(ctx, org, actor, repo, sessionID)
 		if err != nil {
 			_ = d.Sessions.Close(ctx, org, sessionID, statusError)
 			pool.release(org)
 			return Accepted{}, err
 		}
-		req.CredUser, req.CredToken, credHandle = agentCredUser, token, handle
+		granted = g
+		req.Remote, req.Key, req.Known = g.Remote, g.Key, g.Known
 	}
 
 	// Detach, and state the tenant again on the way out.
@@ -237,12 +256,22 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 	go func() {
 		defer cancel()
 		defer pool.release(org)
-		// The grant dies with the run rather than with its TTL. Registered before
-		// the panic guard so it runs after it — a run that panicked still gives
-		// the capability back — and on a cancel-immune context, because the run
-		// that most needs its credential withdrawn is the one that hit its
-		// deadline, and that is exactly when runCtx is already dead.
-		defer releaseCredential(context.WithoutCancel(runCtx), credHandle)
+		// The grant dies with the run. Registered before the panic guard so it runs
+		// after it — a run that panicked still gives the capability back — and on a
+		// cancel-immune context, because the run that most needs its credential
+		// withdrawn is the one that hit its deadline, and that is exactly when
+		// runCtx is already dead.
+		//
+		// A failure here is SAID OUT LOUD rather than dropped. Nothing expires a
+		// key on the forge, so a withdrawal that did not happen is a live push
+		// credential and not a tidiness problem; the next run on this repository
+		// sweeps it, and this line is how anyone knows to look.
+		defer func() {
+			if err := withdraw(context.WithoutCancel(runCtx), org, granted); err != nil && log != nil {
+				log("coding: the run's push access was not withdrawn",
+					"org", org, "repo", repo, "key", granted.ID, "err", err)
+			}
+		}()
 		defer func() {
 			// A run executes untrusted model output through a long seam chain. An
 			// unrecovered panic here would take down every tenant sharing this
@@ -273,54 +302,6 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 // guard; bridgeRunContext is the same shape for the same reason.
 func runContext(org string, timeoutSeconds int) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(cloud.For(context.Background(), org), budget(timeoutSeconds))
-}
-
-// agentCredential asks the forge to delegate ONE ref write, and returns the
-// bearer plus the handle that withdraws it.
-//
-// It used to read the org's sealed `agent` git token out of KMS. That token was
-// an ordinary IAM secret key, so IAM resolved it to a user and cloud minted a
-// full org principal from it: the process running untrusted model output held a
-// credential that opened /v1/kms/secrets — every other secret the org has,
-// including the one that posts to its Slack — and every other org-scoped API.
-// The push was confined and the credential was not, and the credential is what a
-// compromised run actually holds.
-//
-// A grant is not an identity. It resolves to no principal at all, so every gate
-// in the platform refuses it by default, and the one exception is the pack
-// protocol on the single repository it names (apps/git/grant.go). It also
-// removes an org-wide standing secret from the world rather than guarding it
-// better: there is nothing left for an operator to seal, and nothing left to
-// leak.
-//
-// Fail-closed, exactly as the KMS read was: an unreachable forge, a repository
-// that is not there, or an empty token each return an error and never a value.
-//
-// The org is NOT an argument. plane.GrantIn has no org field, on purpose: the
-// tenant rides the caller, so this delegates within the caller's own namespace
-// and a run can never reach another tenant's repository by naming it.
-func agentCredential(ctx context.Context, repo, project, ref string, ttl time.Duration) (token, handle string, err error) {
-	g, err := plane.Ask[plane.GrantIn, plane.Granted](ctx, "git", plane.GitGrant,
-		&plane.GrantIn{Repo: repo, Project: project, Ref: ref, TTLSeconds: int(ttl.Seconds())})
-	if err != nil {
-		return "", "", fmt.Errorf("coding: the forge would not delegate a push for %s: %w", repo, err)
-	}
-	if g == nil || strings.TrimSpace(g.Token) == "" {
-		return "", "", fmt.Errorf("coding: the forge returned no push grant for %s", repo)
-	}
-	return g.Token, g.Handle, nil
-}
-
-// releaseCredential withdraws the grant when the run is over, so a grant's life
-// is the RUN's life and not its TTL. Best-effort: the TTL is what makes this
-// safe to miss, and a run that already finished must not fail because the forge
-// was slow to hear about it.
-func releaseCredential(ctx context.Context, handle string) {
-	if strings.TrimSpace(handle) == "" {
-		return
-	}
-	_, _ = plane.Ask[plane.RevokeIn, plane.Revoked](ctx, "git", plane.GitRevoke,
-		&plane.RevokeIn{Handle: handle})
 }
 
 // ---- the bounded pool ------------------------------------------------------

@@ -42,6 +42,9 @@ func newFakeDO() *httptest.Server {
 // right sign, commerce revenue + MRR summed fleet-wide, and the derived margin/
 // runway from computeFinance — all in one envelope.
 func TestFinance_RealAggregation(t *testing.T) {
+	// $150 consumed per org — the figure the HTTP rollup used to answer, now answered
+	// by the process that owns the ledger.
+	serveCommerce(t, func(string) (int64, int64, error) { return 15_000, 0, nil })
 	iam := newFakeIAM()
 	defer iam.server.Close()
 	commerce := newFakeCommerceFinance()
@@ -146,6 +149,7 @@ func TestFinance_RealAggregation(t *testing.T) {
 // with no DO_API_TOKEN the endpoint returns cost.digitalocean = {configured:false},
 // zero credit/burn, null runway — the honest state, never a fabricated $40k.
 func TestFinance_HonestUnconfiguredDO(t *testing.T) {
+	serveCommerce(t, func(string) (int64, int64, error) { return 15_000, 0, nil })
 	iam := newFakeIAM()
 	defer iam.server.Close()
 	commerce := newFakeCommerceFinance()

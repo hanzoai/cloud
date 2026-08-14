@@ -152,7 +152,7 @@ func (p *pool) openLocked(org, seg string) (*appEntry, error) {
 		return nil, fmt.Errorf("base[%s]: mkdir %q: %w", org, dir, err)
 	}
 
-	app := baseapp.NewWithConfig(baseapp.Config{DefaultDataDir: dir, HideStartBanner: true})
+	app := baseapp.NewWithConfig(appConfig(dir, org))
 
 	// IAM-native auth: validate bearer tokens against Hanzo IAM's JWKS as the
 	// EXCLUSIVE auth source (no local-password path). Same IAM the cloud edge

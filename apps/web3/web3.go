@@ -165,7 +165,7 @@ type noInput struct{}
 // principal must be present. Without it this subsystem is an open RPC relay
 // anyone on the internet can point at the deployment's paid upstream.
 func gate(ctx context.Context) error {
-	_, err := principal.RequireOrg(ctx)
+	_, err := principal.Acting(ctx)
 	return err
 }
 

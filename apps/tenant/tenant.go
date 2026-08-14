@@ -180,7 +180,7 @@ func Qualified(id string, k Key) bool {
 // the two can legitimately differ. When they do, this refuses: minting `hanzo/acme`
 // for an org whose only attestation came from lux.id puts two unrelated businesses
 // in one key space, which is precisely what qualification exists to prevent. A
-// principal with no issuer to resolve (an hk-/sk- key this deployment's own IAM
+// principal with no issuer to resolve (an sk- key this deployment's own IAM
 // issued) carries no second fact, and nothing is compared.
 func Of(ctx context.Context, deployment string) (Key, error) {
 	org, ok := principal.OrgFrom(ctx)

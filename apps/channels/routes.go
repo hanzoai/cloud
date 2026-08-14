@@ -107,18 +107,6 @@ type ops struct{ s *cloud.Service[state] }
 // principal: it takes nothing off the wire.
 type noInput struct{}
 
-// tenant is the VALIDATED org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the
-// caller asserted for itself. Fails closed off the HTTP path.
-func tenant(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	return org, nil
-}
-
 // requireOrgAdmin is the mutation gate, and it is the ONE reason this package
 // reaches for the REQUEST. Approving a pairing or editing an allowlist decides
 // who may talk to the org's bots, so it takes admin of the org — which is
@@ -378,7 +366,7 @@ func askConnection(ctx context.Context, provider string) plane.Connection {
 // response as the channel that cannot post.
 func (o ops) list(ctx context.Context, _ *noInput) (*chatChannels, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +434,7 @@ type inboxPage struct {
 // Example: {"since": "1042", "limit": "100"}
 func (o ops) inbox(ctx context.Context, in *inboxIn) (*inboxPage, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +492,7 @@ type pairingQueue struct {
 // returned. Codes are capability strings: they are shown here, and never logged.
 func (o ops) pairingList(ctx context.Context, _ *noInput) (*pairingQueue, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -557,7 +545,7 @@ type pairingApproved struct {
 // Example: {"channel": "telegram", "code": "PAIR-7Q2M"}
 func (o ops) pairingApprove(ctx context.Context, in *approvePairingIn) (*pairingApproved, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -595,7 +583,7 @@ type allowlistRef struct {
 // Example: {"channel": "slack"}
 func (o ops) allowlistGet(ctx context.Context, in *allowlistRef) (*allowlistView, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -659,7 +647,7 @@ type allowlistPutIn struct {
 // Example: {"channel": "slack", "dmPolicy": "allowlist", "dm": ["U024BE7LH"]}
 func (o ops) allowlistPut(ctx context.Context, in *allowlistPutIn) (*allowlistView, error) {
 	s := o.s
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

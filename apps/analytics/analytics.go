@@ -125,10 +125,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // records the informative mount line and brings up the event sink.
 func build(b cloud.Base) (state, error) {
 	b.Log.Info("analytics surface", "warehouse", "hanzo", "brand", b.Brand)
-	// The key→project resolver this door refuses without. The FALLBACK only:
-	// projects.Mount installs the in-process one when it shares this process, and
-	// currentKeyResolver prefers it.
-	SetFallbackKeyResolver(planeKeys{})
 	startSink(b.Log)
 	// The event door for a peer in another process, published beside the HTTP
 	// doors and reaching the same write core — see event_rpc.go.
@@ -331,19 +327,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // second place for the same binding to be got wrong.
 type readOps struct{ s *cloud.Service[state] }
 
-// tenantOf is tenant() for a typed op: the VALIDATED org cloud.Bridge parked on the
-// context, never a field of In. An In field is caller-supplied, so a tenant key read
-// from one is a cross-tenant read the caller asserted for itself. The 403 it returns
-// is byte-identical to the one tenant() produces on the untyped path — both are
-// zip.ErrForbidden through the same error handler.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("valid bearer required")
-	}
-	return org, nil
-}
-
 // noArgs is the In of an op that takes nothing off the wire at all. ONE of these for
 // the package: an op with no input has no input to describe twice.
 type noArgs struct{}
@@ -352,8 +335,9 @@ type noArgs struct{}
 // is the SAME grammar hanzoai/types.ParseWindow gives the console, so analytics and
 // the Overview module cannot disagree about what "7d" means.
 type windowQuery struct {
-	// Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
-	// start and end are given. An unknown value is a 400.
+	// Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
+	// <N>d — or day, week, month, all. Default 24h. Ignored when both start and
+	// end are given. An unknown value, or one past the 730-day horizon, is a 400.
 	Range string `json:"range"`
 	// Start is the inclusive lower bound of a custom window, RFC3339. Requires end.
 	Start string `json:"start"`
@@ -365,8 +349,9 @@ type windowQuery struct {
 // window fields are spelled out rather than embedded: zip's schema walk publishes
 // an embedded type as a nested object property the flat wire does not carry.
 type topQuery struct {
-	// Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
-	// start and end are given. An unknown value is a 400.
+	// Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
+	// <N>d — or day, week, month, all. Default 24h. Ignored when both start and
+	// end are given. An unknown value, or one past the 730-day horizon, is a 400.
 	Range string `json:"range"`
 	// Start is the inclusive lower bound of a custom window, RFC3339. Requires end.
 	Start string `json:"start"`
@@ -505,7 +490,7 @@ func isWarehouseUnreachable(err error) bool {
 //
 // Example: {"range": "7d"}
 func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -529,7 +514,7 @@ func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, erro
 	where, args := llmWhere(org, start, end)
 	llmSQL := "SELECT count() AS requests, sum(total_tokens) AS tokens, " +
 		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
-		"sum(cost_cents) AS cost_cents, uniqExact(model) AS models, uniqExact(provider) AS providers, " +
+		datastore.Spend + " AS cost_cents, uniqExact(model) AS models, uniqExact(provider) AS providers, " +
 		"countIf(status = 'error') AS errors FROM " + llmTable + " WHERE " + where
 	llmRows, err := datastore.Query(ctx, llmSQL, args...)
 	if err != nil {
@@ -578,7 +563,7 @@ func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, erro
 //
 // Example: {"range": "30d"}
 func (o readOps) timeseries(ctx context.Context, in *windowQuery) (*Timeseries, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -602,7 +587,7 @@ func (o readOps) timeseries(ctx context.Context, in *windowQuery) (*Timeseries, 
 	}
 	where, args := llmWhere(org, start, end)
 	seriesSQL := fmt.Sprintf("SELECT toStartOf%s(timestamp, 'UTC') AS bucket, count() AS requests, "+
-		"sum(total_tokens) AS tokens, sum(cost_cents) AS cost_cents FROM %s WHERE %s GROUP BY bucket ORDER BY bucket",
+		"sum(total_tokens) AS tokens, "+datastore.Spend+" AS cost_cents FROM %s WHERE %s GROUP BY bucket ORDER BY bucket",
 		bucketFn, llmTable, where)
 	rows, err := datastore.Query(ctx, seriesSQL, args...)
 	if err != nil {
@@ -636,7 +621,7 @@ func (o readOps) timeseries(ctx context.Context, in *windowQuery) (*Timeseries, 
 //
 // Example: {"range": "7d", "limit": 25}
 func (o readOps) top(ctx context.Context, in *topQuery) (*Top, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -657,7 +642,7 @@ func (o readOps) top(ctx context.Context, in *topQuery) (*Top, error) {
 	// org + time stay bound parameters.
 	where, args := llmWhere(org, start, end)
 	modelSQL := fmt.Sprintf("SELECT model, any(provider) AS provider, count() AS requests, "+
-		"sum(total_tokens) AS tokens, sum(cost_cents) AS cost_cents FROM %s WHERE %s "+
+		"sum(total_tokens) AS tokens, "+datastore.Spend+" AS cost_cents FROM %s WHERE %s "+
 		"GROUP BY model ORDER BY cost_cents DESC, requests DESC LIMIT %d", llmTable, where, limit)
 	modelRows, err := datastore.Query(ctx, modelSQL, args...)
 	if err != nil {

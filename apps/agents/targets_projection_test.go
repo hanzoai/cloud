@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -71,7 +72,7 @@ func TestTargetOpsProjectEverywhere(t *testing.T) {
 	props, _ := in["properties"].(map[string]any)
 	for _, f := range []string{"label", "kind", "host"} {
 		if _, ok := props[f]; !ok {
-			t.Errorf("tool inputSchema has no %q; properties = %v", f, keysOfAny(props))
+			t.Errorf("tool inputSchema has no %q; properties = %v", f, slices.Collect(maps.Keys(props)))
 		}
 	}
 
@@ -91,7 +92,7 @@ func TestTargetOpsProjectEverywhere(t *testing.T) {
 	if cmd.service != "agents" || cmd.name != "targets-create" {
 		t.Errorf("command = %q %q, want %q %q", cmd.service, cmd.name, "agents", "targets-create")
 	}
-	if !contains(cmd.flags, "label") || !contains(cmd.flags, "host") {
+	if !slices.Contains(cmd.flags, "label") || !slices.Contains(cmd.flags, "host") {
 		t.Errorf("command flags = %v, want the In fields", cmd.flags)
 	}
 
@@ -124,16 +125,4 @@ func TestTargetDeleteIsURLOnly(t *testing.T) {
 	if p["name"] != "id" || p["in"] != "path" || p["required"] != true {
 		t.Errorf("parameter = %v, want a required path param named id", p)
 	}
-}
-
-func keysOfAny(m map[string]any) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
-
-func contains(xs []string, want string) bool {
-	return slices.Contains(xs, want)
 }

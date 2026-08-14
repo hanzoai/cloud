@@ -93,7 +93,7 @@ MUTANTS = [
      "TestRoutedPostSetIsExactlyTheDoors", PA),
 
     ("doors: silently drop a declared door", [
-        (E, '\t{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},\n', '')],
+        (E, '\t{path: "/v1/todo", decode: decodeIngest, source: sourceCapture},\n', '')],
      "TestIngestSurfaceIsExactlyTheContract", PA),
 
     ("doors: rebind a door onto the OTHER wire", [
@@ -102,8 +102,8 @@ MUTANTS = [
      "TestIngestSurfaceIsExactlyTheContract", PA),
 
     ("doors: relabel a door's origin tag", [
-        (E, '\t{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},',
-            '\t{path: "/v1/tracker", decode: decodeIngest, source: sourceEvent},')],
+        (E, '\t{path: "/v1/todo", decode: decodeIngest, source: sourceCapture},',
+            '\t{path: "/v1/todo", decode: decodeIngest, source: sourceEvent},')],
      "TestIngestSurfaceIsExactlyTheContract", PA),
 
     ("routes: resurrect the retired /v1/ingest door", [

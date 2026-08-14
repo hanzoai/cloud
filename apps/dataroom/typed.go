@@ -91,7 +91,7 @@ func bundleMessage(status int, body []byte) string {
 // is the BUNDLE's answer and comes back as a goja.BundleErr, so the client gets
 // the same bytes under the same status the untyped relay wrote.
 func (o ops) call(ctx context.Context, route string, params map[string]string, out any) error {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (o ops) call(ctx context.Context, route string, params map[string]string, o
 // body with the relay's 413 — after the tenant, before the work, the order the
 // relay used — then assemble the caller's verbatim tokens and dispatch.
 func (o ops) write(ctx context.Context, route string, size goja.SizedIn, params map[string]string, fields map[string]goja.BodyField, out any) error {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return err
 	}

@@ -32,6 +32,7 @@ import (
 // cockpitFakes bundles a stateful IAM + commerce fake and the mounted `do` helper,
 // exposing the recorded state (forbidden flips, deposits) tests assert on.
 type cockpitFakes struct {
+	spend    map[string]int64 // org slug -> consumed cents, the money read's answer
 	iam      *httptest.Server
 	commerce *httptest.Server
 	service  *cloud.Service[core.State]
@@ -73,7 +74,8 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 		forbidden: map[string]bool{},
 		balances:  map[string]int64{"acme": 20000, "globex": 5000},
 	}
-	spend := map[string]int64{"acme": 1500, "globex": 300}
+	f.spend = map[string]int64{"acme": 1500, "globex": 300}
+	spend := f.spend
 
 	// Signup + usage dates relative to now so analytics windows include them.
 	acmeCreated := now.AddDate(0, 0, -45).Format(time.RFC3339)
@@ -629,6 +631,25 @@ func (f *cockpitFakes) servePlaneBooks(t *testing.T) {
 	t.Setenv("CLOUD_RUN_DIR", planetest.Dir(t))
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
+
+	// The MONEY READ every fleet board folds (core.OrgMoney → plane.FinanceSpend). It
+	// belongs on this stand-in and not on a second one: two apps answering "commerce"
+	// would shadow each other, and which a call reached would depend on which fixture
+	// was built last. The consumption is fixed per org; the balance is read LIVE, so a
+	// grant made through the HTTP half is visible to the next money read.
+	zip.Post[plane.SpendIn, plane.Spend](cloud.Plane(), "/finance/spend",
+		func(ctx context.Context, _ *plane.SpendIn) (*plane.Spend, error) {
+			org := cloud.Who(ctx).Org
+			if org == "" {
+				return nil, zip.ErrForbidden("spend: no org on the call")
+			}
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			return &plane.Spend{
+				Consumed: plane.Amount(money.FromCents(f.spend[org]).Unwrap()),
+				Balance:  plane.Amount(money.FromCents(f.balances[org]).Unwrap()),
+			}, nil
+		}, zip.WithOperationID(plane.FinanceSpend))
 
 	zip.Post[plane.CreditIn, plane.Credited](cloud.Plane(), "/finance/credit",
 		func(ctx context.Context, in *plane.CreditIn) (*plane.Credited, error) {

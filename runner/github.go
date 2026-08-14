@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 const userAgent = "hanzo-arcd/1"
@@ -129,7 +131,7 @@ func (c *ghClient) do(ctx context.Context, method, org, path string, body, out a
 
 func snippet(b []byte) string {
 	if len(b) > 512 {
-		return string(b[:512]) + "..."
+		return shorten.To(string(b), 512) + "..."
 	}
 	return string(b)
 }

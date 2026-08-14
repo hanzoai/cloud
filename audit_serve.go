@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/environ"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -115,7 +116,7 @@ func buildAuditRecorder(cfg *Config, logger luxlog.Logger, proc string) (*audit.
 // CLOUD_AUDIT_CHECKPOINT_INTERVAL is a Go duration (e.g. "5m", "1h"); default 5m;
 // "0" disables periodic checkpoints (the on-close checkpoint still fires).
 func auditCheckpointInterval() time.Duration {
-	if v := getenv("CLOUD_AUDIT_CHECKPOINT_INTERVAL", ""); v != "" {
+	if v := environ.Or("CLOUD_AUDIT_CHECKPOINT_INTERVAL", ""); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
 		}

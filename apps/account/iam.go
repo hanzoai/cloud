@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/iam"
 )
 
 // iamMaxBody bounds an IAM response read — these are small JSON envelopes (a key,
@@ -158,19 +159,16 @@ func (c *iamClient) basicAuth() string {
 	return "Basic " + basicToken(c.clientID, c.clientSecret)
 }
 
-// iamEnvelope is the uniform /v1/iam response shape ({status,msg,data}). A non-ok
-// status is an error surfaced honestly to the caller.
+// iamEnvelope carries what one IAM call answered. Only Data is read; the wire
+// shape it arrived in is iam.Answer's business, not this client's.
 type iamEnvelope struct {
-	Status string          `json:"status"`
-	Msg    string          `json:"msg"`
-	Data   json.RawMessage `json:"data"`
+	Data json.RawMessage `json:"data"`
 }
 
-// do performs one authenticated IAM request and decodes the /v1 envelope. body is
-// an optional JSON payload (nil for GET/param-only POST). A 401/403 from IAM maps
-// to a distinct denied error; a non-envelope or non-ok status is an error with the
-// upstream msg. The response body is size-bounded and never logged (it may carry a
-// freshly-minted key).
+// do performs one authenticated IAM request and hands the body to iam.Answer,
+// which owns reading IAM's two wire shapes. body is an optional JSON payload (nil
+// for GET/param-only POST). The response body is size-bounded and never logged
+// (it may carry a freshly-minted key).
 func (c *iamClient) do(ctx context.Context, method, path string, q url.Values, body []byte) (iamEnvelope, error) {
 	if !c.configured() {
 		return iamEnvelope{}, errNotConfigured
@@ -201,53 +199,11 @@ func (c *iamClient) do(ctx context.Context, method, path string, q url.Values, b
 	if err != nil {
 		return iamEnvelope{}, err
 	}
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return iamEnvelope{}, fmt.Errorf("iam denied (%d)", resp.StatusCode)
+	data, err := iam.Answer(resp.StatusCode, raw)
+	if err != nil {
+		return iamEnvelope{}, err
 	}
-	// TWO WIRE SHAPES, and this door has to read both.
-	//
-	// Some routes answer the {status,msg,data} envelope this type was written
-	// for. Others — /v1/iam/users/get among them — answer the RESOURCE DIRECTLY,
-	// and errors come back as {"status":404,"error":"…"} where `status` is a
-	// NUMBER, not the string "ok".
-	//
-	// Assuming the envelope broke both: a raw row parsed with Status "" and was
-	// rejected as `iam status 200`, and an error body failed to unmarshal at all
-	// and was reported as `iam non-envelope response (400)`. Both were the avatar
-	// write's "photo stored but the profile could not be updated" — measured
-	// against the running IAM, where GET users/get?owner=hanzo&name=z returns
-	// {createdAt,updatedAt,deleted,id,owner,name,…} with no envelope in sight.
-	//
-	// So the HTTP status decides, and the body is only read for what it carries:
-	// a 2xx with no envelope IS the data; a non-2xx yields its `error` or `msg`.
-	var env iamEnvelope
-	enveloped := json.Unmarshal(raw, &env) == nil && env.Status != ""
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		msg := env.Msg
-		if msg == "" {
-			var alt struct {
-				Error string `json:"error"`
-				Msg   string `json:"msg"`
-			}
-			_ = json.Unmarshal(raw, &alt)
-			msg = firstNonEmpty(alt.Error, alt.Msg, fmt.Sprintf("iam status %d", resp.StatusCode))
-		}
-		return iamEnvelope{}, fmt.Errorf("iam: %s", msg)
-	}
-
-	if enveloped {
-		if env.Status != "ok" {
-			msg := env.Msg
-			if msg == "" {
-				msg = fmt.Sprintf("iam status %d", resp.StatusCode)
-			}
-			return iamEnvelope{}, fmt.Errorf("iam: %s", msg)
-		}
-		return env, nil
-	}
-	// A 2xx that is not an envelope: the body is the resource.
-	return iamEnvelope{Status: "ok", Data: json.RawMessage(raw)}, nil
+	return iamEnvelope{Data: data}, nil
 }
 
 // ── the Cloud API key (per-user) ─────────────────────────────────────────────
@@ -319,8 +275,15 @@ func keyBelongsTo(k userKey, owner, user string) bool {
 // The type rides as a FIELD on the one mint. A secret key returns its confidential
 // sk- half; a publishable key returns its pk- (and IAM stores no secret for it at
 // all), which is the credential a browser bundle carries.
-func (c *iamClient) mintUserKey(ctx context.Context, id, typ string) (string, error) {
-	env, err := c.do(ctx, http.MethodPost, "/v1/iam/mint-user-keys", url.Values{"id": {id}, "type": {typ}}, nil)
+func (c *iamClient) mintUserKey(ctx context.Context, id, typ, scope string) (string, error) {
+	form := url.Values{"id": {id}, "type": {typ}}
+	// Sent only when there is one: an empty scope would OVERWRITE the class IAM
+	// derives for a publishable key, turning a browser key into a key that resolves
+	// to a principal.
+	if scope != "" {
+		form.Set("scope", scope)
+	}
+	env, err := c.do(ctx, http.MethodPost, "/v1/iam/mint-user-keys", form, nil)
 	if err != nil {
 		return "", err
 	}

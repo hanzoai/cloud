@@ -44,12 +44,13 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	s3 "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzos3/go"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/sites"
@@ -210,12 +211,7 @@ func scanSource(ctx context.Context, cli *s3.Client, bucket, src string) ([]rele
 }
 
 func hasIndex(objs []releaseObject) bool {
-	for _, o := range objs {
-		if o.rel == "index.html" {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(objs, func(o releaseObject) bool { return o.rel == "index.html" })
 }
 
 // releaseID is the content address: SHA-256 over the sorted manifest of

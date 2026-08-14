@@ -19,6 +19,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/notify"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -257,7 +258,7 @@ type Unsubscribed struct {
 //
 // Example: {"limit": 100}
 func (o ops) listSuppressions(ctx context.Context, in *Page) (*SuppressionList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +276,7 @@ func (o ops) listSuppressions(ctx context.Context, in *Page) (*SuppressionList, 
 //
 // Example: {"channel": "email", "address": "person@example.com", "reason": "asked support to stop"}
 func (o ops) addSuppression(ctx context.Context, in *Suppression) (*Suppression, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +301,7 @@ func (o ops) addSuppression(ctx context.Context, in *Suppression) (*Suppression,
 //
 // Example: {"channel": "email", "address": "person@example.com"}
 func (o ops) removeSuppression(ctx context.Context, in *Suppression) (*struct{}, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

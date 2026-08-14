@@ -257,6 +257,23 @@ func chStr(v any) string {
 	return ""
 }
 
+// chDate coerces a datastore DateTime (time.Time) to a UTC calendar day. A daily bucket
+// IS a day, and saying so is what lets a reader take the month and the day off the front
+// of it; an RFC3339 instant carries a midnight nobody asked about.
+func chDate(v any) string {
+	switch t := v.(type) {
+	case time.Time:
+		return t.UTC().Format("2006-01-02")
+	case string:
+		if len(t) >= 10 {
+			return t[:10]
+		}
+		return t
+	default:
+		return ""
+	}
+}
+
 // chTime coerces a datastore DateTime (time.Time) to an RFC3339 UTC string.
 func chTime(v any) string {
 	switch t := v.(type) {

@@ -63,6 +63,7 @@ import (
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/apps/x402"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/money"
 	"github.com/zap-proto/zip"
 )
@@ -155,19 +156,6 @@ type noInput struct{}
 // body" about a route that answers 204 with none.
 type noContent = struct{}
 
-// tenantOf is the validated org for a typed op — the one the gateway asserted and
-// cloud.Bridge parked on the context, never a field of In. An In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the caller
-// asserted for itself. It IS the principal.Org gate, refusing with the same 403 and
-// the same message.
-func tenantOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	return org, nil
-}
-
 // projectOf is the caller's project sub-scope. It lives in a header rather than in
 // the tenant key, so it needs the request; off the HTTP path there is none, and the
 // caller lands in the org's default project exactly as an absent header does.
@@ -224,7 +212,7 @@ type marketCatalog struct {
 // installed=true on the ones already activated for that scope. It is the shop
 // window: one read that answers what exists, what it costs and what is already on.
 func (o marketOps) discover(ctx context.Context, _ *noInput) (*marketCatalog, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +248,7 @@ type listingPage struct {
 // ListListings returns the listings the caller's own org has published — what this
 // org is offering, not what it can buy. A publisher only ever sees its own rows.
 func (o marketOps) listListings(ctx context.Context, _ *noInput) (*listingPage, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +297,7 @@ type publishReq struct {
 //
 // Example: {"tool": "summarize", "title": "Summarize", "price": "0.0025", "recipient": "wal_9f2", "public": true}
 func (o marketOps) publish(ctx context.Context, in *publishReq) (*Listing, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +354,7 @@ type listingRef struct {
 //
 // Example: {"id": "lst_1"}
 func (o marketOps) unpublish(ctx context.Context, in *listingRef) (*noContent, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +395,7 @@ type installState struct {
 //
 // Example: {"tool": "summarize"}
 func (o marketOps) install(ctx context.Context, in *installReq) (*installState, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +422,7 @@ func (o marketOps) install(ctx context.Context, in *installReq) (*installState, 
 //
 // Example: {"tool": "summarize"}
 func (o marketOps) uninstall(ctx context.Context, in *installReq) (*installState, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -452,10 +440,7 @@ func (o marketOps) uninstall(ctx context.Context, in *installReq) (*installState
 // ── helpers ─────────────────────────────────────────────────────────────────────
 
 func clip(s string) string {
-	if len(s) > maxText {
-		return s[:maxText]
-	}
-	return strings.TrimSpace(s)
+	return strings.TrimSpace(shorten.To(s, maxText))
 }
 
 // callerOf is the validated principal behind the request — the actor an activation
