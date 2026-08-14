@@ -492,7 +492,7 @@ jobs:
           # direction to fail (a hole is inert; a reused number serves wrong
           # bytes). They are not carried over, because a name nothing published
           # is not a release.
-          GIT=$(git ls-remote --tags "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/cloud" \
+          GIT=$(git ls-remote --tags "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzo-inc/cloud" \
             | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' || true)
 
@@ -544,7 +544,7 @@ jobs:
             CODE=$(curl -s -o /tmp/claim.json -w '%{http_code}' -X POST \
               -H "Authorization: token $FORGE_TOKEN" \
               -H 'Content-Type: application/json' \
-              "https://git.hanzo.ai/v1/repos/hanzoai/cloud/tags" \
+              "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/tags" \
               -d "{\"tag_name\":\"v${CAND}\",\"target\":\"${SHA}\"}")
             if [ "$CODE" = "409" ]; then
               # TWO DIFFERENT FAILURES SHARE THIS STATUS, and treating them alike
@@ -564,7 +564,7 @@ jobs:
               # Taken. By us, or by somebody else? The distinction is the whole
               # difference between a resume and a collision, and it is one GET.
               HAVE=$(curl -fsS -H "Authorization: token $FORGE_TOKEN" \
-                "https://git.hanzo.ai/v1/repos/hanzoai/cloud/tags/v${CAND}" | jq -r '.commit.sha // empty')
+                "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/tags/v${CAND}" | jq -r '.commit.sha // empty')
               if [ "$HAVE" = "${SHA}" ]; then
                 echo "v${CAND} is already claimed at our sha — this release, resumed"
                 CLAIMED="$CAND"; break
@@ -578,7 +578,7 @@ jobs:
               # secret. FORGE_TOKEN has only ever been READ with in this
               # workflow — go module fetches and ls-remote — so the first
               # release to write with it is the first test of its scope.
-              echo "::error::the forge refused the claim for v${CAND} with $CODE. FORGE_TOKEN must carry write:repository on hanzoai/cloud — it creates refs/tags/v<N> and the refs/smoked/<digest> receipt. Re-issue it with that scope and set it as the hanzoai org actions secret; nothing else here needs changing."
+              echo "::error::the forge refused the claim for v${CAND} with $CODE. FORGE_TOKEN must carry write:repository on hanzo-inc/cloud — it creates refs/tags/v<N> and the refs/smoked/<digest> receipt. Re-issue it with that scope and set it as the hanzo-inc org actions secret; nothing else here needs changing."
               cat /tmp/claim.json; exit 1
             fi
             if [ "$CODE" != "201" ]; then
@@ -761,7 +761,7 @@ jobs:
           # so the receipt says "these bytes, from this source, booted" and stays
           # false the moment the bytes change under the name.
           SMOKED=0
-          if git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/cloud" "refs/${RECEIPT}" >/dev/null 2>&1; then
+          if git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzo-inc/cloud" "refs/${RECEIPT}" >/dev/null 2>&1; then
             echo "$DIGEST already has a smoke receipt — these exact bytes have booted"
             SMOKED=1
           fi
@@ -843,10 +843,10 @@ jobs:
           # already names something else, and re-pushing the identical value is a
           # no-op. Gitea has no POST for a ref outside refs/tags, and it does not
           # need one — this is the operation that endpoint would have wrapped.
-          if git push "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/cloud" \
+          if git push "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzo-inc/cloud" \
                "${{ github.sha }}:refs/${{ steps.img.outputs.receipt }}" 2>/tmp/receipt.err; then
             echo "recorded: ${{ steps.img.outputs.digest }} booted, built from ${{ github.sha }}"
-          elif git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/cloud" \
+          elif git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzo-inc/cloud" \
                  "refs/${{ steps.img.outputs.receipt }}" >/dev/null 2>&1; then
             echo "already recorded by another run — same digest, same statement"
           else
@@ -864,7 +864,7 @@ jobs:
           FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
         run: |
           set -euo pipefail
-          git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/cloud" \
+          git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzo-inc/cloud" \
             "refs/${{ steps.img.outputs.receipt }}" >/dev/null 2>&1 \
             || { echo "::error::no smoke receipt for ${{ steps.img.outputs.digest }} — these bytes have never been proven to boot. Nothing downstream may pin them."; exit 1; }
           echo "${{ steps.img.outputs.digest }} is smoked"
@@ -900,7 +900,7 @@ jobs:
           set -euo pipefail
           TAG="v${{ needs.image.outputs.version }}"
           HAVE=$(curl -fsS -H "Authorization: token ${FORGE_TOKEN}" \
-            "https://git.hanzo.ai/v1/repos/hanzoai/cloud/tags/${TAG}" | jq -r '.commit.sha // empty')
+            "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/tags/${TAG}" | jq -r '.commit.sha // empty')
           if [ -z "$HAVE" ]; then
             echo "::error::${TAG} was claimed by this run but no longer exists — refusing to ship a release whose receipt was deleted"; exit 1
           fi
@@ -1286,14 +1286,14 @@ jobs:
 
           # Idempotent: create, or update the one that a previous attempt left.
           ID=$(curl -fsS -H "Authorization: token ${FORGE_TOKEN}" \
-            "https://git.hanzo.ai/v1/repos/hanzoai/cloud/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
+            "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
           if [ -n "$ID" ]; then
             curl -fsS -X PATCH -H "Authorization: token ${FORGE_TOKEN}" \
-              "https://git.hanzo.ai/v1/repos/hanzoai/cloud/releases/${ID}" \
+              "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/releases/${ID}" \
               -d "$(jq -nc --arg b "$BODY" '{body:$b}')" >/dev/null
           else
             curl -fsS -X POST -H "Authorization: token ${FORGE_TOKEN}" \
-              "https://git.hanzo.ai/v1/repos/hanzoai/cloud/releases" \
+              "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/releases" \
               -d "$(jq -nc --arg t "$TAG" --arg b "$BODY" '{tag_name:$t, name:$t, body:$b}')" >/dev/null
           fi
           echo "receipt written to the ${TAG} release"
