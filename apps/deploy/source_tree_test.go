@@ -91,6 +91,30 @@ func TestTreeSourceRefusesTruncated(t *testing.T) {
 	}
 }
 
+// TestTreeSourceRefusesEmpty pins the other half of the prune-safety property: a
+// read that SUCCEEDS but resolves to no manifests is an empty desired set, which a
+// pruning reconcile reads as "delete everything". Only non-manifest files present —
+// a README, a kustomization — is the ordinary shape of a wrong path, and it must be
+// an error, not an empty answer. This is the "manifest directory is empty" half that
+// TestTreeSourceUnreadableIsError's comment names but a failed read never reaches.
+func TestTreeSourceRefusesEmpty(t *testing.T) {
+	standIn(t, forge.Tree{
+		Rev: "abc",
+		Files: []forge.File{
+			{Path: "k8s/README.md", Data: []byte("# not a manifest\n")},
+			{Path: "k8s/kustomization.yaml", Data: []byte("resources: []\n")},
+		},
+	}, nil)
+
+	_, _, err := treeSource{org: "hanzo", repo: "universe", ref: "main", path: "k8s"}.render(context.Background())
+	if err == nil {
+		t.Fatal("render accepted an empty desired set")
+	}
+	if !strings.Contains(err.Error(), "empty desired set") {
+		t.Fatalf("error does not name the empty set: %v", err)
+	}
+}
+
 // TestTreeSourceUnreadableIsError proves a forge that will not answer surfaces as
 // an error. "The forge is unreachable" and "the manifest directory is empty" must
 // never look alike: an empty desired set reaching a pruning reconcile sweeps the
