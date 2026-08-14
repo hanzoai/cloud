@@ -141,39 +141,6 @@
         }
       }
     },
-    "/v1/usage/openrouter": {
-      "post": {
-        "operationId": "post_usage_openrouter",
-        "summary": "Receive OpenRouter Broadcast traces as usage rows",
-        "description": "OpenRouter's spend is invisible to every Hanzo money lens because those lenses read hanzo.cloud_usage and OpenRouter meters keys of its own. Point a Broadcast destination (Settings ▸ Observability ▸ Webhook) at this door and each generation span becomes ONE row in that same ledger with provider `openrouter`, so one query answers what we spend everywhere. Enable the Cost and Identity field categories: cost is the money and identity carries `openrouter.api_key_name`, which is what says WHICH key spent it — it lands in `account` as openrouter/\u003ckey name\u003e.\n\nAUTHENTICATION IS AN INGEST KEY. Broadcast signs nothing; its only authentication is the destination's Headers map, so send a Hanzo publishable key as `Authorization: Bearer pk-…` and it resolves through the same seam /v1/event resolves a beacon's key through. That key names the org every row is filed under; it can write and cannot read. No key, or a key that names no org, is 401 and nothing is stored.\n\nThe body is OTLP/JSON — `{resourceSpans:[{scopeSpans:[{spans:[…]}]}]}` — exactly as OpenTelemetry defines it; the model, tokens and cost are read from each span's `gen_ai.*` attributes and the key name from `openrouter.api_key_name`. The answer is `{stored, dropped}`: how many generations became rows, and how many spans named no model. Those are OpenRouter's trace and span parents — they carry no cost to meter. An empty payload stores nothing and answers 200, which is what makes Test Connection pass. A warehouse that cannot take the rows answers 503 so the delivery shows red and can be replayed: a row is keyed by its span id, so a redelivery collapses rather than double-counting.",
-        "tags": [
-          "usage"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": {}
-              }
-            }
-          }
-        },
-        "responses": {
-          "2XX": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {}
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/usage/samples": {
       "get": {
         "operationId": "get_usage_samples",
