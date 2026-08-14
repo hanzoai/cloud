@@ -203,6 +203,18 @@ func fundingClass(pc ProviderCredit) string {
 	}
 }
 
+// window is the funding board's read window: the caller's own from/to, or the
+// last 30 days when they gave nothing readable. The bounds are the pair this
+// board reads, so it is a custom window — asking for the default one would
+// answer a day and drop the dates the caller sent.
+func window(from, to string, now time.Time) (start, end time.Time) {
+	w, err := types.ParseWindow("custom", from, to, now)
+	if err != nil {
+		return now.AddDate(0, 0, -30), now
+	}
+	return w.Start, w.End
+}
+
 // UsageFundingIn is the GET /v1/admin/usage/funding window.
 type UsageFundingIn struct {
 	// From is the inclusive start of the window. Unparseable or absent, together with
@@ -240,12 +252,7 @@ func (o ops) UsageFunding(ctx context.Context, in *UsageFundingIn) (*UsageFundin
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
 	}
-	w, werr := types.ParseWindow("", in.From, in.To, time.Now().UTC())
-	start, end := w.Start, w.End
-	if werr != nil {
-		end = time.Now().UTC()
-		start = end.AddDate(0, 0, -30)
-	}
+	start, end := window(in.From, in.To, time.Now().UTC())
 
 	cls := map[string]string{}
 	for _, pc := range computeProviderCredits(ctx, o.s) {
