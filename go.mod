@@ -47,7 +47,7 @@ require (
 	github.com/zap-proto/http v0.3.5
 	github.com/zap-proto/mcp v1.0.5
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.28.3
+	github.com/zap-proto/zip v1.29.0
 	golang.org/x/term v0.45.0
 	helm.sh/helm/v3 v3.21.3
 	k8s.io/apimachinery v0.36.2

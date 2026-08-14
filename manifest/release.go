@@ -107,9 +107,10 @@ func (a App) remote() (zip.Plugin, bool) {
 	// Sum is what makes fetching code safe to execute: zip verifies before
 	// chmod, and caches by digest, so restart and rollback touch no network.
 	return zip.Plugin{
-		Name: a.Name,
-		URL:  at.url,
-		Sum:  at.sum,
-		Lazy: !a.Eager,
+		Name:      a.Name,
+		URL:       at.url,
+		Sum:       at.sum,
+		Lazy:      !a.Eager,
+		IdleAfter: idleAfter,
 	}, true
 }
