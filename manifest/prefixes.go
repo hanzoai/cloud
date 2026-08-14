@@ -49,6 +49,29 @@ func PrefixesFor(name string) []string {
 	return nil
 }
 
+// Coresident reports whether the named app routes no prefix of its own — it
+// mounts as middleware on a sibling's router and decides per request whether to
+// serve or Next (App.Coresident).
+//
+// It is the ONE predicate for that question. Three callers already fold a set on
+// it — the host that declines to spawn a child (cmd/cloud mount), the derivation
+// that skips it when listing what is elsewhere (Elsewhere), and the program that
+// names itself (cloud.procName) — and each rebuilding the answer from Apps is how
+// "who routes" comes to mean different things in the process that spawns and the
+// process that runs.
+//
+// An unknown name routes for itself: a plugin absent from Apps was never a
+// passenger on anybody, and TestEveryPluginNameIsInTheManifest keeps the case
+// from arising silently.
+func Coresident(name string) bool {
+	for _, a := range Apps {
+		if a.Name == name {
+			return a.Coresident
+		}
+	}
+	return false
+}
+
 // GrantFor is the subtrees whose MIDDLEWARE an app may install — what
 // cloud.Plugin.Prefixes bounds, and what a plugin/<app>/main.go hands it.
 //
