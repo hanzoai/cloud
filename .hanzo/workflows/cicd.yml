@@ -1082,15 +1082,35 @@ jobs:
 
   # ══ CAR 4 ══ FAN OUT. One release, one document, every projection.
   #
-  # Nine repos listen for `repository_dispatch: spec-update`. Three of them have
-  # listened since the day they were written and NOTHING HAS EVER SENT IT — the
-  # sender was assumed to be hanzoai/openapi, which has zero workflows. This is
-  # the sender.
+  # Pokes every client projection so a release, not a clock, is what moves them.
   #
-  # The payload is the coupler: (version, sha, spec_sha256). Each repo fetches
-  # openapi.yaml AT THAT SHA through hanzoai/ci's `client:` lane, refuses on a
-  # digest mismatch, regenerates, compiles itself AND its examples, and cuts a
-  # patch. The lane is one shape in seven languages, defined once.
+  # THIS USED TO POST TO api.github.com AND COULD NEVER WORK. It sent
+  # `repository_dispatch: spec-update` to nine repos on github.com, and those
+  # repos' workflows ask for `hanzo-build-linux-amd64` — a label only the forge's
+  # fleet carries. github.com has zero self-hosted runners of ours, so the events
+  # were ACCEPTED and ran nothing: twelve of them. The job then failed for want
+  # of a FLEET_DISPATCH_TOKEN, a classic PAT spanning six GitHub owners, which
+  # made a missing GitHub credential look like the blocker. It was not. The
+  # plane was wrong. CI here is native (.hanzo/workflows on git.hanzo.ai), and a
+  # GitHub credential cannot fix an estate that does not run there.
+  #
+  # The forge has no `repository_dispatch` — that is the wall the old shape hit —
+  # but it has `workflow_dispatch`, and the receivers already migrated to it:
+  # every projection's cicd.yml now declares a bare `workflow_dispatch:` and
+  # says so in its own comment. So this sends the verb the forge HAS, with the
+  # FORGE_TOKEN rollout already uses to read this repo's tags. Verified against
+  # a live projection before it was written here: POST -> 204, and the run
+  # appears as event=workflow_dispatch, in_progress, on a runner.
+  #
+  # WHAT IS LOST, stated plainly: the old payload carried (version, sha,
+  # spec_sha256) and a projection refused on a digest mismatch. A bare
+  # workflow_dispatch carries none of it, so a projection regenerates from the
+  # spec at HEAD and nothing records which release it is a projection of. That
+  # trade was already made by the receivers when they migrated; this restores
+  # the missing half, which is that a RELEASE is what pokes them. Today the only
+  # thing moving them is a nightly `schedule:`, so a client is a day stale on
+  # average. Carrying the digest again means giving each projection a
+  # `workflow_dispatch.inputs` contract and sending it here.
   fanout:
     needs: [image, rollout, reach]
     runs-on: [hanzo-build-linux-amd64]
@@ -1098,164 +1118,64 @@ jobs:
     outputs:
       dispatched: ${{ steps.send.outputs.dispatched }}
     steps:
-      - name: Send spec-update to every projection
+      - name: Poke every projection on the forge
         id: send
         env:
-          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
-          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
-          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
-          KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          # The projections that exist ON THE FORGE, which is the only place a
+          # dispatch can be answered. hanzo-kotlin/sdk and hanzo-cpp/sdk are in
+          # the old list and are NOT here: both 404 on git.hanzo.ai, so poking
+          # them is not a thing that can succeed. Mirror them to the forge and
+          # add them back; leaving them in would fail every release for two repos
+          # nothing can deliver to.
+          PROJECTIONS: >-
+            hanzoai/python-sdk hanzoai/js-sdk hanzo-go/sdk hanzo-rs/sdk
+            hanzoai/java-sdk hanzoai/cli hanzo-docs/docs
         run: |
           set -euo pipefail
-
-          # CREDENTIAL: FLEET_DISPATCH_TOKEN — carries `contents:write` (a client
-          # repo's lane commits its regenerated projection and pushes a tag) and
-          # `metadata:read` on the nine repos below. From KMS, like every other
-          # secret this fleet uses; the repo holds only KMS_CLIENT_ID/SECRET.
-          #
-          # IT CANNOT BE A FINE-GRAINED PAT, and that is a fact about where the
-          # projections live rather than a preference. A fine-grained token is
-          # scoped to ONE owner; these nine sit in SIX — hanzoai, hanzo-go,
-          # hanzo-rs, hanzo-kotlin, hanzo-cpp, hanzo-docs. So it is a classic PAT
-          # with `repo`, or a GitHub App installed on all six. Naming it wrong
-          # would have produced a token that works for four repos and 404s on
-          # five, which is worse than none.
-          #
-          # It does not exist yet. Wiring the car and naming the credential is
-          # the honest state — a release that cannot fan out fails HERE, loudly,
-          # naming the exact KMS path to create, instead of quietly shipping a
-          # cloud nobody's client knows about. That silent version is what the
-          # fleet has been living in.
-          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
-            -H 'Content-Type: application/json' \
-            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
-            | jq -r '.accessToken // empty' || true)
-          [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
-
-          # Same route correction as the pin above: no org in a KMS path.
-          TOKEN=$(curl -sS \
-            "${KMS_ENDPOINT}/v1/kms/secrets/deploy/FLEET_DISPATCH_TOKEN?env=${KMS_SECRET_ENV}" \
-            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
-          if [ -z "$TOKEN" ]; then
-            echo "::error::FLEET_DISPATCH_TOKEN missing in KMS at deploy/ (env ${KMS_SECRET_ENV}, org from the KMS credential). Create it with contents:write + metadata:read on hanzoai/{python-sdk,js-sdk,java-sdk,cli} hanzo-go/sdk hanzo-rs/sdk hanzo-kotlin/sdk hanzo-cpp/sdk hanzo-docs/docs — six owners, so a fine-grained PAT cannot carry it; use a classic PAT with repo scope or a GitHub App installed on all six. Until it exists, every cloud release ships a document no client is regenerated from — which is the failure this car was built to end, so it fails rather than skipping."
-            exit 1
-          fi
-          echo "::add-mask::${TOKEN}"
-
-          PAYLOAD=$(jq -nc \
-            --arg v "v${{ needs.image.outputs.version }}" \
-            --arg s "${{ github.sha }}" \
-            --arg d "${{ needs.image.outputs.spec_sha256 }}" \
-            '{version:$v, sha:$s, spec_sha256:$d}')
-
-          # ONE EVENT TYPE for every projection — SDKs, the CLI and the docs
-          # alike. A second name for "the document moved" would be a second
-          # thing to keep in step.
-          #
-          # EACH PROJECTION BY ITS OWN ADDRESS. Five of the nine no longer live
-          # under hanzoai/: go, rust, kotlin and cpp each moved to a per-language
-          # org, and docs to hanzo-docs. Measured against api.github.com rather
-          # than assumed — POST .../dispatches with an event nothing listens for:
-          #
-          #   hanzoai/go-sdk     307      hanzo-go/sdk       204
-          #   hanzoai/rust-sdk   307      hanzo-rs/sdk       204
-          #   hanzoai/kotlin-sdk 307      hanzo-kotlin/sdk   204
-          #   hanzoai/cpp-sdk    307      hanzo-cpp/sdk      204
-          #   hanzoai/docs       307      hanzo-docs/docs    204
-          #
-          # A redirect is not a delivery. GitHub follows a repo rename for GET,
-          # but a dispatch POST answers 307 and drops the body, so this loop
-          # would have failed five of nine on its first real run — five clients
-          # silently describing the previous release. Curl is deliberately NOT
-          # given -L: a projection is addressed where it lives, and a redirect
-          # that has to be followed means this list is stale and should say so.
-          # Taken BEFORE the first dispatch, so "a run created at or after T0" can
-          # never be satisfied by a run that was already there.
+          [ -n "${FORGE_TOKEN:-}" ] || { echo "::error::FORGE_TOKEN is empty — the same secret rollout uses to read this repo's tags"; exit 1; }
           T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           ok=0; bad=""
-          for repo in hanzoai/python-sdk hanzoai/js-sdk hanzo-go/sdk hanzo-rs/sdk \
-                      hanzoai/java-sdk hanzo-kotlin/sdk hanzo-cpp/sdk hanzoai/cli \
-                      hanzo-docs/docs; do
+          for repo in $PROJECTIONS; do
             CODE=$(curl -s -o /tmp/d.json -w '%{http_code}' -X POST \
-              -H "Authorization: Bearer ${TOKEN}" \
-              -H 'Accept: application/vnd.github+json' \
-              "https://api.github.com/repos/${repo}/dispatches" \
-              -d "{\"event_type\":\"spec-update\",\"client_payload\":${PAYLOAD}}")
+              -H "Authorization: token ${FORGE_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              "https://git.hanzo.ai/v1/repos/${repo}/actions/workflows/cicd.yml/dispatches" \
+              -d '{"ref":"main"}')
             if [ "$CODE" = "204" ]; then
-              echo "  dispatched  ${repo}"; ok=$((ok+1))
-            elif [ "$CODE" = "301" ] || [ "$CODE" = "307" ] || [ "$CODE" = "308" ]; then
-              echo "  MOVED ${CODE}  ${repo} — this repo was renamed or transferred; put its new address in this list"
-              bad="${bad} ${repo}"
+              ok=$(( ok + 1 )); echo "  poked     ${repo}"
             else
-              echo "  FAILED ${CODE}  ${repo}"; cat /tmp/d.json; bad="${bad} ${repo}"
+              echo "  FAILED ${CODE}  ${repo}"; cat /tmp/d.json || true; bad="${bad} ${repo}"
             fi
           done
-
           echo "dispatched=${ok}" >> "$GITHUB_OUTPUT"
           if [ -n "$bad" ]; then
-            echo "::error::spec-update was not accepted by:${bad}. A projection that never heard about this release describes the previous one."
+            echo "::error::the forge refused the dispatch for:${bad}. A projection that never heard about this release describes the previous one."
             exit 1
           fi
-
-          # A DISPATCH THAT STARTS NOTHING IS NOT A DELIVERY, and this is the
-          # difference between a receipt that means something and one that counts
-          # HTTP status codes. 204 says GitHub recorded the event; it says
-          # nothing about a runner ever picking it up, and on this fleet that
-          # distinction is not academic:
-          #
-          #   github.com has ZERO self-hosted runners — org-level 0, and 0 on
-          #   every one of these repos. Every caller declares
-          #   `runs-on: [hanzo-build-linux-amd64]`, a pool registered to
-          #   git.hanzo.ai. Measured: hanzoai/python-sdk's CI/CD run from
-          #   18:19 today is still `queued`, hanzoai/java-sdk's since 2026-07-31.
-          #   The forge, which HAS the runners, has no repository_dispatch
-          #   endpoint at all — POST /v1/repos/<o>/<r>/dispatches is 404 there,
-          #   while POST .../actions/workflows/cicd.yml/dispatches is 401, so
-          #   `workflow_dispatch` is the forge's dispatch verb and this event
-          #   cannot reach it.
-          #
-          # So today this gate goes RED, naming every projection that accepted
-          # the event and never ran it. That is the correct reading of the state:
-          # a release whose clients cannot be regenerated is incomplete, and the
-          # receipt should say so rather than record 9/9 for nine queued jobs.
           echo "::group::did the dispatch start a run?"
           DEADLINE=$(( $(date +%s) + 480 ))
-          started=""; stalled=""
-          # `${pending-first}` without the colon: it substitutes only when the
-          # variable is UNSET, so the first pass enters and a pass that leaves
-          # `pending` empty exits. With `:-` an empty value would also substitute
-          # and the loop would always run to the deadline.
-          while [ -n "${pending-first}" ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
+          started=""; pending="first"
+          while [ -n "$pending" ] && [ "$(date +%s)" -lt "$DEADLINE" ]; do
             pending=""
-            for repo in hanzoai/python-sdk hanzoai/js-sdk hanzo-go/sdk hanzo-rs/sdk \
-                        hanzoai/java-sdk hanzo-kotlin/sdk hanzo-cpp/sdk hanzoai/cli \
-                        hanzo-docs/docs; do
+            for repo in $PROJECTIONS; do
               case " $started " in *" $repo "*) continue ;; esac
-              # A run for OUR event, created at or after this job began, that has
-              # left `queued` — i.e. a runner took it.
-              S=$(curl -s -H "Authorization: Bearer ${TOKEN}" \
-                    "https://api.github.com/repos/${repo}/actions/runs?event=repository_dispatch&per_page=5" \
-                  | jq -r --arg t "$T0" '[.workflow_runs[]? | select(.created_at >= $t) | .status] | first // ""')
+              S=$(curl -s -H "Authorization: token ${FORGE_TOKEN}" \
+                    "https://git.hanzo.ai/v1/repos/${repo}/actions/runs?limit=5" \
+                  | jq -r --arg t "$T0" '[.workflow_runs[]? | select(.event=="workflow_dispatch") | .status] | first // ""')
               case "$S" in
-                in_progress|completed) started="${started} ${repo}"; echo "  started   ${repo}" ;;
-                *)                     pending="${pending} ${repo}" ;;
+                in_progress|completed|running) started="${started} ${repo}"; echo "  started   ${repo}" ;;
+                *)                             pending="${pending} ${repo}" ;;
               esac
             done
             [ -n "$pending" ] && sleep 20
           done
           echo "::endgroup::"
           if [ -n "$pending" ]; then
-            echo "::error::accepted but never ran:${pending}. No runner picked the dispatch up within 8 minutes. github.com has zero self-hosted runners and these callers ask for the forge's pool (hanzo-build-linux-amd64); the forge cannot receive a repository_dispatch. Until a runner answers on the side the event lands on, these projections do not move and this release is incomplete."
+            echo "::error::accepted but never ran:${pending}. The forge took the dispatch and no runner answered within 8 minutes — check the git-runner fleet and the labels in ConfigMap git-runner-config."
             exit 1
           fi
 
-  # ══ CAR 5 ══ THE RECEIPT. This artifact IS the definition of "shipped".
-  #
-  # Always runs, so a hole is RECORDED rather than merely absent from a green
-  # run. It is the release's own GitHub Release — state belongs with the thing it
-  # describes, and a tag's receipt belongs on that tag. Writing it back into the
-  # repo would trigger the next release; an asset on the tag triggers nothing and
-  # is what the next run reads to know whether the last one finished.
   receipt:
     needs: [image, rollout, reach, fanout]
     if: always() && needs.image.result == 'success'
