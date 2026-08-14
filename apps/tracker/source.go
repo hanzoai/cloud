@@ -346,7 +346,14 @@ func (o ops) answer(err error) error {
 	default:
 		if strings.Contains(err.Error(), "credential rejected") {
 			o.s.State.forge.invalidate()
-			o.s.Log.Error("forge rejected the machine credential", "ref", tokenRef)
+			// CARRY THE ERROR. The forge answers 401 and 403 to different problems
+			// and the client folds both into this one string, so the status code in
+			// it is the only thing that separates "the token is revoked" — re-mint
+			// and write the ref — from "the token is fine and its account may not
+			// Sudo", which no rotation ever fixes. Dropping it left an operator with
+			// a message that named a secret and could not say what was wrong with
+			// it. The error carries a path and a code, never the credential.
+			o.s.Log.Error("forge rejected the machine credential", "ref", tokenRef, "err", err)
 			return zip.Errorf(http.StatusServiceUnavailable, "forge unavailable")
 		}
 		o.s.Log.Error("forge read failed", "err", err)
@@ -418,8 +425,25 @@ func forgeIssue(i forge.Issue) issueView {
 		CreatedAt:   unix(i.Created),
 		UpdatedAt:   unix(i.Updated),
 	}
+	// THE SCHEDULE. A forge issue's deadline is its milestone's due date — the
+	// forge has no per-issue one — and the interval it occupies runs from when it
+	// was opened to when it is due.
+	//
+	// StartAt was left at 0 here, and that made the timeline structurally
+	// incapable of drawing a bar: spanOf reads a due date with no start as a
+	// POINT, so every scheduled row on every board rendered as a milestone
+	// diamond and the gantt was a column of dots. Filling it from Created is not
+	// an invented field — it is the one instant the forge actually knows the work
+	// began to exist, and "open since -> due" is what the bar means.
 	if i.Milestone != nil && i.Milestone.Due != "" {
 		v.DueAt = unix(i.Milestone.Due)
+		v.StartAt = v.CreatedAt
+		// A row created after its own deadline has no interval to draw. Leave the
+		// start unset so it reads as the point it is, rather than as a bar running
+		// backwards — barOf would clamp it to a sliver at the wrong end.
+		if v.StartAt >= v.DueAt {
+			v.StartAt = 0
+		}
 	}
 	return v
 }
@@ -573,8 +597,15 @@ func (o ops) forgeProject(ctx context.Context, in *projectRef) (*trackerProject,
 	})
 }
 
-// ListIssues returns one board's issues — the work items of that repository on
-// the forge, with their column, priority, assignee and labels.
+// ListIssues returns a board's issues — work items with their column, priority,
+// assignee, labels and schedule.
+//
+// WHICH board is a filter, not an address. Bound to a repository (the key from
+// the path) it is that project's board; left unbound it is the org's whole
+// board; narrowed by label it is a board smaller than any repository — which is
+// the only way an app that lives as a directory inside a shared repository can
+// have one. Every combination is the same rows through the same projection, so
+// no two boards can disagree about what a column means.
 //
 // The column is a LABEL on the forge, so the board and the forge web UI are the
 // same object seen twice: relabelling in either moves the card in both. A closed
@@ -604,7 +635,18 @@ func (o ops) forgeIssues(ctx context.Context, in *issueQuery) (*issueList, error
 			// The board is addressed by repository, and issues-search spans the org, so
 			// the repo IS the project filter. Compared case-insensitively for the same
 			// reason getProject is.
-			if !strings.EqualFold(v.Repo, in.Key) {
+			//
+			// AN EMPTY KEY KEEPS EVERYTHING. The fan-out above is already org-wide and
+			// every row not on the requested board was being discarded here; leaving
+			// the filter unbound is therefore the global board, at no extra cost and
+			// with no second endpoint to drift from this one.
+			if in.Key != "" && !strings.EqualFold(v.Repo, in.Key) {
+				continue
+			}
+			if in.Repo != "" && !strings.EqualFold(v.Repo, in.Repo) {
+				continue
+			}
+			if in.Label != "" && !hasLabel(v.Labels, in.Label) {
 				continue
 			}
 			if in.Status != "" && v.Status != in.Status {
@@ -617,6 +659,18 @@ func (o ops) forgeIssues(ctx context.Context, in *issueQuery) (*issueList, error
 		}
 		return &out, nil
 	})
+}
+
+// hasLabel reports whether a row carries the label, case-insensitively — the
+// same comparison every other name on this surface uses, because a board that
+// answers differently for `app/Meet` and `app/meet` is two boards.
+func hasLabel(labels []string, want string) bool {
+	for _, l := range labels {
+		if strings.EqualFold(l, want) {
+			return true
+		}
+	}
+	return false
 }
 
 // ListMilestones returns every milestone across your org's repositories, each
