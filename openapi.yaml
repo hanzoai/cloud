@@ -115215,13 +115215,23 @@ paths:
   /v1/tracker/projects:
     get:
       description: |-
-        Returns the boards of your org — one per repository on the
-        deployment's forge that you can see. The key is the repository name, and it is
-        what addresses the board's issues.
+        Returns the boards of your org — the places your work actually
+        is. The key addresses the board's issues.
 
-        Archived repositories are omitted: they are not live work. The set is the
-        FORGE's answer for your own account, so two people in one org can legitimately
-        see different boards.
+        A BOARD IS A PLACE WORK IS, not an object somebody provisioned. So the list is
+        assembled from the work itself: the repositories your org has filed issues on,
+        plus the boards the index holds. A repository with nothing on it is not in the
+        list and is still perfectly addressable — GET /projects/<name> reads it and a
+        create files into it — so nothing is lost by leaving it out.
+
+        Measured, which is why: reading the forge's whole repository inventory put 745
+        boards here, of which all but a handful were vendored forks and mirrors
+        (.github, .profile, DOMPurify, BoatAttack) that will never carry this org's
+        work. A list that long is not a list — the estate's real roadmap was in it
+        somewhere and no one could see it.
+
+        The forge half is the FORGE's answer for your own account, so two people in
+        one org can legitimately see different boards.
       operationId: get_tracker_projects
       responses:
         "200":
@@ -115232,8 +115242,7 @@ paths:
                   $ref: '#/components/schemas/trackerProject'
                 type: array
           description: ok
-      summary: Returns the boards of your org — one per repository on the deployment's
-        forge that you can see.
+      summary: Returns the boards of your org — the places your work actually is.
       tags:
       - tracker
       x-app: tracker
