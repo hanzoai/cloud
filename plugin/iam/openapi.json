@@ -4384,8 +4384,8 @@
     "/v1/iam/users/get": {
       "get": {
         "operationId": "get_iam_users_get",
-        "summary": "Returns one person in your organization, by the organization they belong to and their username.",
-        "description": "Returns one person in your organization, by the organization they belong\nto and their username. Passwords, API secrets and MFA material are stripped\nfrom the response.",
+        "summary": "Returns one person in your organization, addressed by their username or by their email address.",
+        "description": "Returns one person in your organization, addressed by their username or by\ntheir email address. Passwords, API secrets and MFA material are stripped from\nthe response.\n\nAn address that names two accounts names none: the read refuses rather than\npicking one, and says so instead of reporting \"no such user\". Handing back an\narbitrary one of two rows is how somebody gets added to a team under a\ncolleague's identity.",
         "tags": [
           "iam"
         ],
@@ -4401,7 +4401,15 @@
           {
             "name": "name",
             "in": "query",
-            "required": true,
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             }
