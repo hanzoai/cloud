@@ -430,7 +430,7 @@ func TestPublishedPrecedenceIsTheEnforcedPrecedence(t *testing.T) {
 }
 
 // TestTheColumnarOrderingNamesEverySource is the only defence available against
-// a rule with two homes. The Go comparator and the ClickHouse ordering tuple are
+// a rule with two homes. The Go comparator and the Datastore ordering tuple are
 // both rendered from `precedence`; if a source is added and the SQL rendering
 // forgets it, that source silently sorts last in the warehouse and first-class in
 // the app — two different training sets from one rule.

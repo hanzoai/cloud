@@ -52,7 +52,7 @@ func (r *writeRecorder) snapshot() (int, []int) {
 // TestBufferCoalescesIntoOneWrite is the contract: many batches, ONE write.
 // Without it each batch is its own INSERT, and each INSERT is three parts once
 // the rollup views fan out — which is what put event.metric_30m over its part
-// ceiling and made ClickHouse reject every metric write for an hour.
+// ceiling and made Datastore reject every metric write for an hour.
 func TestBufferCoalescesIntoOneWrite(t *testing.T) {
 	r := &writeRecorder{}
 	b := newMetricBuffer(r.write, time.Hour, 1000, bufQuietLog()) // ticker must not fire
