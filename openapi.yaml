@@ -1650,6 +1650,36 @@ components:
             none.
           type: string
       type: object
+    Category:
+      properties:
+        brands:
+          description: |-
+            Brands are the brands whose console shows this category. Absent means every
+            brand.
+          items:
+            type: string
+          type: array
+        id:
+          description: ID is the stable slug this category is addressed by, e.g. "observe".
+          type: string
+        label:
+          description: Label is the display name, e.g. "Observe".
+          type: string
+        order:
+          description: Order is where the category sits among its siblings, ascending.
+          type: integer
+        summary:
+          description: |-
+            Summary is the one line describing what the category groups, shown as the
+            header copy on its landing page.
+          type: string
+        taxa:
+          description: Taxa are the products filed under this category, in display
+            order.
+          items:
+            $ref: '#/components/schemas/Taxon'
+          type: array
+      type: object
     CategorySpend:
       properties:
         category:
@@ -9444,6 +9474,66 @@ components:
         type:
           type: string
       type: object
+    Taxon:
+      properties:
+        brands:
+          description: |-
+            Brands are the brands whose console shows this taxon. Absent means every
+            brand its category admits.
+          items:
+            type: string
+          type: array
+        category:
+          description: Category is the id of the category this taxon is filed under.
+          type: string
+        description:
+          description: Description is the one line shown beneath the name in the catalogue
+            and nav.
+          type: string
+        href:
+          description: |-
+            Href is the absolute URL an external product launches, for the taxa that
+            genuinely live at their own domain. Empty for an in-console product.
+          type: string
+        icon:
+          description: |-
+            Icon names the icon the surface renders, e.g. "Database". It is a NAME, not
+            an image: which icon set draws it is the rendering surface's business.
+          type: string
+        id:
+          description: ID is the stable slug this taxon is addressed by, e.g. "vector".
+          type: string
+        name:
+          description: Name is the display name, e.g. "Vector".
+          type: string
+        order:
+          description: Order is where the taxon sits within its category, ascending.
+          type: integer
+        published:
+          description: |-
+            Published is whether the taxon is shown. An unpublished taxon is served only
+            to an editor, so a product can be staged before anyone sees it.
+          type: boolean
+        route:
+          description: |-
+            Route is the in-console path this taxon opens, e.g. "/vector". Set for a
+            product the console renders itself; empty for an external one.
+          type: string
+        tags:
+          description: Tags are free-form labels for search and grouping across categories.
+          items:
+            type: string
+          type: array
+      type: object
+    Taxonomy:
+      properties:
+        categories:
+          description: Categories are the groupings, in display order, each with its
+            own taxa.
+          items:
+            $ref: '#/components/schemas/Category'
+          type: array
+      type: object
     Template:
       properties:
         basicConfigOptions:
@@ -15018,6 +15108,27 @@ components:
             sizes itself on.
           type: integer
       type: object
+    categoryIn:
+      properties:
+        brands:
+          description: Brands are the brands whose console shows it. Omit for every
+            brand.
+          items:
+            type: string
+          type: array
+        id:
+          description: ID is the category slug to write, from the path.
+          type: string
+        label:
+          description: Label is the display name. Required.
+          type: string
+        order:
+          description: Order is where the category sits among its siblings, ascending.
+          type: integer
+        summary:
+          description: Summary is the one line describing what the category groups.
+          type: string
+      type: object
     chainList:
       properties:
         chains:
@@ -17339,6 +17450,12 @@ components:
           items:
             $ref: '#/components/schemas/DefRow'
           type: array
+      type: object
+    deleted:
+      properties:
+        deleted:
+          description: Deleted is the id that no longer exists.
+          type: string
       type: object
     deletedOut:
       properties:
@@ -45639,6 +45756,56 @@ components:
           type: string
         updatedAt:
           type: string
+      type: object
+    taxonIn:
+      properties:
+        brands:
+          description: |-
+            Brands are the brands whose console shows it. Omit for every brand its
+            category admits.
+          items:
+            type: string
+          type: array
+        category:
+          description: Category is the id of an EXISTING category to file it under.
+            Required.
+          type: string
+        description:
+          description: Description is the one line shown beneath the name.
+          type: string
+        href:
+          description: |-
+            Href is the absolute URL an external product launches. Give this or route,
+            never both.
+          type: string
+        icon:
+          description: Icon names the icon the surface renders, e.g. "Database".
+          type: string
+        id:
+          description: ID is the taxon slug to write, from the path.
+          type: string
+        name:
+          description: Name is the display name. Required.
+          type: string
+        order:
+          description: Order is where it sits within its category, ascending.
+          type: integer
+        published:
+          description: |-
+            Published is whether it is shown. Omitted means published — a taxon someone
+            took the trouble to write is meant to be seen, and hiding one is the
+            deliberate act.
+          type: boolean
+        route:
+          description: |-
+            Route is the in-console path it opens, e.g. "/vector". Give this or href,
+            never both.
+          type: string
+        tags:
+          description: Tags are free-form labels for search and grouping across categories.
+          items:
+            type: string
+          type: array
       type: object
     templateCatalog:
       properties:
@@ -113480,6 +113647,177 @@ paths:
       tags:
       - tasks
       x-app: tasks
+  /v1/taxonomy:
+    get:
+      description: |-
+        Read returns the whole product catalogue: every category in display order, each
+        carrying the products filed under it in theirs. This is what the console's
+        navigation and the marketing landing page are rendered from, and it is readable
+        signed out — it holds no tenant data, only the same list of products every
+        visitor sees.
+
+        `?brand=` narrows it the way a brand's own console does: only the categories
+        that brand admits, and within them only the taxa scoped to it. Unpublished
+        taxa are served to a platform SuperAdmin alone, so the editor can see what it
+        has staged while nobody else can.
+      operationId: get_taxonomy
+      parameters:
+      - description: |-
+          Brand returns only what that brand's console shows — the categories it
+          admits, and within them the taxa scoped to it. Empty returns everything.
+        in: query
+        name: brand
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Taxonomy'
+          description: ok
+      summary: 'Read returns the whole product catalogue: every category in display
+        order, each carrying the products filed under it in theirs.'
+      tags:
+      - taxonomy
+      x-app: taxonomy
+  /v1/taxonomy/categories/{id}:
+    delete:
+      description: |-
+        Removes one empty category. A category that still has taxa
+        filed under it is refused with 409 and a count: deleting the label off a group
+        must never silently take the products wearing it, and the alternative — orphan
+        rows naming a category that no longer exists — is a catalogue that cannot be
+        rendered. Move or delete its taxa first. An id no category holds is a 404.
+      operationId: delete_taxonomy_categories_by_id
+      parameters:
+      - description: ID is the slug to act on, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/deleted'
+          description: ok
+      summary: Removes one empty category.
+      tags:
+      - taxonomy
+      x-app: taxonomy
+    put:
+      description: |-
+        Creates or replaces one category and returns it as stored. The id in
+        the URL is the one it is filed under whatever the body says, so a category can
+        never be written under a name it was not addressed by — which also makes create
+        and replace the same act, and is why there is no POST beside this.
+
+        Platform SuperAdmin only: one catalogue serves every tenant, so an org admin who
+        could rename a category would rename it for all of them.
+      operationId: put_taxonomy_categories_by_id
+      parameters:
+      - description: ID is the category slug to write, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              label: Observe
+              order: 6
+              summary: Traces, metrics, logs and alerts.
+            schema:
+              $ref: '#/components/schemas/categoryIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ok
+      summary: Creates or replaces one category and returns it as stored.
+      tags:
+      - taxonomy
+      x-app: taxonomy
+  /v1/taxonomy/taxa/{id}:
+    delete:
+      description: |-
+        Removes one product from the catalogue. An id no taxon holds is a
+        404. To take a product out of view without losing what was written about it, set
+        `published` to false instead.
+      operationId: delete_taxonomy_taxa_by_id
+      parameters:
+      - description: ID is the slug to act on, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/deleted'
+          description: ok
+      summary: Removes one product from the catalogue.
+      tags:
+      - taxonomy
+      x-app: taxonomy
+    put:
+      description: |-
+        Creates or replaces one product and returns it as stored. The id in the
+        URL is the one it is filed under whatever the body says. The category must
+        already exist — a taxon naming a category that does not is refused with 400
+        rather than stored where nothing can render it.
+
+        A taxon opens exactly one way: `route` for a product the console renders
+        itself, or `href` for one that genuinely lives at its own domain. Giving both,
+        or neither, is refused.
+
+        Platform SuperAdmin only.
+      operationId: put_taxonomy_taxa_by_id
+      parameters:
+      - description: ID is the taxon slug to write, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              category: data
+              description: Managed vector search.
+              icon: Database
+              name: Vector
+              order: 3
+              route: /vector
+              tags:
+              - search
+            schema:
+              $ref: '#/components/schemas/taxonIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Taxon'
+          description: ok
+      summary: Creates or replaces one product and returns it as stored.
+      tags:
+      - taxonomy
+      x-app: taxonomy
   /v1/team/account:
     post:
       description: |-
@@ -117460,6 +117798,10 @@ tags:
 - description: 'Package tasks is Hanzo Tasks: durable workflows that survive a crash,
     with every run visible and replayable.'
   name: tasks
+- description: 'Package taxonomy is the product catalogue''s shape: which categories
+    exist, what each product is called, which category it sits in, what it is tagged
+    with, and the order the two are shown in.'
+  name: taxonomy
 - description: 'Package team is your org''s shared workspace: documents edited together,
     files, seats, and agents as teammates.'
   name: team
