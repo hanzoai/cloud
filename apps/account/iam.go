@@ -275,8 +275,15 @@ func keyBelongsTo(k userKey, owner, user string) bool {
 // The type rides as a FIELD on the one mint. A secret key returns its confidential
 // sk- half; a publishable key returns its pk- (and IAM stores no secret for it at
 // all), which is the credential a browser bundle carries.
-func (c *iamClient) mintUserKey(ctx context.Context, id, typ string) (string, error) {
-	env, err := c.do(ctx, http.MethodPost, "/v1/iam/mint-user-keys", url.Values{"id": {id}, "type": {typ}}, nil)
+func (c *iamClient) mintUserKey(ctx context.Context, id, typ, scope string) (string, error) {
+	form := url.Values{"id": {id}, "type": {typ}}
+	// Sent only when there is one: an empty scope would OVERWRITE the class IAM
+	// derives for a publishable key, turning a browser key into a key that resolves
+	// to a principal.
+	if scope != "" {
+		form.Set("scope", scope)
+	}
+	env, err := c.do(ctx, http.MethodPost, "/v1/iam/mint-user-keys", form, nil)
 	if err != nil {
 		return "", err
 	}
