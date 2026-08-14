@@ -31,6 +31,9 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/zap-proto/zip"
 )
 
 // Grant is the set of things one credential may reach, read off the key's scope.
@@ -48,6 +51,22 @@ type Grant []string
 // GrantClassPublish is the one CLASS entry, IAM's storage value for a key with no
 // secret half. It is not a reach and Covers never consults it.
 const GrantClassPublish = "publish"
+
+// GrantOf is what the credential THIS request arrived on may reach. It is the
+// second half of the rule gate.go states the first half of:
+//
+//	Scope.Admits(AuthorityOf(c)) && GrantOf(c).Covers(kind, name)
+//
+// Read off the boundary's own attestation, so a request cannot state its own
+// limit — the same rule the org follows. An unattested request has no
+// credential and therefore no limit; it is refused by the gate, not by this.
+func GrantOf(c *zip.Ctx) Grant {
+	p, ok := principal.Minted(c)
+	if !ok {
+		return nil
+	}
+	return Grant(p.Limit)
+}
 
 // ParseGrant reads a key's scope. Comma-separated, blanks dropped, order
 // irrelevant — it is a set.
