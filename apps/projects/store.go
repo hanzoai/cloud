@@ -550,40 +550,6 @@ func (s *Store) ListProjects(ctx context.Context, org string) ([]Project, error)
 	return out, rows.Err()
 }
 
-// Unlisted names every project that must NOT be publicly readable: the publisher
-// chose private, or moderation removed it. It is the visibility audit's list
-// (visibility.go sweep) — the rows that can be a leak.
-//
-// The rule is [Project.listed] and NOT a WHERE clause, deliberately. A predicate
-// spelled once in Go and again in SQL is two rules that agree until somebody
-// changes one, and the one that would drift here decides whether a private
-// project's source is checked at all. So the query is dumb — four small columns
-// of every row — and the ONE rule filters them. It costs a scan of a local table
-// at boot and saves the forge from hearing about the projects that are allowed
-// to be readable.
-//
-// Only the identity and the two fields the rule reads are filled.
-func (s *Store) Unlisted(ctx context.Context) ([]Project, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT org, slug, visibility, hidden FROM projects ORDER BY org, slug`)
-	if err != nil {
-		return nil, fmt.Errorf("list projects: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var out []Project
-	for rows.Next() {
-		var p Project
-		if err := rows.Scan(&p.Org, &p.Slug, &p.Visibility, &p.Hidden); err != nil {
-			return nil, fmt.Errorf("scan project: %w", err)
-		}
-		if p.listed() {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
-}
-
 // UpdateProject overwrites the mutable fields of an existing project. The caller
 // reads-modifies-writes the whole Project; org+slug+id+created_at are immutable.
 func (s *Store) UpdateProject(ctx context.Context, p Project) error {

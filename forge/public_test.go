@@ -30,7 +30,11 @@ type repos struct {
 	private map[string]bool // "owner/name" ⇒ closed
 	patched int
 	deaf    bool
-	token   string
+	// keeps is deaf for the OTHER retraction: a forge that answers a delete and
+	// keeps the repository. Same shape of silent false success, and the same
+	// answer — the verdict is a read, not a status code.
+	keeps bool
+	token string
 }
 
 func newRepos(t *testing.T) *repos {
@@ -51,6 +55,11 @@ func newRepos(t *testing.T) *repos {
 			return
 		}
 		switch r.Method {
+		case http.MethodDelete:
+			if !s.keeps {
+				delete(s.private, name)
+			}
+			w.WriteHeader(http.StatusNoContent)
 		case http.MethodPatch:
 			s.patched++
 			var body struct {
@@ -237,5 +246,91 @@ func TestSetPublic_RefusesNamesThatAreNotSegments(t *testing.T) {
 	defer s.mu.Unlock()
 	if s.patched != 0 {
 		t.Fatalf("%d writes reached the forge for a refused name", s.patched)
+	}
+}
+
+// ── the other retraction ─────────────────────────────────────────────────────
+//
+// Closing a repository and deleting it are the same kind of act — a caller
+// taking something back — and they fail the same way, so they are proved the
+// same way: by a read afterwards, never by the status of the write.
+
+// A delete removes the repository, and a repository that was never there is
+// success rather than an error: absence is the state the caller asked for, so a
+// retried delete can land on nothing and still be done.
+func TestDelete_RemovesItAndToleratesAnAbsentOne(t *testing.T) {
+	s := newRepos(t)
+	s.add("hanzo-community/acme_board", false)
+	c := s.client(t)
+
+	if err := c.Delete(t.Context(), "hanzo-community", "acme_board"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	s.mu.Lock()
+	_, there := s.private["hanzo-community/acme_board"]
+	s.mu.Unlock()
+	if there {
+		t.Fatal("the repository is still on the forge after a delete")
+	}
+	if err := c.Delete(t.Context(), "hanzo-community", "acme_board"); err != nil {
+		t.Fatalf("deleting what is already gone: %v", err)
+	}
+}
+
+// A forge that accepts the delete and keeps the repository is a FAILURE here.
+// Reported as success it would be a repository nobody's row speaks for any more,
+// left readable, with the one caller who could have noticed told it was done.
+func TestDelete_AForgeThatKeepsItIsAFailure(t *testing.T) {
+	s := newRepos(t)
+	s.add("hanzo-community/acme_board", false)
+	s.mu.Lock()
+	s.keeps = true
+	s.mu.Unlock()
+
+	if err := s.client(t).Delete(t.Context(), "hanzo-community", "acme_board"); err == nil {
+		t.Fatal("a delete the forge did not apply was reported as success")
+	}
+}
+
+// The names are refused before anything is sent, exactly as the visibility write
+// refuses them: a value bearing a separator addresses a different repository
+// than the call site wrote.
+func TestDelete_RefusesNamesThatAreNotSegments(t *testing.T) {
+	s := newRepos(t)
+	s.add("hanzo-community/acme_board", false)
+	for _, tc := range []struct{ owner, repo string }{
+		{"", "acme_board"},
+		{"hanzo-community", ""},
+		{"hanzo-community", "../hanzoai/cloud"},
+		{"hanzo-community", "acme/board"},
+	} {
+		if err := s.client(t).Delete(t.Context(), tc.owner, tc.repo); err == nil {
+			t.Fatalf("Delete(%q, %q) was accepted", tc.owner, tc.repo)
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, there := s.private["hanzo-community/acme_board"]; !there {
+		t.Fatal("a refused name still deleted a repository")
+	}
+}
+
+// An unscoped client refuses, and refuses BEFORE the wire: the delete is the
+// most destructive call in this package, so it is the last one that may fall
+// back to the machine identity.
+func TestDelete_NoActorRefuses(t *testing.T) {
+	s := newRepos(t)
+	s.add("hanzo-community/acme_board", false)
+	c, err := New(s.URL, s.token)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := c.Delete(t.Context(), "hanzo-community", "acme_board"); !errors.Is(err, ErrNoActor) {
+		t.Fatalf("err = %v, want ErrNoActor", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, there := s.private["hanzo-community/acme_board"]; !there {
+		t.Fatal("an unscoped client deleted a repository")
 	}
 }
