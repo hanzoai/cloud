@@ -869,19 +869,6 @@
   },
   {
    "owner": "hanzo",
-   "id": "records",
-   "name": "Records",
-   "description": "Browse and edit any Base collection as a CRM/CMS — from its own schema.",
-   "category": "data",
-   "tags": [],
-   "icon": "Boxes",
-   "route": "/records",
-   "brands": [],
-   "order": 6,
-   "published": true
-  },
-  {
-   "owner": "hanzo",
    "id": "docdb",
    "name": "DocDB",
    "description": "Managed document database.",
@@ -2564,6 +2551,45 @@
    "route": "/profile",
    "brands": [],
    "order": 5,
+   "published": true
+  },
+  {
+   "owner": "hanzo",
+   "id": "deploy",
+   "name": "Deploy",
+   "description": "Ship an app or a static site — pick a repo, bind a host, set env, deploy. Then watch CD reconcile it, CI build it, and storage serve it.",
+   "category": "platform",
+   "tags": [],
+   "icon": "Rocket",
+   "route": "/deploy",
+   "brands": [],
+   "order": 14,
+   "published": true
+  },
+  {
+   "owner": "hanzo",
+   "id": "tags",
+   "name": "Tags",
+   "description": "Browser pixels per site, server-side conversions per org, and the one-line install.",
+   "category": "observe",
+   "tags": [],
+   "icon": "Tags",
+   "route": "/tags",
+   "brands": [],
+   "order": 37,
+   "published": true
+  },
+  {
+   "owner": "hanzo",
+   "id": "tel",
+   "name": "Telecom",
+   "description": "Phone numbers, calls, and messages for your org — on whatever carrier this deployment runs.",
+   "category": "apps",
+   "tags": [],
+   "icon": "Phone",
+   "route": "/tel",
+   "brands": [],
+   "order": 23,
    "published": true
   }
  ]
