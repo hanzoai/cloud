@@ -11,13 +11,13 @@
 // the second site this package exists to retire.
 //
 // The backend is the SeaweedFS S3 gateway (s3.hanzo.svc:9000), which speaks the
-// S3 API, so hanzoai/s3-go is the client. The gateway is reached over the internal
+// S3 API, so hanzos3/go is the client. The gateway is reached over the internal
 // admin endpoint for control operations; a SEPARATE public-host client
 // (PublicClient) is used only to MINT presigned URLs that a browser can follow,
 // since a presign is a pure signature over the client's endpoint and never makes
 // a network call — so the signed host is the browser-routable one.
 //
-// This package depends on nothing but hanzoai/s3-go: it is a leaf, so both
+// This package depends on nothing but hanzos3/go: it is a leaf, so both
 // projects and the s3 subsystem import it without any import cycle.
 package s3admin
 
@@ -27,8 +27,8 @@ import (
 	"strconv"
 	"strings"
 
-	s3 "github.com/hanzoai/s3-go"
-	"github.com/hanzoai/s3-go/pkg/credentials"
+	s3 "github.com/hanzos3/go"
+	"github.com/hanzos3/go/pkg/credentials"
 
 	"github.com/hanzoai/cloud/internal/environ"
 )

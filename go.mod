@@ -28,11 +28,11 @@ require (
 	github.com/hanzoai/plans v1.4.14
 	github.com/hanzoai/pricing v1.4.10
 	github.com/hanzoai/pubsub v1.4.5
-	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.5.2
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
+	github.com/hanzos3/go v1.0.1
 	github.com/luxfi/log v1.6.0
 	github.com/luxfi/node v1.36.15
 	github.com/luxfi/trace v1.4.0
@@ -72,7 +72,6 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
@@ -87,7 +86,6 @@ require (
 	github.com/hanzokv/go/extra/kvcmd/v9 v9.22.0 // indirect
 	github.com/hanzokv/go/extra/kvotel/v9 v9.22.0 // indirect
 	github.com/hanzos3/crc64nvme v1.1.2 // indirect
-	github.com/hanzos3/go v1.0.1 // indirect
 	github.com/hanzos3/go-sdk v1.0.2 // indirect
 	github.com/hanzos3/md5-simd v1.1.3 // indirect
 	github.com/lib/pq v1.12.3 // indirect
@@ -95,7 +93,6 @@ require (
 	github.com/linode/linodego v1.67.0 // indirect
 	github.com/luxfi/filesystem v0.0.1 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
-	github.com/minio/minio-go/v7 v7.0.100 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/moby/spdystream v0.5.1 // indirect
 	github.com/moby/term v0.5.2 // indirect
@@ -137,7 +134,6 @@ require (
 require (
 	github.com/google/go-github/v84 v84.0.0 // indirect
 	github.com/hanzoai/captable v1.0.0
-	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 )
 
 require (
