@@ -57,6 +57,7 @@ type isoClaims struct {
 	IsAdmin bool           `json:"isAdmin"`
 	Type    string         `json:"type"`
 	Orgs    []model.OrgRef `json:"orgs"`
+	Azp     string         `json:"azp"`
 }
 
 // isoTok is one attacker-chosen token shape. Every field is a lever the attacker
@@ -70,6 +71,13 @@ type isoTok struct {
 	isAdmin bool
 	typ     string // IAM account kind, as the token carries it
 	machine bool   // mint NO membership set — IAM's client_credentials shape
+	// azp is the authorized party: the client that obtained the token. Setting it
+	// completes the client_credentials SHAPE (azp == the sole audience == the last
+	// segment of the subject), which is what cloud recognises a machine by. Without
+	// it a `machine: true` fixture is only a token missing its memberships — it
+	// resolves no org and is refused before any authority question is asked, so a
+	// test built on one would assert nothing about machines.
+	azp     string
 	expired bool
 }
 
@@ -103,11 +111,21 @@ func (tk isoTok) mint(t *testing.T, key *rsa.PrivateKey) string {
 	if tk.expired {
 		exp = time.Now().Add(-time.Hour)
 	}
+	// A machine's subject names the client itself, "<org>/<app>"; a person's names
+	// the person. aud defaults to the sole-audience half of the same shape.
+	sub := tk.owner + "/principal"
+	aud := tk.aud
+	if tk.azp != "" {
+		sub = tk.owner + "/" + tk.azp
+		if aud == nil {
+			aud = []string{tk.azp}
+		}
+	}
 	raw, err := jwt.Signed(signer).Claims(isoClaims{
 		Claims: jwt.Claims{
 			Issuer:   e2eIssuer,
-			Subject:  tk.owner + "/principal", // non-empty ⇒ X-User-Id set ⇒ principal.Validated
-			Audience: jwt.Audience(tk.aud),
+			Subject:  sub, // non-empty ⇒ X-User-Id set ⇒ principal.Validated
+			Audience: jwt.Audience(aud),
 			Expiry:   jwt.NewNumericDate(exp),
 			IssuedAt: jwt.NewNumericDate(time.Now()),
 		},
@@ -115,6 +133,7 @@ func (tk isoTok) mint(t *testing.T, key *rsa.PrivateKey) string {
 		IsAdmin: tk.isAdmin,
 		Type:    tk.typ,
 		Orgs:    refs,
+		Azp:     tk.azp,
 	}).Serialize()
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
@@ -481,7 +500,11 @@ func TestRedIso_E_OrgFoldIsInjective(t *testing.T) {
 // each folds the org through the same orgPath, and each is probed here.
 func TestRedIso_F_WriteListDeleteAreScopedToo(t *testing.T) {
 	app, key, path := isoWorld(t)
-	acme := isoTok{owner: paasOrgB}.mint(t, key)
+	// acme administers ACME — the authority a tenant needs to write its own secrets,
+	// and no more. It confers nothing across the org boundary this test probes: the
+	// store root is folded from the caller's own org either way, and only platform
+	// sudo can act as another tenant at all.
+	acme := isoTok{owner: paasOrgB, isAdmin: true}.mint(t, key)
 
 	post := func(what, body string, hdr map[string]string) isoProbe {
 		t.Helper()

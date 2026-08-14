@@ -128,14 +128,12 @@ const HeaderUserBrand = "X-User-Brand"
 // project spend caps HARD-enforce. The native evals subsystem, which scopes
 // exclusively by c.Org() and ignores X-Project-Id, is unaffected.
 var authorityHeaders = []string{
-	"X-User-Id",
-	"X-Org-Id",
-	"X-Roles",
-	"X-User-Permissions",
-	"X-User-Email",
-	"X-Phone-Number",
-	"X-User-IsAdmin",
-	"X-User-IsOrgAdmin",
+	authz.HeaderUser,
+	authz.HeaderOrg,
+	authz.HeaderUserPermissions,
+	authz.HeaderUserEmail,
+	authz.HeaderUserAdmin,
+	authz.HeaderUserOrgAdmin,
 	// X-User-Owner is the HOME org (the validated `owner` claim) — the identity +
 	// BILLING anchor, written below DISTINCT from X-Org-Id (the effective/acted-on
 	// org). Stripped on ingress like every authority header so a client can never
@@ -148,10 +146,7 @@ var authorityHeaders = []string{
 	// in, which is exactly the collision brand-qualification exists to prevent.
 	HeaderUserBrand,
 	// Legacy identity aliases an attacker might try; none are org sub-scopes.
-	"X-User-Role",
-	"X-User-Roles",
-	"X-User-Name",
-	"X-Org",
+	authz.HeaderUserName,
 }
 
 // subScopeHeaders are org SUB-SCOPES — narrowings WITHIN an org, NOT identity
@@ -171,7 +166,34 @@ var authorityHeaders = []string{
 //     stopped restoring the client copy — a stale sentence on a money boundary,
 //     which is how someone "restores" a debited header believing it decides
 //     nothing. sanitizeSubScopes states the rule it enforces; this now agrees.
-var subScopeHeaders = []string{"X-Project-Id", "X-App-Id", "X-Billing-Account-Id"}
+var subScopeHeaders = []string{authz.HeaderProject, authz.HeaderApp, authz.HeaderBillingAccount}
+
+// stripped is every identity name ingress DELETES, taken from the estate's own list
+// rather than restated here.
+//
+// authz.Headers is defined as "every header the edge writes, and therefore every
+// header it must strip" — the two being ONE list is what makes a forged identity
+// header impossible rather than unlikely. Deriving from it keeps that property as the
+// estate grows: a name authz adds is swept here the day it is added, with no second
+// list to remember. The two categories above still differ in how a value is RESTORED,
+// and they still say so; they no longer get to disagree about what is REMOVED.
+//
+// Two deliberate adjustments, each a fact about this binary rather than a copy:
+//
+//   - X-User-Brand is cloud's own (which brand's IAM vouched for the principal), so
+//     authz does not name it and this adds it.
+//   - X-Request-Id is EXCLUDED. Alone among these it is a correlation id the caller
+//     legitimately supplies and the edge propagates verbatim; deleting it would break
+//     the trace support follows, and it authorizes nothing.
+var stripped = func() []string {
+	out := []string{HeaderUserBrand}
+	for _, h := range append(append([]string{}, authz.Headers...), authz.Retired...) {
+		if h != authz.HeaderRequestID {
+			out = append(out, h)
+		}
+	}
+	return out
+}()
 
 // SanitizeIdentity returns the identity-trust-boundary middleware.
 //
@@ -242,10 +264,7 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 			cliOrg = ""
 		}
 		cliApp := strings.TrimSpace(string(req.Header.Peek("X-App-Id")))
-		for _, h := range authorityHeaders {
-			req.Header.Del(h)
-		}
-		for _, h := range subScopeHeaders {
+		for _, h := range stripped {
 			req.Header.Del(h)
 		}
 
