@@ -672,6 +672,11 @@ func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (
 	dropped := 0
 	for _, e := range evs {
 		e.Properties = withSource(e.Properties, source)
+		// Record it, then say whether the vocabulary knows it. The name is the
+		// one thing here nobody validates — the type is a closed set, but an
+		// event name is whatever a surface typed, so a typo becomes a permanent
+		// column that quietly splits a funnel in two.
+		e.Properties = flagUnknown(e.Properties, e.Type, resolveEventName(e))
 		// ONE ADMISSION DECISION, and it is the plane's own normalizer (fact.go) that
 		// makes it — the canonical answer to "what is this event", which is exactly
 		// what admission is asking. It is also the only normalizer that can see the
