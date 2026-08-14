@@ -341,6 +341,19 @@ func run(addr, zapAddr string) error {
 		_ = app.Shutdown()
 	}()
 
+	// Stop subsystems nothing is asking for. Every one is its own process, and
+	// until this they only ever accumulated: resident memory tracked the size of
+	// the catalog rather than the traffic, which is what evicted this pod for
+	// node memory and took the API down with it. A stopped plugin costs a cold
+	// start on its next request and nothing in between; an Eager one is never a
+	// candidate, so identity and config keep their process.
+	//
+	// The sweep is cheap (a timestamp compare per plugin) so a minute is often
+	// enough to be precise without being noisy. Stopped before Shutdown runs,
+	// because a sweep in flight reads state Shutdown writes.
+	stopReaper := app.ReapIdle(time.Minute)
+	defer stopReaper()
+
 	// Both transports, same router — the pair cloud.Listen listens on. A bare
 	// address is ZAP (zip's default scheme); HTTP has to be spelled out, and
 	// omitting it is why a curl against the host answers with a frame-size error

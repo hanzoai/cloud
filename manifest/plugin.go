@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/zap-proto/zip"
 )
@@ -163,6 +164,23 @@ func (a App) Plugin() zip.Plugin { return a.resolve() }
 // resolve is the ladder: an operator's address, an operator's path, the binary on
 // disk beside the host, a published release, and finally the on-disk path again so
 // the failure names the file a developer expected to have built.
+// IdleAfter is how long a lazy subsystem may go unused before its process is
+// stopped, to be started again by the next request that needs it.
+//
+// Every subsystem here is its own process, and until now none of them ever
+// stopped: resident memory tracked the SIZE OF THE CATALOG rather than the
+// traffic. Measured on the fleet — 24 children, ~150MiB of live heap each,
+// ~4.4GiB, while the three that do little sat at 12-20MiB. That is what caps
+// how many subsystems this host can carry, and it is why one of them being
+// evicted for node memory took the whole API down.
+//
+// Fifteen minutes is chosen to be longer than any human's think-time between
+// two calls to the same surface, so an interactive session never pays a cold
+// start twice. A subsystem that must NEVER pay one — identity, config, anything
+// every other call goes through — declares Eager instead, which makes it
+// non-lazy and therefore never a candidate.
+const idleAfter = 15 * time.Minute
+
 func (a App) resolve() zip.Plugin {
 	env := "CLOUD_" + strings.ToUpper(strings.NewReplacer("-", "_").Replace(a.Name))
 	if addr := strings.TrimSpace(os.Getenv(env + "_ADDR")); addr != "" {
@@ -171,7 +189,7 @@ func (a App) resolve() zip.Plugin {
 	// An explicit path is honoured as given: the operator named this file, so
 	// silently running something else instead would be a lie.
 	if path := strings.TrimSpace(os.Getenv(env + "_BIN")); path != "" {
-		return zip.Plugin{Name: a.Name, Path: path, Lazy: !a.Eager}
+		return zip.Plugin{Name: a.Name, Path: path, Lazy: !a.Eager, IdleAfter: idleAfter}
 	}
 	dir := ""
 	if self, err := os.Executable(); err == nil {
@@ -201,5 +219,5 @@ func (a App) pluginIn(dir string) zip.Plugin {
 	// <dir>/<name> or it does not resolve on disk at all. A missing one is named
 	// in the failure, because that is the binary a developer expects to have
 	// built (or the release ladder below fills in over the network).
-	return zip.Plugin{Name: a.Name, Path: filepath.Join(dir, a.Name), Lazy: !a.Eager}
+	return zip.Plugin{Name: a.Name, Path: filepath.Join(dir, a.Name), Lazy: !a.Eager, IdleAfter: idleAfter}
 }
