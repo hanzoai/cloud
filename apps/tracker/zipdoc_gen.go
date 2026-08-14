@@ -10,6 +10,25 @@ func init() {
 	zip.Describe("DELETE /v1/tracker/projects/:key", zip.Doc{
 		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second door onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
 	})
+	zip.Describe("GET /v1/tracker/board", zip.Doc{
+		Description: "Returns a board's issues — work items with their column, priority,\nassignee, labels and schedule.\n\nWHICH board is a filter, not an address. Bound to a repository (the key from\nthe path) it is that project's board; left unbound it is the org's whole\nboard; narrowed by label it is a board smaller than any repository — which is\nthe only way an app that lives as a directory inside a shared repository can\nhave one. Every combination is the same rows through the same projection, so\nno two boards can disagree about what a column means.\n\nThe column is a LABEL on the forge, so the board and the forge web UI are the\nsame object seen twice: relabelling in either moves the card in both. A closed\nissue reads as done whatever its labels say.",
+		Fields: map[string]string{
+			"issueQuery.key":       "Key is the project whose issues to list, from the path. EMPTY means every\nproject in the org — the global board. It is a filter like the rest of\nthis struct rather than an address, which is what lets one op answer both\n\"this board\" and \"all the work\" without a second surface disagreeing with\nthe first about what a column is.",
+			"issueQuery.kind":      "Kind keeps only work items of that shape: issue, pr or epic. An unknown\nvalue is refused with 400.",
+			"issueQuery.label":     "Label keeps only issues carrying that label, compared case-insensitively.\n\nThis is how a board narrows to something SMALLER than a repository — the\none mechanism for it. An estate whose apps are directories inside one\nrepository (hanzoai/cloud carries ~140 of them) has no repository per app\nto address, so the app is a label: `label=app/meet` is the meet board.\nNothing is provisioned to make one exist; a board is the query.",
+			"issueQuery.repo":      "Repo keeps only issues bound to that git repository.",
+			"issueQuery.scheduled": "Scheduled keeps only issues that carry a date — a start, a due date or\nboth. This is the timeline's slice of the board: pass scheduled=true to\nget exactly the rows a gantt has somewhere to draw, instead of fetching\nevery issue and discarding the undated ones client-side.",
+			"issueQuery.source":    "Source keeps only issues opened from that surface: team, git, crm,\nhelpdesk, cms or agent. An unknown value is refused with 400.",
+			"issueQuery.status":    "Status keeps only issues in that board column: backlog, todo, in_progress,\ndone or canceled. An unknown value is refused with 400.",
+			"issueView.dueAt":      "unix seconds; absent = no due date",
+			"issueView.extRef":     "external anchor",
+			"issueView.identifier": "KEY-<number>, the human handle",
+			"issueView.kind":       "issue | pr | epic",
+			"issueView.repo":       "git repo binding",
+			"issueView.source":     "team | git | crm | helpdesk | cms | agent",
+			"issueView.startAt":    "unix seconds; absent = unscheduled",
+		},
+	})
 	zip.Describe("GET /v1/tracker/issues", zip.Doc{
 		Description: "Answers across every project in the org.\n\nThe org comes from the validated principal and never from the request: a\ncaller able to name the org could read another tenant's backlog, and a search\nis exactly the shape that would quietly return it.",
 		Fields: map[string]string{
@@ -36,10 +55,11 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/tracker/projects/:key/issues", zip.Doc{
-		Description: "Returns one board's issues — the work items of that repository on\nthe forge, with their column, priority, assignee and labels.\n\nThe column is a LABEL on the forge, so the board and the forge web UI are the\nsame object seen twice: relabelling in either moves the card in both. A closed\nissue reads as done whatever its labels say.",
+		Description: "Returns a board's issues — work items with their column, priority,\nassignee, labels and schedule.\n\nWHICH board is a filter, not an address. Bound to a repository (the key from\nthe path) it is that project's board; left unbound it is the org's whole\nboard; narrowed by label it is a board smaller than any repository — which is\nthe only way an app that lives as a directory inside a shared repository can\nhave one. Every combination is the same rows through the same projection, so\nno two boards can disagree about what a column means.\n\nThe column is a LABEL on the forge, so the board and the forge web UI are the\nsame object seen twice: relabelling in either moves the card in both. A closed\nissue reads as done whatever its labels say.",
 		Fields: map[string]string{
-			"issueQuery.key":       "Key is the project whose issues to list, from the path.",
+			"issueQuery.key":       "Key is the project whose issues to list, from the path. EMPTY means every\nproject in the org — the global board. It is a filter like the rest of\nthis struct rather than an address, which is what lets one op answer both\n\"this board\" and \"all the work\" without a second surface disagreeing with\nthe first about what a column is.",
 			"issueQuery.kind":      "Kind keeps only work items of that shape: issue, pr or epic. An unknown\nvalue is refused with 400.",
+			"issueQuery.label":     "Label keeps only issues carrying that label, compared case-insensitively.\n\nThis is how a board narrows to something SMALLER than a repository — the\none mechanism for it. An estate whose apps are directories inside one\nrepository (hanzoai/cloud carries ~140 of them) has no repository per app\nto address, so the app is a label: `label=app/meet` is the meet board.\nNothing is provisioned to make one exist; a board is the query.",
 			"issueQuery.repo":      "Repo keeps only issues bound to that git repository.",
 			"issueQuery.scheduled": "Scheduled keeps only issues that carry a date — a start, a due date or\nboth. This is the timeline's slice of the board: pass scheduled=true to\nget exactly the rows a gantt has somewhere to draw, instead of fetching\nevery issue and discarding the undated ones client-side.",
 			"issueQuery.source":    "Source keeps only issues opened from that surface: team, git, crm,\nhelpdesk, cms or agent. An unknown value is refused with 400.",

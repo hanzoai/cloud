@@ -1,10 +1,17 @@
-# Tracker UI (embedded)
+# Todo UI (embedded)
 
-`dist/` is the built **Hanzo Tracker SPA** — the `tracker` app in `hanzoai/admin`
+`dist/` is the built **Hanzo Todo SPA** — the `tracker` app in `hanzoai/admin`
 (`@hanzo/tracker`, Vite + a `@hanzogui` shell over the forge's own board CSS) —
 baked into the cloud binary via `//go:embed` and served at `/tracker/*` by
-`apps/tracker`. This is the real UI behind `tracker.hanzo.ai`, and it is what
-retires the Huly tracker that used to answer that host.
+`apps/tracker`.
+
+IT IS A SECOND COPY. `tracker.hanzo.ai` is served at its own root by its own
+image (`ghcr.io/hanzoai/tracker`, universe `charts/app/values/hanzo/tracker.yaml`)
+and no longer by this embed; what this serves is `api.hanzo.ai/tracker/*`. One
+source built twice into two live surfaces is how the two came to show different
+titles — this one still said "Hanzo Tracker" after the product was renamed.
+Sync it whenever the app changes, and prefer retiring it: the host it existed to
+front has its own image now.
 
 The SPA is built with `base: '/tracker/'` and `VITE_API_PREFIX=/v1/tracker`, so
 every asset and XHR is same-origin under paths this binary already serves
@@ -33,17 +40,19 @@ So the page carries two things, and neither is tenancy the client invented:
 ## Regenerating dist/
 
 Source of truth: the `tracker` app in `hanzoai/admin` (`apps/tracker`, package
-`@hanzo/tracker`). Build it where `hanzogui@7.x` and `@hanzogui/admin` both
-resolve, then sync its `dist/`:
+`@hanzo/tracker`). It builds for `/` by default — that is the standalone image —
+so this copy MUST be built with `VITE_BASE=/tracker/` or every hashed chunk
+resolves to a path nothing serves and the page loads blank. Build it where
+`@hanzo/gui` and `@hanzogui/admin` both resolve, then sync its `dist/`:
 
 ```sh
 cd apps/tracker
 ../../node_modules/.bin/tsc --noEmit     # typecheck gate
 ../../node_modules/.bin/vitest run       # the IAM-endpoint pins
-../../node_modules/.bin/vite build       # → dist/  (base=/tracker/, api=/v1/tracker)
+VITE_BASE=/tracker/ ../../node_modules/.bin/vite build --outDir /tmp/dist-embed
 ../../node_modules/.bin/playwright test  # sign-in, chrome, org switch — against dist/
 
-rsync -a --delete --exclude='.sync-stamp' apps/tracker/dist/ <cloud>/apps/tracker/ui/dist/
+rsync -a --delete --exclude='.sync-stamp' /tmp/dist-embed/ <cloud>/apps/tracker/ui/dist/
 ```
 
 Then `go build ./plugin/tracker` re-embeds it. Do NOT hand-edit files under
