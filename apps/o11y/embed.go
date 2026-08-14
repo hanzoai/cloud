@@ -77,7 +77,7 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 	}
 
 	// o11y's sqlstore (sqlite, control-plane metadata) and Prometheus active-query
-	// todo need a writable dir. Cloud's container is distroless (no /tmp), so pin
+	// tracker need a writable dir. Cloud's container is distroless (no /tmp), so pin
 	// both under cloud's data root and create it eagerly so o11y.New's migrations
 	// don't fail on a missing parent. The standalone pod used an emptyDir at
 	// /var/lib/o11y — this is the in-process equivalent, owned by cloud.

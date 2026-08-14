@@ -316,13 +316,24 @@ func (o ops) answer(err error) error {
 		// with; logging it as one would bury the real failures above in noise.
 		o.s.Log.Debug("forge read abandoned by the caller")
 		return zip.Errorf(http.StatusGatewayTimeout, "request abandoned")
+	case errors.Is(err, forge.ErrBadName):
+		// The CALLER's own key, refused before a request was built. 400, because
+		// nothing upstream was asked and nothing upstream is wrong — this used to
+		// answer "502 forge read failed", which is the same shape of lie the
+		// milestone rollup told when it declined to make a read it could have made.
+		return zip.ErrBadRequest("that is not a valid board key")
 	case errors.Is(err, forge.ErrUnknownActor):
 		return zip.ErrForbidden("no forge identity for this principal")
 	case errors.Is(err, forge.ErrNoActor), errors.Is(err, forge.ErrNoToken):
 		o.s.Log.Error("forge call made unscoped or uncredentialed", "err", err)
 		return zip.Errorf(http.StatusServiceUnavailable, "forge unavailable")
+	case errors.Is(err, forge.ErrRefused):
+		// The forge refused the ACTOR, not us. 403 to the caller, and nothing is
+		// invalidated — this used to be folded in with a rejected credential and
+		// cost every tenant the cached client.
+		return zip.ErrForbidden("the forge refused this account")
 	default:
-		if strings.Contains(err.Error(), "credential rejected") {
+		if errors.Is(err, forge.ErrCredentialRejected) {
 			o.s.State.forge.invalidate()
 			// CARRY THE ERROR. The forge answers 401 and 403 to different problems
 			// and the client folds both into this one string, so the status code in
