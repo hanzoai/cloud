@@ -71728,23 +71728,6 @@ paths:
       tags:
       - compute
       x-app: visor
-  /v1/connector/github/webhook:
-    post:
-      description: |-
-        The address the GitHub App delivers events to. A push is handed to the repository sync engine, and an issue or issue-comment event is mirrored into the native todo — idempotently, so the same issue re-syncs to one row however many times it is edited, closed or reopened.
-
-        It answers a benign 200 for everything it does not act on — the ping, other event types, an unknown installation — deliberately, so GitHub does not enter a retry storm over events that were never going to do anything. Only a bad signature and a genuine sync failure are non-200, and an oversized payload is refused outright.
-
-        Two sync rules are worth stating because neither is guessable. EVERY ref syncs, tags as well as branches, because releases are cut by tag and filtering them would stop publishing with nothing reporting a failure. And a delete is NEVER propagated: the native side is canonical, so an inbound delete never removes a native ref.
-
-        The payload is verified by HMAC against the webhook secret before it is parsed.
-
-        The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
-      operationId: post_connector_github_webhook
-      summary: GitHub App webhook
-      tags:
-      - connector
-      x-app: integrations
   /v1/connectors:
     get:
       description: |-
@@ -86541,6 +86524,50 @@ paths:
                 $ref: '#/components/schemas/githubSearchOut'
           description: ok
       summary: Finds repositories on GitHub.
+      tags:
+      - integrations
+      x-app: integrations
+  /v1/integrations/github/webhook:
+    post:
+      description: |-
+        The address the GitHub App delivers events to. A push is handed to the repository sync engine, and an issue or issue-comment event is mirrored into the native todo — idempotently, so the same issue re-syncs to one row however many times it is edited, closed or reopened.
+
+        It answers a benign 200 for everything it does not act on — the ping, other event types, an unknown installation — deliberately, so GitHub does not enter a retry storm over events that were never going to do anything. Only a bad signature and a genuine sync failure are non-200, and an oversized payload is refused outright.
+
+        Two sync rules are worth stating because neither is guessable. EVERY ref syncs, tags as well as branches, because releases are cut by tag and filtering them would stop publishing with nothing reporting a failure. And a delete is NEVER propagated: the native side is canonical, so an inbound delete never removes a native ref.
+
+        The payload is verified by HMAC against the webhook secret before it is parsed.
+
+        The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
+      operationId: post_integrations_github_webhook
+      summary: GitHub App webhook
+      tags:
+      - integrations
+      x-app: integrations
+  /v1/integrations/openrouter/webhook:
+    post:
+      description: |-
+        OpenRouter's spend is invisible to every Hanzo money lens because those lenses read hanzo.cloud_usage and OpenRouter meters keys of its own. Point a Broadcast destination (Settings ▸ Observability ▸ Webhook) at this door and each generation span becomes ONE row in that same ledger with provider `openrouter`, so one query answers what we spend everywhere. Enable the Cost and Identity field categories: cost is the money and identity carries `openrouter.api_key_name`, which is what says WHICH key spent it — it lands in `account` as openrouter/<key name>.
+
+        AUTHENTICATION IS A HANZO KEY. Broadcast signs nothing; its only authentication is the destination's Headers map, so send a key as `Authorization: Bearer pk-…` and it is admitted exactly as /v1/event admits a beacon's: a project key resolves through the project that minted it, an IAM-issued key through IAM. That key names the org every row is filed under; it can write and cannot read. No key, or a key that names no org, is 401 and nothing is stored.
+
+        The body is OTLP/JSON — `{resourceSpans:[{scopeSpans:[{spans:[…]}]}]}` — exactly as OpenTelemetry defines it; the model, tokens and cost are read from each span's `gen_ai.*` attributes and the key name from `openrouter.api_key_name`. The answer is `{stored, dropped}`: how many generations became rows, and how many spans named no model. Those are OpenRouter's trace and span parents — they carry no cost to meter. An empty payload stores nothing and answers 200, which is what makes Test Connection pass. A warehouse that cannot take the rows answers 503 so the delivery shows red and can be replayed: a row is keyed by its span id, so a redelivery collapses rather than double-counting.
+      operationId: post_integrations_openrouter_webhook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: {}
+              type: object
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                additionalProperties: {}
+                type: object
+          description: Success
+      summary: Receive OpenRouter Broadcast traces as usage rows
       tags:
       - integrations
       x-app: integrations
@@ -116090,33 +116117,6 @@ paths:
       tags:
       - usage
       x-app: leaderboard
-  /v1/usage/openrouter:
-    post:
-      description: |-
-        OpenRouter's spend is invisible to every Hanzo money lens because those lenses read hanzo.cloud_usage and OpenRouter meters keys of its own. Point a Broadcast destination (Settings ▸ Observability ▸ Webhook) at this door and each generation span becomes ONE row in that same ledger with provider `openrouter`, so one query answers what we spend everywhere. Enable the Cost and Identity field categories: cost is the money and identity carries `openrouter.api_key_name`, which is what says WHICH key spent it — it lands in `account` as openrouter/<key name>.
-
-        AUTHENTICATION IS AN INGEST KEY. Broadcast signs nothing; its only authentication is the destination's Headers map, so send a Hanzo publishable key as `Authorization: Bearer pk-…` and it resolves through the same seam /v1/event resolves a beacon's key through. That key names the org every row is filed under; it can write and cannot read. No key, or a key that names no org, is 401 and nothing is stored.
-
-        The body is OTLP/JSON — `{resourceSpans:[{scopeSpans:[{spans:[…]}]}]}` — exactly as OpenTelemetry defines it; the model, tokens and cost are read from each span's `gen_ai.*` attributes and the key name from `openrouter.api_key_name`. The answer is `{stored, dropped}`: how many generations became rows, and how many spans named no model. Those are OpenRouter's trace and span parents — they carry no cost to meter. An empty payload stores nothing and answers 200, which is what makes Test Connection pass. A warehouse that cannot take the rows answers 503 so the delivery shows red and can be replayed: a row is keyed by its span id, so a redelivery collapses rather than double-counting.
-      operationId: post_usage_openrouter
-      requestBody:
-        content:
-          application/json:
-            schema:
-              additionalProperties: {}
-              type: object
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                additionalProperties: {}
-                type: object
-          description: Success
-      summary: Receive OpenRouter Broadcast traces as usage rows
-      tags:
-      - usage
-      x-app: usage
   /v1/usage/rollup/backfill:
     post:
       description: |-
@@ -117708,9 +117708,6 @@ tags:
 - description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
     clusters — launch one, resize it, tear it down.'
   name: compute
-- description: Package integrations is how your org connects third-party accounts
-    like Slack, and revokes them.
-  name: connector
 - description: Package integrations is how your org connects third-party accounts
     like Slack, and revokes them.
   name: connectors

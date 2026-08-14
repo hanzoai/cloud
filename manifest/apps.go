@@ -327,7 +327,7 @@ var Apps = []App{
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}},
 	{Name: "explorer", Prefixes: []string{"/v1/indexers", "/v1/oracles"}},
 	{Name: "security", Prefixes: []string{"/v1/security"}},
-	{Name: "integrations", Prefixes: []string{"/v1/connector/github/webhook", "/v1/connectors", "/v1/integrations"}},
+	{Name: "integrations", Prefixes: []string{"/v1/connectors", "/v1/integrations"}},
 	// /v1/tags is owned by the projects app, which holds both the handler and the
 	// project store it reads (see the projects entry above and apps/projects/tagdoor.go).
 	// It must be claimed exactly once — two apps claiming it panics the host build.

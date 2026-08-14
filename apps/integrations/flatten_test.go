@@ -14,10 +14,10 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// flatten_test.go guards the connector webhook against the 500→4xx bug: integrations
+// flatten_test.go guards the GitHub webhook against the 500→4xx bug: integrations
 // mounts AFTER the commerce embed, whose /v1 ErrorHandlerJSON rewrites ANY propagated
 // downstream error into a hardcoded 500. cloud.Terminal writes the reject status
-// in-band so it survives. It also pins the route move to the /v1/connector namespace.
+// in-band so it survives. It also pins the door's address.
 
 // installV1Flatten reproduces apps.mountCommerce's ErrorHandlerJSON (see the sync
 // twin): a filter over /v1 that turns any propagated downstream error into 500.
@@ -57,9 +57,9 @@ func newAppUnderFlatten(t *testing.T, kc *kms.Client) *zip.App {
 	return app
 }
 
-// TestConnectorWebhookRejectsSurviveCommerceFlatten: under the commerce /v1 flatten
+// TestGithubWebhookRejectsSurviveCommerceFlatten: under the commerce /v1 flatten
 // filter a bad signature stays 401 and a malformed body stays 400 — never 500.
-func TestConnectorWebhookRejectsSurviveCommerceFlatten(t *testing.T) {
+func TestGithubWebhookRejectsSurviveCommerceFlatten(t *testing.T) {
 	const secret = "wh_secret_flat"
 	t.Setenv(githubWebhookSecretEnv, secret)
 	app := newAppUnderFlatten(t, newKMS(t))
@@ -75,29 +75,35 @@ func TestConnectorWebhookRejectsSurviveCommerceFlatten(t *testing.T) {
 	}
 }
 
-// TestConnectorWebhookRouteMoved pins the /v1/connector/github/webhook namespace: the
-// new path resolves to the handler (a bad signature is rejected, not 404'd) and the
-// old top-level /v1/github-webhook is gone (404).
-func TestConnectorWebhookRouteMoved(t *testing.T) {
+// TestGithubWebhookAddress pins where the door is and where it is not: the live path
+// resolves to the handler (a bad signature is rejected, not 404'd), and every address
+// it has left behind is gone. GitHub delivers to a URL configured in the App, so an
+// address that answers 404 costs a push event; the retired ones must answer nothing
+// rather than half a handler.
+func TestGithubWebhookAddress(t *testing.T) {
 	const secret = "wh_secret_moved"
 	t.Setenv(githubWebhookSecretEnv, secret)
 	app := newApp(t, newKMS(t))
 
 	p := pushPayload(t, 111, "widgets", "refs/heads/main")
-	// webhookPost targets the new path; a bad signature resolving to 401 proves it.
+	// webhookPost targets the live path; a bad signature resolving to 401 proves it.
 	if r := webhookPost(t, app, "push", "sha256=deadbeef", "", p); r.Code != http.StatusUnauthorized {
-		t.Fatalf("new /v1/connector/github/webhook must resolve (bad-sig 401), got %d (%s)", r.Code, r.Body)
+		t.Fatalf("/v1/integrations/github/webhook must resolve (bad-sig 401), got %d (%s)", r.Code, r.Body)
 	}
-	// The old path no longer exists.
-	rq := httptest.NewRequest(http.MethodPost, "/v1/github-webhook", bytes.NewReader(p))
-	rq.Header.Set("X-GitHub-Event", "push")
-	rq.Header.Set("X-Hub-Signature-256", ghSign(secret, p))
-	resp, err := app.Test(rq)
-	if err != nil {
-		t.Fatalf("old path: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("old /v1/github-webhook must 404 after the move, got %d", resp.StatusCode)
+	// The addresses it left: /v1/connector/github/webhook was the one word in the
+	// estate for "an integration" that was not "integrations", and /v1/github-webhook
+	// predates the namespace entirely.
+	for _, gone := range []string{"/v1/connector/github/webhook", "/v1/github-webhook"} {
+		rq := httptest.NewRequest(http.MethodPost, gone, bytes.NewReader(p))
+		rq.Header.Set("X-GitHub-Event", "push")
+		rq.Header.Set("X-Hub-Signature-256", ghSign(secret, p))
+		resp, err := app.Test(rq)
+		if err != nil {
+			t.Fatalf("%s: %v", gone, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("%s must 404, got %d", gone, resp.StatusCode)
+		}
 	}
 }

@@ -138,12 +138,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Declared on the GROUP: the op's path is the prefix composed with the leaf,
 	// which is the identity every projection keys on, and cmd/zipdoc resolves the
 	// prefix the same way, so the prose below reaches the document and the tool list.
-	// Raw, not a typed op: the credential is a HEADER and a typed op holds a context,
-	// not a request. Terminal keeps its 401 intact under the outer /v1 error filter,
-	// exactly as the forge's push door does. A literal path, so it never shadows and
-	// is never shadowed by the group's leaves below.
-	app.Post(openrouterPath, cloud.Terminal(cloud.Handle(s, receive)))
-
 	g := app.Group("/v1/usage")
 	zip.Get(g, "/samples", o.samples)
 	zip.Get(g, "/summary", o.summary)
