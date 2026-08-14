@@ -2061,6 +2061,10 @@ components:
             run never writes here — it writes the agent branch it answers with.
           type: string
         desktop:
+          description: |-
+            Desktop asks for a run with a SCREEN — an image carrying an X server — for a
+            task that has to drive a browser or another windowed program. False, the
+            default, is a headless checkout, which is what writing code needs.
           type: boolean
         project:
           description: |-
@@ -2095,20 +2099,6 @@ components:
             resolves the clone URL and the push credential from the org itself, so this
             says WHICH repository and never how to reach it.
           type: string
-        subject:
-          description: |-
-            Subject is the person the run is ATTRIBUTED to — the session's actor and the
-            PR's assignee. Empty is refused rather than defaulted: a run that lost its
-            human must not execute as the org.
-
-            IT IS NOT AN AUTHORIZATION INPUT and must never become one. It arrives in
-            this body and the HTTP door passes it through unread (plugin/agents
-            httpCodingStart), so it is a name the caller picks. What the run ACTS AS on
-            the forge is resolved separately, from the validated address on the caller's
-            own identity and confirmed against the forge (apps/coding actorOf →
-            forge.LoginFor) — because attribution is not entitlement, and a field a
-            caller fills cannot be either.
-          type: string
         targetId:
           description: |-
             TargetID routes the run to a registered machine the org has claimed instead
@@ -2135,14 +2125,30 @@ components:
     CodingStarted:
       properties:
         branch:
+          description: |-
+            Branch is the ref the run will push its work to, and the ONLY ref it is
+            permitted to write. It exists before the work does, so it is safe to tell
+            somebody where to look while the run is still going.
           type: string
         repo:
+          description: |-
+            Repo is the repository the run was admitted against, echoed back as the
+            engine resolved it.
           type: string
         routed:
+          description: |-
+            Routed says the run went to one of the org's own registered machines rather
+            than to a sandbox in our cluster. False is the ordinary case.
           type: boolean
         sessionId:
+          description: |-
+            SessionID is the run's handle: its durable record, and the id its live
+            progress streams under at /v1/agents/sessions/{sessionId}/stream. Every
+            later question about this run is asked with it.
           type: string
         targetId:
+          description: TargetID names that machine when Routed is true, and is empty
+            otherwise.
           type: string
       type: object
     CollectOut:
@@ -51521,8 +51527,15 @@ paths:
       operationId: adminUsage
       parameters:
       - description: |-
-          Org reads ONE tenant's month-to-date total instead of the fleet sum. Honoured
+          Org reads ONE tenant's trailing-30-day total instead of the fleet sum. Honoured
           for a SuperAdmin only — a white-label admin always reads their own org.
+
+          The window is the one core.OrgMoney returns, and it is what the operator board
+          beside this already labelled ("Daily, last 30 days"). The wire used to say
+          month-to-date while that UI said 30 days; they agree now. This comment is
+          REGENERATED into plugin/admin/openapi.json and openapi.yaml as the ?org
+          parameter description, so a stale word here ships as a contradiction inside
+          one spec file — which is the drift this whole change set exists to remove.
         example: acme
         in: query
         name: org
@@ -67330,10 +67343,16 @@ paths:
   /v1/coding:
     post:
       description: |-
-        Is the app's door. It answers 202 with the run's handle the
-        moment the run is ADMITTED — not when it finishes. A coding run takes minutes;
-        holding a request open for one would tie a connection to a model loop and give
-        the caller nothing it cannot get better from the session stream.
+        Runs a coding task on a repository: clones it into a sandbox, lets a model read
+        and edit the code, run the tests, and push the work to a branch. Say the thing
+        you want done — "fix
+        the failing auth test in hanzoai/cloud" — and the run infers the repo, the
+        branch and the plan. No prefix, no ceremony.
+
+        It answers 202 with the run's handle the moment the run is ADMITTED — not when
+        it finishes. A coding run takes minutes; holding a request open for one would
+        tie a connection to a model loop and give the caller nothing it cannot get
+        better from the session stream.
 
         The handle is a session id, and that is deliberate: the session is already the
         run's durable record and its live stream (/v1/agents/sessions/{id}/stream), so
@@ -87406,7 +87425,9 @@ paths:
 
         `env` is REQUIRED on a write and has no default, which is the rule most easily got wrong here: reads and deletes still fall back to the default environment for older callers, but a write must not, because the environment is part of the storage key. A silently defaulted write lands in a bucket the readers that resolve project, environment and path never look in, and the stale value keeps being served — so the write fails loudly instead.
 
-        `name` is required, `path` is an optional subpath beneath the org root, and the org is taken from the validated claim rather than the body. Same fail-closed admission as the rest of the secret surface: validated member, well-formed org, master key present.
+        `name` is required, `path` is an optional subpath beneath the org root, and the org is taken from the validated claim rather than the body.
+
+        Requires ADMIN authority over the org — a member reads, an admin writes. A machine credential holds no membership and so is never an org admin: it can read the secrets it was issued for and cannot replace one. Fail-closed admission, in order: admin of the org, well-formed org, master key present — 403, 400 and 503, all decided before any record is touched.
       operationId: post_kms_secrets
       summary: Store or replace one secret in your org
       tags:
@@ -87417,7 +87438,9 @@ paths:
       description: |-
         Removes one secret from the caller's own org and confirms the name and environment that were removed. Deleting a secret that is not there is a 404, not a silent success, so a caller can tell a real deletion from a typo.
 
-        The trailing path is the secret's subpath and name beneath the caller's org root, and `env` selects the environment, defaulting when omitted. Scoped to the caller's own org — the store root comes from the validated claim, never from the request — under the same fail-closed admission as the reads.
+        The trailing path is the secret's subpath and name beneath the caller's org root, and `env` selects the environment, defaulting when omitted. Scoped to the caller's own org — the store root comes from the validated claim, never from the request.
+
+        Requires ADMIN authority over the org, like the write: destroying a secret is an administrative act, and a credential distributed to read one must not be able to remove it.
       operationId: delete_kms_secrets_by_wildcard1
       parameters:
       - in: path
