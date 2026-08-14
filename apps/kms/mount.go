@@ -9,10 +9,10 @@
 //
 //	GET    /v1/kms/health                 — real probe (503 in health-only mode); public
 //	GET    /v1/kms/config                 — SPA runtime config;                    public
-//	GET    /v1/kms/secrets                — list a path's secret metadata;         JWT
-//	GET    /v1/kms/secrets/+              — read one secret value;                 JWT
-//	POST   /v1/kms/secrets                — upsert a secret (sealed);              JWT
-//	DELETE /v1/kms/secrets/+              — delete a secret;                       JWT
+//	GET    /v1/kms/secrets                — list a path's secret metadata;      member
+//	GET    /v1/kms/secrets/+              — read one secret value;              member
+//	POST   /v1/kms/secrets                — upsert a secret (sealed);       org admin
+//	DELETE /v1/kms/secrets/+              — delete a secret;                org admin
 //
 // ORG SCOPING — the org is the CALLER'S, read from the validated principal, and
 // never named in the URL. It used to be a path segment that had to equal
@@ -98,9 +98,12 @@ func init() {
 			"resolve project, environment and path never look in, and the stale value keeps "+
 			"being served — so the write fails loudly instead.\n\n"+
 			"`name` is required, `path` is an optional subpath beneath the org root, and the "+
-			"org is taken from the validated claim rather than the body. Same fail-closed "+
-			"admission as the rest of the secret surface: validated member, well-formed org, "+
-			"master key present.")
+			"org is taken from the validated claim rather than the body.\n\n"+
+			"Requires ADMIN authority over the org — a member reads, an admin writes. A "+
+			"machine credential holds no membership and so is never an org admin: it can "+
+			"read the secrets it was issued for and cannot replace one. Fail-closed "+
+			"admission, in order: admin of the org, well-formed org, master key present — "+
+			"403, 400 and 503, all decided before any record is touched.")
 	openapi.Describe("/v1/kms/secrets/+", http.MethodGet,
 		"Read one secret's value",
 		"Opens one sealed secret belonging to the caller's own org and returns its value in "+
@@ -122,7 +125,10 @@ func init() {
 			"The trailing path is the secret's subpath and name beneath the caller's org "+
 			"root, and `env` selects the environment, defaulting when omitted. Scoped to the "+
 			"caller's own org — the store root comes from the validated claim, never from the "+
-			"request — under the same fail-closed admission as the reads.")
+			"request.\n\n"+
+			"Requires ADMIN authority over the org, like the write: destroying a secret is an "+
+			"administrative act, and a credential distributed to read one must not be able to "+
+			"remove it.")
 	openapi.Describe("/v1/kms/auth/login", http.MethodPost,
 		"Exchange a machine credential for an IAM bearer token",
 		"Takes a tenant's machine credential — a client id and client secret — and returns "+
@@ -233,10 +239,22 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// unreachable. `+` requires a non-empty name, so the bare path falls through
 	// to the exact list route.
 	// The tenant surface: the caller's OWN secrets. No org in the path.
-	g.Get("/secrets", guard(s, cloud.Handle(s, listSecrets)))
-	g.Get("/secrets/+", guard(s, cloud.Handle(s, getSecret)))
-	g.Post("/secrets", guard(s, cloud.Handle(s, putSecret)))
-	g.Delete("/secrets/+", guard(s, cloud.Handle(s, deleteSecret)))
+	// READS admit a member; WRITES require admin authority over the org. That split is
+	// the estate's rule, not this subsystem's invention — authz states it at the
+	// definition of Verb ("cloud gates writes on org-admin authority while admitting
+	// members to read") and Role.Admits encodes it (member reads; admin and owner read
+	// and write). KMS asks the same question through the same two doors.
+	//
+	// It lands hardest, and most usefully, on MACHINES. A client_credentials identity
+	// carries no membership, so SanitizeIdentity grants it neither admin scope; it can
+	// still read the secrets it was issued for and can no longer overwrite or delete
+	// one. That is the right authority for a credential whose whole job is to deliver
+	// material into a workload, and it is the authority every reader in the fleet
+	// actually exercises — a sync reads.
+	g.Get("/secrets", guard(s, cloud.Member, cloud.Handle(s, listSecrets)))
+	g.Get("/secrets/+", guard(s, cloud.Member, cloud.Handle(s, getSecret)))
+	g.Post("/secrets", guard(s, cloud.Admin, cloud.Handle(s, putSecret)))
+	g.Delete("/secrets/+", guard(s, cloud.Admin, cloud.Handle(s, deleteSecret)))
 
 	s.Log.Info(
 		"kms subsystem mounted",
@@ -290,20 +308,25 @@ func newEmbeddedClient(cfg *cloud.Config, dur *org.Durability, log luxlog.Logger
 	return c, nil
 }
 
-// guard wraps a secrets handler with the platform gate (cloud.Member — a
-// validated principal, HIP-0519's one predicate set) and then the two facts that
+// guard wraps a secrets handler with the platform gate at the scope the ROUTE
+// requires (HIP-0519's one predicate set) and then the two facts that
 // are this subsystem's OWN business: the org key must be a storage-safe label,
 // and the store must hold a master key. Fail-closed in that order, before any
 // record is touched: 403 for an unvalidated caller, 400 for a malformed org, 503
 // for an unconfigured key.
+//
+// The scope is the ROUTE'S, passed in rather than fixed here, because reading a
+// secret and replacing one are different acts and the gate is where that difference
+// belongs. Taking it as a parameter also puts the answer at the route table, where a
+// reader sees which door each operation is behind without following a call.
 //
 // The org match is EXACT (==), not case-folded: this mirrors the platform's own
 // tenant boundary (SanitizeIdentity gates admin on `owner == adminOrg`, and
 // X-Org-Id is the raw owner claim), and it keeps the authz check and the store
 // path in lockstep — orgPath folds :org into /orgs/{org} verbatim, so a
 // case-insensitive authz check would let org "Acme" reach org "acme"'s namespace.
-func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
-	return cloud.Guard(cloud.Member, func(ctx *zip.Ctx) error {
+func guard(s *cloud.Service[state], scope cloud.Scope, h zip.Handler) zip.Handler {
+	return cloud.Guard(scope, func(ctx *zip.Ctx) error {
 		org := reqOrg(ctx)
 		if !validOrg(org) {
 			return zip.ErrBadRequest("org must be a DNS-1123 label")
