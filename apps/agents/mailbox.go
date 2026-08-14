@@ -45,6 +45,10 @@ type RoutedRun struct {
 	// to the executing machine — the machine needs neither.
 	Actor    string `json:"actor,omitempty"`
 	AgentRef string `json:"agentRef,omitempty"`
+	// ForgeActor is the forge login the run acts as — carried for the same reason
+	// and with the same confinement: the completion opens the pull request as
+	// that person, and the machine never sees it.
+	ForgeActor string `json:"forgeActor,omitempty"`
 }
 
 // RoutedResult is a routed run's terminal outcome, reported by the machine and

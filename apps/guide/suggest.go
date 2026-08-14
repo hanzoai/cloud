@@ -156,7 +156,7 @@ func buildSuggestions(s *cloud.Service[state], ctx context.Context, org string) 
 // an AI plane is wired. READ-ONLY: it advises and never runs a step — the only
 // executing path is POST /v1/guide/steps/{id}/do.
 func (o ops) suggest(ctx context.Context, _ *noInput) (*suggestResponse, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ type chatResponse struct {
 //
 // Example: {"message": "what should I do next to get my first customers?"}
 func (o ops) chat(ctx context.Context, in *chatRequest) (*chatResponse, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

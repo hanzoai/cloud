@@ -335,7 +335,7 @@ func (o ops) listRules(ctx context.Context, _ *noIn) (*ruleList, error) {
 // with its findings.
 func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +426,7 @@ func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 // Strictly org-scoped: a caller only ever sees its own scans, and one with no
 // validated org is refused.
 func (o ops) listScans(ctx context.Context, in *scanPage) (*scanList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +449,7 @@ func (o ops) listScans(ctx context.Context, in *scanPage) (*scanList, error) {
 // as an id that never existed, so a ruleset learns nothing about what exists
 // elsewhere. No validated org is refused.
 func (o ops) getScan(ctx context.Context, in *scanRef) (*scanDetail, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +478,7 @@ func (o ops) getScan(ctx context.Context, in *scanRef) (*scanDetail, error) {
 // ignored, so a filter typo cannot read as "no findings". Strictly org-scoped, and
 // a caller with no validated org is refused.
 func (o ops) listFindings(ctx context.Context, in *findingFilter) (*findingList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +504,7 @@ func (o ops) listFindings(ctx context.Context, in *findingFilter) (*findingList,
 // Scoped to the caller's org, and a finding belonging to another org is the same
 // 404 as one that never existed.
 func (o ops) getFinding(ctx context.Context, in *findingRef) (*findingView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

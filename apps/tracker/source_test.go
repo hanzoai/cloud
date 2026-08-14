@@ -31,8 +31,12 @@ import (
 
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
+	"net"
+	"os"
+	"time"
 )
 
 // kmsStub answers the one secret the tracker reads. It is NOT a general KMS: a
@@ -71,6 +75,18 @@ type stubForge struct {
 	token  string
 }
 
+// writtenBy is the Sudo actor of every write the forge received — who the board
+// acted AS, which is the only thing a caller can put another person's name on.
+func (f *stubForge) writtenBy() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, 0, len(f.writes))
+	for _, w := range f.writes {
+		out = append(out, w.actor)
+	}
+	return out
+}
+
 type write struct {
 	method, path, actor string
 	body                map[string]any
@@ -91,6 +107,18 @@ func newForge(t *testing.T) *stubForge {
 
 		if r.Header.Get("Authorization") != "token "+f.token {
 			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		// The ownership lookup behind forge.LoginFor is a MACHINE call — no Sudo —
+		// so it is answered ahead of the sudo gate. Every stub user owns the
+		// address their login derives from; a test that needs the two to DISAGREE
+		// states its own row in `identity`.
+		if login, ok := strings.CutPrefix(strings.TrimPrefix(r.URL.Path, "/v1"), "/users/"); ok {
+			if _, exists := f.visible[login]; !exists {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			writeJSON(w, map[string]any{"login": login, "email": login + "@hanzo.ai"})
 			return
 		}
 		actor := r.Header.Get("Sudo")
@@ -193,8 +221,61 @@ func issue(number int, title, state string, labels ...string) map[string]any {
 }
 
 // mountForge mounts the tracker against a stub forge and a stub KMS.
+// identity is what the store answers about each subject, keyed by X-User-Id
+// exactly as the real op keys it. A test states rows it needs before mounting;
+// serveIdentity defaults every asUser subject to a CONFIRMED address whose local
+// part is the login, which is what the forge stub also says.
+var identity map[string]plane.Email
+
+// serveIdentity stands up the iam peer scopeForge resolves the actor through.
+// Without it every forge-backed read refuses, which is the point: an
+// unresolvable identity is not a board, it is a 403.
+func serveIdentity(t *testing.T) {
+	t.Helper()
+	t.Setenv("ZIP_RUNTIME_DIR", shortDir(t))
+	app := zip.New(zip.Config{AppName: "iam", DisableStartupMessage: true})
+	zip.Post[struct{}, plane.Email](app, "/iam/email",
+		func(ctx context.Context, _ *struct{}) (*plane.Email, error) {
+			sub := zip.CallerOf(ctx).User
+			if e, ok := identity[sub]; ok {
+				return &e, nil
+			}
+			// Every asUser subject is "u_<login>", and by default owns the address
+			// that login derives from.
+			if login, ok := strings.CutPrefix(sub, "u_"); ok && login != "" {
+				return &plane.Email{Address: login + "@hanzo.ai", Verified: true}, nil
+			}
+			return nil, zip.ErrUnauthorized("no such subject")
+		}, zip.WithOperationID(plane.IAMEmail))
+	plane.Bind()
+	go func() { _ = app.Listen(zip.SocketPath("iam")) }()
+	t.Cleanup(func() { _ = app.Shutdown() })
+	for i := 0; i < 200; i++ {
+		if c, err := net.Dial("unix", zip.SocketPath("iam")); err == nil {
+			_ = c.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the iam peer never came up")
+}
+
+// shortDir is a runtime dir short enough to hold a unix socket path: t.TempDir()
+// embeds the test NAME, and sun_path caps at 104 bytes on darwin.
+func shortDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "z")
+	if err != nil {
+		t.Fatalf("runtime dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func mountForge(t *testing.T, f *stubForge) *zip.App {
 	t.Helper()
+	identity = map[string]plane.Email{}
+	serveIdentity(t)
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
@@ -225,14 +306,14 @@ func asUser(t *testing.T, app *zip.App, method, path, org, user string, body any
 // would let one of these cases through.
 func TestForgeTenancy_OrgComesFromThePrincipalAndTheForgeReChecksIt(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
+	f.visible["alice"] = []string{"hanzoai"}
 	f.visible["mallory"] = []string{"umbrella"}
-	f.repo("acme", "api", issue(1, "acme private work", "open", "todo"))
+	f.repo("hanzoai", "api", issue(1, "acme private work", "open", "todo"))
 	f.repo("umbrella", "evil", issue(9, "umbrella secret", "open"))
 	app := mountForge(t, f)
 
 	t.Run("a member reads their own org", func(t *testing.T) {
-		code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues", "acme", "alice", nil)
+		code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues", "hanzo", "alice", nil)
 		if code != http.StatusOK {
 			t.Fatalf("GET = %d %s", code, raw)
 		}
@@ -247,7 +328,7 @@ func TestForgeTenancy_OrgComesFromThePrincipalAndTheForgeReChecksIt(t *testing.T
 	// asks the forge for umbrella — never for the org she might name. She cannot
 	// reach acme's board at all.
 	t.Run("a member of another org reads nothing of acme's", func(t *testing.T) {
-		code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues", "umbrella", "mallory", nil)
+		code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues", "hanzo", "mallory", nil)
 		if code != http.StatusOK {
 			t.Fatalf("GET = %d %s", code, raw)
 		}
@@ -259,7 +340,7 @@ func TestForgeTenancy_OrgComesFromThePrincipalAndTheForgeReChecksIt(t *testing.T
 	// Naming another org in a header does not move the scope: X-Org-Id is an
 	// authority header, stripped on ingress and re-minted only from claims.
 	t.Run("naming acme while validated as umbrella reads nothing of acme's", func(t *testing.T) {
-		code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues", "acme", "mallory", nil)
+		code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues", "hanzo", "mallory", nil)
 		if code == http.StatusOK && strings.Contains(string(raw), "acme private work") {
 			t.Fatalf("CROSS-TENANT READ via a named org: %s", raw)
 		}
@@ -269,8 +350,8 @@ func TestForgeTenancy_OrgComesFromThePrincipalAndTheForgeReChecksIt(t *testing.T
 // No validated principal ⇒ every route refuses, and none leaks a row.
 func TestForgeTenancy_NoPrincipalRefusesEverything(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
-	f.repo("acme", "api", issue(1, "secret", "open"))
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api", issue(1, "secret", "open"))
 	app := mountForge(t, f)
 
 	for _, tc := range []struct{ method, path string }{
@@ -294,12 +375,12 @@ func TestForgeTenancy_NoPrincipalRefusesEverything(t *testing.T) {
 // repo the token can see.
 func TestForgeTenancy_NoActorRefusesRatherThanUsingTheMachineIdentity(t *testing.T) {
 	f := newForge(t)
-	f.visible[""] = []string{"acme"} // if the surface sudoed as nobody, this would answer
-	f.repo("acme", "api", issue(1, "secret", "open"))
+	f.visible[""] = []string{"hanzoai"} // if the surface sudoed as nobody, this would answer
+	f.repo("hanzoai", "api", issue(1, "secret", "open"))
 	app := mountForge(t, f)
 
 	// An org but no user id and no username ⇒ principal.Org already fails closed.
-	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects", "acme", "", nil)
+	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects", "hanzo", "", nil)
 	if code != http.StatusForbidden {
 		t.Fatalf("no actor = %d %s, want 403", code, raw)
 	}
@@ -311,14 +392,14 @@ func TestForgeTenancy_NoActorRefusesRatherThanUsingTheMachineIdentity(t *testing
 // fan-out, and each row must name the repo it came from.
 func TestForgeMilestones_OrgRollupFansOutServerSide(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
-	f.repo("acme", "api")
-	f.repo("acme", "web")
-	f.milestones["acme/api"] = []map[string]any{{"id": 1, "title": "v1", "state": "open", "open_issues": 3}}
-	f.milestones["acme/web"] = []map[string]any{{"id": 2, "title": "launch", "state": "open", "open_issues": 5}}
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api")
+	f.repo("hanzoai", "web")
+	f.milestones["hanzoai/api"] = []map[string]any{{"id": 1, "title": "v1", "state": "open", "open_issues": 3}}
+	f.milestones["hanzoai/web"] = []map[string]any{{"id": 2, "title": "launch", "state": "open", "open_issues": 5}}
 	app := mountForge(t, f)
 
-	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/milestones", "acme", "alice", nil)
+	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/milestones", "hanzo", "alice", nil)
 	if code != http.StatusOK {
 		t.Fatalf("GET milestones = %d %s", code, raw)
 	}
@@ -339,9 +420,9 @@ func TestForgeMilestones_OrgRollupFansOutServerSide(t *testing.T) {
 // An empty rollup is [] and never null.
 func TestForgeMilestones_EmptyIsAnArray(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
+	f.visible["alice"] = []string{"hanzoai"}
 	app := mountForge(t, f)
-	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/milestones", "acme", "alice", nil)
+	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/milestones", "hanzo", "alice", nil)
 	if code != http.StatusOK {
 		t.Fatalf("= %d %s", code, raw)
 	}
@@ -356,15 +437,15 @@ func TestForgeMilestones_EmptyIsAnArray(t *testing.T) {
 // labels say — the forge's own state is the stronger fact.
 func TestForgeBoard_ColumnComesFromTheLabelAndClosedWins(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
-	f.repo("acme", "api",
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api",
 		issue(1, "labelled", "open", "in_progress", "high"),
 		issue(2, "unlabelled", "open"),
 		issue(3, "closed but labelled todo", "closed", "todo"),
 	)
 	app := mountForge(t, f)
 
-	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues", "acme", "alice", nil)
+	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues", "hanzo", "alice", nil)
 	if code != http.StatusOK {
 		t.Fatalf("= %d %s", code, raw)
 	}
@@ -397,11 +478,11 @@ func TestForgeBoard_ColumnComesFromTheLabelAndClosedWins(t *testing.T) {
 // A card moved on the board must be relabelled ON THE FORGE, as the human.
 func TestForgeWrites_MoveIsARelabelAttributedToTheUser(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
-	f.repo("acme", "api", issue(7, "card", "open", "todo"))
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api", issue(7, "card", "open", "todo"))
 	app := mountForge(t, f)
 
-	code, raw := asUser(t, app, http.MethodPatch, "/v1/tracker/projects/api/issues/7", "acme", "alice",
+	code, raw := asUser(t, app, http.MethodPatch, "/v1/tracker/projects/api/issues/7", "hanzo", "alice",
 		map[string]any{"status": "in_progress"})
 	if code != http.StatusOK {
 		t.Fatalf("move = %d %s", code, raw)
@@ -425,7 +506,7 @@ func TestForgeWrites_MoveIsARelabelAttributedToTheUser(t *testing.T) {
 // The repository lifecycle is the forge's, not this surface's.
 func TestForgeWrites_RepositoryLifecycleIsRefused(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
+	f.visible["alice"] = []string{"hanzoai"}
 	app := mountForge(t, f)
 
 	for _, tc := range []struct{ method, path string }{
@@ -491,8 +572,8 @@ func doWireAs(t *testing.T, app *zip.App, method, path, org, user string, body a
 // forge-backed writes for exactly that reason.
 func TestAmbientCookieWritesNeedCSRF(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
-	f.repo("acme", "api", issue(7, "card", "open", "todo"))
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api", issue(7, "card", "open", "todo"))
 	app := mountForge(t, f)
 
 	// browser issues a request the way a signed-in tab does: a session COOKIE and
@@ -509,7 +590,7 @@ func TestAmbientCookieWritesNeedCSRF(t *testing.T) {
 			rq.Header.Set("Content-Type", "application/json")
 		}
 		rq.Header.Set("Cookie", "hanzo_iam_token=session-value")
-		rq.Header.Set("X-Org-Id", "acme")
+		rq.Header.Set("X-Org-Id", "hanzo")
 		rq.Header.Set("X-User-Id", "u_alice")
 		rq.Header.Set(authz.HeaderUserName, "alice")
 		if csrf != "" {
@@ -572,7 +653,7 @@ func TestAmbientCookieWritesNeedCSRF(t *testing.T) {
 	t.Run("a header-authenticated caller is unaffected", func(t *testing.T) {
 		// Not CSRF-able: a cross-site page cannot set Authorization. Gating it would
 		// break every API client and the gateway-fronted path for no gain.
-		if code, raw := asUser(t, app, http.MethodPatch, "/v1/tracker/projects/api/issues/7", "acme", "alice",
+		if code, raw := asUser(t, app, http.MethodPatch, "/v1/tracker/projects/api/issues/7", "hanzo", "alice",
 			map[string]any{"status": "in_progress"}); code != http.StatusOK {
 			t.Errorf("header-auth write = %d, want 200 (%s)", code, raw)
 		}
@@ -650,9 +731,9 @@ func TestPerProjectStoreFileIsolation(t *testing.T) {
 // is the whole lesson: neither of them asked WHO VOUCHED.
 func TestForgeBrandGate_AnotherBrandsPrincipalIsRefusedEverywhere(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
-	f.repo("acme", "api", issue(1, "acme private work", "open", "todo"))
-	f.milestones["acme/api"] = []map[string]any{{"id": 1, "title": "v1", "state": "open"}}
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api", issue(1, "acme private work", "open", "todo"))
+	f.milestones["hanzoai/api"] = []map[string]any{{"id": 1, "title": "v1", "state": "open"}}
 	app := mountForgeBranded(t, f, "hanzo")
 
 	// EVERY route, read and write and the rollup — the gate lives in the one
@@ -668,7 +749,7 @@ func TestForgeBrandGate_AnotherBrandsPrincipalIsRefusedEverywhere(t *testing.T) 
 		{http.MethodPost, "/v1/tracker/projects/api/issues", map[string]any{"title": "x"}},
 		{http.MethodPatch, "/v1/tracker/projects/api/issues/1", map[string]any{"status": "done"}},
 	} {
-		code, raw := asBrandedUser(t, app, tc.method, tc.path, "acme", "alice", "lux", tc.body)
+		code, raw := asBrandedUser(t, app, tc.method, tc.path, "hanzo", "alice", "lux", tc.body)
 		if code != http.StatusForbidden {
 			t.Errorf("%s %s with a lux-vouched principal = %d, want 403", tc.method, tc.path, code)
 		}
@@ -691,13 +772,13 @@ func TestForgeBrandGate_AnotherBrandsPrincipalIsRefusedEverywhere(t *testing.T) 
 // by this deployment's own IAM, which is by construction this brand) passes too.
 func TestForgeBrandGate_OwnBrandAndUnbrandedStillWork(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
-	f.repo("acme", "api", issue(1, "acme work", "open", "todo"))
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api", issue(1, "acme work", "open", "todo"))
 	app := mountForgeBranded(t, f, "hanzo")
 
 	t.Run("the deployment's own brand passes", func(t *testing.T) {
 		code, raw := asBrandedUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues",
-			"acme", "alice", "hanzo", nil)
+			"hanzo", "alice", "hanzo", nil)
 		if code != http.StatusOK {
 			t.Fatalf("own-brand principal = %d %s, want 200", code, raw)
 		}
@@ -708,7 +789,7 @@ func TestForgeBrandGate_OwnBrandAndUnbrandedStillWork(t *testing.T) {
 
 	t.Run("a case difference does not decide tenancy", func(t *testing.T) {
 		code, _ := asBrandedUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues",
-			"acme", "alice", "HANZO", nil)
+			"hanzo", "alice", "HANZO", nil)
 		if code != http.StatusOK {
 			t.Fatalf("own brand in a different case = %d, want 200", code)
 		}
@@ -716,7 +797,7 @@ func TestForgeBrandGate_OwnBrandAndUnbrandedStillWork(t *testing.T) {
 
 	t.Run("no vouching brand passes — an own-IAM key has no second fact", func(t *testing.T) {
 		code, raw := asBrandedUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues",
-			"acme", "alice", "", nil)
+			"hanzo", "alice", "", nil)
 		if code != http.StatusOK {
 			t.Fatalf("unbranded principal = %d %s, want 200", code, raw)
 		}
@@ -727,6 +808,8 @@ func TestForgeBrandGate_OwnBrandAndUnbrandedStillWork(t *testing.T) {
 // is what the brand gate compares the principal's vouching brand against.
 func mountForgeBranded(t *testing.T, f *stubForge, brand string) *zip.App {
 	t.Helper()
+	identity = map[string]plane.Email{}
+	serveIdentity(t)
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
@@ -783,7 +866,7 @@ func asBrandedUser(t *testing.T, app *zip.App, method, path, org, user, brand st
 // present either way, so a count passes while the track stays empty.
 func TestForgeSchedule_AMilestoneDueDateGivesTheRowAnInterval(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
+	f.visible["alice"] = []string{"hanzoai"}
 	scheduled := issue(1, "scheduled", "open", "todo")
 	scheduled["created_at"] = "2026-08-01T00:00:00Z"
 	scheduled["milestone"] = map[string]any{"id": 1, "title": "0.2.0", "due_on": "2026-08-20T00:00:00Z"}
@@ -792,10 +875,10 @@ func TestForgeSchedule_AMilestoneDueDateGivesTheRowAnInterval(t *testing.T) {
 	backdated["milestone"] = map[string]any{"id": 2, "title": "late", "due_on": "2026-08-20T00:00:00Z"}
 	unscheduled := issue(3, "no milestone", "open", "todo")
 	unscheduled["created_at"] = "2026-08-01T00:00:00Z"
-	f.repo("acme", "api", scheduled, backdated, unscheduled)
+	f.repo("hanzoai", "api", scheduled, backdated, unscheduled)
 	app := mountForge(t, f)
 
-	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues", "acme", "alice", nil)
+	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues", "hanzo", "alice", nil)
 	if code != http.StatusOK {
 		t.Fatalf("= %d %s", code, raw)
 	}
@@ -836,14 +919,14 @@ func TestForgeSchedule_AMilestoneDueDateGivesTheRowAnInterval(t *testing.T) {
 // directory inside a shared repository. Nothing is provisioned for any of them.
 func TestForgeBoard_TheKeyIsAFilterSoTheGlobalAndPerAppBoardsAreQueries(t *testing.T) {
 	f := newForge(t)
-	f.visible["alice"] = []string{"acme"}
-	f.repo("acme", "api", issue(1, "api work", "open", "todo", "app/meet"))
-	f.repo("acme", "web", issue(2, "web work", "open", "todo"))
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api", issue(1, "api work", "open", "todo", "app/meet"))
+	f.repo("hanzoai", "web", issue(2, "web work", "open", "todo"))
 	app := mountForge(t, f)
 
 	titles := func(path string) []string {
 		t.Helper()
-		code, raw := asUser(t, app, http.MethodGet, path, "acme", "alice", nil)
+		code, raw := asUser(t, app, http.MethodGet, path, "hanzo", "alice", nil)
 		if code != http.StatusOK {
 			t.Fatalf("%s = %d %s", path, code, raw)
 		}

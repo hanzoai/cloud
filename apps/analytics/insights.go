@@ -182,7 +182,7 @@ type eventList struct {
 //
 // Example: {"limit": 100}
 func (o readOps) insightsEvents(ctx context.Context, in *limitQuery) (*eventList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

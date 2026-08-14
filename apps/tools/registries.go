@@ -114,7 +114,7 @@ type skillWritten struct {
 //
 // Example: {"name": "triage", "description": "how we triage", "content": "# Triage\n…"}
 func (o toolOps) putSkill(ctx context.Context, in *skillIn) (*skillWritten, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ type skillDeleted struct {
 // caller's org, so an id belonging to another tenant is never reached. Removing
 // what is not there is not an error — the caller's intent is "gone", and it is.
 func (o toolOps) deleteSkill(ctx context.Context, in *skillRef) (*skillDeleted, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ type authoredSkillList struct {
 // org's, with activation flags and no bodies; this is the EDITABLE set, so it
 // carries the content that view omits and nothing the org did not write.
 func (o toolOps) listAuthoredSkills(ctx context.Context, _ *noInput) (*authoredSkillList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ type pluginMountList struct {
 // asking what this deployment can do wants what is running; ?all=true adds the
 // configured-but-off ones.
 func (o toolOps) listPlugins(ctx context.Context, in *pluginQuery) (*pluginMountList, error) {
-	if _, err := principal.RequireOrg(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	all := in.All == "true"

@@ -238,7 +238,7 @@ type mcpServerList struct {
 // injected into; the credential VALUE lives only in KMS and is never returned,
 // so hasSecret is the whole of what this surface says about it.
 func (o toolOps) listServers(ctx context.Context, _ *noInput) (*mcpServerList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +295,7 @@ type createServerReq struct {
 //
 // Example: {"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "Bearer …"}
 func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPServer, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +398,7 @@ type serverRef struct {
 // another tenant is a 404 and not a delete. Answers 204 with no body; a server
 // this org does not have is 404.
 func (o toolOps) deleteServer(ctx context.Context, in *serverRef) (*noContent, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -498,7 +498,7 @@ type mcpCatalog struct {
 // thousands of servers, so an unbounded answer is a twenty-megabyte response and a
 // storefront that renders in a minute. total is the whole match, not the page.
 func (o toolOps) listCatalog(ctx context.Context, in *catalogQuery) (*mcpCatalog, error) {
-	if _, err := principal.RequireOrg(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	if o.s.State.catalog == nil {
@@ -538,7 +538,7 @@ type listingRef struct {
 // not list would be a way around the shelf — but is served to a SuperAdmin, who
 // is the one deciding whether to put it back.
 func (o toolOps) getListing(ctx context.Context, in *listingRef) (*MCPListing, error) {
-	if _, err := principal.RequireOrg(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	l, err := o.listing(ctx, in.ID)
@@ -573,7 +573,7 @@ type mcpCatalogSync struct {
 // server. And it never touches CURATION: hidden, featured, an admin-set official
 // and a logo survive every sync, because the write does not name those columns.
 func (o toolOps) syncCatalog(ctx context.Context, _ *noInput) (*mcpCatalogSync, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -627,7 +627,7 @@ type curateReq struct {
 //
 // Example: {"featured": true, "official": false}
 func (o toolOps) curateListing(ctx context.Context, in *curateReq) (*MCPListing, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

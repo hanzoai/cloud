@@ -48,8 +48,8 @@ func routedDispatcher(sess *fakeSessions, run *fakeRunner, router *fakeRouter, g
 	var cloneCalls []string
 	d := Dispatcher{
 		Sessions: sess, PR: &fakePR{}, Runner: run,
-		CloneURL: func(_ context.Context, org, repo string) string {
-			cloneCalls = append(cloneCalls, org+"/"+repo)
+		CloneURL: func(_ context.Context, org, actor, repo string) string {
+			cloneCalls = append(cloneCalls, actor+"@"+org+"/"+repo)
 			return "https://git.test/v1/git/" + org + "/" + repo + ".git"
 		},
 		Route:      router.route,
@@ -59,8 +59,42 @@ func routedDispatcher(sess *fakeSessions, run *fakeRunner, router *fakeRouter, g
 }
 
 func routedReq() Req {
-	// Deliberately NO credential — a routed run must not need one.
-	return Req{Org: "acme", UserID: "u-1", AgentRef: "hanzo", Repo: "api", Prompt: "add a test", TargetID: "tgt_evo"}
+	// Deliberately NO credential — a routed run must not need one. It DOES need an
+	// actor: a routed run acts on a repository too, and the machine it is handed
+	// to holds credentials broader than the caller's, so the entitlement is the
+	// one thing both paths share.
+	return Req{Org: "acme", UserID: "u-1", Actor: "zoe", AgentRef: "hanzo",
+		Repo: "api", Prompt: "add a test", TargetID: "tgt_evo"}
+}
+
+// A ROUTED RUN WITH NO ACTOR IS REFUSED, and nothing is enqueued.
+//
+// This is the confused deputy the credential gate did not cover: the sandbox
+// path needed an actor to be handed a key, and the routed path needed none at
+// all — so naming a repository you cannot read was enough to have a machine that
+// CAN read it clone the repository and stream it into your session.
+func TestRun_Routed_RefusesWithNoActor(t *testing.T) {
+	sess := &fakeSessions{id: "sess_noactor"}
+	router := &fakeRouter{}
+	gate := &fakeGate{}
+	d, cloneCalls := routedDispatcher(sess, &fakeRunner{}, router, gate)
+
+	req := routedReq()
+	req.Actor = ""
+	res := d.Run(context.Background(), req)
+
+	if res.OK {
+		t.Fatalf("a routed run with no forge identity was accepted: %+v", res)
+	}
+	if router.called != 0 {
+		t.Fatal("a run with no entitlement was enqueued to a machine")
+	}
+	if len(*cloneCalls) != 0 {
+		t.Fatalf("the repository was resolved for a caller with no identity: %v", *cloneCalls)
+	}
+	if len(sess.opened) != 0 {
+		t.Fatal("a session was opened for a refused run")
+	}
 }
 
 // A routed run is ENQUEUED to the target and NEVER executed in the sandbox.
@@ -77,7 +111,7 @@ func TestRun_RoutedToTarget_EnqueuesNotLocal(t *testing.T) {
 		t.Fatalf("want routed+accepted to tgt_evo, got %+v", res)
 	}
 	// The local sandbox runner was NEVER invoked.
-	if run.gotOrg != "" || run.gotReq.CloneURL != "" {
+	if run.gotOrg != "" || run.gotReq.Remote != "" {
 		t.Fatalf("the local runner must not run for a routed dispatch: %+v", run.gotReq)
 	}
 	// The gate was consulted for exactly this (org,target).
@@ -102,7 +136,7 @@ func TestRun_RoutedToTarget_EnqueuesNotLocal(t *testing.T) {
 	if len(sess.opened) != 1 || sess.opened[0].target != "tgt_evo" {
 		t.Fatalf("session must be opened on the target: %+v", sess.opened)
 	}
-	if len(*cloneCalls) != 1 || (*cloneCalls)[0] != "acme/api" {
+	if len(*cloneCalls) != 1 || (*cloneCalls)[0] != "zoe@acme/api" {
 		t.Fatalf("clone must target acme/api only: %v", *cloneCalls)
 	}
 	// A routed session stays live (the machine drives it to terminal) — not closed here.
@@ -120,7 +154,8 @@ func TestRun_NoTarget_LocalPathUnchanged(t *testing.T) {
 	gate := &fakeGate{}
 	d, _ := routedDispatcher(sess, run, router, gate)
 	// A local run DOES need a credential.
-	req := Req{Org: "acme", UserID: "u-1", AgentRef: "hanzo", Repo: "api", Prompt: "fix it", CredToken: "sk-secret"}
+	req := Req{Org: "acme", UserID: "u-1", AgentRef: "hanzo", Repo: "api", Prompt: "fix it",
+		Remote: "git@git.test:acme/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN"}
 
 	res := d.Run(context.Background(), req)
 
@@ -195,7 +230,7 @@ func TestRun_Routed_NeedsNoCredential_CarriesNoSecret(t *testing.T) {
 	d, _ := routedDispatcher(sess, &fakeRunner{}, router, gate)
 
 	req := routedReq()
-	req.CredToken = "" // explicitly none
+	req.Key, req.Remote = "", "" // explicitly none
 	res := d.Run(context.Background(), req)
 
 	if !res.OK || !res.Routed {
@@ -221,7 +256,7 @@ func TestRun_RoutedButRoutingUnwired_FailsClosed(t *testing.T) {
 	run := &fakeRunner{}
 	// No Route / TargetGate seams.
 	d := Dispatcher{Sessions: sess, PR: &fakePR{}, Runner: run,
-		CloneURL: func(_ context.Context, org, repo string) string {
+		CloneURL: func(_ context.Context, org, actor, repo string) string {
 			return "https://git.test/v1/git/" + org + "/" + repo + ".git"
 		}}
 

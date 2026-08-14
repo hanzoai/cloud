@@ -339,7 +339,7 @@ func viewer(s *cloud.Service[state], route string, readBody bool) zip.Handler {
 func uploadDocument(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	raw := c.Fiber().Body()
 	if len(raw) == 0 {
@@ -381,7 +381,7 @@ func uploadDocument(s *cloud.Service[state], c *zip.Ctx) error {
 func adminDownload(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	resp, err := s.State.host.Dispatch(c.Context(), org, goja.BaseRequest{
 		Route: "documents.file", Params: map[string]string{"id": c.Param("id")},

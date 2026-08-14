@@ -47,7 +47,7 @@ func fakeGitHub(t *testing.T, exists bool) (*[]ghCall, func()) {
 	}))
 	old := api
 	api = srv.URL
-	t.Setenv(mirrorEnvToken, "test-token")
+	t.Setenv(mirrorTokenStem+"_GITHUB_COM", "test-token")
 	t.Cleanup(func() { api = old; srv.Close() })
 	return &calls, srv.Close
 }
@@ -148,7 +148,7 @@ func TestVisibilityStaysInStepOnBothHosts(t *testing.T) {
 // publish path without reaching for the network, and must NOT register a mirror
 // push that could never land.
 func TestNoCredentialMeansNoReplica(t *testing.T) {
-	t.Setenv(mirrorEnvToken, "")
+	t.Setenv(mirrorTokenStem+"_GITHUB_COM", "")
 	url, err := ensure(context.Background(), "acme", "board", "", true)
 	if err != nil {
 		t.Fatalf("unconfigured must be a no-op, got %v", err)

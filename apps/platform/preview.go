@@ -157,10 +157,7 @@ func ensurePreviewApp(s *cloud.Service[state], ctx context.Context, org, project
 		return Application{}, zip.Errorf(http.StatusInternalServerError, "get preview app: %v", err)
 	}
 
-	id, gErr := genID("app")
-	if gErr != nil {
-		return Application{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", gErr)
-	}
+	id := genID("app")
 	domainsJSON, _ := json.Marshal(seedDefaultDomain(s, org, slug, nil))
 	a = Application{
 		ID: id, Org: org, ProjectID: projectID, Slug: slug,

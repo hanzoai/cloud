@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -141,10 +142,7 @@ func publishSite(s *cloud.Service[state], ctx context.Context, org string, p Pro
 	if err != nil {
 		return Deployment{}, fmt.Errorf("version: %w", err)
 	}
-	id, err := genID("dep")
-	if err != nil {
-		return Deployment{}, fmt.Errorf("rng: %w", err)
-	}
+	id := genID("dep")
 	d := Deployment{
 		ID: id, ProjectID: p.ID, Org: org, Version: version, Status: "uploading",
 		Source: source, Bucket: s.State.blob.bucket, Prefix: sitePrefix(org, p.Slug),
@@ -210,7 +208,7 @@ func publishSite(s *cloud.Service[state], ctx context.Context, org string, p Pro
 func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	p, err := loadProject(s, c.Context(), org, slugParam(c))
 	if err != nil {
@@ -296,10 +294,7 @@ func (o ops) startDeployment(ctx context.Context, in *projectsDeployStart) (*pro
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "version: %v", err)
 	}
-	id, err := genID("dep")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := genID("dep")
 	d := Deployment{
 		ID: id, ProjectID: p.ID, Org: org, Version: version, Status: "queued",
 		Source: "git", Commit: strings.TrimSpace(in.Commit), Bucket: s.State.blob.bucket,
@@ -624,10 +619,14 @@ func (o ops) getDeployment(ctx context.Context, in *projectsDeploymentRef) (*pro
 }
 
 // genID returns "<prefix>_<22-char-url-safe-token>" (96 bits of entropy).
-func genID(prefix string) (string, error) {
+// genID mints this package's ids: sixteen random bytes in base64url, which is the
+// shape its rows already carry — shorter than the hex mint.ID makes, and not
+// interchangeable with it for that reason.
+//
+// No error. crypto/rand.Read fills the buffer or panics; since Go 1.24 it cannot
+// report a short read, so there was never a failure for a caller to handle.
+func genID(prefix string) string {
 	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return prefix + "_" + base64.RawURLEncoding.EncodeToString(b), nil
+	_, _ = rand.Read(b)
+	return prefix + "_" + base64.RawURLEncoding.EncodeToString(b)
 }

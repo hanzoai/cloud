@@ -294,7 +294,7 @@ var shutdownStores = func() error { return nil }
 // principal, never a client field: the org is parked on the context by cloud.Bridge
 // and an In field could only ever be a tenant key the caller asserted for itself.
 func (o ops) orgStore(ctx context.Context) (*store, string, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -696,7 +696,7 @@ type noInput struct{}
 func getArtifactBlob(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return errJSON(c, http.StatusForbidden, "X-Org-Id required")
+		return errJSON(c, http.StatusForbidden, principal.Refusal(c))
 	}
 	st, err := storeFor(s.State.stores, org)
 	if err != nil {

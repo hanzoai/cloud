@@ -164,7 +164,7 @@ func gate(s *cloud.Service[state], ctx context.Context) (string, error) {
 		// "not available yet" state.
 		return "", zip.Errorf(http.StatusServiceUnavailable, "networking is not configured on this deployment")
 	}
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return "", err
 	}

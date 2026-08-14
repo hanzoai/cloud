@@ -184,7 +184,7 @@ func (s *service) engineFor(org, billingOrg, project string) (*engine, error) {
 // In field.
 //
 // Off the HTTP path both are empty, which is the unbilled, default-project
-// answer — and principal.RequireOrg has already refused before any op reaches here.
+// answer — and principal.Acting has already refused before any op reaches here.
 func meter(ctx context.Context) (billingOrg, project string) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
@@ -368,7 +368,7 @@ type askPostIn struct {
 //
 // Example: {"q": "func openStore", "type": "hybrid", "repo": "cloud", "limit": 20}
 func (s *service) search(ctx context.Context, in *searchIn) (*searchResults, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -415,7 +415,7 @@ func (s *service) search(ctx context.Context, in *searchIn) (*searchResults, err
 //
 // Example: {"query": "how does the store open a per-org database", "budgetTokens": 4000, "repo": "cloud"}
 func (s *service) context(ctx context.Context, in *contextIn) (*ContextBundle, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +453,7 @@ func (s *service) context(ctx context.Context, in *contextIn) (*ContextBundle, e
 //
 // Example: {"repo": "cloud"}
 func (s *service) tree(ctx context.Context, in *treeIn) (*repoTree, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +484,7 @@ func (s *service) tree(ctx context.Context, in *treeIn) (*repoTree, error) {
 //
 // Example: {"repo": "cloud", "path": "apps/code/store.go"}
 func (s *service) file(ctx context.Context, in *fileIn) (*fileContent, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -542,7 +542,7 @@ func (s *service) askPost(ctx context.Context, in *askPostIn) (*AskAnswer, error
 // answer is the ONE cited-RAG path both /ask forms take, so the two verbs can
 // never drift into two behaviours.
 func (s *service) answer(ctx context.Context, rawQuery, rawRepo string) (*AskAnswer, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -581,7 +581,7 @@ func (s *service) answer(ctx context.Context, rawQuery, rawRepo string) (*AskAns
 //
 // Example: {"repo": "cloud", "files": [{"path": "main.go", "content": "package main\n"}], "prune": true}
 func (s *service) index(ctx context.Context, in *indexIn) (*indexResult, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

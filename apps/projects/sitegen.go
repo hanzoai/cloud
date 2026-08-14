@@ -544,10 +544,7 @@ func resolveSlug(raw, name string) (string, error) {
 // "site-<random>". genID gives "site_<22 url-safe chars>"; slugify lowercases it
 // and turns '_' into '-', so the result always begins "site-" and matches slugRE.
 func mintSlug() (string, error) {
-	tok, err := genID("site")
-	if err != nil {
-		return "", zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	tok := genID("site")
 	return slugify(tok), nil
 }
 
@@ -566,10 +563,7 @@ func ensureProject(s *cloud.Service[state], ctx context.Context, org, slug, name
 		return Project{}, zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
 	}
 	now := time.Now().Unix()
-	id, err := genID("proj")
-	if err != nil {
-		return Project{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := genID("proj")
 	np := Project{
 		ID: id, Org: org, Slug: slug, Name: name, Framework: "static",
 		Status: "draft", Bucket: s.State.blob.bucket, CreatedAt: now, UpdatedAt: now,

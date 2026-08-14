@@ -154,7 +154,7 @@ type clusterView struct {
 	AmdGPU    int    `json:"amdGpu,omitempty"`
 }
 
-// ---- mapping (PURE); firstNonEmpty lives in client.go (one helper, one place) ----
+// ---- mapping (PURE) ----
 
 // toMachineView maps a Visor machine to the console view. vcpu prefers a clean
 // integer CpuSize and otherwise recovers the count from a provider size slug
@@ -167,7 +167,7 @@ func toMachineView(m visorMachine) machineView {
 		ID:          cmp.Or(strings.TrimSpace(m.Name), m.Id),
 		Name:        cmp.Or(m.DisplayName, m.Name),
 		Region:      cmp.Or(m.Region, m.Zone),
-		Type:        cmp.Or(m.Size, m.Type),
+		Type:        cmp.Or(strings.TrimSpace(m.Size), m.Type),
 		Status:      m.State,
 		Provider:    m.Provider,
 		PublicIp:    m.PublicIp,
@@ -176,7 +176,7 @@ func toMachineView(m visorMachine) machineView {
 		Image:       m.Image,
 		Os:          m.Os,
 	}
-	slug := cmp.Or(m.Size, m.Type)
+	slug := cmp.Or(strings.TrimSpace(m.Size), m.Type)
 	slugVcpu, slugMemGB := parseSizeSlug(slug)
 	spec, isGpu := gpuSpecOf(slug)
 	if n, err := strconv.Atoi(strings.TrimSpace(m.CpuSize)); err == nil && n > 0 {
@@ -199,7 +199,7 @@ func toMachineView(m visorMachine) machineView {
 // accelerator (perNode from the size slug — a gpu-h100x8 node genuinely holds 8
 // H100s). A non-GPU machine yields nothing. No telemetry is invented.
 func gpusFromMachine(m visorMachine) []gpuView {
-	spec, ok := gpuSpecOf(cmp.Or(m.Size, m.Type))
+	spec, ok := gpuSpecOf(cmp.Or(strings.TrimSpace(m.Size), m.Type))
 	if !ok {
 		return nil
 	}
@@ -223,7 +223,7 @@ func gpusFromMachine(m visorMachine) []gpuView {
 
 func toNodePoolView(p visorNodePool) nodePoolView {
 	return nodePoolView{
-		PoolID:    cmp.Or(p.PoolID, p.Name),
+		PoolID:    cmp.Or(strings.TrimSpace(p.PoolID), strings.TrimSpace(p.Name)),
 		Name:      p.Name,
 		Size:      p.Size,
 		Count:     p.Count,
@@ -241,7 +241,7 @@ func toNodePoolView(p visorNodePool) nodePoolView {
 func clustersFromPools(pools []visorNodePool) []clusterView {
 	byID := map[string]*clusterView{}
 	for _, p := range pools {
-		key := cmp.Or(p.ClusterID, p.Name)
+		key := cmp.Or(strings.TrimSpace(p.ClusterID), strings.TrimSpace(p.Name))
 		if key == "" {
 			continue
 		}

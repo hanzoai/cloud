@@ -342,10 +342,7 @@ func launchRelease(s *cloud.Service[state], ctx context.Context, ref, repo, dock
 	}
 	tag := "v" + version
 	image := releaseImage + ":" + tag
-	bldID, err := genID("rel")
-	if err != nil {
-		return "", "", zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	bldID := genID("rel")
 	repoURL := cmp.Or(repo, releaseRepoURL)
 	plan := releaseFor(s, repoURL, sha, image, tag, cmp.Or(dockerfile, "Dockerfile"), bldID)
 

@@ -102,6 +102,41 @@ authority for them.
 this itself; it asks over the plane. Noted in advance because that mistake has
 been made five times in this codebase and caught five times afterwards.
 
+## The screen, and the three things that were not obvious
+
+A `desktop` sandbox has an X server, and `/v1/sandboxes/:id/screen` is how you
+look at it: the terminal's three doors again — a ticket, a page, a socket —
+differing only in the bytes on the wire (RFB) and the client in the page (noVNC,
+inlined the way xterm is). The ticket, the bridge, the lease that bounds a
+session and the attention that keeps it from being reaped are the SAME code;
+what a session runs is the only argument.
+
+**The pixels come out through the exec channel.** The image binds its VNC server
+to `127.0.0.1:5900` on purpose — a screen reachable from the pod network is a
+screen whose only defence is a NetworkPolicy — so there is no address to dial.
+`socat - TCP:127.0.0.1:5900` on the exec subresource IS the transport. Nothing
+new is exposed and there is nothing new to authorize.
+
+**Not on a pty, and this one is a silent corrupter.** A pty translates bytes; RFB
+is bytes. A screen on `tty()` works until a pixel happens to be 0x0d. It is
+`stream()` for that reason and no other, and stderr comes back with it so a pod
+whose screen is not running says "connection refused" instead of showing a black
+rectangle.
+
+**The image's screen died at thirty seconds, and nothing could see it.**
+`x0vncserver` is TigerVNC's session MANAGER, not its server: it starts
+X0tigervnc and then waits for the port by binding INADDR_ANY with SO_REUSEADDR —
+a test a LOOPBACK listener can never pass, because 127.0.0.1:5900 leaves
+0.0.0.0:5900 free. After 300 tries at 100ms it killed a server that had been
+serving since boot. Every symptom pointed elsewhere: the pod is Running, exec
+answers, X and openbox are up, and only a VNC client ever finds out. hanzoai/bot
+965d91487 calls the server directly.
+
+Same shape, one layer up: zsh was installed in every class and was the prompt of
+none, because the user's login shell stayed `/bin/bash` and tmux asks passwd what
+to run. Installed is not in use — for a shell, for a VNC server, for anything a
+supervisor stands in front of.
+
 ## `android` — a phone is a WINDOW, and that is the whole design
 
 An Android emulator is qemu drawing an ordinary X window. The desktop class
@@ -166,6 +201,88 @@ the device plugin.
 **amd64 only, and this time it is the image's limit rather than the fleet's.**
 Google publishes no linux-aarch64 emulator, so the arm64 answer is Cuttlefish,
 which is a different program and would be a different stage.
+
+## Issuing the token — the constraint that decides it
+
+VERIFIED, not assumed: **IAM never discloses an application's client secret.**
+`pkg/schema/mask.go:124` — `Application.Mask()` sets `ClientSecret = ""`, and
+BOTH `Create` and `Get` return `in.Mask()`. Not masked on read and returned once
+on create; never, on either.
+
+So the obvious implementation does not exist. Cloud cannot create `<org>-agent`,
+read its secret back, and exchange it for a client_credentials token, because
+there is no moment at which it is handed the secret.
+
+ANSWERED — and it is neither of the two shapes below, but the second one's
+mechanism, found by reading every route IAM registers:
+
+**`POST /v1/iam/admin/applications/upsert`** (`internal/bootstrap/bootstrap.go:62`)
+is authenticated by the SERVICE TOKEN (`HANZO_API_KEY`/`KMS_SERVICE_TOKEN`/
+`IAM_SERVICE_TOKEN`, `httpx.ServiceAuth`) and returns the app's clientSecret in
+cleartext — including the EXISTING secret when the app is already there
+(`resolveSecret`, bootstrap.go:456-467; emitted at :334-337). It is the one
+unmasked Application credential in the whole service, and it is deliberate: its
+own comment says "this is where it learns a secret it did not send". cloud
+already holds that token and already calls this endpoint for `<org>-platform-kms`.
+
+So the sequence is: upsert `<org>-agent` -> read the secret back -> exchange at
+`POST /v1/iam/oauth/token` `grant_type=client_credentials`. IAM mints, cloud
+delivers, nothing is invented here.
+
+**No route mints an app-subject token on any other authority.** `client_credentials`
+(token.go:213) requires that app's own secret, constant-time, with no bypass;
+`/v1/iam/tokens/issue` is user-only and refuses an application target
+(`mintTarget`, issuetoken.go:248-267); token-exchange yields a USER subject.
+Verified by enumerating every route and every `ClientSecret` reference.
+
+**THREE LANDMINES, and the first one means `ensureAgentApplication` is WRONG as
+written.** It creates via `POST /v1/iam/applications` with `owner=<org>`. The
+upsert looks up hard-pinned to owner `"admin"` (bootstrap.go:252, and sets
+`admin/<name>` at :315/:329), so it will not find that row — it will create a
+SECOND one. Worse, the bootstrap path does not enforce clientId uniqueness
+(`ensureClientIdUnique` is only on the typed CRUD path, applications.go:57-71),
+and resolution is admin-preferring (`morePreferredApp`, store.go:64-83), so the
+admin row silently wins at the token endpoint. Create it THROUGH the upsert.
+
+Second: an app created through `/v1/iam/applications` with no `clientSecret` is a
+PUBLIC client with no secret, which `clientCredentialsGrant` refuses outright
+(token.go:226) — and its secret can never be read back, so it is unusable and
+unrecoverable. Third: `publicTokenEndpointForbidden` (token.go:230, :776-778)
+refuses a name ending `-iam` or an app whose ORGANIZATION is reserved (admin,
+built-in, app). `Organization` must be the tenant org. Note it tests Organization
+and not Owner, so an admin-OWNED app serving a tenant org mints fine — which is
+exactly the shape the upsert produces.
+
+The rejected alternative, recorded so it is not re-proposed: cloud generating the
+secret itself and supplying it at create. `Create` does persist a caller-supplied
+`ClientSecret` verbatim (applications.go:202-206, no server-side generation on
+that path at all), so it WOULD work — and it makes cloud a minter of credential
+material, which "IAM is all auth and tokens, nothing else has that responsibility"
+forbids. The upsert costs nothing extra and keeps issuance IAM's.
+
+Superseded framing (kept so the reasoning is legible):
+
+  a. **Cloud supplies the secret at creation.** `Create` takes a whole
+     `*schema.Application`, so a caller-provided `ClientSecret` is stored. Cloud
+     would generate it, seal it in KMS, and exchange it later. Standard OAuth
+     client registration — but it means cloud generating credential material,
+     which sits close to the line "never build custom auth" draws.
+  b. **IAM issues the token for an app it owns**, without the secret leaving.
+     IAM mints, cloud receives — which is exactly what the rule asks for, and it
+     is a small addition on IAM's side rather than a new authority on cloud's.
+
+(b) is the one that needs nothing bent. It also matches every other credential
+here: `cred.go` reads what an issuing service already made and mints nothing.
+
+What is NOT in doubt any more, and cost this session to establish:
+- the identity exists and is provisioned per org (`apps/account/iam.go`)
+- a client_credentials token of that class is ALREADY denied platform sudo,
+  structurally, by `isClientCredentialsPrincipal` — including in the reserved
+  `admin` org, which is the escalation attempt #1 was reverted for. There is a
+  test for it. No suffix list, no allowlist, nothing to maintain.
+- delivery belongs in `cred.go`, beside the SuperAdmin delivery, under that
+  file's existing rule
+- `apps/sandbox` is a different PROCESS, so it asks over the plane
 
 ## The harness
 

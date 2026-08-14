@@ -498,7 +498,7 @@ type none struct{}
 // validated owner claim, never from a client X-Org-Id, so a dataset can only ever
 // be written under the caller's own tenant. A description over 64 KiB is 400.
 func (s *service) createDataset(ctx context.Context, in *datasetReq) (*datasetView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -532,7 +532,7 @@ func (s *service) createDataset(ctx context.Context, in *datasetReq) (*datasetVi
 // there is no parameter that reaches another tenant's datasets. The item count is
 // NOT populated here — read one dataset to get it.
 func (s *service) listDatasets(ctx context.Context, in *page) (*datasetList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -553,7 +553,7 @@ func (s *service) listDatasets(ctx context.Context, in *page) (*datasetList, err
 // A name this org does not have is 404, which is also what another tenant's
 // dataset looks like from here. Requires a validated principal; 403 without one.
 func (s *service) getDataset(ctx context.Context, in *datasetRef) (*datasetView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -583,7 +583,7 @@ func (s *service) getDataset(ctx context.Context, in *datasetRef) (*datasetView,
 // validated principal; 403 without one. Runs and scores already recorded against
 // the dataset are telemetry events and are NOT deleted with it.
 func (s *service) deleteDataset(ctx context.Context, in *datasetRef) (*none, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -638,7 +638,7 @@ type itemPage struct {
 // That dataset MUST already exist for this org: an unknown one is 404, never a
 // silent create. Requires a validated principal; 403 without one.
 func (s *service) createItem(ctx context.Context, in *itemReq) (*itemView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -697,7 +697,7 @@ func (s *service) createItem(ctx context.Context, in *itemReq) (*itemView, error
 // the read is filtered on the validated org, so naming another tenant's dataset
 // returns nothing rather than its contents.
 func (s *service) listItems(ctx context.Context, in *itemPage) (*itemList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -735,7 +735,7 @@ type evaluatorReq struct {
 // Like a dataset, the NAME is the key: re-posting a name edits that judge rather
 // than adding a second one. Requires a validated principal; 403 without one.
 func (s *service) createEvaluator(ctx context.Context, in *evaluatorReq) (*evaluatorView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -769,7 +769,7 @@ func (s *service) createEvaluator(ctx context.Context, in *evaluatorReq) (*evalu
 // Requires a validated principal; 403 without one, and the listing is filtered on
 // the validated org.
 func (s *service) listEvaluators(ctx context.Context, in *page) (*evaluatorList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -816,7 +816,7 @@ type scoreConfigReq struct {
 // A CATEGORICAL rubric with no categories is 400, as is a non-finite bound or a
 // minValue above maxValue. Requires a validated principal; 403 without one.
 func (s *service) createScoreConfig(ctx context.Context, in *scoreConfigReq) (*scoreConfigView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -862,7 +862,7 @@ func (s *service) createScoreConfig(ctx context.Context, in *scoreConfigReq) (*s
 // Requires a validated principal; 403 without one, and the listing is filtered on
 // the validated org.
 func (s *service) listScoreConfigs(ctx context.Context, in *page) (*scoreConfigList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -922,7 +922,7 @@ type scoreReq struct {
 // Requires a validated principal; 403 without one, and the org is stamped from
 // the validated claim rather than read off the body.
 func (s *service) createScore(ctx context.Context, in *scoreReq) (*scoreView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1006,7 +1006,7 @@ func (s *service) validateScore(ctx context.Context, org, name string, body scor
 		if len(label) > 256 {
 			return ScoreEvent{}, zip.ErrBadRequest("stringValue too long")
 		}
-		if hasCfg && !containsStr(cfg.Categories, label) {
+		if hasCfg && !slices.Contains(cfg.Categories, label) {
 			return ScoreEvent{}, zip.ErrBadRequest("stringValue not in the configured category set")
 		}
 		ev.StringValue = label
@@ -1045,7 +1045,7 @@ type traceFilter struct {
 // datastore, so a deployment with none wired answers 503 rather than an empty
 // page that would read as "no scores".
 func (s *service) listScores(ctx context.Context, in *scoreFilter) (*scoreList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1078,7 +1078,7 @@ func (s *service) listScores(ctx context.Context, in *scoreFilter) (*scoreList, 
 // principal; 403 without one. Traces live in the datastore, so a deployment with
 // none wired answers 503 rather than an empty page.
 func (s *service) listTraces(ctx context.Context, in *traceFilter) (*traceList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1249,7 +1249,7 @@ type runs struct {
 // produces, so a deployment with no datastore wired is 503 up front. Requires a
 // validated principal; 403 without one.
 func (s *service) runHandler(ctx context.Context, in *runRequest) (*runSummary, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1414,7 +1414,7 @@ func (s *service) runItem(ctx context.Context, org, authz, runName, model string
 // so they are readable on a deployment with no telemetry wired — but a run's
 // traces and scores are not.
 func (s *service) listRuns(ctx context.Context, in *runFilter) (*runs, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1599,10 +1599,6 @@ func cleanCategories(xs []string) []string {
 		}
 	}
 	return out
-}
-
-func containsStr(xs []string, target string) bool {
-	return slices.Contains(xs, target)
 }
 
 // normalizeJudge fills a judge spec: the judge model defaults to the model under

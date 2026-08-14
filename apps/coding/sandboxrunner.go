@@ -62,7 +62,6 @@ package coding
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"maps"
 	"slices"
@@ -194,7 +193,7 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	// process holding the credential. A run handed `main` stops here rather than
 	// discovering at push time that it was never allowed.
 	branch := strings.TrimSpace(req.Branch)
-	if strings.TrimSpace(req.CloneURL) != "" && !strings.HasPrefix(branch, agentPrefix) {
+	if strings.TrimSpace(req.Remote) != "" && !strings.HasPrefix(branch, agentPrefix) {
 		return RunResult{}, fmt.Errorf("coding: %q is not an agent branch", branch)
 	}
 
@@ -263,12 +262,18 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	}()
 
 	// The checkout, when there is one. No repo means no clone and no credential —
-	// the request shape already guarantees the second (CredToken must be empty
-	// when CloneURL is), so there is nothing to strip here.
-	in := sandbox{ctx: ctx, id: id, ttl: ttl, session: req.SessionID,
-		token: req.CredToken, basic: basicOf(req)}
+	// the request shape already guarantees the second (Key must be empty when
+	// Remote is), so there is nothing to strip here.
+	in := sandbox{ctx: ctx, id: id, ttl: ttl, session: req.SessionID, key: req.Key}
 	base := ""
-	if u := strings.TrimSpace(req.CloneURL); u != "" {
+	if u := strings.TrimSpace(req.Remote); u != "" {
+		// The key has to be a FILE before git can use it — ssh reads an identity
+		// from a path and from nowhere else — so this is the one moment the run's
+		// secret is written down, and it is written the only way that does not
+		// publish it. See [sandbox.arm].
+		if err := in.arm(req); err != nil {
+			return RunResult{}, err
+		}
 		step("clone", "cloning "+u, "running")
 		// The clone narrates into the session like everything else. It is the step
 		// that most often hangs — a big repo, a slow forge — and a watcher seeing
@@ -301,7 +306,13 @@ func (sandboxRunner) Run(ctx context.Context, org, userID string, req RunRequest
 	if cred != "" {
 		argv, stdin = keyed(argv), cred+"\n"
 	}
-	ran, err := runIn(ctx, id, argv, ttl, req.SessionID, stdin)
+	// THE GATEWAY CREDENTIAL IS BLINDED TOO, and it is the one most likely to be
+	// printed: it becomes HANZO_API_KEY inside the box, so any `env`, any harness
+	// that dumps its configuration, and any stack trace carrying the environment
+	// publishes it. It is the DEPLOYMENT's identity rather than this run's, so it
+	// is the more valuable of the two.
+	in.cred = cred
+	ran, err := runIn(ctx, id, argv, ttl, req.SessionID, stdin, in.secrets()...)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("coding: run: %w", err)
 	}
@@ -377,11 +388,73 @@ type sandbox struct {
 	id      string
 	ttl     int
 	session string
-	// Both spellings of the grant, because both exist: the token as the forge
-	// issued it, and the base64 git presents it as. Scrubbing one and not the
-	// other would leave the credential in the output in the only form that
-	// actually travelled.
-	token, basic string
+	// key is the run's private key and cred is the deployment's gateway token.
+	// Both are held to be BLINDED, never to be used: the copy git reads is the
+	// file [sandbox.arm] wrote, and the copy the harness reads arrived on its
+	// stdin. They are the two strings that must never appear in a session event,
+	// a Slack line or a log.
+	key, cred string
+}
+
+// secrets is what every command of this run must never publish.
+//
+// It travels WITH each command (plane.RunIn.Blind) rather than being applied to
+// what comes back, because a sandbox narrates straight into the session as bytes
+// are produced — that stream never passes through this process, so a scrub here
+// would run minutes after the secret was already delivered to a durable event
+// store, an SSE feed and a chat thread. apps/sandbox/blind.go states the rest.
+func (in sandbox) secrets() []string {
+	var out []string
+	if strings.TrimSpace(in.key) != "" {
+		out = append(out, in.key)
+	}
+	if strings.TrimSpace(in.cred) != "" {
+		out = append(out, in.cred)
+	}
+	return out
+}
+
+// Where the run's credential lives inside the sandbox.
+//
+// Under /tmp and not the checkout: the checkout is what the model edits and what
+// `git add -A` stages, so a key kept there is one careless commit away from
+// being pushed to the branch this very grant opens.
+const (
+	keyPath   = "/tmp/hanzo-run/key"
+	knownPath = "/tmp/hanzo-run/known_hosts"
+)
+
+// arm writes the run's credential into the sandbox.
+//
+// THE KEY ARRIVES ON STDIN. Argv is public — every process in the pod can read
+// another's command line out of /proc, and the argv of a run's commands is
+// echoed into its own session narration — and the process about to run in this
+// pod executes a language model's output. Stdin reaches this one command and
+// nothing else, which is the same reason the model credential travels that way
+// (key.go).
+//
+// `umask 077` before the write, because ssh REFUSES a key file others can read
+// ("UNPROTECTED PRIVATE KEY FILE") — so the mode is not belt-and-braces here, it
+// is the difference between a run that clones and one that does not.
+//
+// The host key goes on argv deliberately: it is the forge's PUBLIC identity, and
+// keeping it visible is what lets a person reading a failed run see which host
+// was pinned.
+func (in sandbox) arm(req RunRequest) error {
+	if strings.TrimSpace(req.Known) == "" {
+		// Refused, never softened to "trust whatever answers". An unpinned host is
+		// a run that will accept any server standing in front of the forge — with
+		// a write key in hand and a checkout it is about to trust.
+		return fmt.Errorf("coding: no forge host key to pin; refusing to clone unpinned")
+	}
+	_, err := runIn(in.ctx, in.id, []string{"sh", "-c",
+		`umask 077 && mkdir -p "$(dirname "$1")" && cat > "$1" && printf '%s\n' "$3" > "$2"`,
+		"sh", keyPath, knownPath, req.Known},
+		in.ttl, in.session, req.Key, in.secrets()...)
+	if err != nil {
+		return fmt.Errorf("coding: install the run credential: %s", in.scrub(err.Error()))
+	}
+	return nil
 }
 
 // deliver commits what the tool left behind, pushes it to the run's ref, and
@@ -401,7 +474,8 @@ func (in sandbox) deliver(req RunRequest, branch, base string, out *RunResult, s
 	// `git -c` before a subcommand is not written into the repository's config.
 	if _, err := runIn(in.ctx, in.id, []string{"git",
 		"-c", "user.name=" + authorName, "-c", "user.email=" + authorEmail,
-		"commit", "--quiet", "-m", message(req.Prompt, in.session)}, in.ttl, in.session, ""); err != nil {
+		"commit", "--quiet", "-m", message(req.Prompt, in.session)},
+		in.ttl, in.session, "", in.secrets()...); err != nil {
 		return fmt.Errorf("coding: commit: %w", err)
 	}
 
@@ -426,70 +500,67 @@ func (in sandbox) deliver(req RunRequest, branch, base string, out *RunResult, s
 	return nil
 }
 
-// cloneArgv checks out the repo. The credential is a per-invocation rewrite, so
-// what git records as the remote is the plain URL and the grant is gone the
-// moment the process is.
+// cloneArgv checks out the repo.
 func cloneArgv(req RunRequest) []string {
 	argv := append(gitAs(req), "clone", "--depth", "1")
 	if b := strings.TrimSpace(req.BaseBranch); b != "" {
 		argv = append(argv, "-b", b)
 	}
-	return append(argv, req.CloneURL, ".")
+	return append(argv, req.Remote, ".")
 }
 
 // pushArgv writes ONE ref, named in full, and never forces.
 //
 // The refspec is explicit rather than `push origin <branch>` because the local
-// name and the remote ref are then the same string we checked and the grant
-// names, with no configured remote and no push.default in between to resolve it
+// name and the remote ref are then the same string we checked and the run was
+// issued, with no configured remote and no push.default in between to resolve it
 // into something else.
+//
+// It matters more here than it used to. The credential this replaces was
+// per-REF: the forge refused any command naming another ref, so an explicit
+// refspec was one of two independent statements of the same rule. A deploy key
+// is per-REPOSITORY — Forgejo has no per-ref credential, and its token scopes
+// are categories rather than repositories — so this refspec, and the branch
+// check at the top of Run, are now what keep an honest run in its lane. The
+// dishonest case is bounded by the repository instead of by the ref, and the
+// integrity gate (the forge's own view of the branch, read afterwards) is what
+// decides whether the work is proposed.
 func pushArgv(req RunRequest, branch string) []string {
-	return append(gitAs(req), "push", req.CloneURL, "HEAD:refs/heads/"+branch)
+	return append(gitAs(req), "push", req.Remote, "HEAD:refs/heads/"+branch)
 }
 
-// gitAs is `git`, carrying the grant when there is one — as an Authorization
-// header CONFINED to the one URL it is for, applied to this invocation alone.
+// gitAs is `git`, carrying the run's key — for this invocation alone.
 //
-// Three properties, each of which cost a bug to learn. All three were verified
-// against git 2.43 with a server that answers like the forge.
-//
-// IT ARRIVES. The credential used to ride the clone URL, and git does not send a
-// URL-embedded credential until it is CHALLENGED: it makes an anonymous request
-// first and waits for 401 WWW-Authenticate. The forge answers a caller it does
-// not recognise with 403 (smart_http.go resolvePackRepo), never 401 — so the
-// grant was never sent at all, and a clone of any private repo could only 403.
-// Presented as a header it is on the FIRST request, which is the same thing
-// apps/git's own wire test does and the reason that test passes.
+// Three properties, and each one is the reason a line is there.
 //
 // IT DOES NOT PERSIST. `git -c` before the subcommand is not written into the new
 // repository's config — unlike `git clone -c`, which is — so the checkout the
-// model then edits holds no credential. The URL form wrote one into .git/config
-// verbatim, where every later step of the run could read it, including the step
-// that executes untrusted model output.
+// model then edits names no identity file. The key is still on disk (ssh reads
+// an identity from a path and from nowhere else), but it is under /tmp rather
+// than inside the tree `git add -A` stages.
 //
-// IT GOES NOWHERE ELSE. The key is scoped to the URL, so git attaches the header
-// to that repository and to nothing else. A bare http.extraHeader is sent to
-// WHATEVER the command reaches — a redirect, another host — and what a repository
-// makes git reach is chosen by whoever wrote the repository.
+// IT IS THE ONLY IDENTITY OFFERED. IdentitiesOnly stops ssh walking an agent or
+// a default ~/.ssh/id_* first; without it a sandbox image that happens to carry
+// a key would authenticate as something other than this run.
 //
-// One function, because clone and push are the same act — reach that URL as this
-// bearer — and a second spelling is a second place to get it wrong.
+// THE HOST IS PINNED, TO EXACTLY ONE KEY. StrictHostKeyChecking=yes against a
+// known_hosts file CLOUD wrote means the run trusts the key cloud holds, not
+// whatever answers on the sandbox's network — which is the one network in this
+// system carrying untrusted output. `accept-new` would have been
+// trust-on-first-use per run, which is not a pin at all. GlobalKnownHostsFile is
+// sent to /dev/null in the same breath: ssh consults /etc/ssh/ssh_known_hosts as
+// well, so an image (or a layer added to one) carrying an entry for the forge
+// would be a second trusted key that our pin never sees.
+//
+// One function, because clone and push are the same act — reach that remote as
+// this key — and a second spelling is a second place to get it wrong.
 func gitAs(req RunRequest) []string {
-	if req.CredToken == "" || !strings.HasPrefix(req.CloneURL, "https://") {
+	if strings.TrimSpace(req.Key) == "" {
 		return []string{"git"}
 	}
-	return []string{"git", "-c", "http." + req.CloneURL + ".extraHeader=Authorization: Basic " + basicOf(req)}
-}
-
-// basicOf is the grant as git presents it: base64 of user:token. The user is
-// ignored by the forge — the password is the whole credential — but basic auth
-// has a shape and it has to be filled.
-func basicOf(req RunRequest) string {
-	user := req.CredUser
-	if user == "" {
-		user = "x-access-token"
-	}
-	return base64.StdEncoding.EncodeToString([]byte(user + ":" + req.CredToken))
+	return []string{"git", "-c", "core.sshCommand=ssh -i " + keyPath +
+		" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" +
+		" -o UserKnownHostsFile=" + knownPath + " -o GlobalKnownHostsFile=/dev/null"}
 }
 
 // tip reads the checkout's current commit.
@@ -508,7 +579,7 @@ func (in sandbox) tip() (string, error) {
 // same fact: a clone that did not clone or a push that did not push leaves
 // nothing to report, so the exit code is read and the run stops.
 func (in sandbox) do(argv []string, what string) (*plane.Ran, error) {
-	ran, err := runIn(in.ctx, in.id, argv, in.ttl, in.session, "")
+	ran, err := runIn(in.ctx, in.id, argv, in.ttl, in.session, "", in.secrets()...)
 	if err != nil {
 		return nil, fmt.Errorf("coding: %s: %s", what, in.scrub(err.Error()))
 	}
@@ -545,10 +616,27 @@ func message(prompt, session string) string {
 // rather than sitting loose so that every path out of a command goes through it
 // without anyone having to remember.
 func (in sandbox) scrub(s string) string {
-	if strings.TrimSpace(in.token) == "" {
+	if len(in.secrets()) == 0 {
 		return s
 	}
-	return strings.NewReplacer(in.token, redacted, in.basic, redacted).Replace(s)
+	// The key is multi-line PEM, so it is scrubbed BOTH whole and line by line: a
+	// tool that echoes a file's contents with its own indentation, or a JSON
+	// encoder that re-wraps the newlines, would leave a whole-string match
+	// finding nothing while every secret line is still there. The armour lines
+	// are skipped — they are the same public constant in every OpenSSH key and
+	// redacting them only makes the output unreadable.
+	var rep []string
+	for _, sec := range in.secrets() {
+		for _, line := range strings.Split(sec, "\n") {
+			line = strings.TrimSpace(line)
+			if len(line) < 16 || strings.HasPrefix(line, "-----") {
+				continue
+			}
+			rep = append(rep, line, redacted)
+		}
+		rep = append(rep, sec, redacted)
+	}
+	return strings.NewReplacer(rep...).Replace(s)
 }
 
 const redacted = "[redacted]"
@@ -559,9 +647,9 @@ const redacted = "[redacted]"
 // here, because the bytes are IN THE SANDBOX and this call does not return until
 // the command is over. Streamed from where they are produced, a twenty-five
 // minute agent edit loop is watchable; collected here, it is a silence.
-func runIn(ctx context.Context, id string, argv []string, ttl int, session, stdin string) (*plane.Ran, error) {
+func runIn(ctx context.Context, id string, argv []string, ttl int, session, stdin string, blind ...string) (*plane.Ran, error) {
 	ran, err := plane.Ask[plane.RunIn, plane.Ran](ctx, "sandboxes", plane.SandboxRun,
-		&plane.RunIn{ID: id, Argv: argv, TimeoutSec: ttl, Session: session, Stdin: stdin})
+		&plane.RunIn{ID: id, Argv: argv, TimeoutSec: ttl, Session: session, Stdin: stdin, Blind: blind})
 	if err != nil {
 		return nil, err
 	}

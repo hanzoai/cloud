@@ -158,7 +158,7 @@ func (o ops) getK8sCluster(ctx context.Context, in *k8sClusterRef) (*clusterDeta
 	view.NodePools = make([]nodePoolView, 0, len(d.NodePools))
 	for _, p := range d.NodePools {
 		view.NodePools = append(view.NodePools, nodePoolView{
-			PoolID: cmp.Or(p.ID, p.Name), Name: p.Name, Size: p.Size,
+			PoolID: cmp.Or(strings.TrimSpace(p.ID), strings.TrimSpace(p.Name)), Name: p.Name, Size: p.Size,
 			Count: p.Count, MinNodes: p.MinNodes, MaxNodes: p.MaxNodes, AutoScale: p.AutoScale,
 		})
 		view.NodeCount += p.Count

@@ -36,6 +36,8 @@ package entitlements
 // should collapse all three, not just the two this file can see.
 
 import (
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -111,21 +113,12 @@ func walk(v any, visit func(map[string]any)) {
 // catalog renders the grant side for a failure message: which tier licenses what.
 func catalog(g map[string][]string) string {
 	var b strings.Builder
-	for _, p := range sorted(g) {
+	for _, p := range slices.Sorted(maps.Keys(g)) {
 		tiers := g[p]
 		sort.Strings(tiers)
 		b.WriteString("\n    " + p + " <- " + strings.Join(tiers, ", "))
 	}
 	return b.String()
-}
-
-func sorted(g map[string][]string) []string {
-	out := make([]string, 0, len(g))
-	for p := range g {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // TestEveryProductCloudAsksAboutCanBeGranted is the CLOSED-to-everyone direction: a
@@ -190,7 +183,7 @@ func TestEveryProductThePlansGrantIsAskedAbout(t *testing.T) {
 		asked[p] = true
 	}
 	var unread []string
-	for _, p := range sorted(g) {
+	for _, p := range slices.Sorted(maps.Keys(g)) {
 		if !asked[p] && !engineLicence[p] {
 			unread = append(unread, p)
 		}
