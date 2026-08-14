@@ -55,6 +55,7 @@ import (
 	"time"
 
 	ds "github.com/hanzo-ds/go"
+	"github.com/hanzoai/o11y/pkg/types/llmobstypes"
 	zaplogreceiver "github.com/hanzoai/o11y/pkg/zaplogreceiver"
 	zapreceiver "github.com/hanzoai/o11y/pkg/zapreceiver"
 	luxlog "github.com/luxfi/log"
@@ -441,8 +442,13 @@ func spanRowsOf(b *zapreceiver.SpanBatch) [][]any {
 		if s.EndUnixNs > s.StartUnixNs {
 			dur = uint64(s.EndUnixNs - s.StartUnixNs)
 		}
+		// Hoisted rather than called inside the literal: it MUTATES attrs, and the
+		// row below carries attrs — Go does not fix the evaluation order of calls
+		// within a composite literal, so an inline call would be a coin flip over
+		// whether the attribute reached the store.
+		org := planeTenant(attrs)
 		rows = append(rows, []any{
-			planeOrg(attrs),
+			org,
 			time.Unix(0, s.StartUnixNs).UTC(),
 			s.SpanID,
 			s.Name,
@@ -616,8 +622,11 @@ func sdkSpanRowsOf(spans []sdktrace.ReadOnlySpan) [][]any {
 		if s.Status().Code.String() == "Error" {
 			status = "error"
 		}
+		// Hoisted for the same reason as the wire path: planeTenant mutates attrs,
+		// which this row carries.
+		org := planeTenant(attrs)
 		rows = append(rows, []any{
-			planeOrg(attrs),
+			org,
 			s.StartTime().UTC(),
 			sc.SpanID().String(),
 			s.Name(),
@@ -717,6 +726,33 @@ func planeOrg(attrs map[string]string) string {
 		return org
 	}
 	return platformOrg
+}
+
+// planeTenant resolves the row's tenant AND stamps it onto the span's own
+// attributes, so the column and the attribute are ONE fact rather than two
+// spellings of it.
+//
+// They were two. This path wrote the tenant to the org COLUMN and never set the
+// attribute, while every llmobs view filters on the ATTRIBUTE
+// (llmobstypes.GenAIHanzoOrgID, impllmobs/views.go) — so a span whose tenant was
+// perfectly well known was invisible to every org that could have read it. It
+// went unnoticed because the failure is silent and selective: the majority of
+// gen_ai spans arrive through spansink, which has always stamped it
+// (spansink.go), so the views were populated and merely incomplete. Measured
+// before this change: 76 spans carried hanzo.org and no attribute, and ALL 76
+// were error spans from the agents and channels emitters — the ones a customer
+// most needs to see.
+//
+// Stamped unconditionally and last, for the reason spansink states in full: the
+// key is the tenant boundary of every llmobs read, so it is never taken from the
+// wire. A client-supplied value would let one org write rows another org reads.
+//
+// Safe for non-LLM telemetry: every llmobs view is gated on gen_ai.system, so an
+// infrastructure span carrying this attribute is still not an llmobs row.
+func planeTenant(attrs map[string]string) string {
+	org := planeOrg(attrs)
+	attrs[llmobstypes.GenAIHanzoOrgID] = org
+	return org
 }
 
 // k8sWorkloadKeys is OTel's own service.name recommendation for a resource that
