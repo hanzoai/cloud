@@ -677,9 +677,9 @@ func mirrorOut(ctx context.Context, s *cloud.Service[state], w *work, org string
 // from the target's account — an org may replicate into several accounts and
 // each has its own installation — so a repository imported under one org's
 // credential is never pushed with another's. Absent one it returns a ZERO
-// credential, which mirrorGitEnv resolves to the token held for that host — and
-// absent that too the push is anonymous and fails closed at the remote rather
-// than leaking anything.
+// credential, which [credAuthHeader] resolves to the token held for that host —
+// and absent that too the push is anonymous and fails closed at the remote
+// rather than leaking anything.
 func outboundCred(ctx context.Context, org, target string) gitCred {
 	host := hostOf(target)
 	if strings.EqualFold(host, "github.com") {
