@@ -312,9 +312,30 @@ func (s *state) query(ctx context.Context, in *Query, op string) (*Answer, error
 	return out, nil
 }
 
+// coldSlots bounds how many cold prepares run at once. A prepare holds the whole
+// tree resident several times over — the forge bytes, the string copy files()
+// makes, and the JSON body the daemon encodes — all live until daemon.root
+// returns. unpack bounds ONE tree (maxTree); nothing bounded the PROCESS, so a
+// caller firing N hovers at N distinct cold shas — each a fresh root, since the
+// daemon keys roots by resolved sha — pulled N whole trees into memory at once
+// and turned a per-hover charge into an OOM. This is that ceiling. A warm root
+// never reaches prepare (query asks the daemon first), so this gates only the
+// slow, rare cold path: serializing it a few wide costs a little tail latency and
+// buys a hard bound on resident memory.
+var coldSlots = make(chan struct{}, 4)
+
 // prepare hands the daemon the tree for one commit and records on out whether
 // that call actually built it.
 func (s *state) prepare(ctx context.Context, c *zip.Ctx, org, repo, sha string, out *Answer) error {
+	// Hold a slot for the whole memory-resident window — the read AND the handoff
+	// to the daemon, since the tree stays live until root() returns. A caller that
+	// hangs up while waiting releases its place rather than pinning one.
+	select {
+	case coldSlots <- struct{}{}:
+		defer func() { <-coldSlots }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	files, err := s.files(ctx, c, org, repo, sha)
 	if err != nil {
 		return err
