@@ -11,7 +11,6 @@ import (
 	// test process has no KMS.
 
 	_ "github.com/hanzoai/cloud/internal/devmaster"
-	"github.com/hanzoai/cloud/internal/mint"
 )
 
 func testStore(t *testing.T) *Store {

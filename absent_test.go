@@ -107,7 +107,8 @@ var probes = []struct {
 		return err
 	}},
 	{"RegisterPushBuilder", "OnGitPush", func(ctx context.Context) error {
-		return OnGitPush(ctx, GitPushEvent{Org: "acme", Repo: "r", Ref: "refs/heads/main"})
+		_, err := OnGitPush(ctx, GitPushEvent{Org: "acme", Repo: "r", Ref: "refs/heads/main"})
+		return err
 	}},
 	{"RegisterServiceReleaser", "OnServiceRelease", func(ctx context.Context) error {
 		return OnServiceRelease(ctx, ServiceReleaseEvent{Service: "cloud", Image: "ghcr.io/hanzoai/cloud:v1.0.0"})

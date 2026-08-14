@@ -539,6 +539,79 @@ func TestOwner_IsClosedSoAnUnmappedOrgIsRefused(t *testing.T) {
 	}
 }
 
+// A FORGE NAMESPACE IS NEVER A TENANT BY DEFAULT — the same table, read the way
+// an inbound DELIVERY reads it.
+//
+// A signed push names the namespace it landed in, and that name decides whose
+// applications rebuild and whose compute pays. A forge account is enough to
+// create a namespace, so were an unmapped one to resolve to the IAM org spelled
+// the same way, picking which tenant rebuilds would take a signup and a push.
+func TestOrg_IsClosedSoAnUnmappedNamespaceIsRefused(t *testing.T) {
+	got, err := Org("hanzoai")
+	if err != nil || got != "hanzo" {
+		t.Fatalf("Org(hanzoai) = %q, %v; want hanzo", got, err)
+	}
+	if got, err := Org("  HANZOAI "); err != nil || got != "hanzo" {
+		t.Fatalf("Org is not normalising: %q, %v", got, err)
+	}
+	// The IAM names themselves, an ordinary tenant, and the shapes an attacker
+	// would reach for. NONE of them may resolve.
+	for _, owner := range []string{"hanzo", "acme", "luxfi", "zooai", "admin", "", "HANZO"} {
+		if got, err := Org(owner); err == nil {
+			t.Fatalf("Org(%q) = %q with no error — an unmapped namespace became a tenant", owner, got)
+		} else if !errors.Is(err, ErrNoOrg) {
+			t.Fatalf("Org(%q) refused with %v, want ErrNoOrg", owner, err)
+		}
+	}
+}
+
+// ONE TABLE, TWO DIRECTIONS. Whichever way it is read, the pair must be the same
+// pair — a second declared table is what lets a push be attributed to one tenant
+// while that tenant's work is written to another's namespace.
+func TestOwnerAndOrgAreTheSameTable(t *testing.T) {
+	if len(orgs) != len(owners) {
+		t.Fatalf("the inverse has %d entries against %d — a namespace was dropped or doubled", len(orgs), len(owners))
+	}
+	for iam, forgeOrg := range owners {
+		back, err := Org(forgeOrg)
+		if err != nil || back != iam {
+			t.Fatalf("Org(Owner(%q)) = %q, %v; want %q", iam, back, err, iam)
+		}
+		there, err := Owner(back)
+		if err != nil || there != forgeOrg {
+			t.Fatalf("Owner(Org(%q)) = %q, %v; want %q", forgeOrg, there, err, forgeOrg)
+		}
+	}
+}
+
+// The forge is the SIBLING of the deployment's own API host, through one
+// derivation. A literal git.hanzo.ai at a call site is what makes a white-labelled
+// deployment read another brand's forge — and this host is also the origin an
+// inbound delivery is stamped with, so two derivations of it is how a mirror
+// stops recognising its own echo.
+func TestHost_IsTheSiblingOfTheDeploymentsOwnAPI(t *testing.T) {
+	for api, want := range map[string]string{
+		"api.hanzo.ai":    "git.hanzo.ai",
+		"api.lux.network": "git.lux.network",
+		"api.zoo.ngo":     "git.zoo.ngo",
+	} {
+		if got := Host(api); got != want {
+			t.Fatalf("Host(%q) = %q, want %q", api, got, want)
+		}
+	}
+	// An override for the deployment whose forge genuinely is not that sibling —
+	// a developer box, a staging forge. An override, not the source.
+	t.Setenv("CLOUD_FORGE_HOST", "forge.dev.local")
+	if got := Host("api.hanzo.ai"); got != "forge.dev.local" {
+		t.Fatalf("CLOUD_FORGE_HOST did not override: %q", got)
+	}
+	// A Source's own Host still wins over the environment, which is the one
+	// precedence a caller can set in code.
+	if got := (&Source{Host: "forge.test"}).host("api.hanzo.ai"); got != "forge.test" {
+		t.Fatalf("Source.Host did not win: %q", got)
+	}
+}
+
 // A GRANT IS REFUSED ON A REPOSITORY WHOSE DEFAULT BRANCH ACCEPTS IT.
 //
 // The credential is per-repository, so without a rule the forge enforces, a run
