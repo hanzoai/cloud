@@ -120,13 +120,18 @@ func (o ops) searchIssues(ctx context.Context, in *issueSearch) (*issueHits, err
 		return nil, err
 	}
 
+	key, err := boardKeys(ctx, store, org)
+	if err != nil {
+		return nil, err
+	}
+
 	out := &issueHits{Issues: make([]issueHit, 0, len(rows))}
 	for _, r := range rows {
 		if len(out.Issues) >= limit {
 			break
 		}
 		out.Issues = append(out.Issues, issueHit{
-			Project: r.ProjectID, Number: r.Number, Kind: r.Kind, Source: r.Source,
+			Project: key[r.ProjectID], Number: r.Number, Kind: r.Kind, Source: r.Source,
 			Repo: r.Repo, Title: r.Title, Status: r.Status, Priority: r.Priority,
 			Assignee: r.Assignee, URL: r.ExtRef,
 		})
@@ -189,8 +194,12 @@ func (o ops) claimIssue(ctx context.Context, in *issueClaim) (*issueHit, error) 
 		if err := store.UpdateIssue(ctx, r); err != nil {
 			return nil, err
 		}
+		names, err := boardKeys(ctx, store, org)
+		if err != nil {
+			return nil, err
+		}
 		return &issueHit{
-			Project: r.ProjectID, Number: r.Number, Kind: r.Kind, Source: r.Source,
+			Project: names[r.ProjectID], Number: r.Number, Kind: r.Kind, Source: r.Source,
 			Repo: r.Repo, Title: r.Title, Status: r.Status, Priority: r.Priority,
 			Assignee: r.Assignee, URL: r.ExtRef,
 		}, nil
