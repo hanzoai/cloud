@@ -150,7 +150,7 @@ func TestTheAssistantKnowsWhatItIs(t *testing.T) {
 // WHERE THE ISSUES ARE. Asked which issues someone had filed on our
 // repositories, the deployed assistant searched the WEB for a GitHub profile,
 // met the login wall every logged-out scrape meets, and reported that absence as
-// a fact about the person — while holding `tracker`, whose issues are GitHub's,
+// a fact about the person — while holding `todo`, whose issues are GitHub's,
 // mirrored in by the App.
 //
 // The tool was there; the sentence connecting the question to it was not, and no
@@ -159,8 +159,8 @@ func TestTheAssistantKnowsWhatItIs(t *testing.T) {
 func TestTheAssistantKnowsWhereIssuesLive(t *testing.T) {
 	p := builtinAgentInstructions
 	for _, phrase := range []string{
-		"tracker",            // the subsystem that answers
-		"get_tracker_issues", // the op, named so it does not have to be found
+		"todo",            // the subsystem that answers
+		"get_todo_issues", // the op, named so it does not have to be found
 		"mirrored in",        // why GitHub's issues are there at all
 		"never",              // …and that a web search is not the way to them
 	} {

@@ -51,7 +51,7 @@ var kinds = map[string]struct {
 }{
 	"RegisterGitImporter":         {remote, "integrations decides to import; git holds the repos"},
 	"RegisterGitMirrorController": {remote, "sync declares the mirror; git holds the repo that pushes it"},
-	"RegisterIssueSink":           {remote, "integrations feeds the items; tracker holds the store"},
+	"RegisterIssueSink":           {remote, "integrations feeds the items; todo holds the store"},
 	"RegisterSync":                {remote, "integrations and git trigger; sync holds the engine"},
 	"RegisterPushBuilder":         {remote, "git takes the push; platform holds the builder"},
 	"RegisterServiceReleaser":     {remote, "a build releases; platform holds the CR control plane"},
@@ -134,7 +134,7 @@ func isolate(t *testing.T) {
 //
 // A nil here is not cosmetic. It is the shape of the outages this exists to end
 // — a push that built nothing, a release that patched nothing, an issue that
-// reached no tracker — each reported as success to a caller with no way to learn
+// reached no todo — each reported as success to a caller with no way to learn
 // otherwise.
 func TestAbsentErrors(t *testing.T) {
 	isolate(t)

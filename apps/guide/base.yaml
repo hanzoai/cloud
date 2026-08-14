@@ -3073,7 +3073,7 @@ strategies:
     you win before a rival can frame you on theirs.
   blog:
     caseStudy: Linear's 'purpose-built for modern software teams' framed the whole
-      comparison on speed and craft, the axis where legacy trackers can't follow,
+      comparison on speed and craft, the axis where legacy todos can't follow,
       and converted on first view.
     how: Distill your defensible edge into one concrete, specific sentence — no adjectives,
       a number if you have one — and lead every surface with it, cutting the vague
@@ -7839,7 +7839,7 @@ strategies:
     slug: aeo-citation-share-monitor
     title: 'Measure Your Share of the Answer: AEO Citation Tracking'
     why: Answer engines are the new front page and you are invisible to classic rank
-      trackers there; measuring citation share is the only way to know if the generative
+      todos there; measuring citation share is the only way to know if the generative
       channel is finding you, and it is the leading indicator SEO used to be.
   category: answer-engine-optimization
   era: modern
@@ -23903,7 +23903,7 @@ strategies:
     how: Crawl competitor pricing, changelog, docs, and job pages on a schedule, diff
       each snapshot, and have an agent summarize material changes with a recommended
       counter-move into a weekly intelligence brief.
-    slug: competitor-move-tracker
+    slug: competitor-move-todo
     title: 'The Battle Isn''t Over: An Agent That Watches Every Rival Move'
     why: The moment you feel you've won a market is exactly when a competitor is repositioning
       to take it back, and their pricing changes, changelogs, and hiring signals telegraph
@@ -23911,7 +23911,7 @@ strategies:
       foreknowledge.
   category: business-market-insight
   era: modern
-  id: guarded-completion-competitor-move-tracker
+  id: guarded-completion-competitor-move-todo
   principle: guarded-completion
   source: Sun Tzu, The Use of Spies (ch.13) — know the enemy's plans while they are
     still forming
@@ -24037,7 +24037,7 @@ strategies:
   workload: low
 - action: Continuously validate that analytics tags, conversion pixels, and event
     pipelines are still firing correctly across the live site and app, so a broken
-    tracker doesn't leave you flying blind and misallocating budget for weeks after
+    todo doesn't leave you flying blind and misallocating budget for weeks after
     a deploy.
   blog:
     caseStudy: Teams auto-auditing pixel fires caught a consent-banner change that
@@ -24045,7 +24045,7 @@ strategies:
       cycle was misallocated on bad data.
     how: Run automated checks that fire synthetic events and assert they arrive intact
       in every analytics and ad platform, monitor event volumes for unexplained drops,
-      and alert on any tracker that goes silent so the blind spot is closed in hours.
+      and alert on any todo that goes silent so the blind spot is closed in hours.
     slug: attribution-integrity-audit
     title: 'Guard the Instruments: Broken Tracking Blinds Every Decision'
     why: Every growth decision rides on analytics and conversion tracking, but tags

@@ -165,7 +165,7 @@ var allowedRequestUses = map[string]string{
 		"of the fan-out, and every read after is a cheap re-pointing of a value nobody else holds. Fails " +
 		"closed off the HTTP path: no request means the plain context, which carries no operator standing " +
 		"and is refused by the reads themselves.",
-	"apps/tracker/source.go": "scopeForge. The forge-backed board needs the caller's IAM USERNAME " +
+	"apps/todo/source.go": "scopeForge. The forge-backed board needs the caller's IAM USERNAME " +
 		"(X-User-Name) as well as their org: the org says WHICH tenant's work to ask the forge for, and the " +
 		"username is who the forge is asked AS (Forgejo Sudo), which drops privilege to that user so the " +
 		"forge's own ACL re-checks the answer. principal.OrgFrom carries the org and nothing else, so an op " +

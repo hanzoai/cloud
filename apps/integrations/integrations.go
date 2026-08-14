@@ -714,7 +714,7 @@ func init() {
 		"GitHub App webhook",
 		"The address the GitHub App delivers events to. A push is handed to the repository "+
 			"sync engine, and an issue or issue-comment event is mirrored into the native "+
-			"tracker — idempotently, so the same issue re-syncs to one row however many "+
+			"todo — idempotently, so the same issue re-syncs to one row however many "+
 			"times it is edited, closed or reopened.\n\n"+
 			"It answers a benign 200 for everything it does not act on — the ping, other "+
 			"event types, an unknown installation — deliberately, so GitHub does not enter a "+
@@ -895,7 +895,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// 202: the import runs in a bounded background worker, so the op DECLARES the
 	// status it has always answered rather than setting it per request.
 	zip.Post(zapp, "/v1/integrations/github/repos/import", o.githubImport, zip.WithStatus(http.StatusAccepted))
-	// Seed the native tracker with the org's EXISTING GitHub issues (the webhook
+	// Seed the native todo with the org's EXISTING GitHub issues (the webhook
 	// keeps them live thereafter). Org-authed via the principal; bounded + idempotent.
 	zip.Post(zapp, "/v1/integrations/github/issues/backfill", o.githubIssuesBackfill)
 	// GitHub Pages management (github_pages.go), one repo as a resource. Registered
