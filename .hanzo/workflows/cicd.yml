@@ -111,6 +111,37 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # ══ CAR 0b ══ IS THIS CHANGE HOSTILE? Every other gate asks whether the code is
+  # CORRECT. None asks what it is FOR. A commit that exfiltrates a provider key,
+  # opens an egress or weakens an auth check compiles, passes its tests and ships.
+  # This reads the diff and refuses it.
+  #
+  # It fails CLOSED — an unreachable reviewer is how an attacker turns a reviewer
+  # off — and the break-glass is a named human decision (REVIEW_BREAK_GLASS),
+  # recorded in the run, never a silent fallback.
+  review:
+    runs-on: [hanzo-build-linux-amd64]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The reviewer diffs against the commit this push built on, so it needs
+          # more than the tip. Shallow history is why a first-push review would
+          # otherwise have nothing to compare.
+          fetch-depth: 0
+      - name: read the change, and refuse it if it carries an attack
+        env:
+          REVIEW_API_KEY: ${{ secrets.REVIEW_API_KEY }}
+          REVIEW_BREAK_GLASS: ${{ vars.REVIEW_BREAK_GLASS }}
+        run: |
+          set -euo pipefail
+          base="${{ github.event.before }}"
+          # A new branch, or a forge that reports no predecessor, arrives as the
+          # zero sha. Fall back to the first parent; a merge is reviewed against
+          # the line it lands on, which is the change this release actually adds.
+          case "$base" in ""|0000000*) base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)";; esac
+          bash .hanzo/review/review.sh "$base" "${{ github.sha }}"
+
   # ══ CAR 0 ══ THE DOCUMENT EQUALS THE CODE. Everything below `needs:` this.
   #
   # The test gate, driven by hanzo.yml, whose `app-contract` step is
@@ -369,7 +400,7 @@ jobs:
   # image, so neither is a superset. The smoke gate stays BEFORE the tag, which is
   # what makes a tag a receipt for an image that booted.
   image:
-    needs: [gate, containment]
+    needs: [gate, containment, review]
     # NAME WHAT IS REFUSED, NOT WHAT IS ALLOWED — because this job's ref is not
     # reliably knowable and its absence must not read as "no".
     #
