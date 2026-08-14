@@ -99,7 +99,7 @@ func mountWith(t *testing.T, c commerce) (*zip.App, *cloud.Service[state]) {
 func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
 // req drives one HTTP request. org sets a VALIDATED principal (X-Org-Id +
-// X-User-Id, the tenant() gate); admin additionally sets X-User-IsAdmin.
+// X-User-Id, the principal.Acting gate); admin additionally sets X-User-IsAdmin.
 func req(t *testing.T, app *zip.App, method, path, org string, admin bool, body any) (int, []byte) {
 	t.Helper()
 	var r io.Reader

@@ -234,7 +234,7 @@ func guarded(t *testing.T, name, op string) (edge, plane string) {
 	zip.Post(app, "/v1/"+name+"/"+op, func(ctx context.Context, in *echoIn) (*echoOut, error) {
 		org, ok := principal.OrgFrom(ctx)
 		if !ok {
-			return nil, zip.ErrForbidden("X-Org-Id required")
+			return nil, principal.RefusedFrom(ctx)
 		}
 		return &echoOut{App: name, Say: in.Say, Org: org}, nil
 	}, zip.WithOperationID(op), zip.WithSummary("what "+name+" does at "+op))
@@ -252,7 +252,7 @@ func guarded(t *testing.T, name, op string) (edge, plane string) {
 
 // TestATenantedToolAnswersTheRun is the @hanzo Slack failure, as a test: a run
 // with a principal the fleet resolved server-side calls a tool that scopes by
-// tenant, and gets an answer instead of `X-Org-Id required`.
+// tenant, and gets an answer instead of a refusal.
 //
 // It is the same call TestADispatchCarriesTheRunsOrg makes, against a subsystem
 // that has the boundary production has. Point the door's internal reach at the

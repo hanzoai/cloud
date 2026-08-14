@@ -26,7 +26,7 @@ func main() {
 		Name:     "agents",
 		Price:    cloud.Metered,
 		Mount:    mountAgents,
-		Shutdown: agents.Shutdown,
+		Shutdown: shutdownAgents,
 	}}, []string{"agents"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

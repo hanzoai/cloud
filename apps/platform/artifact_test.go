@@ -20,7 +20,7 @@ func TestRunnerArtifact_LaunchesAndIndexes(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	app := runnerApp(t)
 	code, body := postRunner(t, app, testBuildTok, map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "sha": "0abcdef1234567890a1b2c3d4e5f60718293a4b",
+		"repo": "https://github.com/hanzoai/cloud", "sha": "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
 		"bucket": "plugins",
 		"binaries": []any{
 			map[string]any{"name": "cloud", "main": "./cmd/cloud", "platforms": []string{"linux/amd64", "linux/arm64"}},
@@ -34,7 +34,7 @@ func TestRunnerArtifact_LaunchesAndIndexes(t *testing.T) {
 	if err := json.Unmarshal(body, &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	want := "https://s3.hanzo.ai/plugins/hanzoai/cloud/0abcdef1234567890a1b2c3d4e5f60718293a4b/binaries.json"
+	want := "https://s3.hanzo.ai/plugins/hanzoai/cloud/0abcdef1234567890a1b2c3d4e5f60718293a4bc/binaries.json"
 	if resp.Index != want {
 		t.Fatalf("index = %q, want %q", resp.Index, want)
 	}
@@ -121,11 +121,11 @@ func TestRunnerArtifact_IAMAdminBoundToItsOwnOwner(t *testing.T) {
 	app := runnerApp(t)
 	recipe := []any{map[string]any{"name": "x", "main": "./cmd/x"}}
 	if code, body := postRunnerAs(t, app, "u", "hanzo", true, false, map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "sha": "0abcdef1234567890a1b2c3d4e5f60718293a4b", "binaries": recipe}); code != http.StatusAccepted {
+		"repo": "https://github.com/hanzoai/cloud", "sha": "0abcdef1234567890a1b2c3d4e5f60718293a4bc", "binaries": recipe}); code != http.StatusAccepted {
 		t.Fatalf("own-owner build: want 202, got %d (%s)", code, body)
 	}
 	if code, _ := postRunnerAs(t, app, "u", "hanzo", true, false, map[string]any{
-		"repo": "https://github.com/luxfi/node", "sha": "0abcdef1234567890a1b2c3d4e5f60718293a4b", "binaries": recipe}); code != http.StatusForbidden {
+		"repo": "https://github.com/luxfi/node", "sha": "0abcdef1234567890a1b2c3d4e5f60718293a4bc", "binaries": recipe}); code != http.StatusForbidden {
 		t.Fatalf("cross-owner build: want 403, got %d", code)
 	}
 }

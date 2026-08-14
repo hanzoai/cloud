@@ -27,10 +27,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hanzoai/cloud/internal/environ"
 	s3 "github.com/hanzos3/go"
 	"github.com/hanzos3/go/pkg/credentials"
-
-	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // Admin holds the shared S3 admin connection parameters, sourced once from the
@@ -63,7 +62,8 @@ type Admin struct {
 //	S3_SECURE              TLS to the internal endpoint (default false)
 //	S3_REGION              signing region (default us-east-1)
 //	S3_PUBLIC_ENDPOINT     browser-routable host for presigned URLs
-//	                             (default s3.hanzo.ai; strips any scheme)
+//	                             (default s3.hanzo.ai; strips any scheme;
+//	                             SET AND EMPTY disables presigning)
 //	S3_PUBLIC_SECURE       TLS for the public host (default true)
 //
 // publicHost is the browser-routable host, and the one setting here where SET AND

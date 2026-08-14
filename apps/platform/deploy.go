@@ -152,10 +152,7 @@ func nextDeployment(s *cloud.Service[state], ctx context.Context, appID string) 
 	if err != nil {
 		return "", 0, fmt.Errorf("version: %w", err)
 	}
-	depID, err := genID("dep")
-	if err != nil {
-		return "", 0, fmt.Errorf("rng: %w", err)
-	}
+	depID := genID("dep")
 	return depID, version, nil
 }
 
@@ -251,10 +248,7 @@ func startGitBuild(s *cloud.Service[state], ctx context.Context, org string, a A
 	ref := cmp.Or(strings.TrimSpace(commit), a.RepoBranch, "main")
 	image := s.State.k8s.buildImageRef(org, a.Slug, shortTag(ref))
 
-	bldID, err := genID("bld")
-	if err != nil {
-		return Deployment{}, "", http.StatusInternalServerError, fmt.Errorf("rng: %v", err)
-	}
+	bldID := genID("bld")
 	b := Build{ID: bldID, Org: org, ApplicationID: a.ID, DeploymentID: depID, Status: "queued", Image: image, CreatedAt: now, UpdatedAt: now}
 	if err := s.State.store.InsertBuild(ctx, b); err != nil {
 		return Deployment{}, "", http.StatusInternalServerError, fmt.Errorf("persist build: %v", err)

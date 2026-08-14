@@ -52,7 +52,7 @@ type booksOps struct{ s *cloud.Service[*state] }
 // always answered with ("sign in to view books", "sign in to export books"), so
 // the 401 is unchanged route by route.
 func tenant(ctx context.Context, action string) (string, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return "", zip.ErrUnauthorized("sign in to " + action)
 	}

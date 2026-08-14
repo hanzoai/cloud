@@ -172,7 +172,16 @@ func (d *Door) serve(c *zip.Ctx, at At) error {
 		return c.JSON(200, rpcErr(nil, -32700, "parse error"))
 	}
 	switch req.Method {
-	case "initialize":
+	// initialize and server/discover answer the SAME thing, because under a
+	// stateless protocol they ask the same question.
+	//
+	// THE DOOR NEEDS ITS OWN CASE. zip answers server/discover for a subsystem,
+	// but /v1/mcp is this composed door and dispatches methods here, so teaching
+	// only the children left the fleet's public address replying `method not
+	// found: server/discover` while already declaring 2026-07-28 — the exact
+	// mismatch the version constant is supposed to rule out. Caught by asking the
+	// live address rather than trusting the child fix.
+	case "initialize", "server/discover":
 		return c.JSON(200, rpcResult(req.ID, map[string]any{
 			"protocolVersion": protocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},

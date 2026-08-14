@@ -397,9 +397,5 @@ func clampInt64(v, hi int64) int64 {
 // character, and what is left is scrubbed to valid UTF-8, so a hostile sample can
 // never store a broken column value.
 func clampStr(s string, n int) string {
-	s = trim(s)
-	if len(s) > n {
-		return strings.ToValidUTF8(shorten.To(s, n), "")
-	}
-	return s
+	return strings.ToValidUTF8(shorten.To(trim(s), n), "")
 }

@@ -73,8 +73,10 @@ func visibility(listed bool) string {
 	return "private"
 }
 
-// token is the shared mirror credential, or "" when unconfigured.
-func secret() string { return strings.TrimSpace(os.Getenv(mirrorEnvToken)) }
+// secret is our GitHub credential, resolved by the ONE resolver every other git
+// credential goes through. This reader only ever talks to api.github.com, so the host
+// is named here rather than configured.
+func secret() string { return mirrorCredential("github.com") }
 
 // call performs one authenticated GitHub API call and returns the status code.
 // Bodies are read and discarded except on the decode path, so a caller never

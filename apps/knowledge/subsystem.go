@@ -138,7 +138,7 @@ type searchOut struct {
 //
 // Example: {"query": "how do we rotate the signing key", "limit": 5}
 func (o ops) search(ctx context.Context, in *searchIn) (*searchOut, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

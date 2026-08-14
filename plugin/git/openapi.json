@@ -2280,7 +2280,7 @@
             "type": "string"
           },
           "source": {
-            "description": "Source is the http(s) git URL to fetch from. The host is SSRF-guarded and\nthe shared mirror credential is only sent to allowlisted hosts.",
+            "description": "Source is the http(s) git URL to fetch from. The host is SSRF-guarded, and a\ncredential is sent only if we hold one NAMED FOR that host — so a\ntenant-supplied URL to anywhere else fetches anonymously.",
             "type": "string"
           }
         },

@@ -388,7 +388,7 @@ func mapErr(err error, notFoundMsg string) error {
 func createAccount(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body Account
 	if err := c.Bind(&body); err != nil {
@@ -417,7 +417,7 @@ func createAccount(s *cloud.Service[state], c *zip.Ctx) error {
 func listAccounts(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	provider := strings.ToLower(strings.TrimSpace(c.Query("provider")))
 	rows, err := s.State.store.ListAccounts(c.Context(), org, provider, limitOf(c))
@@ -430,7 +430,7 @@ func listAccounts(s *cloud.Service[state], c *zip.Ctx) error {
 func getAccount(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	acct, err := s.State.store.GetAccount(c.Context(), org, idParam(c))
 	if err != nil {
@@ -442,7 +442,7 @@ func getAccount(s *cloud.Service[state], c *zip.Ctx) error {
 func updateAccount(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body Account
 	if err := c.Bind(&body); err != nil {
@@ -470,7 +470,7 @@ func updateAccount(s *cloud.Service[state], c *zip.Ctx) error {
 func deleteAccount(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	deleted, err := s.State.store.DeleteAccount(c.Context(), org, idParam(c))
 	if err != nil {
@@ -487,7 +487,7 @@ func deleteAccount(s *cloud.Service[state], c *zip.Ctx) error {
 func createPost(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body Post
 	if err := c.Bind(&body); err != nil {
@@ -531,7 +531,7 @@ func createPost(s *cloud.Service[state], c *zip.Ctx) error {
 func listPosts(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
 	rows, err := s.State.store.ListPosts(c.Context(), org, status, limitOf(c))
@@ -544,7 +544,7 @@ func listPosts(s *cloud.Service[state], c *zip.Ctx) error {
 func getPost(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	post, err := s.State.store.GetPost(c.Context(), org, idParam(c))
 	if err != nil {
@@ -556,7 +556,7 @@ func getPost(s *cloud.Service[state], c *zip.Ctx) error {
 func updatePost(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body Post
 	if err := c.Bind(&body); err != nil {
@@ -588,7 +588,7 @@ func updatePost(s *cloud.Service[state], c *zip.Ctx) error {
 func deletePost(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	deleted, err := s.State.store.DeletePost(c.Context(), org, idParam(c))
 	if err != nil {
@@ -609,7 +609,7 @@ func deletePost(s *cloud.Service[state], c *zip.Ctx) error {
 func publishPostHandler(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	post, err := publishPost(c.Context(), s, org, idParam(c))
 	if err != nil {
@@ -624,7 +624,7 @@ func publishPostHandler(s *cloud.Service[state], c *zip.Ctx) error {
 // the coordinator's pre-cutover checklist of what to supply.
 func listProviders(_ *cloud.Service[state], c *zip.Ctx) error {
 	if _, ok := principal.Org(c); !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": providerCapabilities()})
 }
@@ -647,7 +647,7 @@ func mapPublishErr(err error) error {
 func summary(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	posts, scheduled, published, accounts, err := s.State.store.Counts(c.Context(), org)
 	if err != nil {

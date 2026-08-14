@@ -241,7 +241,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // 403 (a ready-made *zip.HTTPError); off the HTTP path there is no principal, so
 // every op refuses.
 func tenant(ctx context.Context) (string, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return "", err
 	}

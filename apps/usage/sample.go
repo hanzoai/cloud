@@ -425,11 +425,7 @@ func clampInt64(v, hi int64) int64 {
 // clampStr trims a string and caps its length, keeping the result valid UTF-8 so a
 // multi-byte rune cut at the cap can never yield a broken column value.
 func clampStr(s string, n int) string {
-	s = trim(s)
-	if len(s) > n {
-		return strings.ToValidUTF8(shorten.To(s, n), "")
-	}
-	return s
+	return strings.ToValidUTF8(shorten.To(trim(s), n), "")
 }
 
 // trim is strings.TrimSpace, aliased for terse boundary code.

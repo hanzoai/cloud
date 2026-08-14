@@ -163,7 +163,7 @@ type noInput struct{}
 // columns and its per-item action buttons from this single answer, so the UI and
 // the write-time enforcement hook can never disagree about what is legal.
 func (o contentOps) getLifecycle(ctx context.Context, _ *noInput) (*stateGraph, error) {
-	if _, err := principal.RequireOrg(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	g := lifecycleGraph()
@@ -202,7 +202,7 @@ type boardPage struct {
 //
 // Example: {"status": "queued", "limit": 50}
 func (o contentOps) getBoard(ctx context.Context, in *boardQuery) (*boardPage, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +259,7 @@ type channelList struct {
 // social integrations a publish can target. A deployment with no distribution edge
 // wired answers 503 rather than an empty list that would read as "no channels".
 func (o contentOps) getChannels(ctx context.Context, _ *noInput) (*channelList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (o contentOps) getChannels(ctx context.Context, _ *noInput) (*channelList, 
 //
 // Example: {"doctype": "SocialPost", "name": "spring-teaser"}
 func (o contentOps) postPublish(ctx context.Context, in *PublishInput) (*PublishResult, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +320,7 @@ type transitionIn struct {
 //
 // Example: {"doctype": "SocialPost", "name": "spring-teaser", "to": "published"}
 func (o contentOps) postTransition(ctx context.Context, in *transitionIn) (*TransitionResult, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -299,7 +299,7 @@ func feeCents() int64 {
 
 // load resolves the caller's org and loads its formation, or returns the right error.
 func load(ctx context.Context, s *cloud.Service[state]) (*Formation, string, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -376,7 +376,7 @@ type beginIn struct {
 //
 // Example: {"structure": "c-corp", "jurisdiction": "DE", "name": "Acme Inc."}
 func (o ops) begin(ctx context.Context, in *beginIn) (*formationView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

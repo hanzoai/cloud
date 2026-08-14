@@ -229,7 +229,7 @@ type errorList struct {
 //
 // Example: {"limit": 100}
 func (o readOps) errors(ctx context.Context, in *limitQuery) (*errorList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

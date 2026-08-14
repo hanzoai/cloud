@@ -14,7 +14,7 @@
 // not a constant in a telecom package.
 //
 // Tenant isolation is enforced SERVER-SIDE on every request: the org is
-// principal.RequireOrg — the value SanitizeIdentity minted from the VALIDATED
+// principal.Acting — the value SanitizeIdentity minted from the VALIDATED
 // bearer owner claim (HIP-0026) — and never a client-supplied header. Every store
 // query filters on it, so one tenant can neither read nor mutate another's
 // numbers, calls or messages.
@@ -143,7 +143,7 @@ type numberList struct {
 // searchNumbers asks the carrier what is available to buy. Nothing is recorded —
 // a search is not a holding, and treating it as one is how inventory leaks.
 func (o ops) searchNumbers(ctx context.Context, in *searchInput) (*numberList, error) {
-	if _, err := principal.RequireOrg(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	if in.Country == "" {
@@ -158,10 +158,13 @@ func (o ops) searchNumbers(ctx context.Context, in *searchInput) (*numberList, e
 	return &numberList{Data: found}, nil
 }
 
-// listNumbers returns the numbers this org holds. Scoped to the caller's org, so a
-// number bought by one tenant is invisible to every other.
+// Lists the phone numbers this org HOLDS — the ones it has bought and not
+// released. Distinct from the availability search one path down
+// (`/numbers/available`), which asks the carrier what could be bought: this
+// answers only from our own store, so it is what an org owns rather than what
+// it could own.
 func (o ops) listNumbers(ctx context.Context, _ *noInput) (*numberList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +183,7 @@ type buyInput struct {
 // records a holding that may not exist, and a number the platform believes it owns
 // but cannot use is worse than one it failed to buy.
 func (o ops) buyNumber(ctx context.Context, in *buyInput) (*Number, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +205,7 @@ func (o ops) buyNumber(ctx context.Context, in *buyInput) (*Number, error) {
 // Without that read, an id belonging to another tenant would be released by
 // whoever guessed it.
 func (o ops) releaseNumber(ctx context.Context, in *idInput) (*noInput, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -233,10 +236,10 @@ type callInput struct {
 	Webhook string `json:"webhook,omitempty"`
 }
 
-// listCalls returns this org's call history, newest first as the store gives it.
-// Org-scoped like every read here.
+// Lists the calls this org has placed or received, newest first. Like the
+// message list beside it, these are our own records rather than the carrier's.
 func (o ops) listCalls(ctx context.Context, _ *noInput) (*callList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +254,7 @@ func (o ops) listCalls(ctx context.Context, _ *noInput) (*callList, error) {
 // refused up front when no assistant plane is configured, because a call that
 // connects to silence has already cost the person who answered it.
 func (o ops) placeCall(ctx context.Context, in *callInput) (*Call, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -281,11 +284,11 @@ func (o ops) placeCall(ctx context.Context, in *callInput) (*Call, error) {
 	return &call, nil
 }
 
-// hangup ends a live call. The holding is checked before the carrier is asked, so
-// a call belonging to another org answers 404 rather than being torn down: the
-// carrier knows nothing about tenancy and would obey either way.
+// Ends a call this org placed. The holding is read for THIS org before the
+// carrier is asked, for the reason releaseNumber gives one surface up: an id
+// belonging to another tenant would otherwise be hung up by whoever guessed it.
 func (o ops) hangup(ctx context.Context, in *idInput) (*noInput, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -310,9 +313,11 @@ type messageInput struct {
 	Media []string `json:"media,omitempty"`
 }
 
-// listMessages returns this org's message history. Org-scoped like every read here.
+// Lists the messages this org has sent or received, newest first. Records from
+// our own store, not the carrier's — so it is what this platform did on the
+// org's behalf, which is the set an audit or a bill has to agree with.
 func (o ops) listMessages(ctx context.Context, _ *noInput) (*messageList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -323,12 +328,15 @@ func (o ops) listMessages(ctx context.Context, _ *noInput) (*messageList, error)
 	return &messageList{Data: rows}, nil
 }
 
-// sendMessage sends one message. `from` must be a number this org holds -- the carrier
-// will send from any number it routes, so without that check one tenant could
-// originate traffic on another's number, and the bill and the reputation would
-// follow the number rather than the sender.
+// Sends a message from one of this org's own numbers.
+//
+// `from` must be a number the org HOLDS, checked against the store rather than
+// taken on trust — a caller that could send from any number could impersonate
+// one, and the carrier would deliver it. `to` is required, and the body needs
+// text or media, because a message with neither is delivered as nothing and
+// billed as something.
 func (o ops) sendMessage(ctx context.Context, in *messageInput) (*SMS, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -361,10 +369,11 @@ type summary struct {
 	Messages int `json:"messages"`
 }
 
-// summary counts what this org holds and has used -- numbers, calls, messages. The
-// one read the dashboard makes, so it is three counts rather than three lists.
+// Counts what this org holds on the telephony plane: its numbers, its calls and
+// its messages. The one read a dashboard makes before it asks for any list, so
+// it answers three totals and no rows.
 func (o ops) summary(ctx context.Context, _ *noInput) (*summary, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

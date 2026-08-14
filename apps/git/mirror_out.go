@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -180,8 +181,9 @@ func mirrorPushEnv(ctx context.Context, org, host, target string) []string {
 // GitHub-App-imported repo mirrors back with THAT org's credential (never one shared
 // token presented to every org's remote). Gated to allowed outbound targets
 // (mirrorOutHostAllowed) so the local git host is never a target; falls back to the
-// shared GIT_MIRROR_TOKEN (still allowlisted) when no per-org token resolves — so an
-// org that has NOT connected the GitHub App keeps the exact prior behavior. Returns
+// credential NAMED FOR THE TARGET HOST when no per-org token resolves — so an org
+// that has NOT connected the GitHub App still pushes, with a token that belongs to
+// the host receiving it. Returns
 // "" (anonymous) for a non-allowed host — a private remote then fails closed, never
 // leaking a credential to an untrusted host.
 func outboundAuthHeader(ctx context.Context, org, host, target string) string {
@@ -203,12 +205,18 @@ func outboundAuthHeader(ctx context.Context, org, host, target string) string {
 
 // mirrorPushAuthHeader returns the base64 "<user>:<token>" basic-auth credential
 // for a downstream push ONLY when the target host is on the OUTBOUND allowlist
-// (mirrorOutHostAllowed) and a token is configured (GIT_MIRROR_TOKEN). Empty for a
-// non-allowlisted host or no token — the push then proceeds anonymously and simply
-// fails closed if the remote requires auth, never leaking the token to an untrusted
-// host.
+// (mirrorOutHostAllowed) and we hold a credential FOR THAT HOST. Empty otherwise —
+// the push then proceeds anonymously and fails closed if the remote requires auth,
+// never leaking a token to an untrusted host.
+//
+// Per host, through the same resolver the inbound fetch uses, because this path had
+// the same defect that one did: a single variable meant every allowlisted target got
+// the same token, so a push to gitlab.com was offered a GitHub credential. It
+// authenticates nothing there. The allowlist stays — a host we will PUSH tenant code
+// to is a stricter question than one we will fetch from — but WHICH token is no
+// longer a guess.
 func mirrorPushAuthHeader(host string) string {
-	tok := strings.TrimSpace(os.Getenv(mirrorEnvToken))
+	tok := mirrorCredential(host)
 	if tok == "" || !mirrorOutHostAllowed(host) {
 		return ""
 	}
@@ -220,4 +228,19 @@ func mirrorPushAuthHeader(host string) string {
 func githubOwnerOf(remote string) string {
 	owner, _ := githubRepoOf(remote)
 	return owner
+}
+
+// githubRepoOf reads the account and repository out of a GitHub remote —
+// https://github.com/<owner>/<name>[.git]. Both empty when the URL names
+// neither, which the caller reads as "this target is not GitHub".
+func githubRepoOf(raw string) (owner, name string) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || !strings.EqualFold(u.Hostname(), "github.com") {
+		return "", ""
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) < 2 {
+		return "", ""
+	}
+	return parts[0], strings.TrimSuffix(parts[1], ".git")
 }

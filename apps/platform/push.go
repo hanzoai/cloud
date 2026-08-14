@@ -64,11 +64,7 @@ func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPus
 			s.Log.Warn("push build: version alloc failed", "org", ev.Org, "app", a.Slug, "err", verr)
 			continue
 		}
-		depID, derr := genID("dep")
-		if derr != nil {
-			s.Log.Warn("push build: rng failed", "org", ev.Org, "app", a.Slug, "err", derr)
-			continue
-		}
+		depID := genID("dep")
 		_, jobName, _, berr := startGitBuild(s, ctx, ev.Org, a, depID, version, now, ev.Commit, s.State.k8s.ready())
 		if berr != nil {
 			s.Log.Warn("push build failed", "org", ev.Org, "app", a.Slug, "err", berr)

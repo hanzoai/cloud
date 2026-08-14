@@ -418,7 +418,7 @@ type safeProposal struct {
 //
 // Example: {"name": "treasury"}
 func (o ops) createAccount(ctx context.Context, in *createAccountIn) (*WalletAccount, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +437,7 @@ func (o ops) createAccount(ctx context.Context, in *createAccountIn) (*WalletAcc
 // listAccounts returns the caller org's wallet accounts, newest first. Accounts
 // are physically org-scoped, so another tenant's are not reachable from here.
 func (o ops) listAccounts(ctx context.Context, _ *noInput) (*accountList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -463,7 +463,7 @@ func (o ops) listAccounts(ctx context.Context, _ *noInput) (*accountList, error)
 // Example: {"accountId": "acct_9f8c1d", "name": "ops hot wallet", "custody": "kms", "tier": "hot", "chain": "eip155:36963"}
 func (o ops) createWallet(ctx context.Context, in *createWalletIn) (*Wallet, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -535,7 +535,7 @@ func (o ops) createWallet(ctx context.Context, in *createWalletIn) (*Wallet, err
 //
 // Example: {"account": "acct_9f8c1d"}
 func (o ops) listWallets(ctx context.Context, in *listWalletsIn) (*walletList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +562,7 @@ func (o ops) listWallets(ctx context.Context, in *listWalletsIn) (*walletList, e
 //
 // Example: {"id": "wal_4b1e77"}
 func (o ops) getWallet(ctx context.Context, in *walletRef) (*Wallet, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -587,7 +587,7 @@ func (o ops) getWallet(ctx context.Context, in *walletRef) (*Wallet, error) {
 // Example: {"id": "wal_4b1e77"}
 func (o ops) rotateKeys(ctx context.Context, in *walletRef) (*Wallet, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -625,7 +625,7 @@ func (o ops) rotateKeys(ctx context.Context, in *walletRef) (*Wallet, error) {
 // Example: {"id": "wal_4b1e77", "message": "approve withdrawal 42"}
 func (o ops) sign(ctx context.Context, in *signIn) (*signature, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -669,7 +669,7 @@ func (o ops) sign(ctx context.Context, in *signIn) (*signature, error) {
 // Example: {"id": "wal_4b1e77", "to": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984", "value": "0", "data": "0x", "chainId": 36963, "nonce": 7}
 func (o ops) proposeTransaction(ctx context.Context, in *safeTxIn) (*safeProposal, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

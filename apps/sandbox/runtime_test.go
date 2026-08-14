@@ -159,7 +159,7 @@ func TestLeaseRefusesAForcedRuntimeBeforeItBuildsAnything(t *testing.T) {
 	ctx := context.Background()
 	const org = "acme"
 
-	_, err = Lease(s, ctx, org, false, Spec{Class: "dev", Project: "p", Runtime: "kata-fc"})
+	_, err = Lease(s, ctx, org, org, false, Spec{Class: "dev", Project: "p", Runtime: "kata-fc"})
 	if err == nil {
 		t.Fatal("Lease accepted kata-fc for a sandbox that mounts a volume")
 	}
@@ -273,7 +273,7 @@ func TestASandboxReportsTheRuntimeItGotNotTheOneItAskedFor(t *testing.T) {
 	ctx := context.Background()
 	const org = "acme"
 
-	if _, err = Lease(s, ctx, org, false, Spec{Class: "dev", Project: "p"}); err == nil {
+	if _, err = Lease(s, ctx, org, org, false, Spec{Class: "dev", Project: "p"}); err == nil {
 		t.Fatal("Lease reached a cluster in a unit test")
 	}
 	out, err := List(s, ctx, org, "", "")

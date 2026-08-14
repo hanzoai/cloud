@@ -11,6 +11,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/mint"
+	"github.com/hanzoai/cloud/internal/shorten"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -293,7 +294,7 @@ type annQueueDeleted struct {
 //
 // Example: {"page": 1, "limit": 20}
 func (s *annService) listQueues(ctx context.Context, in *annPage) (*annQueueList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +325,7 @@ type createQueueReq struct {
 //
 // Example: {"name": "hallucination review", "scoreConfigIds": ["quality"]}
 func (s *annService) createQueue(ctx context.Context, in *createQueueReq) (*annQueueView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +364,7 @@ func (s *annService) createQueue(ctx context.Context, in *createQueueReq) (*annQ
 //
 // Example: {"id": "annq_1"}
 func (s *annService) getQueue(ctx context.Context, in *annQueueRef) (*annQueueDetailView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +413,7 @@ type updateQueueIn struct {
 //
 // Example: {"id": "annq_1", "name": "hallucination review v2"}
 func (s *annService) updateQueue(ctx context.Context, in *updateQueueIn) (*annQueueView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +467,7 @@ func (s *annService) updateQueue(ctx context.Context, in *updateQueueIn) (*annQu
 //
 // Example: {"id": "annq_1"}
 func (s *annService) deleteQueue(ctx context.Context, in *annQueueRef) (*annQueueDeleted, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +500,7 @@ type listItemsIn struct {
 //
 // Example: {"id": "annq_1", "status": "PENDING"}
 func (s *annService) listItems(ctx context.Context, in *listItemsIn) (*annItemList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -567,7 +568,7 @@ type annItemsCreated struct {
 //
 // Example: {"id": "annq_1", "items": [{"traceId": "tr_1"}]}
 func (s *annService) addItems(ctx context.Context, in *addItemsIn) (*annItemsCreated, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -629,7 +630,7 @@ type updateItemIn struct {
 //
 // Example: {"id": "annq_1", "itemId": "annqi_1", "status": "COMPLETED"}
 func (s *annService) updateItem(ctx context.Context, in *updateItemIn) (*annItemView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -695,11 +696,7 @@ func resolveObject(in itemInput) (string, string, error) {
 }
 
 func boundedID(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > maxAnnFieldLen {
-		return s[:maxAnnFieldLen]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), maxAnnFieldLen)
 }
 
 // cleanScoreConfigIDs trims, drops blanks/dupes, and bounds the set. Each id is a

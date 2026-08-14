@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/apps/principal"
 	"net/http"
 	"strings"
 
@@ -59,7 +60,7 @@ type principalKey struct{}
 func tenantFrom(c *zip.Ctx) (tenant, error) {
 	o, ok := org(c)
 	if !ok {
-		return tenant{}, zip.ErrForbidden("X-Org-Id required")
+		return tenant{}, principal.Refused(c)
 	}
 	return tenant{org: o, project: projectScope(c), user: strings.TrimSpace(c.User())}, nil
 }
@@ -80,7 +81,7 @@ func bridgePrincipal(c *zip.Ctx) error {
 func tenantOf(ctx context.Context) (tenant, error) {
 	t, ok := ctx.Value(principalKey{}).(tenant)
 	if !ok {
-		return tenant{}, zip.ErrForbidden("X-Org-Id required")
+		return tenant{}, principal.RefusedFrom(ctx)
 	}
 	return t, nil
 }

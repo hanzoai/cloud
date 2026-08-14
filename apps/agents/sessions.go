@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/apps/principal"
 	"net/http"
 	"strings"
 	"time"
@@ -881,7 +882,7 @@ type eventReq struct {
 func appendSessionEvent(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	sto, err := s.State.storeFor(org)
 	if err != nil {
@@ -969,7 +970,7 @@ func messageSession(s *cloud.Service[state], c *zip.Ctx) error { return control(
 func control(s *cloud.Service[state], c *zip.Ctx, command string) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	sto, err := s.State.storeFor(org)
 	if err != nil {

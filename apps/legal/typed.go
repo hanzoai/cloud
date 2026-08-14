@@ -160,7 +160,7 @@ type templateReply struct {
 // marked counselReview: every document rendered from them carries a counsel notice,
 // and that posture cannot be dropped by an override.
 func (o ops) listTemplates(ctx context.Context, _ *noInput) (*templateCatalog, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ type templateRef struct {
 // own override if it has saved one, else the built-in — with its full text/template
 // body and its declared merge fields. 404 when neither exists.
 func (o ops) getTemplate(ctx context.Context, in *templateRef) (*templateReply, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ type templateOverride struct {
 // Example: {"id": "nda", "title": "Acme Mutual NDA", "body": "…{{.counterparty}}…",
 // "fields": [{"key": "counterparty", "label": "Counterparty"}]}
 func (o ops) overrideTemplate(ctx context.Context, in *templateOverride) (*templateReply, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +395,7 @@ type generateRequest struct {
 //
 // Example: {"templateId": "nda", "data": {"counterparty": "Acme, Inc.", "date": "2026-07-30"}}
 func (o ops) generateDocument(ctx context.Context, in *generateRequest) (*documentReply, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +445,7 @@ type documentFilter struct {
 // The response is marked no-store: these records name the counterparties an org is
 // contracting with, and must not sit in a shared cache.
 func (o ops) listDocuments(ctx context.Context, in *documentFilter) (*documentPage, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -474,7 +474,7 @@ type documentRef struct {
 // The response is marked no-store: the body is contract text, sealed at rest and
 // returned only to the owning org, and must not sit in a shared cache.
 func (o ops) getDocument(ctx context.Context, in *documentRef) (*documentReply, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +521,7 @@ type signReply struct {
 //
 // Example: {"id": "doc_1f…", "signers": [{"name": "Ada", "email": "ada@acme.com"}]}
 func (o ops) requestSign(ctx context.Context, in *signRequest) (*signReply, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -596,7 +596,7 @@ type filingPage struct {
 //
 // Example: {"documentIds": ["doc_1f…"], "jurisdiction": "DE"}
 func (o ops) createFiling(ctx context.Context, in *filingRequest) (*filingReply, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -635,7 +635,7 @@ func (o ops) createFiling(ctx context.Context, in *filingRequest) (*filingReply,
 // ListLegalFilings returns the org's filing records, newest first — which documents
 // were filed where, through which provider, and what the filing's honest status is.
 func (o ops) listFilings(ctx context.Context, in *documentFilter) (*filingPage, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

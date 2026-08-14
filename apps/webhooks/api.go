@@ -190,7 +190,7 @@ type noInput struct{}
 // see the refusal but not which half of it fired; the status, the body shape and
 // the ordering are unchanged, and the message names both halves.
 func tenant(ctx context.Context) (string, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return "", zip.ErrUnauthorized("webhooks: a validated principal with an org scope is required")
 	}

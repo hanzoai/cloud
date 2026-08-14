@@ -303,7 +303,7 @@ type promptReq struct {
 // Example: {"name": "greeting", "prompt": "You are a helpful assistant.", "tags": ["support"]}
 func (o promptOps) create(ctx context.Context, in *promptReq) (*promptDetail, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func (o promptOps) create(ctx context.Context, in *promptReq) (*promptDetail, er
 // template bodies are deliberately absent — fetch one prompt to read its text.
 func (o promptOps) list(ctx context.Context, _ *noInput) (*promptList, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +377,7 @@ func (o promptOps) list(ctx context.Context, _ *noInput) (*promptList, error) {
 // Example: {"name": "greeting"}
 func (o promptOps) get(ctx context.Context, in *promptRef) (*promptDetail, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +403,7 @@ func (o promptOps) get(ctx context.Context, in *promptRef) (*promptDetail, error
 //
 // Example: {"name": "greeting"}
 func (o promptOps) del(ctx context.Context, in *promptRef) (*noContent, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +445,7 @@ type metricRow struct {
 // Every number is counted from the store — nothing here is estimated or fabricated.
 func (o promptOps) metrics(ctx context.Context, _ *noInput) (*metricList, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

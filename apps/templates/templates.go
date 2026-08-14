@@ -416,7 +416,7 @@ func (o ops) replace(ctx context.Context, in *replaceKitIn) (*StarterKit, error)
 //
 // Example: {"slug": "acme-portal"}
 func (o ops) remove(ctx context.Context, in *kitRef) (*noContent, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +434,7 @@ func (o ops) remove(ctx context.Context, in *kitRef) (*noContent, error) {
 // create=true inserts (409 on a slug the org already holds), create=false
 // replaces (404 when they hold none).
 func (o ops) write(ctx context.Context, t StarterKit, create bool) (*StarterKit, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

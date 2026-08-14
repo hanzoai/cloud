@@ -361,7 +361,7 @@ type Summary struct {
 //
 // Example: {"name": "Spring Launch", "channel": "meta", "objective": "signups", "budget": 50000, "scheduledAt": 1780000000}
 func (o ops) createCampaign(ctx context.Context, in *Campaign) (*Campaign, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +401,7 @@ func (o ops) createCampaign(ctx context.Context, in *Campaign) (*Campaign, error
 //
 // Example: {"status": "active", "limit": 25}
 func (o ops) listCampaigns(ctx context.Context, in *CampaignQuery) (*CampaignList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +417,7 @@ func (o ops) listCampaigns(ctx context.Context, in *CampaignQuery) (*CampaignLis
 //
 // Example: {"id": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
 func (o ops) getCampaign(ctx context.Context, in *CampaignRef) (*Campaign, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +435,7 @@ func (o ops) getCampaign(ctx context.Context, in *CampaignRef) (*Campaign, error
 //
 // Example: {"name": "Spring Launch", "channel": "meta", "status": "active", "objective": "signups", "budget": 50000, "spend": 12500}
 func (o ops) updateCampaign(ctx context.Context, in *Campaign) (*Campaign, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +467,7 @@ func (o ops) updateCampaign(ctx context.Context, in *Campaign) (*Campaign, error
 //
 // Example: {"id": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
 func (o ops) deleteCampaign(ctx context.Context, in *CampaignRef) (*struct{}, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -486,7 +486,7 @@ func (o ops) deleteCampaign(ctx context.Context, in *CampaignRef) (*struct{}, er
 //
 // Example: {"id": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60", "scheduledAt": 1780000000}
 func (o ops) scheduleCampaign(ctx context.Context, in *ScheduleInput) (*Campaign, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -515,7 +515,7 @@ func (o ops) scheduleCampaign(ctx context.Context, in *ScheduleInput) (*Campaign
 //
 // Response: {"campaigns": 12, "active": 3, "budget": 500000, "spend": 128400}
 func (o ops) summary(ctx context.Context, _ *struct{}) (*Summary, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -49,6 +49,11 @@ func newAsked(t *testing.T) *askedForge {
 	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/v1")
 		switch {
+		case strings.HasPrefix(path, "/users/"):
+			// The ownership lookup behind forge.LoginFor: every stub user owns the
+			// address their login derives from.
+			login := strings.TrimPrefix(path, "/users/")
+			writeJSON(w, map[string]any{"login": login, "email": login + "@hanzo.ai"})
 		case path == "/repos/issues/search":
 			owner := r.URL.Query().Get("owner")
 			f.mu.Lock()
@@ -100,18 +105,23 @@ func row(repo, title string) map[string]any {
 
 // ── defect 1: the IAM org is not the forge org ───────────────────────────────
 
-func TestForgeOwner_TranslatesTheIAMOrgAndLeavesOthersAlone(t *testing.T) {
-	if got := forgeOwner("hanzo"); got != "hanzoai" {
-		t.Fatalf("forgeOwner(hanzo) = %q, want hanzoai — the board reads the wrong org", got)
+func TestForgeOwner_TranslatesTheIAMOrgAndRefusesTheRest(t *testing.T) {
+	got, err := forgeOwner("hanzo")
+	if err != nil || got != "hanzoai" {
+		t.Fatalf("forgeOwner(hanzo) = %q, %v; want hanzoai — the board reads the wrong org", got, err)
 	}
 	// Case and surrounding space must not decide a tenancy question.
-	if got := forgeOwner("  HANZO "); got != "hanzoai" {
-		t.Fatalf("forgeOwner(%q) = %q, want hanzoai", "  HANZO ", got)
+	if got, err := forgeOwner("  HANZO "); err != nil || got != "hanzoai" {
+		t.Fatalf("forgeOwner(%q) = %q, %v; want hanzoai", "  HANZO ", got, err)
 	}
-	// Identity for everyone else: a tenant whose two names agree needs no entry.
-	for _, org := range []string{"acme", "zoo", "lux"} {
-		if got := forgeOwner(org); got != org {
-			t.Fatalf("forgeOwner(%q) = %q, want it unchanged", org, got)
+	// REFUSED for everyone else. This used to be identity — "a tenant whose two
+	// names agree needs no entry" — which meant an unmapped IAM org WAS a forge
+	// coordinate, and the forge namespaces (hanzoai, luxfi, zooai) were names a
+	// customer could take at signup. An org with no forge is a 403, never a read
+	// of somebody else's namespace.
+	for _, org := range []string{"acme", "zoo", "lux", "hanzoai", "luxfi", "zooai"} {
+		if got, err := forgeOwner(org); err == nil {
+			t.Fatalf("forgeOwner(%q) = %q with no error — an unmapped org became a forge namespace", org, got)
 		}
 	}
 }
@@ -161,6 +171,10 @@ func TestForgeOwner_TranslationDoesNotChangeTheSudoActor(t *testing.T) {
 		mu.Lock()
 		actors = append(actors, r.Header.Get("Sudo"))
 		mu.Unlock()
+		if login, ok := strings.CutPrefix(r.URL.Path, "/v1/users/"); ok {
+			writeJSON(w, map[string]any{"login": login, "email": login + "@hanzo.ai"})
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, "/search") {
 			writeJSON(w, []map[string]any{row("cloud", "work")})
 			return
@@ -179,10 +193,21 @@ func TestForgeOwner_TranslationDoesNotChangeTheSudoActor(t *testing.T) {
 	if len(actors) == 0 {
 		t.Fatal("the forge was never called")
 	}
+	// Every SUDOED call is made as alice. The ownership lookup that resolves her
+	// login is a machine call and carries no Sudo — it is asking the forge who
+	// holds a login, not acting as anyone — so it is not one of these.
+	sudoed := 0
 	for _, a := range actors {
+		if a == "" {
+			continue
+		}
+		sudoed++
 		if a != "alice" {
 			t.Fatalf("Sudo actor = %q, want alice — the org mapping must not touch the identity", a)
 		}
+	}
+	if sudoed == 0 {
+		t.Fatal("the forge was never asked as anybody")
 	}
 }
 
@@ -224,6 +249,10 @@ func TestForgeProject_ReadsOneRepositoryRatherThanTheInventory(t *testing.T) {
 		mu.Lock()
 		paths = append(paths, p)
 		mu.Unlock()
+		if login, ok := strings.CutPrefix(p, "/users/"); ok {
+			writeJSON(w, map[string]any{"login": login, "email": login + "@hanzo.ai"})
+			return
+		}
 		if p == "/repos/hanzoai/cloud" {
 			writeJSON(w, map[string]any{"name": "cloud", "full_name": "hanzoai/cloud"})
 			return
@@ -244,7 +273,16 @@ func TestForgeProject_ReadsOneRepositoryRatherThanTheInventory(t *testing.T) {
 			t.Fatalf("the board-detail read listed the org inventory: %v", paths)
 		}
 	}
-	if len(paths) != 1 || paths[0] != "/repos/hanzoai/cloud" {
+	// ONE repository read, direct. The /users/ lookup beside it resolves who is
+	// asking and is not a read of the board — the property under test is that the
+	// board is not assembled by walking the org.
+	var repos []string
+	for _, p := range paths {
+		if strings.HasPrefix(p, "/repos/") {
+			repos = append(repos, p)
+		}
+	}
+	if len(repos) != 1 || repos[0] != "/repos/hanzoai/cloud" {
 		t.Fatalf("want exactly one direct repository read, got %v", paths)
 	}
 }
@@ -278,7 +316,11 @@ func TestLiveOwner_EveryMappingTargetActuallyHoldsWork(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), budget)
 	defer cancel()
 
-	for iam, owner := range forgeOwners {
+	for _, iam := range []string{"hanzo"} {
+		owner, oerr := forgeOwner(iam)
+		if oerr != nil {
+			t.Fatalf("%s has no forge namespace: %v", iam, oerr)
+		}
 		rows, err := cl.As(actor).Issues(ctx, owner, forge.IssueFilter{State: "all", Limit: 1})
 		if err != nil {
 			t.Errorf("%s -> %s: the mapping target does not answer: %v", iam, owner, err)

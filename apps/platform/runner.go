@@ -418,10 +418,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 		}
 	}
 
-	bldID, err := genID("bld")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	bldID := genID("bld")
 
 	jobName, err := s.State.k8s.launchDirectBuild(ctx, platformBuildOrg, req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID, req.Args)
 	if err != nil {
@@ -459,7 +456,7 @@ func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ct
 	if err != nil {
 		return nil, zip.ErrBadRequest(err.Error())
 	}
-	if _, err := validateGitRef(ref); err != nil {
+	if _, err := validateBuildRef(ref); err != nil {
 		return nil, zip.ErrBadRequest(err.Error())
 	}
 	for i := range req.Binaries {
@@ -488,10 +485,7 @@ func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ct
 		}
 	}
 
-	bldID, err := genID("bld")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	bldID := genID("bld")
 	slug := repoSlug(repoURL)
 	base := artifactBase(bucket, slug, tag)
 	jobName, err := s.State.k8s.launchArtifactBuild(ctx, repoURL, ref, tag, base, artifactPutBase(bucket, slug, tag), req.Binaries, bldID)

@@ -83,14 +83,15 @@ func TestACompromisedSandboxCannotRenameItsOwnBranch(t *testing.T) {
 			OK: true, Changed: true, CommitSha: "deadbeef",
 			Branch: "main", // the lie
 		}},
-		CloneURL: func(context.Context, string, string) string { return "https://git.test/acme/api.git" },
+		CloneURL: func(context.Context, string, string, string) string { return "https://git.test/acme/api.git" },
 		VerifyRef: func(_ context.Context, _, _, branch string) (string, bool) {
 			verified[branch] = true
 			return "deadbeef", true
 		},
 	}
 	res := d.Run(context.Background(), Req{
-		Org: "acme", Repo: "api", Prompt: "do a thing", CredToken: "hgg_x", UserID: "u",
+		Org: "acme", Repo: "api", Prompt: "do a thing", UserID: "u",
+		Remote: "git@git.test:acme/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",
 	})
 
 	want := BranchFor("sess_abc123def456")

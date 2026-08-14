@@ -1,6 +1,7 @@
 package principal_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"maps"
@@ -178,5 +179,42 @@ func TestWallet_ClaimSurvivesAMissingUsername(t *testing.T) {
 func TestWallet_UnvalidatedRefuses(t *testing.T) {
 	if _, _, ok := wallet(t, map[string]string{"X-Org-Id": "victim"}); ok {
 		t.Fatalf("forged X-Org-Id with no principal resolved a wallet")
+	}
+}
+
+// A SUPERADMIN INSPECTING SOMEBODY ELSE'S ORG SPENDS ITS OWN BOOKS, and the
+// context shape has to agree with the request shape or the two doors bill
+// different people.
+//
+// Ledger reads a request, LedgerFrom reads a context, and both exist because a
+// core that takes identity as arguments cannot hold a *zip.Ctx. The rule they
+// share is one line, so the risk was never that the rule is wrong — it is that a
+// second copy of it drifts. This drives the context shape through every case,
+// including the one the whole distinction exists for: apps/sandbox billed the
+// EFFECTIVE org, so an operator leasing a sandbox while inspecting a customer
+// charged the customer.
+func TestLedgerFrom_MasqueradeSpendsTheOperatorsOwnBooks(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		org, owner string
+		super      bool
+		want       string
+	}{
+		{"a member acting at home", "acme", "acme", false, "acme"},
+		{"a member whose home differs — the SELECTED org still pays", "acme", "other", false, "acme"},
+		{"a SuperAdmin at home", "admin", "admin", true, "admin"},
+		{"a SuperAdmin inspecting acme — admin pays, NOT acme", "acme", "admin", true, "admin"},
+		{"a SuperAdmin with no home claim falls back to the org", "acme", "", true, "acme"},
+		{"no org resolves to no ledger, so nothing is billed", "", "admin", true, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := zip.WithCaller(context.Background(), zip.Caller{
+				Org: tc.org, Owner: tc.owner, Admin: tc.super, User: "u-1",
+			})
+			if got := principal.LedgerFrom(ctx); got != tc.want {
+				t.Fatalf("LedgerFrom(org=%q owner=%q super=%v) = %q, want %q",
+					tc.org, tc.owner, tc.super, got, tc.want)
+			}
+		})
 	}
 }

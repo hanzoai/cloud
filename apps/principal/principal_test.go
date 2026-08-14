@@ -345,7 +345,7 @@ func TestRequireOrg_IsOrgFromPlusTheOneRefusal(t *testing.T) {
 // context, so there is no caller to read and no org to resolve. It refuses rather
 // than serving the first request that arrives with no owner as if it had one.
 func TestRequireOrg_FailsClosedOffTheHTTPPath(t *testing.T) {
-	org, err := principal.RequireOrg(context.Background())
+	org, err := principal.Acting(context.Background())
 	if err == nil {
 		t.Fatalf("RequireOrg off the HTTP path returned %q with no error — it must refuse", org)
 	}
@@ -360,7 +360,7 @@ func required(t *testing.T, headers map[string]string) (org string, status int, 
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	app.Get("/required", func(c *zip.Ctx) error {
-		o, err := principal.RequireOrg(principal.WithOrg(c.Context(), c))
+		o, err := principal.Acting(principal.WithOrg(c.Context(), c))
 		if err != nil {
 			return err
 		}

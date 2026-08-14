@@ -151,7 +151,7 @@ func init() {
 // apply is the UNAUTHENTICATED public application endpoint. It validates, drops
 // honeypot hits, dedups on (email, company), writes the ProgramApplication (+ a
 // best-effort CRM Company/Contact for sales visibility), and kicks off the AI
-// screen. It NEVER calls principal.RequireOrg: the org is the fixed program org.
+// screen. It NEVER calls principal.Acting: the org is the fixed program org.
 func apply(s *cloud.Service[state], c *zip.Ctx) error {
 	if body := c.Body(); len(body) > maxIntakeBody {
 		return zip.ErrBadRequest("application too large")
@@ -300,7 +300,7 @@ type applicationList struct {
 // Each carries its AI screen and its stage history; a stage narrows the page to
 // one pipeline stage.
 func (o ops) listApplications(ctx context.Context, in *applicationPage) (*applicationList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +320,7 @@ func (o ops) listApplications(ctx context.Context, in *applicationPage) (*applic
 //
 // Example: {"id": "appl_1"}
 func (o ops) getApplication(ctx context.Context, in *ref) (*ProgramApplication, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +355,7 @@ type patchApplicationIn struct {
 //
 // Example: {"id": "appl_1", "stage": "rejected", "reason": "not a fit this round"}
 func (o ops) patchApplication(ctx context.Context, in *patchApplicationIn) (*ProgramApplication, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

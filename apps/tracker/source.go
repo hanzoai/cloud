@@ -54,7 +54,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/brand"
@@ -157,43 +156,16 @@ func (f *forgeSource) invalidate() {
 	f.client = nil
 }
 
-// forgeOwners maps an IAM org to the org that owns its work ON THE FORGE.
+// forgeOwner is the forge org for a VALIDATED IAM org, from forge's own CLOSED
+// table. It lived here as a second copy of that table until the coding path
+// needed the same translation; two copies of "which namespace is this tenant's"
+// is two chances to disagree, and the copy that fell back to the org's own name
+// made an unmapped IAM org address the estate's repositories directly.
 //
-// The two names are not the same fact, and this deployment is the proof. The IAM
-// tenant is `hanzo`; its work lives under `hanzoai`, which is the name the estate
-// writes wherever a namespace is written down — github.com/hanzoai,
-// ghcr.io/hanzoai, git.hanzo.ai/hanzoai. Measured on git.hanzo.ai:
-//
-//	forge org `hanzo`     64 repos, 0 issues, and hanzo/cloud is 404
-//	forge org `hanzoai`   250 repos, the actual work, hanzoai/cloud is 200
-//
-// A NEAR-EMPTY NAMESAKE also exists, which is why mapping by name did not fail
-// loudly: the forge answered 200 with an empty list, and an empty board reads as
-// "you have no work" rather than as "we asked the wrong org". That is the whole
-// hazard — a wrong answer that looks like a healthy one.
-//
-// A declared table rather than a branch inside the resolver: the mapping is a
-// VALUE, so it can be read, tested and added to without touching the code that
-// applies it. Identity by default, so a tenant whose two names already agree
-// needs no entry.
-var forgeOwners = map[string]string{"hanzo": "hanzoai"}
-
-// forgeOwner is the forge org for a VALIDATED IAM org.
-//
-// It is applied to the principal's own org and never to anything a caller sent:
-// this decides WHICH ORG is asked about, and a caller-supplied value here would
-// be a tenant selecting its own tenancy.
-//
-// It does not touch WHO the forge answers as. That remains the Sudo actor, so
-// the forge's own ACL still decides what comes back — which means a wrong entry
-// in this table can show a user an empty board, but cannot show them anything
-// they are not entitled to see. The two controls stay independent.
-func forgeOwner(org string) string {
-	if o, ok := forgeOwners[strings.ToLower(strings.TrimSpace(org))]; ok {
-		return o
-	}
-	return org
-}
+// An org with no forge namespace is REFUSED, which reads to a caller as 403
+// rather than as an empty board — an org that has no forge is a fact about the
+// deployment, not about the user's work.
+func forgeOwner(org string) (string, error) { return forge.Owner(org) }
 
 // budget bounds a forge-backed request end to end.
 //
@@ -245,17 +217,16 @@ func onForge[T any](o ops, ctx context.Context, fn func(context.Context, *forge.
 // answer through), returning a client already scoped to both.
 //
 // Both come from the validated principal and neither can be supplied by the
-// caller. A request with no validated org, or with no IAM username to act as,
+// caller. A request with no validated org, or with no PROVED forge identity,
 // gets 403 — never a client carrying the bare machine identity.
 func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
-	c, ok := cloud.Request(ctx)
-	if !ok {
+	if _, ok := cloud.Request(ctx); !ok {
 		// Off the HTTP path (a CLI LocalInvoke) there is no attested tenant and no
 		// attested actor, so there is nothing to scope by. Same 403 as an
 		// unauthenticated request.
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+		return nil, "", principal.RefusedFrom(ctx)
 	}
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -274,7 +245,7 @@ func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
 	// vouched.
 	//
 	// So the vouching brand must be this deployment's own. ok==false means there
-	// is no second fact to compare — an hk-/sk- key minted by this deployment's
+	// is no second fact to compare — an sk- key minted by this deployment's
 	// own IAM, which is by construction this brand — and is allowed, exactly as
 	// apps/tenant reads the same pair. Normalised on both sides so a case
 	// difference cannot decide a tenancy question.
@@ -284,35 +255,42 @@ func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
 			"vouched", vouched, "deployment", o.s.Brand, "org", org)
 		return nil, "", zip.ErrForbidden("this deployment's forge does not serve that brand's principals")
 	}
-	actor := actorOf(c)
-	if actor == "" {
-		return nil, "", zip.ErrForbidden("no forge identity for this principal")
-	}
 	cl, err := o.s.State.forge.resolve(ctx, o.s)
 	if err != nil {
 		o.s.Log.Error("forge credential unavailable", "err", err)
 		return nil, "", zip.Errorf(http.StatusServiceUnavailable, "forge unavailable")
 	}
+	// WHO the forge answers as, resolved and PROVED — see forge.Client.Caller.
+	//
+	// This used to be the IAM username, handed straight to Sudo. The two are
+	// different namespaces: a forge login is the local part of a confirmed
+	// address, and an IAM username is separately chosen. On a shared signup org
+	// they collide by choice — a stranger picking the username `z` sudoed as the
+	// staff member whose address is z@…, and this surface WRITES: it opens issues
+	// and moves cards as whoever it acts for.
+	//
+	// The same resolver the coding path uses, deliberately: one question, one
+	// answer, and no second implementation to drift.
+	actor, aerr := cl.Caller(ctx)
+	if aerr != nil {
+		// A FORGE THAT DID NOT ANSWER IN TIME IS NOT A MISSING IDENTITY. The
+		// resolution reads the forge, so a wedged one fails here first — and
+		// reporting that as 403 would send an operator looking for a permissions
+		// problem that does not exist. The deadline keeps its own answer (504),
+		// which is what o.answer already says about every other read.
+		if errors.Is(aerr, context.DeadlineExceeded) || errors.Is(aerr, context.Canceled) {
+			return nil, "", o.answer(aerr)
+		}
+		o.s.Log.Warn("tracker: no proved forge identity for this principal", "err", aerr)
+		return nil, "", zip.ErrForbidden("no forge identity for this principal")
+	}
 	// The ORG is translated here, at the one place the validated tenant becomes a
 	// forge coordinate, so no call site can ask the forge about an IAM name.
-	return cl.As(actor), forgeOwner(org), nil
-}
-
-// actorOf is the IAM username the forge should act as.
-//
-// X-User-Name is the `name` half of <owner>/<name>, stamped by the identity
-// boundary from VALIDATED claims only — it is in authorityHeaders, so a client's
-// own copy is stripped on ingress and cannot survive. It is therefore safe to
-// hand to Sudo: a caller cannot name someone else.
-//
-// It falls back to X-User-Id only when the username is absent, which is the same
-// order resolveCaller uses — the gateway path historically minted the name into
-// X-User-Id while the in-binary direct-Bearer path stamps the UUID subject.
-func actorOf(c *zip.Ctx) string {
-	if n := strings.TrimSpace(c.Header(authz.HeaderUserName)); n != "" {
-		return n
+	owner, oerr := forgeOwner(org)
+	if oerr != nil {
+		return nil, "", zip.ErrForbidden("this org has no namespace on the forge")
 	}
-	return strings.TrimSpace(c.User())
+	return cl.As(actor), owner, nil
 }
 
 // answer renders a forge error onto the wire.
