@@ -245,7 +245,7 @@ func (o ops) scopeForge(ctx context.Context) (*forge.Client, string, error) {
 	// vouched.
 	//
 	// So the vouching brand must be this deployment's own. ok==false means there
-	// is no second fact to compare — an hk-/sk- key minted by this deployment's
+	// is no second fact to compare — an sk- key minted by this deployment's
 	// own IAM, which is by construction this brand — and is allowed, exactly as
 	// apps/tenant reads the same pair. Normalised on both sides so a case
 	// difference cannot decide a tenancy question.
