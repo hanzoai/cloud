@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/authz"
 )
 
 // jwtWithOwner builds an UNSIGNED-looking JWT (header.payload.sig) whose payload
@@ -21,11 +23,11 @@ func jwtWithOwner(owner string, isAdmin bool) string {
 }
 
 func TestDecodeJWTOwner(t *testing.T) {
-	owner, isAdmin, err := decodeJWTOwner(jwtWithOwner("hanzo", false))
-	if err != nil || owner != "hanzo" || isAdmin {
-		t.Fatalf("decodeJWTOwner = %q,%v,%v want hanzo,false,nil", owner, isAdmin, err)
+	owner, err := decodeJWTOwner(jwtWithOwner("hanzo", false))
+	if err != nil || owner != "hanzo" {
+		t.Fatalf("decodeJWTOwner = %q,%v want hanzo,nil", owner, err)
 	}
-	if _, _, err := decodeJWTOwner("not-a-jwt"); err == nil {
+	if _, err := decodeJWTOwner("not-a-jwt"); err == nil {
 		t.Fatal("decodeJWTOwner(non-jwt) should error so callers skip the local assertion")
 	}
 }
@@ -61,12 +63,30 @@ func TestTokenFunc_OwnerMustMatchOrg(t *testing.T) {
 	}
 }
 
-func TestTokenFunc_AdminTokenRefused(t *testing.T) {
-	// An admin-owner token must never be used for a fleet (tenant) target.
-	c := newKMSClient("http://cloud", embedded, loginDoer{owner: "admin", isAdmin: true})
+// The two admin authorities are DIFFERENT, and the tool must tell them apart.
+//
+// Platform sudo is membership of the reserved admin org — cross-tenant, and the one
+// authority a fleet KMS identity must never hold. Admin of one's OWN org is
+// org-bound, and it is what cloud's secret plane requires of anyone who writes a
+// record. The tool asks the `owner` claim, which distinguishes them.
+//
+// The pair below is the discrimination. A single case setting BOTH — owner "admin"
+// AND the isAdmin bit — passes whichever one the code reads, so it asserts nothing
+// about which authority was refused.
+func TestTokenFunc_AdminOrgRefused(t *testing.T) {
+	c := newKMSClient("http://cloud", embedded, loginDoer{owner: authz.AdminOrg})
 	tf := newTokenFunc(c, fixedCred, "dst")
-	_, err := tf(context.Background(), Target{Org: "admin"})
-	if err == nil || !strings.Contains(err.Error(), "ADMIN") {
-		t.Fatalf("admin token: err=%v, want an admin refusal (fleet identity must be org-bound)", err)
+	_, err := tf(context.Background(), Target{Org: authz.AdminOrg})
+	if err == nil || !strings.Contains(err.Error(), "org-bound") {
+		t.Fatalf("admin-org token: err=%v, want a refusal (fleet identity must be org-bound)", err)
+	}
+}
+
+func TestTokenFunc_OrgAdminAccepted(t *testing.T) {
+	c := newKMSClient("http://cloud", embedded, loginDoer{owner: "hanzo", isAdmin: true})
+	tf := newTokenFunc(c, fixedCred, "dst")
+	if _, err := tf(context.Background(), Target{Org: "hanzo"}); err != nil {
+		t.Fatalf("org admin for its own org: err=%v, want the token — a reseal writes, "+
+			"and writing a secret requires admin authority over that org", err)
 	}
 }
