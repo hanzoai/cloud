@@ -808,6 +808,15 @@ func (o ops) forgeIssue(ctx context.Context, in *issueRef) (*issueView, error) {
 			v := forgeIssue(r)
 			return &v, nil
 		}
+		// THE INDEX IS ORG-SCOPED, AND ONLY ORG-SCOPED. The forge half above drops
+		// privilege to the caller through Sudo, so a repository they cannot see is
+		// 404; this half filters on the validated IAM org and nothing finer. The
+		// two ACLs are deliberately different — the index holds work the forge
+		// never had (an agent's roadmap, a helpdesk escalation) and an org's
+		// members are meant to see their org's work — but it does mean a row
+		// MIRRORED here from a repository the caller cannot read on the forge is
+		// readable through this address. The list and the search have always
+		// unioned it the same way; this is the same rule, not a new one.
 		if st, iamOrg, ierr := o.index(ctx); ierr == nil {
 			key, kerr := boardKeys(ctx, st, iamOrg)
 			rows, rerr := st.ListIssues(ctx, iamOrg, "", IssueFilter{})
@@ -966,8 +975,26 @@ func (o ops) forgePatchIssue(ctx context.Context, in *issueEdit) (*issueView, er
 		// which fans out over every repository the actor can see to keep the single
 		// row it already knows the address of — so moving one card cost the whole
 		// board twice.
+		//
+		// THE READ-BACK IS A SECOND FAILURE POINT ON A PATH THAT HAS ALREADY
+		// WRITTEN, so what it says must be about the ROW and never about the
+		// caller. Under Sudo the forge answers 404 for "not there" and for "not
+		// yours" alike, and both arrive as ErrUnknownActor — which o.answer renders
+		// as "no forge identity for this principal", a claim about the caller's
+		// IDENTITY that sends whoever reads it to IAM to fix a missing issue.
+		//
+		// It still reports an ERROR when the read-back fails, and that is a choice
+		// rather than an oversight: every write above is IDEMPOTENT — a title, a
+		// body, a state and a label set, each set to a value, not incremented — so
+		// a caller that retries on this error re-applies exactly the same row and
+		// nothing is duplicated. The alternative is answering 200 with a row this
+		// surface never read back, which is the one thing the forge-is-the-truth
+		// rule above forbids.
 		r, err := cl.Issue(ctx, org, in.Key, in.Num)
 		if err != nil {
+			if errors.Is(err, forge.ErrUnknownActor) {
+				return nil, zip.ErrNotFound("no such issue")
+			}
 			return nil, o.answer(err)
 		}
 		v := forgeIssue(r)

@@ -61,9 +61,11 @@ func TestRenamingTheStoreLosesTheRowsSilently(t *testing.T) {
 
 	var n int
 	if err := renamed.QueryRow(`SELECT count(*) FROM issues`).Scan(&n); err == nil {
-		t.Fatalf("the renamed binding read %d rows — cek no longer binds the key to the "+
-			"subsystem, so the constant above may be a genuine leftover. Re-derive the "+
-			"argument before acting on it either way.", n)
+		t.Fatalf("the renamed binding read %d rows. This exercises the DERIVED-key path "+
+			"only — a temp dir has no .dek sidecar — so this says nothing about a "+
+			"sidecar-backed store, where the wrapping key is derived from the namespace "+
+			"and a file id and NOT from the subsystem. Re-derive the argument before "+
+			"acting on it either way.", n)
 	}
 
 	// The rows are not gone; they are simply not where the renamed binding looks.
