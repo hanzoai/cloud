@@ -387,7 +387,7 @@ LIMIT ?`
 // truth. The scope label is the honest alternative until that equality is proven.
 func hanzoQuery(org string, from, to time.Time) (string, []any) {
 	q := `SELECT provider, count() AS requests, sum(total_tokens) AS total_tokens, ` +
-		`sum(cost_cents) AS cost_cents FROM ` + llmTable + ` ` +
+		datastore.Spend + ` AS cost_cents FROM ` + llmTable + ` ` +
 		`WHERE organization = ? AND timestamp >= ? AND timestamp < ? ` +
 		`GROUP BY provider ORDER BY total_tokens DESC LIMIT ?`
 	return q, []any{org, tsLiteral(from), tsLiteral(to), maxReadRows}

@@ -48,6 +48,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -56,6 +57,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -543,7 +545,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // for the link legs. They must NOT be placed behind any principal/tenant gate.
 //
 // Every verify-inside inbound webhook (slack events/commands, discord interactions,
-// teams events, telegram webhook — like /v1/connector/github/webhook) is
+// teams events, telegram webhook, github webhook) is
 // cloud.Terminal-wrapped so its bad-signature 401 / malformed-body 400 is written
 // in-band and survives the commerce /v1 ErrorHandlerJSON (co-mounted ahead of us),
 // which would otherwise flatten a propagated 4xx to 500. Uniform reject codes.
@@ -561,8 +563,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 //     answer text/html (channelLinkedHTML / telegramWidgetHTML). Same c.JSON(out)
 //     terminus — an op's Out is a JSON body, so a page cannot be one. The link legs
 //     also SET __Host- cookies, and a typed op holds no response to set them on.
-//   - 6 inbound WEBHOOKS, for two distinct reasons:
-//     RAW BYTES (slack/events, slack/commands, connector/github/webhook,
+//   - 7 inbound WEBHOOKS, for three distinct reasons:
+//     RAW BYTES (slack/events, slack/commands, github/webhook,
 //     discord/interactions) — auth is a signature over the exact received bytes
 //     (Slack/GitHub HMAC-SHA256, Discord Ed25519), and a typed op is handed the
 //     DECODED In, never what was signed. slack/commands is additionally
@@ -576,6 +578,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 //     (typed.go:227), turning that 200 into a 400 — and for telegram it also inverts
 //     the auth order, leaking a parse result to an unauthenticated caller that today
 //     gets 401 first.
+//     A SUBSET OF A WIRE (openrouter/webhook) — the body is OpenTelemetry's OTLP/JSON
+//     and openrouter.go reads the handful of fields a usage row needs. An op's In IS
+//     the published request schema, so typing it would publish that handful as the
+//     whole of a wire OpenTelemetry defines.
 //
 // The 202 Accepted creators (/repos/import, /pages/builds) were a THIRD family
 // until zip v1.18.2: zip wrote 200, or 204 for a nil Out, and cloud.Created only
@@ -585,9 +591,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // projection reads, so both are typed ops now and the document says 202 because
 // the op does.
 //
-// The partition is COMPLETE at 22 typed / 19 raw: every route with a JSON
-// request/response shape is a typed op, and each of the 19 above is refused by one
-// of the three wire facts, not by an unfinished pass. Re-check before converting.
+// The partition is COMPLETE at 26 typed / 21 raw: every route with a JSON
+// request/response shape is a typed op, and each of the 21 above is refused by one
+// of those wire facts, not by an unfinished pass. Re-check before converting.
 //
 // vendorCall is the sentence every inbound webhook shares: who is actually
 // calling. A reader who assumes these are tenant-facing API calls will look for a
@@ -621,10 +627,11 @@ const linkFlow = "\n\nThis is one leg of a three-leg flow, and the legs are not 
 	"another browser is refused rather than completed. Each link is single-use, and a " +
 	"deployment without linking configured answers 503."
 
-// The prose for the nineteen untyped operations on this surface. The typed ops
+// The prose for the twenty-one untyped operations on this surface. The typed ops
 // beside them carry theirs in a doc comment zipdoc lifts; these cannot, because
-// each is refused typing by its own wire — a vendor-signed raw body, an HTML page,
-// a 302 back to the console — so the prose is declared beside the route table.
+// each is refused typing by its own wire — a vendor-signed raw body, a body this
+// package decodes only a subset of, an HTML page, a 302 back to the console — so
+// the prose is declared beside the route table.
 //
 // Every sentence below is about what the operation DOES and what it refuses. None
 // of them names a secret, and none implies a token appears in a response: the link
@@ -659,9 +666,9 @@ func init() {
 		"Slack Events API webhook",
 		"The address a Slack app posts workspace events to. It answers Slack's "+
 			"url_verification handshake with the challenge, and routes an @mention or a "+
-			"direct message to an agent turn that replies in the same thread. A prompt "+
-			"beginning with `code:` is routed to the coding flow instead, which runs under "+
-			"its own pool.\n\n"+
+			"direct message to an agent turn that replies in the same thread. The turn holds "+
+			"the product's own tools, so a request to change code starts a sandbox run "+
+			"because the model chose to — there is no prefix and no second path.\n\n"+
 			"The raw body and its timestamp are verified against the app's signing secret "+
 			"before anything is read from them. Hanzo's own bot messages are dropped, so a "+
 			"reply cannot trigger another reply."+vendorCall+asyncTurn)
@@ -709,11 +716,11 @@ func init() {
 			"Authentication is the secret token Telegram echoes on every update, compared in "+
 			"constant time. A message in a chat that has never been bound is dropped, which "+
 			"is why the bind command exists."+vendorCall+asyncTurn)
-	openapi.Describe("/v1/connector/github/webhook", http.MethodPost,
+	openapi.Describe("/v1/integrations/github/webhook", http.MethodPost,
 		"GitHub App webhook",
 		"The address the GitHub App delivers events to. A push is handed to the repository "+
 			"sync engine, and an issue or issue-comment event is mirrored into the native "+
-			"tracker — idempotently, so the same issue re-syncs to one row however many "+
+			"todo — idempotently, so the same issue re-syncs to one row however many "+
 			"times it is edited, closed or reopened.\n\n"+
 			"It answers a benign 200 for everything it does not act on — the ping, other "+
 			"event types, an unknown installation — deliberately, so GitHub does not enter a "+
@@ -727,6 +734,36 @@ func init() {
 			"native ref.\n\n"+
 			"The payload is verified by HMAC against the webhook secret before it is parsed."+
 			vendorCall)
+	// The one door here whose BODIES are declared as well as described. Both are
+	// free-form objects and their shape is in the prose, because neither is this
+	// package's to publish as a schema: the request is OpenTelemetry's OTLP/JSON, of
+	// which openrouter.go decodes the subset a usage row is built from, and a partial
+	// view published as "the" schema is a document that lies.
+	openapi.Register(openrouterPath, http.MethodPost, map[string]any{}, map[string]any{})
+	openapi.Describe(openrouterPath, http.MethodPost,
+		"Receive OpenRouter Broadcast traces as usage rows",
+		"OpenRouter's spend is invisible to every Hanzo money lens because those lenses read "+
+			"hanzo.cloud_usage and OpenRouter meters keys of its own. Point a Broadcast destination "+
+			"(Settings ▸ Observability ▸ Webhook) at this door and each generation span becomes ONE "+
+			"row in that same ledger with provider `openrouter`, so one query answers what we spend "+
+			"everywhere. Enable the Cost and Identity field categories: cost is the money and identity "+
+			"carries `openrouter.api_key_name`, which is what says WHICH key spent it — it lands in "+
+			"`account` as openrouter/<key name>.\n\n"+
+			"AUTHENTICATION IS A HANZO KEY. Broadcast signs nothing; its only authentication is the "+
+			"destination's Headers map, so send a key as `Authorization: Bearer pk-…` and it is "+
+			"admitted exactly as /v1/event admits a beacon's: a project key resolves through the "+
+			"project that minted it, an IAM-issued key through IAM. That key names the org every row "+
+			"is filed under; it can write and cannot read. No key, or a key that names no org, is 401 "+
+			"and nothing is stored.\n\n"+
+			"The body is OTLP/JSON — `{resourceSpans:[{scopeSpans:[{spans:[…]}]}]}` — exactly as "+
+			"OpenTelemetry defines it; the model, tokens and cost are read from each span's `gen_ai.*` "+
+			"attributes and the key name from `openrouter.api_key_name`. The answer is "+
+			"`{stored, dropped}`: how many generations became rows, and how many spans named no model. "+
+			"Those are OpenRouter's trace and span parents — they carry no cost to meter. An empty "+
+			"payload stores nothing and answers 200, which is what makes Test Connection pass. A "+
+			"warehouse that cannot take the rows answers 503 so the delivery shows red and can be "+
+			"replayed: a row is keyed by its span id, so a redelivery collapses rather than "+
+			"double-counting.")
 
 	// ── account-link flows (three legs each) ─────────────────────────────────
 	openapi.Describe("/v1/integrations/slack/link", http.MethodGet,
@@ -871,17 +908,23 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/integrations/slack/link/slack", cloud.Handle(s, slackLinkSlack))
 	app.Get("/v1/integrations/slack/link/callback", cloud.Handle(s, slackLinkCallback))
 	// GitHub App sync (github_app.go / github_webhook.go). The App POSTs push events
-	// to /v1/connector/github/webhook — the EXTERNAL-platform namespace
-	// /v1/connector/<provider>/webhook (github now; gitlab/others are sibling literal
-	// routes later, each with its own signature scheme + handler). It is PUBLIC at the
-	// JWT layer, HMAC-verified inside, and hands the push to the universal sync engine
-	// (cloud.Sync). cloud.Terminal writes the handler's reject status in-band so the
-	// commerce /v1 ErrorHandlerJSON (co-mounted ahead of us) cannot flatten a bad-sig
-	// 401 / malformed-body 400 to 500. repos/import register BEFORE the /:provider
-	// wildcards (registration-order matching) and are org-authed via the principal.
-	// It stays raw because it speaks GitHub's webhook protocol: the HMAC covers
-	// the raw body, which an op handed the decoded In could not re-verify.
-	app.Post("/v1/connector/github/webhook", cloud.Terminal(cloud.Handle(s, githubWebhook)))
+	// here, at the address every other vendor's inbound door already uses:
+	// /v1/integrations/<vendor>/<the vendor's own noun>, GitHub's being "webhook".
+	// It answered at /v1/connector/github/webhook until this change — a namespace one
+	// door in the estate used and nothing else, so the fleet carried a second word for
+	// "an integration". It is PUBLIC at the JWT layer, HMAC-verified inside, and hands
+	// the push to the universal sync engine (cloud.Sync). cloud.Terminal writes the
+	// handler's reject status in-band so the commerce /v1 ErrorHandlerJSON (co-mounted
+	// ahead of us) cannot flatten a bad-sig 401 / malformed-body 400 to 500. It stays
+	// raw because it speaks GitHub's webhook protocol: the HMAC covers the raw body,
+	// which an op handed the decoded In could not re-verify.
+	app.Post("/v1/integrations/github/webhook", cloud.Terminal(cloud.Handle(s, githubWebhook)))
+	// OpenRouter's Broadcast destination (openrouter.go). Raw and Terminal like its
+	// siblings, and public at the JWT layer for the same reason: the credential is a
+	// key in the destination's Headers map, admitted INSIDE the handler through the
+	// admission /v1/event uses. A literal, so it is matched before the /:provider
+	// wildcards below.
+	app.Post(openrouterPath, cloud.Terminal(cloud.Handle(s, openrouterWebhook)))
 	zip.Get(zapp, "/v1/integrations/github/installations", o.githubInstallations)
 	// Bind installations the App already holds to the org the caller acts in.
 	zip.Post(zapp, "/v1/integrations/github/claim", o.githubClaim)
@@ -894,7 +937,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// 202: the import runs in a bounded background worker, so the op DECLARES the
 	// status it has always answered rather than setting it per request.
 	zip.Post(zapp, "/v1/integrations/github/repos/import", o.githubImport, zip.WithStatus(http.StatusAccepted))
-	// Seed the native tracker with the org's EXISTING GitHub issues (the webhook
+	// Seed the native todo with the org's EXISTING GitHub issues (the webhook
 	// keeps them live thereafter). Org-authed via the principal; bounded + idempotent.
 	zip.Post(zapp, "/v1/integrations/github/issues/backfill", o.githubIssuesBackfill)
 	// GitHub Pages management (github_pages.go), one repo as a resource. Registered
@@ -1430,12 +1473,7 @@ func providerViewFor(s *cloud.Service[state], ctx context.Context, org string, p
 }
 
 func sortedProviderIDs(s *cloud.Service[state]) []string {
-	ids := make([]string, 0, len(s.State.providers))
-	for id := range s.State.providers {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	return ids
+	return slices.Sorted(maps.Keys(s.State.providers))
 }
 
 // successRedirect 302s to {console}/integrations?connected={provider}&account=<label>.
@@ -1946,4 +1984,16 @@ func (f *flight) lock(key string) (unlock func()) {
 		}
 		f.mu.Unlock()
 	}
+}
+
+// truncate bounds a value to n bytes and says so, because a silently clipped
+// string reads as the whole of it.
+func truncate(s string, n int) string {
+	if len(s) > n {
+		// shorten.To, not s[:n]: a byte slice can cut a multi-byte rune in half and
+		// emit invalid UTF-8 into a Slack message. The fleet has one way to bound a
+		// length and this is it.
+		return shorten.To(s, n) + "…"
+	}
+	return s
 }

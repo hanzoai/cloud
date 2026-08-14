@@ -31,9 +31,9 @@ func TestStartRefusesABaseThatIsNotABranch(t *testing.T) {
 		"a semicolon":          "main;id",
 		"a leading dot":        ".hidden",
 	} {
-		in := startIn("u", "api", "do a thing")
+		in := startIn("api", "do a thing")
 		in.Base = base
-		if _, err := Start(context.Background(), "acme", in, nil); err == nil {
+		if _, err := Start(context.Background(), "acme", "u", in, nil); err == nil {
 			t.Errorf("%s (%q): accepted; it reaches a git argv on a customer's machine", name, base)
 		} else if !strings.Contains(err.Error(), "branch name") {
 			t.Errorf("%s (%q): refused for the wrong reason: %v", name, base, err)
@@ -51,13 +51,13 @@ func TestStartAcceptsARealBase(t *testing.T) {
 	}
 }
 
-// Project becomes a git scope and a tracker key, so it is shaped for the same
+// Project becomes a git scope and a todo key, so it is shaped for the same
 // reason Repo is: a value carrying a separator addresses another namespace.
 func TestStartRefusesAProjectThatIsAPath(t *testing.T) {
 	for _, project := range []string{"../other", "a/b", ".", "..", "a/../b"} {
-		in := startIn("u", "api", "do a thing")
+		in := startIn("api", "do a thing")
 		in.Project = project
-		if _, err := Start(context.Background(), "acme", in, nil); err == nil {
+		if _, err := Start(context.Background(), "acme", "u", in, nil); err == nil {
 			t.Errorf("project %q: accepted; it is a path", project)
 		}
 	}
@@ -73,24 +73,25 @@ func TestStartRefusesAProjectThatIsAPath(t *testing.T) {
 // there.
 func TestACompromisedSandboxCannotRenameItsOwnBranch(t *testing.T) {
 	sessions := &fakeSessions{id: "sess_abc123def456"}
-	tracker := &fakePR{ref: PRRef{Identifier: "API-1"}}
+	todo := &fakePR{ref: PRRef{Identifier: "API-1"}}
 	verified := map[string]bool{}
 
 	d := Dispatcher{
 		Sessions: sessions,
-		PR:       tracker,
+		PR:       todo,
 		Runner: &fakeRunner{result: RunResult{
 			OK: true, Changed: true, CommitSha: "deadbeef",
 			Branch: "main", // the lie
 		}},
-		CloneURL: func(context.Context, string, string) string { return "https://git.test/acme/api.git" },
+		CloneURL: func(context.Context, string, string, string) string { return "https://git.test/acme/api.git" },
 		VerifyRef: func(_ context.Context, _, _, branch string) (string, bool) {
 			verified[branch] = true
 			return "deadbeef", true
 		},
 	}
 	res := d.Run(context.Background(), Req{
-		Org: "acme", Repo: "api", Prompt: "do a thing", CredToken: "hgg_x", UserID: "u",
+		Org: "acme", Repo: "api", Prompt: "do a thing", UserID: "u",
+		Remote: "git@git.test:acme/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",
 	})
 
 	want := BranchFor("sess_abc123def456")
@@ -100,23 +101,23 @@ func TestACompromisedSandboxCannotRenameItsOwnBranch(t *testing.T) {
 	if verified["main"] {
 		t.Fatal("the integrity check was pointed at main by the sandbox's own claim")
 	}
-	if len(tracker.inputs) != 1 {
-		t.Fatalf("want one PR, got %d", len(tracker.inputs))
+	if len(todo.inputs) != 1 {
+		t.Fatalf("want one PR, got %d", len(todo.inputs))
 	}
-	if head := tracker.inputs[0].Head; head != want {
+	if head := todo.inputs[0].Head; head != want {
 		t.Fatalf("A PR WAS FILED HEADED AT %q — the sandbox chose the head", head)
 	}
-	t.Logf("the sandbox said %q; the PR is headed at %q", "main", head(tracker))
+	t.Logf("the sandbox said %q; the PR is headed at %q", "main", head(todo))
 }
 
 // The same lie on the ROUTED path, where the reporter is a customer's machine
 // rather than our sandbox — a strictly less trusted place.
 func TestARoutedMachineCannotRenameItsOwnBranch(t *testing.T) {
 	sessions := &fakeSessions{id: "sess_abc123def456"}
-	tracker := &fakePR{ref: PRRef{Identifier: "API-2"}}
+	todo := &fakePR{ref: PRRef{Identifier: "API-2"}}
 	d := Dispatcher{
 		Sessions:  sessions,
-		PR:        tracker,
+		PR:        todo,
 		VerifyRef: func(context.Context, string, string, string) (string, bool) { return "deadbeef", true },
 	}
 	issuedBranch := BranchFor("sess_abc123def456")
@@ -124,10 +125,10 @@ func TestARoutedMachineCannotRenameItsOwnBranch(t *testing.T) {
 		RoutedRun{Org: "acme", Repo: "api", SessionID: "sess_abc123def456", Branch: issuedBranch, Actor: "u"},
 		RoutedResult{OK: true, Changed: true, Branch: "main", CommitSha: "deadbeef"})
 
-	if len(tracker.inputs) != 1 {
-		t.Fatalf("want one PR, got %d", len(tracker.inputs))
+	if len(todo.inputs) != 1 {
+		t.Fatalf("want one PR, got %d", len(todo.inputs))
 	}
-	if got := tracker.inputs[0].Head; got != issuedBranch {
+	if got := todo.inputs[0].Head; got != issuedBranch {
 		t.Fatalf("A ROUTED PR WAS FILED HEADED AT %q, want %q", got, issuedBranch)
 	}
 	t.Logf("the machine said %q; the PR is headed at %q", "main", issuedBranch)

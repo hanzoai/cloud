@@ -43,6 +43,7 @@ func (r siteResolver) Resolve(ctx context.Context, slug string) (sites.Site, boo
 		Prefix:               servePrefix(p),
 		Status:               p.Status,
 		CrossOriginIsolation: crossOriginIsolated(p.Framework),
+		CacheControl:         p.CacheControl,
 	}, true, nil
 }
 
@@ -64,6 +65,7 @@ func (r siteResolver) ResolveOrg(ctx context.Context, org, slug string) (sites.S
 		Prefix:               servePrefix(p),
 		Status:               p.Status,
 		CrossOriginIsolation: crossOriginIsolated(p.Framework),
+		CacheControl:         p.CacheControl,
 	}, true, nil
 }
 

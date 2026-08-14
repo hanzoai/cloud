@@ -43,7 +43,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
-		req.Header.Set("X-User-Id", "u_"+org) // validated principal (principal.RequireOrg gates on it)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (principal.Acting gates on it)
 	}
 	resp, err := app.Test(req)
 	if err != nil {

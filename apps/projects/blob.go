@@ -10,15 +10,15 @@ import (
 	"fmt"
 	"io"
 	"mime"
-	"os"
 	"path"
 	"strings"
 
-	s3 "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzos3/go"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // Deploy artifact guards. A builder one-click deploy ships a small tar(.gz) of
@@ -44,7 +44,7 @@ type blobStore struct {
 func openBlobStore() *blobStore {
 	return &blobStore{
 		admin:  s3admin.New(),
-		bucket: env("CLOUD_PROJECTS_BUCKET", "hanzo-sites"),
+		bucket: environ.Or("CLOUD_PROJECTS_BUCKET", "hanzo-sites"),
 	}
 }
 
@@ -400,12 +400,3 @@ func (p *peekReader) Read(b []byte) (int, error) {
 }
 
 func isGzip(head []byte) bool { return len(head) >= 2 && head[0] == 0x1f && head[1] == 0x8b }
-
-// ---- env helper (local to projects; mirror provisioning conventions) ----
-
-func env(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
-}

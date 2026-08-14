@@ -75,7 +75,7 @@ import (
 //     unnamed in Apps the collaborative editor got the console shell while the
 //     typed RPC — published in openapi.yaml, in every generated SDK and in the MCP
 //     tool list — reached no app at all. team's row names /collaborator now.)
-//   - ONE NAME, TWO OWNERS (0). /v1/tracker was the last; analytics dropped
+//   - ONE NAME, TWO OWNERS (0). /v1/todo was the last; analytics dropped
 //     the claim and the entry with it.
 //
 // Regenerating it is mechanical: the failure below prints the current list, in
@@ -87,12 +87,12 @@ var unreachable = []string{
 	// events at 2026-07-29 04:15:29 — eighteen seconds after the ReplicaSet running
 	// the first image where manifest.Apps is the actual router. Routed now.
 	//
-	// /v1/tracker is no longer here. apps/analytics published it as the
-	// @hanzo/capture unload beacon while apps/tracker owned the name for the issue
-	// tracker and got there first, so the beacon 405'd in the fleet and passed in
+	// /v1/todo is no longer here. apps/analytics published it as the
+	// @hanzo/capture unload beacon while apps/todo owned the name for the issue
+	// todo and got there first, so the beacon 405'd in the fleet and passed in
 	// analytics' own single-app tests — a name with two claimants, recorded rather
 	// than resolved. It is resolved now: analytics dropped the claim (its wire is
-	// /v1/event), the tracker product keeps the name, and this ledger records only
+	// /v1/event), the todo product keeps the name, and this ledger records only
 	// paths that are still owned twice.
 	// /v1/billing/methods is no longer here either, and it went the same
 	// way. apps/commerce registered a POST at an address manifest.Apps gives to the
@@ -111,6 +111,22 @@ var unreachable = []string{
 	// skills' with it. Grafted, iam declares the three exact documents its
 	// router holds (jwks, openid-configuration, oauth-authorization-server), so the
 	// host routes exactly those. A relying party's FIRST call reaches an app now.
+	// The three paths `bot` holds inside the subtree `bots` relays. bots publishes
+	// /v1/bot/{wildcard1} — every path under /v1/bot, forwarded to the runtime that
+	// executes a run — and `bot`, whose product is connected machines, owns these
+	// three more specifically, so the router delivers them to `bot`. That is the
+	// declared routing working: a deeper prefix is the more specific one. What makes
+	// them a division rather than a nesting is that the relay's surface is decided
+	// UPSTREAM: the runtime chooses what it answers, so a path it adds under one of
+	// these three names arrives at `bot` instead, and neither document says so.
+	//
+	// One app vacates and these three lines go. Which one is a product question —
+	// both addresses are published in the agent-skills catalog on three brands, and
+	// /v1/bot/connect is a socket already-deployed nodes hold open — so it is not a
+	// rename this ledger can make. The count is here to be argued down.
+	"bots /v1/bot/connect -> bot",
+	"bots /v1/bot/nodes -> bot",
+	"bots /v1/bot/peer/invoke -> bot",
 	"git / -> nothing",
 	"git /{org}/{project}/{repo}/git-receive-pack -> nothing",
 	"git /{org}/{project}/{repo}/git-upload-pack -> nothing",
@@ -198,6 +214,41 @@ func concrete(path string) string {
 	return strings.Join(segs, "/")
 }
 
+// carved is the sibling prefixes that fall inside a WILDCARD path's subtree.
+//
+// It exists because concrete() is deliberately blind here, and rightly so for the
+// shape it was written for: a named parameter takes a value no route spells
+// literally, so {org} can never land on a sibling's static segment and report the
+// wrong owner. A greedy wildcard is the opposite kind of address. Its value is a
+// whole sub-path the app forwards, so the subtree it publishes is unbounded and a
+// sibling's static prefix inside it is a real division of that surface — not a
+// substitution artefact. Probed with one synthetic segment, the one address shape
+// whose surface has no edges was tested with the single value guaranteed not to
+// collide.
+//
+// Neither side can see the division alone: the wildcard's own document names one
+// path, and the sibling's row names a prefix that routes exactly as declared.
+// Only the pair is wrong, so the pair is what this returns.
+func carved(owner, path string) []string {
+	root, _, wild := strings.Cut(path, "/{wildcard")
+	if !wild {
+		return nil
+	}
+	var out []string
+	for _, a := range Apps {
+		if a.Name == owner {
+			continue
+		}
+		for _, p := range a.Prefixes {
+			if strings.HasPrefix(p, root+"/") {
+				out = append(out, p)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // served is every path an app's own binary answers, read from the subset that
 // binary projected from its own router.
 func served(t *testing.T, app string) []string {
@@ -236,17 +287,21 @@ func TestEveryServedPathReachesTheAppThatServesIt(t *testing.T) {
 	paths := 0
 	for _, a := range Apps {
 		for _, p := range served(t, a.Name) {
-			paths++
-			to := destination(t, fleet, p)
-			if to == a.Name {
-				continue
+			// The path itself, then the sibling prefixes carved out of it when it is
+			// a wildcard — an unbounded subtree is published one path at a time.
+			for _, probe := range append([]string{p}, carved(a.Name, p)...) {
+				paths++
+				to := destination(t, fleet, probe)
+				if to == a.Name {
+					continue
+				}
+				entry := a.Name + " " + probe + " -> " + to
+				found = append(found, entry)
+				if !known[entry] {
+					unrecorded = append(unrecorded, entry)
+				}
+				delete(known, entry)
 			}
-			entry := a.Name + " " + p + " -> " + to
-			found = append(found, entry)
-			if !known[entry] {
-				unrecorded = append(unrecorded, entry)
-			}
-			delete(known, entry)
 		}
 	}
 

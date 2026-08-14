@@ -132,6 +132,23 @@ const (
 	// never has to be handled, let alone forwarded.
 	IAMApproval = "iam_approval"
 
+	// IAMEmail answers what address IAM holds for the CALLER, and whether they
+	// have PROVED it.
+	//
+	// It is on the plane and not in the token because the token does not carry it:
+	// this deployment's JWT emits `email` and no `email_verified`
+	// (hanzoai/iam internal/oidc/jwt.go), while the identity store records the
+	// proof on the account (pkg/schema/user.go EmailVerified) and a direct
+	// password signup records it FALSE until the address is confirmed. Reading it
+	// here means every existing token gets a true answer immediately, where a new
+	// claim would answer only for tokens minted after it shipped — and would
+	// refuse everyone else in the meantime.
+	//
+	// The subject is the CALLER'S and can never be an argument, exactly as
+	// [IAMApproval] states: a caller able to name a subject could read another
+	// person's address, which is a leak on its own and an account oracle in bulk.
+	IAMEmail = "iam_email"
+
 	// IAMProjects lists the projects an org owns, from the store that owns them.
 	//
 	// A project is IAM's noun. Platform reads it because a PaaS app is scoped to
@@ -190,13 +207,6 @@ const (
 	// integrations, the app that knows whether one is imported is git.
 	GitStatus = "git_status"
 
-	// GitGrant / GitRevoke delegate — and withdraw — the right to create ONE ref
-	// in ONE repository. git owns refs, so git decides who may write one, and an
-	// orchestrator that dispatches untrusted work asks for this instead of
-	// carrying the org's git credential. See apps/git/grant.go.
-	GitGrant  = "git_grant"
-	GitRevoke = "git_revoke"
-
 	// GitMirror declares (or removes) a native repo's OUTBOUND mirror target. The
 	// sync engine decides a mirror should exist; the git app owns the repos and
 	// the reactor that pushes them. Two processes, so declaring it was a nil call
@@ -209,10 +219,10 @@ const (
 	// is the sync app. Three processes, one of which has the engine.
 	SyncRun = "sync_run"
 
-	// TrackerUpsert mirrors one external work item into the native tracker. The
-	// feeder is integrations (it holds the GitHub App); the store is the tracker
+	// TodoUpsert mirrors one external work item into the native todo. The
+	// feeder is integrations (it holds the GitHub App); the store is the todo
 	// app's.
-	TrackerUpsert = "tracker_upsert"
+	TodoUpsert = "todo_upsert"
 
 	// PlatformPush turns a landed push into a build. The push lands on git's
 	// embedded server and the builder belongs to platform — the single most
@@ -819,6 +829,23 @@ type Sent struct {
 
 // ---- iam.approval ----------------------------------------------------------
 
+// Email is the address the identity store holds for the caller, and whether
+// they have proved it.
+//
+// Verified is the whole point. An address a person merely TYPED is not evidence
+// of anything: a self-serve signup can name any address, so a consumer keying
+// an identity on one is keying it on a claim. Only a confirmed address says the
+// person is reachable there — and therefore is who that address belongs to.
+type Email struct {
+	// Address is what the store holds, which is not necessarily what a token's
+	// `email` claim says — a caller that changed it since the token was minted
+	// would present the old one. Anything resolving an identity uses this.
+	Address string `json:"address,omitempty"`
+	// Verified is whether the person proved the address. False is a real answer
+	// and callers must refuse on it, never treat it as "probably fine".
+	Verified bool `json:"verified"`
+}
+
 // Approval is the caller's waitlist state, as the identity store holds it.
 //
 // Status is the RAW approvalStatus string, not a verdict. What the value MEANS —
@@ -1000,47 +1027,6 @@ type Imported struct {
 	Repo string `json:"repo"`
 }
 
-// GrantIn asks the forge to delegate ONE ref write in ONE repository.
-//
-// There is no Org field, on purpose: the tenant rides the caller's plane
-// identity, so an app cannot delegate a write into a repository it does not act
-// for by naming one.
-type GrantIn struct {
-	// Repo is the repository the grant addresses, and the only one it opens.
-	Repo string `json:"repo" validate:"required"`
-	// Project is the repository's sub-scope; empty is the org's default scope.
-	Project string `json:"project,omitempty"`
-	// Ref is the FULL ref the grant may create, and the only one. The forge
-	// delegates the machine namespace and nothing else.
-	Ref string `json:"ref" validate:"required"`
-	// TTLSeconds bounds the grant. Absent, or longer than the forge's cap, gets
-	// the cap — a grant is never open-ended.
-	TTLSeconds int `json:"ttlSeconds,omitempty"`
-}
-
-// Granted is the delegated capability.
-type Granted struct {
-	// Token is the bearer. It authenticates nobody and opens nothing but the pack
-	// protocol on the repository named in the request — never a log line.
-	Token string `json:"token"`
-	// Handle revokes the grant. It is the token's digest, so carrying it back
-	// never means presenting the secret twice.
-	Handle string `json:"handle"`
-	// ExpiresAt is the unix second the grant stops working regardless.
-	ExpiresAt int64 `json:"expiresAt"`
-}
-
-// RevokeIn withdraws a grant early, so its life is the run's life rather than
-// its TTL.
-type RevokeIn struct {
-	// Handle is what Granted returned. An unknown handle, or one belonging to
-	// another org, is a no-op rather than an error: revoking is idempotent.
-	Handle string `json:"handle" validate:"required"`
-}
-
-// Revoked is the empty receipt for a withdrawal.
-type Revoked struct{}
-
 // RevIn asks which commit a ref names. An empty Ref means the repo's default
 // branch.
 type RevIn struct {
@@ -1077,18 +1063,35 @@ type Files struct {
 	Files []File `json:"files"`
 }
 
-// Visibility is one project's resolved publication state.
-//
-// Listed is the ONE derived answer — public and moderated — computed by the
+// Visibility is what one project's repository must BE, as the ONE derived
+// answer — public, moderated and deleted resolved together — computed by the
 // owner of that rule and never re-derived from parts here. Name and Description
 // seed a repo the first time it is created and are never re-imposed, so an
 // author who edits their own description keeps it.
+//
+// State has THREE values because the project row has three, and the third is
+// load-bearing: a repository is created by NAME, so one left behind by a deleted
+// project is one the next project of that name inherits — commits and all — and
+// then publishes. A two-valued fact could say "closed" and could not say "gone",
+// which left the deletion nowhere to go.
 type Visibility struct {
 	Slug        string `json:"slug" validate:"required"`
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
-	Listed      bool   `json:"listed"`
+	State       string `json:"state" validate:"required"`
 }
+
+// The three states a project's repository is asked to be in. They are the whole
+// vocabulary of the visibility seam, on both sides of it.
+const (
+	// Open: readable by anyone, including a reader with no credential.
+	Open = "open"
+	// Shut: it exists and is readable only by someone on it.
+	Shut = "shut"
+	// Gone: not there at all, with its contents. Deletion rather than closure,
+	// because a closed repository is still there to be adopted and re-opened.
+	Gone = "gone"
+)
 
 // ---- platform.fleet --------------------------------------------------------
 
@@ -1909,15 +1912,15 @@ type SyncRan struct {
 	Skipped int `json:"skipped"`
 }
 
-// ---- tracker ---------------------------------------------------------------
+// ---- todo ---------------------------------------------------------------
 
-// IssueIn is one external work item to mirror into the native tracker, keyed
+// IssueIn is one external work item to mirror into the native todo, keyed
 // idempotently by ExtRef so a webhook redelivery updates the same row. No Org:
 // the tenant is the caller's, resolved from the signed installation at the edge.
 type IssueIn struct {
 	// Project is the IAM project scope; empty means the org's default store.
 	Project string `json:"project,omitempty"`
-	// Key is the tracker team the item files under, e.g. "GH"; ensured on first use.
+	// Key is the todo team the item files under, e.g. "GH"; ensured on first use.
 	Key string `json:"key,omitempty"`
 	// TeamName is the display name used when that team is first created.
 	TeamName string `json:"teamName,omitempty"`
@@ -1932,7 +1935,7 @@ type IssueIn struct {
 	Source      string `json:"source,omitempty"`
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
-	// State is the upstream open/closed state; the tracker maps it to a column.
+	// State is the upstream open/closed state; the todo maps it to a column.
 	State    string   `json:"state,omitempty"`
 	Assignee string   `json:"assignee,omitempty"`
 	Labels   []string `json:"labels,omitempty"`
@@ -1942,7 +1945,7 @@ type IssueIn struct {
 type IssueUpserted struct {
 	// Created distinguishes a new row from an update.
 	Created bool `json:"created"`
-	// Number is the tracker's own item number.
+	// Number is the todo's own item number.
 	Number int `json:"number"`
 	// Identifier is KEY-<number>.
 	Identifier string `json:"identifier,omitempty"`
@@ -1969,14 +1972,18 @@ type PushIn struct {
 // Built acknowledges that the builder ACCEPTED the push. A failure is an error,
 // never this shape — the same contract as Imported and Mirrored.
 //
-// It deliberately does NOT report how many applications the push matched. Most
-// pushes track no app, so that count would be interesting, but nothing consumes
-// it today and the builder does not return it; adding the field would mean
-// widening buildFromPush's signature to produce a value no caller reads. Fields
-// append at the END of a ZAP type, so the day something needs the count it can
-// be added without disturbing any peer.
+// Builds is how many builds the push actually LAUNCHED, and it is here because
+// something finally reads it: the forge's push receiver answers its delivery with
+// this number, and without it "accepted" and "built" are the same answer. Most
+// pushes track no application, so zero is ordinary rather than an error — but it
+// is a different fact from one, and collapsing the two is what let a green
+// delivery page sit on top of a fleet that had built nothing.
+//
+// Appended at the END, which is what this type's own note said the day would
+// look like.
 type Built struct {
-	Repo string `json:"repo"`
+	Repo   string `json:"repo"`
+	Builds int    `json:"builds"`
 }
 
 // ReleaseIn is a proven, clean-semver image ready to roll onto its Service CR.
@@ -2196,9 +2203,16 @@ type LeaseIn struct {
 	//	exec     a throwaway one that keeps nothing. Seconds to minutes.
 	//	dev      a coding one, with the project's own disk attached. Hours.
 	//	desktop  a dev one that also has a screen.
+	//	android  a desktop with a phone running on that screen.
 	//
 	// Empty leases an `exec`, which is the right answer for running a program and
 	// the wrong one for working on a repository, because it keeps nothing.
+	//
+	// An `android` needs a node that can virtualise a CPU, so it is the one class
+	// a deployment may not be able to place. Where the fleet has none, the lease
+	// succeeds and the pod stays Pending naming the device it is waiting for —
+	// which is the honest answer, because the alternative is an emulator running
+	// on an interpreted CPU and never finishing its boot.
 	Class string `json:"class,omitempty"`
 	// Project names the disk to attach, and is REQUIRED for every class but `exec`.
 	//
@@ -2265,6 +2279,18 @@ type RunIn struct {
 	// TimeoutSec bounds this ONE command, so a wedged program holds the caller for
 	// its own timeout rather than for the whole lease.
 	TimeoutSec int `json:"timeoutSec,omitempty"`
+	// Blind is the set of secrets this command must never publish.
+	//
+	// It exists because output is redacted where it is PRODUCED or not at all. A
+	// caller that scrubbed the returned result would still have streamed the
+	// unredacted bytes into the session as they were written — to a durable event
+	// store, an SSE feed and a chat thread — because the narration leaves the
+	// sandbox by a different door from the result. Nothing downstream can take a
+	// secret back out of a message that has already been delivered.
+	//
+	// The sandbox holds these only for the life of the one command, applies them
+	// to every stream leaving it, and never logs or stores them.
+	Blind []string `json:"blind,omitempty"`
 	// Session is the live agent session this command narrates into: its output is
 	// appended there AS IT IS PRODUCED, so every surface watching that session
 	// watches the command work instead of a blank pause. A long run is otherwise a
@@ -2360,7 +2386,7 @@ type EndIn struct {
 // A coding run (`@hanzo code: <repo> <task>`) is the most cross-app act in the
 // estate: it opens an agents SESSION, resolves and gates an agents TARGET, reads
 // git's CLONE URL, verifies in git that the pushed branch LANDED, and files the
-// PR row in tracker. Five apps, and since the fused monolith went away, five
+// PR row in todo. Five apps, and since the fused monolith went away, five
 // PROCESSES.
 //
 // It was written as five direct Go calls. Each of those reads a package global
@@ -2405,46 +2431,20 @@ const (
 	// that hands it out have to be the same process, and that process is agents.
 	AgentsRouteRun = "agents_route_run"
 
-	// GitCloneURL is the canonical clone URL for an org's native repo — the only
-	// thing the sandbox is ever pointed at, so the run cannot reach another
-	// tenant's namespace.
-	GitCloneURL = "git_clone_url"
+	// TodoAgentPR opens the native PR work item for a finished run.
+	TodoAgentPR = "todo_agent_pr"
 
-	// GitVerifyRef reports the tip of a branch by reading the bare repo on git's
-	// own storage. It is the INTEGRITY gate: cloud trusts the ref it can read,
-	// not the remote runner's claim to have pushed one. Found=false is
-	// fail-closed and costs the run its PR.
-	GitVerifyRef = "git_verify_ref"
-
-	// GitPropose offers a run's branch for merging into its base, and answers the
-	// address a human opens to read it.
+	// A coding run has no plane op, and that absence is a decision.
 	//
-	// ONE seam, two backends, chosen by where the code actually lives rather than
-	// by who is asking: a repository that mirrors into GitHub gets a real pull
-	// request there (its head pushed to the mirror first, because GitHub refuses a
-	// pull request whose head it cannot see), and one that lives only in the forge
-	// gets its branch page. The caller asks for the address and never for the host.
-	GitPropose = "git_propose"
-
-	// TrackerAgentPR opens the native PR work item for a finished run.
-	TrackerAgentPR = "tracker_agent_pr"
-
-	// CodingStart is the ONE door onto a coding run, for a caller in another
-	// process.
-	//
-	// The engine has to live in exactly one process and that process is agents:
-	// it already holds the live session store the run streams into, the durable
-	// tasks engine, and the in-memory mailbox a routed run is handed through.
-	// A second process assembling its own Dispatcher would be a second engine —
-	// same orchestration, different pool, different in-flight set, a run started
-	// from chat unobservable from the app. So the ENGINE stays put and the START
-	// travels, exactly as AgentsRunOnBehalf made one brain reachable from every
-	// chat platform.
-	//
-	// The chat adapter and the /v1/coding route are then two DOORS onto the same
-	// coding.Start, which is what makes "one engine, two adapters" a fact about
-	// the code rather than a claim about it.
-	CodingStart = "coding_start"
+	// There was a `coding_start`, so that the process holding the Slack adapter
+	// could reach the engine in the agents process. Its only caller was the
+	// `code:` prefix a human typed, and the whole point of deleting that prefix is
+	// that a chat surface reaches the engine the way every other capability is
+	// reached: the brain calls the TOOL. That path already runs through this
+	// plane — AgentsRunOnBehalf carries the turn, the run's tool loop asks the
+	// fleet's own door, and the door routes the call to the agents process — so a
+	// second op would be a second way in for exactly one caller, and a caller with
+	// a private way in is a caller whose model never has to choose.
 )
 
 // The ORG rides in these arguments rather than on the caller's plane identity,
@@ -2523,53 +2523,6 @@ type TargetGateIn struct {
 	TargetID string `json:"targetId"`
 }
 
-// RepoRefIn names one of an org's native repos.
-type RepoRefIn struct {
-	Org  string `json:"org"`
-	Repo string `json:"repo"`
-}
-
-// RepoCloneURL is the canonical clone URL. Empty means git could not answer,
-// which the run reads as "git is not available" and refuses to proceed.
-type RepoCloneURL struct {
-	URL string `json:"url"`
-}
-
-// RefIn names one branch of one repo.
-type RefIn struct {
-	Org    string `json:"org"`
-	Repo   string `json:"repo"`
-	Branch string `json:"branch"`
-}
-
-// RefTip is what git's own storage says about that branch. Found is EXPLICIT
-// rather than inferred from an empty SHA: "the branch is not there" and "the
-// read failed" both have to fail the integrity gate, and an absent tip that read
-// as a present-but-unknown one would file a PR for a branch nobody can fetch.
-type RefTip struct {
-	SHA   string `json:"sha,omitempty"`
-	Found bool   `json:"found"`
-}
-
-// ProposeIn offers Head for merging into Base. The org is the caller's plane
-// identity and never a field, so a run can only ever propose within its own
-// namespace.
-type ProposeIn struct {
-	Repo    string `json:"repo" validate:"required"`
-	Project string `json:"project,omitempty"`
-	Base    string `json:"base,omitempty"`
-	Head    string `json:"head" validate:"required"`
-	Title   string `json:"title,omitempty"`
-	Body    string `json:"body,omitempty"`
-}
-
-// Proposed is where the proposal can be read. Empty is a real answer — a
-// project-scoped repository has no browsable page — and it costs a link, never a
-// run.
-type Proposed struct {
-	URL string `json:"url,omitempty"`
-}
-
 // AgentPRIn opens the native PR work item for a pushed branch.
 //
 // IT CARRIES NO ORG, deliberately, and for the same reason [IssueIn] carries
@@ -2614,32 +2567,41 @@ type RouteRunIn struct {
 	// session close and the PR assignee). They never cross to the machine.
 	Actor    string `json:"actor,omitempty"`
 	AgentRef string `json:"agentRef,omitempty"`
+	// ForgeActor is the forge login the run acts as. It is CLOUD-SIDE, like Actor:
+	// the completion opens the pull request as that person and the executing
+	// machine never sees it.
+	ForgeActor string `json:"forgeActor,omitempty"`
 }
 
 // CodingStartIn asks the engine to begin one coding run.
 //
-// IT CARRIES NO CREDENTIAL, and that absence is the point. The org's agent git
-// secret used to be read by the Slack surface and handed down through the
-// request, so a token with write access to every repo in the org existed in the
-// chat process, crossed a socket, and sat in a struct that three packages
-// touched. None of them needed it. The ENGINE needs it, at the one moment it
-// dispatches a sandbox, so the engine now reads it from KMS itself in the org
-// the run belongs to. Custody shrinks from three processes to one, and a door
-// onto this op can no longer be a door onto the secret.
+// IT SAYS WHAT TO DO AND NEVER WHO TO BE, and that absence is the whole shape of
+// the type. There is no org on it, no subject and no credential, so the two
+// questions worth forging — whose balance, whose name — have no field to answer
+// them with. The door reads both off the caller it already proved
+// (plugin/agents/coding.go), which is what makes the boundary structural: there
+// is nothing to validate away, because there is nothing there.
 //
-// Subject is the linked Hanzo identity the run is attributed to, already proved
-// by the door (a Slack account link, or the authenticated caller of /v1/coding).
-// It is refused when empty rather than defaulted: a run that lost its human must
-// not execute AS THE ORG.
+// Each of the three left for the same reason one step later than the last.
 //
-// The tenant is NOT here. It rides the caller — stated on a detached context
-// before the hop — because a run spends the org's balance and reaches the org's
-// repos, and a field the caller can set is not an identity.
+// The org's agent git secret used to be read by the Slack surface and handed
+// down through the request, so a token with write access to every repo in the
+// org existed in the chat process, crossed a socket, and sat in a struct that
+// three packages touched. None of them needed it; the ENGINE needs it, at the
+// one moment it dispatches a sandbox, and reads it from KMS itself now.
+//
+// The subject — the person a run is ATTRIBUTED to, its session's actor and its
+// PR's assignee — used to be filled in by whichever adapter had proved the
+// account link. That was sound while every door was an adapter we wrote. It
+// stopped being sound the moment this op became an MCP tool, because the thing
+// filling in a tool's arguments is a MODEL: a subject field is a model deciding
+// whose run this is, and it could hand the work, the session and the assignment
+// to a colleague who never asked for any of it. A field a model writes is not an
+// identity, so there is no longer a field.
+//
+// What remains is entirely facts about the WORK, which is exactly what a model
+// is entitled to decide.
 type CodingStartIn struct {
-	// Subject is the person the run is attributed to — a linked Hanzo identity the
-	// door already proved, never a name the caller picks. Empty is refused rather
-	// than defaulted: a run that lost its human must not execute as the org.
-	Subject string `json:"subject"`
 	// Repo is what to work on, as `owner/name` in the caller's own org. The engine
 	// resolves the clone URL and the push credential from the org itself, so this
 	// says WHICH repository and never how to reach it.
@@ -2655,6 +2617,20 @@ type CodingStartIn struct {
 	// Base is the branch to start from. Empty takes the repository's default. The
 	// run never writes here — it writes the agent branch it answers with.
 	Base string `json:"base,omitempty"`
+	// After names a previous run's session, and starts this one from where that
+	// one stopped instead of from the repository's default. It is how a follow-up
+	// instruction — "now add tests for it" — builds on work already done rather
+	// than beginning again on a fresh clone.
+	//
+	// It sets the base and nothing else, so this run still writes its OWN branch.
+	// One run, one branch: a run that wrote back onto an earlier run's branch
+	// would break the rule the forge's ref policy is built on, and would leave
+	// two turns of work with one name to review.
+	//
+	// A caller who already knows the branch may pass Base directly; this exists
+	// because the branch is derived from a session id and nobody should have to
+	// know how. Base wins if both are given.
+	After string `json:"after,omitempty"`
 	// AgentRef names a configured agent to run as, which is how an org pins a
 	// harness, a model and a prompt to a name. Empty runs the default agent.
 	AgentRef string `json:"agentRef,omitempty"`
@@ -2673,8 +2649,11 @@ type CodingStartIn struct {
 	// what argv starts; the screen decides which image carries an X server. A
 	// caller may want claude WITH a browser it can see, and a single enum would
 	// have made that combination unsayable.
-	Tool    string `json:"tool,omitempty"`
-	Desktop bool   `json:"desktop,omitempty"`
+	Tool string `json:"tool,omitempty"`
+	// Desktop asks for a run with a SCREEN — an image carrying an X server — for a
+	// task that has to drive a browser or another windowed program. False, the
+	// default, is a headless checkout, which is what writing code needs.
+	Desktop bool `json:"desktop,omitempty"`
 	// ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the door
 	// that started it has somewhere for it to talk. Empty means nobody is
 	// listening and the run simply does not narrate — which is the app door's
@@ -2696,11 +2675,22 @@ type CodingStartIn struct {
 // policy). Progress streams at /v1/agents/sessions/{sessionId}/stream for every
 // door equally, which is why neither door grew a progress endpoint of its own.
 type CodingStarted struct {
+	// SessionID is the run's handle: its durable record, and the id its live
+	// progress streams under at /v1/agents/sessions/{sessionId}/stream. Every
+	// later question about this run is asked with it.
 	SessionID string `json:"sessionId"`
-	Branch    string `json:"branch"`
-	Repo      string `json:"repo"`
-	Routed    bool   `json:"routed,omitempty"`
-	TargetID  string `json:"targetId,omitempty"`
+	// Branch is the ref the run will push its work to, and the ONLY ref it is
+	// permitted to write. It exists before the work does, so it is safe to tell
+	// somebody where to look while the run is still going.
+	Branch string `json:"branch"`
+	// Repo is the repository the run was admitted against, echoed back as the
+	// engine resolved it.
+	Repo string `json:"repo"`
+	// Routed says the run went to one of the org's own registered machines rather
+	// than to a sandbox in our cluster. False is the ordinary case.
+	Routed bool `json:"routed,omitempty"`
+	// TargetID names that machine when Routed is true, and is empty otherwise.
+	TargetID string `json:"targetId,omitempty"`
 }
 
 // ---- ask.figures -----------------------------------------------------------

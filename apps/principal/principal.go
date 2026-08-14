@@ -155,6 +155,14 @@ type Principal struct {
 	// row, a membership — keys on this and refuses it empty, so it can never be
 	// handed one identity's token and address another's row.
 	Subject string
+	// Limit is what the CREDENTIAL this request arrived on may reach, as
+	// `kind:name` entries. Empty means the credential carries no limit and
+	// reaches whatever its holder does, which is every session and every key
+	// minted before limits existed.
+	//
+	// It rides here rather than in a header for the reason the attestation does:
+	// a request that could state its own limit could state a wider one.
+	Limit []string
 }
 
 // mintedSlot names the request-local slot the boundary parks its attestation in.
@@ -243,45 +251,82 @@ func OrgFrom(ctx context.Context) (string, bool) {
 	return OrgOf(c.User, c.Org)
 }
 
-// RequireOrg is [OrgFrom] composed with the ONE refusal, for the typed op that
-// cannot serve without an org: the isolation key, or the 403 that says why not.
+// Acting is the org this call acts for, or the refusal that it named none.
 //
-// It exists because fourteen subsystems had written it themselves — the same five
-// lines under three names (`tenant`, `tenantOf`, `callerOf`), each with its own
-// paragraph restating that the org is never an In field. That is one decision in
-// fourteen places, and this package's own opening line says why that is the thing
-// to avoid: the trust decision lives once "and can never drift between six
-// hand-rolled copies". The decision did not drift. The REFUSAL was the copy —
-// `zip.ErrForbidden("X-Org-Id required")`, a string a fifteenth subsystem would
-// have had to spell correctly for its 403 to read like everyone else's.
+// The doc at the top of this package promises the trust decision "lives once and
+// can never drift between six hand-rolled copies". It had drifted into
+// thirty-seven: every org-scoped op wrapped OrgFrom in the same five lines, under
+// two names, and they gave NINE different refusals for one call — so what a client
+// was told depended on which app it reached.
 //
-// The org is never an In field: an In field is caller-supplied, so an org read
-// from one is a cross-tenant read the caller asserted for itself. It is the org
-// EXACTLY as the identity boundary minted it from the validated IAM owner claim —
-// never lowercased, stripped or truncated, because folding collapses DISTINCT
-// owners into one storage bucket, which is itself a cross-org break.
+// The nine were not arbitrary, which is the useful part. OrgFrom answers ONE
+// question by collapsing TWO, and each author described whichever half they had in
+// mind: some said "a validated principal is required", others "X-Org-Id required".
+// Both halves are refused here and each is NAMED, so the answer says which it was:
 //
-// It fails CLOSED off the HTTP path, where nothing parked an org and there is no
-// caller to read: a CLI invoke resolves nothing and the op refuses, rather than
-// serving the first request that arrives with no owner as if it had one.
+//   - nobody attested the caller — no credential, or none this process can read.
+//     The CLI's local invoke lands here too, since nothing parks a principal off
+//     the HTTP path.
+//   - the caller IS attested and still resolves no org — a machine token, or one
+//     minted before IAM's orgs claim, so there is no tenant to act for.
 //
-// Ask [OrgFrom] instead where the absence is a BRANCH rather than a refusal, and
-// [Validated] where the plane has no org to scope by and the gate is only whether
-// the caller is signed in at all.
+// "X-Org-Id required" was the most common wording and the most misleading, since a
+// caller sending that header with no credential is refused for the OTHER half and
+// would read it as an instruction to send what it already sent.
 //
-// There is NO request-shaped twin, unlike every other fact here ([Org]/[OrgFrom],
-// [Validated]/[ValidatedFrom], [Brand]/[BrandFrom]). A raw handler holds a
-// *zip.Ctx and asks [Org], which cannot be reached from a bare c.Context() —
-// zip's caller finds no request behind one — so a twin would be a second function
-// for the shape the fleet is migrating AWAY from. Investing an API in the raw
-// handler is investing in the thing being deleted; a raw handler asks [Org] and
-// writes its own refusal until it becomes a typed op.
-func RequireOrg(ctx context.Context) (string, error) {
-	org, ok := OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
+// THE STATUS IS 403 FOR BOTH, which is what thirty-six of the thirty-seven
+// answered. 401 is the better reading of the first half — we do not know who is
+// asking — and one surface (webhooks, whose whole contract is 401 on every route)
+// says so. Changing the other thirty-six would move an externally visible code for
+// every unauthenticated caller in the fleet, which is a decision about the API and
+// not a duplicate to delete, so it is left alone and left visible.
+// Refused is the refusal itself, for the ~90 handlers that ask Org(c) and answer
+// their own 403. Same two halves Acting separates, same status, said correctly:
+//
+//	no credential this process could read  →  "a validated principal is required"
+//	attested, but no tenant to act for     →  "an org scope is required"
+//
+// They all said "X-Org-Id required", which names a header the caller usually DID
+// send and often cannot send — the edge mints it from the token and strips any
+// client copy. Read literally it is an instruction to do the thing you already
+// did, so it sends you to look at your request when the answer is your identity.
+// Measured cost, not a style note: it misdirected three separate diagnoses in one
+// day, one of them into rebuilding a CLI path that was never broken.
+//
+// THE STATUS IS UNCHANGED. 401 is the better reading of the first half and moving
+// it would change an externally visible code for every unauthenticated caller in
+// the fleet — a decision about the API, deliberately left alone. This changes only
+// which of the two things went wrong, which nothing else was saying.
+//
+// Refused/RefusedFrom is the Org/OrgFrom pair again: one question, two shapes, for
+// a handler that holds the request and a core that holds only the context.
+func Refused(c *zip.Ctx) error { return refused(Validated(c)) }
+
+// RefusedFrom is [Refused] where only the context crossed the seam.
+func RefusedFrom(ctx context.Context) error { return refused(ValidatedFrom(ctx)) }
+
+// Refusal is the sentence [Refused] carries, for a surface that writes its own
+// envelope — the ZAP and JSON-RPC shapes name their message field themselves —
+// and so needs the words rather than the error.
+func Refusal(c *zip.Ctx) string { return sentence(Validated(c)) }
+
+// sentence holds both wordings. Everything above differs only in where it
+// learns the predicate and what it wraps the answer in; a refusal worded
+// several ways is the thing this whole change exists to stop.
+func sentence(validated bool) string {
+	if !validated {
+		return "a validated principal is required"
 	}
-	return org, nil
+	return "an org scope is required"
+}
+
+func refused(validated bool) error { return zip.ErrForbidden(sentence(validated)) }
+
+func Acting(ctx context.Context) (string, error) {
+	if org, ok := OrgFrom(ctx); ok {
+		return org, nil
+	}
+	return "", RefusedFrom(ctx)
 }
 
 // validatedKey names the slot the WEAKER fact crosses the same seam in.
@@ -363,7 +408,7 @@ type brandKey struct{}
 // key space.
 //
 // ok is false when there is nothing to compare — no validated principal, or a
-// principal with no issuer to resolve (an hk-/sk- key, minted by this
+// principal with no issuer to resolve (an sk- key, minted by this
 // deployment's own IAM). A caller must read that as "no second fact", never as
 // a brand.
 func Brand(c *zip.Ctx) (string, bool) {
@@ -427,13 +472,30 @@ func BillingOrg(c *zip.Ctx) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	if IsSuperAdmin(c) {
-		// Masquerade (or a SuperAdmin at home, where owner == org): spend own books.
-		if owner := Owner(c); owner != "" {
-			return owner, true
-		}
+	return ledgerOf(org, Owner(c), IsSuperAdmin(c)), true
+}
+
+// ledgerOf is the masquerade rule over plain values, so the handler shape and the
+// context shape cannot answer it differently. A SuperAdmin acting in another org
+// spends its OWN books — that is what platform sudo means, and it is the whole of
+// the difference between the org that PAYS and the org whose DATA is being read.
+// At home the two coincide, so the rule needs no second case.
+func ledgerOf(org, owner string, super bool) string {
+	if super && owner != "" {
+		return owner
 	}
-	return org, true
+	return org
+}
+
+// LedgerFrom is [Ledger] where only the context crossed the seam — the ZAP plane,
+// and any core that took identity as arguments rather than reading a request.
+func LedgerFrom(ctx context.Context) string {
+	c := zip.CallerOf(ctx)
+	org := strings.TrimSpace(c.Org)
+	if org == "" {
+		return ""
+	}
+	return ledgerOf(org, strings.TrimSpace(c.Owner), c.Admin)
 }
 
 // Ledger is the bare-string form of BillingOrg for the in-handler resource meters

@@ -123,7 +123,7 @@ func declaring(t *testing.T, by map[string][]string) *zip.App {
 // app that has something to offer, plus describe. Nothing else.
 func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
 	h := declaring(t, map[string][]string{
-		"ai":    {"post_v1_chat_completions", "get_v1_models"},
+		"ai":    {"post_chat_completions", "get_models"},
 		"git":   {"post_git_repos", "get_git_repos"},
 		"iam":   {"CreateUser", "DeleteUser"}, // every op refused: no tool at all
 		"quiet": {},                           // nothing to offer: no tool at all
@@ -143,7 +143,7 @@ func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
 	// Within an enum the order is gather's: rank first (chat before models),
 	// then name inside a bucket (both git ops share one) — and rank still reads
 	// the ROUTE, so ordering is unchanged by naming. What the enum CARRIES is the
-	// verb phrase: `create_chat_completion`, not `post_v1_chat_completions`.
+	// verb phrase: `create_chat_completion`, not `post_chat_completions`.
 	if ops := offered(res); strings.Join(ops, ",") !=
 		"create_chat_completion,list_models,list_git_repos,create_git_repo" {
 		t.Errorf("the enums carry %v; within a subsystem the product surface still leads", ops)
@@ -491,7 +491,7 @@ func TestDescribeOfANameNobodyServesIsRefused(t *testing.T) {
 // All three are the same gate: [fleet.Door.gather] refuses before it writes the
 // routing table, and list, call and describe all read that one gathered set.
 func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
-	kid := startNamed(t, "console", "CreateServiceAccountKey", "GetUser", "post_v1_chat_completions")
+	kid := startNamed(t, "console", "CreateServiceAccountKey", "GetUser", "post_chat_completions")
 	h := host(t, []string{"console"}, map[string]*child{"console": kid})
 
 	// The fixture is only worth something if the child serves it.
@@ -554,7 +554,7 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 	// And the sibling still runs through the same envelope, so none of the above
 	// passes because the door is broken.
 	ok := rpc(t, h, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"console",`+
-		`"arguments":{"op":"post_v1_chat_completions","input":{"which":"hello"}}}}`)
+		`"arguments":{"op":"post_chat_completions","input":{"which":"hello"}}}}`)
 	content, _ := ok["content"].([]any)
 	if len(content) == 0 {
 		t.Fatalf("the product op did not run through console: %v", ok)

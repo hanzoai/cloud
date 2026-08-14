@@ -53,6 +53,7 @@
 package cloud
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -61,6 +62,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/environ"
 	luxlog "github.com/luxfi/log"
 	luxtrace "github.com/luxfi/trace"
 	"github.com/luxfi/zap"
@@ -329,7 +331,7 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 	// endpoint needed). Keep the clean no-op-when-unset posture so this is safe
 	// before any path is live.
 	zapEndpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_ZAP_ENDPOINT"))
-	legacy := firstNonEmptyEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
+	legacy := cmp.Or(environ.Or("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""), environ.Or("OTEL_EXPORTER_OTLP_ENDPOINT", ""))
 	if zapEndpoint == "" && legacy == "" && !TraceInprocEnabled() {
 		log.Info("tracing disabled: no span destination configured (metrics are unaffected)",
 			"hint", "set O11Y_TRACES_ZAP_INPROCESS=true (o11y linked in) or OTEL_EXPORTER_ZAP_ENDPOINT=<host:port> (o11y as a plugin or remote)")
@@ -465,22 +467,15 @@ func (e *routerTraceExporter) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func firstNonEmptyEnv(keys ...string) string {
-	for _, k := range keys {
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 // deploymentEnvironment resolves the process deployment environment for the OTel
 // resource. Env-overridable (DEPLOYMENT_ENVIRONMENT / OTEL_DEPLOYMENT_ENVIRONMENT
 // / ENVIRONMENT); defaults to "production" because the providers install only
 // when a sink/wire is configured — i.e. a real deployment.
 func deploymentEnvironment() string {
-	if v := firstNonEmptyEnv("DEPLOYMENT_ENVIRONMENT", "OTEL_DEPLOYMENT_ENVIRONMENT", "ENVIRONMENT"); v != "" {
-		return v
-	}
-	return "production"
+	return cmp.Or(
+		environ.Or("DEPLOYMENT_ENVIRONMENT", ""),
+		environ.Or("OTEL_DEPLOYMENT_ENVIRONMENT", ""),
+		environ.Or("ENVIRONMENT", ""),
+		"production",
+	)
 }

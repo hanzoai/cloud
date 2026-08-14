@@ -44,16 +44,25 @@ anyone eject a colleague. `participantName` is a display label only.
 
 ## Regenerating dist/
 
-Source of truth: the `admin-meet` app in `hanzoai/admin`. Build it in a workspace
-where `hanzogui@7.x` + `@hanzogui/admin` resolve, then sync its `dist/`:
+Source of truth: the `meet` app in `hanzoai/admin`. Build it in a workspace where
+`hanzogui@8.x` + `@hanzogui/admin` resolve, then sync its `dist/`:
 
 ```sh
-cd apps/admin-meet
+cd apps/meet
 bun install
-bun run build             # tsc --noEmit && vite build → dist/ (base=/meet/, api=/v1/meet)
+VITE_BASE=/meet/ bun run build    # tsc --noEmit && vite build → dist/
 
-rsync -a --delete apps/admin-meet/dist/ <cloud>/apps/meet/ui/dist/
+rsync -a --delete apps/meet/dist/ <cloud>/apps/meet/ui/dist/
 ```
+
+**VITE_BASE is not optional.** Upstream builds for the root that its own
+standalone image owns, so the default is now `/`. This binary serves the bundle
+under `StripPrefix("/meet", …)`, and a root-based build emits `/assets/` URLs
+that nothing here answers — index.html is 200 and the page renders blank, with
+no runtime signal at all. `embed_test.go` asserts the prefix for that reason,
+and asserts the sign-in path with it: that one is a runtime string rather than
+an asset URL, so `base` cannot rewrite it and it is derived from `BASE_URL` in
+the app instead.
 
 Then `go build ./plugin/meet` re-embeds it. Do NOT hand-edit files under `dist/` —
 they are content-addressed Vite output. Keep `.sync-stamp` truthful (source repo

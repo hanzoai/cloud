@@ -17,7 +17,6 @@ package cloud
 import (
 	"context"
 	"errors"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -27,6 +26,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud/internal/planetest"
 )
 
 // Where a capability lives.
@@ -48,10 +49,10 @@ var kinds = map[string]struct {
 	where int
 	why   string
 }{
-	"RegisterGitImporter":         {remote, "integrations decides to import; git holds the repos"},
-	"RegisterGitMirrorController": {remote, "sync declares the mirror; git holds the repo that pushes it"},
-	"RegisterIssueSink":           {remote, "integrations feeds the items; tracker holds the store"},
-	"RegisterSync":                {remote, "integrations and git trigger; sync holds the engine"},
+	"RegisterGitImporter":         {remote, "integrations decides to import; sync runs the advance"},
+	"RegisterGitMirrorController": {remote, "any app may declare a mirror; sync records it and pushes it"},
+	"RegisterIssueSink":           {remote, "integrations feeds the items; todo holds the store"},
+	"RegisterSync":                {remote, "integrations and the webhook door trigger; sync holds the engine"},
 	"RegisterPushBuilder":         {remote, "git takes the push; platform holds the builder"},
 	"RegisterServiceReleaser":     {remote, "a build releases; platform holds the CR control plane"},
 	"RegisterOrgScopeResolver":    {remote, "the identity check asks; projects holds the registry"},
@@ -106,7 +107,8 @@ var probes = []struct {
 		return err
 	}},
 	{"RegisterPushBuilder", "OnGitPush", func(ctx context.Context) error {
-		return OnGitPush(ctx, GitPushEvent{Org: "acme", Repo: "r", Ref: "refs/heads/main"})
+		_, err := OnGitPush(ctx, GitPushEvent{Org: "acme", Repo: "r", Ref: "refs/heads/main"})
+		return err
 	}},
 	{"RegisterServiceReleaser", "OnServiceRelease", func(ctx context.Context) error {
 		return OnServiceRelease(ctx, ServiceReleaseEvent{Service: "cloud", Image: "ghcr.io/hanzoai/cloud:v1.0.0"})
@@ -132,7 +134,7 @@ func isolate(t *testing.T) {
 //
 // A nil here is not cosmetic. It is the shape of the outages this exists to end
 // — a push that built nothing, a release that patched nothing, an issue that
-// reached no tracker — each reported as success to a caller with no way to learn
+// reached no todo — each reported as success to a caller with no way to learn
 // otherwise.
 func TestAbsentErrors(t *testing.T) {
 	isolate(t)
@@ -198,7 +200,7 @@ func TestAllListed(t *testing.T) {
 
 	// The list may not outlive the code: a stale entry is a claim nobody checks.
 	for name := range kinds {
-		if !has(found, name) {
+		if !slices.Contains(found, name) {
 			t.Errorf("kinds names %s, which this package no longer declares", name)
 		}
 	}
@@ -251,10 +253,6 @@ func registers(t *testing.T) []string {
 		t.Fatal("found no Register* declarations; the parse is not reading this package")
 	}
 	return out
-}
-
-func has(all []string, name string) bool {
-	return slices.Contains(all, name)
 }
 
 // unregister clears every remote registration so the tests see a process with no

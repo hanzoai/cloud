@@ -33,12 +33,13 @@
 // letting registration order decide silently, and at api.hanzo.ai those two were
 // already answered by IAM anyway (ingress routes /v1/iam/* there).
 //
-// THE STORE IS THE IDENTITY STORE — {DataDir}/iam/iam.db, opened with IAM's own
-// opener (iamstore.Open: plain SQLite, WAL, busy timeout). It is the same file the
-// standalone iam is pointed at with --db, which is the whole point: mount the identity
-// volume there and this graft serves the identities that exist, rather than a second
-// database that agrees with none of them. See openStore for what that costs and why
-// the alternative is worse. This embed owns its OWN orm.DB outright, so the old fork's
+// THE STORE IS THE IDENTITY STORE — {DataDir}/iam/iam.db, ENCRYPTED AT REST under the
+// key cek derives for it, and converted in place the first time it is opened if it
+// arrived plaintext. It is the same file the standalone iam is pointed at with --db,
+// which is the whole point: mount the identity volume there and this graft serves the
+// identities that exist, rather than a second database that agrees with none of them.
+// See openStore for how both of those are true at once, which they were not before.
+// This embed owns its OWN orm.DB outright, so the old fork's
 // "ai bootstrap unable to open database file (14)" crash is gone. Config
 // (orgs/apps/providers/signing certs) is seeded from the same init_data.json the
 // deployment already provides (server.Seed, new-only + idempotent), so hanzo.id's
@@ -97,6 +98,7 @@ package iam
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -105,10 +107,12 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/brand"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	iamserver "github.com/hanzoai/iam/server"
+	"github.com/hanzoai/namespace"
 	"github.com/hanzoai/orm"
 )
 
@@ -141,6 +145,11 @@ var Prefixes = []string{
 // a nil DB the way they used to guard a nil ormer.
 var embeddedDB orm.DB
 
+// embeddedConn is the keyed connection embeddedDB reads and writes through. The
+// ORM BORROWS it (orm.AdaptSQLite) and its Close is a no-op, so the handle this
+// package opened is the handle this package has to close.
+var embeddedConn *sql.DB
+
 // DB returns the embedded IAM store's orm.DB for in-process readers (clients/platform,
 // clients/deploy) that reflect the IAM-owned Project resource via
 // github.com/hanzoai/iam/pkg/store. It is nil until Mount has run (IAM not enabled, or
@@ -150,11 +159,17 @@ func DB() orm.DB { return embeddedDB }
 
 // Shutdown releases the embedded IAM store. Idempotent.
 //
-// The ORM owns the pool it opened (iamstore.Open), so closing the orm.DB closes the
-// database — which the standalone iam does the same way, from its own shutdown hook.
+// WHICHEVER HANDLE THIS PACKAGE OPENED is the one it has to close. On the file backend
+// that is the CONNECTION, not the orm.DB: the ORM borrows a handle it did not open, so
+// its Close is a no-op and closing it would leave the file open with the process gone —
+// which on a keyed store is how a WAL is left behind unmerged. On a server backend there
+// is no connection here at all and the ORM owns the pool, so the orm.DB closes it.
 func Shutdown() error {
-	db := embeddedDB
-	embeddedDB = nil
+	db, conn := embeddedDB, embeddedConn
+	embeddedDB, embeddedConn = nil, nil
+	if conn != nil {
+		return conn.Close()
+	}
 	if db == nil {
 		return nil
 	}
@@ -170,6 +185,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	exposeRoster()
 	exposeProjects()
 	exposeApproval()
+	exposeEmail()
 
 	log := luxlog.Default().New("subsystem", "iam")
 
@@ -190,13 +206,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// so the addresses this process serves are the ones IAM declares either way —
 	// which is what keeps the published document, the MCP tool list, the SDKs and the
 	// CLI from depending on whether a volume happened to be mounted.
-	db, err := openStore(dir)
+	db, conn, err := openStore(dir)
 	if err != nil {
-		log.Error("iam store absent — every identity op answers 503 (cloud stays up)", "err", err, "dir", dir)
+		log.Error("iam store unavailable — every identity op answers 503 (cloud stays up)", "err", err, "dir", dir)
 	}
 	// Published for in-process readers (DB()) — nil while there is no store, so a
 	// reader can tell.
-	embeddedDB = db
+	embeddedDB, embeddedConn = db, conn
 
 	// Bind the transport that carries a verification code to a person (sender.go).
 	// Binding is an ASSERTION: it tells IAM that a code handed over will reach
@@ -279,38 +295,55 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // exists to refuse, written by hand.
 func StorePath(dir string) string { return filepath.Join(dir, "iam", "iam.db") }
 
-// openStore opens THE identity store — with IAM's own opener.
+// storeNamespace and storeSubsystem name the identity store's KEY. The platform
+// owns it, under a subsystem nothing else uses, so no other store in the estate
+// derives the same key and a volume lifted from this one opens nothing else.
+var storeNamespace = namespace.System()
+
+const storeSubsystem = "iam"
+
+// openStore opens THE identity store, encrypted at rest.
 //
-// The store is not cloud's to open. iamstore.Open is the ONE path IAM's serving binary
-// and its migrator both take, so a store this process writes and a store the iam CLI
-// reads are byte-compatible by construction rather than by agreement: the same WAL
-// mode, the same busy timeout, the same file. Opening it any other way makes a second
-// format for one database, and the second one only ever has the wrong rows in it.
-//
-// IT USED TO OPEN THROUGH cek, and the reason it stopped is worth keeping. cek gives a
-// keyed handle, which made this store encrypted at rest — a real property, and the
-// argument for it was sound: an identity graph and every credential record readable
-// from a lifted volume is exactly the exposure encryption exists to remove. What the
-// argument missed is that it was protecting the WRONG FILE. cek derives its own path,
-// so this opened {DataDir}/orgs/_platform/global.db while every identity in production
-// lives in a plain SQLite file the standalone iam wrote; the encrypted store held four
+// IT USED TO OPEN THROUGH cek AND THEN STOPPED, and the reason is the whole shape of
+// this function. cek gives a keyed handle, and the argument for one was always sound:
+// an identity graph and every credential record readable from a lifted volume is
+// exactly the exposure encryption exists to remove. What went wrong was never the
+// encryption — it was the ADDRESS. cek.Open derives its own path from the namespace,
+// so it opened {DataDir}/orgs/_platform/global.db while every identity in production
+// lived in the plain SQLite file at {DataDir}/iam/iam.db. The encrypted store held four
 // kilobytes and no users, and asking it for the signing keys returned {"keys":[]}. A
-// fully-mounted, completely empty identity service is not a security posture.
+// fully-mounted, completely empty identity service is not a security posture, so the
+// keyed open was reverted and the store went back to plaintext at rest.
 //
-// cek cannot be pointed at the real file either — not "should not": it derives a key
-// unconditionally and refuses a plaintext database at open, which is measured, not
-// assumed. So the choice is between an encrypted store with no identities in it and
-// the store that has them. Encrypting the one that has them means re-keying an
-// existing file, which is a migration, and the directive here is forward-only: one
-// store, pointed at, never converted.
+// Both halves are available now, and neither costs the other. cek.OpenAt is cek.Open
+// for a store whose LOCATION is settled by a mounted volume rather than by the
+// namespace — the same derivation, the same keyed open, at the file that actually
+// holds the identities. And cek.Convert makes an existing plaintext database encrypted
+// under that key without losing a row: the plaintext stays the source of truth until
+// an atomic rename commits, and the rename happens only after the copy reproduces the
+// source's schema, per-table row count and per-table content hash, passes
+// integrity_check, and re-opens under this exact keyed path. A key that could not open
+// the result is caught while the original is still there.
 //
-// SO THE IDENTITY STORE IS PLAINTEXT AT REST, exactly as it is today, and that is a
-// cost named rather than hidden. The only shape that changes it without a migration is
-// a NEW store born encrypted with the old one retired, and that is a separate decision
-// this open cannot smuggle in.
+// CONVERT RUNS ON EVERY BOOT and is a stat once the store is encrypted. That is
+// deliberate: it is not a migration somebody has to remember to run, so a store
+// restored from an old backup, or a volume mounted from before this change, is
+// encrypted by the act of serving it rather than by a runbook.
 //
-// cek keeps opening cloud's OWN stores. Each store is opened by whoever owns it.
-func openStore(dir string) (orm.DB, error) {
+// ALL OF THAT IS THE FILE BACKEND'S. Point IAM_STORE_BACKEND at a server and there is
+// no file here to key: iamstore.Open takes it, the same call IAM's serving binary and
+// its migrator make, so the two processes reach one database rather than two formats
+// of it. Encryption at rest is then the server's, over the rows it holds.
+//
+// The ORM is layered over the keyed connection rather than opening its own
+// (orm.AdaptSQLite): the file's lifecycle — its key, its pragmas, its pool — belongs
+// to whoever opened it, and the ORM only manages records inside it. The engine and its
+// pragmas are the driver's either way, so this is the same database iam's own opener
+// produces, with a key.
+//
+// The store is still not cloud's to CREATE — see below — and it is now cloud's to
+// unlock, because cloud is what holds the master key.
+func openStore(dir string) (orm.DB, *sql.DB, error) {
 	// REFUSE TO CREATE ONE. This process is pointed at an identity store that
 	// already exists — that is the whole shape: one store, pointed at, never
 	// converted. iamstore.Open creates the file when it is absent, which is right
@@ -338,12 +371,8 @@ func openStore(dir string) (orm.DB, error) {
 	// derived from anything the process already knows — and it defaults to the
 	// behaviour that exists today, so a deployment that sets nothing is unchanged.
 	//
-	// On "sql" the identity store stops being a file on one volume: no path, no
-	// per-file key, and nothing a volume-wide encryption sweep can convert out
-	// from under a plain-SQLite opener. That is not a hypothetical — it is what
-	// took every brand's login down on 13 Aug, when this store was the one
-	// plaintext database on a volume where everything else was cek-encrypted, and
-	// a sweep did the obviously-right thing to it.
+	// On "sql" the identity store is not a file on a volume at all: no path and no
+	// per-file key, reached identically from every replica.
 	backend := strings.TrimSpace(os.Getenv("IAM_STORE_BACKEND"))
 
 	if backend != "" && backend != "sqlite" {
@@ -360,20 +389,35 @@ func openStore(dir string) (orm.DB, error) {
 		// database and expect to be told.
 		db, err := iamstore.Open(backend, "")
 		if err != nil {
-			return nil, fmt.Errorf("iam: open the %s identity store: %w", backend, err)
+			return nil, nil, fmt.Errorf("iam: open the %s identity store: %w", backend, err)
 		}
-		return db, nil
+		// No connection to hand back: there is no local file, so nothing here holds a
+		// keyed handle and the ORM owns the pool it opened.
+		return db, nil, nil
 	}
 
 	path := StorePath(dir)
 	if _, err := os.Stat(path); err != nil {
-		return nil, fmt.Errorf("iam: the identity store is not at %s, so this process has nothing to serve — check that the volume holding it is mounted there: %w", path, err)
+		return nil, nil, fmt.Errorf("iam: the identity store is not at %s, so this process has nothing to serve — check that the volume holding it is mounted there: %w", path, err)
 	}
-	db, err := iamstore.Open("sqlite", path)
+
+	// Encrypt it if it is not already. Refusing here rather than opening anyway is
+	// the point: a missing or wrong master key must never be the reason the
+	// identity graph is served from a plaintext file.
+	if err := cek.Convert(storeNamespace, storeSubsystem, path); err != nil {
+		return nil, nil, fmt.Errorf("iam: encrypt the identity store at %s: %w", path, err)
+	}
+
+	conn, err := cek.OpenAt(storeNamespace, storeSubsystem, path)
 	if err != nil {
-		return nil, fmt.Errorf("iam: open store: %w", err)
+		return nil, nil, fmt.Errorf("iam: open store: %w", err)
 	}
-	return db, nil
+	db, err := orm.AdaptSQLite(conn)
+	if err != nil {
+		_ = conn.Close()
+		return nil, nil, fmt.Errorf("iam: layer the ORM over the identity store: %w", err)
+	}
+	return db, conn, nil
 }
 
 // paths derives the data directory IAM's store lives under and its init_data.json

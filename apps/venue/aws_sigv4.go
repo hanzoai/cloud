@@ -18,9 +18,10 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -86,11 +87,7 @@ func signV4(req *http.Request, c awsCreds, region, service string, body []byte, 
 		signed["x-k8s-aws-id"] = v
 	}
 
-	names := make([]string, 0, len(signed))
-	for k := range signed {
-		names = append(names, k)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(signed))
 	var ch strings.Builder
 	for _, n := range names {
 		ch.WriteString(n)
@@ -150,11 +147,7 @@ func presignGetCallerIdentity(endpoint string, c awsCreds, region, clusterName s
 	if c.sessionToken != "" {
 		params["X-Amz-Security-Token"] = c.sessionToken
 	}
-	keys := make([]string, 0, len(params))
-	for k := range params {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(params))
 	var q strings.Builder
 	for i, k := range keys {
 		if i > 0 {

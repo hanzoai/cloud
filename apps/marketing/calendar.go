@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -326,7 +328,7 @@ type PostList struct {
 //
 // Example: {"title": "Launch day", "body": "Hanzo Cloud is live.", "channel": "x", "scheduledAt": 1780000000}
 func (o ops) createCalendarPost(ctx context.Context, in *CalendarPost) (*CalendarPost, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -341,10 +343,7 @@ func (o ops) createCalendarPost(ctx context.Context, in *CalendarPost) (*Calenda
 	if in.ScheduledAt > 0 {
 		status = calScheduled
 	}
-	id, err := genID("cal")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("cal")
 	now := time.Now().Unix()
 	p, err := o.s.State.store.CreateCalendarPost(ctx, CalendarPost{
 		ID: id, Org: org, Title: clip(in.Title), Body: in.Body, Channel: channel,
@@ -362,7 +361,7 @@ func (o ops) createCalendarPost(ctx context.Context, in *CalendarPost) (*Calenda
 //
 // Example: {"status": "scheduled", "limit": 50}
 func (o ops) listCalendarPosts(ctx context.Context, in *PostQuery) (*PostList, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +378,7 @@ func (o ops) listCalendarPosts(ctx context.Context, in *PostQuery) (*PostList, e
 //
 // Example: {"id": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}
 func (o ops) getCalendarPost(ctx context.Context, in *PostRef) (*CalendarPost, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +396,7 @@ func (o ops) getCalendarPost(ctx context.Context, in *PostRef) (*CalendarPost, e
 //
 // Example: {"title": "Launch day", "body": "Hanzo Cloud is live — try it free.", "channel": "x", "scheduledAt": 1780003600}
 func (o ops) updateCalendarPost(ctx context.Context, in *CalendarPost) (*CalendarPost, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +424,7 @@ func (o ops) updateCalendarPost(ctx context.Context, in *CalendarPost) (*Calenda
 //
 // Example: {"id": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}
 func (o ops) deleteCalendarPost(ctx context.Context, in *PostRef) (*struct{}, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +445,7 @@ func (o ops) deleteCalendarPost(ctx context.Context, in *PostRef) (*struct{}, er
 //
 // Example: {"id": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}
 func (o ops) publishCalendarPost(ctx context.Context, in *PostRef) (*CalendarPost, error) {
-	org, err := tenant(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -61,18 +61,12 @@ func TestSlugify(t *testing.T) {
 	}
 }
 
-func TestLocalPartAndFirstNonEmpty(t *testing.T) {
+func TestLocalPart(t *testing.T) {
 	if got := localPart("z@hanzo.ai"); got != "z" {
 		t.Errorf("localPart = %q", got)
 	}
 	if got := localPart("noatsign"); got != "noatsign" {
 		t.Errorf("localPart = %q", got)
-	}
-	if got := firstNonEmpty("", "", "third", "fourth"); got != "third" {
-		t.Errorf("firstNonEmpty = %q", got)
-	}
-	if got := firstNonEmpty("", ""); got != "" {
-		t.Errorf("firstNonEmpty empty = %q", got)
 	}
 }
 

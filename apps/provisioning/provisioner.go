@@ -17,8 +17,10 @@ import (
 	"strings"
 	"time"
 
-	s3 "github.com/hanzoai/s3-go"
-	"github.com/hanzoai/s3-go/pkg/credentials"
+	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/shorten"
+	s3 "github.com/hanzos3/go"
+	"github.com/hanzos3/go/pkg/credentials"
 )
 
 // errAlreadyExists is returned by a Provisioner when the backend reports the
@@ -72,7 +74,7 @@ type qdrantProvisioner struct {
 }
 
 func newQdrant() *qdrantProvisioner {
-	base := strings.TrimRight(env("CLOUD_VECTOR_ADMIN_URL", "http://vector.hanzo.svc:6333"), "/")
+	base := strings.TrimRight(environ.Or("CLOUD_VECTOR_ADMIN_URL", "http://vector.hanzo.svc:6333"), "/")
 	host, port := hostPortFromURL(base, 6333)
 	return &qdrantProvisioner{
 		base:     base,
@@ -80,7 +82,7 @@ func newQdrant() *qdrantProvisioner {
 		host:     host,
 		port:     port,
 		dim:      atoiEnv("CLOUD_VECTOR_DEFAULT_DIM", 1536),
-		distance: env("CLOUD_VECTOR_DISTANCE", "Cosine"),
+		distance: environ.Or("CLOUD_VECTOR_DISTANCE", "Cosine"),
 	}
 }
 
@@ -129,7 +131,7 @@ type meiliProvisioner struct {
 }
 
 func newMeili() *meiliProvisioner {
-	base := strings.TrimRight(env("CLOUD_SEARCH_ADMIN_URL", "http://search.hanzo.svc:7700"), "/")
+	base := strings.TrimRight(environ.Or("CLOUD_SEARCH_ADMIN_URL", "http://search.hanzo.svc:7700"), "/")
 	host, port := hostPortFromURL(base, 7700)
 	return &meiliProvisioner{base: base, key: os.Getenv("CLOUD_SEARCH_ADMIN_KEY"), host: host, port: port}
 }
@@ -185,14 +187,14 @@ type s3Provisioner struct {
 }
 
 func newS3() *s3Provisioner {
-	endpoint := env("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000")
+	endpoint := environ.Or("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000")
 	host, port := splitAddr(endpoint, 9000)
 	return &s3Provisioner{
 		endpoint: endpoint,
 		ak:       os.Getenv("S3_ADMIN_ACCESS_KEY"),
 		sk:       os.Getenv("S3_ADMIN_SECRET_KEY"),
 		secure:   boolEnv("S3_SECURE", false),
-		region:   env("S3_REGION", "us-east-1"),
+		region:   environ.Or("S3_REGION", "us-east-1"),
 		host:     host,
 		port:     port,
 	}
@@ -288,7 +290,7 @@ func httpRequest(ctx context.Context, method, rawURL string, headers map[string]
 func truncate(b []byte) string {
 	s := strings.TrimSpace(string(b))
 	if len(s) > 200 {
-		return s[:200]
+		return shorten.To(s, 200)
 	}
 	return s
 }
@@ -304,13 +306,6 @@ func genToken(n int) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-func env(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }
 
 func atoiEnv(key string, def int) int {

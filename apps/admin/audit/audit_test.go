@@ -6,6 +6,7 @@ package audit
 // summary, and the SuperAdmin gate.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -196,7 +197,7 @@ func TestAdminAudit_DeniedWithoutSuperAdmin(t *testing.T) {
 				t.Errorf("%s [%s]: got %d, want 403 (body=%s)", ep, tc.name, resp.StatusCode, body)
 			}
 			// No record content must appear in a denied response.
-			if len(body) > 0 && (contains(body, "DELETE /v1/admin/orgs") || contains(body, `"hash"`)) {
+			if len(body) > 0 && (bytes.Contains(body, []byte("DELETE /v1/admin/orgs")) || bytes.Contains(body, []byte(`"hash"`))) {
 				t.Errorf("%s [%s]: denied response leaked audit data: %s", ep, tc.name, body)
 			}
 		}
@@ -220,17 +221,7 @@ func TestAdminAudit_VerifyWithoutStore(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	// A well-formed error envelope, not a 500/panic.
-	if resp.StatusCode != http.StatusOK || !contains(body, "not configured") {
+	if resp.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("not configured")) {
 		t.Errorf("nil-store verify = %d %s, want an ok-envelope 'not configured' error", resp.StatusCode, body)
 	}
-}
-
-func contains(b []byte, sub string) bool {
-	s := string(b)
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

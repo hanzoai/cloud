@@ -17,6 +17,7 @@ package main
 // embedded /v1/kms store would reject — one rule, both sides.
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -205,9 +206,9 @@ func BuildInventory(crs []cr) Inventory {
 			Org: org, Path: path, Env: env,
 			CRNamespace: c.Metadata.Namespace, CRName: c.Metadata.Name,
 			HostAPI:  strings.TrimSpace(c.Spec.HostAPI),
-			CredName: cref.SecretName, CredNS: firstNonEmpty(cref.SecretNamespace, c.Metadata.Namespace),
+			CredName: cref.SecretName, CredNS: cmp.Or(strings.TrimSpace(cref.SecretNamespace), c.Metadata.Namespace),
 			ManagedName: c.Spec.ManagedSecretReference.SecretName,
-			ManagedNS:   firstNonEmpty(c.Spec.ManagedSecretReference.SecretNamespace, c.Metadata.Namespace),
+			ManagedNS:   cmp.Or(strings.TrimSpace(c.Spec.ManagedSecretReference.SecretNamespace), c.Metadata.Namespace),
 			Policy:      c.Spec.ManagedSecretReference.CreationPolicy,
 		}
 
@@ -306,11 +307,4 @@ func validOrg(org string) bool {
 		}
 	}
 	return true
-}
-
-func firstNonEmpty(a, b string) string {
-	if strings.TrimSpace(a) != "" {
-		return a
-	}
-	return b
 }

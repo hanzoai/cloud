@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -251,7 +252,7 @@ func TestAdmitPublic_NameIsServerChosen(t *testing.T) {
 
 func truncate(s string) string {
 	if len(s) > 24 {
-		return s[:24] + "…"
+		return shorten.To(s, 24) + "…"
 	}
 	return s
 }

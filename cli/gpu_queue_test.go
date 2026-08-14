@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -337,7 +338,7 @@ func TestStudioReadyGatesCapability(t *testing.T) {
 	if w.studioReady {
 		t.Fatal("no token must never be studio-ready")
 	}
-	if contains(w.capabilities(), studioCap) {
+	if slices.Contains(w.capabilities(), studioCap) {
 		t.Fatalf("studioCap advertised without a token: %v", w.capabilities())
 	}
 	if w.studioBlockReason() == "" {
@@ -350,7 +351,7 @@ func TestStudioReadyGatesCapability(t *testing.T) {
 	if w.studioReady {
 		t.Fatal("a node that launches its own studio claimed readiness before that studio answered")
 	}
-	if contains(w.capabilities(), studioCap) {
+	if slices.Contains(w.capabilities(), studioCap) {
 		t.Fatalf("studioCap advertised by a cold node: %v", w.capabilities())
 	}
 
@@ -369,7 +370,7 @@ func TestStudioReadyGatesCapability(t *testing.T) {
 	if changed := w.refreshStudioReady(context.Background()); !changed {
 		t.Fatal("a studio that started answering should flip readiness")
 	}
-	if !w.studioReady || !contains(w.capabilities(), studioCap) {
+	if !w.studioReady || !slices.Contains(w.capabilities(), studioCap) {
 		t.Fatalf("a reachable studio must be ready + advertise studioCap: ready=%v caps=%v", w.studioReady, w.capabilities())
 	}
 	if w.studioBlockReason() != "" {

@@ -331,7 +331,7 @@ func TestPrincipalBridgeCarriesOrg(t *testing.T) {
 			got.key = *in
 			got.org, _ = ctx.Value(orgKey{}).(string)
 			if got.org == "" {
-				return nil, zip.ErrForbidden("X-Org-Id required")
+				return nil, zip.ErrForbidden("a validated principal is required")
 			}
 			return &sessionView{ID: in.ID, Status: "running"}, nil
 		},

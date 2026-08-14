@@ -48,8 +48,10 @@ package platform
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -173,12 +175,7 @@ func discoverNamespaces(s *cloud.Service[fleetState], ctx context.Context) []str
 		out = append(out, ns)
 		delete(known, ns)
 	}
-	rest := make([]string, 0, len(known))
-	for ns := range known {
-		rest = append(rest, ns)
-	}
-	sort.Strings(rest)
-	out = append(out, rest...)
+	out = append(out, slices.Sorted(maps.Keys(known))...)
 
 	if cache != nil {
 		cache.mu.Lock()

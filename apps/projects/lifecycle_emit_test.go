@@ -40,10 +40,10 @@ func TestDeployEmitsLifecycle(t *testing.T) {
 		t.Fatalf("create project: %d %s", code, b)
 	}
 
-	// Git deploy → queued deployment + BuildStarted.
-	code, b := do(t, app, http.MethodPost, "/v1/projects/myapp/deploy", "acme", map[string]any{"source": "git", "commit": "abc123"})
+	// Open a deployment → queued deployment + BuildStarted.
+	code, b := do(t, app, http.MethodPost, "/v1/projects/myapp/deployments", "acme", map[string]any{"commit": "abc123"})
 	if code != http.StatusAccepted {
-		t.Fatalf("git deploy want 202, got %d (%s)", code, b)
+		t.Fatalf("start deployment want 202, got %d (%s)", code, b)
 	}
 	var dep struct {
 		ID string `json:"id"`

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/commerce/events"
 	"github.com/hanzoai/commerce/infra"
 	psembed "github.com/hanzoai/pubsub/embed"
@@ -41,7 +42,7 @@ func seedEndpoint(t *testing.T, d *dispatcher, org string, e Endpoint) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	e.Org, e.CreatedAt, e.UpdatedAt = org, now, now
 	if e.ID == "" {
-		e.ID = newID("wh")
+		e.ID = mint.ID("wh")
 	}
 	if e.Status == "" {
 		e.Status = "active"
@@ -288,7 +289,7 @@ func TestBusEndToEnd(t *testing.T) {
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	if err := st.create(context.Background(), Endpoint{
-		ID: newID("wh"), Org: "acme", URL: sub.URL, Events: []string{"commerce.>"},
+		ID: mint.ID("wh"), Org: "acme", URL: sub.URL, Events: []string{"commerce.>"},
 		Secret: "whsec_e2e", Status: "active", CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatal(err)

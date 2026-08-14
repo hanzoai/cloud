@@ -7,7 +7,9 @@ package visor
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -114,7 +116,7 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 
 	// A creator states its request schema, and the example comes from the comment.
 	if _, ok := doc.Components.Schemas["createClusterReq"]; !ok {
-		t.Errorf("createClusterReq schema missing: %v", keys(doc.Components.Schemas))
+		t.Errorf("createClusterReq schema missing: %v", slices.Collect(maps.Keys(doc.Components.Schemas)))
 	}
 	if !strings.Contains(spec, `"gpu-h100x8-640gb"`) {
 		t.Errorf("the createK8sCluster example did not reach the spec")
@@ -151,12 +153,4 @@ func TestMCPPublishesTheSurface(t *testing.T) {
 	if strings.Contains(tools, "launchBot") {
 		t.Errorf("launchBot is raw by design but appears as an MCP tool")
 	}
-}
-
-func keys(m map[string]any) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }

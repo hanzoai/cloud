@@ -61,7 +61,11 @@ var Apps = []App{
 	// route the three and nothing more. They were in manifest/router_test.go's
 	// `unreachable` ledger until now — a relying party's FIRST call, reaching no app.
 	{Name: "iam", Prefixes: []string{"/.well-known/jwks", "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration", "/login/oauth", "/v1/iam"}},
-	{Name: "base", Prefixes: []string{"/rest/v1", "/v1/base", "/v1/collections", "/v1/waitlist"}},
+	// One prefix for the org's Base, because everything it serves is under it now.
+	// The table wire used to need a second one at /rest/v1, outside /v1 by a REST
+	// client's convention rather than by ours; Base moved it beneath the mount
+	// prefix, so it is /v1/base/rest/{collection} and this row covers it.
+	{Name: "base", Prefixes: []string{"/v1/base", "/v1/waitlist"}},
 	// /v1/summary is the PUBLIC platform status document (apps/o11y/summary.go),
 	// the outward projection of the fleet health probes o11y already runs. It has
 	// to be listed here or the host never routes it to this app and it falls to
@@ -135,7 +139,14 @@ var Apps = []App{
 	// though it answers 501 — an address the fleet publishes and routes nowhere is
 	// the defect this table exists to prevent, and a 501 that names what is missing
 	// is a better answer than commerce's bare-"/v1" 404.
-	{Name: "platform", Prefixes: []string{"/v1/builds", "/v1/environments", "/v1/pipelines", "/v1/platform/apps", "/v1/platform/cd", "/v1/platform/ci", "/v1/platform/fleet", "/v1/platform/health", "/v1/platform/projects", "/v1/releases", "/v1/run", "/v1/runner"}},
+	//
+	// /v1/git-webhook is where the FORGE delivers a push (apps/platform hook.go).
+	// It is platform's because the deploy trigger is: the door that used to take
+	// these deliveries was in git's process, where that trigger is nil, so it
+	// answered every push 204 and built nothing. It is a sibling of git's row and
+	// not a child — a prefix claims a path and its subtree, so "/v1/git" holds
+	// /v1/git and /v1/git/*, and /v1/git-webhook is neither.
+	{Name: "platform", Prefixes: []string{"/v1/builds", "/v1/environments", "/v1/git-webhook", "/v1/pipelines", "/v1/platform/apps", "/v1/platform/cd", "/v1/platform/ci", "/v1/platform/fleet", "/v1/platform/health", "/v1/platform/projects", "/v1/releases", "/v1/run", "/v1/runner"}},
 	{Name: "projects", Prefixes: []string{"/v1/platform/sites", "/v1/projects", "/v1/sites", "/v1/tags"}},
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
@@ -153,20 +164,7 @@ var Apps = []App{
 	{Name: "x402", Prefixes: []string{"/v1/x402"}},
 	{Name: "deploy", Prefixes: []string{"/v1/deploy/account/can-i", "/v1/deploy/applications", "/v1/deploy/callback", "/v1/deploy/clusters", "/v1/deploy/gitops", "/v1/deploy/health", "/v1/deploy/login", "/v1/deploy/logout", "/v1/deploy/projects", "/v1/deploy/reconcile", "/v1/deploy/session/userinfo", "/v1/deploy/settings", "/v1/deploy/stream/applications", "/v1/deploy/version"}},
 	{Name: "functions", Prefixes: []string{"/v1/functions"}},
-	// /tracker is the BOARD ITSELF — the SPA embedded in this app's binary
-	// (apps/tracker/ui), which is the whole point of tracker.hanzo.ai. It must be
-	// claimed here or the fleet routes the host's page to whoever owns "/" (the
-	// console), and the visitor gets the console's HTML shell where the board
-	// should be: a 200 that is not the product. An app-level static prefix beside
-	// the API it reads, exactly as git claims /explore and team claims
-	// /collaborator.
-	//
-	// It could NOT be caught by the published-path oracle: a static bundle is
-	// served by an untyped All() route, so it appears in no openapi.json and
-	// router_test's gate had nothing to compare. The gate that does catch it is
-	// internal/manifesttest, which reads the app's LIVE router declaration
-	// (untyped routes included) rather than its published document.
-	{Name: "tracker", Prefixes: []string{"/tracker", "/v1/tracker"}},
+	{Name: "todo", Prefixes: []string{"/v1/todo"}},
 	{Name: "templates", Prefixes: []string{"/v1/templates"}},
 	{Name: "blueprint", Prefixes: []string{"/v1/blueprint"}},
 	{Name: "framework", Prefixes: []string{"/v1/framework"}},
@@ -287,8 +285,8 @@ var Apps = []App{
 	// fleet serves. The other four prefixes are READ ONLY: bare "/v1/analytics" now
 	// carries only the four lenses (overview, timeseries, top, health) — the ingest
 	// aliases under it are retired — and /v1/errors, /v1/insights/events and
-	// /v1/insights/health are GET lenses. /v1/tracker is NOT here and never was:
-	// the tracker product owns that name (its row is above, and it wins the prefix).
+	// /v1/insights/health are GET lenses. /v1/todo is NOT here and never was:
+	// the todo product owns that name (its row is above, and it wins the prefix).
 	//
 	// "/v1/event.js" is its OWN prefix and cannot be folded into "/v1/event": a
 	// prefix owns segments, and ".js" is part of this one's single segment rather
@@ -329,7 +327,7 @@ var Apps = []App{
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}},
 	{Name: "explorer", Prefixes: []string{"/v1/indexers", "/v1/oracles"}},
 	{Name: "security", Prefixes: []string{"/v1/security"}},
-	{Name: "integrations", Prefixes: []string{"/v1/connector/github/webhook", "/v1/connectors", "/v1/integrations"}},
+	{Name: "integrations", Prefixes: []string{"/v1/connectors", "/v1/integrations"}},
 	// /v1/tags is owned by the projects app, which holds both the handler and the
 	// project store it reads (see the projects entry above and apps/projects/tagdoor.go).
 	// It must be claimed exactly once — two apps claiming it panics the host build.
@@ -363,6 +361,11 @@ var Apps = []App{
 	{Name: "crawl", Prefixes: []string{"/v1/crawl"}},
 	{Name: "index", Prefixes: []string{"/v1/index"}},
 	{Name: "catalog", Prefixes: []string{"/v1/catalog"}},
+	// The product TAXONOMY — categories, tags and display order — beside catalog
+	// rather than inside it, and beside commerce rather than inside it. catalog is
+	// the deployed-sites corpus and commerce's `product` is a priced SKU; this is
+	// navigation copy, most of which is not purchasable and has no price.
+	{Name: "taxonomy", Prefixes: []string{"/v1/taxonomy"}},
 	{Name: "world", Prefixes: []string{"/v1/world"}},
 	// web3 is named for the domain and serves none of it under /v1/web3, so the
 	// /v1/<name> default would cover nothing it registers — the apps/plan defect.

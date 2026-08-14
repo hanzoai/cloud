@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // send.go is the ONE bounded, credential-safe HTTP transport every adapter shares to
@@ -79,7 +81,7 @@ func truncate(b []byte, n int) string {
 	if len(b) <= n {
 		return string(b)
 	}
-	return strings.ToValidUTF8(string(b[:n]), "")
+	return strings.ToValidUTF8(shorten.To(string(b), n), "")
 }
 
 // ── PII normalization + hashing (advanced matching) ──────────────────────────

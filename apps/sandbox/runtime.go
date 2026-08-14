@@ -28,16 +28,20 @@ package sandbox
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
-	"sort"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/internal/environ"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -96,9 +100,20 @@ const (
 // nothing.
 const annLeased = "hanzo.ai/sandbox-leased"
 
-// defaultTTL is the lease a class gets when the caller names none. Unbounded is
-// not an option for a pod running submitted code on our nodes.
-var defaultTTL = map[string]int{"exec": 900, "dev": 14400, "desktop": 14400}
+// kvmResource is the extended resource an android pod asks for, and it is the
+// ONE name for the device.
+//
+// A hostPath mount of /dev/kvm does NOT work and the way it fails is the reason
+// this is a device plugin. The file appears in the container, `ls -l` shows it,
+// and every open returns EPERM — the container's device cgroup, which a volume
+// does not touch. Measured on a worker node: the same probe answered
+// `PermissionError: [Errno 1] Operation not permitted` unprivileged and
+// `KVM_API_VERSION 12` privileged. A device plugin is what makes the kubelet add
+// the device to that allowlist, so the pod can open what it was given.
+//
+// The name is KubeVirt's because every KVM device plugin advertises it; a name
+// of our own would be a second vocabulary for one device.
+const kvmResource = "devices.kubevirt.io/kvm"
 
 // maxLiveExec is how many `exec` sandboxes ONE org may hold at once.
 //
@@ -156,9 +171,9 @@ func newRuntime() *runtime {
 		// denies them the cluster — ingress from nothing, egress a whitelist —
 		// and a sandbox must not sit beside the datastores it is forbidden to
 		// reach. One namespace, one policy, everything that runs submitted code.
-		ns:           envOr("SANDBOX_NAMESPACE", "hanzo-sandboxes"),
-		image:        envOr("SANDBOX_IMAGE_REPO", "oci.hanzo.ai/hanzoai/sandbox"),
-		tag:          envOr("SANDBOX_IMAGE_TAG", ""),
+		ns:           environ.Or("SANDBOX_NAMESPACE", "hanzo-sandboxes"),
+		image:        environ.Or("SANDBOX_IMAGE_REPO", "oci.hanzo.ai/hanzoai/sandbox"),
+		tag:          environ.Or("SANDBOX_IMAGE_TAG", ""),
 		startTimeout: time.Duration(atoiOr(os.Getenv("SANDBOX_START_TIMEOUT_SEC"), 120)) * time.Second,
 		execTimeout:  time.Duration(atoiOr(os.Getenv("SANDBOX_EXEC_TIMEOUT_SEC"), 900)) * time.Second,
 	}
@@ -256,7 +271,7 @@ func (r *runtime) imageFor(class string, super bool) string {
 	}
 	tag := r.tag
 	if tag == "" {
-		tag = envOr("SANDBOX_IMAGE_TAG_"+strings.ToUpper(class), "")
+		tag = environ.Or("SANDBOX_IMAGE_TAG_"+strings.ToUpper(class), "")
 	}
 	if tag == "" {
 		// FALL BACK TO A NAME NOTHING PUBLISHES, on purpose.
@@ -478,14 +493,7 @@ func (r *runtime) runtimeFor(m Sandbox, want, fleet string) (string, error) {
 // sorted is the closed set, in one order. A Go map range would give a different
 // one every time, and both an error message and a derived choice that change on
 // their own are ones nobody can grep for or reproduce.
-func sorted() []string {
-	n := make([]string, 0, len(runtimes))
-	for k := range runtimes {
-		n = append(n, k)
-	}
-	sort.Strings(n)
-	return n
-}
+func sorted() []string { return slices.Sorted(maps.Keys(runtimes)) }
 
 func runtimeNames() string { return strings.Join(sorted(), ", ") }
 
@@ -679,10 +687,10 @@ func (r *runtime) ensureVolume(ctx context.Context, m Sandbox) error {
 		},
 		"spec": map[string]any{
 			"accessModes": []any{"ReadWriteOnce"},
-			"resources":   map[string]any{"requests": map[string]any{"storage": envOr("SANDBOX_VOLUME_SIZE", "20Gi")}},
+			"resources":   map[string]any{"requests": map[string]any{"storage": environ.Or("SANDBOX_VOLUME_SIZE", "20Gi")}},
 		},
 	}}
-	if sc := envOr("SANDBOX_STORAGE_CLASS", ""); sc != "" {
+	if sc := environ.Or("SANDBOX_STORAGE_CLASS", ""); sc != "" {
 		pvc.Object["spec"].(map[string]any)["storageClassName"] = sc
 	}
 	if _, err := vols.Create(ctx, pvc, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -693,6 +701,7 @@ func (r *runtime) ensureVolume(ctx context.Context, m Sandbox) error {
 
 // podSpec is the sandbox, stated once.
 func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
+	k := classes[m.Class]
 	c := map[string]any{
 		"name":       container,
 		"image":      m.Image,
@@ -704,16 +713,23 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 		// container rootfs, which on our nodes shares one disk with every image
 		// layer and every build; a handful of unbounded sandbox take the node
 		// into DiskPressure and evict their own neighbours. Measured, not feared.
+		//
+		// A CLASS MAY ASK FOR MORE, and until now none could. These three env vars
+		// are the FLEET's envelope, one size for every sandbox, so an emulator —
+		// which holds a whole guest machine's RAM before it has drawn a pixel —
+		// would have been given 512Mi and killed. The class's own row wins where it
+		// states a value; where it is silent the fleet default stands, so exec, dev
+		// and desktop are byte-identical to what they were.
 		"resources": map[string]any{
 			"requests": map[string]any{
-				"cpu":               envOr("MACHINE_CPU_REQUEST", "250m"),
-				"memory":            envOr("MACHINE_MEM_REQUEST", "512Mi"),
-				"ephemeral-storage": envOr("MACHINE_DISK_REQUEST", "2Gi"),
+				"cpu":               cmp.Or(k.cpu, environ.Or("MACHINE_CPU_REQUEST", "250m")),
+				"memory":            cmp.Or(k.mem, environ.Or("MACHINE_MEM_REQUEST", "512Mi")),
+				"ephemeral-storage": cmp.Or(k.disk, environ.Or("MACHINE_DISK_REQUEST", "2Gi")),
 			},
 			"limits": map[string]any{
-				"cpu":               envOr("MACHINE_CPU_LIMIT", "2"),
-				"memory":            envOr("MACHINE_MEM_LIMIT", "4Gi"),
-				"ephemeral-storage": envOr("MACHINE_DISK_LIMIT", "8Gi"),
+				"cpu":               cmp.Or(k.cpu, environ.Or("MACHINE_CPU_LIMIT", "2")),
+				"memory":            cmp.Or(k.mem, environ.Or("MACHINE_MEM_LIMIT", "4Gi")),
+				"ephemeral-storage": cmp.Or(k.disk, environ.Or("MACHINE_DISK_LIMIT", "8Gi")),
 			},
 		},
 		"securityContext": map[string]any{
@@ -731,11 +747,7 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 	// Sorted, because a Go map ranges in random order and a pod spec that differs
 	// run to run is one nothing can diff.
 	if len(cr.env) > 0 {
-		names := make([]string, 0, len(cr.env))
-		for k := range cr.env {
-			names = append(names, k)
-		}
-		sort.Strings(names)
+		names := slices.Sorted(maps.Keys(cr.env))
 		env := make([]any, 0, len(names))
 		for _, k := range names {
 			env = append(env, map[string]any{"name": k, "value": cr.env[k]})
@@ -746,27 +758,43 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 	// a program. Every lifetime, from a one-shot invoke to a week-long session, is
 	// the same pod entered through the same channel.
 	//
-	// EXCEPT A DESKTOP, WHOSE SCREEN IS ITS PROCESS. The desktop image's CMD
-	// starts Xvfb, a window manager and the VNC/noVNC pair and only then becomes
-	// the same `sleep infinity`; stating a command here replaced that script
-	// outright, so the class that exists to have a display came up with no X
-	// server at all — byte-identical to `dev` but for a label, and silent about
+	// EXCEPT A CLASS WITH A SCREEN, WHOSE DISPLAY IS ITS PROCESS. The desktop
+	// image's CMD starts Xvfb, a window manager and the VNC/noVNC pair and only
+	// then becomes the same `sleep infinity`; stating a command here replaced that
+	// script outright, so the class that exists to have a display came up with no
+	// X server at all — byte-identical to `dev` but for a label, and silent about
 	// it, because a pod that sleeps looks perfectly healthy.
 	//
+	// It reads the class's own row rather than testing `!= "desktop"`, because
+	// that test is a list of one written as a comparison: android has a screen
+	// too, and adding it by hand here is the half of a new class it is easiest to
+	// forget — with exactly the failure above as the symptom.
+	//
 	// Deferring to the image is not a second way to start a sandbox. Work still
-	// arrives only through the exec subresource, for all three classes; the
-	// desktop simply also has something of its own to run first.
-	if m.Class != "desktop" {
+	// arrives only through the exec subresource, for every class; a screen simply
+	// also has something of its own to run first.
+	if !k.screen {
 		c["command"] = []any{"sleep", "infinity"}
 	} else {
 		// Declared so the screen is addressable by name rather than by a number
-		// somebody has to look up. Ports are how a reader learns a desktop has a
+		// somebody has to look up. Ports are how a reader learns a class has a
 		// display; they do not open anything the entrypoint has not bound, and it
 		// binds loopback.
 		c["ports"] = []any{
-			map[string]any{"name": "vnc", "containerPort": int64(5900)},
+			map[string]any{"name": "vnc", "containerPort": int64(rfb)},
 			map[string]any{"name": "novnc", "containerPort": int64(6080)},
 		}
+	}
+	// THE DEVICE IS A RESOURCE, ASKED FOR ON BOTH SIDES. Kubernetes admits an
+	// extended resource only when request and limit agree, so it is stated twice
+	// and cannot be stated once by mistake. Asking for it is also what SCHEDULES
+	// the pod: a node with no plugin advertises none, so an android sandbox stays
+	// Pending with a message naming the resource — which is the honest outcome,
+	// against a pod that starts and emulates the CPU in software and never boots.
+	if k.kvm {
+		res := c["resources"].(map[string]any)
+		res["requests"].(map[string]any)[kvmResource] = int64(1)
+		res["limits"].(map[string]any)[kvmResource] = int64(1)
 	}
 	spec := map[string]any{
 		// No token, ever. A sandbox runs somebody else's code; a projected
@@ -898,7 +926,7 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 			// runtime, so the volume states its own ceiling and the kubelet evicts
 			// the pod that exceeds it — which is the sandbox's problem to have,
 			// not the node's.
-			"emptyDir": map[string]any{"sizeLimit": envOr("SANDBOX_WORKDIR_SIZE", "2Gi")},
+			"emptyDir": map[string]any{"sizeLimit": environ.Or("SANDBOX_WORKDIR_SIZE", "2Gi")},
 		}}
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
@@ -1040,7 +1068,7 @@ func (r *runtime) exec(ctx context.Context, m Sandbox, argv []string, stdin io.R
 		return ExecResult{}, err
 	}
 	if m.Status != "running" || m.Pod == "" {
-		return ExecResult{}, fmt.Errorf("sandbox is %s", firstNonEmpty(m.Status, "unknown"))
+		return ExecResult{}, fmt.Errorf("sandbox is %s", cmp.Or(m.Status, "unknown"))
 	}
 	d := r.execTimeout
 	if timeoutSec > 0 && time.Duration(timeoutSec)*time.Second < d {
@@ -1090,9 +1118,45 @@ func (r *runtime) tty(ctx context.Context, m Sandbox, argv []string, stdin io.Re
 		return err
 	}
 	if m.Status != "running" || m.Pod == "" {
-		return fmt.Errorf("sandbox is %s", firstNonEmpty(m.Status, "unknown"))
+		return fmt.Errorf("sandbox is %s", cmp.Or(m.Status, "unknown"))
 	}
 	return r.str.tty(ctx, r.ns, m.Pod, argv, stdin, stdout, size)
+}
+
+// screen carries the sandbox's DISPLAY out as bytes: RFB, exactly as the VNC
+// server inside the pod speaks it, in both directions.
+//
+// It is the third shape of the one channel and not a third channel. There is no
+// address to dial — the desktop image binds its VNC server to loopback on
+// purpose, so the pod network can no more reach a screen than the internet can —
+// and the exec subresource is the only way into a sandbox that exists. `socat`
+// joins that stream to the loopback port, and what comes back is the protocol
+// unaltered: this function transports and never interprets.
+//
+// NO TTY, and that is the difference that matters. A pty translates — CR to LF,
+// among others — and RFB is arbitrary bytes, so a screen on a terminal is a
+// screen that corrupts the moment a pixel happens to be 0x0d. The plain stream
+// carries what it is given.
+//
+// stderr is COLLECTED rather than discarded, because the one failure anybody
+// will hit says its whole reason there. A pod whose screen is not running
+// refuses the connection, socat says so in one line and exits non-zero, and
+// without this the person watching gets a blank rectangle and a close frame that
+// says the command exited. With it, they get "connection refused".
+func (r *runtime) screen(ctx context.Context, m Sandbox, in io.Reader, out io.Writer) error {
+	if err := r.ready(); err != nil {
+		return err
+	}
+	if m.Status != "running" || m.Pod == "" {
+		return fmt.Errorf("sandbox is %s", cmp.Or(m.Status, "unknown"))
+	}
+	var why capped
+	err := r.str.stream(ctx, r.ns, m.Pod,
+		[]string{"socat", "-", "TCP:127.0.0.1:" + strconv.Itoa(rfb)}, in, out, &why)
+	if said := strings.TrimSpace(why.String()); err != nil && said != "" {
+		return fmt.Errorf("%s", said)
+	}
+	return err
 }
 
 func asCodeExit(err error, out *utilexec.CodeExitError) bool {
@@ -1195,11 +1259,4 @@ func coreConfig(in *rest.Config) *rest.Config {
 	out.APIPath = "/api"
 	out.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
 	return out
-}
-
-func envOr(k, def string) string {
-	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-		return v
-	}
-	return def
 }

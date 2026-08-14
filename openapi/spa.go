@@ -26,7 +26,7 @@ import "github.com/zap-proto/zip"
 //
 // prefix is the mount ("/tasks"), and its API subtree is "/v1"+prefix by
 // construction — the same-origin shape every embed uses. name is what the product
-// IS to the person reading the document ("tasks console", "tracker board"), and
+// IS to the person reading the document ("tasks console", "todo board"), and
 // reads directly after "The ".
 func DescribeSPA(prefix, name string) {
 	api := "/v1" + prefix

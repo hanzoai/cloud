@@ -27,6 +27,7 @@ package analytics
 // scaling ingest is scaling replicas, no handler changes.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -34,6 +35,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -78,7 +80,7 @@ func (e insightsEvent) toCapture() CaptureEvent {
 		// as an `$insert_id` property instead. Preserve it as the client MessageID so
 		// a retried batch (insights-go retries with backoff) keeps a STABLE row id
 		// rather than the server minting a fresh one per attempt.
-		MessageID:  firstNonEmptyStr(strings.TrimSpace(e.UUID), strings.TrimSpace(str("$insert_id"))),
+		MessageID:  cmp.Or(strings.TrimSpace(e.UUID), strings.TrimSpace(str("$insert_id"))),
 		Type:       typ,
 		Event:      e.Event,
 		Timestamp:  e.Timestamp,
@@ -180,7 +182,7 @@ type eventList struct {
 //
 // Example: {"limit": 100}
 func (o readOps) insightsEvents(ctx context.Context, in *limitQuery) (*eventList, error) {
-	org, err := tenantOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

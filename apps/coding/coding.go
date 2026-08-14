@@ -4,7 +4,7 @@
 // git, open a native "PR" work item, and return a Result the caller renders.
 //
 // It is a LIBRARY, not an app: no route, no plugin, no manifest row. Its one
-// caller is apps/integrations (the Slack `code:` trigger). It touches its
+// caller is plugin/agents, which registers the one door. It touches its
 // collaborators only through interface seams (Sessions, PR, Runner) plus two
 // git functions (CloneURL, VerifyRef), so the whole orchestration is unit-testable
 // with fakes and — critically — coding does NOT import apps/git: git imports
@@ -13,7 +13,7 @@
 // it into the trigger surface.
 //
 // ISOLATION: org is the ONLY tenant key and is threaded to every seam call
-// (session, tracker, git, and the bot-gateway X-Org-Id). A run for org A can only
+// (session, todo, git, and the bot-gateway X-Org-Id). A run for org A can only
 // ever open A's session, read/verify A's repo, and file A's PR. The clone URL is
 // built from (org, repo) so the sandbox is pointed only at this org's namespace,
 // and the credential (write-only) is scoped by IAM to this org at the edge.
@@ -56,6 +56,28 @@ var BaseRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$`)
 // forge's ref policy state the rule structurally: a coding run writes
 // refs/heads/agent/<something>, and nothing else, ever.
 func BranchFor(sessionID string) string { return "agent/" + shortID(sessionID) }
+
+// BaseOf is where a run starts: the branch given, or the branch of the run named
+// by after, or the repository's default.
+//
+// `after` is what makes a follow-up instruction — "now add tests for it" — build
+// on work already done instead of beginning again on a fresh clone. It sets the
+// base and NOTHING else, so the new run still writes its own branch: a run that
+// wrote back onto an earlier run's branch would break the rule the forge's ref
+// policy rests on, and would leave two turns of work under one name to review.
+//
+// A session is turned into a branch HERE rather than accepted as one, so naming a
+// run can never name a branch outside agent/. A given base wins — a caller who
+// already knows the branch is not overruled by a convenience.
+func BaseOf(base, after string) string {
+	if base = strings.TrimSpace(base); base != "" {
+		return base
+	}
+	if after = strings.TrimSpace(after); after != "" {
+		return BranchFor(after)
+	}
+	return ""
+}
 
 // Event kinds mirrored into the agent session. These are the agents session
 // vocabulary (a stable wire contract): a phase is a tool-call, a free line is a
@@ -100,10 +122,14 @@ type Runner interface {
 	Run(ctx context.Context, org, userID string, req RunRequest, onStep func(Step)) (RunResult, error)
 }
 
-// PRInput / PRRef mirror tracker's agent-PR shape without leaking its types into
+// PRInput / PRRef mirror todo's agent-PR shape without leaking its types into
 // the seam (the adapter bridges).
 type PRInput struct {
-	Org      string
+	Org string
+	// Actor is the forge login the proposal is opened as — the person the run
+	// acts for. It is not Assignee: that is who the todo row is assigned to
+	// (the agent), and the two are different facts.
+	Actor    string
 	Project  string
 	Repo     string
 	Base     string
@@ -137,17 +163,24 @@ type RunRequest struct {
 	// already drive a headless one.
 	Desktop bool
 
-	// The repo is OPTIONAL. CloneURL empty means the run has no checkout — and
-	// then CredUser/CredToken MUST be empty too, because a credential a run can
-	// never use only exists to leak. The runtime refuses the combination.
-	CloneURL          string
+	// The repo is OPTIONAL. Remote empty means the run has no checkout — and then
+	// Key MUST be empty too, because a credential a run can never use only exists
+	// to leak. The runtime refuses the combination.
+	//
+	// Remote is the forge's SSH address, because the grant behind it is a deploy
+	// key and a deploy key is SSH-only: the forge's HTTP path resolves permission
+	// from an authenticated USER and has no deploy-key branch at all.
+	Remote            string
 	BaseBranch        string
 	Branch            string
 	Prompt            string
 	SessionID         string
 	RunTimeoutSeconds int
-	CredUser          string
-	CredToken         string // write-only secret — never logged
+	// Key is the run's OpenSSH private key — write-only, never logged, scrubbed
+	// out of everything that leaves the sandbox. Known is the forge's host key,
+	// which is public and pins the host the run will talk to.
+	Key   string
+	Known string
 }
 
 type Step struct {
@@ -176,15 +209,25 @@ type RunResult struct {
 // cloud-side sandbox, and the credential is NOT used (the machine authenticates
 // with its own). When empty, the local sandbox path runs unchanged.
 type Req struct {
-	Org            string
-	UserID         string // linked Hanzo subject — session attribution + X-User-Id
-	AgentRef       string // agent label (e.g. "hanzo")
-	Repo           string
-	Project        string // IAM project slug (tracker + git scope); "" = org default
-	Base           string // base branch; "" = repo default
-	Prompt         string
-	CredUser       string
-	CredToken      string
+	Org      string
+	UserID   string // linked Hanzo subject — session attribution + X-User-Id
+	AgentRef string // agent label (e.g. "hanzo")
+	Repo     string
+	Project  string // IAM project slug (todo + git scope); "" = org default
+	Base     string // base branch; "" = repo default
+	Prompt   string
+	// Remote, Key and Known are the run's checkout: where the repository is, the
+	// key that opens it, and the host key that pins the forge. Start resolves all
+	// three together from one grant — see start.go — and a routed run carries
+	// none of them.
+	Remote string
+	Key    string // write-only secret — never logged
+	Known  string
+	// Actor is the forge login this run acts as — the AUTHENTICATED caller, not
+	// the attributed Subject. It is what every repository question is asked as,
+	// on BOTH the sandbox and the routed path, so the forge's own ACL decides
+	// which repository a run may reach.
+	Actor          string
 	TimeoutSeconds int
 	TargetID       string // when set, route to this registered machine instead of the sandbox
 	// Tool / Desktop are the caller's choice of harness and whether it needs a
@@ -222,6 +265,11 @@ type RoutedRun struct {
 	// machine (the durable view the machine claims omits them).
 	Actor    string
 	AgentRef string
+	// ForgeActor is the login the proposal is opened as when the machine reports
+	// back. It is carried for the same reason Branch is: the completion happens
+	// minutes later in another process, and re-deriving it there would be a
+	// second answer to who this run acts for.
+	ForgeActor string
 }
 
 // Result is the terminal outcome the trigger surface renders.
@@ -260,7 +308,7 @@ type Dispatcher struct {
 	Sessions  Sessions
 	PR        PR
 	Runner    Runner
-	CloneURL  func(ctx context.Context, org, repo string) string
+	CloneURL  func(ctx context.Context, org, actor, repo string) string
 	VerifyRef func(ctx context.Context, org, repo, branch string) (string, bool)
 	// Log is an optional structured log seam for best-effort mirror failures; nil
 	// is fine (mirror failures are non-fatal and simply dropped).
@@ -320,15 +368,10 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 		return d.routed(ctx, req, org, repo, prompt, res)
 	}
 
-	if strings.TrimSpace(req.CredToken) == "" {
-		res.Error = "no agent credential for this org"
-		return res
-	}
-	cloneURL := ""
-	if d.CloneURL != nil {
-		cloneURL = d.CloneURL(ctx, org, repo)
-	}
-	if cloneURL == "" {
+	// ONE check, because there is now one fact. The grant IS the remote and the
+	// credential: Start resolved them together, so a run either has a repository
+	// it can push to or it has neither half, and the two could not disagree.
+	if strings.TrimSpace(req.Remote) == "" || strings.TrimSpace(req.Key) == "" {
 		res.Error = "git is not available"
 		return res
 	}
@@ -367,9 +410,9 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	// 2. Dispatch to the sandbox runtime, mirroring every progress line live.
 	runReq := RunRequest{
 		Tool: req.Tool, Desktop: req.Desktop,
-		CloneURL: cloneURL, BaseBranch: strings.TrimSpace(req.Base), Branch: branch,
+		Remote: req.Remote, BaseBranch: strings.TrimSpace(req.Base), Branch: branch,
 		Prompt: prompt, SessionID: sessionID, RunTimeoutSeconds: timeoutOr(req.TimeoutSeconds),
-		CredUser: req.CredUser, CredToken: req.CredToken,
+		Key: req.Key, Known: req.Known,
 	}
 	onStep := func(s Step) {
 		kind := kindLog
@@ -418,7 +461,8 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	return d.completeChanged(term, completion{
 		org: org, repo: repo, project: strings.TrimSpace(req.Project), base: req.Base,
 		prompt: prompt, sessionID: sessionID, branch: branch, actor: actor, agentRef: agentRef,
-		diffstat: runRes.Diffstat, logTail: runRes.LogTail,
+		forgeActor: req.Actor,
+		diffstat:   runRes.Diffstat, logTail: runRes.LogTail,
 	}, res)
 }
 
@@ -428,14 +472,19 @@ type completion struct {
 	org, repo, project, base  string
 	prompt, sessionID, branch string
 	actor, agentRef           string
-	diffstat, logTail         string
+	// forgeActor is the login the proposal is opened as. It is separate from
+	// actor, which is the attributed subject the session records — one is who the
+	// work is FOR, the other is who the forge acts AS, and they are only the same
+	// string when the caller's subject happens to be their forge login.
+	forgeActor        string
+	diffstat, logTail string
 }
 
 // completeChanged is the shared terminal for a run that reported CHANGES: confirm the
 // pushed branch LANDED in native git (integrity — trust the tips we can read, not a
 // self-report), open the native PR work item, mirror the done status, and close the
 // session done. Fail-closed: when the verify seam is wired and the ref is absent, the
-// session closes ERROR and NO PR is filed. A tracker failure is recorded but does not
+// session closes ERROR and NO PR is filed. A todo failure is recorded but does not
 // fail the run (the branch is pushed + verified). ctx is the cancel-immune terminal
 // context. Used by the local path (Run) and the routed completion (finalizeRouted).
 func (d Dispatcher) completeChanged(ctx context.Context, c completion, res Result) Result {
@@ -451,7 +500,7 @@ func (d Dispatcher) completeChanged(ctx context.Context, c completion, res Resul
 		}
 	}
 	pr, perr := d.PR.Open(ctx, PRInput{
-		Org: c.org, Project: strings.TrimSpace(c.project), Repo: c.repo,
+		Org: c.org, Actor: c.forgeActor, Project: strings.TrimSpace(c.project), Repo: c.repo,
 		Base: baseOr(c.base), Head: c.branch, Title: codingTitle(c.repo, c.prompt),
 		Body: prBody(c.prompt, c.base, c.branch, res.CommitSha, c.diffstat, c.sessionID), Assignee: c.agentRef,
 	})
@@ -515,7 +564,8 @@ func (d Dispatcher) finalizeRouted(ctx context.Context, in RoutedRun, res Routed
 	_ = d.completeChanged(ctx, completion{
 		org: in.Org, repo: in.Repo, project: in.Project, base: in.Base,
 		prompt: in.Prompt, sessionID: in.SessionID, branch: branch, actor: in.Actor, agentRef: agentRef,
-		diffstat: res.Diffstat, logTail: "",
+		forgeActor: in.ForgeActor,
+		diffstat:   res.Diffstat, logTail: "",
 	}, out)
 }
 
@@ -551,9 +601,19 @@ func (d Dispatcher) routed(ctx context.Context, req Req, org, repo, prompt strin
 
 	// The machine clones the org's repo with its OWN credential; we still need the
 	// clone URL (non-secret) to hand it.
+	//
+	// IT IS RESOLVED AS THE ACTOR. The machine's credentials are broader than the
+	// caller's, so confirming the repository as a site administrator and then
+	// handing the address to that machine is a confused deputy — the caller would
+	// be reading a repository they have no access to, through a machine that
+	// does. The address is only produced for someone who could have found it.
+	if strings.TrimSpace(req.Actor) == "" {
+		res.Error = "git is not available"
+		return res
+	}
 	cloneURL := ""
 	if d.CloneURL != nil {
-		cloneURL = d.CloneURL(ctx, org, repo)
+		cloneURL = d.CloneURL(ctx, org, req.Actor, repo)
 	}
 	if cloneURL == "" {
 		res.Error = "git is not available"
@@ -594,7 +654,7 @@ func (d Dispatcher) routed(ctx context.Context, req Req, org, repo, prompt strin
 		Org: org, TargetID: target, SessionID: sessionID,
 		Repo: repo, Project: strings.TrimSpace(req.Project), Base: strings.TrimSpace(req.Base),
 		Branch: branch, Prompt: prompt, CloneURL: cloneURL, TimeoutSeconds: timeoutOr(req.TimeoutSeconds),
-		Actor: actor, AgentRef: agentRef,
+		Actor: actor, AgentRef: agentRef, ForgeActor: req.Actor,
 	}
 	// Enqueue on the durable engine. A failure fails the run closed (session
 	// error) rather than leaving a zombie "running" session or running locally.

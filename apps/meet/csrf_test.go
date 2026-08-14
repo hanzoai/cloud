@@ -29,7 +29,7 @@ import (
 // the native SPA at meet.hanzo.ai, which is cross-origin and bearer-only and
 // sends no cookie at all — is unaffected.
 //
-// Mirrors apps/tracker/typed_wire_test.go TestAmbientCookieWritesNeedCSRF,
+// Mirrors apps/todo/typed_wire_test.go TestAmbientCookieWritesNeedCSRF,
 // because it is the same gate over the same account.RequireCSRF.
 func TestAmbientCookieMintNeedsCSRF(t *testing.T) {
 	app := mount(t, "APIkey", "apisecret")

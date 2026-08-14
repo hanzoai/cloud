@@ -67,21 +67,23 @@ func newCloudApp(t *testing.T) (*zip.App, string, cloud.Deps) {
 
 // cloudDoer simulates the SanitizeIdentity boundary the gateway/serve.go establish
 // in production: it maps the tool's org-bound bearer to the identity headers the
-// in-process guard reads. Token grammar (tests only): "org:<org>" or "admin".
+// in-process guard reads. Token grammar (tests only): "org:<org>".
+//
+// The bearer carries ADMIN AUTHORITY OVER THAT ORG, because a reseal WRITES and
+// cloud's secret plane admits a member to read but requires an admin to write
+// (apps/kms/mount.go). It is still org-bound — X-User-IsOrgAdmin says "admin of this
+// org", never the cross-tenant sudo X-User-IsAdmin marks and the tool refuses to
+// hold. A bearer without it is a member, and a member's write is refused 403; that
+// refusal is what these tests hit before the authority was stated here.
 type cloudDoer struct{ app *zip.App }
 
 func (c cloudDoer) Do(r *http.Request) (*http.Response, error) {
 	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	r.Header.Del("Authorization")
-	switch {
-	case tok == "admin":
-		r.Header.Set("X-Org-Id", "admin")
-		r.Header.Set("X-User-Id", "u-admin")
-		r.Header.Set("X-User-IsAdmin", "true")
-	case strings.HasPrefix(tok, "org:"):
-		org := tok[len("org:"):]
+	if org, ok := strings.CutPrefix(tok, "org:"); ok {
 		r.Header.Set("X-Org-Id", org)
 		r.Header.Set("X-User-Id", "u-"+org)
+		r.Header.Set("X-User-IsOrgAdmin", "true")
 	}
 	return c.app.Test(r)
 }

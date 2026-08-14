@@ -70,6 +70,10 @@ type line struct {
 // writes stdout and stderr from different goroutines.
 type tell struct {
 	org, session string
+	// blind redacts what the caller said must never be published. It is applied
+	// HERE, at the moment a line becomes an event, because this is the door the
+	// bytes leave by — see [blinder] and plane.RunIn.Blind.
+	blind *blinder
 
 	mu   sync.Mutex
 	buf  []byte
@@ -79,11 +83,11 @@ type tell struct {
 
 // newTell returns the sink for one command, or nil when no session was named. A
 // nil *tell's methods are no-ops, so no caller has to branch on being watched.
-func newTell(org, session string) *tell {
+func newTell(org, session string, blind *blinder) *tell {
 	if strings.TrimSpace(org) == "" || strings.TrimSpace(session) == "" {
 		return nil
 	}
-	return &tell{org: org, session: session}
+	return &tell{org: org, session: session, blind: blind}
 }
 
 func (t *tell) Write(p []byte) (int, error) {
@@ -133,12 +137,41 @@ func (t *tell) take(now time.Time, force bool) string {
 		return ""
 	}
 	b := t.buf
-	if len(b) > tellCap {
-		b = b[len(b)-tellCap:]
+	// REDACT FIRST, THEN CUT — the order is the whole of it.
+	//
+	// The stream is chopped by a CLOCK, not by content, so a program that writes
+	// half a key, waits, and writes the rest defeats a fixed-string replacement
+	// with neither half matching. Cutting first and redacting the pieces does not
+	// fix that: it just moves the split, and the emitted piece can be all but one
+	// byte of the secret.
+	//
+	// So the whole buffer is hidden first, which replaces every COMPLETE secret in
+	// it. The only thing that can still be in the clear is a secret straddling the
+	// END of the buffer, and that is at most one byte short of the longest one —
+	// so holding back exactly that many bytes retains it whole for the next
+	// flush, where the rest of it will have arrived.
+	s := t.blind.hide(string(b))
+	// TRUNCATE AFTER HIDING, for the same reason the cut below happens after it:
+	// dropping the head of the buffer first would discard the front of a secret
+	// straddling that boundary and emit its tail in the clear. Hidden first, every
+	// complete secret is already a marker, so the cut can only land in ordinary
+	// text or in one.
+	if len(s) > tellCap {
+		s = s[len(s)-tellCap:]
 	}
-	s := string(b)
-	t.buf, t.at = t.buf[:0], now
-	return s
+	keep := 0
+	if !force {
+		if keep = t.blind.carry(); keep > tellCap/2 {
+			keep = tellCap / 2
+		}
+		if keep > len(s) {
+			keep = len(s)
+		}
+	}
+	// A forced flush keeps nothing: `done` is a watcher's last word and must not
+	// be swallowed by the carry-over.
+	t.buf, t.at = append(t.buf[:0], s[len(s)-keep:]...), now
+	return s[:len(s)-keep]
 }
 
 // say appends one event to the session, best-effort.
@@ -153,10 +186,15 @@ func (t *tell) say(kind string, l line) {
 	if dead {
 		return
 	}
+	l.Message, l.Step = t.blind.hide(l.Message), t.blind.hide(l.Step)
 	payload, err := json.Marshal(l)
 	if err != nil {
 		return
 	}
+	// Belt AND braces, on the ENCODED form: a secret containing a quote, a
+	// backslash or a newline is re-spelled by the JSON encoder, so the escaped
+	// form can survive a replacement made on the plain one.
+	payload = []byte(t.blind.hide(string(payload)))
 	// A DETACHED, TENANT-STATED context. The command's own may already be
 	// cancelled — a stop is exactly that case — and the last thing a stopped run
 	// says is the part a watcher most needs. plane.For supplies the org where

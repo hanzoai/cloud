@@ -8,6 +8,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/types"
 	"github.com/zap-proto/zip"
 )
 
@@ -68,36 +69,6 @@ func noStore(ctx context.Context) {
 	if c, ok := cloud.Request(ctx); ok {
 		c.SetHeader("Cache-Control", "no-store")
 	}
-}
-
-// Ranges — the closed allowlist for a sample-dash read window. This is the
-// FINE-GRAINED account-usage grammar (a live lane dash cares about the 1h/6h
-// scale); the coarser cost/analytics grammar (aiobject.ResolveCloudUsageWindow:
-// 24h/7d/30d/custom + a bucket interval) drives summary and analytics. Two lanes,
-// two grammars, each complete for its read.
-const (
-	Range1h  = "1h"
-	Range24h = "24h"
-	Range7d  = "7d"
-	Range30d = "30d"
-)
-
-// resolveRange maps a range label to an absolute [from, to) window. Pure: `now` is
-// injected. An unknown label is an error, never a silent default — a caller who
-// asked for a window we do not have must be told, not shown a different one.
-func resolveRange(label string, now time.Time) (from, to time.Time, err error) {
-	now = now.UTC()
-	switch trim(label) {
-	case "", Range24h:
-		return now.Add(-24 * time.Hour), now, nil
-	case Range1h:
-		return now.Add(-time.Hour), now, nil
-	case Range7d:
-		return now.Add(-7 * 24 * time.Hour), now, nil
-	case Range30d:
-		return now.Add(-30 * 24 * time.Hour), now, nil
-	}
-	return time.Time{}, time.Time{}, fmt.Errorf("range must be one of 1h, 24h, 7d, 30d")
 }
 
 // ── views ────────────────────────────────────────────────────────────────────
@@ -518,8 +489,10 @@ type usageSamplesQuery struct {
 	Account string `json:"account"`
 	// Provider is the upstream to read, e.g. anthropic. Required.
 	Provider string `json:"provider"`
-	// Range is the window to read: 1h, 24h, 7d or 30d. Empty means 24h, and any
-	// other label is refused rather than silently replaced.
+	// Range is the window to read: a count and a unit — 1h, 24h, 90d, any <N>h or
+	// <N>d — or day, week, month, all. Empty means 24h. A label that is not a
+	// count, or one reaching past the 730-day horizon, is refused rather than
+	// silently replaced.
 	Range string `json:"range"`
 	// Window narrows to ONE window class: 6h, day, week or month. Empty covers
 	// every class.
@@ -553,16 +526,13 @@ func (o ops) samples(ctx context.Context, in *usageSamplesQuery) (*dashResp, err
 	if window != "" && !validWindow(window) {
 		return nil, zip.ErrBadRequest("window must be one of 6h, day, week, month")
 	}
-	rangeLabel := trim(in.Range)
-	from, to, err := resolveRange(rangeLabel, time.Now())
+	w, err := types.ParseWindow(in.Range, "", "", time.Now())
 	if err != nil {
 		return nil, zip.ErrBadRequest(err.Error())
 	}
-	if rangeLabel == "" {
-		rangeLabel = Range24h
-	}
+	from, to := w.Start, w.End
 	out := dashResp{
-		Provider: provider, Account: acct, Range: rangeLabel,
+		Provider: provider, Account: acct, Range: w.Label,
 		From: rfc3339Of(from), To: rfc3339Of(to),
 		Source: SourceAccount, Scope: ScopeUser,
 		Current: []usageWindowView{}, Windows: []usageWindowView{},

@@ -2,8 +2,6 @@ package sync
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +11,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -108,8 +107,8 @@ type syncQueued struct {
 // asserted for itself. A malformed org is refused as hard as a missing one: the org
 // is a storage key here, so only the exact slug shape is admitted.
 func orgOf(ctx context.Context) (string, error) {
-	o, ok := principal.OrgFrom(ctx)
-	if !ok || !orgRE.MatchString(o) {
+	o, err := principal.Acting(ctx)
+	if err != nil || !orgRE.MatchString(o) {
 		return "", zip.ErrUnauthorized("a validated principal is required")
 	}
 	return o, nil
@@ -194,10 +193,7 @@ func (o syncOps) create(ctx context.Context, in *syncReq) (*syncView, error) {
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	id, err := genID("sync")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("sync")
 	now := time.Now().Unix()
 	if err := store.Upsert(ctx, Sync{
 		ID: id, Org: org, Kind: kind, Source: src, Target: tgt,
@@ -248,9 +244,13 @@ type patchSyncIn struct {
 	// to hanzo-inc/cloud failed every reconcile with "Repository not found", and the
 	// PATCH that appeared to fix it did nothing at all. Declaring the fields is what
 	// lets the documented immutability actually answer.
+	// Source names a new upstream, and is refused. Delete this sync and create the
+	// one you want.
 	Source *endpointReq `json:"source"`
+	// Target names a new native repository, and is refused, for the same reason.
 	Target *endpointReq `json:"target"`
-	Kind   *string      `json:"kind"`
+	// Kind names a different kind of sync, and is refused, for the same reason.
+	Kind *string `json:"kind"`
 }
 
 // Patch updates one sync's mutable policy — direction, trigger and actor — in place.
@@ -435,8 +435,13 @@ func validateGitSource(e endpointReq) (Endpoint, error) {
 		return Endpoint{}, zip.ErrBadRequest("source.locator host must be " + host)
 	}
 	u.User = nil // credentials ride env-only at fetch time, never a stored value
-	if repoNameFromLocator(u.String()) == "" {
-		return Endpoint{}, zip.ErrBadRequest("source.locator must name a repository")
+	// Which repository this is, asked at the door with the SAME rule the import
+	// answers to ([newRepo]): an account and a name the flat forge can spell. A
+	// source it could never hold — a nested GitLab namespace, a name outside the
+	// fold — is refused here with a status, rather than accepted and then refused
+	// by every reconcile into a log nobody reads.
+	if _, err := newRepo(accountOf(u.String()), repoNameFromLocator(u.String())); err != nil {
+		return Endpoint{}, zip.ErrBadRequest(err.Error())
 	}
 	return Endpoint{Connector: strings.TrimSpace(e.Connector), Provider: provider, Locator: u.String()}, nil
 }
@@ -462,8 +467,12 @@ func deriveGitTarget(e endpointReq, src Endpoint) Endpoint {
 // never fatal to the CRUD op (a webhook / re-run reconciles). push=false removes the
 // target; push=true ensures it.
 func reconcileOutboundMirror(ctx context.Context, s *cloud.Service[state], sy Sync, push bool) {
-	native := normalizeGitName(sy.Target.Locator)
-	if err := cloud.EnsureGitMirror(ctx, sy.Org, "", native, sy.Source.Locator, push); err != nil {
+	native := fold(sy.Target.Locator)
+	// The target is declared for THIS repository, which is (account, name) and not
+	// a name alone — the sync's own source URL says which account, and without it
+	// a second sync of a same-named repository from another account would take
+	// this one's target over.
+	if err := cloud.EnsureGitMirror(ctx, sy.Org, accountOf(sy.Source.Locator), native, sy.Source.Locator, push); err != nil {
 		s.Log.Warn("sync: outbound mirror", "sync", sy.ID, "push", push, "err", err)
 	}
 }
@@ -494,15 +503,6 @@ func spawnReconcile(store *store, sy Sync) {
 		defer cancel()
 		runOne(ctx, store, sy, Event{Provider: sy.Source.Provider, Org: sy.Org, Manual: true})
 	}()
-}
-
-// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // rfc3339 formats a unix time as RFC3339 UTC ("" for 0).

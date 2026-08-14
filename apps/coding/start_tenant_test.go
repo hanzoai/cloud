@@ -4,7 +4,7 @@ package coding
 // two halves of why that is not obvious — the same pair apps/integrations keeps
 // for the chat turn, kept here because this is the other place it shipped wrong.
 //
-// Every seam a run touches (session, git, tracker, the balance gate behind them)
+// Every seam a run touches (session, git, todo, the balance gate behind them)
 // authorizes on the CALLER's org and never on an argument, so no caller can name
 // the tenant it acts for. The org therefore rides the caller. But zip reads a
 // STATED caller only where there is NO REQUEST behind the context
@@ -94,7 +94,7 @@ func TestStartRefusesWhatItMustRefuse(t *testing.T) {
 		"repo is a path":           {"acme", "u", "../other-org/api", "do a thing"},
 		"repo escapes":             {"acme", "u", "a/b", "do a thing"},
 	} {
-		_, err := Start(context.Background(), tc.org, startIn(tc.subject, tc.repo, tc.prompt), nil)
+		_, err := Start(context.Background(), tc.org, tc.subject, startIn(tc.repo, tc.prompt), nil)
 		if err == nil {
 			t.Errorf("%s: accepted; it must be refused before a slot is spent", name)
 		}
@@ -155,11 +155,12 @@ func TestARunCannotInjectSlackMarkup(t *testing.T) {
 
 func q(s string) string { b, _ := json.Marshal(s); return string(b) }
 
-// startIn builds the door's request. The tenant is deliberately NOT a field of
-// it — that is the whole point of the contract — so it is passed to Start
-// separately, exactly as a real door passes what it read off the caller.
-func startIn(subject, repo, prompt string) plane.CodingStartIn {
-	return plane.CodingStartIn{Subject: subject, Repo: repo, Prompt: prompt}
+// startIn builds the door's request. NEITHER half of the identity is a field of
+// it — not the tenant and not the subject, which is the whole point of the
+// contract — so both are passed to Start separately, exactly as a real door
+// passes what it read off the caller.
+func startIn(repo, prompt string) plane.CodingStartIn {
+	return plane.CodingStartIn{Repo: repo, Prompt: prompt}
 }
 
 // A finished run must always get the last word, and it must say which ending it

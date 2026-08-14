@@ -90,14 +90,14 @@ func (f *countingForge) client(t *testing.T) *Client {
 	return c
 }
 
-// clock installs a movable clock on both caches of c and returns the mover.
+// clock installs a movable clock on c's read cache and returns the mover.
 // Installed BEFORE any goroutine exists so the assignment cannot race the
 // background refresh that later reads it.
 func clock(c *Client) func(time.Duration) {
 	var off atomic.Int64
 	base := time.Now()
 	now := func() time.Time { return base.Add(time.Duration(off.Load())) }
-	c.repos.now, c.rollup.now = now, now
+	c.repos.now = now
 	return func(d time.Duration) { off.Store(int64(d)) }
 }
 
@@ -138,27 +138,6 @@ func TestReposCache_KeyedByActorSoOneUserNeverSeesAnothersRepositories(t *testin
 		if r.Private {
 			t.Fatalf("bob was served the private repo %q", r.FullName)
 		}
-	}
-}
-
-// The rollup is cached on the same key and needs the same property.
-func TestMilestonesCache_KeyedByActorToo(t *testing.T) {
-	s := newStub(t)
-	s.visible["alice"] = []string{"acme"}
-	s.visible["bob"] = []string{"othercorp"}
-	s.repos["acme"] = []Repo{{Name: "api", FullName: "acme/api"}}
-	s.milestones["acme/api"] = []Milestone{{ID: 1, Title: "v1", State: "open"}}
-	c := s.client(t)
-
-	if _, err := c.As("alice").Milestones(t.Context(), "acme"); err != nil {
-		t.Fatalf("alice Milestones: %v", err)
-	}
-	bob, err := c.As("bob").Milestones(t.Context(), "acme")
-	if err != nil {
-		t.Fatalf("bob Milestones: %v", err)
-	}
-	if len(bob) != 0 {
-		t.Fatalf("CROSS-USER ROLLUP READ: bob got %d of acme's milestones: %+v", len(bob), bob)
 	}
 }
 
@@ -375,46 +354,6 @@ func TestReuse_KeepsTheWarmListAcrossACredentialRotation(t *testing.T) {
 	}
 }
 
-// ── the rollup refuses rather than truncating ────────────────────────────────
-
-func TestMilestones_RefusesAnOrgPastTheRollupCapRatherThanTruncating(t *testing.T) {
-	s := newStub(t)
-	s.visible["alice"] = []string{"acme"}
-	for i := range maxRollup + 1 {
-		name := fmt.Sprintf("repo%d", i)
-		s.repos["acme"] = append(s.repos["acme"], Repo{Name: name, FullName: "acme/" + name})
-	}
-
-	got, err := s.client(t).As("alice").Milestones(t.Context(), "acme")
-	if err == nil {
-		t.Fatalf("want a refusal past the cap, got %d milestones — a partial rollup presented as a complete one", len(got))
-	}
-	// The message must name the cap, so whoever reads it knows what to change.
-	if !strings.Contains(err.Error(), fmt.Sprint(maxRollup)) {
-		t.Fatalf("the refusal should name the cap %d: %v", maxRollup, err)
-	}
-}
-
-// An org AT the cap is served: the cap is a runaway guard, not a limit real orgs
-// are expected to bump into.
-func TestMilestones_AnOrgAtTheCapIsStillServed(t *testing.T) {
-	s := newStub(t)
-	s.visible["alice"] = []string{"acme"}
-	for i := range maxRollup {
-		name := fmt.Sprintf("repo%d", i)
-		s.repos["acme"] = append(s.repos["acme"], Repo{Name: name, FullName: "acme/" + name})
-	}
-	s.milestones["acme/repo0"] = []Milestone{{ID: 1, Title: "v1", State: "open"}}
-
-	got, err := s.client(t).As("alice").Milestones(t.Context(), "acme")
-	if err != nil {
-		t.Fatalf("an org at the cap must still be served: %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("got %d milestones, want 1", len(got))
-	}
-}
-
 // An unscoped client refuses BEFORE it can take a slot in the cache, so a
 // missing actor can never be cached as an answer under an empty key.
 func TestReposCache_UnscopedClientRefusesWithoutCaching(t *testing.T) {
@@ -423,9 +362,6 @@ func TestReposCache_UnscopedClientRefusesWithoutCaching(t *testing.T) {
 
 	if _, err := c.Repos(t.Context(), "acme"); !errors.Is(err, ErrNoActor) {
 		t.Fatalf("want ErrNoActor, got %v", err)
-	}
-	if _, err := c.Milestones(t.Context(), "acme"); !errors.Is(err, ErrNoActor) {
-		t.Fatalf("want ErrNoActor from the rollup, got %v", err)
 	}
 	if n := f.calls.Load(); n != 0 {
 		t.Fatalf("an unscoped client reached the forge %d times", n)
@@ -538,5 +474,130 @@ func TestListRepos_PagesAreFetchedConcurrently(t *testing.T) {
 	defer mu.Unlock()
 	if peak < 2 {
 		t.Fatalf("peak concurrency was %d: the pages were not in flight together", peak)
+	}
+}
+
+// ── 5. the read that is deliberately not cached ──────────────────────────────
+
+// A JUDGEMENT reads the forge. The visibility audit closes every repository no
+// live project permits to be open, and a list minutes old would have it act on a
+// repository that has since changed and, worse, silently skip one that has since
+// been opened. So Inventory neither reads the cache nor fills it: it cannot be
+// served what a board left behind, and cannot displace what a board is served.
+func TestInventory_NeitherReadsNorFillsTheCache(t *testing.T) {
+	f := newCounting(t)
+	c := f.client(t).Machine()
+
+	if _, err := c.Repos(t.Context(), "acme"); err != nil {
+		t.Fatalf("Repos: %v", err)
+	}
+	f.setBody(`[{"name":"api","full_name":"acme/api"},{"name":"web","full_name":"acme/web"}]`, 2)
+
+	got, whole, err := c.Inventory(t.Context(), "acme")
+	if err != nil || !whole {
+		t.Fatalf("Inventory = (whole %v, %v), want (true, nil)", whole, err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("Inventory answered %d repositories from a forge holding 2 — it read the cache", len(got))
+	}
+	if n := f.calls.Load(); n != 2 {
+		t.Fatalf("the forge was asked %d times, want one per call", n)
+	}
+
+	// And the entry a board is being served is untouched.
+	cached, err := c.Repos(t.Context(), "acme")
+	if err != nil {
+		t.Fatalf("Repos after Inventory: %v", err)
+	}
+	if len(cached) != 1 {
+		t.Fatalf("Inventory overwrote the cached list: %d repositories, want the held 1", len(cached))
+	}
+	if n := f.calls.Load(); n != 2 {
+		t.Fatalf("the cached read reached the forge: %d calls", n)
+	}
+}
+
+// It refuses without an actor, like every other read here: an uncached list is
+// still a list of what somebody may see.
+func TestInventory_UnscopedRefuses(t *testing.T) {
+	f := newCounting(t)
+	if _, _, err := f.client(t).Inventory(t.Context(), "acme"); !errors.Is(err, ErrNoActor) {
+		t.Fatalf("err = %v, want ErrNoActor", err)
+	}
+	if n := f.calls.Load(); n != 0 {
+		t.Fatalf("%d requests reached the forge from an unscoped client", n)
+	}
+}
+
+// ── 6. the walk that must not end quietly ────────────────────────────────────
+
+// A namespace larger than the walk reads is never a short list wearing the shape
+// of a complete one. The walk SAYS it did not end, and the two readers answer
+// that differently because a partial list is worth different things to them.
+//
+// The caller that most needs to know is the one that cannot tell. A board or a
+// rollup reads a list it prunes from, so a missing repository reads as one that
+// does not exist: those refuse. The visibility audit only ever CLOSES what it
+// finds, so a partial walk closes strictly more than the nothing a refusal would
+// leave — and an audit that refuses a full namespace is an audit a tenant can
+// stop for good by minting projects.
+func TestListRepos_SaysWhenTheNamespaceOutgrewTheWalk(t *testing.T) {
+	const over = maxRepoPages*repoPage + 1
+	page := make([]Repo, repoPage)
+	for i := range page {
+		page[i] = Repo{Name: fmt.Sprintf("r%d", i), FullName: "acme/r"}
+	}
+
+	for _, tc := range []struct {
+		name  string
+		count bool // does this forge count its lists?
+	}{
+		{"a forge that counts its lists", true},
+		{"a forge that does not", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.count {
+					w.Header().Set("X-Total-Count", strconv.Itoa(over))
+				}
+				// Every page is FULL, so the list never ends: the serial fallback
+				// runs out of pages rather than out of repositories.
+				writeJSON(w, page)
+			}))
+			t.Cleanup(srv.Close)
+
+			c, err := New(srv.URL, "machine-token")
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			// The AUDIT's read: what could be read, and the fact that it is not
+			// everything.
+			got, whole, err := c.Machine().Inventory(t.Context(), "acme")
+			if err != nil {
+				t.Fatalf("Inventory: %v", err)
+			}
+			if whole {
+				t.Fatalf("a namespace of %d was reported COMPLETE at %d repositories", over, len(got))
+			}
+			if len(got) == 0 {
+				t.Fatal("the audit was handed nothing to close; a partial walk closes more than no walk")
+			}
+			if len(got) > maxRepoPages*repoPage {
+				t.Fatalf("the walk read %d repositories, past the %d ceiling", len(got), maxRepoPages*repoPage)
+			}
+
+			// The CACHED read, which is served to callers that prune from it: refused,
+			// naming the ceiling, and nothing stored.
+			cached, err := c.Machine().Repos(t.Context(), "acme")
+			if err == nil {
+				t.Fatalf("a namespace past the ceiling was served as %d repositories; it must refuse", len(cached))
+			}
+			if cached != nil {
+				t.Fatalf("a refusal must carry no list, got %d repositories", len(cached))
+			}
+			if cap := fmt.Sprint(maxRepoPages * repoPage); !strings.Contains(err.Error(), cap) {
+				t.Fatalf("the refusal should name the ceiling %s: %v", cap, err)
+			}
+		})
 	}
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/samples"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -185,7 +186,7 @@ func scanTarget(sc interface{ Scan(...any) error }) (Target, error) {
 	return t, nil
 }
 
-// CreateTarget inserts one target. The id is caller-generated (genID("tgt")).
+// CreateTarget inserts one target. The id is caller-generated (mint.ID("tgt")).
 func (s *Store) CreateTarget(ctx context.Context, t Target) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO agent_targets (`+targetCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -723,10 +724,7 @@ func (o targetOps) registerTarget(ctx context.Context, in *targetReq) (*targetVi
 		}
 	}
 
-	id, err := genID("tgt")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("tgt")
 	t := Target{
 		ID: id, Org: org, Owner: owner, Label: label, Kind: kind, Status: status,
 		Capacity: capacity, Host: host, Spec: spec, Metrics: metrics, MetricsAt: metricsAt,

@@ -35,8 +35,6 @@ package agents
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	mrand "math/rand/v2"
@@ -55,6 +53,7 @@ import (
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
@@ -66,7 +65,22 @@ import (
 
 // agentTracer emits the per-run/per-step agent spans (shipped over ZAP to
 // o11y). A run is one root span; each step nests an LLM GenAI client span.
-var agentTracer = otel.Tracer("hanzo.ai/cloud/agents")
+//
+// IT IS A FUNCTION, AND IT HAS TO BE. As a package-level `var` it called
+// otel.Tracer at INIT — before serve.go installs the process-global provider —
+// and pinned a tracer from the provider that existed beforehand. Every
+// agent.run, agent.step and agent.tool span was then recorded by a tracer whose
+// provider never became the real one, so they were built and went nowhere:
+// event.span carried 700+ `chat {model}` spans and, over the same days, ZERO
+// beginning with `agent`. Resolving per call always yields the CURRENT global
+// provider, so no ordering between package init and telemetry install can
+// silence this again.
+//
+// The ai module hit the same thing and fixed it by capturing the tracer
+// immediately AFTER installing the provider (object/telemetry.go
+// captureGenAITracer, via AdoptHostTracerProvider). That works and needs a
+// caller to remember the order; this needs nothing.
+func agentTracer() trace.Tracer { return otel.Tracer("hanzo.ai/cloud/agents") }
 
 // nameRE constrains an agent's org-unique name at the create boundary — the one
 // place a name is written. Path addressing (Store.Resolve, parameterized) accepts
@@ -579,10 +593,7 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 				"long-running agent limit reached for this org (max %d)", longRunningCap())
 		}
 	}
-	id, err := genID("agent")
-	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
+	id := mint.ID("agent")
 	now := time.Now().Unix()
 	a := Agent{
 		ID: id, Org: org, Name: name, Model: model, Instructions: body.Instructions,
@@ -852,7 +863,7 @@ func init() {
 func run(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	// tenant() above already required a VALIDATED principal (principal.Org
 	// returns ok only when c.User() — set solely from a JWT SanitizeIdentity
@@ -918,7 +929,7 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input string, history []types.ChatMessage, actor, requestID, clientIP string) (Run, error) {
 	// Root span per run — the whole trace (balance gate → step → LLM call)
 	// nests under it, shipped over ZAP to o11y.
-	ctx, span := agentTracer.Start(ctx, "agent.run "+a.Name, trace.WithSpanKind(trace.SpanKindInternal))
+	ctx, span := agentTracer().Start(ctx, "agent.run "+a.Name, trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 
 	// The run's NAME, minted before the work rather than after it.
@@ -931,7 +942,7 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input strin
 	// round by round. The id existed only on the record of a thing that was
 	// already over. Minting it here is what lets one value be on the span, on the
 	// row and on the money, which is the whole of "drill into this run".
-	id, _ := genID("run")
+	id := mint.ID("run")
 
 	// hanzo.org, not a name of this package's own, because the TRACE PLANE reads
 	// exactly this key: apps/o11y/planesink.go planeOrg files each row under
@@ -1055,7 +1066,7 @@ const (
 // tool dispatch runs as the principal the run is charged to.
 func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Agent, input string, history []types.ChatMessage, fallback, runID string) Run {
 	// Child step span; the AI client opens its own GenAI span nested under this.
-	ctx, span := agentTracer.Start(ctx, "agent.step", trace.WithSpanKind(trace.SpanKindInternal))
+	ctx, span := agentTracer().Start(ctx, "agent.step", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 	// The run's name on every span it produces, not only on the root. A trace
 	// query that finds a slow LLM call or a failing tool should answer "which run"
@@ -1613,14 +1624,6 @@ func cleanList(xs []string) []string {
 		}
 	}
 	return out
-}
-
-func genID(prefix string) (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
 // Shutdown stops the scheduler (draining in-flight runs, bounded by ctx) and

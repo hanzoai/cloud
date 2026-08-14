@@ -86,6 +86,9 @@ func (o ops) Revenue(ctx context.Context, _ *core.None) (*RevenueOut, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Money is read per org, and three of these folds run their orgs in parallel, so
+	// the principal is lifted off the request ONCE here and re-pointed per tenant.
+	ctx = core.Acting(c)
 	data, err := Compute(o.s, ctx, core.CallerCreds(c))
 	if err != nil {
 		return &RevenueOut{Status: core.Err, Msg: err.Error()}, nil
@@ -104,7 +107,9 @@ func Compute(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds) (R
 		return RevenueData{}, err
 	}
 
-	// Per-org money, fanned out concurrently (balance + spend + plan/MRR).
+	// Per-org money, fanned out concurrently (balance + spend + plan/MRR). ONE
+	// delegation for the whole fan-out — see core.Delegate.
+	money := core.Delegate(ctx)
 	rows := make([]RevenueCustomer, len(orgs))
 	oks := make([]bool, len(orgs))
 	sem := make(chan struct{}, core.MaxCustomerConcurrency)
@@ -115,7 +120,7 @@ func Compute(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds) (R
 		go func(i int, o iam.Org) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			rows[i], oks[i] = revenueOf(s, ctx, o)
+			rows[i], oks[i] = revenueOf(s, ctx, money, o)
 		}(i, o)
 	}
 	wg.Wait()
@@ -185,15 +190,15 @@ func Compute(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds) (R
 // overview folds — so the revenue board no longer reads the money source as down when
 // commerce is in-process. MRR stays a subscriptions read (a separate endpoint); its
 // absence degrades the row to pay-as-you-go and never marks the money source down.
-func revenueOf(s *cloud.Service[core.State], ctx context.Context, o iam.Org) (RevenueCustomer, bool) {
+func revenueOf(s *cloud.Service[core.State], ctx context.Context, money core.Delegated, o iam.Org) (RevenueCustomer, bool) {
 	row := RevenueCustomer{Org: o.Name, Display: core.Display(o.DisplayName, o.Name), Plan: "pay-as-you-go"}
 
-	spend, balance, ok := core.OrgMoney(s, ctx, o.Name)
+	spend, balance, err := core.OrgMoney(s, money, o.Name)
 	row.SpendCents = spend
 	row.BalanceCents = balance
 	if pl, err := s.State.Commerce.Plan(ctx, o.Name); err == nil {
 		row.MRRCents = int64(pl.MRR)
 		row.Plan = pl.Name
 	}
-	return row, ok
+	return row, !core.MoneyFailed(err)
 }

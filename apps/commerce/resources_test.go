@@ -4,7 +4,8 @@ package commerce
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -62,12 +63,7 @@ func boundLeaves(t *testing.T) []string {
 			seen[rest] = true
 		}
 	}
-	out := make([]string, 0, len(seen))
-	for k := range seen {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
+	return slices.Sorted(maps.Keys(seen))
 }
 
 // TestEveryBoundMerchantLeafIsRoutedToCommerce is the assertion that matters, and

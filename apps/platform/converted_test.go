@@ -20,8 +20,9 @@ package platform
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -37,12 +38,7 @@ func keysOf(t *testing.T, body []byte) []string {
 	}
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(body, &obj); err == nil {
-		out := make([]string, 0, len(obj))
-		for k := range obj {
-			out = append(out, k)
-		}
-		sort.Strings(out)
-		return out
+		return slices.Sorted(maps.Keys(obj))
 	}
 	var arr []map[string]json.RawMessage
 	if err := json.Unmarshal(body, &arr); err != nil {
@@ -51,12 +47,7 @@ func keysOf(t *testing.T, body []byte) []string {
 	if len(arr) == 0 {
 		return nil
 	}
-	out := make([]string, 0, len(arr[0]))
-	for k := range arr[0] {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
+	return slices.Sorted(maps.Keys(arr[0]))
 }
 
 // TestConvertedRoutesAnswerAsBefore is the read half: every GET the surface serves
@@ -169,7 +160,7 @@ func TestConvertedRoutesRefuseAsBefore(t *testing.T) {
 			if code != http.StatusForbidden {
 				t.Fatalf("%s %s = %d, want 403 (%s)", tc.method, tc.path, code, body)
 			}
-			if !strings.Contains(string(body), "X-Org-Id required") {
+			if !strings.Contains(string(body), "a validated principal is required") {
 				t.Errorf("%s %s refusal = %s, want the tenant gate's own sentence", tc.method, tc.path, body)
 			}
 		})

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // helpers.go holds the small, pure, dependency-free utilities the KB lane shares.
@@ -42,10 +44,7 @@ func b64Decode(s string) ([]byte, error) {
 
 // truncate returns at most n bytes of b as a string (for bounded error messages).
 func truncate(b []byte, n int) string {
-	if len(b) > n {
-		return string(b[:n])
-	}
-	return string(b)
+	return shorten.To(string(b), n)
 }
 
 // lexicalText extracts the plain text runs from a Lexical EditorState JSON string

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
 )
 
@@ -268,9 +269,8 @@ func TestLinksLifecycle(t *testing.T) {
 		if n >= maxLinksPerAffiliate {
 			break
 		}
-		lid, _ := genID("aln")
 		code, _ := randomLinkCode()
-		if _, err := s.State.store.CreateLink(ctx, lid, idA, code, "fill", time.Now().Unix()); err != nil {
+		if _, err := s.State.store.CreateLink(ctx, mint.ID("aln"), idA, code, "fill", time.Now().Unix()); err != nil {
 			t.Fatalf("fill link: %v", err)
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/internal/environ"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -163,10 +164,10 @@ type dsTelemetry struct {
 // Creds are the ONE shared namespace (KMS-injected, never hard-coded), resolved
 // by clients/datastore: DATASTORE_ADDR / DATASTORE_DB / DATASTORE_USER / DATASTORE_PASSWORD.
 func newDatastoreTelemetry(log luxlog.Logger) (Telemetry, error) {
-	if getenv("DATASTORE_ADDR") == "" {
+	if environ.Or("DATASTORE_ADDR", "") == "" {
 		return nil, nil // no datastore configured — telemetry disabled.
 	}
-	return &dsTelemetry{db: getenvDefault("DATASTORE_DB", "hanzo"), log: log}, nil
+	return &dsTelemetry{db: environ.Or("DATASTORE_DB", "hanzo"), log: log}, nil
 }
 
 func (t *dsTelemetry) table(name string) string { return t.db + "." + name }
@@ -581,13 +582,6 @@ func asTime(v any) time.Time {
 		}
 	}
 	return time.Time{}
-}
-
-func getenvDefault(key, def string) string {
-	if v := getenv(key); v != "" {
-		return v
-	}
-	return def
 }
 
 // asInt64 — restored: metrics.go consumes it; #217 removed it with the

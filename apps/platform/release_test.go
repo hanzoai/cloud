@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -88,7 +89,7 @@ func TestReleasePlan_Ordering(t *testing.T) {
 	if err == nil || reached != stepNone {
 		t.Fatalf("build-fail: reached=%v err=%v", reached, err)
 	}
-	if contains(calls, "tagged") {
+	if slices.Contains(calls, "tagged") {
 		t.Fatalf("build-fail MINTED A TAG WITHOUT A PROVEN IMAGE: %v", calls)
 	}
 
@@ -98,7 +99,7 @@ func TestReleasePlan_Ordering(t *testing.T) {
 	if err == nil || reached != stepBuilt {
 		t.Fatalf("smoke-fail: reached=%v err=%v", reached, err)
 	}
-	if contains(calls, "tagged") || contains(calls, "pinned") {
+	if slices.Contains(calls, "tagged") || slices.Contains(calls, "pinned") {
 		t.Fatalf("smoke-fail reached tag/pin (phantom tag): %v", calls)
 	}
 
@@ -108,7 +109,7 @@ func TestReleasePlan_Ordering(t *testing.T) {
 	if err == nil || reached != stepSmoked {
 		t.Fatalf("tag-fail: reached=%v err=%v", reached, err)
 	}
-	if contains(calls, "pinned") {
+	if slices.Contains(calls, "pinned") {
 		t.Fatalf("tag-fail reached pin: %v", calls)
 	}
 }

@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -363,7 +364,7 @@ func slackExchangeUser(ctx context.Context, creds OAuthConfig, redirectURI, code
 		return "", "", err
 	}
 	if !r.OK {
-		return "", "", fmt.Errorf("slack oauth.v2.access error: %s", nonEmpty(r.Error, "unknown_error"))
+		return "", "", fmt.Errorf("slack oauth.v2.access error: %s", cmp.Or(r.Error, "unknown_error"))
 	}
 	if r.AuthedUser.ID == "" || r.Team.ID == "" {
 		return "", "", fmt.Errorf("slack oauth: no authenticated user")
@@ -391,7 +392,7 @@ func slackOIDCAuthorizeURL(s *cloud.Service[state], state string) string {
 		"scope":         {"openid profile email offline_access"},
 		"state":         {state},
 	}
-	return slackIAMBase() + "/oauth/authorize?" + q.Encode()
+	return oidcBase() + "/oauth/authorize?" + q.Encode()
 }
 
 // slackOIDCExchange swaps an authorization code for a token set. hanzo-slack is a
@@ -419,7 +420,7 @@ var errLinkRejected = errors.New("slack: the linked Hanzo account was refused")
 // slackOIDCToken performs an OAuth2 token request. The secrets (code /
 // client_secret) are POST-form only and never logged.
 func slackOIDCToken(ctx context.Context, form url.Values) (slackTokenSet, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, slackIAMBase()+"/oauth/token",
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, oidcBase()+"/oauth/token",
 		strings.NewReader(form.Encode()))
 	if err != nil {
 		return slackTokenSet{}, err
@@ -461,7 +462,7 @@ func slackOIDCToken(ctx context.Context, form url.Values) (slackTokenSet, error)
 // informational (the RUN's org is the workspace org, from OrgForExternalID), so an
 // absent owner yields "" rather than trusting an unverified claim.
 func slackOIDCIdentity(s *cloud.Service[state], ctx context.Context, access string) (sub, org string, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, slackIAMBase()+"/oauth/userinfo", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, oidcBase()+"/oauth/userinfo", nil)
 	if err != nil {
 		return "", "", err
 	}
@@ -505,14 +506,6 @@ func slackIAMClientSecret() string {
 
 // slackIAMBase resolves the hanzo.id OIDC surface: {IAM_ENDPOINT}/v1/iam
 // (default https://hanzo.id).
-func slackIAMBase() string {
-	ep := strings.TrimSpace(os.Getenv("IAM_ENDPOINT"))
-	if ep == "" {
-		ep = "https://hanzo.id"
-	}
-	return strings.TrimRight(ep, "/") + "/v1/iam"
-}
-
 // slackLinkCallbackURI is the hanzo.id OIDC redirect (leg3). One env override, else
 // derived from the deployment domain — mirroring the OAuth provider's redirectURI.
 func slackLinkCallbackURI(s *cloud.Service[state]) string {

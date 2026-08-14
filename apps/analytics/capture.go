@@ -477,13 +477,6 @@ func deny(key string) bool {
 
 func trim(s string) string { return strings.TrimSpace(s) }
 
-func firstNonEmptyStr(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
-}
-
 // hostOf extracts the bare host from a referrer URL (no scheme/path), for the
 // referrer_domain column the channel derivation and reports use. Best-effort; ""
 // on anything unparseable.
@@ -607,7 +600,7 @@ func projectKey(c *zip.Ctx) string {
 // and doors (event.go) is the only list that binds them.
 //
 // There is no 'capture' tag: rows carrying it were written by the retired
-// /v1/analytics{,/batch} and /v1/tracker name-aliases of the canonical wire. Those
+// /v1/analytics{,/batch} and /v1/todo name-aliases of the canonical wire. Those
 // rows keep their value in the warehouse — history is not rewritten — but no code
 // path can mint another, which is what makes the retirement a fact rather than a
 // convention.

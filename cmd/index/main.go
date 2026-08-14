@@ -35,6 +35,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // The server's own bounds, restated so a batch is split here rather than
@@ -72,13 +74,6 @@ type indexBody struct {
 	Repo  string `json:"repo"`
 	Files []file `json:"files"`
 	Prune bool   `json:"prune,omitempty"`
-}
-
-func env(k, def string) string {
-	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-		return v
-	}
-	return def
 }
 
 var client = &http.Client{Timeout: 5 * time.Minute}
@@ -230,9 +225,9 @@ func push(api, key, repo string, files []file) error {
 
 func main() {
 	var (
-		host  = env("FORGE", "git.hanzo.ai")
+		host  = environ.Or("FORGE", "git.hanzo.ai")
 		token = os.Getenv("FORGE_TOKEN")
-		api   = env("API", "https://api.hanzo.ai")
+		api   = environ.Or("API", "https://api.hanzo.ai")
 		key   = os.Getenv("HANZO_API_KEY")
 	)
 	if key == "" {
@@ -251,7 +246,7 @@ func main() {
 	fmt.Printf("indexing %d repos from %s\n", len(list), host)
 
 	workers := 8
-	if n := env("WORKERS", ""); n != "" {
+	if n := environ.Or("WORKERS", ""); n != "" {
 		fmt.Sscanf(n, "%d", &workers)
 	}
 	// Fan out over repos rather than within one: each repo is an independent

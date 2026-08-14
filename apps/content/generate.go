@@ -1,6 +1,7 @@
 package content
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -289,8 +290,8 @@ func copyUserPrompt(in GenerateInput, spec copySpec) string {
 // it). goal is left to the DocType default (awareness).
 func buildCampaign(in GenerateInput, content string) map[string]any {
 	p := parseCopyJSON(content)
-	brief := firstNonEmpty(cstr(p, "brief"), strings.TrimSpace(in.Brief), plainText(content))
-	title := firstNonEmpty(cstr(p, "title"), strings.TrimSpace(in.Title), firstLine(brief, 60))
+	brief := cmp.Or(cstr(p, "brief"), strings.TrimSpace(in.Brief), plainText(content))
+	title := cmp.Or(cstr(p, "title"), strings.TrimSpace(in.Title), firstLine(brief, 60))
 	data := map[string]any{"title": title}
 	if brief != "" {
 		data["brief"] = brief
@@ -306,16 +307,16 @@ func buildCampaign(in GenerateInput, content string) map[string]any {
 // copy plus the hashtags; excerpt is the one-line teaser; channels come from the request.
 func buildSocialPost(in GenerateInput, content string) map[string]any {
 	p := parseCopyJSON(content)
-	caption := firstNonEmpty(cstr(p, "caption"), plainText(content))
+	caption := cmp.Or(cstr(p, "caption"), plainText(content))
 	if tags := hashtagLine(cstrs(p, "hashtags")); tags != "" {
 		caption = strings.TrimSpace(caption + "\n\n" + tags)
 	}
-	title := firstNonEmpty(cstr(p, "title"), strings.TrimSpace(in.Title), firstLine(caption, 60))
+	title := cmp.Or(cstr(p, "title"), strings.TrimSpace(in.Title), firstLine(caption, 60))
 	data := map[string]any{"title": title}
 	if caption != "" {
 		data["caption"] = caption
 	}
-	if excerpt := firstNonEmpty(cstr(p, "excerpt"), firstLine(caption, 140)); excerpt != "" {
+	if excerpt := cmp.Or(cstr(p, "excerpt"), firstLine(caption, 140)); excerpt != "" {
 		data["excerpt"] = excerpt
 	}
 	if ch := strings.TrimSpace(in.Channels); ch != "" {
@@ -345,8 +346,12 @@ func addContext(data map[string]any, in GenerateInput) {
 
 // copyModel resolves the copy model most-specific first: request override, operator
 // override (CONTENT_COPY_MODEL), then the zen5 default.
+//
+// Both overrides are trimmed, and for the same reason: a padded value is not a
+// model name. Only the request half was, so CONTENT_COPY_MODEL=" " named a model
+// of one space and won against the default.
 func copyModel(reqModel, envModel string) string {
-	return firstNonEmpty(strings.TrimSpace(reqModel), envModel, defaultCopyModel)
+	return cmp.Or(strings.TrimSpace(reqModel), envModel, defaultCopyModel)
 }
 
 // parseCopyJSON best-effort decodes the model's reply into a field map. It tolerates
@@ -434,16 +439,6 @@ func hashtagLine(tags []string) string {
 		}
 	}
 	return strings.Join(out, " ")
-}
-
-// firstNonEmpty returns the first trimmed non-empty argument, or "".
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v = strings.TrimSpace(v); v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // firstLine returns the first line of s clipped to max runes (with an ellipsis when

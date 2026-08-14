@@ -60,23 +60,8 @@ func liveOps(t *testing.T, name string, mount cloud.MountFunc, global bool) []st
 // what commerce registers — no more, no less.
 func TestGeneratedSurfaceIsTheLiveSurface(t *testing.T) {
 	live := liveOps(t, commercepeer.App, commerce.Mount, true)
-
-	generated := append([]string(nil), commercepeer.Ops...)
-	sort.Strings(generated)
-
-	if len(live) == 0 {
-		t.Fatal("commerce registered no plane ops at all — the mount, not the generator, is the thing to look at")
-	}
-	if len(generated) != len(live) {
-		t.Fatalf("generated %d ops, commerce serves %d\n  generated: %v\n  live:      %v\n"+
-			"  fix: go run ./plane/gen", len(generated), len(live), generated, live)
-	}
-	for i := range live {
-		if generated[i] != live[i] {
-			t.Fatalf("op %d: generated %q, commerce serves %q\n  fix: go run ./plane/gen",
-				i, generated[i], live[i])
-		}
-	}
+	sameSurface(t, "commerce", commercepeer.Ops, live,
+		"commerce registered no plane ops at all — the mount, not the generator, is the thing to look at")
 }
 
 // TestGeneratedRiskSurfaceIsTheLiveSurface holds the SCORER to the same gate, and
@@ -92,24 +77,9 @@ func TestGeneratedSurfaceIsTheLiveSurface(t *testing.T) {
 func TestGeneratedRiskSurfaceIsTheLiveSurface(t *testing.T) {
 	live := liveOps(t, riskpeer.App, risk.Mount, false)
 	t.Cleanup(func() { _ = risk.Shutdown(t.Context()) })
-
-	generated := append([]string(nil), riskpeer.Ops...)
-	sort.Strings(generated)
-
-	if len(live) == 0 {
-		t.Fatal("risk registered no plane ops at all — every gate in the fleet reads an absent scorer, " +
+	sameSurface(t, "risk", riskpeer.Ops, live,
+		"risk registered no plane ops at all — every gate in the fleet reads an absent scorer, "+
 			"allows unscored, and nothing says so. Mount must call exposeDecide.")
-	}
-	if len(generated) != len(live) {
-		t.Fatalf("generated %d ops, risk serves %d\n  generated: %v\n  live:      %v\n"+
-			"  fix: go run ./plane/gen", len(generated), len(live), generated, live)
-	}
-	for i := range live {
-		if generated[i] != live[i] {
-			t.Fatalf("op %d: generated %q, risk serves %q\n  fix: go run ./plane/gen",
-				i, generated[i], live[i])
-		}
-	}
 }
 
 // TestGeneratedAnalyticsSurfaceIsTheLiveSurface holds the EVENT DOOR to the same
@@ -125,22 +95,34 @@ func TestGeneratedRiskSurfaceIsTheLiveSurface(t *testing.T) {
 func TestGeneratedAnalyticsSurfaceIsTheLiveSurface(t *testing.T) {
 	live := liveOps(t, analyticspeer.App, analytics.Mount, false)
 	t.Cleanup(func() { _ = analytics.Shutdown(t.Context()) })
-
-	generated := append([]string(nil), analyticspeer.Ops...)
-	sort.Strings(generated)
-
-	if len(live) == 0 {
-		t.Fatal("analytics registered no plane ops at all — every peer that states a fact about " +
+	sameSurface(t, "analytics", analyticspeer.Ops, live,
+		"analytics registered no plane ops at all — every peer that states a fact about "+
 			"its own work writes nothing, and nothing says so. build must call exposeCapture.")
+}
+
+// sameSurface holds a generated peer client to the surface its app actually
+// registers: the same ops, in the same order, nothing extra on either side.
+//
+// ONE comparison for all of them. It stood written out once per app, so a
+// difference in the message was the only thing that could distinguish them —
+// and the defect does not differ: either the generator is stale or a Mount
+// stopped exposing an op. What DOES differ per app is the worse case, an EMPTY
+// registry, so each names its own consequence in empty.
+func sameSurface(t *testing.T, app string, generated, live []string, empty string) {
+	t.Helper()
+	if len(live) == 0 {
+		t.Fatal(empty)
 	}
+	generated = append([]string(nil), generated...)
+	sort.Strings(generated)
 	if len(generated) != len(live) {
-		t.Fatalf("generated %d ops, analytics serves %d\n  generated: %v\n  live:      %v\n"+
-			"  fix: go run ./plane/gen", len(generated), len(live), generated, live)
+		t.Fatalf("generated %d ops, %s serves %d\n  generated: %v\n  live:      %v\n"+
+			"  fix: go run ./plane/gen", len(generated), app, len(live), generated, live)
 	}
 	for i := range live {
 		if generated[i] != live[i] {
-			t.Fatalf("op %d: generated %q, analytics serves %q\n  fix: go run ./plane/gen",
-				i, generated[i], live[i])
+			t.Fatalf("op %d: generated %q, %s serves %q\n  fix: go run ./plane/gen",
+				i, generated[i], app, live[i])
 		}
 	}
 }

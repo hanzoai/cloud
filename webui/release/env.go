@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // Config names the site whose active release IS the console, and how often to
@@ -41,8 +42,8 @@ type Config struct {
 // apps/sites. A white-label deployment that moves it moves the console with it.
 func ConfigFromEnv() Config {
 	return Config{
-		Org:  env("CLOUD_CONSOLE_ORG", sites.ConfigFromEnv("").FirstPartyOrg),
-		Slug: env("CLOUD_CONSOLE_SITE", "hanzo-console"),
+		Org:  environ.Or("CLOUD_CONSOLE_ORG", sites.ConfigFromEnv("").FirstPartyOrg),
+		Slug: environ.Or("CLOUD_CONSOLE_SITE", "hanzo-console"),
 		Poll: pollFromEnv(),
 	}
 }
@@ -69,11 +70,4 @@ func pollFromEnv() time.Duration {
 		return defaultPoll
 	}
 	return d
-}
-
-func env(k, def string) string {
-	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-		return v
-	}
-	return def
 }
