@@ -12328,6 +12328,15 @@ components:
             Key is the FULL value, and is present for a publishable key only: it is
             public by construction and useless to its holder if it cannot be read back.
           type: string
+        limit:
+          description: |-
+            Limit is what this key may reach, as `kind:name` entries — `model:zen5`,
+            `project:acme`, `product:commerce`. Absent means the key reaches whatever
+            its holder does, which is what every key minted before limits existed does
+            and must keep doing.
+          items:
+            type: string
+          type: array
         prefix:
           description: |-
             Prefix is the recognizable, non-secret head of the key — enough to tell two
@@ -23902,6 +23911,20 @@ components:
       type: object
     keyTypeIn:
       properties:
+        limit:
+          description: |-
+            Limit narrows what the minted key may reach, as `kind:name` entries:
+            `model:zen5`, `project:acme`, `product:commerce`, or `model:*` for a whole
+            kind. It only ever NARROWS — a key can never reach further than the person
+            who minted it — so an unrecognised kind costs availability, never privilege.
+
+            Omitted mints an unrestricted key, because that is what every key in the
+            estate is today and a default that restricted would revoke all of them.
+
+            Example: {"type": "secret", "limit": ["model:zen5", "project:acme"]}
+          items:
+            type: string
+          type: array
         type:
           description: |-
             Type is the key class to act on: "secret" (sk-, session-equivalent, belongs
@@ -25048,6 +25071,13 @@ components:
           description: Key is the credential, returned ONCE — a secret key is unreadable
             afterwards.
           type: string
+        limit:
+          description: |-
+            Limit is what the minted key may reach, echoed back so the caller can see
+            the narrowing took. Absent means unrestricted.
+          items:
+            type: string
+          type: array
         type:
           description: Type is the class of key that was minted.
           type: string

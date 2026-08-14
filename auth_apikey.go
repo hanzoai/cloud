@@ -291,6 +291,10 @@ func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
 			Name    string `json:"name"`
 			Email   string `json:"email"`
 			IsAdmin bool   `json:"isAdmin"`
+			// Scope is the KEY's own limit (iam store.UserAndScopeByAccessKey). An
+			// older IAM omits it, which decodes to "" — unrestricted, the same answer
+			// a key with no limit gives, so a version skew cannot silently deny.
+			Scope string `json:"scope"`
 		} `json:"data"`
 	}
 	if json.Unmarshal(raw, &env) != nil || env.Status != "ok" || env.Data == nil {
@@ -319,6 +323,7 @@ func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
 		// a machine is a member of nothing) from a HUMAN token that has merely lost
 		// its claim — the latter must still fail closed.
 		subjectOrg: owner,
+		grant:      ParseGrant(env.Data.Scope),
 	}
 }
 

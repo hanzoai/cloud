@@ -118,7 +118,15 @@ func TestCatalogAddressesAreServed(t *testing.T) {
 }
 
 // resolves reports whether the fleet publishes anything at or beneath addr.
+//
+// An address must name a product, so it has to reach PAST /v1. Without that,
+// "/v1" and "/" both resolve — every published path lies beneath them — and a row
+// addressed either one passes while telling a customer to call api.hanzo.ai/v1
+// and hope. A prefix is a real answer only when it is a prefix of something.
 func resolves(published map[string]json.RawMessage, addr string) bool {
+	if !strings.HasPrefix(addr, "/v1/") || len(addr) <= len("/v1/") {
+		return false
+	}
 	if _, ok := published[addr]; ok {
 		return true
 	}
