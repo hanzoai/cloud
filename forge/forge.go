@@ -618,7 +618,18 @@ func (c *Client) Inventory(ctx context.Context, org string) (repos []Repo, whole
 	if c.actor == "" && !c.machine {
 		return nil, false, ErrNoActor
 	}
-	return c.listRepos(ctx, org)
+	repos, whole, err = c.listRepos(ctx, org)
+	if errors.Is(err, ErrNotFound) {
+		// A namespace that does not exist has no repositories, which is a COMPLETE
+		// answer for the close-only audit: nothing is open, so nothing is to close.
+		// Only a genuine 404 is read this way — an unknown-actor refusal is a real
+		// failure and stays one, never a silently-empty pass.
+		// The community catalogue is created lazily by the first publish
+		// (apps/projects apply → [Client.EnsureOrg]); before then this finds
+		// nothing rather than erroring on every sweep forever.
+		return nil, true, nil
+	}
+	return repos, whole, err
 }
 
 // listRepos is the uncached walk of the org's repository pages.
