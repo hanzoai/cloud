@@ -118,7 +118,7 @@ func publishable(orgs uint32, n uint64) bool {
 // organisation's own daily median, verbatim — a sharper leak than the domination
 // the vote reduction removed, because twenty-four colluding organisations read
 // the twenty-fifth's number exactly rather than merely moving it. `quantile` is
-// ClickHouse's interpolating estimator: the published figure lies BETWEEN two
+// Datastore's interpolating estimator: the published figure lies BETWEEN two
 // organisations' values and is therefore nobody's. Inside one organisation there
 // is nothing to disclose, so [vote] stays exact and stays modelled in Go.
 //
