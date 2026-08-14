@@ -1,7 +1,7 @@
 # apps/engine — Hanzo Engine on /v1/engine (typed passthrough to the serving runtime)
 
 Hanzo Engine is the inference runtime product: github.com/hanzoai/engine, the
-Rust LLM engine (`hanzo serve` — the OpenAI- and Anthropic-compatible server,
+Rust LLM engine (`hanzo-engine serve` — the OpenAI- and Anthropic-compatible server,
 quantization, multimodality, the built-in web UI). cloud does not reimplement
 it. This app is the product-repo model with an HTTP seam — apps/flow's
 posture — a typed read lens over the engine deployment's own management
@@ -62,8 +62,8 @@ before.
 
 Config: ENGINE_UPSTREAM (default `http://engine.hanzo.svc.cluster.local:36900`
 — 36900 is the port svc/engine actually exposes; 1234 is standalone
-`hanzo serve`'s default and is right on a dev box), ENGINE_API_KEY (KMS-synced platform
-credential, rides `Authorization: Bearer` upstream; a bare `hanzo serve`
+`hanzo-engine serve`'s default and is right on a dev box), ENGINE_API_KEY (KMS-synced platform
+credential, rides `Authorization: Bearer` upstream; a bare `hanzo-engine serve`
 enforces none). Upstream 401/403 → caller sees 503 (deployment fault, never a
 caller-auth bug); upstream 5xx → 502; unreachable → 503.
 
