@@ -128,8 +128,10 @@ var mounted *cloud.Service[state]
 //
 // It therefore keeps the spelling the rows were written under, and the product's
 // name is the value that moved. Migrating it would be a full logical copy per
-// tenant under two keys, at open, with no rollback — real risk for a filename
-// nobody sees. TestStoreKeepsTheNameItsRowsWereWrittenUnder pins it.
+// tenant under two keys — and it buys nothing but a filename nobody sees.
+// (A sidecar-backed store would in fact move with its .dek under the same key;
+// cek.Convert is the primitive for the derived case. Possible, just pointless.)
+// TestStoreKeepsTheNameItsRowsWereWrittenUnder pins it.
 const store = "tracker"
 
 // storeFor is the ONE way this package reaches a todo store. It names the
