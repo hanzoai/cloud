@@ -80,16 +80,6 @@ var allowedRequestUses = map[string]string{
 		"the vhost the caller reached, read only to pick the brand the summary renders for.",
 	"apps/admin/core/typed.go": "Admit / AdmitScoped — the SuperAdmin and white-label tenant gates. " +
 		"Both read validated identity beyond the org (IsAdmin, the WL allowlist), which principal.OrgFrom does not carry.",
-	"apps/admin/core/fanin.go": "Delegate — ONE read of the caller's authority, taken off the request " +
-		"before a fleet read fans out over it. It is here for a reason the other pins do not have: " +
-		"building the principal READS fasthttp's headers, and that store shares one scratch buffer " +
-		"across reads, so a dozen goroutines each building their own race on it — -race proves it on " +
-		"the overview's twelve-wide read. So the request is consulted once, ahead of the fan-out, and " +
-		"each per-tenant read is a re-pointing of a value nobody else holds. principal.OrgFrom cannot " +
-		"stand in: an operator reading someone else's books needs the principal WHOLE, carried onto a " +
-		"context with no request behind it and then pointed at each tenant in turn — the caller's own " +
-		"org is the one answer a fleet read must not give. It fails closed off the HTTP path, where " +
-		"there is no request and the delegation is the plain context.",
 	"apps/taxonomy/ops.go": "writable — the product catalogue's authority, and an identity gate reading " +
 		"strictly more than the org. Every row belongs to an org, so the question is WHICH catalogue this " +
 		"caller may change, and it is answered from two facts principal.OrgFrom does not carry: platform " +
