@@ -50,6 +50,18 @@ const TokenRef = "orgs/hanzo/deploy/FORGE_TRACKER_TOKEN@prod"
 // its own network.
 const HostKeyRef = "orgs/hanzo/deploy/FORGE_HOST_KEY@prod"
 
+// WebhookRef is the KMS coordinate of the secret the forge signs its deliveries
+// with — the value configured on the forge's system webhook, and read by the
+// receiver that turns a delivered push into a build (apps/platform).
+//
+// The forge carries no Hanzo session when it delivers, so the signature is that
+// door's ONLY authentication and this value is the whole of the trust: holding
+// it is the ability to start a build. It lives in KMS for the reasons [TokenRef]
+// does, and it is the SAME secret for every repository — one forge-wide system
+// webhook covers the estate, so a repository opts in by having an app that
+// tracks it rather than by owning a hook and a secret of its own.
+const WebhookRef = "orgs/hanzo/deploy/FORGE_WEBHOOK_SECRET@prod"
+
 // fresh bounds how long a resolved credential is reused. A rotated token is
 // therefore live within this window without a restart, and a revoked one stops
 // working. Short enough to make rotation real, long enough that a read is not a
@@ -171,23 +183,33 @@ func (s *Source) Client(ctx context.Context, kms Secrets, domain string) (*Clien
 	return c, nil
 }
 
-// host is the forge this deployment talks to.
+// Host is the forge a deployment with this API host talks to.
 //
 // It is the SIBLING of the deployment's own API host, through the one derivation
-// of it. A literal "git.hanzo.ai" here is what makes a white-labelled deployment
-// (lux.network, zoo.ngo) read another brand's forge.
+// of it. A literal "git.hanzo.ai" at a call site is what makes a white-labelled
+// deployment (lux.network, zoo.ngo) read another brand's forge.
 //
 // CLOUD_FORGE_HOST overrides it for the deployment whose forge genuinely is not
 // that sibling — a developer box, or a migration running against a staging
 // forge. An override, not the source.
-func (s *Source) host(domain string) string {
-	if h := strings.TrimSpace(s.Host); h != "" {
-		return h
-	}
+//
+// Exported because the host is a fact about the forge that outlived the client:
+// a receiver of the forge's own deliveries has no client to ask, and it needs
+// the host to say where a push arrived FROM. Two derivations of one host is how
+// a mirror ends up unable to recognise its own echo.
+func Host(domain string) string {
 	if h := strings.TrimSpace(os.Getenv("CLOUD_FORGE_HOST")); h != "" {
 		return h
 	}
 	return brand.Sibling(domain, Name)
+}
+
+// host is [Host] with this Source's own override taking precedence.
+func (s *Source) host(domain string) string {
+	if h := strings.TrimSpace(s.Host); h != "" {
+		return h
+	}
+	return Host(domain)
 }
 
 // Invalidate drops a held credential the forge has just rejected, so the next
@@ -314,4 +336,42 @@ func Owner(org string) (string, error) {
 		return o, nil
 	}
 	return "", fmt.Errorf("%w: %q", ErrNoOwner, org)
+}
+
+// ErrNoOrg means this forge namespace belongs to no IAM org. Like [ErrNoOwner]
+// it is a REFUSAL, and never a fallback to the namespace's own name.
+var ErrNoOrg = errors.New("forge: this forge namespace belongs to no org")
+
+// orgs is [owners] read the other way — a forge namespace to the IAM org that
+// owns it — DERIVED from the same table, so the two directions cannot come to
+// disagree by one of them being edited.
+//
+// A namespace claimed by two IAM orgs has no answer in this direction, and Go
+// ranges a map in a different order every run, so inverting one lazily would
+// decide tenancy by process start. It is refused here instead, at init, where a
+// declared table's contradiction belongs.
+var orgs = func() map[string]string {
+	m := make(map[string]string, len(owners))
+	for org, owner := range owners {
+		if prior, dup := m[owner]; dup {
+			panic(fmt.Sprintf("forge: namespace %q is claimed by both %q and %q — a push delivered from it names no one org", owner, prior, org))
+		}
+		m[owner] = org
+	}
+	return m
+}()
+
+// Org is the IAM org that owns a forge namespace, or [ErrNoOrg].
+//
+// This is the direction a DELIVERY is read in. A signed push names the namespace
+// it landed in, and that name decides whose applications rebuild and whose
+// compute pays for it — so it is closed for the reason [Owner] is, from the
+// other side. Anyone with a forge account can create a namespace; were an
+// unmapped one to resolve to the IAM org spelled the same way, choosing which
+// tenant rebuilds would take a signup and a push.
+func Org(owner string) (string, error) {
+	if o, ok := orgs[strings.ToLower(strings.TrimSpace(owner))]; ok {
+		return o, nil
+	}
+	return "", fmt.Errorf("%w: %q", ErrNoOrg, owner)
 }

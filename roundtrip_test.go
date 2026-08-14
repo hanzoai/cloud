@@ -82,7 +82,7 @@ func TestPushReachesPlatform(t *testing.T) {
 			}, zip.WithOperationID(plane.PlatformPush))
 	})
 
-	err := cloud.OnGitPush(context.Background(), cloud.GitPushEvent{
+	_, err := cloud.OnGitPush(context.Background(), cloud.GitPushEvent{
 		Org: "acme", Project: "web", Repo: "site",
 		Ref: "refs/heads/main", Commit: "deadbeef",
 		CloneURL: "https://git.hanzo.ai/v1/git/acme/site.git",
