@@ -80,9 +80,7 @@ var nonWLOrgAdminHdr = map[string]string{"X-Org-Id": "acme", "X-User-Id": "acme/
 func TestScope_SuperSeesAllOrgs(t *testing.T) {
 	iam := newScopeIAM()
 	defer iam.server.Close()
-	commerce := newFakeCommerce()
-	defer commerce.server.Close()
-	do := mount(t, iam.server.URL, commerce.server.URL, "")
+	do := mount(t, iam.server.URL, "", "")
 
 	resp, body := do("GET", "/v1/admin/orgs", superHdr)
 	if resp.StatusCode != http.StatusOK {
@@ -102,9 +100,7 @@ func TestScope_SuperSeesAllOrgs(t *testing.T) {
 func TestScope_OrgAdminSeesOnlyOwnOrg(t *testing.T) {
 	iam := newScopeIAM()
 	defer iam.server.Close()
-	commerce := newFakeCommerce()
-	defer commerce.server.Close()
-	do := mount(t, iam.server.URL, commerce.server.URL, "")
+	do := mount(t, iam.server.URL, "", "")
 
 	// dave asks for hanzo, but must see ONLY maxpower — the escalation line.
 	resp, body := do("GET", "/v1/admin/orgs?org=hanzo", orgAdminHdr)
@@ -125,9 +121,7 @@ func TestScope_OrgAdminSeesOnlyOwnOrg(t *testing.T) {
 func TestScope_UsersHardPinnedToOwnOrg(t *testing.T) {
 	iam := newScopeIAM()
 	defer iam.server.Close()
-	commerce := newFakeCommerce()
-	defer commerce.server.Close()
-	do := mount(t, iam.server.URL, commerce.server.URL, "")
+	do := mount(t, iam.server.URL, "", "")
 
 	// dave tries to list hanzo's users; the read MUST be pinned to maxpower.
 	if resp, body := do("GET", "/v1/admin/users?org=hanzo", orgAdminHdr); resp.StatusCode != http.StatusOK {
@@ -144,9 +138,7 @@ func TestScope_UsersHardPinnedToOwnOrg(t *testing.T) {
 func TestScope_AnalyticsScopedToOwnOrg(t *testing.T) {
 	iam := newScopeIAM()
 	defer iam.server.Close()
-	commerce := newFakeCommerce()
-	defer commerce.server.Close()
-	do := mount(t, iam.server.URL, commerce.server.URL, "")
+	do := mount(t, iam.server.URL, "", "")
 
 	resp, body := do("GET", "/v1/admin/analytics", orgAdminHdr)
 	if resp.StatusCode != http.StatusOK {
@@ -228,9 +220,7 @@ func TestScope_WhiteLabelTenantDeniedGodViews(t *testing.T) {
 func TestScope_WhiteLabelDefaultFailClosed(t *testing.T) {
 	iam := newScopeIAM()
 	defer iam.server.Close()
-	commerce := newFakeCommerce()
-	defer commerce.server.Close()
-	do, s, _ := mountService(t, iam.server.URL, commerce.server.URL, "")
+	do, s, _ := mountService(t, iam.server.URL, "", "")
 	s.State.WLTenants = nil // fleet-only default: no white-label tenant enabled
 	for _, r := range scopedAdminRoutes {
 		if resp, body := do(r.method, r.path, orgAdminHdr); resp.StatusCode != http.StatusForbidden {
