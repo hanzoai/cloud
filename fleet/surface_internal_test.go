@@ -334,3 +334,55 @@ func TestRank_TheCodingRunIsAProduct(t *testing.T) {
 		t.Error("the coding run and code intelligence share a bucket — they are two products")
 	}
 }
+
+// TestAParentIdDoesNotQualifyASecret is the hole this pair of sets was opened by.
+//
+// `id` marks a token as NAMED rather than presented — `tokenId` on a chain is an
+// asset's number, not a bearer secret. But the neighbour test read either side,
+// and in a REST path the id before a subresource names the PARENT:
+//
+//	GET /v1/connectors/{id}/token   →  get | connectors | by | id | token
+//
+// The id there is the connector's. The token is exactly what it says, and the
+// door projected it to every model as `get_connector_token` — a live OAuth
+// bearer for a customer's connector, one tools/call away, offered by the gate
+// whose whole job is to withhold it. Measured against the deployed fleet, it was
+// one of two ops carrying a secret noun that survived; the other is the counted
+// one this asserts still survives.
+//
+// So an asset's field qualifies only when it FOLLOWS. A quantity still reads
+// either way, because English puts it on both sides — "count tokens" and "token
+// count" are the same claim.
+func TestAParentIdDoesNotQualifyASecret(t *testing.T) {
+	for name, want := range map[string]bool{
+		"get_connectors_by_id_token": true,  // the parent's id; the token is the object
+		"post_messages_count_tokens": false, // counted, not presented
+		"get_token_count":            false, // the same claim, the other way round
+		"get_validators_by_token_id": false, // an asset's number on a chain
+		"get_token_symbol":           false,
+		"post_iam_oauth_token":       true, // the thing this file exists for
+	} {
+		if got := refuse(name); got != want {
+			verb := map[bool]string{true: "must be refused", false: "must be projected"}[want]
+			t.Errorf("%s %s, but refuse() said %v — words=%v", name, verb, got, words(name))
+		}
+	}
+}
+
+// TestNoSecretNounSurvivesTheRealFleet judges the fleet that exists rather than
+// names invented here, so an op written tomorrow is measured by the same rule.
+// The one admitted exception is named, not counted: a rule that allowed "some"
+// survivors would pass while the wrong one survived.
+func TestNoSecretNounSurvivesTheRealFleet(t *testing.T) {
+	counted := map[string]bool{"post_messages_count_tokens": true}
+	for _, op := range Corpus(t) {
+		if refuse(op.ID) || counted[op.ID] {
+			continue
+		}
+		for _, w := range words(op.ID) {
+			if w == "token" || w == "tokens" || secretNoun[w] {
+				t.Errorf("%s/%s carries %q and is projected to every model", op.App, op.ID, w)
+			}
+		}
+	}
+}
