@@ -155,6 +155,14 @@ type Principal struct {
 	// row, a membership — keys on this and refuses it empty, so it can never be
 	// handed one identity's token and address another's row.
 	Subject string
+	// Limit is what the CREDENTIAL this request arrived on may reach, as
+	// `kind:name` entries. Empty means the credential carries no limit and
+	// reaches whatever its holder does, which is every session and every key
+	// minted before limits existed.
+	//
+	// It rides here rather than in a header for the reason the attestation does:
+	// a request that could state its own limit could state a wider one.
+	Limit []string
 }
 
 // mintedSlot names the request-local slot the boundary parks its attestation in.
