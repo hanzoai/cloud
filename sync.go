@@ -7,13 +7,12 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// sync.go is the inversion layer between the universal sync ENGINE
-// (clients/sync) and the two planes that trigger or execute it — the webhook
-// triggers (clients/integrations GitHub App, clients/git Hanzo Git ingest) and the git
-// object plane (clients/git). It is the same idiom as git_import.go's GitImporter:
-// the engine registers itself here at Mount; triggers call the package funcs below
-// with NO import of the engine package, so nothing imports the sync package except apps
-// (which mounts it). One direction, no cycles.
+// sync.go is the inversion layer between the universal sync ENGINE (apps/sync)
+// and the webhook triggers that fire it (apps/integrations for the GitHub App,
+// the forge's own push webhook). It is the same idiom as git_import.go's
+// GitImporter: the engine registers itself here at Mount; triggers call the
+// package funcs below with NO import of the engine package, so nothing imports
+// the sync package except apps (which mounts it). One direction, no cycles.
 
 // SyncEvent is a provider-agnostic sync trigger. A webhook (GitHub push, Hanzo Git
 // push) or a manual run builds one and hands it to the registered engine via Sync;
@@ -89,39 +88,37 @@ func Sync(ctx context.Context, ev SyncEvent) (SyncResult, error) {
 
 // ── git object-plane control (outbound mirror ensure/remove) ────────────────
 
-// GitMirrorController lets the sync engine's git provider ENSURE or REMOVE a
-// native repo's outbound mirror target without importing clients/git (which owns
-// the per-org repo store + the mirror_out reactor that does the actual pushing).
-// enabled=true registers the target (idempotent); enabled=false removes it. The
-// push itself stays with mirror_out on the native push lifecycle — the engine only
-// declares the target, exactly the "cloud ensures the mirror exists; the git plane
-// does the pushing" split.
+// GitMirrorController ENSURES or REMOVES a repo's outbound mirror target.
+// enabled=true declares the target (idempotent); enabled=false withdraws it.
+// Declaring is all it does: the pushing happens on the next advance of that
+// repository, fast-forward only like every other write this estate makes to a
+// git host, so a target that exists is a fact about the repo rather than a job
+// somebody has to keep running.
 type GitMirrorController interface {
 	EnsureMirror(ctx context.Context, org, project, repo, url string, enabled bool) error
 }
 
 var gitMirrorCtl GitMirrorController
 
-// RegisterGitMirrorController installs the git-plane mirror controller. nil-safe.
+// RegisterGitMirrorController installs the mirror controller. nil-safe.
 func RegisterGitMirrorController(c GitMirrorController) { gitMirrorCtl = c }
 
-// ErrGitMirrorControllerUnavailable is returned when the git object plane is not
+// ErrGitMirrorControllerUnavailable is returned when the sync engine is not
 // mounted — fail-closed, never a silent success.
 var ErrGitMirrorControllerUnavailable = errors.New("cloud: git mirror controller not registered")
 
-// EnsureGitMirror registers (enabled) or removes (disabled) the outbound mirror
-// target url on the native repo. Idempotent.
+// EnsureGitMirror declares (enabled) or withdraws (disabled) the outbound target
+// url on repo. Idempotent.
 //
-// The DECIDER is the sync engine and the OWNER is the git app, so absent
-// co-residency this asks git over the plane rather than reporting a controller
-// that was never going to be in this process. Declaring a mirror is the whole
-// point of configuring one; refusing it here meant a sync that reconciled
-// inbound forever and never pushed anything back.
+// Absent co-residency this asks the sync app over the plane rather than
+// reporting a controller that was never going to be in this process. Declaring a
+// mirror is the whole point of configuring one; refusing it here meant a sync
+// that reconciled inbound forever and never pushed anything back.
 func EnsureGitMirror(ctx context.Context, org, project, repo, url string, enabled bool) error {
 	if gitMirrorCtl != nil {
 		return gitMirrorCtl.EnsureMirror(ctx, org, project, repo, url, enabled)
 	}
-	_, err := Ask[plane.MirrorIn, plane.Mirrored](For(ctx, org), "git", plane.GitMirror,
+	_, err := Ask[plane.MirrorIn, plane.Mirrored](For(ctx, org), "sync", plane.GitMirror,
 		&plane.MirrorIn{Project: project, Repo: repo, URL: url, Enabled: enabled})
 	return err
 }
