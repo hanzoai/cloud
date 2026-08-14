@@ -108,8 +108,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	b = &broker{nc: nc, js: js, mounted: time.Now()}
 
-	// cloud.Bridge — the ONE source of the org every handler scopes by (callerOf
-	// reads what it parks) — is not installed here. Whoever composes the program
+	// cloud.Bridge — the ONE source of the org every handler scopes by
+	// (principal.Acting reads what it parks) — is not installed here. Whoever composes the program
 	// installs it once at the root — after the identity check that mints the
 	// validated org and before any subsystem registers a route (serve.go) —
 	// because that order is a property of the whole program and no subsystem can

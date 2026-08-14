@@ -179,7 +179,7 @@ func TestResourceMeter_GateRefusesAtZero(t *testing.T) {
 // EVERY priced surface: the caller is resolved before the money plane is asked.
 //
 // An empty org reaches Gate from any handler whose tenant check and whose
-// principal.Ledger disagree — provisioning's tenant() admits an admin with no
+// principal.Ledger disagree — provisioning's tenantOf admits an admin with no
 // org and Ledger answers "" for that same request — and before this guard both
 // of Gate's branches answered a question about IDENTITY in the vocabulary of
 // MONEY: 503 "Billing temporarily unavailable" co-resident, and over the peer
@@ -805,5 +805,50 @@ func TestResourceMeter_MeterOwnsTheStringsItRetains(t *testing.T) {
 		t.Fatalf("the debit recorded requestId %q, want %q — the meter retained a view into the "+
 			"caller's request arena, so the row quotes whoever used that connection next",
 			in.Usage.RequestID, "req-mine")
+	}
+}
+
+// A SANDBOX LEASE IS RECORDED ONLY ONCE IT HAS A PRICE, and the test says so
+// because the deployment cannot.
+//
+// apps/sandbox meters every lease that reaches "running", passing the fee its
+// class resolves to. That fee defaults to FREE — a sandbox costs nothing until
+// somebody prices it — and meterUsage drops a zero amount on the floor, for the
+// good reason that a zero debit is not a debit. Compose the two and an unpriced
+// fleet leases sandboxes all day while /v1/billing/usage stays empty, which
+// reads exactly like metering is broken. It is not: there is nothing to bill.
+//
+// The lever is a price, and the price is config (SANDBOX_FEE_CENTS[_CLASS]), so
+// what is pinned here is the mechanism either side of it: unpriced records
+// nothing, priced records the amount asked for. Whoever wonders why usage is
+// empty should find this test before they go looking for the bug.
+func TestMeterUsage_ASandboxLeaseIsRecordedOnlyOnceItIsPriced(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		cents int64
+		want  int32
+	}{
+		{"unpriced — free, so nothing to record", 0, 0},
+		{"priced — the lease is billed", 250, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fc := &recCommerce{balanceAvailable: 100000}
+			rm := meterFor(t, fc.server(t).URL, "mainnet", false)
+
+			rm.MeterUsage("acme", "sandbox", metering.Usage{
+				User:        "acme",
+				Model:       "exec/kata-fc",
+				AmountCents: tc.cents,
+			})
+
+			got := waitFor(func() bool { return fc.usages() == tc.want }, time.Second)
+			if !got && tc.want > 0 {
+				t.Fatalf("usage records = %d, want %d — a priced lease must reach the ledger",
+					fc.usages(), tc.want)
+			}
+			if fc.usages() != tc.want {
+				t.Fatalf("usage records = %d, want %d", fc.usages(), tc.want)
+			}
+		})
 	}
 }

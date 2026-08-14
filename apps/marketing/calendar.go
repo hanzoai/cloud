@@ -328,7 +328,7 @@ type PostList struct {
 //
 // Example: {"title": "Launch day", "body": "Hanzo Cloud is live.", "channel": "x", "scheduledAt": 1780000000}
 func (o ops) createCalendarPost(ctx context.Context, in *CalendarPost) (*CalendarPost, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +361,7 @@ func (o ops) createCalendarPost(ctx context.Context, in *CalendarPost) (*Calenda
 //
 // Example: {"status": "scheduled", "limit": 50}
 func (o ops) listCalendarPosts(ctx context.Context, in *PostQuery) (*PostList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +378,7 @@ func (o ops) listCalendarPosts(ctx context.Context, in *PostQuery) (*PostList, e
 //
 // Example: {"id": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}
 func (o ops) getCalendarPost(ctx context.Context, in *PostRef) (*CalendarPost, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +396,7 @@ func (o ops) getCalendarPost(ctx context.Context, in *PostRef) (*CalendarPost, e
 //
 // Example: {"title": "Launch day", "body": "Hanzo Cloud is live — try it free.", "channel": "x", "scheduledAt": 1780003600}
 func (o ops) updateCalendarPost(ctx context.Context, in *CalendarPost) (*CalendarPost, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -424,7 +424,7 @@ func (o ops) updateCalendarPost(ctx context.Context, in *CalendarPost) (*Calenda
 //
 // Example: {"id": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}
 func (o ops) deleteCalendarPost(ctx context.Context, in *PostRef) (*struct{}, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +445,7 @@ func (o ops) deleteCalendarPost(ctx context.Context, in *PostRef) (*struct{}, er
 //
 // Example: {"id": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}
 func (o ops) publishCalendarPost(ctx context.Context, in *PostRef) (*CalendarPost, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

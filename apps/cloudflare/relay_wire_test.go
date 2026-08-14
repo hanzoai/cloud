@@ -10,7 +10,9 @@ package cloudflare
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -217,7 +219,7 @@ func TestUntypedJSONRoutesDeclareTheirBody(t *testing.T) {
 			if _, ok := got[field]; !ok {
 				t.Errorf("%s publishes no request field %q — the declaration in cloudflare.go's init "+
 					"is what puts this route's body in openapi.yaml and every SDK generated from it; "+
-					"have %v", key, field, sortedNames(got))
+					"have %v", key, field, slices.Sorted(maps.Keys(got)))
 			}
 		}
 	}
@@ -267,15 +269,6 @@ func decode(t *testing.T, node, out any) {
 	if err := json.Unmarshal(raw, out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-}
-
-func sortedNames(m map[string]any) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // Every typed op must carry lifted prose, because that prose IS the product

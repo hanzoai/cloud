@@ -9,7 +9,9 @@ import (
 
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
+
 	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/cloud/internal/mint"
 )
 
 func testStore(t *testing.T) *Store {

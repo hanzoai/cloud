@@ -104,7 +104,7 @@ var cookieTokenNames = []string{"__Host-hanzo_iam_token", "hanzo_iam_token", "ia
 //
 // It is minted only from validated claims and stripped on ingress like every
 // other authority header, so it is never a value a caller chose. Absent for a
-// principal that carries no issuer to resolve — an hk-/sk- API key, which this
+// principal that carries no issuer to resolve — an sk- API key, which this
 // deployment's own IAM issued — and a consumer must treat absent as "no second
 // fact to compare", never as a brand.
 const HeaderUserBrand = "X-User-Brand"

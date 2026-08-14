@@ -188,10 +188,7 @@ func (o ops) run(ctx context.Context, body *runReq) (*runView, error) {
 	a, err := s.State.store.GetApplication(ctx, org, project, slug)
 	switch {
 	case errors.Is(err, errNotFound):
-		id, gerr := genID("app")
-		if gerr != nil {
-			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
-		}
+		id := genID("app")
 		a = Application{
 			ID: id, Org: org, ProjectID: project, Slug: slug, Name: name,
 			Environment: "production", Source: "image", ImageRepo: repo, ImageTag: tag,

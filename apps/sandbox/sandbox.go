@@ -346,7 +346,7 @@ type createBody struct {
 func create(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body createBody
 	if err := c.Bind(&body); err != nil {
@@ -356,7 +356,7 @@ func create(s *Service, c *zip.Ctx) error {
 	// org, attested by the identity middleware. It is read here and nowhere else in
 	// this package: what it decides is which image a `dev` sandbox runs (imageFor),
 	// and a second caller of it would be a second answer to drift from.
-	m, err := Lease(s, c.Context(), o, principal.IsSuperAdmin(c), Spec{
+	m, err := Lease(s, c.Context(), o, principal.Ledger(c), principal.IsSuperAdmin(c), Spec{
 		Class: body.Class, Project: body.Project, Image: body.Image,
 		Runtime: body.Runtime, TTLSec: body.TTLSec})
 	if err != nil {
@@ -368,7 +368,7 @@ func create(s *Service, c *zip.Ctx) error {
 func list(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	out, err := List(s, c.Context(), o, c.Query("project"), c.Query("status"))
 	if err != nil {
@@ -380,7 +380,7 @@ func list(s *Service, c *zip.Ctx) error {
 func get(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	m, err := Get(s, c.Context(), o, idParam(c))
 	if err != nil {
@@ -392,7 +392,7 @@ func get(s *Service, c *zip.Ctx) error {
 func del(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	if err := End(s, c.Context(), o, idParam(c), c.Query("purge") == "1"); err != nil {
 		return err
@@ -404,7 +404,7 @@ func del(s *Service, c *zip.Ctx) error {
 func execIn(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body struct {
 		Argv       []string `json:"argv"`
@@ -430,7 +430,7 @@ func execIn(s *Service, c *zip.Ctx) error {
 func fsRead(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	e, err := Read(s, c.Context(), o, idParam(c), c.Query("path"))
 	if err != nil {
@@ -446,7 +446,7 @@ func fsRead(s *Service, c *zip.Ctx) error {
 func fsWrite(s *Service, c *zip.Ctx) error {
 	o, ok := orgOf(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	path, n, err := Write(s, c.Context(), o, idParam(c), c.Query("path"), c.Body())
 	if err != nil {
@@ -619,44 +619,48 @@ func init() {
 			"plain shell again when the image has no tmux. Every step is a preference and none "+
 			"is a requirement: whatever else the image carries — the hanzo CLI included — is a "+
 			"command to type, never a condition for getting a prompt.")
+
+	// The screen's three, beside the terminal's three. They were published with no
+	// prose at all — the sentence lives on each handler's doc comment, but those
+	// routes are registered on the GROUP (`/:id/screen/ws`) while this document
+	// addresses them as the fleet routes them, so the lift landed under a key
+	// nothing asks for. Stated here, at the address, exactly as the terminal's are.
 	openapi.Describe("/v1/sandboxes/:id/screen/ticket", http.MethodPost,
 		"Open a screen",
-		"Mints a SINGLE-USE ticket for one view of this sandbox's display and returns "+
-			"`{ticket, expiresIn, url}`, where url is the screen PAGE with the ticket already "+
-			"on it.\n\n"+
-			"It is the terminal's ticket exactly — bound to this org and this sandbox, valid "+
-			"for thirty seconds, gone the first time it is presented — for the same reason: a "+
-			"browser carries no Authorization header into a WebSocket or an iframe, and a "+
-			"long-lived bearer in a query string would be written into every access log on the "+
-			"path.\n\n"+
-			"Mint one per view, and mint a fresh one to reconnect.")
+		"Mints a SINGLE-USE ticket for this sandbox's DISPLAY and returns "+
+			"`{ticket, expiresIn, url}`, where url is the desktop PAGE with the ticket already "+
+			"on it. The same ticket as the terminal's, minted for a different door.\n\n"+
+			"A ticket says which org and which sandbox, and the terminal and the screen are two "+
+			"views of one machine: a caller who may type in a sandbox may look at it. What the "+
+			"door decides is the URL handed back, which is the only part that differs.\n\n"+
+			"Mint one per screen, and mint a fresh one to reconnect.")
 	openapi.Describe("/v1/sandboxes/:id/screen", http.MethodGet,
 		"The screen, as a page",
 		"A complete, self-contained desktop — noVNC inline, no other origin — that opens its "+
 			"own socket and draws this sandbox's display. Embed it in an iframe and there is "+
 			"nothing else to build.\n\n"+
-			"`ticket` is the credential from the POST above, carried through to the socket. As "+
-			"with the terminal the page is NOT gated: it is inert markup and does not redeem "+
-			"the ticket, because a ticket is spent once and a page that spent it would hold a "+
-			"credential that no longer opens anything.\n\n"+
-			"The view SCALES what it is given rather than resizing the display — a browser "+
-			"pane's size is not the X server's, and the image runs no RandR — so the window is "+
-			"deliberately not negotiated.")
+			"`ticket` is the credential from the POST above, carried through to the socket. The "+
+			"page is NOT gated: it is inert markup and does not redeem the ticket, because a "+
+			"ticket is spent once and a page that spent it would hold a credential that no "+
+			"longer opens anything. `frame-ancestors` admits our own brands' hosts and nothing "+
+			"further.\n\n"+
+			"It is served for every class, not only for `desktop`. The class is a fact about the "+
+			"image, and a sandbox with no VNC server already fails exactly — the connection is "+
+			"refused and the page says so — where a check here would be a second opinion about "+
+			"what is running inside a pod, formed from a label rather than from the pod.")
 	openapi.Describe("/v1/sandboxes/:id/screen/ws", http.MethodGet,
 		"The screen, as a socket",
-		"Upgrades to a WebSocket carrying the RFB stream of this sandbox's display — for a "+
-			"host that brings its own VNC client. Requires `ticket`; a missing, expired or "+
-			"already-spent one answers 401 without upgrading.\n\n"+
-			"THE PIXELS COME OUT THROUGH THE EXEC CHANNEL. The desktop image serves RFB on "+
-			"127.0.0.1:5900 and binds nothing else — a screen reachable from the pod network "+
-			"is a screen whose only defence is a NetworkPolicy — so there is no address to "+
-			"dial. `socat` joins stdin and stdout to that loopback port over the same "+
-			"Kubernetes exec subresource every other call into a sandbox uses, and the stream "+
-			"IS the transport: one way in, one thing to authorize, nothing new exposed.\n\n"+
-			"It is registered for EVERY class rather than for `desktop` alone, because the "+
-			"class is a fact about the image and the failure is already exact: a sandbox with "+
-			"no VNC server refuses the socat connection and the page says the connection "+
-			"failed. A check here would be a second opinion about what is running inside a "+
-			"pod, formed from a label rather than from the pod.")
-
+		"Upgrades to a WebSocket carrying RFB — the VNC wire protocol — from the sandbox's "+
+			"display, for a host that brings its own client. Requires `ticket`; a missing, "+
+			"expired or already-spent one answers 401 without upgrading.\n\n"+
+			"THE WIRE IS RFB, in BINARY frames both ways, and it is not interpreted here: this "+
+			"is a pipe between the caller's client and the server inside the pod.\n\n"+
+			"THE PIXELS COME OUT THROUGH THE EXEC CHANNEL. The display binds 127.0.0.1 only and "+
+			"deliberately nothing else, so there is no address to dial — `socat` joins the "+
+			"stream to that loopback port over the same Kubernetes exec subresource every other "+
+			"call into a sandbox uses. One way in, one thing to authorize, nothing further "+
+			"exposed.\n\n"+
+			"The window size is ignored. A browser pane is not the X server's geometry, and the "+
+			"client scales what it is given rather than asking a server with no RandR to resize "+
+			"itself.")
 }

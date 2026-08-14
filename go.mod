@@ -27,16 +27,16 @@ require (
 	github.com/hanzoai/notify v1.7.2
 	github.com/hanzoai/plans v1.4.14
 	github.com/hanzoai/pricing v1.4.10
-	github.com/hanzoai/pubsub v1.4.5
+	github.com/hanzoai/pubsub v1.4.6
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.5.2
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
-	github.com/hanzos3/go v1.0.1
+	github.com/hanzos3/go v1.0.2
 	github.com/luxfi/log v1.6.0
 	github.com/luxfi/node v1.36.15
 	github.com/luxfi/trace v1.4.0
-	github.com/luxfi/zapdb v1.10.1
+	github.com/luxfi/zapdb v1.10.6
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/nats-io/nats.go v1.50.0
 	github.com/spf13/cobra v1.10.2
@@ -88,6 +88,7 @@ require (
 	github.com/hanzokv/go/extra/kvotel/v9 v9.22.0 // indirect
 	github.com/hanzos3/crc64nvme v1.1.2 // indirect
 	github.com/hanzos3/go-sdk v1.0.2 // indirect
+	github.com/hanzos3/highwayhash v1.0.5 // indirect
 	github.com/hanzos3/md5-simd v1.1.3 // indirect
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
@@ -172,7 +173,6 @@ require (
 	github.com/luxfi/mlwe v0.3.0 // indirect
 	github.com/luxfi/sampler v1.1.0 // indirect
 	github.com/luxwallet/connect/go v0.1.4 // indirect
-	github.com/minio/highwayhash v1.0.4 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/nats-io/jwt/v2 v2.8.1 // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729 // indirect
@@ -491,12 +491,12 @@ require (
 	github.com/luxfi/aml v0.3.5
 	github.com/luxfi/cache v1.3.1 // indirect
 	github.com/luxfi/consensus v1.36.11
-	github.com/luxfi/container v0.2.1 // indirect
+	github.com/luxfi/container v0.2.2 // indirect
 	github.com/luxfi/corona v0.10.4 // indirect
 	github.com/luxfi/crypto v1.20.2
 	github.com/luxfi/crypto/ipa v1.2.4 // indirect
 	github.com/luxfi/fhe v1.8.8 // indirect
-	github.com/luxfi/geth v1.20.1
+	github.com/luxfi/geth v1.20.2
 	github.com/luxfi/ids v1.3.2
 	github.com/luxfi/kms v1.12.9
 	github.com/luxfi/lattice/v7 v7.1.4 // indirect
@@ -521,8 +521,6 @@ require (
 	github.com/microsoft/go-mssqldb v1.9.5 // indirect
 	github.com/miekg/dns v1.1.72 // indirect
 	github.com/mimoo/StrobeGo v0.0.0-20220103164710-9a04d6ca976b // indirect
-	github.com/minio/crc64nvme v1.1.1 // indirect
-	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.1-0.20231216201459-8508981c8b6c // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect

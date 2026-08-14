@@ -366,7 +366,7 @@ func askConnection(ctx context.Context, provider string) plane.Connection {
 // response as the channel that cannot post.
 func (o ops) list(ctx context.Context, _ *noInput) (*chatChannels, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +434,7 @@ type inboxPage struct {
 // Example: {"since": "1042", "limit": "100"}
 func (o ops) inbox(ctx context.Context, in *inboxIn) (*inboxPage, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -492,7 +492,7 @@ type pairingQueue struct {
 // returned. Codes are capability strings: they are shown here, and never logged.
 func (o ops) pairingList(ctx context.Context, _ *noInput) (*pairingQueue, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -545,7 +545,7 @@ type pairingApproved struct {
 // Example: {"channel": "telegram", "code": "PAIR-7Q2M"}
 func (o ops) pairingApprove(ctx context.Context, in *approvePairingIn) (*pairingApproved, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -583,7 +583,7 @@ type allowlistRef struct {
 // Example: {"channel": "slack"}
 func (o ops) allowlistGet(ctx context.Context, in *allowlistRef) (*allowlistView, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -647,7 +647,7 @@ type allowlistPutIn struct {
 // Example: {"channel": "slack", "dmPolicy": "allowlist", "dm": ["U024BE7LH"]}
 func (o ops) allowlistPut(ctx context.Context, in *allowlistPutIn) (*allowlistView, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

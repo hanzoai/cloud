@@ -278,7 +278,7 @@ type statusView struct {
 // tally of its verifications. It is deliberately NOT a boolean "compliant" — it
 // reports counts of provider-reported states and carries the boundary disclaimer.
 func (o ops) status(ctx context.Context, _ *noInput) (*statusView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +347,7 @@ type subjectReq struct {
 //
 // Example: {"kind": "individual", "email": "founder@example.com", "name": "Ada"}
 func (o ops) createSubject(ctx context.Context, in *subjectReq) (*Subject, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +390,7 @@ type subjectList struct {
 // email, only whether an email is on file. The full record is returned only by the
 // explicit single-subject read.
 func (o ops) listSubjects(ctx context.Context, in *listIn) (*subjectList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +419,7 @@ type subjectRef struct {
 //
 // Example: {"id": "sub_1"}
 func (o ops) getSubject(ctx context.Context, in *subjectRef) (*Subject, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +505,7 @@ type verificationReq struct {
 //
 // Example: {"subjectId": "sub_1"}
 func (o ops) startVerification(ctx context.Context, in *verificationReq) (*checkView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -572,7 +572,7 @@ type checkList struct {
 // ListVerifications returns the org's KYC/KYB verifications, newest first — opaque
 // subject references and provider-reported statuses only, no subject PII.
 func (o ops) listVerifications(ctx context.Context, in *listIn) (*checkList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -599,7 +599,7 @@ type verificationRef struct {
 //
 // Example: {"id": "chk_1"}
 func (o ops) getVerification(ctx context.Context, in *verificationRef) (*checkView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -650,7 +650,7 @@ func reconcileCheck(s *cloud.Service[state], ctx context.Context, chk Check) (Ch
 //
 // Example: {"id": "chk_1"}
 func (o ops) refreshVerification(ctx context.Context, in *verificationRef) (*checkView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -743,7 +743,7 @@ type verificationDecision struct {
 //
 // Example: {"id": "chk_1", "status": "reviewer_confirmed"}
 func (o ops) decideVerification(ctx context.Context, in *verificationDecision) (*checkView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -858,7 +858,7 @@ type accreditationReq struct {
 //
 // Example: {"subjectId": "sub_1", "method": "self_attested", "basis": "income"}
 func (o ops) createAccreditation(ctx context.Context, in *accreditationReq) (*accView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -914,7 +914,7 @@ type accList struct {
 // ListAccreditation returns the org's tracked accreditation-state records, newest
 // first — evidence entries the org keeps, never a platform certification.
 func (o ops) listAccreditation(ctx context.Context, in *listIn) (*accList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -940,7 +940,7 @@ type accreditationRef struct {
 //
 // Example: {"id": "acc_1"}
 func (o ops) getAccreditation(ctx context.Context, in *accreditationRef) (*accView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -974,7 +974,7 @@ type accreditationDecision struct {
 //
 // Example: {"id": "acc_1", "status": "reviewer_confirmed"}
 func (o ops) decideAccreditation(ctx context.Context, in *accreditationDecision) (*accView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1024,7 +1024,7 @@ type recordList struct {
 // platform-asserted. PII stays in the subject store; records carry only opaque ids
 // and statuses.
 func (o ops) listRecords(ctx context.Context, in *listIn) (*recordList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1068,7 +1068,7 @@ type auditList struct {
 // compliance.* actions. Fail-closed: no principal is a 403, no configured audit
 // store a 501.
 func (o ops) auditRead(ctx context.Context, in *auditIn) (*auditList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

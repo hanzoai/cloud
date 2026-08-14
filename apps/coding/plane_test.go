@@ -2,11 +2,16 @@ package coding
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/internal/planetest"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/forge"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -25,8 +30,14 @@ import (
 // production plane clients. What is proven is what could not be proven before:
 // every argument ENCODES (a map field would die inside zip.Call, before the
 // socket — see plane_encodable_test.go), every reply decodes, and a run whose
-// collaborators are all elsewhere still opens its session, points the sandbox at
-// its own org, verifies the pushed ref and files its PR.
+// collaborators are all elsewhere still opens its session, verifies the pushed
+// ref and files its PR.
+//
+// GIT IS NO LONGER ONE OF THOSE PEERS. The forge is an external host, so the
+// facts a run needs from it are read over HTTPS from whichever process the run
+// is in, and the stub below is a forge rather than a plane app. The credential
+// still crosses a socket — it is read from KMS, which IS a peer — so the whole
+// path from "this deployment's secret" to "this run's answer" is exercised.
 
 // peers stands up the three apps a coding run reaches, each backed by the same
 // recording fakes the in-process tests use, so an assertion can be made about
@@ -34,15 +45,69 @@ import (
 type peers struct {
 	sessions *fakeSessions
 	tracker  *fakePR
-	clone    string
 	tip      string
 	found    bool
 	gated    []string
 	proposed string
+	// asked records every path the forge stub was called on, so a test can assert
+	// which questions actually reached it and as whom.
+	asked []string
+	sudo  []string
+}
+
+// serveForge stands up a fake forge and points this process's client at it.
+//
+// It answers on loopback, which forge.New exempts from its https rule, so the
+// production client — machine token, Sudo header, /v1 prefix and all — is the
+// thing under test rather than a stand-in for it.
+func serveForge(t *testing.T, p *peers) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p.asked = append(p.asked, r.Method+" "+r.URL.Path)
+		p.sudo = append(p.sudo, r.Header.Get("Sudo"))
+		if r.Header.Get("Authorization") != "token forge-machine-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch {
+		case strings.Contains(r.URL.Path, "/branches/"):
+			if !p.found {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name": "agent/abc123def456", "commit": map[string]any{"id": p.tip},
+			})
+		case strings.HasSuffix(r.URL.Path, "/pulls") && r.Method == http.MethodPost:
+			var in struct{ Head string }
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			p.proposed = in.Head
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"html_url": "https://git.test/hanzoai/api/pulls/1",
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name": "api", "full_name": "hanzoai/api", "default_branch": "main",
+				"ssh_url": "git@git.test:acme/api.git",
+			})
+		}
+	}))
+	t.Cleanup(srv.Close)
+	// A fresh Source per test: the production one holds its credential for five
+	// minutes, and a test that inherited another test's forge would pass for the
+	// wrong reason.
+	// CLOUD_FORGE_HOST is the documented override for a deployment whose forge is
+	// not the sibling of its own domain — a developer box, a staging forge, and
+	// this. The held credential is dropped either side so no test is answered by
+	// the forge another one stood up.
+	t.Setenv("CLOUD_FORGE_HOST", srv.URL)
+	forge.Invalidate()
+	t.Cleanup(forge.Invalidate)
 }
 
 func servePeers(t *testing.T, p *peers) {
 	t.Helper()
+	serveForge(t, p)
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 
 	agentsApp := zip.New(zip.Config{AppName: "agents", DisableStartupMessage: true})
@@ -74,21 +139,17 @@ func servePeers(t *testing.T, p *peers) {
 			return &plane.CodingAck{OK: true}, nil
 		}, zip.WithOperationID(plane.AgentsTargetGate))
 
-	gitApp := zip.New(zip.Config{AppName: "git", DisableStartupMessage: true})
-	zip.Post[plane.RepoRefIn, plane.RepoCloneURL](gitApp, "/git/clone-url",
-		func(_ context.Context, in *plane.RepoRefIn) (*plane.RepoCloneURL, error) {
-			p.clone = in.Org + "/" + in.Repo
-			return &plane.RepoCloneURL{URL: "https://git.test/v1/git/" + in.Org + "/" + in.Repo + ".git"}, nil
-		}, zip.WithOperationID(plane.GitCloneURL))
-	zip.Post[plane.RefIn, plane.RefTip](gitApp, "/git/verify-ref",
-		func(_ context.Context, _ *plane.RefIn) (*plane.RefTip, error) {
-			return &plane.RefTip{SHA: p.tip, Found: p.found}, nil
-		}, zip.WithOperationID(plane.GitVerifyRef))
-	zip.Post[plane.ProposeIn, plane.Proposed](gitApp, "/git/propose",
-		func(_ context.Context, in *plane.ProposeIn) (*plane.Proposed, error) {
-			p.proposed = in.Head
-			return &plane.Proposed{URL: "https://git.test/git/acme/api?ref=" + in.Head}, nil
-		}, zip.WithOperationID(plane.GitPropose))
+	// KMS is where the forge credential comes from, so it is a real peer on a
+	// real socket — the one hop between "the deployment's secret" and a run's
+	// ability to read the forge at all.
+	kmsApp := zip.New(zip.Config{AppName: "kms", DisableStartupMessage: true})
+	zip.Post[plane.SecretIn, plane.Secret](kmsApp, "/kms/get",
+		func(_ context.Context, in *plane.SecretIn) (*plane.Secret, error) {
+			if in.Ref != forge.TokenRef {
+				return nil, zip.ErrNotFound("no such secret")
+			}
+			return &plane.Secret{Value: []byte("forge-machine-token")}, nil
+		}, zip.WithOperationID(plane.KMSGet))
 
 	trackerApp := zip.New(zip.Config{AppName: "tracker", DisableStartupMessage: true})
 	zip.Post[plane.AgentPRIn, plane.AgentPROut](trackerApp, "/tracker/agent-pr",
@@ -105,7 +166,7 @@ func servePeers(t *testing.T, p *peers) {
 			return &plane.AgentPROut{Identifier: ref.Identifier, ProjectKey: ref.ProjectKey, Number: ref.Number}, nil
 		}, zip.WithOperationID(plane.TrackerAgentPR))
 
-	for name, app := range map[string]*zip.App{"agents": agentsApp, "git": gitApp, "tracker": trackerApp} {
+	for name, app := range map[string]*zip.App{"agents": agentsApp, "kms": kmsApp, "tracker": trackerApp} {
 		plane.Bind()
 		go func(path string) { _ = app.Listen(path) }(zip.SocketPath(name))
 		t.Cleanup(func() { _ = app.Shutdown() })
@@ -130,7 +191,7 @@ func waitListening(t *testing.T, app string) {
 func planeDispatcher(run *fakeRunner) Dispatcher {
 	return Dispatcher{
 		Sessions: planeSessions{}, PR: planePR{}, Runner: run,
-		CloneURL: planeCloneURL, VerifyRef: planeVerifyRef, TargetGate: planeTargetGate,
+		CloneURL: forgeCloneURL, VerifyRef: forgeVerifyRef, TargetGate: planeTargetGate,
 	}
 }
 
@@ -148,8 +209,10 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 		result: RunResult{Changed: true, OK: true, CommitSha: "deadbeef", Diffstat: " 1 file changed"},
 	}
 	res := planeDispatcher(run).Run(context.Background(), Req{
-		Org: "acme", UserID: "u_1", AgentRef: "hanzo", Repo: "api",
-		Prompt: "fix the flake", CredUser: "x-access-token", CredToken: "sk-secret",
+		Org: "hanzo", UserID: "u_1", Actor: "zoe", AgentRef: "hanzo", Repo: "api",
+		Prompt: "fix the flake", Remote: "git@git.test:hanzoai/api.git",
+		Key:   "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----",
+		Known: "git.test ssh-ed25519 AAAAPIN",
 	})
 
 	if !res.OK || !res.Verified {
@@ -164,25 +227,31 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 	if p.proposed != "agent/abc123def456" {
 		t.Fatalf("git was never asked to propose the branch, got %q", p.proposed)
 	}
-	if res.PR.URL != "https://git.test/git/acme/api?ref=agent/abc123def456" {
+	if res.PR.URL != "https://git.test/hanzoai/api/pulls/1" {
 		t.Fatalf("the address did not come back with the run: %q", res.PR.URL)
 	}
 	if res.CommitSha != "verifiedsha" {
-		t.Fatalf("the tip must come from git's own storage, got %q", res.CommitSha)
+		t.Fatalf("the tip must come from the forge, got %q", res.CommitSha)
 	}
-	// ISOLATION: the sandbox is pointed only at THIS org's namespace, and that
-	// survives the crossing rather than being re-derived on the far side.
-	if p.clone != "acme/api" {
-		t.Fatalf("git was asked for %q, want acme/api", p.clone)
+	// THE INTEGRITY GATE ASKED THE FORGE, and asked about THIS org's repository.
+	var verified bool
+	for _, a := range p.asked {
+		if strings.HasPrefix(a, "GET /v1/repos/hanzoai/api/branches/agent/") {
+			verified = true
+		}
 	}
-	if !strings.Contains(run.gotReq.CloneURL, "/acme/api.git") {
-		t.Fatalf("clone url did not survive the crossing: %q", run.gotReq.CloneURL)
+	if !verified {
+		t.Fatalf("the forge was never asked whether the branch landed: %v", p.asked)
 	}
-	if run.gotReq.CredToken != "sk-secret" {
+	// ISOLATION: the sandbox is pointed only at THIS org's namespace.
+	if !strings.Contains(run.gotReq.Remote, "hanzoai/api.git") {
+		t.Fatalf("the sandbox remote did not survive the crossing: %q", run.gotReq.Remote)
+	}
+	if !strings.Contains(run.gotReq.Key, "OPENSSH PRIVATE KEY") {
 		t.Fatal("the credential must reach the sandbox unchanged")
 	}
 	// The session opened, streamed and closed — all three ops, all across.
-	if len(p.sessions.opened) != 1 || p.sessions.opened[0].org != "acme" {
+	if len(p.sessions.opened) != 1 || p.sessions.opened[0].org != "hanzo" {
 		t.Fatalf("session open did not arrive: %+v", p.sessions.opened)
 	}
 	if len(p.sessions.closes) != 1 || p.sessions.closes[0].status != statusDone {
@@ -214,7 +283,8 @@ func TestRun_OverThePlane_UnverifiedRefFilesNoPR(t *testing.T) {
 
 	run := &fakeRunner{result: RunResult{Changed: true, OK: true, CommitSha: "deadbeef"}}
 	res := planeDispatcher(run).Run(context.Background(), Req{
-		Org: "acme", UserID: "u_1", Repo: "api", Prompt: "fix", CredToken: "sk-secret",
+		Org: "hanzo", UserID: "u_1", Actor: "zoe", Repo: "api", Prompt: "fix",
+		Remote: "git@git.test:hanzoai/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",
 	})
 
 	if res.OK || !strings.Contains(res.Error, "not found in native git") {
@@ -233,9 +303,36 @@ func TestRun_OverThePlane_UnverifiedRefFilesNoPR(t *testing.T) {
 func TestRun_OverThePlane_MissingPeerFailsHonestly(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // nothing listening at all
 	res := planeDispatcher(&fakeRunner{}).Run(context.Background(), Req{
-		Org: "acme", UserID: "u_1", Repo: "api", Prompt: "fix", CredToken: "sk-secret",
+		Org: "hanzo", UserID: "u_1", Actor: "zoe", Repo: "api", Prompt: "fix",
+		Remote: "git@git.test:hanzoai/api.git", Key: "k", Known: "git.test ssh-ed25519 AAAAPIN",
 	})
-	if res.OK || res.Error != "git is not available" {
-		t.Fatalf("an absent git must stop the run before it starts, got %+v", res)
+	if res.OK {
+		t.Fatalf("a run with no peers at all must not succeed: %+v", res)
 	}
+	// It names the peer it could not reach. "Something went wrong" sends an
+	// operator to read code; naming the socket sends them to the right process.
+	if !strings.Contains(res.Error, "agents") {
+		t.Fatalf("the failure must name the absent peer, got %q", res.Error)
+	}
+	if res.Verified {
+		t.Fatal("nothing may read as verified when nothing could be asked")
+	}
+}
+
+// socketDir is a runtime dir SHORT enough to hold a unix socket path.
+//
+// t.TempDir() embeds the test's NAME, and a unix socket path is capped at 104
+// bytes on darwin and 108 on linux (sun_path). The descriptive test names in
+// this package push a t.TempDir() socket past that, and the failure is not a
+// bind error a reader would recognise — the listener simply never comes up and
+// every peer reads as absent, which is indistinguishable from the production
+// bug these tests exist to catch.
+func socketDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "z")
+	if err != nil {
+		t.Fatalf("runtime dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }

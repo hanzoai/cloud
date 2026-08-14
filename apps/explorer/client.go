@@ -173,6 +173,8 @@ func (cl *client) priceFeeds(ctx context.Context, auth string) ([]map[string]any
 		return nil, zip.Errorf(http.StatusBadGateway, "explorer: decode graphql response: %v", err)
 	}
 	if len(out.Errors) > 0 {
+		// The message is the upstream's, so an all-whitespace one is no message at
+		// all: trim it so the fallback wins and the error is never blank text.
 		return nil, zip.Errorf(http.StatusBadGateway, "explorer: %s", cmp.Or(strings.TrimSpace(out.Errors[0].Message), "graphql error"))
 	}
 	return out.Data.PriceFeeds, nil

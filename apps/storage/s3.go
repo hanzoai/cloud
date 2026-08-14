@@ -295,7 +295,7 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	gated := cloud.Guard(cloud.Member, func(ctx *zip.Ctx) error {
 		org, ok := tenant(ctx)
 		if !ok {
-			return zip.ErrForbidden("X-Org-Id required")
+			return principal.Refused(ctx)
 		}
 		ctx.Locals(orgKey, org)
 

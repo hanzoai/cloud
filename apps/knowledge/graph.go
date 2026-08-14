@@ -65,7 +65,7 @@ type graphOut struct {
 // renders as its own "unresolved" node instead of vanishing. ?project= narrows
 // it. A store outage degrades to an honest empty graph, never a 5xx.
 func (o ops) graph(ctx context.Context, in *graphIn) (*graphOut, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

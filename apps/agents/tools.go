@@ -223,14 +223,21 @@ func (registryTools) call(ctx context.Context, org, actor, name, args string) (s
 // its `op` enum (fleet/grouped.go), and those names are spelled
 // <method>_<subsystem>_<rest> — so the owner is a fact the name already states.
 //
-// THE METHOD IS WHAT SAYS THE NAME IS IN THAT SHAPE. It used to be the literal
-// "v1" between the method and the subsystem, and that segment is gone: an id no
-// longer spells the version every address shares (zip.ID). Reading the second
-// word unconditionally would answer "web" for a registry-local "search_web", so
-// the leading word must first be a method for the one after it to be an owner. Deriving it here keeps this a pure function of the value: it answers
-// the same way in the fused binary and in a single-app plugin process, whereas
+// THE METHOD IS WHAT SAYS THE NAME IS IN THAT SHAPE. Reading the second word
+// unconditionally would answer "web" for a registry-local "search_web", so the
+// leading word must first be a method for the one after it to be an owner.
+// Deriving it here keeps this a pure function of the value: it answers the same
+// way in the fused binary and in a single-app plugin process, whereas
 // cloud.SubsystemOf reads a boot-time mount index that in a plugin knows only
 // that plugin's own routes and would answer "" for every sibling's tool.
+//
+// THE SUBSYSTEM IS THE SECOND WORD, because the first is the method and the
+// version is not in the name: zip.ID drops a leading /v1 as saying nothing that
+// every address does not already carry. This used to read whatever followed a "v1"
+// word, so once the names lost it every tool answered "" and every tool span lost
+// the app it addressed. An op that declares its own id may still spell the version
+// (plugin/agents declares post_v1_coding), so a second word of "v1" is stepped
+// over rather than returned.
 //
 // A name that is not in that shape (a registry-local tool like "http") owns no
 // subsystem and says so with "", rather than with a guess.
@@ -238,6 +245,12 @@ func toolSubsystem(op string) string {
 	parts := strings.Split(op, "_")
 	if len(parts) < 2 || !httpMethodWord(parts[0]) {
 		return ""
+	}
+	if parts[1] == "v1" {
+		if len(parts) < 3 {
+			return ""
+		}
+		return parts[2]
 	}
 	return parts[1]
 }
@@ -394,7 +407,7 @@ func completeWithTools(ctx context.Context, ai types.AIClient, org, actor string
 // here to leak into a transcript: what goes back is the tool's own output or our
 // own sentence about why there is none.
 func dispatchOne(ctx context.Context, org, actor string, tc types.ToolCall, runID string, round int) string {
-	ctx, span := agentTracer.Start(ctx, "agent.tool "+tc.Name, trace.WithSpanKind(trace.SpanKindInternal))
+	ctx, span := agentTracer().Start(ctx, "agent.tool "+tc.Name, trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 	// Everything an operator needs to read one dispatch out of a run: which run,
 	// which tenant, which person, which tool, which subsystem answers for it, and

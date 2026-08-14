@@ -102,12 +102,12 @@ type ops struct{ s *cloud.Service[state] }
 type noInput struct{}
 
 // gate enforces the ONE tenancy boundary that applies to public chain data: a
-// validated IAM principal MUST be present (principal.OrgFrom, the typed-op reader of
+// validated IAM principal MUST be present (principal.Acting, the typed-op reader of
 // the org cloud.Bridge parked), so an unauthenticated caller reads nothing. The org
 // itself is not a filter key here (a ledger is public within a brand); it is the
 // proof-of-auth gate, checked in ONE place before any handler touches an upstream.
 func gate(ctx context.Context) error {
-	_, err := principal.RequireOrg(ctx)
+	_, err := principal.Acting(ctx)
 	return err
 }
 

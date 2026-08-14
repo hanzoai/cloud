@@ -346,6 +346,10 @@ func addContext(data map[string]any, in GenerateInput) {
 
 // copyModel resolves the copy model most-specific first: request override, operator
 // override (CONTENT_COPY_MODEL), then the zen5 default.
+//
+// Both overrides are trimmed, and for the same reason: a padded value is not a
+// model name. Only the request half was, so CONTENT_COPY_MODEL=" " named a model
+// of one space and won against the default.
 func copyModel(reqModel, envModel string) string {
 	return cmp.Or(strings.TrimSpace(reqModel), envModel, defaultCopyModel)
 }

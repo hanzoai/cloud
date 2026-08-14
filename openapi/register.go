@@ -60,7 +60,17 @@ type registration struct {
 	description string
 	described   bool // the prose half is present (Describe ran)
 
-	id string // stated instead of derived; empty ⇒ derived (see identify)
+	// id overrides the operation id derived from method+path. Empty for almost
+	// every route, because a derived id is the right one: it is the address, and
+	// two routes cannot share an address.
+	//
+	// The exception is an address served TWICE — a UI at /tasks and its API at
+	// /v1/tasks. zip.ID drops a leading version as saying nothing every address
+	// carries, which is true right up until something else claims the unversioned
+	// path: then both derive "get_tasks" and the document cannot be generated at
+	// all. So the UI names itself, in the one place that knows a prefix is a UI
+	// (DescribeSPA), and the API keeps the plain name a caller expects.
+	id string
 }
 
 // opKey addresses a registration the same way the router addresses a route:

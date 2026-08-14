@@ -348,22 +348,29 @@ var httpMethod = set("get", "post", "put", "patch", "delete", "head", "options")
 // rank is the sort bucket for a tool: its index in [productStems], or the tail.
 //
 // A name is ranked by its PATH, which a derived id carries verbatim after the
-// method word. `post_chat_completions` → "chat_completions" → stem "chat"
-// matches on the '_' boundary → bucket 0.
+// method word. `post_chat_completions` → "chat_completions" → stem "chat" matches
+// on the '_' boundary → bucket 0. A name with no method word (`GetUserPreference`)
+// has no path to match and takes the tail bucket, as does any route under no
+// product prefix.
 //
-// A LINGERING VERSION IS STRIPPED, because a subsystem pinned at an older zip
-// still publishes one: `post_v1_chat_completions` and `post_chat_completions`
-// are one operation named twice and must rank alike. Stripping here keeps the
-// stems a list of products instead of a list of spellings. A name with no method word
-// (`GetUserPreference`) has no path to match and takes the tail bucket, as does
-// any route under no product prefix.
+// A LEADING VERSION IS STEPPED OVER, the way [route] steps over it. zip stopped
+// emitting one — it names nothing every address does not already carry — and the
+// stems here spelled it, so for a while every product tool matched nothing and
+// fell to the tail: the console led the list, and a client that keeps only the
+// first few tools kept the console instead of chat. A subsystem pinned at an
+// older zip still publishes one, so `post_v1_chat_completions` and
+// `post_chat_completions` are one operation named twice; stepping over the
+// version ranks them alike and keeps the stems a list of products instead of a
+// list of spellings.
 func rank(tool string) int {
 	head, tail, found := strings.Cut(tool, "_")
 	if !found || !httpMethod[strings.ToLower(head)] {
 		return len(productStems)
 	}
 	tail = strings.ToLower(tail)
-	tail = strings.TrimPrefix(tail, "v1_")
+	if v, rest, ok := strings.Cut(tail, "_"); ok && isVersion(v) {
+		tail = rest
+	}
 	for i, stem := range productStems {
 		if tail == stem || strings.HasPrefix(tail, stem+"_") {
 			return i

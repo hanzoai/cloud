@@ -212,7 +212,7 @@ type marketCatalog struct {
 // installed=true on the ones already activated for that scope. It is the shop
 // window: one read that answers what exists, what it costs and what is already on.
 func (o marketOps) discover(ctx context.Context, _ *noInput) (*marketCatalog, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +248,7 @@ type listingPage struct {
 // ListListings returns the listings the caller's own org has published — what this
 // org is offering, not what it can buy. A publisher only ever sees its own rows.
 func (o marketOps) listListings(ctx context.Context, _ *noInput) (*listingPage, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +297,7 @@ type publishReq struct {
 //
 // Example: {"tool": "summarize", "title": "Summarize", "price": "0.0025", "recipient": "wal_9f2", "public": true}
 func (o marketOps) publish(ctx context.Context, in *publishReq) (*Listing, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +354,7 @@ type listingRef struct {
 //
 // Example: {"id": "lst_1"}
 func (o marketOps) unpublish(ctx context.Context, in *listingRef) (*noContent, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +395,7 @@ type installState struct {
 //
 // Example: {"tool": "summarize"}
 func (o marketOps) install(ctx context.Context, in *installReq) (*installState, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -422,7 +422,7 @@ func (o marketOps) install(ctx context.Context, in *installReq) (*installState, 
 //
 // Example: {"tool": "summarize"}
 func (o marketOps) uninstall(ctx context.Context, in *installReq) (*installState, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -440,10 +440,7 @@ func (o marketOps) uninstall(ctx context.Context, in *installReq) (*installState
 // ── helpers ─────────────────────────────────────────────────────────────────────
 
 func clip(s string) string {
-	if len(s) > maxText {
-		return shorten.To(s, maxText)
-	}
-	return strings.TrimSpace(s)
+	return strings.TrimSpace(shorten.To(s, maxText))
 }
 
 // callerOf is the validated principal behind the request — the actor an activation
