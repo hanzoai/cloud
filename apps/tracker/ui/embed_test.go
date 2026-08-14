@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-// TestRealBundleEmbedded proves the embedded dist is the REAL Tracker SPA and
+// TestRealBundleEmbedded proves the embedded dist is the REAL Todo SPA and
 // that it was built for the path cloud mounts it on. Both halves matter: a
 // bundle built with the wrong base resolves every chunk to a prefix nothing
 // serves, which is a blank page rather than an error.
@@ -27,8 +27,8 @@ func TestRealBundleEmbedded(t *testing.T) {
 	if !strings.Contains(html, "/tracker/assets/") {
 		t.Errorf("index.html does not reference /tracker/assets/ — wrong base path:\n%s", html)
 	}
-	if !strings.Contains(html, "Hanzo Tracker") {
-		t.Errorf("index.html is not the tracker shell:\n%s", html)
+	if !strings.Contains(html, "Hanzo Todo") {
+		t.Errorf("index.html is not the Todo shell:\n%s", html)
 	}
 	if _, err := fs.Stat(root, "assets"); err != nil {
 		t.Fatalf("assets/ dir must exist in the build: %v", err)

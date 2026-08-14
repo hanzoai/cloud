@@ -1,14 +1,15 @@
-# Provenance of this embedded Tracker SPA build. See ../README.md to regenerate.
+# Provenance of this embedded Todo SPA build. See ../README.md to regenerate.
 #
 # NOT embedded in the binary: `//go:embed dist` (no `all:`) omits dot-files, so
 # this names the source without publishing it at /tracker/.sync-stamp.
 app=@hanzo/tracker (apps/tracker)
 base=/tracker/
 api_prefix=/v1/tracker
-auth=AuthGate (@hanzogui/admin) + @hanzo/iam@0.9.4 PKCE
+auth=AuthGate (@hanzogui/admin) + @hanzo/iam PKCE
 idp=brand registry: hostname -> hanzo.id | lux.id | zoolabs.id (VITE_IAM_BRAND pins)
 callback=/tracker/callback
-chrome=OrgSwitcher (left) + UserMenu (right); no nav rail, no env/version/clock/theme
+chrome=OrgSwitcher + view tabs (Todo/Boards/Milestones) left, UserMenu right; no nav rail
 org_scope=X-Org-Id, resolved against the token's signed `orgs` claim; cloud re-mints it
-source=hanzoai/admin:apps/tracker@a4495ce (main)
-built=typecheck 11/11 + vitest 696 + tracker e2e 5/5
+views=todo (global board) | boards | board | timeline | milestones
+source=hanzoai/admin:apps/tracker@3ddbed3 (main)
+built=typecheck clean + vitest 12 + render probe 5/5 views RENDERS_DATA
