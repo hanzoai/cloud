@@ -21,7 +21,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -767,4 +769,113 @@ func asBrandedUser(t *testing.T, app *zip.App, method, path, org, user, brand st
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, raw
+}
+
+// ── the schedule, and the boards that are queries ────────────────────────────
+
+// A GANTT NEEDS AN INTERVAL. The forge gives an issue its deadline through its
+// milestone and never gives it a start, so leaving StartAt at 0 made every
+// scheduled row a POINT: spanOf reads "due, no start" as a milestone diamond,
+// and the timeline was structurally incapable of drawing a bar on any board.
+//
+// The interval the forge does know is created -> due, and that is what a bar on
+// this timeline means. Pinned here because nothing else can see it: the row is
+// present either way, so a count passes while the track stays empty.
+func TestForgeSchedule_AMilestoneDueDateGivesTheRowAnInterval(t *testing.T) {
+	f := newForge(t)
+	f.visible["alice"] = []string{"acme"}
+	scheduled := issue(1, "scheduled", "open", "todo")
+	scheduled["created_at"] = "2026-08-01T00:00:00Z"
+	scheduled["milestone"] = map[string]any{"id": 1, "title": "0.2.0", "due_on": "2026-08-20T00:00:00Z"}
+	backdated := issue(2, "created after its own deadline", "open", "todo")
+	backdated["created_at"] = "2026-09-01T00:00:00Z"
+	backdated["milestone"] = map[string]any{"id": 2, "title": "late", "due_on": "2026-08-20T00:00:00Z"}
+	unscheduled := issue(3, "no milestone", "open", "todo")
+	unscheduled["created_at"] = "2026-08-01T00:00:00Z"
+	f.repo("acme", "api", scheduled, backdated, unscheduled)
+	app := mountForge(t, f)
+
+	code, raw := asUser(t, app, http.MethodGet, "/v1/tracker/projects/api/issues", "acme", "alice", nil)
+	if code != http.StatusOK {
+		t.Fatalf("= %d %s", code, raw)
+	}
+	var rows []map[string]any
+	_ = json.Unmarshal(raw, &rows)
+	by := map[string]map[string]any{}
+	for _, r := range rows {
+		by[r["title"].(string)] = r
+	}
+
+	start, due := by["scheduled"]["startAt"], by["scheduled"]["dueAt"]
+	if start == nil || due == nil {
+		t.Fatalf("scheduled row = start %v due %v, want both — a bar needs an interval", start, due)
+	}
+	if start.(float64) >= due.(float64) {
+		t.Errorf("start %v is not before due %v", start, due)
+	}
+
+	// A row created after its own deadline has no interval. It stays a point
+	// rather than becoming a bar drawn backwards.
+	if s := by["created after its own deadline"]["startAt"]; s != nil {
+		t.Errorf("backdated startAt = %v, want absent so it renders as the point it is", s)
+	}
+	if by["created after its own deadline"]["dueAt"] == nil {
+		t.Error("backdated dueAt went missing; it is still a deadline")
+	}
+
+	// No milestone, no schedule — an unscheduled row must not be conjured onto
+	// the timeline by this.
+	if s := by["no milestone"]["startAt"]; s != nil {
+		t.Errorf("unscheduled startAt = %v, want absent", s)
+	}
+}
+
+// A BOARD IS A QUERY. The key is a filter and not an address, so the same op
+// answers one project's board, the org's whole board, and a board narrower than
+// any repository — which is the only shape available to an app that lives as a
+// directory inside a shared repository. Nothing is provisioned for any of them.
+func TestForgeBoard_TheKeyIsAFilterSoTheGlobalAndPerAppBoardsAreQueries(t *testing.T) {
+	f := newForge(t)
+	f.visible["alice"] = []string{"acme"}
+	f.repo("acme", "api", issue(1, "api work", "open", "todo", "app/meet"))
+	f.repo("acme", "web", issue(2, "web work", "open", "todo"))
+	app := mountForge(t, f)
+
+	titles := func(path string) []string {
+		t.Helper()
+		code, raw := asUser(t, app, http.MethodGet, path, "acme", "alice", nil)
+		if code != http.StatusOK {
+			t.Fatalf("%s = %d %s", path, code, raw)
+		}
+		var rows []map[string]any
+		_ = json.Unmarshal(raw, &rows)
+		out := []string{}
+		for _, r := range rows {
+			out = append(out, r["title"].(string))
+		}
+		sort.Strings(out)
+		return out
+	}
+
+	// The global board: every repository's work, one set of columns.
+	if got := titles("/v1/tracker/board"); !reflect.DeepEqual(got, []string{"api work", "web work"}) {
+		t.Errorf("global board = %v, want both repositories' work", got)
+	}
+	// Bound to a repository, it is that project's board — unchanged.
+	if got := titles("/v1/tracker/projects/api/issues"); !reflect.DeepEqual(got, []string{"api work"}) {
+		t.Errorf("project board = %v, want only that repository's work", got)
+	}
+	// Narrowed by label, it is a board smaller than a repository.
+	if got := titles("/v1/tracker/board?label=app/meet"); !reflect.DeepEqual(got, []string{"api work"}) {
+		t.Errorf("per-app board = %v, want only the labelled row", got)
+	}
+	// The label is a name, and a name that answered differently for two casings
+	// would be two boards.
+	if got := titles("/v1/tracker/board?label=App/Meet"); !reflect.DeepEqual(got, []string{"api work"}) {
+		t.Errorf("per-app board (other casing) = %v, want the same board", got)
+	}
+	// A label nobody carries is an empty board, never every board.
+	if got := titles("/v1/tracker/board?label=app/nothing"); len(got) != 0 {
+		t.Errorf("unknown label = %v, want an empty board rather than a silent fall-through to all work", got)
+	}
 }

@@ -58,7 +58,11 @@ type projectRef struct {
 // query parameter and every one is optional; omitting all of them returns the
 // whole board.
 type issueQuery struct {
-	// Key is the project whose issues to list, from the path.
+	// Key is the project whose issues to list, from the path. EMPTY means every
+	// project in the org — the global board. It is a filter like the rest of
+	// this struct rather than an address, which is what lets one op answer both
+	// "this board" and "all the work" without a second surface disagreeing with
+	// the first about what a column is.
 	Key string `json:"key"`
 	// Status keeps only issues in that board column: backlog, todo, in_progress,
 	// done or canceled. An unknown value is refused with 400.
@@ -68,6 +72,14 @@ type issueQuery struct {
 	Kind string `json:"kind"`
 	// Repo keeps only issues bound to that git repository.
 	Repo string `json:"repo"`
+	// Label keeps only issues carrying that label, compared case-insensitively.
+	//
+	// This is how a board narrows to something SMALLER than a repository — the
+	// one mechanism for it. An estate whose apps are directories inside one
+	// repository (hanzoai/cloud carries ~140 of them) has no repository per app
+	// to address, so the app is a label: `label=app/meet` is the meet board.
+	// Nothing is provisioned to make one exist; a board is the query.
+	Label string `json:"label"`
 	// Source keeps only issues opened from that surface: team, git, crm,
 	// helpdesk, cms or agent. An unknown value is refused with 400.
 	Source string `json:"source"`
