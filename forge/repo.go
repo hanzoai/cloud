@@ -112,6 +112,48 @@ func (c *Client) Ensure(ctx context.Context, owner, repo, description string) (R
 	return out, nil
 }
 
+// EnsureOrg makes the organisation NAME exist, idempotently. It is how a
+// namespace this deployment owns — the community catalogue every published
+// project's source lives in (apps/projects visibility.go) — comes into being on
+// the first publish rather than through a pre-flight nobody runs. A fresh
+// deployment has no such org until this creates it.
+//
+// A read that finds it is the whole answer; only its absence justifies a create,
+// and a 409 is the state asked for. The verdict is a READ-BACK, for the same
+// reason [Client.Ensure]'s and [Client.SetPublic]'s are: a 2xx says the forge
+// accepted the request, and the only statement that the namespace is now there
+// to be written and walked is the forge finding it afterwards.
+func (c *Client) EnsureOrg(ctx context.Context, name string) error {
+	// A MACHINE-ONLY capability, stated the way [Client.Delete] states its own.
+	// Creating a top-level organisation is a platform act with no human behind it;
+	// a client acting As(a user) could otherwise mint arbitrary namespaces in that
+	// user's name — squatting. As and Machine are mutually exclusive, so `!machine`
+	// is exactly "not the deployment identity".
+	if !c.machine {
+		return fmt.Errorf("forge: EnsureOrg is the machine identity's; %q may not create an org", c.actor)
+	}
+	if err := validOrg(name); err != nil {
+		return err
+	}
+	if _, err := c.get(ctx, "/orgs/"+url.PathEscape(name), nil, &struct{}{}); err == nil {
+		return nil
+	} else if !isMissing(err) {
+		return err
+	}
+	cerr := c.send(ctx, sendOpts{
+		method: http.MethodPost,
+		path:   "/orgs",
+		body:   map[string]any{"username": name, "visibility": "public"},
+	})
+	if cerr != nil && !errors.Is(cerr, ErrExists) {
+		return fmt.Errorf("forge: create org %s: %w", name, cerr)
+	}
+	if _, err := c.get(ctx, "/orgs/"+url.PathEscape(name), nil, &struct{}{}); err != nil {
+		return fmt.Errorf("forge: confirm org %s: %w", name, err)
+	}
+	return nil
+}
+
 // Delete removes org/repo, and CONFIRMS that it is gone.
 //
 // It is the inverse of [Client.Ensure] and exists because Ensure is idempotent
