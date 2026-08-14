@@ -309,3 +309,28 @@ func TestRefuse_ANamelessToolIsNotProjectable(t *testing.T) {
 		}
 	}
 }
+
+// TestRank_TheCodingRunIsAProduct pins the coding run into a product bucket.
+//
+// It ranked in the TAIL for a reason worth keeping written down: `productStems`
+// carried "code" — code intelligence at /v1/code, which is ask/context/index —
+// and the sandbox run at /v1/coding is a different product that was simply never
+// listed. "coding" does not match the stem "code", so rank() sent it to the tail.
+//
+// The tail is not merely last. subsystemTool (grouped.go) skips prose for exactly
+// that bucket, so the op reached the model as a bare name with no sentence, and
+// any client that truncates its tool list drops the tail first. One missing stem,
+// two symptoms: unranked and undescribed.
+func TestRank_TheCodingRunIsAProduct(t *testing.T) {
+	tail := len(productStems)
+	for _, name := range []string{"post_coding", "post_v1_coding", "post_coding_start"} {
+		if got := rank(name); got == tail {
+			t.Errorf("rank(%q) = %d, the tail bucket — the coding run sorts last and loses its prose", name, got)
+		}
+	}
+	// It is its own product, not a spelling of code intelligence: both rank, and
+	// folding one into the other would let a stem match a name it does not name.
+	if rank("post_coding") == rank("post_code_ask") {
+		t.Error("the coding run and code intelligence share a bucket — they are two products")
+	}
+}

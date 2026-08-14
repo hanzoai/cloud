@@ -332,6 +332,7 @@ var productStems = []string{
 	"models",      // what can it call
 	"agent",       // the agent loop: conversations, presets
 	"agents",      // …sessions, runs, targets
+	"coding",      // the agent's hands: a real task in a sandbox, on a branch
 	"code",        // code intelligence: ask, context, index, search
 	"search",      //
 	"git",         // source control
