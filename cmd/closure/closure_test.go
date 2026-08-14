@@ -394,13 +394,24 @@ func TestAnEmptyComparisonIsNotAPass(t *testing.T) {
 // could not fetch. So the property held, this test passed, and the gate still
 // called all 116 documents stale on every run once hanzoai/orm v0.6.24 went
 // missing from the forge. The shape a test does not carry is the shape that ships.
+// THE THIRD CASE IS WHY THE OTHER TWO WERE NOT ENOUGH. Naming the packages is
+// where this stopped, so twice in one day the answer to "why" was hunted by hand
+// and both hunts went to the wrong host: `go mod download` run in a shell dials
+// whatever THAT machine's insteadOf says, and a warm cache does not dial at all,
+// so it reports success for the module CI could not fetch. The toolchain had
+// already recorded the reason and `-e` had already swallowed it.
 func TestAnUnresolvedDependencyIsAnErrorNotADigest(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		strip func(*pkg)
+		says  string
 	}{
-		{"module attributed, source absent", func(p *pkg) { p.Dir = "" }},
-		{"no module either, which is what an unfetchable one reports", func(p *pkg) { p.Dir = ""; p.Module = nil }},
+		{"module attributed, source absent", func(p *pkg) { p.Dir = "" }, "no reason recorded"},
+		{"no module either, which is what an unfetchable one reports", func(p *pkg) { p.Dir = ""; p.Module = nil }, "no reason recorded"},
+		{"the reason go list recorded is the reason printed", func(p *pkg) {
+			p.Dir, p.Module = "", nil
+			p.Error = &struct{ Err string }{Err: "could not read Username for 'https://github.com'"}
+		}, "could not read Username"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, pkgs := world(t, "package server")
@@ -411,8 +422,8 @@ func TestAnUnresolvedDependencyIsAnErrorNotADigest(t *testing.T) {
 			}
 			if _, err := snapshot(root, pkgs, []string{"iam", "wallets"}); err == nil {
 				t.Fatal("an unresolvable dependency must fail loudly, not hash to a constant")
-			} else if !strings.Contains(err.Error(), "go mod download") {
-				t.Errorf("the error must name the repair, got: %v", err)
+			} else if !strings.Contains(err.Error(), tc.says) {
+				t.Errorf("the error must carry the toolchain's own reason, got: %v", err)
 			}
 		})
 	}
