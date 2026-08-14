@@ -66,9 +66,11 @@ type tokenFunc func(ctx context.Context, t Target) (string, error)
 // from src (with the src-face token) and writing+sealing into dst (with the
 // dst-face token). The two faces carry DIFFERENT identities: src uses the CR's
 // existing app-name credential (which the standalone accepts); dst uses the per-org
-// <org>-platform-kms credential (which cloud accepts dynamically, admin-denied, with
-// NO static audience widening). It never stops on a single target's failure — every
-// result is recorded so the run is re-runnable. plan=true performs NO network I/O.
+// <org>-platform-kms credential, which cloud accepts dynamically with NO static
+// audience widening and which must hold admin authority over that org: cloud admits
+// a member to READ a secret and requires an admin to WRITE one. It never stops on a
+// single target's failure — every result is recorded so the run is re-runnable.
+// plan=true performs NO network I/O.
 func reseal(ctx context.Context, inv Inventory, src, dst *kmsClient, srcAuth, dstAuth tokenFunc, plan bool) *resealReport {
 	rep := &resealReport{}
 

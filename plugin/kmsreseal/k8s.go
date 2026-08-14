@@ -20,6 +20,8 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+
+	"github.com/hanzoai/authz"
 )
 
 // crGVR is the KMSSecret custom resource the operator reconciles.
@@ -64,7 +66,7 @@ type credRef struct {
 // credResolver maps a target to the credential that authenticates it on one face.
 // crCredResolver reads the CR's credentialsRef (the app-name identity the standalone
 // accepts); machineAudResolver reads the per-org <org>-platform-kms identity cloud
-// accepts dynamically and admin-denied (no static widening).
+// accepts dynamically (no static widening).
 type credResolver func(t Target) (credRef, error)
 
 // crCredResolver reads a target's CR credentialsRef Secret — the existing app-name
@@ -82,8 +84,14 @@ func crCredResolver(t Target) (credRef, error) {
 
 // machineAudResolver reads the per-org <org>-platform-kms credential (Secret
 // name = "<org>"+suffix in ns) — the dedicated KMS-sync identity CLOUD accepts
-// dynamically via kmsMachineAudience (admin-denied, scoped to /v1/kms org==owner).
-// A missing Secret fails loud: provisioning it is a gated cutover prerequisite.
+// dynamically via kmsMachineAudience, scoped to /v1/kms org==owner. A missing
+// Secret fails loud: provisioning it is a cutover prerequisite.
+//
+// The credential must also hold ADMIN authority over its org, because a reseal
+// WRITES: cloud's secret plane admits a member to read and requires an admin to
+// write (apps/kms/mount.go). A client_credentials identity carries no membership and
+// so holds neither admin scope (authz.Claims.Machine) — the right authority for the
+// delivery syncs, every one of which only reads, and not enough to seed them.
 func machineAudResolver(ns, suffix string) credResolver {
 	return func(t Target) (credRef, error) {
 		name := t.Org + suffix
@@ -99,8 +107,14 @@ func machineAudResolver(ns, suffix string) credResolver {
 // credential, caches per credential, and (LOW-1, defense-in-depth) decodes the
 // minted token's owner claim and asserts it EQUALS the target's org before the
 // token is handed to any read/write — so a misscoped credential fails the target
-// rather than acting on the wrong org. An admin-owner token is refused for a
-// tenant target (the fleet identities must be org-bound, never platform admin).
+// rather than acting on the wrong org. A token owned by the reserved admin org is
+// refused (the fleet identities are org-bound, never platform sudo).
+//
+// The owner claim is the whole question, because owner IS the scope: membership of
+// authz.AdminOrg is what makes a principal cross-tenant. Admin OF ONE'S OWN ORG is a
+// different authority — org-bound, and the authority cloud's secret plane requires of
+// anyone who WRITES a record (apps/kms/mount.go) — so holding it is a prerequisite of
+// the reseal, not a reason to refuse the token.
 func newTokenFunc(client *kmsClient, resolve credResolver, face string) tokenFunc {
 	var (
 		mu    sync.Mutex
@@ -125,11 +139,11 @@ func newTokenFunc(client *kmsClient, resolve credResolver, face string) tokenFun
 			cache[key] = tok
 			mu.Unlock()
 		}
-		// LOW-1: assert token owner == target org (fail-closed on mismatch/admin).
-		owner, isAdmin, derr := decodeJWTOwner(tok)
+		// LOW-1: assert token owner == target org (fail-closed on mismatch/sudo).
+		owner, derr := decodeJWTOwner(tok)
 		if derr == nil {
-			if isAdmin {
-				return "", fmt.Errorf("%s credential %s mints an ADMIN token — the fleet KMS identity must be org-bound, not platform admin", face, key)
+			if owner == authz.AdminOrg {
+				return "", fmt.Errorf("%s credential %s is owned by the reserved %q org — the fleet KMS identity is org-bound, never platform sudo", face, key, authz.AdminOrg)
 			}
 			if owner != t.Org {
 				return "", fmt.Errorf("%s credential %s token owner %q != target org %q (misscoped credential)", face, key, owner, t.Org)
@@ -139,28 +153,31 @@ func newTokenFunc(client *kmsClient, resolve credResolver, face string) tokenFun
 	}
 }
 
-// decodeJWTOwner reads the `owner` + `isAdmin` claims from a JWT WITHOUT verifying
-// the signature — the SERVER validates the signature; this is a local sanity gate
-// so the tool never uses a token whose owner disagrees with the target org. A
-// non-JWT token (e.g. an opaque test stub) returns an error, which the caller
-// treats as "skip the local assertion" (the server still enforces owner==:org).
-func decodeJWTOwner(token string) (owner string, isAdmin bool, err error) {
+// decodeJWTOwner reads the `owner` claim from a JWT WITHOUT verifying the
+// signature — the SERVER validates the signature; this is a local sanity check so
+// the tool never uses a token whose owner disagrees with the target org. A non-JWT
+// token (e.g. an opaque test stub) returns an error, which the caller treats as
+// "skip the local assertion" (the server still enforces owner==:org).
+//
+// Owner is the only claim read. IAM signs no `isAdmin` claim into either token
+// (cloud reads admin authority from the signed membership set instead), so a tool
+// that decoded one would be reading a field that is never sent.
+func decodeJWTOwner(token string) (owner string, err error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return "", false, fmt.Errorf("not a JWT")
+		return "", fmt.Errorf("not a JWT")
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return "", false, fmt.Errorf("jwt payload: %w", err)
+		return "", fmt.Errorf("jwt payload: %w", err)
 	}
 	var claims struct {
-		Owner   string `json:"owner"`
-		IsAdmin bool   `json:"isAdmin"`
+		Owner string `json:"owner"`
 	}
 	if err := json.Unmarshal(raw, &claims); err != nil {
-		return "", false, fmt.Errorf("jwt claims: %w", err)
+		return "", fmt.Errorf("jwt claims: %w", err)
 	}
-	return claims.Owner, claims.IsAdmin, nil
+	return claims.Owner, nil
 }
 
 // readCredential extracts (clientId, clientSecret) from a credentialsRef Secret.
