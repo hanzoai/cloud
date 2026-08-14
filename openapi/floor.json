@@ -1,6 +1,6 @@
 {
-  "paths": 1802,
-  "operations": 2476,
+  "paths": 1803,
+  "operations": 2477,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -86,6 +86,7 @@
     "generate-text-to-speech-audio": 1,
     "generate-text-to-speech-audio-stream": 1,
     "git": 40,
+    "git-webhook": 1,
     "gpus": 2,
     "guide": 19,
     "health": 1,
