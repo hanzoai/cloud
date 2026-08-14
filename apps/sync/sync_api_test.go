@@ -167,6 +167,10 @@ func TestSyncValidation(t *testing.T) {
 		{"bad direction", map[string]any{"source": map[string]any{"provider": "github", "locator": widgetsURL}, "direction": "sideways"}, http.StatusBadRequest},
 		{"bad kind", map[string]any{"kind": "db", "source": map[string]any{"provider": "github", "locator": widgetsURL}}, http.StatusBadRequest},
 		{"gitlab ok", map[string]any{"source": map[string]any{"provider": "gitlab", "locator": "https://gitlab.com/acme/widgets.git"}}, http.StatusOK},
+		// A GitLab namespace nests and the forge's does not, so a source the forge
+		// has no coordinate for is refused HERE — rather than stored as a sync that
+		// refuses every reconcile it is ever given. See TestNestedNamespacesDoNotCollapse.
+		{"nested namespace", map[string]any{"source": map[string]any{"provider": "gitlab", "locator": "https://gitlab.com/group/sub1/widgets.git"}}, http.StatusBadRequest},
 	}
 	for _, tc := range cases {
 		code, body := do(t, app, http.MethodPost, "/v1/sync", "acme", tc.body)
