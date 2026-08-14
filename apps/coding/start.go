@@ -105,15 +105,18 @@ func Engine(log func(msg string, kv ...any)) Dispatcher {
 
 // Start admits one coding run and returns its handle.
 //
-// org is the CALLER's tenant, read off the caller by the door and never taken
-// from the request body. Everything the run then does happens in that org and
-// nowhere else: its session, its repo, its credential, its PR.
+// org and subject are the CALLER's, read off the caller by the door and never
+// taken from the request body — the two are parameters for exactly that reason,
+// and the symmetry is the contract: a door that can name one can name the other,
+// and neither is nameable. Everything the run then does happens in that org and
+// nowhere else: its session, its repo, its credential, its PR; and it is
+// attributed to that person.
 //
 // It is synchronous up to the point the run is admitted — validate, resolve the
 // credential, open the session — and detached after it. That split is what lets
 // a door answer immediately with a real handle instead of an empty promise, and
 // it is why the session is opened HERE rather than inside Run.
-func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg string, kv ...any)) (Accepted, error) {
+func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log func(msg string, kv ...any)) (Accepted, error) {
 	org = strings.TrimSpace(org)
 	if !OrgRE.MatchString(org) {
 		// Shape-checked, not merely non-empty. The org becomes a git namespace and
@@ -123,12 +126,16 @@ func Start(ctx context.Context, org string, in plane.CodingStartIn, log func(msg
 		// side that would actually be harmed if the first ever failed.
 		return Accepted{}, fmt.Errorf("coding: a run needs a tenant")
 	}
-	subject := strings.TrimSpace(in.Subject)
+	subject = strings.TrimSpace(subject)
 	if subject == "" {
 		// A run that lost its human must not execute AS THE ORG: that bills the
 		// tenant for an unattributable act and hands an unlinked caller the org's
 		// agent and its repos. Refused, never defaulted.
-		return Accepted{}, fmt.Errorf("coding: a run needs a linked subject")
+		//
+		// It says "person", not "linked subject": linking is how ONE surface gets
+		// here (a Slack sender resolving to a hanzo user), and this refusal now
+		// reaches every surface. An API caller holding a token has nothing to link.
+		return Accepted{}, fmt.Errorf("coding: a run needs the person it is for")
 	}
 	repo := strings.TrimSpace(in.Repo)
 	prompt := strings.TrimSpace(in.Prompt)
