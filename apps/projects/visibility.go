@@ -276,8 +276,14 @@ func apply(ctx context.Context, m *forge.Client, name string, w want, p Project)
 		// the create and never on the read — so an author who edits their
 		// repository's description keeps their edit. Visibility is ours; their prose
 		// is not.
-		if _, err = m.Ensure(ctx, community, name, p.Description); err == nil {
-			err = m.SetPublic(ctx, community, name, true)
+		// The community namespace is this deployment's, brought into being by the
+		// first publish rather than by a pre-flight nobody runs: a fresh deployment
+		// has no hanzo-community org until EnsureOrg makes it. Idempotent — an org
+		// that is already there costs one read.
+		if err = m.EnsureOrg(ctx, community); err == nil {
+			if _, err = m.Ensure(ctx, community, name, p.Description); err == nil {
+				err = m.SetPublic(ctx, community, name, true)
+			}
 		}
 
 	default:
@@ -286,8 +292,11 @@ func apply(ctx context.Context, m *forge.Client, name string, w want, p Project)
 		if there, err = retract(ctx, m, name); err == nil && !there {
 			// It is not there at all, which is already closed. A private project still
 			// gets its source, born closed, so choosing private is not choosing a
-			// project with nowhere to push.
-			_, err = m.Ensure(ctx, community, name, p.Description)
+			// project with nowhere to push — in the community namespace, which the
+			// first such publish brings into being (EnsureOrg).
+			if err = m.EnsureOrg(ctx, community); err == nil {
+				_, err = m.Ensure(ctx, community, name, p.Description)
+			}
 		}
 	}
 	return err
