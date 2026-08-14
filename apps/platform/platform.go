@@ -53,6 +53,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/brand"
+	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/hanzoai/namespace"
@@ -184,12 +185,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// with no list to maintain per brand.
 	selfGitHost = brand.Apex(deps.Domain)
 
+	// The forge, by the same reasoning and from the ONE derivation of it. It is
+	// what makes an application's github.com RepoURL and a delivery's git.hanzo.ai
+	// clone URL the same repository while the migration runs (normRepo).
+	forgeHost = forge.Host(deps.Domain)
+
 	// git-push-to-deploy: a push landed on the embedded git server (clients/git)
 	// triggers a build for every app tracking that repo+branch. Inverted so git
 	// never imports platform — build.go RegisterPushBuilder ⇄ OnGitPush (push.go).
-	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) error {
-		_, err := buildFromPush(mounted, ctx, ev)
-		return err
+	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) (int, error) {
+		return buildFromPush(mounted, ctx, ev)
 	})
 
 	// The same trigger on the plane. git and platform are separate processes, so

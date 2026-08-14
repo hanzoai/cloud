@@ -65,6 +65,10 @@ var allowedTokenPrimitives = map[string]string{
 		"provider's signing secret (sha256= scheme). Verifies THEIR signature; grants nothing here.",
 	"apps/integrations/github_webhook.go": "GitHub webhook verification — X-Hub-Signature-256 over " +
 		"the raw body, GitHub's contract.",
+	"apps/platform/hook.go": "forge webhook verification — the same shape one host over, under the " +
+		"secret configured on git.hanzo.ai's system webhook (X-Git-/X-Gitea-/X-Hub-Signature-256 over " +
+		"the raw body). It verifies THEIR signature and mints nothing: the delivery names a repository " +
+		"and a ref, and no Hanzo surface accepts anything this file produces.",
 	"apps/integrations/slack_verify.go": "Slack request verification — the v0 signing scheme over " +
 		"timestamp+body, Slack's contract.",
 	"apps/integrations/state.go": "OAuth state MAC — tamper-proofs the (org, nonce) binding across " +

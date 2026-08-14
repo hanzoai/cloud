@@ -396,11 +396,13 @@ func fireBranchBuilds(s *cloud.Service[state], ctx context.Context, org, project
 func fireBranchBuild(s *cloud.Service[state], ctx context.Context, org, project, name, branch, before, after, pusher string) {
 	org, project, name = strings.Clone(org), strings.Clone(project), strings.Clone(name)
 	branch, before, pusher = strings.Clone(branch), strings.Clone(before), strings.Clone(pusher)
-	if err := cloud.OnGitPush(ctx, cloud.GitPushEvent{
+	if builds, err := cloud.OnGitPush(ctx, cloud.GitPushEvent{
 		Org: org, Project: project, Repo: name,
 		Ref: "refs/heads/" + branch, Commit: after, CloneURL: cloneURL(s, org, project, name),
 	}); err != nil {
 		s.Log.Warn("git push-to-deploy trigger failed", "org", org, "repo", name, "branch", branch, "err", err)
+	} else {
+		s.Log.Info("git push-to-deploy", "org", org, "repo", name, "branch", branch, "builds", builds)
 	}
 	// Fan the same fact out to the lifecycle stream (best-effort, detached — never
 	// blocks the push). Origin is "" for a native push (the mirror-out reactor's

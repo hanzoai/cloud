@@ -104,9 +104,8 @@ func TestPushToForgeEnqueuesBuild(t *testing.T) {
 	prev := selfGitHost
 	selfGitHost = gitHost
 	t.Cleanup(func() { selfGitHost = prev })
-	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) error {
-		_, err := buildFromPush(s, ctx, ev)
-		return err
+	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) (int, error) {
+		return buildFromPush(s, ctx, ev)
 	})
 	t.Cleanup(func() { cloud.RegisterPushBuilder(nil) })
 
