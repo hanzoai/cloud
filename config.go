@@ -53,7 +53,15 @@ type Config struct {
 	// Domain is the deployment's primary public domain.
 	Domain string
 
-	// IAMIssuer is the JWKS issuer for JWT validation (usually iam.hanzo.ai).
+	// IAMIssuer is the JWKS issuer for JWT validation, and it MUST equal the
+	// `iss` IAM actually stamps: hanzo.id for hanzo, and each brand's own .id
+	// otherwise (brand/brand.go is the registry and the reasoning).
+	//
+	// Not iam.hanzo.ai. That host answers discovery and reports
+	// issuer=https://hanzo.id — it is a routing alias rather than an issuer, so
+	// pinning it here fails the issuer check on every real token and anonymizes
+	// every principal. Left unset, issuerFor derives it from the brand, which is
+	// the path to prefer.
 	IAMIssuer string
 
 	// AdminOrg is the IAM org slug whose members are SuperAdmins (IAM's
