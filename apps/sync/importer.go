@@ -62,7 +62,8 @@ var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 // accountRE bounds the upstream ACCOUNT a repository belongs to. It is GitHub's
 // own login alphabet, and what matters about it is what it leaves out: no `_`,
-// which is the separator [repo.flat] joins on.
+// which is the separator [repo.flat] joins on, and no `/`, so a namespace that
+// NESTS is not an account this can name.
 var accountRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,38}$`)
 
 // repo is one repository this seam syncs: the ACCOUNT it belongs to upstream,
@@ -95,13 +96,24 @@ type repo struct{ account, name string }
 //
 // A pair this cannot spell unambiguously is REFUSED rather than coerced or
 // escaped: nothing is imported, which is the safe half of the failure.
+//
+// # A namespace that nests is such a pair
+//
+// A GitLab subgroup names a place two coordinates cannot reach:
+// group/sub1/widgets and group/sub2/widgets are two repositories, and the flat
+// forge has one owner and one name to spell them with. Both ways out are worse
+// than refusing — dropping the middle segments makes them ONE repository (the
+// overwrite this whole file exists to prevent), and escaping the separator moves
+// the ambiguity to whatever escape is chosen. So it is refused exactly as an
+// account carrying the join separator is: the error NAMES the namespace, and
+// nothing is written.
 func newRepo(account, name string) (repo, error) {
 	r := repo{account: fold(account), name: fold(name)}
 	if r.account != "" && !accountRE.MatchString(r.account) {
-		return repo{}, fmt.Errorf("sync: invalid account")
+		return repo{}, fmt.Errorf("sync: %q is not an account the forge can hold a repository under", r.account)
 	}
 	if !nameRE.MatchString(r.name) {
-		return repo{}, fmt.Errorf("sync: invalid repo name")
+		return repo{}, fmt.Errorf("sync: %q is not a repository name the forge can hold", r.name)
 	}
 	return r, nil
 }
@@ -196,7 +208,9 @@ func upstream(rawURL, token string) (remote, error) {
 // FAST-FORWARD ONLY, per branch, exactly like the webhook path: a branch the
 // forge has moved on independently is recorded as a conflict and LEFT ALONE,
 // rather than destroyed to make the upstream fit. On a first import the forge
-// holds nothing, so every branch is a create and the whole repository lands.
+// holds nothing, so every branch is a create and the whole repository lands. A
+// run where EVERY ref was refused is an error rather than a quiet success — it
+// took nothing in, and the caller reads a nil here as "synced".
 //
 // When MirrorURL names a downstream, the same refs are then advanced OUT to it —
 // also fast-forward only. See [mirrorOut].
@@ -311,6 +325,16 @@ func (importer) ImportRepo(ctx context.Context, req cloud.GitImportReq) error {
 			Branch: strings.TrimPrefix(head, "refs/heads/"), After: landed[head],
 			Origin: hostOf(from.URL),
 		})
+	}
+	// AN IMPORT THAT LANDED NOTHING IS NOT AN IMPORT. Every ref refused means the
+	// canonical store did not move, and the reconcile stamps "last synced, just
+	// now" on this returning nil — the same lie pushOut refuses to tell about a
+	// push nothing received. The refusals are already recorded per ref above, so
+	// the console still says which ones and against whom; this says the operation
+	// itself did not happen. An upstream that advertises no ref at all is not
+	// that: there was nothing to take, and the empty repository is the answer.
+	if len(landed) == 0 && len(srcTips) > 0 {
+		return fmt.Errorf("sync: %s took nothing in; every ref was refused", r.flat())
 	}
 	return nil
 }
