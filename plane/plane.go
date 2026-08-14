@@ -1955,14 +1955,18 @@ type PushIn struct {
 // Built acknowledges that the builder ACCEPTED the push. A failure is an error,
 // never this shape — the same contract as Imported and Mirrored.
 //
-// It deliberately does NOT report how many applications the push matched. Most
-// pushes track no app, so that count would be interesting, but nothing consumes
-// it today and the builder does not return it; adding the field would mean
-// widening buildFromPush's signature to produce a value no caller reads. Fields
-// append at the END of a ZAP type, so the day something needs the count it can
-// be added without disturbing any peer.
+// Builds is how many builds the push actually LAUNCHED, and it is here because
+// something finally reads it: the forge's push receiver answers its delivery with
+// this number, and without it "accepted" and "built" are the same answer. Most
+// pushes track no application, so zero is ordinary rather than an error — but it
+// is a different fact from one, and collapsing the two is what let a green
+// delivery page sit on top of a fleet that had built nothing.
+//
+// Appended at the END, which is what this type's own note said the day would
+// look like.
 type Built struct {
-	Repo string `json:"repo"`
+	Repo   string `json:"repo"`
+	Builds int    `json:"builds"`
 }
 
 // ReleaseIn is a proven, clean-semver image ready to roll onto its Service CR.
