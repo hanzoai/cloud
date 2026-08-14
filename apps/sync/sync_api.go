@@ -107,7 +107,7 @@ type syncQueued struct {
 // asserted for itself. A malformed org is refused as hard as a missing one: the org
 // is a storage key here, so only the exact slug shape is admitted.
 func orgOf(ctx context.Context) (string, error) {
-	o, err := principal.RequireOrg(ctx)
+	o, err := principal.Acting(ctx)
 	if err != nil || !orgRE.MatchString(o) {
 		return "", zip.ErrUnauthorized("a validated principal is required")
 	}

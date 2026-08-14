@@ -104,11 +104,7 @@ func (m Metrics) Sanitize() Metrics {
 }
 
 func clampStr(s string, n int) string {
-	s = strings.TrimSpace(s)
-	if len(s) > n {
-		return strings.ToValidUTF8(shorten.To(s, n), "")
-	}
-	return s
+	return strings.ToValidUTF8(shorten.To(strings.TrimSpace(s), n), "")
 }
 
 func clampInt(i, hi int) int {

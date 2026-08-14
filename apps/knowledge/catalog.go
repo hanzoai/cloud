@@ -65,7 +65,7 @@ type catalogOut struct {
 func (o ops) listCatalog(ctx context.Context, _ *noInput) (*catalogOut, error) {
 	// A valid principal is required (the catalog is only served to authenticated
 	// callers), though the catalog content itself is org-independent.
-	if _, err := principal.RequireOrg(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	out := make([]catalogEntry, 0, len(providers))

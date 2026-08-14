@@ -554,7 +554,7 @@ type EnrollmentRef struct {
 //
 // Example: {"name": "Trial onboarding", "status": "draft"}
 func (o ops) createSequence(ctx context.Context, in *Sequence) (*Sequence, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -583,7 +583,7 @@ func (o ops) createSequence(ctx context.Context, in *Sequence) (*Sequence, error
 //
 // Example: {"limit": 50}
 func (o ops) listSequences(ctx context.Context, in *Page) (*SequenceList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -599,7 +599,7 @@ func (o ops) listSequences(ctx context.Context, in *Page) (*SequenceList, error)
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"}
 func (o ops) getSequence(ctx context.Context, in *SequenceRef) (*SequenceView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -620,7 +620,7 @@ func (o ops) getSequence(ctx context.Context, in *SequenceRef) (*SequenceView, e
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248", "status": "active"}
 func (o ops) setSequenceStatus(ctx context.Context, in *SequenceStatus) (*SequenceStatus, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -645,7 +645,7 @@ func (o ops) setSequenceStatus(ctx context.Context, in *SequenceStatus) (*Sequen
 //
 // Example: {"delaySeconds": 86400, "subject": "Day 1: your first model call", "body": "Here is how to make your first request…"}
 func (o ops) addStep(ctx context.Context, in *StepInput) (*Step, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -675,7 +675,7 @@ func (o ops) addStep(ctx context.Context, in *StepInput) (*Step, error) {
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"}
 func (o ops) listSteps(ctx context.Context, in *SequenceRef) (*StepList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -767,7 +767,7 @@ func recipients(ctx context.Context, s *cloud.Service[state], org, channel strin
 // Example: {"audienceId": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a", "channel": "email"}
 // Response: {"resolved": 412, "enrolled": 409, "alreadyEnrolled": 3}
 func (o ops) enroll(ctx context.Context, in *EnrollInput) (*EnrollResult, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -828,7 +828,7 @@ func (o ops) enroll(ctx context.Context, in *EnrollInput) (*EnrollResult, error)
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248", "limit": 100}
 func (o ops) listEnrollments(ctx context.Context, in *EnrollmentQuery) (*EnrollmentList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -846,7 +846,7 @@ func (o ops) listEnrollments(ctx context.Context, in *EnrollmentQuery) (*Enrollm
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248", "eid": "enr_2a8d6f0b4c1e9375a0d2f6b8c4e19f73"}
 func (o ops) cancelEnrollment(ctx context.Context, in *EnrollmentRef) (*struct{}, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

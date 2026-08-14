@@ -155,7 +155,7 @@ func init() {
 func completeSign(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	doc, err := s.State.store.GetDocument(c.Context(), org, c.Param("id"))
 	if err == errNotFound {
@@ -274,7 +274,7 @@ func bodyCap() zip.Handler {
 			return c.Continue()
 		}
 		if _, ok := principal.Org(c); !ok {
-			return zip.ErrForbidden("X-Org-Id required")
+			return principal.Refused(c)
 		}
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "request body too large")
 	}

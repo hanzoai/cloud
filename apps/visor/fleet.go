@@ -140,7 +140,7 @@ func byoWorkers(ctx context.Context, org string) []byoWorker {
 		if b, err := json.Marshal(a.Input); err == nil {
 			_ = json.Unmarshal(b, &reg)
 		}
-		host := cmp.Or(reg.Hostname, a.Execution.WorkflowId)
+		host := cmp.Or(strings.TrimSpace(reg.Hostname), a.Execution.WorkflowId)
 		out = append(out, byoWorker{
 			ID:            a.Execution.WorkflowId,
 			Hostname:      host,

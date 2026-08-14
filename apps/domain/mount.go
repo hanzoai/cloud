@@ -342,7 +342,7 @@ type searchQuery struct {
 // purchase, so a name quoted here can be gone or dearer by the time you buy it. A
 // deployment with no registrar credentials answers 503.
 func (o ops) search(ctx context.Context, in *searchQuery) (*quoteList, error) {
-	if _, err := principal.RequireOrg(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	q := strings.TrimSpace(in.Q)
@@ -376,7 +376,7 @@ type availabilityQuery struct {
 // It requires a validated principal; 403 without one. Nothing is charged and
 // nothing is held. A deployment with no registrar credentials answers 503.
 func (o ops) availability(ctx context.Context, in *availabilityQuery) (*quoteList, error) {
-	if _, err := principal.RequireOrg(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	raw := strings.TrimSpace(in.Domain)
@@ -414,7 +414,7 @@ type holdings struct {
 // is not here. The default store is in-process, so a deployment that has not
 // swapped in a durable store answers from what this process registered.
 func (o ops) list(ctx context.Context, _ *noIn) (*holdings, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +460,7 @@ type order struct {
 // the zone service is down the domain is still registered against Hanzo's
 // nameservers and the zone reconciles afterwards, rather than the purchase failing.
 func (o ops) register(ctx context.Context, in *order) (*RegisterResult, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -495,7 +495,7 @@ type renewReq struct {
 // when the prepaid balance cannot cover it, 503 when the deployment has no
 // registrar credentials. Requires a validated principal.
 func (o ops) renew(ctx context.Context, in *renewReq) (*RenewResult, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -533,7 +533,7 @@ type transferReq struct {
 // transfer completes at the losing registrar. Unlike a registration this does not
 // provision a zone, so the record carries this deployment's configured nameservers.
 func (o ops) transfer(ctx context.Context, in *transferReq) (*RegisterResult, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

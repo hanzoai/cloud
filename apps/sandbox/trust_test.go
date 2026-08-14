@@ -351,7 +351,7 @@ func TestResumeCannotCrossTheTrustBoundary(t *testing.T) {
 	// two different facts and this test is about the first. The org names WHOSE
 	// store a row lives in; the SuperAdmin attestation says who the caller is. A
 	// test that conflated them would pass for the wrong reason.
-	got, err := Lease(s, ctx, authz.AdminOrg, false, Spec{ID: m.ID})
+	got, err := Lease(s, ctx, authz.AdminOrg, authz.AdminOrg, false, Spec{ID: m.ID})
 	if err != nil || got.ID != m.ID {
 		t.Fatalf("Lease(admin, resume) = %+v, %v — the control did not resume", got, err)
 	}
@@ -359,7 +359,7 @@ func TestResumeCannotCrossTheTrustBoundary(t *testing.T) {
 	// ANOTHER ORG NAMING THE SAME ID gets a sandbox of its own, never ours. It
 	// fails at the cluster (there is none here), which is already past the point
 	// where a resume would have handed over a running pod.
-	if _, err = Lease(s, ctx, "acme", false, Spec{ID: m.ID}); err == nil {
+	if _, err = Lease(s, ctx, "acme", "acme", false, Spec{ID: m.ID}); err == nil {
 		t.Fatal("Lease(acme) resumed a sandbox belonging to the reserved org")
 	}
 	if !strings.Contains(err.Error(), "start sandbox") {

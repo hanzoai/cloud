@@ -588,7 +588,7 @@ func buildOverview(cur Curriculum, custom bool, rows map[string]StateRow) overvi
 // Auto-detect runs first, so a step the org has already completed elsewhere reads
 // done without anyone marking it.
 func (o ops) overview(ctx context.Context, _ *noInput) (*overviewView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -620,7 +620,7 @@ type analyticsView struct {
 // unreachable or silent warehouse answers available=false, never a fabricated
 // number.
 func (o ops) analytics(ctx context.Context, _ *noInput) (*analyticsView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -646,7 +646,7 @@ type profileResponse struct {
 // principal; fail-closed without one. It PRODUCES the profile and classifies the
 // stage; it decides NO recommendation (that is a later surface).
 func (o ops) profile(ctx context.Context, _ *noInput) (*profileResponse, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -680,7 +680,7 @@ type curriculumView struct {
 // whether it comes from the org's OWN override (custom) or from the platform
 // default — the brand blueprint, else the embedded fixture.
 func (o ops) getCurriculum(ctx context.Context, _ *noInput) (*curriculumView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -695,7 +695,7 @@ func (o ops) getCurriculum(ctx context.Context, _ *noInput) (*curriculumView, er
 func putCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	body := c.Body()
 	if len(body) == 0 {
@@ -728,7 +728,7 @@ func putCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
 // journey it falls back to — the brand blueprint, else the embedded fixture.
 // Clearing an org that never set one is a no-op that answers the same default.
 func (o ops) deleteCurriculum(ctx context.Context, _ *noInput) (*curriculumView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -756,7 +756,7 @@ type actionsView struct {
 // whether it succeeded. It is the audit-visible record of what the agent did on
 // the org's behalf, and the backing state for the "acted" auto-detect signal.
 func (o ops) listActions(ctx context.Context, _ *noInput) (*actionsView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -829,7 +829,7 @@ func applyStep(s *cloud.Service[state], ctx context.Context, org, id string, tar
 func transition(s *cloud.Service[state], c *zip.Ctx, target State) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	ov, err := applyStep(s, c.Context(), org, idParam(c), target, true)
 	if blocked, ok := errors.AsType[blockedErr](err); ok {
@@ -872,7 +872,7 @@ func (o ops) resetStep(ctx context.Context, in *stepRef) (*overviewView, error) 
 // setStep is the ungated transition an op performs: resolve the tenant, then the
 // shared body. Never gated, so applyStep can never hand it a blockedErr.
 func (o ops) setStep(ctx context.Context, in *stepRef, target State) (*overviewView, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -886,7 +886,7 @@ func (o ops) setStep(ctx context.Context, in *stepRef, target State) (*overviewV
 func doStep(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	payer := principal.Ledger(c)
 	id := idParam(c)

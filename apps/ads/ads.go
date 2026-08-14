@@ -344,7 +344,7 @@ type adSummary struct {
 //
 // Example: {"name": "Spring Launch", "platform": "meta", "objective": "conversions", "budget": 50000}
 func (o ops) createCampaign(ctx context.Context, in *campaignInput) (*AdCampaign, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +379,7 @@ func (o ops) createCampaign(ctx context.Context, in *campaignInput) (*AdCampaign
 //
 // Example: {"status": "active", "limit": 50}
 func (o ops) listCampaigns(ctx context.Context, in *listCampaignsIn) (*campaignList, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +396,7 @@ func (o ops) listCampaigns(ctx context.Context, in *listCampaignsIn) (*campaignL
 //
 // Example: {"id": "camp_2f9c1d"}
 func (o ops) getCampaign(ctx context.Context, in *campaignRef) (*AdCampaign, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -415,7 +415,7 @@ func (o ops) getCampaign(ctx context.Context, in *campaignRef) (*AdCampaign, err
 //
 // Example: {"id": "camp_2f9c1d", "name": "Spring Launch", "platform": "meta", "status": "paused", "budget": 75000}
 func (o ops) updateCampaign(ctx context.Context, in *updateCampaignIn) (*AdCampaign, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -450,7 +450,7 @@ func (o ops) updateCampaign(ctx context.Context, in *updateCampaignIn) (*AdCampa
 //
 // Example: {"id": "camp_2f9c1d"}
 func (o ops) deleteCampaign(ctx context.Context, in *campaignRef) (*noContent, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -477,7 +477,7 @@ func (o ops) deleteCampaign(ctx context.Context, in *campaignRef) (*noContent, e
 func launchCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
 	if err != nil {
@@ -532,7 +532,7 @@ type noInput struct{}
 // all of them. Budget and spend are MINOR units (cents), the same units the
 // campaign rows carry. It counts only this org's campaigns.
 func (o ops) summary(ctx context.Context, _ *noInput) (*adSummary, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

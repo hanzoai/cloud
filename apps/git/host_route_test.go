@@ -26,7 +26,7 @@ func TestRootSmartHTTP_HostGuard(t *testing.T) {
 		t.Fatalf("git-host request: %v", err)
 	}
 	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("git host: want 403 (handler ran, X-Org-Id required), got %d", resp.StatusCode)
+		t.Fatalf("git host: want 403 (handler ran, refused for want of a principal), got %d", resp.StatusCode)
 	}
 
 	// On the api host the identical path has no /v1/git prefix, so the guard

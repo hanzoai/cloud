@@ -29,8 +29,8 @@ import (
 
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/internal/org"
-	s3 "github.com/hanzos3/go"
 	"github.com/hanzoai/vfs/replica"
+	s3 "github.com/hanzos3/go"
 )
 
 // TestSeaweedFSConditionalStoreAtomic_Staging proves the two CAS preconditions the

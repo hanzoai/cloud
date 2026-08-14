@@ -15,7 +15,7 @@ package coding
 // that started it, which is the identity the gateway already prices and meters.
 //
 // A STATIC KEY WAS THE OTHER OPTION AND IS WORSE IN EVERY DIRECTION. A long-lived
-// hk- key would have to be stored, rotated, and handed to a box that is about to
+// sk- key would have to be stored, rotated, and handed to a box that is about to
 // execute a model's output; this token expires on its own, is scoped to one
 // identity, and nothing has to remember to revoke it.
 //

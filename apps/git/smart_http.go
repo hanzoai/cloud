@@ -3,7 +3,7 @@ package git
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
+	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"net/http"
 	"strings"
@@ -220,7 +220,7 @@ func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
 		// report-status framing to answer in.
 		return zip.ErrBadRequest("unreadable push: " + perr.Error())
 	}
-	if verr := checkRefPolicy(cmds, defaultBranchOf(c.Context(), bareDir), who.ref); verr != nil {
+	if verr := checkRefPolicy(cmds, defaultBranchOf(c.Context(), bareDir), ""); verr != nil {
 		s.Log.Warn("git push refused by ref policy", "org", org, "repo", name, "reason", verr.Error())
 		// 200 with a report-status, NOT a 403. The push is refused either way;
 		// the difference is whether the human reads the reason or reads
@@ -323,42 +323,29 @@ func packProject(c *zip.Ctx, authed bool) (string, error) {
 	return projectScope(c), nil
 }
 
-// packCaller is who is driving a pack request, and what they may do with it.
+// packCaller is who is driving a pack request.
 //
-// It exists because there are now two ways to reach the pack protocol and only
-// one of them is a person. A PRINCIPAL is an org member, reaches every
-// repository that org owns, and is bound by the ref policy's namespace rules. A
-// GRANT is not an identity at all (grant.go): it names one repository and one
-// ref, and ref carries that confinement to the policy so the door and the rule
-// cannot drift apart.
+// There is one way to reach the pack protocol and it is a PRINCIPAL: an org
+// member, reaching every repository that org owns, bound by the ref policy's
+// namespace rules. A second credential class used to be honoured here — a
+// bearer that resolved to no principal, minted for one repository and one ref —
+// and it is gone: the runs that held it now push to the forge (git.hanzo.ai),
+// which issues its own per-repository key, so nothing in this binary is reached
+// by anything but a validated principal or a public read.
 type packCaller struct {
 	org, project, repo string
-	// ref is the ONE ref a granted caller may write, or "" for a principal.
-	ref string
 }
 
-// resolvePackRepo is the shared front-half of every smart-HTTP pack handler, and
-// the ONE place a grant is honoured anywhere in the binary. Three callers, all
-// in this file; nothing else in cloud can be reached with a grant, because
-// nothing else asks.
-//
-// A principal WINS. The grant is consulted only where there is no principal, so
-// it can never widen what an authenticated caller already had.
+// resolvePackRepo is the shared front-half of every smart-HTTP pack handler.
 func resolvePackRepo(s *cloud.Service[state], c *zip.Ctx, allowPublic bool) (packCaller, error) {
 	orgID, authed := org(c)
-	granted, hasGrant := grant{}, false
 	if !authed {
-		granted, hasGrant = issued.lookup(packBearer(c))
-		switch {
-		case hasGrant:
-			orgID = granted.org
-		case allowPublic:
-			orgID = c.Param("org")
-			if orgID == "" || !orgRE.MatchString(orgID) {
-				return packCaller{}, zip.ErrForbidden("X-Org-Id required")
-			}
-		default:
-			return packCaller{}, zip.ErrForbidden("X-Org-Id required")
+		if !allowPublic {
+			return packCaller{}, principal.Refused(c)
+		}
+		orgID = c.Param("org")
+		if orgID == "" || !orgRE.MatchString(orgID) {
+			return packCaller{}, principal.Refused(c)
 		}
 	}
 	name, err := repoNameParam(c)
@@ -372,54 +359,15 @@ func resolvePackRepo(s *cloud.Service[state], c *zip.Ctx, allowPublic bool) (pac
 	if p := c.Param("org"); p != "" && p != orgID {
 		return packCaller{}, zip.ErrForbidden("org path does not match authenticated org")
 	}
-	// A grant addresses the repository it was minted for and no other. The
-	// refusal is the SAME 404 a stranger gets, so a grant cannot be used to probe
-	// which of an org's repositories exist.
-	if hasGrant && (granted.project != project || granted.repo != name) {
-		return packCaller{}, zip.ErrNotFound("repo not found")
-	}
 	store, serr := storeFor(s, orgID)
 	if serr != nil {
 		return packCaller{}, zip.Errorf(http.StatusInternalServerError, "open store: %v", serr)
 	}
 	r, gerr := store.Get(c.Context(), orgID, project, name)
-	if gerr != nil || (!authed && !hasGrant && !r.Public) {
+	if gerr != nil || (!authed && !r.Public) {
 		return packCaller{}, zip.ErrNotFound("repo not found")
 	}
-	return packCaller{org: orgID, project: project, repo: name, ref: granted.ref}, nil
-}
-
-// packBearer reads the credential a git client presents. git sends a token as
-// the BASIC password (there is no way to make it send a bearer), so both
-// spellings are read and neither is validated here — issued.lookup is the only
-// thing that decides whether these bytes mean anything.
-func packBearer(c *zip.Ctx) string {
-	auth := strings.TrimSpace(c.Header("Authorization"))
-	if v, ok := cutPrefixFold(auth, "Bearer "); ok {
-		return strings.TrimSpace(v)
-	}
-	v, ok := cutPrefixFold(auth, "Basic ")
-	if !ok {
-		return ""
-	}
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(v))
-	if err != nil {
-		return ""
-	}
-	_, pass, ok := strings.Cut(string(raw), ":")
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(pass)
-}
-
-// cutPrefixFold is strings.CutPrefix over an ASCII-case-insensitive scheme name,
-// which is what RFC 7235 says an auth-scheme is.
-func cutPrefixFold(s, prefix string) (string, bool) {
-	if len(s) < len(prefix) || !strings.EqualFold(s[:len(prefix)], prefix) {
-		return "", false
-	}
-	return s[len(prefix):], true
+	return packCaller{org: orgID, project: project, repo: name}, nil
 }
 
 // fireBranchBuilds fires a push-to-deploy build for every branch whose tip

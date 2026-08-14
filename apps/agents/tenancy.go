@@ -65,7 +65,7 @@ func (st *state) namespaceFor(org string) (namespace.Namespace, error) {
 // one org's identity with another org's database — there is no call shape that
 // lets it name them separately.
 func tenantStore(ctx context.Context, st *state) (*Store, string, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, "", err
 	}

@@ -98,11 +98,11 @@ type noArgs struct{}
 func scope(ctx context.Context) (*zip.Ctx, string, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+		return nil, "", principal.RefusedFrom(ctx)
 	}
 	org, ok := tenant(c)
 	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+		return nil, "", principal.Refused(c)
 	}
 	return c, org, nil
 }
@@ -473,7 +473,7 @@ func listSizes(s *cloud.Service[state], c *zip.Ctx) error   { return catalog(s, 
 // wire shape stays the single source of truth.
 func catalog(s *cloud.Service[state], c *zip.Ctx, upstream string) error {
 	if _, ok := tenant(c); !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var data json.RawMessage
 	if err := s.State.cl.call(c, http.MethodGet, upstream, "", nil, &data); err != nil {
@@ -568,13 +568,20 @@ func init() {
 func launchMachine(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body launchReq
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	if cmp.Or(strings.TrimSpace(body.Size), strings.TrimSpace(body.InstanceType)) == "" {
+	// Blank is blank. zip's Bind does not trim, and these four are free text that
+	// Visor echoes back into the machine we render — a name of "   " came back and
+	// won the choice against the real id.
+	body.Name = strings.TrimSpace(body.Name)
+	body.Size = strings.TrimSpace(body.Size)
+	body.InstanceType = strings.TrimSpace(body.InstanceType)
+	body.Region = strings.TrimSpace(body.Region)
+	if cmp.Or(body.Size, body.InstanceType) == "" {
 		return zip.ErrBadRequest("size is required")
 	}
 	var data json.RawMessage
@@ -772,7 +779,7 @@ func (o ops) createPool(ctx context.Context, in *poolCreate) (*nodePoolView, err
 	// Forward only the CreateNodePoolSpec fields; provider/clusterId/owner ride in
 	// the query exactly as Visor's create-node-pool expects.
 	spec := map[string]any{
-		"name": in.Name, "size": in.Size, "count": in.Count,
+		"name": strings.TrimSpace(in.Name), "size": strings.TrimSpace(in.Size), "count": in.Count,
 		"minNodes": in.MinNodes, "maxNodes": in.MaxNodes, "autoScale": in.AutoScale,
 	}
 	var pool visorNodePool

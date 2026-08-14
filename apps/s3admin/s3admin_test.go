@@ -103,10 +103,9 @@ func TestPresignDisabledWhenPublicEndpointBlank(t *testing.T) {
 	clearS3Env(t)
 	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIA")
 	t.Setenv("S3_ADMIN_SECRET_KEY", "secret")
-	// Whitespace is not a value — a blank variable reads as unset and takes the
-	// default — so blanking the host takes a sentinel that IS a value and that
-	// hostOnly reduces to "". A bare slash is one: it is a path with no host.
-	t.Setenv("S3_PUBLIC_ENDPOINT", "/")
+	// SET AND EMPTY is the way to say "no public host", and it is a different answer
+	// from ABSENT (which takes the default). Spaces say the same thing as "" here.
+	t.Setenv("S3_PUBLIC_ENDPOINT", "   ")
 	a := New()
 	if a.publicEndpoint != "" {
 		t.Fatalf("blanked public endpoint = %q, want empty", a.publicEndpoint)

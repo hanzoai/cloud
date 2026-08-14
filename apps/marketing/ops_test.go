@@ -102,7 +102,7 @@ func TestTypedOpRefusesAnonymousMCP(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("mcp want 200 (a refusal rides in the result), got %d (%s)", code, body)
 	}
-	if !strings.Contains(body, `"isError":true`) || !strings.Contains(body, "X-Org-Id required") {
+	if !strings.Contains(body, `"isError":true`) || !strings.Contains(body, "a validated principal is required") {
 		t.Fatalf("anonymous MCP call was not refused: %s", body)
 	}
 }

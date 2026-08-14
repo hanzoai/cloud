@@ -81,7 +81,7 @@ var survivors = []struct{ name, why string }{
 	{"post_v1_responses", "POST /v1/responses"},
 	{"post_v1_embeddings", "POST /v1/embeddings"},
 	{"post_v1_rerank", "POST /v1/rerank"},
-	{"get_v1_models", "GET /v1/models"},
+	{"get_models", "GET /v1/models"},
 	{"post_v1_messages_count_tokens", "POST /v1/messages/count_tokens — `token` is a UNIT here; the counting neighbour says so"},
 	{"get_validators_tokenId", "a chain token id, not a bearer token"},
 
@@ -290,8 +290,8 @@ func TestWords_ReadsBothNamingConventions(t *testing.T) {
 		{"GetRolesByUserID", []string{"get", "roles", "by", "user", "id"}},
 		{"delete_v1_ai_signin-sessions_by_owner_by_name",
 			[]string{"delete", "v1", "ai", "signin", "sessions", "by", "owner", "by", "name"}},
-		{"post_v1_git_by_org_by_repo_git-upload-pack",
-			[]string{"post", "v1", "git", "by", "org", "by", "repo", "git", "upload", "pack"}},
+		{"post_git_by_org_by_repo_git-upload-pack",
+			[]string{"post", "git", "by", "org", "by", "repo", "git", "upload", "pack"}},
 	} {
 		got := words(c.in)
 		if strings.Join(got, " ") != strings.Join(c.want, " ") {

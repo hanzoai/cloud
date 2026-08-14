@@ -136,7 +136,7 @@ type invokeReq struct {
 // output. Scoped to the caller's org; requires a validated principal.
 func (o ops) invoke(ctx context.Context, in *invokeReq) (*invocationView, error) {
 	s := o.s
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
