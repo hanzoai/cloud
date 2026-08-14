@@ -87,7 +87,11 @@ func planeProbe(t *testing.T, objs ...runtime.Object) *zip.App {
 	if err != nil {
 		t.Fatalf("ServePlane: %v", err)
 	}
-	t.Cleanup(func() { _ = stop() })
+	// ServePlane FREEZES the plane app, and the plane is process-wide. A later
+	// Mount registering an op on a frozen one panics ("was frozen"), and this
+	// binary mounts many times — so one test's fixture must not decide whether
+	// the next test can mount at all. Dropping it is what ResetPlane is for.
+	t.Cleanup(func() { _ = stop(); cloud.ResetPlane() })
 	for i := 0; i < 200; i++ {
 		if c, derr := net.Dial("unix", zip.SocketPath("platform")); derr == nil {
 			_ = c.Close()
@@ -280,7 +284,11 @@ func TestFleetPlane_UnreadyClusterIsAnErrorNotAnEmptyFleet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ServePlane: %v", err)
 	}
-	t.Cleanup(func() { _ = stop() })
+	// ServePlane FREEZES the plane app, and the plane is process-wide. A later
+	// Mount registering an op on a frozen one panics ("was frozen"), and this
+	// binary mounts many times — so one test's fixture must not decide whether
+	// the next test can mount at all. Dropping it is what ResetPlane is for.
+	t.Cleanup(func() { _ = stop(); cloud.ResetPlane() })
 	for i := 0; i < 200; i++ {
 		if c, derr := net.Dial("unix", zip.SocketPath("platform")); derr == nil {
 			_ = c.Close()
