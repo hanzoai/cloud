@@ -160,7 +160,7 @@ func TestConvertedRoutesRefuseAsBefore(t *testing.T) {
 			if code != http.StatusForbidden {
 				t.Fatalf("%s %s = %d, want 403 (%s)", tc.method, tc.path, code, body)
 			}
-			if !strings.Contains(string(body), "X-Org-Id required") {
+			if !strings.Contains(string(body), "a validated principal is required") {
 				t.Errorf("%s %s refusal = %s, want the tenant gate's own sentence", tc.method, tc.path, body)
 			}
 		})

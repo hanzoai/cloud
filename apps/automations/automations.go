@@ -49,6 +49,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -1346,7 +1347,7 @@ func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
 // caller asserted for itself. Same validOrg rule and same 403 as tenant, and it fails
 // closed off the HTTP path, where nothing parked an org.
 func tenantOf(ctx context.Context) (string, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -1384,18 +1385,7 @@ func boundLimit(n int) int {
 
 // clip trims and bounds a text field.
 func clip(s string) string {
-	s = shorten.To(s, maxField)
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t' || s[0] == '\n' || s[0] == '\r') {
-		s = s[1:]
-	}
-	for len(s) > 0 {
-		last := s[len(s)-1]
-		if last != ' ' && last != '\t' && last != '\n' && last != '\r' {
-			break
-		}
-		s = s[:len(s)-1]
-	}
-	return s
+	return strings.TrimSpace(shorten.To(s, maxField))
 }
 
 func terminal(s FlowRunStatus) bool {

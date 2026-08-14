@@ -118,7 +118,7 @@ type statusIn struct {
 //
 // Example: {"product": "kms", "range": 3600}
 func handleMetrics(ctx context.Context, in *metricsIn) (*metricsResponse, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -208,7 +208,7 @@ type ops struct{ s *cloud.Service[state] }
 // caller asserted for itself. It applies the same validOrg custody check the
 // untyped handlers do, because the org is folded into the KMS secret path.
 func tenantOf(ctx context.Context) (string, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -446,11 +446,7 @@ func validOrg(org string) bool {
 
 // clip trims + bounds a non-secret text field.
 func clip(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > maxField {
-		return shorten.To(s, maxField)
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), maxField)
 }
 
 // toStr coerces a decoded JSON value to a trimmed string (numbers → their literal;

@@ -119,7 +119,7 @@ type tracesOut struct {
 //
 // Example: {"range": 3600, "limit": 50}
 func handleTraces(ctx context.Context, in *tracesIn) (*tracesOut, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -1215,7 +1215,7 @@
             "type": "string"
           },
           "subject": {
-            "description": "Subject is the person the run is attributed to — a linked Hanzo identity the\ndoor already proved, never a name the caller picks. Empty is refused rather\nthan defaulted: a run that lost its human must not execute as the org.",
+            "description": "Subject is the person the run is ATTRIBUTED to — the session's actor and the\nPR's assignee. Empty is refused rather than defaulted: a run that lost its\nhuman must not execute as the org.\n\nIT IS NOT AN AUTHORIZATION INPUT and must never become one. It arrives in\nthis body and the HTTP door passes it through unread (plugin/agents\nhttpCodingStart), so it is a name the caller picks. What the run ACTS AS on\nthe forge is resolved separately, from the validated address on the caller's\nown identity and confirmed against the forge (apps/coding actorOf →\nforge.LoginFor) — because attribution is not entitlement, and a field a\ncaller fills cannot be either.",
             "type": "string"
           },
           "targetId": {

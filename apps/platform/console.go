@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/zap-proto/zip"
 )
 
@@ -457,11 +458,7 @@ func runDuration(status string, start, end int64) string {
 
 // shortCommit trims a git ref/sha to a compact display token.
 func shortCommit(ref string) string {
-	ref = strings.TrimSpace(ref)
-	if len(ref) > 12 {
-		return ref[:12]
-	}
-	return ref
+	return shorten.To(strings.TrimSpace(ref), 12)
 }
 
 // rfc3339 renders a unix timestamp as an RFC3339 string (what the FE's

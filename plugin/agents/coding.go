@@ -34,8 +34,10 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/agents"
 	"github.com/hanzoai/cloud/apps/coding"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
@@ -67,7 +69,60 @@ func mountAgents(app cloud.Router, deps cloud.Deps) error {
 	zip.Post[plane.CodingStartIn, plane.CodingStarted](cloud.ZipApp(app), "/v1/coding", httpCodingStart,
 		zip.WithStatus(http.StatusAccepted),
 		zip.WithSummary("Start one autonomous coding run against a repo in the caller's org"))
+
+	// SAY WHETHER THE FORGE HOST KEY IS CONFIGURED, once, here.
+	//
+	// Without it the degradation is silent: a wrong ref or a secret nobody
+	// created reads exactly like a healthy deployment until somebody intercepts
+	// the first handshake a pod makes. The forge package has no logger and should
+	// not grow one, so the composition root asks and says.
+	//
+	// AND TAKE BACK WHAT AN EARLIER PROCESS ABANDONED. A restart is what produces
+	// orphaned run keys — the run in flight when the old process went away holds
+	// one nobody will withdraw — so a restart is the honest moment to clear them.
+	// Detached and best-effort: a forge that will not answer must not stop this
+	// process from serving.
+	go func() {
+		ctx, cancel := context.WithTimeout(cloud.For(context.Background(), forgeOrg), 5*time.Minute)
+		defer cancel()
+		if n, err := coding.Sweep(ctx, forgeOrg); err != nil {
+			codingLog.Warn("could not sweep abandoned run keys", "err", err)
+		} else if n > 0 {
+			codingLog.Info("withdrew abandoned run keys", "count", n)
+		}
+		// AFTER the sweep, because the sweep is what resolves the credential and
+		// the pin is read alongside it. Asked first, this reported the zero value
+		// on every boot — "not configured", with an empty reason, whether or not
+		// the secret was there — which is worse than not asking: it is the one
+		// line a deploy checks to confirm the pin took effect.
+		if ok, why := coding.Pinned(); ok {
+			codingLog.Info("forge host key is configured")
+		} else {
+			codingLog.Warn("forge host key is not configured; the pin will be learned on first use", "why", why)
+		}
+	}()
 	return nil
+}
+
+// forgeOrg is the tenant whose forge namespace this deployment's runs live in.
+//
+// It is the estate's own org rather than a per-tenant loop: forge.Owner is a
+// closed table with one entry, so this is the whole set, and a sweep that walked
+// every IAM org would be walking orgs that have no forge at all.
+const forgeOrg = "hanzo"
+
+// shutdownAgents gives back every run credential this process is still holding
+// before it goes away. A rolling deploy is the ordinary way keys are abandoned,
+// and this is the ordinary way they are not; coding.Sweep at the next start is
+// the backstop for whatever a SIGKILL takes with it.
+func shutdownAgents(ctx context.Context) error {
+	// Its OWN budget, not the caller's: a shutdown context is often already
+	// cancelled by the time it reaches here, and a withdrawal that does not
+	// happen leaves a live push credential rather than an untidy log line.
+	give, cancel := context.WithTimeout(cloud.For(context.WithoutCancel(ctx), forgeOrg), 20*time.Second)
+	defer cancel()
+	coding.Drain(give)
+	return agents.Shutdown(ctx)
 }
 
 // httpCodingStart is the app's door. It answers 202 with the run's handle the

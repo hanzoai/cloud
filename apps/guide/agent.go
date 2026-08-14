@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // event is one step the Business AI agent takes, streamed to the caller (SSE) or
@@ -136,9 +137,5 @@ func planText(step JourneyStep) string {
 }
 
 func clipDraft(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > maxDraftOutput {
-		return s[:maxDraftOutput]
-	}
-	return s
+	return shorten.To(strings.TrimSpace(s), maxDraftOutput)
 }

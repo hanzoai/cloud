@@ -213,7 +213,7 @@ type boardQuery struct {
 // valid board with zero totals and a flat series rather than a fabricated number
 // or a 500. Requires a validated principal; 403 without one.
 func (s *service) metricsBoard(ctx context.Context, in *boardQuery) (*Board, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

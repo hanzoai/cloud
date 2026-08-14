@@ -74,7 +74,7 @@ var credentialMarkers = []string{
 	"npm_",        // npm automation token
 	"hf_",         // Hugging Face
 	"sk-",         // OpenAI / Anthropic-style secret key
-	"hk-",         // Hanzo key
+	"hk-",         // retired Hanzo key — still redacted; old ones are still in configs
 	"pypi-",       // PyPI
 	"shpat_",      // Shopify
 	"private_key", // a JSON service account (GCP SA, Firebase) carries this field

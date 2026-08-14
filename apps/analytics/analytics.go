@@ -492,7 +492,7 @@ func isWarehouseUnreachable(err error) bool {
 //
 // Example: {"range": "7d"}
 func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -565,7 +565,7 @@ func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, erro
 //
 // Example: {"range": "30d"}
 func (o readOps) timeseries(ctx context.Context, in *windowQuery) (*Timeseries, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -623,7 +623,7 @@ func (o readOps) timeseries(ctx context.Context, in *windowQuery) (*Timeseries, 
 //
 // Example: {"range": "7d", "limit": 25}
 func (o readOps) top(ctx context.Context, in *topQuery) (*Top, error) {
-	org, err := principal.RequireOrg(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

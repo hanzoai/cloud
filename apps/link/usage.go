@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/internal/mint"
-
 	"github.com/zap-proto/zip"
 )
 

@@ -174,7 +174,7 @@ type ops struct{ s *cloud.Service[*state] }
 // validated principal cloud.Bridge parked — the ONE place tenant identity is
 // derived, never a client field. Fails closed: no validated principal, no tenant.
 func tenant(ctx context.Context) (org, project string, err error) {
-	org, err = principal.RequireOrg(ctx)
+	org, err = principal.Acting(ctx)
 	if err != nil {
 		return "", "", err
 	}

@@ -44,6 +44,7 @@ package platform
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/apps/principal"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -95,11 +96,11 @@ type noContent = struct{}
 func (o ops) caller(ctx context.Context) (*zip.Ctx, string, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+		return nil, "", principal.RefusedFrom(ctx)
 	}
 	org, ok := tenant(c)
 	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
+		return nil, "", principal.Refused(c)
 	}
 	return c, org, nil
 }

@@ -37,6 +37,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"net/http"
 	"net/url"
@@ -174,7 +175,7 @@ type botLaunchReq struct {
 func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return principal.Refused(c)
 	}
 	var body botLaunchReq
 	if err := c.Bind(&body); err != nil {
@@ -233,7 +234,7 @@ func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 	if wrap.Machine.Name == "" && wrap.Machine.Id == "" {
 		_ = json.Unmarshal(data, &wrap.Machine)
 	}
-	machineID := cmp.Or(wrap.Machine.Id, wrap.Machine.Name)
+	machineID := cmp.Or(strings.TrimSpace(wrap.Machine.Id), strings.TrimSpace(wrap.Machine.Name))
 	if machineID == "" {
 		return zip.Errorf(http.StatusBadGateway, "bot launch: vm returned no machine")
 	}
@@ -420,7 +421,7 @@ func messageBot(s *cloud.Service[state], c *zip.Ctx, org, id string) error {
 func botScope(s *cloud.Service[state], c *zip.Ctx) (org, id string, err error) {
 	org, ok := tenant(c)
 	if !ok {
-		return "", "", zip.ErrForbidden("X-Org-Id required")
+		return "", "", principal.Refused(c)
 	}
 	id = strings.TrimSpace(c.Param("id"))
 	if id == "" {
