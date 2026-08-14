@@ -135,7 +135,7 @@ func discloses(w []string) bool {
 // measured reports whether `token` at index i is being counted or identified
 // rather than presented — the nearest real neighbour on either side decides.
 func measured(w []string, i int) bool {
-	return tokenIsAQuantity[before(w, i)] || tokenIsAQuantity[after(w, i)]
+	return tokenIsAQuantity[before(w, i)] || tokenIsAQuantity[after(w, i)] || tokenIsAnAsset[after(w, i)]
 }
 
 // unowned reports whether the session at index i belongs to nobody: the word
@@ -238,8 +238,22 @@ var tokenIsAQuantity = set(
 	"usage", "used", "limit", "limits", "budget",
 	"max", "min", "total", "per",
 	"price", "pricing", "cost",
-	"id", "ids", "symbol", "supply", "balance",
 )
+
+// tokenIsAnAsset are the neighbours that turn `token` into a coin whose field is
+// being named — `tokenId`, `tokenSymbol`, `tokenSupply`, `tokenBalance`.
+//
+// They qualify only when they FOLLOW, and that asymmetry is the whole point.
+// Read on either side, `id` matched the parent identifier of a REST subresource:
+//
+//	GET /v1/connectors/{id}/token   →  get | connectors | by | id | token
+//
+// The id there is the CONNECTOR's. The token is exactly what the word says, and
+// the gate whose one job is to withhold bearer secrets projected it to every
+// model as `get_connector_token`. A quantity reads either way because English
+// puts it on both sides — "count tokens", "token count" — but an asset's field
+// is a suffix, so requiring the suffix costs nothing and closes the path shape.
+var tokenIsAnAsset = set("id", "ids", "symbol", "supply", "balance")
 
 // keyOfAStore are the neighbours that turn `key` into an entry in a store or a
 // name in a schema rather than a credential. See [authority] for why this list
