@@ -493,7 +493,7 @@ func mountShared(t *testing.T) (*zip.App, *forgery, *scribe) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	if err := Mount(app, cloud.Deps{
-		Logger: luxlog.New("test"), DataDir: t.TempDir(), KMS: vault{token: f.token},
+		DataDir: t.TempDir(), KMS: vault{token: f.token},
 	}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -1147,7 +1147,7 @@ func TestNoCredentialPublishesNothing(t *testing.T) {
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -1388,7 +1388,7 @@ func TestTheAuditRetriesUntilItLands(t *testing.T) {
 func TestTheAuditStopsWithoutACredential(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -1586,4 +1586,33 @@ func TestAQueuedRetirementIsNeverReplacedByAReconcile(t *testing.T) {
 		t.Fatalf("unexpected further run: %q — identical steps must still collapse", got)
 	case <-time.After(200 * time.Millisecond):
 	}
+}
+
+// The boot sweep is started by Mount, not called by hand. A public repository no
+// live project permits open must close because THIS process started — that is the
+// whole of the recovery path (projects.go: `go audit`). It is staged BEFORE the
+// mount so the immediate boot sweep is the only thing that can close it: with the
+// audit-start line gone from Mount, the orphan stays open and this is the test
+// that notices.
+func TestMountStartsTheBootAudit(t *testing.T) {
+	_ = listen(t)
+	f := newForgery(t)
+	// A public repository with no row to permit it — the leak the boot audit recovers.
+	f.mu.Lock()
+	f.made++
+	f.repos[community+"/stray"] = &repo{mark: f.made}
+	f.mu.Unlock()
+
+	t.Setenv("CLOUD_FORGE_HOST", f.URL)
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), KMS: vault{token: f.token}}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown() })
+
+	// Only Mount ran — no sweep(), no audit() by hand.
+	settled(t, "the boot audit to close a repository nothing permits", func() bool {
+		return !f.readable(t, "stray")
+	})
 }
