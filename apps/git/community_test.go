@@ -83,6 +83,37 @@ func TestAPrivateProjectsRepoIsBornClosed(t *testing.T) {
 	}
 }
 
+// A name this could not spell is REFUSED, and refused before anything is
+// created. The op is its own trust boundary — the peer across the socket is one
+// of our own processes, which is not a reason to take a name unread — and a
+// create and a delete that read the same fact differently would address two
+// repos, which is a delete that never deletes.
+func TestAnUnspellableNameIsRefused(t *testing.T) {
+	mountApp(t)
+	ctx := context.Background()
+	for _, slug := range []string{"", " ", "/etc/passwd", "..", "a/b", "-lead", ".git"} {
+		err := publish(ctx, "acme", plane.Visibility{Slug: slug, State: plane.Open})
+		if err == nil {
+			t.Fatalf("publish(%q) was accepted; a name this cannot spell must be refused", slug)
+		}
+	}
+	// The alphabet it DOES take is the REST surface's own, through the REST
+	// surface's normalisation: a client's trailing ".git" names the same repo the
+	// bare slug does, on the create AND on the delete.
+	if err := publish(ctx, "acme", plane.Visibility{Slug: "board.git", State: plane.Open}); err != nil {
+		t.Fatalf("publish(board.git): %v", err)
+	}
+	if there, public := repoAfter(t, "acme", "board", plane.Open); !there || !public {
+		t.Fatalf("board.git addressed some other repo: there=%v public=%v", there, public)
+	}
+	if err := publish(ctx, "acme", plane.Visibility{Slug: "board.git", State: plane.Gone}); err != nil {
+		t.Fatalf("retire(board.git): %v", err)
+	}
+	if there, _ := repoAfter(t, "acme", "board", plane.Gone); there {
+		t.Fatal("the retirement addressed a different repo from the create")
+	}
+}
+
 // An unrecognised state is CLOSED, not open. The readable bit is the one that
 // cannot be taken back, so anything this does not understand — an empty fact, a
 // newer peer's word — answers with it off.
