@@ -5,7 +5,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package usage
+package integrations
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/apps/analytics"
 	"github.com/zap-proto/zip"
 )
 
@@ -50,13 +51,13 @@ const delivery = `{"resourceSpans":[{
    "attributes":[{"key":"trace.name","value":{"stringValue":"Order Processing"}}]}
  ]}]}]}`
 
-func decodeDelivery(t *testing.T) trace {
+func decodeDelivery(t *testing.T) otlp {
 	t.Helper()
-	var tr trace
-	if err := json.Unmarshal([]byte(delivery), &tr); err != nil {
+	var o otlp
+	if err := json.Unmarshal([]byte(delivery), &o); err != nil {
 		t.Fatalf("decode delivery: %v", err)
 	}
-	return tr
+	return o
 }
 
 // TestDeliveryBecomesAUsageRow is the whole point of the door: a real Broadcast
@@ -68,8 +69,8 @@ func decodeDelivery(t *testing.T) trace {
 // mapping that moves a value into the wrong column fails here rather than writing a
 // plausible-looking lie into the ledger.
 func TestDeliveryBecomesAUsageRow(t *testing.T) {
-	tr := decodeDelivery(t)
-	spans := tr.ResourceSpans[0].ScopeSpans[0].Spans
+	o := decodeDelivery(t)
+	spans := o.ResourceSpans[0].ScopeSpans[0].Spans
 	if len(spans) != 2 {
 		t.Fatalf("decoded %d spans, want 2", len(spans))
 	}
@@ -105,41 +106,53 @@ func TestDeliveryBecomesAUsageRow(t *testing.T) {
 	}
 }
 
-// TestUnkeyedDeliveryStoresNothing is the door's admission contract. Broadcast signs
-// nothing — its only authentication is the Headers map it sends verbatim — so the
-// credential IS the proof, and a delivery that cannot present a key we minted has to
-// be refused before anything reaches the ledger.
+// keys is the PROJECT store: it holds one key, minted with a project, and knows
+// nothing about any other. The real analytics.Admit is what asks it.
+type keys map[string]analytics.Attribution
+
+func (k keys) Resolve(_ context.Context, key string) (analytics.Attribution, bool, error) {
+	at, ok := k[key]
+	return at, ok, nil
+}
+
+// TestProjectKeyIsAdmitted is the defect this door was built with, in one test: a
+// key minted by `POST /v1/projects` lives in the PROJECT store and IAM has never
+// heard of it, so a door that resolves through IAM alone refuses the very key it
+// tells a destination to create. The door calls analytics.Admit, which asks the
+// project store first — and admitting a key only that store holds is the proof the
+// door goes through it, since nothing else in the estate can answer for one.
+// analytics.Admit asks IAM second (TestAdmitAsksBothIssuers), so an IAM-issued key
+// arrives here by the same call.
 //
 // The two outcomes are DISTINGUISHABLE, which is what makes this a test of admission
 // rather than of a status code: a refused delivery answers 401 and never touches the
 // warehouse, while an ADMITTED one gets as far as the write and answers 503 in a
-// process with no warehouse behind it. A door that stopped checking the credential
-// would answer 503 to the forgery, and that is the failure this catches.
-func TestUnkeyedDeliveryStoresNothing(t *testing.T) {
-	app := mountApp(t)
-	// The seam every keyed door resolves through, stubbed so the test needs no IAM:
-	// one key is real, everything else names no org — including a key shaped exactly
-	// like a real one.
-	orig := orgForKey
-	orgForKey = func(_ context.Context, key string) (string, bool) {
-		return "hanzo", key == "pk-real"
-	}
-	t.Cleanup(func() { orgForKey = orig })
+// process with no warehouse behind it.
+func TestProjectKeyIsAdmitted(t *testing.T) {
+	app := newApp(t, newKMS(t))
+	projects(t, keys{"pk-project": {Org: "hanzo", Project: "openrouter"}})
 
-	for _, tc := range []struct {
-		name string
-		auth string
-		want int
-	}{
-		{"no credential at all", "", http.StatusUnauthorized},
-		{"a forged key", "Bearer pk-forged", http.StatusUnauthorized},
-		{"a bare secret in the header", "hunter2", http.StatusUnauthorized},
-		{"the minted key", "Bearer pk-real", http.StatusServiceUnavailable},
+	if code, body := post(t, app, delivery, "Bearer pk-project"); code != http.StatusServiceUnavailable {
+		t.Fatalf("a project key answered %d, want 503 — it was refused before the write (%s)", code, body)
+	}
+}
+
+// TestForgedKeyIsRefusedBeforeTheBody: neither issuer knows the key, so nothing is
+// read. The payload is deliberately malformed — a door that decoded first would
+// answer 400 and tell a stranger its wire; this one answers 401 to every shape.
+func TestForgedKeyIsRefusedBeforeTheBody(t *testing.T) {
+	app := newApp(t, newKMS(t))
+	projects(t, keys{"pk-project": {Org: "hanzo", Project: "openrouter"}})
+
+	for _, tc := range []struct{ name, auth, body string }{
+		{"no credential at all", "", delivery},
+		{"a forged key", "Bearer pk-forged", delivery},
+		{"a bare secret in the header", "hunter2", delivery},
+		{"a body that would not parse", "Bearer pk-forged", "{not-json"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			code, body := post(t, app, delivery, tc.auth)
-			if code != tc.want {
-				t.Fatalf("status = %d, want %d (%s)", code, tc.want, body)
+			if code, body := post(t, app, tc.body, tc.auth); code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401 (%s)", code, body)
 			}
 		})
 	}
@@ -149,12 +162,10 @@ func TestUnkeyedDeliveryStoresNothing(t *testing.T) {
 // destination only if it answers 2xx to an empty payload, so a door that 400s one
 // can never be configured at all.
 func TestEmptyDeliveryIsAccepted(t *testing.T) {
-	app := mountApp(t)
-	orig := orgForKey
-	orgForKey = func(context.Context, string) (string, bool) { return "hanzo", true }
-	t.Cleanup(func() { orgForKey = orig })
+	app := newApp(t, newKMS(t))
+	projects(t, keys{"pk-project": {Org: "hanzo"}})
 
-	code, body := post(t, app, "", "Bearer pk-real")
+	code, body := post(t, app, "", "Bearer pk-project")
 	if code != http.StatusOK {
 		t.Fatalf("empty payload = %d, want 200 (%s)", code, body)
 	}
@@ -162,6 +173,14 @@ func TestEmptyDeliveryIsAccepted(t *testing.T) {
 	if err := json.Unmarshal(body, &r); err != nil || r.Stored != 0 {
 		t.Fatalf("receipt = %s, want stored 0", body)
 	}
+}
+
+// projects installs the project store this door resolves against, and takes it back
+// down: the registry is package state in analytics, shared by every test here.
+func projects(t *testing.T, k keys) {
+	t.Helper()
+	analytics.SetKeyResolver(k)
+	t.Cleanup(func() { analytics.SetKeyResolver(nil) })
 }
 
 // post drives one Broadcast delivery at the door.

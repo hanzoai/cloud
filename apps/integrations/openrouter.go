@@ -15,14 +15,19 @@
 // openrouter.go — the door OpenRouter writes its traces through, so what we spend
 // there lands in the SAME ledger as everything else we spend.
 //
+// It is an INTEGRATION, and it lives with the others: a third party posts to us at
+// /v1/integrations/<vendor>/<what the vendor calls it>, which is why Slack's is
+// /events, Discord's is /interactions and this one is /webhook — OpenRouter's own
+// console calls it Observability ▸ New Webhook Destination. That the rows it writes
+// are usage rows is the DESTINATION and not the door.
+//
 // OpenRouter meters KEYS, not orgs, and hanzo.cloud_usage carried no `openrouter`
-// provider at all: every money lens over that table — the summary here, /v1/analytics,
-// the admin board, the leaderboard — answered "what did we spend" with everything
-// except the upstream. A Broadcast destination (openrouter.ai Settings ▸ Observability)
-// POSTs one OTLP trace per generation to this door, and each generation span becomes
-// ONE cloud_usage row with provider `openrouter`. No second meter, no second table:
-// the same GROUP BY provider that already answers for do-ai and zen now answers for
-// the upstream too.
+// provider at all: every money lens over that table — /v1/usage, /v1/analytics, the
+// admin board, the leaderboard — answered "what did we spend" with everything except
+// the upstream. A Broadcast destination POSTs one OTLP trace per generation here, and
+// each generation span becomes ONE cloud_usage row with provider `openrouter`. No
+// second meter, no second table: the same GROUP BY provider that already answers for
+// do-ai and zen now answers for the upstream too.
 //
 // WHICH KEY SPENT IT is the fact only this trace can supply, and it travels in
 // `account` — the column that already means "the connection that paid", spelled
@@ -30,20 +35,23 @@
 // NAME is a label OpenRouter's own console shows; the secret never appears in the
 // trace and is never written or logged.
 //
-// AUTHENTICATION IS THE INGEST KEY, because Broadcast signs nothing. Its only
+// AUTHENTICATION IS A HANZO KEY, because Broadcast signs nothing. Its only
 // authentication is a Headers map the destination sends verbatim (OpenRouter's
 // X-OpenRouter-Signature belongs to the per-job video callback, a different door,
-// and Broadcast does not emit it). So the credential is the one cloud already mints:
-// an IAM publishable key, resolved through cloud.OrgForKey — the SAME seam /v1/event
-// resolves a beacon's key through. A pk- key cannot read anything, which is exactly
-// what a third party's destination config should hold. No key, or a key naming no
-// org, is 401 and nothing is written.
+// and Broadcast does not emit it). So the credential is one cloud already mints, and
+// it is admitted by the ONE sequence every keyed door admits by — analytics.Admit,
+// which asks BOTH issuers: the project store a key minted with a project lives in,
+// then IAM. Either names the org every row is filed under, and a door that asks one
+// issuer refuses every key the other minted. No key, or a key naming no org, is 401
+// and nothing is read.
 //
-// Raw, not a typed op: the credential is a HEADER and a typed op holds a context, not
-// a request (apps/principal). Terminal keeps its 401 intact under the outer /v1 error
-// filter, exactly as the forge's push door does.
+// Raw, not a typed op, and the reason is the BODY: a typed op publishes its In as THE
+// request schema, and this decodes the SUBSET of OpenTelemetry's OTLP/JSON a usage row
+// is built from — published as the contract, that subset is a document that lies about
+// a wire OpenTelemetry defines. Terminal keeps the 401 intact under the outer /v1
+// error filter, exactly as the sibling webhooks' rejects are kept.
 
-package usage
+package integrations
 
 import (
 	"encoding/json"
@@ -54,13 +62,13 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/analytics"
 	"github.com/hanzoai/cloud/apps/datastore"
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
 const (
-	openrouterPath = "/v1/usage/openrouter"
+	openrouterPath = "/v1/integrations/openrouter/webhook"
 
 	// openrouter is the row's provider label — the value that folds this spend into
 	// the GROUP BY provider every money lens already runs.
@@ -75,44 +83,6 @@ const (
 	otlpError = 2
 )
 
-// orgForKey resolves a presented ingest key to its org through the ONE key seam —
-// the same binding apps/analytics makes for /v1/event. A value, so a test drives the
-// door without IAM.
-var orgForKey = cloud.OrgForKey
-
-// init declares the operation. Both bodies are declared as free-form objects and
-// their shape is stated in the PROSE, because neither shape is this package's to
-// publish as a schema: the request is OpenTelemetry's OTLP/JSON, of which the types
-// below decode the subset a usage row is built from, and a partial view published as
-// "the" schema is a document that lies. The prose is the whole declaration, the same
-// trade apps/destinations makes for the body whose keys the platform picks.
-func init() {
-	openapi.Register(openrouterPath, "POST", map[string]any{}, map[string]any{})
-	openapi.Describe(openrouterPath, "POST",
-		"Receive OpenRouter Broadcast traces as usage rows",
-		"OpenRouter's spend is invisible to every Hanzo money lens because those lenses read "+
-			"hanzo.cloud_usage and OpenRouter meters keys of its own. Point a Broadcast destination "+
-			"(Settings ▸ Observability ▸ Webhook) at this door and each generation span becomes ONE "+
-			"row in that same ledger with provider `openrouter`, so one query answers what we spend "+
-			"everywhere. Enable the Cost and Identity field categories: cost is the money and identity "+
-			"carries `openrouter.api_key_name`, which is what says WHICH key spent it — it lands in "+
-			"`account` as openrouter/<key name>.\n\n"+
-			"AUTHENTICATION IS AN INGEST KEY. Broadcast signs nothing; its only authentication is the "+
-			"destination's Headers map, so send a Hanzo publishable key as `Authorization: Bearer pk-…` "+
-			"and it resolves through the same seam /v1/event resolves a beacon's key through. That key "+
-			"names the org every row is filed under; it can write and cannot read. No key, or a key that "+
-			"names no org, is 401 and nothing is stored.\n\n"+
-			"The body is OTLP/JSON — `{resourceSpans:[{scopeSpans:[{spans:[…]}]}]}` — exactly as "+
-			"OpenTelemetry defines it; the model, tokens and cost are read from each span's `gen_ai.*` "+
-			"attributes and the key name from `openrouter.api_key_name`. The answer is "+
-			"`{stored, dropped}`: how many generations became rows, and how many spans named no model. "+
-			"Those are OpenRouter's trace and span parents — they carry no cost to meter. An empty "+
-			"payload stores nothing and answers 200, which is what makes Test Connection pass. A "+
-			"warehouse that cannot take the rows answers 503 so the delivery shows red and can be "+
-			"replayed: a row is keyed by its span id, so a redelivery collapses rather than "+
-			"double-counting.")
-}
-
 // receipt is what the door answers.
 type receipt struct {
 	// Stored is how many usage rows this delivery wrote.
@@ -121,9 +91,9 @@ type receipt struct {
 	Dropped int `json:"dropped"`
 }
 
-// trace is the Broadcast wire: OTLP/JSON. Only what a usage row is built from is
+// otlp is the Broadcast wire: OTLP/JSON. Only what a usage row is built from is
 // decoded; the rest of the payload is ignored rather than mirrored.
-type trace struct {
+type otlp struct {
 	// ResourceSpans groups spans by the resource that produced them. OpenRouter
 	// sends one, naming itself in service.name.
 	ResourceSpans []struct {
@@ -179,20 +149,20 @@ func (n *num) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// receive verifies one Broadcast delivery and files its generations.
-func receive(s *cloud.Service[state], c *zip.Ctx) error {
+// openrouterWebhook admits one Broadcast delivery and files its generations.
+func openrouterWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	// THE CREDENTIAL IS READ FIRST, before the body is touched: a caller holding no
 	// key never buys a decode.
-	org, ok := orgForKey(c.Context(), bearer(c))
+	at, ok := analytics.Admit(c.Context(), presented(c))
 	if !ok {
 		return zip.Errorf(http.StatusUnauthorized,
-			"an ingest key is required: send it as Authorization: Bearer")
+			"a Hanzo key is required: send it as Authorization: Bearer")
 	}
 	body := c.Body()
 	if len(body) > maxTrace {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "payload too large")
 	}
-	var t trace
+	var t otlp
 	// Test Connection posts an empty payload; nothing to store is not a failure.
 	if len(body) > 0 {
 		if err := json.Unmarshal(body, &t); err != nil {
@@ -205,7 +175,7 @@ func receive(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, rs := range t.ResourceSpans {
 		for _, ss := range rs.ScopeSpans {
 			for _, sp := range ss.Spans {
-				row, ok := usageRow(org, sp, now)
+				row, ok := usageRow(at.Org, sp, now)
 				if !ok {
 					dropped++
 					continue
@@ -229,9 +199,9 @@ func receive(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, receipt{Stored: len(rows), Dropped: dropped})
 }
 
-// bearer reads the ingest key. Broadcast sends a fixed Headers map, so there is ONE
-// carrier — the Authorization header every other keyed caller already uses.
-func bearer(c *zip.Ctx) string {
+// presented reads the key off the request. Broadcast sends a fixed Headers map, so
+// there is ONE carrier — the Authorization header every other keyed caller uses.
+func presented(c *zip.Ctx) string {
 	parts := strings.SplitN(strings.TrimSpace(c.Header("authorization")), " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 		return ""
