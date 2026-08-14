@@ -2097,9 +2097,17 @@ components:
           type: string
         subject:
           description: |-
-            Subject is the person the run is attributed to — a linked Hanzo identity the
-            door already proved, never a name the caller picks. Empty is refused rather
-            than defaulted: a run that lost its human must not execute as the org.
+            Subject is the person the run is ATTRIBUTED to — the session's actor and the
+            PR's assignee. Empty is refused rather than defaulted: a run that lost its
+            human must not execute as the org.
+
+            IT IS NOT AN AUTHORIZATION INPUT and must never become one. It arrives in
+            this body and the HTTP door passes it through unread (plugin/agents
+            httpCodingStart), so it is a name the caller picks. What the run ACTS AS on
+            the forge is resolved separately, from the validated address on the caller's
+            own identity and confirmed against the forge (apps/coding actorOf →
+            forge.LoginFor) — because attribution is not entitlement, and a field a
+            caller fills cannot be either.
           type: string
         targetId:
           description: |-
@@ -7948,6 +7956,22 @@ components:
           description: |-
             Argv is the program and its arguments, already split — the form no shell can
             misread. Give this or Command, not both.
+          items:
+            type: string
+          type: array
+        blind:
+          description: |-
+            Blind is the set of secrets this command must never publish.
+
+            It exists because output is redacted where it is PRODUCED or not at all. A
+            caller that scrubbed the returned result would still have streamed the
+            unredacted bytes into the session as they were written — to a durable event
+            store, an SSE feed and a chat thread — because the narration leaves the
+            sandbox by a different door from the result. Nothing downstream can take a
+            secret back out of a message that has already been delivered.
+
+            The sandbox holds these only for the life of the one command, applies them
+            to every stream leaving it, and never logs or stores them.
           items:
             type: string
           type: array
@@ -25104,8 +25128,9 @@ components:
           type: string
         source:
           description: |-
-            Source is the http(s) git URL to fetch from. The host is SSRF-guarded and
-            the shared mirror credential is only sent to allowlisted hosts.
+            Source is the http(s) git URL to fetch from. The host is SSRF-guarded, and a
+            credential is sent only if we hold one NAMED FOR that host — so a
+            tenant-supplied URL to anywhere else fetches anonymously.
           type: string
       type: object
     mirrorTargetReq:
@@ -78422,7 +78447,7 @@ paths:
         A verified push that reaches both seams answers 200 with fired true and the NUMBER OF BUILDS it launched — zero is ordinary, since most pushes track no application, and it is the answer 'fired' cannot give. A push that could not be dispatched answers 500: the delivery page shows it red, and the Replay that prompts reaches a fresh attempt rather than being declined as already landed.
 
         The deliveries deliberately ignored answer 200 with a reason and nothing else: a payload that is not a push, a ref DELETE (a zero `after` has no commit to build), a BOT-authored push (release automation pushes as the forge's own Actions user, and a release must never rebuild itself), a push from a forge namespace that maps to no org, and a redelivery of a push already fired. Branches and tags both reach the build trigger, because releases are cut by tag and filtering here would silently stop publishing.
-      operationId: post_v1_git-webhook
+      operationId: post_git-webhook
       requestBody:
         content:
           application/json:
@@ -104348,11 +104373,13 @@ paths:
         The metadata delete is authoritative and everything after it is best-effort,
         in this order: the public `<slug>` subdomain binding is released so the slug is
         free to reclaim, the release rows are dropped so a reclaimed slug never
-        inherits the previous owner's rollback menu, the S3 origin is purged under
-        BOTH `<org>/<slug>/` and the site's sibling release space, and the edge
-        cache-tag is flushed. A failure in any of those is logged and the delete still
-        answers 204 — resurrecting a project because a purge missed would be worse
-        than a leaked prefix.
+        inherits the previous owner's rollback menu, the SOURCE at the forge is
+        retired for the same reason and one more — it is the store a reclaimed slug
+        could inherit something READABLE from — the S3 origin is purged under BOTH
+        `<org>/<slug>/` and the site's sibling release space, and the edge cache-tag
+        is flushed. A failure in any of those is logged and the delete still answers
+        204 — resurrecting a project because a purge missed would be worse than a
+        leaked prefix.
 
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404 and
@@ -105817,11 +105844,13 @@ paths:
         The metadata delete is authoritative and everything after it is best-effort,
         in this order: the public `<slug>` subdomain binding is released so the slug is
         free to reclaim, the release rows are dropped so a reclaimed slug never
-        inherits the previous owner's rollback menu, the S3 origin is purged under
-        BOTH `<org>/<slug>/` and the site's sibling release space, and the edge
-        cache-tag is flushed. A failure in any of those is logged and the delete still
-        answers 204 — resurrecting a project because a purge missed would be worse
-        than a leaked prefix.
+        inherits the previous owner's rollback menu, the SOURCE at the forge is
+        retired for the same reason and one more — it is the store a reclaimed slug
+        could inherit something READABLE from — the S3 origin is purged under BOTH
+        `<org>/<slug>/` and the site's sibling release space, and the edge cache-tag
+        is flushed. A failure in any of those is logged and the delete still answers
+        204 — resurrecting a project because a purge missed would be worse than a
+        leaked prefix.
 
         Scope: a validated principal is required (403 without one) and the project is
         resolved within that principal's org, so another tenant's slug is a 404 and
@@ -110281,9 +110310,9 @@ paths:
       description: |-
         A complete, self-contained desktop — noVNC inline, no other origin — that opens its own socket and draws this sandbox's display. Embed it in an iframe and there is nothing else to build.
 
-        `ticket` is the credential from the POST above, carried through to the socket. As with the terminal the page is NOT gated: it is inert markup and does not redeem the ticket, because a ticket is spent once and a page that spent it would hold a credential that no longer opens anything.
+        `ticket` is the credential from the POST above, carried through to the socket. The page is NOT gated: it is inert markup and does not redeem the ticket, because a ticket is spent once and a page that spent it would hold a credential that no longer opens anything. `frame-ancestors` admits our own brands' hosts and nothing further.
 
-        The view SCALES what it is given rather than resizing the display — a browser pane's size is not the X server's, and the image runs no RandR — so the window is deliberately not negotiated.
+        It is served for every class, not only for `desktop`. The class is a fact about the image, and a sandbox with no VNC server already fails exactly — the connection is refused and the page says so — where a check here would be a second opinion about what is running inside a pod, formed from a label rather than from the pod.
       operationId: get_sandboxes_by_id_screen
       parameters:
       - in: path
@@ -110298,11 +110327,11 @@ paths:
   /v1/sandboxes/{id}/screen/ticket:
     post:
       description: |-
-        Mints a SINGLE-USE ticket for one view of this sandbox's display and returns `{ticket, expiresIn, url}`, where url is the screen PAGE with the ticket already on it.
+        Mints a SINGLE-USE ticket for this sandbox's DISPLAY and returns `{ticket, expiresIn, url}`, where url is the desktop PAGE with the ticket already on it. The same ticket as the terminal's, minted for a different door.
 
-        It is the terminal's ticket exactly — bound to this org and this sandbox, valid for thirty seconds, gone the first time it is presented — for the same reason: a browser carries no Authorization header into a WebSocket or an iframe, and a long-lived bearer in a query string would be written into every access log on the path.
+        A ticket says which org and which sandbox, and the terminal and the screen are two views of one machine: a caller who may type in a sandbox may look at it. What the door decides is the URL handed back, which is the only part that differs.
 
-        Mint one per view, and mint a fresh one to reconnect.
+        Mint one per screen, and mint a fresh one to reconnect.
       operationId: post_sandboxes_by_id_screen_ticket
       parameters:
       - in: path
@@ -110317,11 +110346,13 @@ paths:
   /v1/sandboxes/{id}/screen/ws:
     get:
       description: |-
-        Upgrades to a WebSocket carrying the RFB stream of this sandbox's display — for a host that brings its own VNC client. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.
+        Upgrades to a WebSocket carrying RFB — the VNC wire protocol — from the sandbox's display, for a host that brings its own client. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.
 
-        THE PIXELS COME OUT THROUGH THE EXEC CHANNEL. The desktop image serves RFB on 127.0.0.1:5900 and binds nothing else — a screen reachable from the pod network is a screen whose only defence is a NetworkPolicy — so there is no address to dial. `socat` joins stdin and stdout to that loopback port over the same Kubernetes exec subresource every other call into a sandbox uses, and the stream IS the transport: one way in, one thing to authorize, nothing new exposed.
+        THE WIRE IS RFB, in BINARY frames both ways, and it is not interpreted here: this is a pipe between the caller's client and the server inside the pod.
 
-        It is registered for EVERY class rather than for `desktop` alone, because the class is a fact about the image and the failure is already exact: a sandbox with no VNC server refuses the socat connection and the page says the connection failed. A check here would be a second opinion about what is running inside a pod, formed from a label rather than from the pod.
+        THE PIXELS COME OUT THROUGH THE EXEC CHANNEL. The display binds 127.0.0.1 only and deliberately nothing else, so there is no address to dial — `socat` joins the stream to that loopback port over the same Kubernetes exec subresource every other call into a sandbox uses. One way in, one thing to authorize, nothing further exposed.
+
+        The window size is ignored. A browser pane is not the X server's geometry, and the client scales what it is given rather than asking a server with no RandR to resize itself.
       operationId: get_sandboxes_by_id_screen_ws
       parameters:
       - in: path
@@ -114354,8 +114385,8 @@ paths:
   /v1/tel/calls:
     get:
       description: |-
-        Returns this org's call history, newest first as the store gives it.
-        Org-scoped like every read here.
+        Lists the calls this org has placed or received, newest first. Like the
+        message list beside it, these are our own records rather than the carrier's.
       operationId: get_tel_calls
       responses:
         "200":
@@ -114364,7 +114395,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/callList'
           description: ok
-      summary: Returns this org's call history, newest first as the store gives it.
+      summary: Lists the calls this org has placed or received, newest first.
       tags:
       - tel
       x-app: tel
@@ -114394,9 +114425,9 @@ paths:
   /v1/tel/calls/{id}:
     delete:
       description: |-
-        Ends a live call. The holding is checked before the carrier is asked, so
-        a call belonging to another org answers 404 rather than being torn down: the
-        carrier knows nothing about tenancy and would obey either way.
+        Ends a call this org placed. The holding is read for THIS org before the
+        carrier is asked, for the reason releaseNumber gives one surface up: an id
+        belonging to another tenant would otherwise be hung up by whoever guessed it.
       operationId: delete_tel_calls_by_id
       parameters:
       - in: path
@@ -114411,14 +114442,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/noInput'
           description: ok
-      summary: Ends a live call.
+      summary: Ends a call this org placed.
       tags:
       - tel
       x-app: tel
   /v1/tel/messages:
     get:
-      description: Returns this org's message history. Org-scoped like every read
-        here.
+      description: |-
+        Lists the messages this org has sent or received, newest first. Records from
+        our own store, not the carrier's — so it is what this platform did on the
+        org's behalf, which is the set an audit or a bill has to agree with.
       operationId: get_tel_messages
       responses:
         "200":
@@ -114427,16 +114460,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/messageList'
           description: ok
-      summary: Returns this org's message history.
+      summary: Lists the messages this org has sent or received, newest first.
       tags:
       - tel
       x-app: tel
     post:
       description: |-
-        Sends one message. `from` must be a number this org holds -- the carrier
-        will send from any number it routes, so without that check one tenant could
-        originate traffic on another's number, and the bill and the reputation would
-        follow the number rather than the sender.
+        Sends a message from one of this org's own numbers.
+
+        `from` must be a number the org HOLDS, checked against the store rather than
+        taken on trust — a caller that could send from any number could impersonate
+        one, and the carrier would deliver it. `to` is required, and the body needs
+        text or media, because a message with neither is delivered as nothing and
+        billed as something.
       operationId: post_tel_messages
       requestBody:
         content:
@@ -114451,15 +114487,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/SMS'
           description: created
-      summary: Sends one message.
+      summary: Sends a message from one of this org's own numbers.
       tags:
       - tel
       x-app: tel
   /v1/tel/numbers:
     get:
       description: |-
-        Returns the numbers this org holds. Scoped to the caller's org, so a
-        number bought by one tenant is invisible to every other.
+        Lists the phone numbers this org HOLDS — the ones it has bought and not
+        released. Distinct from the availability search one path down
+        (`/numbers/available`), which asks the carrier what could be bought: this
+        answers only from our own store, so it is what an org owns rather than what
+        it could own.
       operationId: get_tel_numbers
       responses:
         "200":
@@ -114468,7 +114507,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/numberList'
           description: ok
-      summary: Returns the numbers this org holds.
+      summary: Lists the phone numbers this org HOLDS — the ones it has bought and
+        not released.
       tags:
       - tel
       x-app: tel
@@ -114560,8 +114600,9 @@ paths:
   /v1/tel/summary:
     get:
       description: |-
-        Counts what this org holds and has used -- numbers, calls, messages. The
-        one read the dashboard makes, so it is three counts rather than three lists.
+        Counts what this org holds on the telephony plane: its numbers, its calls and
+        its messages. The one read a dashboard makes before it asks for any list, so
+        it answers three totals and no rows.
       operationId: get_tel_summary
       responses:
         "200":
@@ -114570,7 +114611,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/summary'
           description: ok
-      summary: Counts what this org holds and has used -- numbers, calls, messages.
+      summary: 'Counts what this org holds on the telephony plane: its numbers, its
+        calls and its messages.'
       tags:
       - tel
       x-app: tel
