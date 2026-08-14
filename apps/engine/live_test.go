@@ -10,7 +10,7 @@ package engine
 //	ENGINE_E2E_UPSTREAM=http://127.0.0.1:1234 make -C apps/engine test
 //
 // ENGINE_E2E_KEY carries the platform credential when the deployment is
-// locked; a bare `hanzo serve` needs none.
+// locked; a bare `hanzo-engine serve` needs none.
 
 import (
 	"encoding/json"
