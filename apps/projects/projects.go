@@ -61,6 +61,7 @@ import (
 	"github.com/hanzoai/cloud/apps/base"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/hanzoai/cloud/internal/shorten"
@@ -114,6 +115,17 @@ type state struct {
 	// see provisionSpace — a failure NEVER fails project creation. nil disables the
 	// side effect entirely (space is provisioned lazily on first real use).
 	ensureSpace func(ctx context.Context, org string) error
+	// forge resolves the deployment's forge client, through which a published
+	// project's source is world-readable exactly when the project is
+	// (visibility.go). It reads the machine credential from KMS on first use and
+	// re-reads it as it rotates, so nothing here holds a secret.
+	forge *forge.Source
+	// queue runs one visibility reconcile at a time per project, so two writes
+	// cannot land on the forge out of order — see visibility.go.
+	queue *queue
+	// stop ends the background visibility audit, so it does not outlive the store
+	// it reads (Shutdown).
+	stop context.CancelFunc
 }
 
 // mounted is the active service so Shutdown can release the store. The unified
@@ -265,6 +277,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		bill:        cloud.NewResourceMeter(deps, hostingProvider),
 		apex:        environ.Or("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
 		ensureSpace: base.EnsureSpace,                            // wired-by-default Base data space (fail-soft).
+		forge:       &forge.Source{},                             // the credential is read from KMS on first publish, not here.
+		queue:       &queue{},
 	}}
 	mounted = s
 
@@ -319,6 +333,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// unreachable Cloudflare cannot delay the mount, and fail-soft — it only ever
 	// logs.
 	go s.State.cf.AssertHTMLPassthrough(context.Background())
+
+	// Nothing a publisher took private — and nothing a deleted project left
+	// behind — may be readable because this process was away when it happened
+	// (visibility.go). Off-thread and read-only in the steady state, so a forge
+	// that is down delays no mount and changes nothing; it keeps trying until it
+	// lands, because boot is the least reliable moment to ask the forge anything
+	// and this is the only thing that recovers a close nobody noticed missing.
+	audited, stop := context.WithCancel(context.Background())
+	s.State.stop = stop
+	go audit(s, audited)
 
 	b.Log.Info("projects mounted", "bucket", s.State.blob.bucket, "s3", s.State.blob.configured(),
 		"ai", s.State.ai != nil, "apex", s.State.apex, "billing", s.State.bill.Enabled(), "brand", deps.Brand)
@@ -663,8 +687,9 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body project
 	// a Base hiccup is logged and swallowed — it never fails the create.
 	provisionSpace(s, c.Context(), &p)
 	// Give it a canonical repo at git.hanzo.ai, world-readable exactly when the
-	// project is.
-	share(s, c.Context(), p)
+	// project is — on a name that STARTS OVER, so a reclaimed slug inherits
+	// nothing from the project that held it before (visibility.go).
+	born(s, p)
 	out := toProject(p)
 	return &out, nil
 }
@@ -925,7 +950,7 @@ func (o ops) update(ctx context.Context, in *projectsUpdate) (*projectsProject, 
 	}
 	// Reconcile the repo to whatever this update settled on — including a
 	// moderation, which must reach the source and not just the listing.
-	share(s, ctx, p)
+	share(s, p)
 	out := toProject(p)
 	return &out, nil
 }
@@ -966,6 +991,10 @@ func (o ops) del(ctx context.Context, in *projectsRef) (*void, error) {
 	if rErr := s.State.store.DeleteReleases(ctx, org, p.Slug); rErr != nil {
 		s.Log.Warn("delete releases failed (continuing)", "org", org, "slug", p.Slug, "err", rErr)
 	}
+	// Take the source with it, before this answers: the slug is free to reclaim
+	// the moment it does, and a repository left behind is one the next project of
+	// that name adopts — commits and all — and then publishes (visibility.go).
+	forget(s, p)
 	// Best-effort purge of the live site; metadata is already gone, so a purge
 	// failure must not resurrect the project — log and continue. BOTH spaces go:
 	// the legacy mutable prefix AND the site's release space, which is a sibling
@@ -1089,6 +1118,11 @@ func providerFromURL(raw string) string {
 func Shutdown() error {
 	if mounted == nil || mounted.State.store == nil {
 		return nil
+	}
+	// The audit reads the store on a timer, so it ends with it rather than
+	// outliving it (visibility.go).
+	if mounted.State.stop != nil {
+		mounted.State.stop()
 	}
 	err := mounted.State.store.Close()
 	mounted = nil
