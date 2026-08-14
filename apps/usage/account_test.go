@@ -7,10 +7,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/hanzoai/types"
 	"github.com/zap-proto/zip"
 )
 
@@ -422,11 +424,12 @@ func TestSourcesAreStampedServerSide(t *testing.T) {
 // TestBothSidesShareOneRange: the union compares one period. Two resolvers could
 // drift and silently compare a day of plan usage against a week of spend.
 func TestBothSidesShareOneRange(t *testing.T) {
-	for _, label := range []string{"1h", "24h", "7d", "30d", ""} {
-		from, to, err := resolveRange(label, now)
+	for _, label := range []string{"1h", "24h", "7d", "30d", "90d", "all", ""} {
+		w, err := types.ParseWindow(label, "", "", now)
 		if err != nil {
 			t.Fatalf("range %q: %v", label, err)
 		}
+		from, to := w.Start, w.End
 		_, aArgs := summaryQuery("acme", "alice", from, to)
 		_, hArgs := hanzoQuery("acme", from, to)
 		// The account side binds instants; the Hanzo side binds the datastore's
@@ -444,14 +447,82 @@ func TestBothSidesShareOneRange(t *testing.T) {
 // default — a caller who asked for a window we do not have must be told, not shown
 // a different one and left to believe it.
 func TestUnknownRangeIsRefused(t *testing.T) {
-	for _, bad := range []string{"90d", "1y", "all", "custom", "1h; DROP TABLE", "24H"} {
-		if _, _, err := resolveRange(bad, now); err == nil {
+	for _, bad := range []string{"1y", "3mo", "1h; DROP TABLE", "0d", "yesterday"} {
+		if _, err := types.ParseWindow(bad, "", "", now); err == nil {
 			t.Fatalf("range %q must be refused", bad)
 		}
 	}
 	app := mountBare(t)
-	if code, _ := drive(t, app, http.MethodGet, "/v1/usage/samples?provider=claude&range=90d", "acme", "alice", nil); code != http.StatusBadRequest {
+	if code, _ := drive(t, app, http.MethodGet, "/v1/usage/samples?provider=claude&range=1y", "acme", "alice", nil); code != http.StatusBadRequest {
 		t.Fatalf("an unknown range want 400, got %d", code)
+	}
+}
+
+// TestSamplesServesEveryWindowItAdmits drives the dash across the whole grammar
+// and checks the window it ANSWERS is the one that was asked for. A range that
+// stopped 400ing but came back as some other window would read as a fixed bug
+// while quietly showing the wrong month's usage.
+func TestSamplesServesEveryWindowItAdmits(t *testing.T) {
+	app := mountBare(t)
+	for _, tc := range []struct {
+		label string
+		back  time.Duration
+	}{
+		{"", 24 * time.Hour},
+		{"1h", time.Hour},
+		{"6h", 6 * time.Hour},
+		{"24h", 24 * time.Hour},
+		{"7d", 7 * 24 * time.Hour},
+		{"14d", 14 * 24 * time.Hour},
+		{"30d", 30 * 24 * time.Hour},
+		{"90d", 90 * 24 * time.Hour},
+		{"365d", 365 * 24 * time.Hour},
+		{"all", types.Horizon},
+	} {
+		t.Run("range="+tc.label, func(t *testing.T) {
+			code, body := drive(t, app, http.MethodGet, "/v1/usage/samples?provider=claude&range="+tc.label, "acme", "alice", nil)
+			if code != http.StatusOK {
+				t.Fatalf("range %q want 200, got %d: %s", tc.label, code, body)
+			}
+			var got dashResp
+			if err := json.Unmarshal(body, &got); err != nil {
+				t.Fatalf("decode: %v (%s)", err, body)
+			}
+			want := tc.label
+			if want == "" {
+				want = "24h"
+			}
+			if got.Range != want {
+				t.Errorf("answered range %q, asked %q", got.Range, want)
+			}
+			from, err := time.Parse(time.RFC3339, got.From)
+			if err != nil {
+				t.Fatalf("from %q: %v", got.From, err)
+			}
+			to, err := time.Parse(time.RFC3339, got.To)
+			if err != nil {
+				t.Fatalf("to %q: %v", got.To, err)
+			}
+			// Second-granularity: the handler reads its own clock.
+			if span := to.Sub(from); span < tc.back-time.Minute || span > tc.back+time.Minute {
+				t.Errorf("range %q answered a %v window, asked for %v", tc.label, span, tc.back)
+			}
+		})
+	}
+}
+
+// TestSamplesRefusesWhatItCannotAnswer: past the horizon the stores hold nothing,
+// so the door says so instead of serving a window short of what was asked. On a
+// spend view a truncated window reads as money that was never spent.
+func TestSamplesRefusesWhatItCannotAnswer(t *testing.T) {
+	app := mountBare(t)
+	for _, bad := range []string{"1y", "3mo", "1w", "0d", "-5d", "yesterday", "731d", "3650d", "1h; DROP TABLE"} {
+		t.Run("range="+bad, func(t *testing.T) {
+			code, body := drive(t, app, http.MethodGet, "/v1/usage/samples?provider=claude&range="+url.QueryEscape(bad), "acme", "alice", nil)
+			if code != http.StatusBadRequest {
+				t.Fatalf("range %q want 400, got %d: %s", bad, code, body)
+			}
+		})
 	}
 }
 

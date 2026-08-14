@@ -73,7 +73,7 @@
             "name": "range",
             "in": "query",
             "required": false,
-            "description": "Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both\nstart and end are given. An unknown value is a 400.",
+            "description": "Range is a relative window: a count and a unit — 24h, 7d, 90d, any \u003cN\u003eh or\n\u003cN\u003ed — or day, week, month, all. Default 24h. Ignored when both start and\nend are given. An unknown value, or one past the 730-day horizon, is a 400.",
             "schema": {
               "type": "string"
             },
@@ -125,7 +125,7 @@
             "name": "range",
             "in": "query",
             "required": false,
-            "description": "Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both\nstart and end are given. An unknown value is a 400.",
+            "description": "Range is a relative window: a count and a unit — 24h, 7d, 90d, any \u003cN\u003eh or\n\u003cN\u003ed — or day, week, month, all. Default 24h. Ignored when both start and\nend are given. An unknown value, or one past the 730-day horizon, is a 400.",
             "schema": {
               "type": "string"
             },
@@ -177,7 +177,7 @@
             "name": "range",
             "in": "query",
             "required": false,
-            "description": "Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both\nstart and end are given. An unknown value is a 400.",
+            "description": "Range is a relative window: a count and a unit — 24h, 7d, 90d, any \u003cN\u003eh or\n\u003cN\u003ed — or day, week, month, all. Default 24h. Ignored when both start and\nend are given. An unknown value, or one past the 730-day horizon, is a 400.",
             "schema": {
               "type": "string"
             },
