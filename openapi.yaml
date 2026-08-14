@@ -60133,8 +60133,9 @@ paths:
       operationId: get_analytics_overview
       parameters:
       - description: |-
-          Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
-          start and end are given. An unknown value is a 400.
+          Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
+          <N>d — or day, week, month, all. Default 24h. Ignored when both start and
+          end are given. An unknown value, or one past the 730-day horizon, is a 400.
         example: 7d
         in: query
         name: range
@@ -60179,8 +60180,9 @@ paths:
       operationId: get_analytics_timeseries
       parameters:
       - description: |-
-          Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
-          start and end are given. An unknown value is a 400.
+          Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
+          <N>d — or day, week, month, all. Default 24h. Ignored when both start and
+          end are given. An unknown value, or one past the 730-day horizon, is a 400.
         example: 30d
         in: query
         name: range
@@ -60230,8 +60232,9 @@ paths:
       operationId: get_analytics_top
       parameters:
       - description: |-
-          Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
-          start and end are given. An unknown value is a 400.
+          Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
+          <N>d — or day, week, month, all. Default 24h. Ignored when both start and
+          end are given. An unknown value, or one past the 730-day horizon, is a 400.
         example: 7d
         in: query
         name: range
@@ -115825,7 +115828,10 @@ paths:
         required: false
         schema:
           type: string
-      - description: 'Range is the window: 24h, 7d, 30d, or custom. Empty means 24h.'
+      - description: |-
+          Range is the window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d —
+          or day, week, month, all, custom. Empty means 24h. The window is then
+          clamped forward to the plan's retention entitlement.
         in: query
         name: range
         required: false
@@ -116073,8 +116079,10 @@ paths:
         schema:
           type: string
       - description: |-
-          Range is the window to read: 1h, 24h, 7d or 30d. Empty means 24h, and any
-          other label is refused rather than silently replaced.
+          Range is the window to read: a count and a unit — 1h, 24h, 90d, any <N>h or
+          <N>d — or day, week, month, all. Empty means 24h. A label that is not a
+          count, or one reaching past the 730-day horizon, is refused rather than
+          silently replaced.
         in: query
         name: range
         required: false
@@ -116118,8 +116126,10 @@ paths:
       operationId: get_usage_summary
       parameters:
       - description: |-
-          Range is the window: 24h, 7d, 30d, or custom. Empty means 24h. A label this
-          surface does not know is refused rather than silently replaced.
+          Range is the window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d —
+          or day, week, month, all, custom. Empty means 24h. A label this surface
+          does not know, or one reaching past the 730-day horizon, is refused rather
+          than silently replaced.
         in: query
         name: range
         required: false
