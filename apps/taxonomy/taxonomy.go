@@ -30,20 +30,30 @@
 // list editor sends what the row should BE — a partial edit of a row this small
 // buys nothing and costs the reader a second write vocabulary.
 //
-// READ IS PUBLIC, WRITE IS PLATFORM SUDO. The read carries no tenant data — it is
-// the same catalogue for every caller, and the marketing landing renders from it
-// while signed out — so it asks who is calling only to decide whether to include
-// UNPUBLISHED rows. It uses the mechanism the binary already has rather than
-// inventing one: the identity middleware never rejects, it only strips and
-// re-mints, so a route is public by not calling a gate (the rule /v1/summary and
-// /v1/health are served under).
+// EVERY ROW BELONGS TO AN ORG. Hanzo's own products belong to the hanzo org and
+// are the PLATFORM catalogue — the part that is true for everyone; a customer org
+// owns the rows it adds. One table, one record, projected per audience: there is
+// no second store for "customer taxonomy", because two stores answering one
+// question drift apart and then disagree.
 //
-// The writes are cloud.Super — platform sudo — and NOT cloud.Admin. This is one
-// catalogue for the whole platform, not a per-org one, so it is exactly what
-// cloud.Scope.Super was drawn for: "an act against SHARED platform state, which no
-// customer-org admin may take however much authority they hold inside their own
-// org". An org admin who could rename a category would rename it for every other
-// tenant.
+// READ: the platform's rows PLUS your own org's, and never another customer's.
+// That is the tenancy boundary and it is the whole point. A signed-out visitor
+// gets the platform catalogue alone, which is what the marketing landing renders
+// from — so the read is public by the mechanism this binary already has rather
+// than a new one: the identity middleware never rejects, it only strips and
+// re-mints, so a route is public by not calling a gate (the rule /v1/summary and
+// /v1/health are served under). Who is calling decides only WHOSE rows join the
+// platform's, and whether unpublished ones are shown.
+//
+// WRITE: an org admin edits their OWN org's rows; a SuperAdmin edits the
+// platform's. Those are the platform's two existing scopes and this package adds
+// no third — org-scope is the org on the validated principal, platform sudo is
+// cloud.Super. Keeping them apart is not pedantry: an org admin who could reach a
+// platform row would rename a category for every other tenant, which is exactly
+// what cloud.Scope.Super was drawn for ("an act against SHARED platform state,
+// which no customer-org admin may take however much authority they hold inside
+// their own org"). Conflating the two is a privilege escalation, so an admin of
+// the hanzo org is refused the platform rows unless they are also platform sudo.
 //
 // NOT THE BILLING CATALOGUE. apps/commerce owns `product` — a Stripe-shaped SKU
 // with prices, the thing a customer is CHARGED for. This is navigation and
@@ -60,6 +70,21 @@ import (
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 )
+
+// platformOrg owns the PLATFORM catalogue — Hanzo's own products, the rows every
+// tenant sees. It is the hanzo org and not a reserved marker, because these are
+// genuinely one org's products rather than a special kind of thing; a customer's
+// rows sit in the same table under their own org.
+//
+// It is NOT the SuperAdmin org. Platform sudo is membership of the reserved
+// `admin` org, which is an identity fact; this is whose products these are. The
+// two are deliberately different values: an admin OF the hanzo org administers
+// hanzo, and only a SuperAdmin edits what every tenant sees.
+//
+// Brand does not enter into it. A lux or zoo deployment serves this same platform
+// catalogue narrowed by the per-row Brands scope — one catalogue, projected — so
+// there is no per-brand owner to resolve.
+const platformOrg = "hanzo"
 
 type service struct {
 	store *Store

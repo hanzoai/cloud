@@ -39,8 +39,15 @@ var (
 	// member is signed in and NOT platform sudo — the case that separates
 	// cloud.Super from "any validated principal".
 	member = map[string]string{"X-User-Id": "dave", "X-Org-Id": "acme"}
-	// orgAdmin administers its OWN org. It must not reach a platform write.
+	// orgAdmin administers its OWN org: it writes acme's rows and nothing else.
 	orgAdmin = map[string]string{"X-User-Id": "dave", "X-Org-Id": "acme", "X-User-IsOrgAdmin": "true"}
+	// Two tenants, to prove the boundary between them rather than assert it.
+	adminA  = map[string]string{"X-User-Id": "ann", "X-Org-Id": "acme", "X-User-IsOrgAdmin": "true"}
+	memberA = map[string]string{"X-User-Id": "al", "X-Org-Id": "acme"}
+	adminB  = map[string]string{"X-User-Id": "bob", "X-Org-Id": "globex", "X-User-IsOrgAdmin": "true"}
+	memberB = map[string]string{"X-User-Id": "bea", "X-Org-Id": "globex"}
+	// An admin of the PLATFORM's own org is still not platform sudo.
+	hanzoAdmin = map[string]string{"X-User-Id": "hal", "X-Org-Id": "hanzo", "X-User-IsOrgAdmin": "true"}
 )
 
 func do(t *testing.T, app *zip.App, method, path string, who map[string]string, body any) (int, []byte) {
@@ -180,7 +187,7 @@ func TestSeedingIsFirstBootOnly(t *testing.T) {
 	if n != 184 {
 		t.Fatalf("first seed wrote %d taxa, want 184", n)
 	}
-	if _, err := store.DeleteTaxon(t.Context(), "overview"); err != nil {
+	if _, err := store.DeleteTaxon(t.Context(), platformOrg, "overview"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	again, err := seed(t.Context(), store)
@@ -190,7 +197,7 @@ func TestSeedingIsFirstBootOnly(t *testing.T) {
 	if again != 0 {
 		t.Fatalf("the seed rewrote %d taxa into a populated store", again)
 	}
-	taxa, err := store.Taxa(t.Context(), "")
+	taxa, err := store.Taxa(t.Context(), platformOrg, "")
 	if err != nil {
 		t.Fatalf("taxa: %v", err)
 	}
@@ -212,10 +219,14 @@ func TestTheCatalogueReadsSignedOut(t *testing.T) {
 	}
 }
 
-// TestOnlyPlatformSudoWrites walks the four writes past every caller that is not a
-// SuperAdmin. An org admin is included deliberately: this is ONE catalogue for the
-// whole platform, so administering your own org must not reach it.
-func TestOnlyPlatformSudoWrites(t *testing.T) {
+// TestAWriteNeedsAnAdmin. Reading the catalogue is open; changing it is not. A
+// caller with no admin standing at all — signed out, or signed in as a plain
+// member of their org — is refused every write, and nothing they send lands
+// anywhere. This USED to also assert 403 for an org admin, back when there was one
+// global catalogue; an org admin now has a catalogue of their own to edit, and
+// TestAnOrgAdminCannotWriteThePlatform is where the line they still cannot cross
+// is pinned.
+func TestAWriteNeedsAnAdmin(t *testing.T) {
 	app := mountApp(t)
 	cat := map[string]any{"label": "Invented", "order": 99}
 	taxon := map[string]any{"name": "Invented", "category": "data", "route": "/invented"}
@@ -223,7 +234,7 @@ func TestOnlyPlatformSudoWrites(t *testing.T) {
 	for _, w := range []struct {
 		name string
 		who  map[string]string
-	}{{"anonymous", anon}, {"member", member}, {"org admin", orgAdmin}} {
+	}{{"anonymous", anon}, {"member", member}} {
 		for _, c := range []struct {
 			method, path string
 			body         any
@@ -239,14 +250,11 @@ func TestOnlyPlatformSudoWrites(t *testing.T) {
 			}
 		}
 	}
-	// Nothing above changed anything.
-	got := read(t, mountApp(t), "/v1/taxonomy", anon)
-	var n int
-	for _, c := range got.Categories {
-		n += len(c.Taxa)
-	}
-	if len(got.Categories) != 14 || n != 184 {
-		t.Fatalf("a refused write still landed: %d categories / %d taxa", len(got.Categories), n)
+	// Nothing above changed anything, for anyone.
+	got := read(t, app, "/v1/taxonomy", anon)
+	if len(got.Categories) != 14 || len(taxaOf(got)) != 184 {
+		t.Fatalf("a refused write still landed: %d categories / %d taxa",
+			len(got.Categories), len(taxaOf(got)))
 	}
 }
 
@@ -577,4 +585,242 @@ func TestALaunchTileGoesSomewhere(t *testing.T) {
 			}
 		}
 	}
+}
+
+// ── tenancy ─────────────────────────────────────────────────────────────────
+
+// twoTenants seeds one row for org acme and one for org globex, each written by
+// that org's own admin through the real surface — so the rows exist the only way a
+// customer row ever comes to exist.
+func twoTenants(t *testing.T) *zip.App {
+	t.Helper()
+	app := mountApp(t)
+	for _, w := range []struct {
+		who  map[string]string
+		id   string
+		name string
+	}{{adminA, "acme-crm", "Acme CRM"}, {adminB, "globex-crm", "Globex CRM"}} {
+		body := map[string]any{"name": w.name, "category": "data", "route": "/" + w.id}
+		if code, out := do(t, app, http.MethodPut, "/v1/taxonomy/taxa/"+w.id, w.who, body); code != http.StatusOK {
+			t.Fatalf("seed %s: %d (%s)", w.id, code, out)
+		}
+	}
+	return app
+}
+
+// TestATenantNeverReadsAnotherTenant is the boundary, and it is the whole point of
+// the org column. Each org sees the platform catalogue plus its OWN row and never
+// the other's — checked in both directions so a rule that happens to work one way
+// round cannot pass.
+func TestATenantNeverReadsAnotherTenant(t *testing.T) {
+	app := twoTenants(t)
+	for _, tc := range []struct {
+		name       string
+		who        map[string]string
+		mine, hers string
+	}{
+		{"acme admin", adminA, "acme-crm", "globex-crm"},
+		{"acme member", memberA, "acme-crm", "globex-crm"},
+		{"globex admin", adminB, "globex-crm", "acme-crm"},
+		{"globex member", memberB, "globex-crm", "acme-crm"},
+	} {
+		got := read(t, app, "/v1/taxonomy", tc.who)
+		if !has(got, tc.mine) {
+			t.Errorf("%s cannot see its own %q", tc.name, tc.mine)
+		}
+		if has(got, tc.hers) {
+			t.Errorf("TENANCY BREACH: %s was served another org's %q", tc.name, tc.hers)
+		}
+		if !has(got, "overview") {
+			t.Errorf("%s lost the platform catalogue", tc.name)
+		}
+	}
+	// A signed-out visitor gets the platform catalogue and NEITHER tenant's rows.
+	anonRead := read(t, app, "/v1/taxonomy", anon)
+	if has(anonRead, "acme-crm") || has(anonRead, "globex-crm") {
+		t.Error("TENANCY BREACH: a signed-out visitor was served a customer's rows")
+	}
+}
+
+// TestATenantNeverWritesAnotherTenant. There is no request that says whose row to
+// write — the owner is derived from the validated principal — so naming another
+// org's id writes the caller's OWN row and leaves the other org's untouched. That
+// is checked here rather than a 403, because a 403 would mean org B's namespace
+// blocks org A's, which is itself an observation of B: A would learn B holds that
+// id. The property that matters is that B's row does not move, and it does not.
+func TestATenantNeverWritesAnotherTenant(t *testing.T) {
+	app := twoTenants(t)
+
+	body := map[string]any{"name": "Stolen", "category": "data", "route": "/stolen"}
+	if code, out := do(t, app, http.MethodPut, "/v1/taxonomy/taxa/globex-crm", adminA, body); code != http.StatusOK {
+		t.Fatalf("acme writing its own row under globex's id: %d (%s)", code, out)
+	}
+	// Globex still reads its own, unchanged.
+	for _, e := range taxaOf(read(t, app, "/v1/taxonomy", adminB)) {
+		if e.ID == "globex-crm" {
+			if e.Name != "Globex CRM" || e.Owner != "globex" {
+				t.Fatalf("TENANCY BREACH: acme's write reached globex's row: %+v", e)
+			}
+		}
+	}
+	// And acme reads ITS row under that id, owned by acme.
+	var seen bool
+	for _, e := range taxaOf(read(t, app, "/v1/taxonomy", adminA)) {
+		if e.ID == "globex-crm" {
+			seen = true
+			if e.Owner != "acme" || e.Name != "Stolen" {
+				t.Fatalf("acme's own row is wrong: %+v", e)
+			}
+		}
+	}
+	if !seen {
+		t.Error("acme's write landed nowhere")
+	}
+
+	// A DELETE naming the other org's id removes nothing of theirs.
+	if code, _ := do(t, app, http.MethodDelete, "/v1/taxonomy/taxa/acme-crm", adminB, nil); code != http.StatusNotFound {
+		t.Errorf("globex deleting acme's id: %d, want 404 — globex holds no such row", code)
+	}
+	if !has(read(t, app, "/v1/taxonomy", adminA), "acme-crm") {
+		t.Fatal("TENANCY BREACH: globex's delete removed acme's row")
+	}
+}
+
+// TestAnOrgAdminCannotWriteThePlatform is the escalation case. Org-scoped admin
+// and platform sudo are different scopes, and an admin who could reach a platform
+// row would rename a category for every other tenant. The admin of the PLATFORM's
+// OWN org is included deliberately: being an admin of hanzo is still not being a
+// SuperAdmin.
+func TestAnOrgAdminCannotWriteThePlatform(t *testing.T) {
+	app := mountApp(t)
+	before := read(t, app, "/v1/taxonomy", anon)
+
+	// hanzo's org admin is refused outright — every write, because their org IS the
+	// platform org and only platform sudo edits it.
+	for _, c := range []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodPut, "/v1/taxonomy/categories/ai", map[string]any{"label": "Hijacked"}},
+		{http.MethodDelete, "/v1/taxonomy/categories/ai", nil},
+		{http.MethodPut, "/v1/taxonomy/taxa/overview", map[string]any{"name": "Hijacked", "category": "ai", "route": "/x"}},
+		{http.MethodDelete, "/v1/taxonomy/taxa/overview", nil},
+	} {
+		if code, out := do(t, app, c.method, c.path, hanzoAdmin, c.body); code != http.StatusForbidden {
+			t.Errorf("ESCALATION: hanzo org admin %s %s: %d (%s), want 403", c.method, c.path, code, out)
+		}
+	}
+
+	// A customer's admin writing a platform id gets their OWN row, and the platform's
+	// is untouched — for everyone else, and for a signed-out visitor.
+	if code, out := do(t, app, http.MethodPut, "/v1/taxonomy/taxa/overview", adminA,
+		map[string]any{"name": "Our Overview", "category": "ai", "route": "/ours"}); code != http.StatusOK {
+		t.Fatalf("acme customising a platform id: %d (%s)", code, out)
+	}
+	after := read(t, app, "/v1/taxonomy", anon)
+	if len(taxaOf(after)) != len(taxaOf(before)) {
+		t.Fatalf("a customer's write changed the platform catalogue: %d -> %d taxa",
+			len(taxaOf(before)), len(taxaOf(after)))
+	}
+	for _, e := range taxaOf(after) {
+		if e.ID == "overview" && (e.Name == "Our Overview" || e.Owner != "hanzo") {
+			t.Fatalf("ESCALATION: a customer's row is being served as the platform's: %+v", e)
+		}
+	}
+	// acme sees its own version of that id, and exactly once.
+	var n int
+	for _, e := range taxaOf(read(t, app, "/v1/taxonomy", adminA)) {
+		if e.ID == "overview" {
+			n++
+			if e.Owner != "acme" || e.Name != "Our Overview" {
+				t.Errorf("acme should see its OWN overview, got %+v", e)
+			}
+		}
+	}
+	if n != 1 {
+		t.Errorf("acme sees the id %q %d times; a shadowed id must resolve to exactly one row", "overview", n)
+	}
+}
+
+// TestSuperWritesThePlatform — the positive half, so the refusals above are a rule
+// and not a wall. A SuperAdmin's write lands on the platform rows, which is what
+// every tenant then reads.
+func TestSuperWritesThePlatform(t *testing.T) {
+	app := mountApp(t)
+	if code, out := do(t, app, http.MethodPut, "/v1/taxonomy/taxa/newthing", super,
+		map[string]any{"name": "New Thing", "category": "data", "route": "/newthing"}); code != http.StatusOK {
+		t.Fatalf("super write: %d (%s)", code, out)
+	}
+	var got Taxon
+	for _, e := range taxaOf(read(t, app, "/v1/taxonomy", anon)) {
+		if e.ID == "newthing" {
+			got = e
+		}
+	}
+	if got.Owner != platformOrg {
+		t.Fatalf("a SuperAdmin's write is owned by %q, want the platform org %q", got.Owner, platformOrg)
+	}
+	// Every tenant sees it, because it is platform state.
+	for _, who := range []map[string]string{adminA, adminB, memberA, anon} {
+		if !has(read(t, app, "/v1/taxonomy", who), "newthing") {
+			t.Error("a platform row is not visible to every caller")
+		}
+	}
+}
+
+// TestStagingIsScopedToWhoeverCanUnstageIt. An unpublished row is shown to the
+// person who can publish it and to nobody else — including no other tenant, which
+// is the tenancy rule again applied to the one field the read varies on.
+func TestStagingIsScopedToWhoeverCanUnstageIt(t *testing.T) {
+	app := mountApp(t)
+	hidden := false
+	if code, out := do(t, app, http.MethodPut, "/v1/taxonomy/taxa/acme-secret", adminA,
+		map[string]any{"name": "Secret", "category": "data", "route": "/secret", "published": &hidden}); code != http.StatusOK {
+		t.Fatalf("put: %d (%s)", code, out)
+	}
+	if !has(read(t, app, "/v1/taxonomy", adminA), "acme-secret") {
+		t.Error("acme's admin cannot see the row it staged — unpublishing would be a one-way door")
+	}
+	for _, tc := range []struct {
+		name string
+		who  map[string]string
+	}{{"another tenant", adminB}, {"a plain member of the same org", memberA},
+		{"a signed-out visitor", anon}, {"a SuperAdmin", super}} {
+		if has(read(t, app, "/v1/taxonomy", tc.who), "acme-secret") {
+			t.Errorf("%s was served acme's unpublished row", tc.name)
+		}
+	}
+}
+
+// TestThePlatformCatalogueStillRoundTrips — the 184/14 property from the original
+// move, now asserted for a caller who has an org but no rows of their own. Adding
+// tenancy must not have narrowed what the platform serves.
+func TestThePlatformCatalogueStillRoundTrips(t *testing.T) {
+	app := twoTenants(t)
+	for _, tc := range []struct {
+		name string
+		who  map[string]string
+		want int
+	}{
+		{"signed out", anon, 184},
+		{"a tenant with no rows of its own", map[string]string{"X-User-Id": "zed", "X-Org-Id": "initech"}, 184},
+		{"acme, which has one", adminA, 185},
+	} {
+		got := read(t, app, "/v1/taxonomy", tc.who)
+		if len(got.Categories) != 14 {
+			t.Errorf("%s sees %d categories, want 14", tc.name, len(got.Categories))
+		}
+		if n := len(taxaOf(got)); n != tc.want {
+			t.Errorf("%s sees %d taxa, want %d", tc.name, n, tc.want)
+		}
+	}
+}
+
+// taxaOf flattens the projection, which most tenancy assertions are about.
+func taxaOf(tx Taxonomy) []Taxon {
+	var out []Taxon
+	for _, c := range tx.Categories {
+		out = append(out, c.Taxa...)
+	}
+	return out
 }
