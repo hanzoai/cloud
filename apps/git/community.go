@@ -50,8 +50,17 @@ func publish(ctx context.Context, org string, ev plane.Visibility) error {
 	if s == nil {
 		return nil // git plane not mounted (or shutting down): nothing to apply
 	}
+	// The name is spelled ONCE, here, through the same normalisation and the same
+	// alphabet the REST surface goes through. This op is its own trust boundary —
+	// the caller across the socket is one of our own processes, not a reason to
+	// take a name unread — and a create and a delete that normalised differently
+	// would address two different repos, which is a delete that never deletes.
+	slug := normalizeName(ev.Slug)
+	if !nameRE.MatchString(slug) {
+		return fmt.Errorf("community: %s/%q is not a repository name", org, ev.Slug)
+	}
 	if ev.State == plane.Gone {
-		return retire(s, ctx, org, ev.Slug)
+		return retire(s, ctx, org, slug)
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
@@ -69,7 +78,7 @@ func publish(ctx context.Context, org string, ev plane.Visibility) error {
 	id := mint.ID("repo")
 	now := time.Now().Unix()
 	err = provision(s, ctx, store, Repo{
-		ID: id, Org: org, Name: ev.Slug,
+		ID: id, Org: org, Name: slug,
 		Description: ev.Description, DefaultBranch: defaultBranchName,
 		Public:    listed,
 		CreatedAt: now, UpdatedAt: now,
@@ -78,16 +87,16 @@ func publish(ctx context.Context, org string, ev plane.Visibility) error {
 	case err == nil:
 		// Created with the right visibility already on it; still attach (or skip)
 		// the replica, so a brand-new public project is mirrored like any other.
-		return mirror(ctx, org, ev, listed)
+		return mirror(ctx, org, slug, ev.Description, listed)
 	case !errors.Is(err, errConflict):
-		return fmt.Errorf("community: provision %s/%s: %w", org, ev.Slug, err)
+		return fmt.Errorf("community: provision %s/%s: %w", org, slug, err)
 	}
 
 	// Already there: reconcile the one field this seam owns.
-	if err := store.SetPublic(ctx, org, "", ev.Slug, listed, now); err != nil {
-		return fmt.Errorf("community: set visibility %s/%s: %w", org, ev.Slug, err)
+	if err := store.SetPublic(ctx, org, "", slug, listed, now); err != nil {
+		return fmt.Errorf("community: set visibility %s/%s: %w", org, slug, err)
 	}
-	return mirror(ctx, org, ev, listed)
+	return mirror(ctx, org, slug, ev.Description, listed)
 }
 
 // retire takes a deleted project's source off BOTH copies.
@@ -125,16 +134,16 @@ func retire(s *cloud.Service[state], ctx context.Context, org, slug string) erro
 // endpoint use — so there is one outbound target list and no second way to add
 // to it. No credential ⇒ ensure returns "" and the whole replica is
 // skipped, rather than registering a push that could never land.
-func mirror(ctx context.Context, org string, ev plane.Visibility, listed bool) error {
-	url, err := ensure(ctx, org, ev.Slug, ev.Description, listed)
+func mirror(ctx context.Context, org, slug, description string, listed bool) error {
+	url, err := ensure(ctx, org, slug, description, listed)
 	if err != nil {
 		return err
 	}
 	if url == "" {
 		return nil
 	}
-	if err := (gitMirrorController{}).EnsureMirror(ctx, org, "", ev.Slug, url, true); err != nil {
-		return fmt.Errorf("community: mirror %s/%s: %w", org, ev.Slug, err)
+	if err := (gitMirrorController{}).EnsureMirror(ctx, org, "", slug, url, true); err != nil {
+		return fmt.Errorf("community: mirror %s/%s: %w", org, slug, err)
 	}
 	return nil
 }

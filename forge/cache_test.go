@@ -559,9 +559,9 @@ func TestInventory_NeitherReadsNorFillsTheCache(t *testing.T) {
 	}
 	f.setBody(`[{"name":"api","full_name":"acme/api"},{"name":"web","full_name":"acme/web"}]`, 2)
 
-	got, err := c.Inventory(t.Context(), "acme")
-	if err != nil {
-		t.Fatalf("Inventory: %v", err)
+	got, whole, err := c.Inventory(t.Context(), "acme")
+	if err != nil || !whole {
+		t.Fatalf("Inventory = (whole %v, %v), want (true, nil)", whole, err)
 	}
 	if len(got) != 2 {
 		t.Fatalf("Inventory answered %d repositories from a forge holding 2 — it read the cache", len(got))
@@ -587,7 +587,7 @@ func TestInventory_NeitherReadsNorFillsTheCache(t *testing.T) {
 // still a list of what somebody may see.
 func TestInventory_UnscopedRefuses(t *testing.T) {
 	f := newCounting(t)
-	if _, err := f.client(t).Inventory(t.Context(), "acme"); !errors.Is(err, ErrNoActor) {
+	if _, _, err := f.client(t).Inventory(t.Context(), "acme"); !errors.Is(err, ErrNoActor) {
 		t.Fatalf("err = %v, want ErrNoActor", err)
 	}
 	if n := f.calls.Load(); n != 0 {
@@ -597,15 +597,17 @@ func TestInventory_UnscopedRefuses(t *testing.T) {
 
 // ── 6. the walk that must not end quietly ────────────────────────────────────
 
-// A namespace larger than the walk reads is REFUSED, not truncated.
+// A namespace larger than the walk reads is never a short list wearing the shape
+// of a complete one. The walk SAYS it did not end, and the two readers answer
+// that differently because a partial list is worth different things to them.
 //
-// The caller that most needs to know is the one that cannot tell. The
-// visibility audit walks a namespace asking which repositories are open that no
-// live project permits; handed the first 2,500 of a longer list it reports a
-// clean sweep, and every repository past the ceiling is invisible to it forever
-// — including the ones a tenant minted to push them there. Same doctrine as the
-// milestone rollup, which has refused rather than trimmed since it was written.
-func TestListRepos_RefusesANamespacePastTheCeiling(t *testing.T) {
+// The caller that most needs to know is the one that cannot tell. A board or a
+// rollup reads a list it prunes from, so a missing repository reads as one that
+// does not exist: those refuse. The visibility audit only ever CLOSES what it
+// finds, so a partial walk closes strictly more than the nothing a refusal would
+// leave — and an audit that refuses a full namespace is an audit a tenant can
+// stop for good by minting projects.
+func TestListRepos_SaysWhenTheNamespaceOutgrewTheWalk(t *testing.T) {
 	const over = maxRepoPages*repoPage + 1
 	page := make([]Repo, repoPage)
 	for i := range page {
@@ -634,15 +636,33 @@ func TestListRepos_RefusesANamespacePastTheCeiling(t *testing.T) {
 			if err != nil {
 				t.Fatalf("New: %v", err)
 			}
-			got, err := c.Machine().Inventory(t.Context(), "acme")
-			if err == nil {
-				t.Fatalf("a namespace past the ceiling was answered with %d repositories; it must refuse", len(got))
+			// The AUDIT's read: what could be read, and the fact that it is not
+			// everything.
+			got, whole, err := c.Machine().Inventory(t.Context(), "acme")
+			if err != nil {
+				t.Fatalf("Inventory: %v", err)
 			}
-			if got != nil {
-				t.Fatalf("a refusal must carry no list, got %d repositories", len(got))
+			if whole {
+				t.Fatalf("a namespace of %d was reported COMPLETE at %d repositories", over, len(got))
+			}
+			if len(got) == 0 {
+				t.Fatal("the audit was handed nothing to close; a partial walk closes more than no walk")
+			}
+			if len(got) > maxRepoPages*repoPage {
+				t.Fatalf("the walk read %d repositories, past the %d ceiling", len(got), maxRepoPages*repoPage)
+			}
+
+			// The CACHED read, which is served to callers that prune from it: refused,
+			// naming the ceiling, and nothing stored.
+			cached, err := c.Machine().Repos(t.Context(), "acme")
+			if err == nil {
+				t.Fatalf("a namespace past the ceiling was served as %d repositories; it must refuse", len(cached))
+			}
+			if cached != nil {
+				t.Fatalf("a refusal must carry no list, got %d repositories", len(cached))
 			}
 			if cap := fmt.Sprint(maxRepoPages * repoPage); !strings.Contains(err.Error(), cap) {
-				t.Fatalf("the refusal should name the cap %s: %v", cap, err)
+				t.Fatalf("the refusal should name the ceiling %s: %v", cap, err)
 			}
 		})
 	}

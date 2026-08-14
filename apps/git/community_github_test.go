@@ -43,6 +43,16 @@ func fakeGitHub(t *testing.T, exists bool) (*[]ghCall, func()) {
 		}
 		mu.Unlock()
 
+		// GitHub serves TWO paths here and 404s everything else, and so does this:
+		// a stand-in that answers whatever it is asked cannot tell a working
+		// endpoint from a malformed one, which is how a create built out of the
+		// repo endpoint stayed green while every real create 404ed.
+		if p := r.URL.Path; p != "/orgs/hanzo-community/repos" &&
+			!(strings.HasPrefix(p, "/repos/hanzo-community/") && strings.Count(p, "/") == 3) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
 		switch {
 		case r.Method == http.MethodDelete:
 			w.WriteHeader(http.StatusNoContent)
@@ -80,9 +90,16 @@ func TestCommunityRepoIsCreatedWhenMissing(t *testing.T) {
 	if len(*calls) != 2 {
 		t.Fatalf("want probe-then-create, got %d calls: %+v", len(*calls), *calls)
 	}
-	create := (*calls)[1]
-	if create.Method != http.MethodPost || !strings.HasSuffix(create.Path, "/orgs/hanzo-community/repos") {
-		t.Fatalf("second call must create in the community org: %+v", create)
+	// The EXACT path, not a suffix of one. A suffix match is satisfied by
+	// /repos/hanzo-community/acme_board/orgs/hanzo-community/repos — the endpoint
+	// built out of the repo endpoint instead of the API root, which GitHub answers
+	// 404 while this stand-in answers anything.
+	probe, create := (*calls)[0], (*calls)[1]
+	if probe.Method != http.MethodPatch || probe.Path != "/repos/hanzo-community/acme_board" {
+		t.Fatalf("the probe must PATCH the repo itself: %+v", probe)
+	}
+	if create.Method != http.MethodPost || create.Path != "/orgs/hanzo-community/repos" {
+		t.Fatalf("the create must POST the community org's repo list: %+v", create)
 	}
 	if create.Body["name"] != "acme_board" {
 		t.Fatalf("repo name = %v, want acme_board (org-qualified: one flat namespace)", create.Body["name"])
