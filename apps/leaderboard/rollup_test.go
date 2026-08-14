@@ -24,19 +24,28 @@ func TestEnsureUsageRollup_OrderAndLatch(t *testing.T) {
 	if !baseEnsured {
 		t.Fatal("cloud_usage base must be ensured before the MV references it")
 	}
-	if len(stmts) != 2 {
-		t.Fatalf("want table+mv (2 DDL), got %d: %v", len(stmts), stmts)
+	want := 2 + len(rollupColumnMigrations)
+	if len(stmts) != want {
+		t.Fatalf("want table+migrations+mv (%d DDL), got %d: %v", want, len(stmts), stmts)
 	}
 	if !strings.Contains(stmts[0], "CREATE TABLE IF NOT EXISTS hanzo.usage_rollup_daily") || !strings.Contains(stmts[0], "SummingMergeTree") {
 		t.Fatalf("target DDL wrong: %s", stmts[0])
 	}
-	if !strings.Contains(stmts[1], "CREATE MATERIALIZED VIEW IF NOT EXISTS hanzo.usage_rollup_daily_mv") {
-		t.Fatalf("mv DDL wrong: %s", stmts[1])
+	// The migrations sit BETWEEN the table and the view, and every one is additive:
+	// a statement here runs on every boot, so it may never rewrite or drop.
+	for _, m := range stmts[1 : len(stmts)-1] {
+		if !strings.Contains(m, "ADD COLUMN IF NOT EXISTS") {
+			t.Fatalf("rollup migration is not additive: %s", m)
+		}
+	}
+	mv := stmts[len(stmts)-1]
+	if !strings.Contains(mv, "CREATE MATERIALIZED VIEW IF NOT EXISTS hanzo.usage_rollup_daily_mv") {
+		t.Fatalf("mv DDL wrong: %s", mv)
 	}
 	// Type-exact projection so the MV can never fail a valid ledger insert.
-	for _, tok := range []string{"toDate(timestamp) AS day", "toUInt64(count()) AS requests", "toUInt64(sum(total_tokens))", "GROUP BY day, organization, user_id, model"} {
-		if !strings.Contains(stmts[1], tok) {
-			t.Fatalf("mv missing type-exact term %q: %s", tok, stmts[1])
+	for _, tok := range []string{"toDate(timestamp) AS day", "toUInt64(count()) AS requests", "toUInt64(sum(total_tokens))", "toInt64(sum(cost_nano)) AS cost_nano", "GROUP BY day, organization, user_id, model"} {
+		if !strings.Contains(mv, tok) {
+			t.Fatalf("mv missing type-exact term %q: %s", tok, mv)
 		}
 	}
 	// Idempotent latch.
@@ -156,5 +165,24 @@ func TestBackfill_GuardsAgainstDoubleRun(t *testing.T) {
 	code, _ = doJSON(t, app, "POST", "/v1/usage/rollup/backfill", principalHeaders("acme", "alice"), nil)
 	if code != 403 {
 		t.Fatalf("non-super backfill must be 403, got %d", code)
+	}
+}
+
+// TestRollup_CarriesNano: the derived table stores the ledger's money column, so a
+// read can sum it and round once. A rollup of cents would round per (org, user,
+// model, day) and every read would add those roundings up.
+func TestRollup_CarriesNano(t *testing.T) {
+	for name, ddl := range map[string]string{"table": rollupTableDDL, "mv": rollupMVDDL, "seed": backfillDDL} {
+		if !strings.Contains(ddl, "cost_nano") {
+			t.Fatalf("%s does not carry cost_nano: %s", name, ddl)
+		}
+		if strings.Contains(ddl, "cost_cents") {
+			t.Fatalf("%s still stores a rendering: %s", name, ddl)
+		}
+	}
+	// The seed NAMES its target columns. A bare INSERT ... SELECT matches by
+	// position, so a column added ahead of the money would silently land in it.
+	if !strings.Contains(backfillDDL, "(day, organization, user_id, model, requests,") {
+		t.Fatalf("seed must name its target columns: %s", backfillDDL)
 	}
 }
