@@ -110,11 +110,11 @@ func serveGitHTTP(t *testing.T, root string) string {
 func TestGitCLIClonePushRoundTrip(t *testing.T) {
 	var mu sync.Mutex
 	var events []cloud.GitPushEvent
-	cloud.RegisterPushBuilder(func(_ context.Context, ev cloud.GitPushEvent) error {
+	cloud.RegisterPushBuilder(func(_ context.Context, ev cloud.GitPushEvent) (int, error) {
 		mu.Lock()
 		events = append(events, ev)
 		mu.Unlock()
-		return nil
+		return 0, nil
 	})
 	t.Cleanup(func() { cloud.RegisterPushBuilder(nil) })
 
