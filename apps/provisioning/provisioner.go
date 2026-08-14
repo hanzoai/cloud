@@ -19,8 +19,8 @@ import (
 
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/shorten"
-	s3 "github.com/hanzoai/s3-go"
-	"github.com/hanzoai/s3-go/pkg/credentials"
+	s3 "github.com/hanzos3/go"
+	"github.com/hanzos3/go/pkg/credentials"
 )
 
 // errAlreadyExists is returned by a Provisioner when the backend reports the

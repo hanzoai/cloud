@@ -25,7 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	s3 "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzos3/go"
 
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/types"

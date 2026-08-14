@@ -6,7 +6,7 @@
 package org
 
 // condstore.go is the concrete atomic-CAS object store the fence needs:
-// hanzoai/s3-go's native If-Match / If-None-Match conditional PUT against the same
+// hanzos3/go's native If-Match / If-None-Match conditional PUT against the same
 // SeaweedFS S3 gateway clients/s3 already speaks to. It satisfies
 // github.com/hanzoai/vfs/replica.ConditionalStore, the seam FencedStore (per-org
 // DB ship) and CASFencer (per-org lease) compose over.
@@ -15,7 +15,7 @@ package org
 // backend exposes NO conditional-write primitive — "overwriting is allowed" is its
 // contract — so the fence, which is a CONDITIONAL write, cannot ride that path. It
 // addresses a dedicated object per shard directly against the gateway, exactly as
-// clients/s3 does. No new dependency: github.com/hanzoai/s3-go is already
+// clients/s3 does. No new dependency: github.com/hanzos3/go is already
 // vendored. Build one from s3admin's admin client:
 //
 //	a := s3admin.New()
@@ -31,7 +31,7 @@ import (
 	"fmt"
 	"io"
 
-	s3 "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzos3/go"
 	"github.com/hanzoai/vfs/replica"
 )
 
