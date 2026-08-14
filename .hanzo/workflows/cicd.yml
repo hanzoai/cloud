@@ -160,15 +160,23 @@ jobs:
     # than a passing one and better than no run, so this is reverted to the state
     # that at least reports.
     #
-    # The lane is still broken and was before this: `gate` never gets a runner
-    # (runner_id 0, zero steps, ~32 min, failure) while `containment` succeeds on
-    # the same run against an idle 10/10 fleet. Runs 925, 926 and 928 all died
-    # that way, so no release has minted since v1.801.490.
+    # A CALLER JOB IS A PARENT, NOT A JOB — read the CHILD before reading a fault.
     #
-    # Whoever picks this up: the question is why the forge declines to SCHEDULE a
-    # called workflow's jobs while scheduling sibling jobs in the same run, and
-    # why naming an immutable tag prevents run construction when that tag demonstrably
-    # carries .hanzo/workflows/build.yml. Both answers live in the forge, not here.
+    # The forge expands `uses:` into a child job carrying the reusable's own key
+    # (here `cicd`), and the child is what holds the labels, the runner and the
+    # steps. So this row always shows runner_id 0, `runs_on` null and zero steps,
+    # and its duration and status are the CHILD's, inherited. That is the shape of
+    # every caller on this forge, the successful ones included — so none of it is
+    # a symptom, and a fault read off this row alone is a fault read off the wrong
+    # row. `SELECT * FROM action_run_job WHERE parent_job_id = <this job>` is the
+    # job that actually ran; its task carries the log.
+    #
+    # This replaces a paragraph asserting the opposite — that the forge declines to
+    # schedule a called workflow's jobs, so nothing had shipped since v1.801.490.
+    # Both halves were read off the parent row. Measured on this forge: 2159 caller
+    # jobs have succeeded across 292 repos, and this lane's own gate succeeded 174
+    # times in the ten days that paragraph called dead.
+    #
     # ci publishes the reusable at .hanzo/workflows/build.yml and NOWHERE ELSE.
     # .github/workflows/build.yml was deleted upstream — present at v1.0.39, gone
     # by v1.0.44, and `v1` now names v1.0.46 — so a caller pinning that path fails
