@@ -578,7 +578,7 @@ jobs:
               # secret. FORGE_TOKEN has only ever been READ with in this
               # workflow — go module fetches and ls-remote — so the first
               # release to write with it is the first test of its scope.
-              echo "::error::the forge refused the claim for v${CAND} with $CODE. FORGE_TOKEN must carry write:repository on hanzo-inc/cloud — it creates refs/tags/v<N> and the refs/smoked/<digest> receipt. Re-issue it with that scope and set it as the hanzo-inc org actions secret; nothing else here needs changing."
+              echo "::error::the forge refused the claim for v${CAND} with $CODE. Ask the forge what it wants before assuming: POST /v1/repos/hanzo-inc/cloud/tags answers 403 with {\"message\":\"token does not have at least one of required scope(s), required=[write:repository], token scope=read:repository\"} for a read-scoped token, at BOTH this path and the old hanzoai/ one, so a 403 here is the TOKEN and not the address. Scopes are fixed when a token is minted, so this needs a new FORGE_TOKEN carrying write:repository installed as the actions secret — it creates refs/tags/v<N> and the refs/smoked/<digest> receipt."
               cat /tmp/claim.json; exit 1
             fi
             if [ "$CODE" != "201" ]; then
