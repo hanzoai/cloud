@@ -284,6 +284,105 @@ func TestACredentialNeverRidesCleartext(t *testing.T) {
 	}
 }
 
+// TestTheGitEnvKeepsEveryConfigKey: one environment, numbered ONCE.
+//
+// git reads its env config by COUNT — GIT_CONFIG_COUNT plus KEY_n/VALUE_n — and
+// os/exec keeps the last of a duplicated variable, so two builders each writing
+// their own count leaves only the last one's keys. That is not a visible
+// failure: the subprocess runs, the sync works, and the bounds that were dropped
+// are the ones that only matter on a repository big enough to exhaust the pod —
+// core.packedGitLimit and core.packedGitWindowSize, whose absence arrives as a
+// kernel OOM of the whole process rather than as a failed fetch.
+func TestTheGitEnvKeepsEveryConfigKey(t *testing.T) {
+	r := remote{URL: "https://github.com/a/b.git", Cred: gitCred{User: "x-access-token", Token: "s3cret"}}
+	cmd, err := gitCmd(context.Background(), &r, []string{"http.lowSpeedLimit=1000"}, "push")
+	if err != nil {
+		t.Fatalf("gitCmd: %v", err)
+	}
+
+	counts, cfg := 0, map[string]string{}
+	keys := map[string]string{}
+	for _, kv := range cmd.Env {
+		name, value, _ := strings.Cut(kv, "=")
+		switch {
+		case name == "GIT_CONFIG_COUNT":
+			counts++
+		case strings.HasPrefix(name, "GIT_CONFIG_KEY_"):
+			keys[strings.TrimPrefix(name, "GIT_CONFIG_KEY_")] = value
+		case strings.HasPrefix(name, "GIT_CONFIG_VALUE_"):
+			cfg[strings.TrimPrefix(name, "GIT_CONFIG_VALUE_")] = value
+		}
+	}
+	if counts != 1 {
+		t.Fatalf("the environment carries %d GIT_CONFIG_COUNTs; git honours one and drops the rest", counts)
+	}
+	got := map[string]string{}
+	for n, key := range keys {
+		got[key] = cfg[n]
+	}
+	for _, want := range append(baseConfig(), "http.lowSpeedLimit=1000", "http.followRedirects=false") {
+		k, v, _ := strings.Cut(want, "=")
+		if have, ok := got[k]; !ok || have != v {
+			t.Errorf("%s = %q (present %v), want %q", k, have, ok, v)
+		}
+	}
+	if hdr := got["http.extraHeader"]; !strings.HasPrefix(hdr, "Authorization: Basic ") {
+		t.Errorf("the credential did not survive the merge: %q", hdr)
+	}
+	// A local call reaches no remote, so it carries no protocol policy and no
+	// credential — and still every memory bound.
+	local, err := gitCmd(context.Background(), nil, nil, "rev-parse")
+	if err != nil {
+		t.Fatalf("gitCmd: %v", err)
+	}
+	for _, kv := range local.Env {
+		if strings.Contains(kv, "extraHeader") || strings.HasPrefix(kv, "GIT_ALLOW_PROTOCOL") {
+			t.Errorf("a local git call carries %q", kv)
+		}
+	}
+}
+
+// TestAdvanceReadsTheDestinationForItself: what an advance reports moving FROM
+// is what the destination held when the objects were taken, not what its
+// advertisement said when the caller read it.
+//
+// The caller reads one advertisement for a whole repository and then advances
+// its refs one at a time, so by the time any given ref is pushed the value it
+// holds may be minutes old. Both halves of the report are downstream of it:
+// push-to-deploy diffs Before..After, and "applied" is what says a deployment
+// has something to build.
+func TestAdvanceReadsTheDestinationForItself(t *testing.T) {
+	ctx := context.Background()
+	src, dst, srcWork, dstWork, w := pair(t)
+	from, to := ends(src, dst)
+	stale := tip(t, dst.bare("forge", "widgets"), mainRef)
+
+	// The destination moves on its own, and the source lands on top of THAT.
+	theirs := dstWork.commit("the destination's own commit")
+	git(t, srcWork.dir, "fetch", "--quiet", to.URL, "main")
+	git(t, srcWork.dir, "reset", "--quiet", "--hard", "FETCH_HEAD")
+	want := srcWork.commit("on top of it")
+
+	oc, err := w.advance(ctx, from, to, mainRef, stale, want)
+	if err != nil {
+		t.Fatalf("advance: %v", err)
+	}
+	if !oc.Applied || oc.Before != theirs || oc.After != want {
+		t.Fatalf("want applied %s→%s — the tip the destination actually held — got %+v", theirs, want, oc)
+	}
+
+	// And now the two ends agree, however stale the caller's value is. Pushing
+	// here earns git's "Everything up-to-date", which exits zero and moves
+	// nothing; calling that an advance hands a deployment an empty diff.
+	oc, err = w.advance(ctx, from, to, mainRef, stale, want)
+	if err != nil {
+		t.Fatalf("advance: %v", err)
+	}
+	if !oc.NoOp || oc.Applied || oc.Before != want || oc.After != want {
+		t.Fatalf("want a no-op at %s, got %+v", want, oc)
+	}
+}
+
 // TestNothingHereForces reads the source of the advance itself.
 //
 // The refusal this seam depends on is the ABSENCE of a forcing refspec, and an

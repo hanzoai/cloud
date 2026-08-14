@@ -55,8 +55,64 @@ import (
 // one thing this seam exists to never do.
 
 // nameRE bounds a repository name. It is the retired store's rule and the shape
-// the forge accepts as a path segment: no slash, no traversal, no surprise.
+// the forge accepts as a path segment: no slash, no traversal, no surprise. It
+// starts with a letter or a digit, which is also what keeps the separator in
+// [repo.flat] unambiguous.
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+// accountRE bounds the upstream ACCOUNT a repository belongs to. It is GitHub's
+// own login alphabet, and what matters about it is what it leaves out: no `_`,
+// which is the separator [repo.flat] joins on.
+var accountRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,38}$`)
+
+// repo is one repository this seam syncs: the ACCOUNT it belongs to upstream,
+// and its own name. Both are folded, so it is one value however it was spelled,
+// and it is comparable, so it keys a map.
+type repo struct{ account, name string }
+
+// newRepo names a repository from a caller's (account, name), or refuses.
+//
+// # Why the account is half the name
+//
+// A repository's name is unique only WITHIN an account. hanzoai/ai,
+// hanzo-apps/ai and hanzo-docs/ai are three real repositories under one IAM
+// tenant, and the retired store kept them apart by holding
+// <org>/<project>/<name>.git. Drop the account and all three become one: each
+// import overwrites the last one's branches, the shared HEAD is re-pointed to
+// whichever landed last, the console draws one row for three repositories, and
+// the outbound target one of them declared receives another's commits under the
+// org's own GitHub credential.
+//
+// # Why it folds into the name rather than the namespace
+//
+// The forge namespace is FLAT — Forgejo addresses owner/repo and holds nothing
+// deeper — and the owner is not ours to choose ([forge.Owner] is a closed
+// table). So the account rides in the repository name, and the fold is
+// INJECTIVE: the account may not contain the separator and a name may not begin
+// with it, so the FIRST `_` is exactly where the two come apart, and no two
+// (account, name) pairs can spell one repository. It is the same trick, for the
+// same reason, as a published project's <org>_<slug>.
+//
+// A pair this cannot spell unambiguously is REFUSED rather than coerced or
+// escaped: nothing is imported, which is the safe half of the failure.
+func newRepo(account, name string) (repo, error) {
+	r := repo{account: fold(account), name: fold(name)}
+	if r.account != "" && !accountRE.MatchString(r.account) {
+		return repo{}, fmt.Errorf("sync: invalid account")
+	}
+	if !nameRE.MatchString(r.name) {
+		return repo{}, fmt.Errorf("sync: invalid repo name")
+	}
+	return r, nil
+}
+
+// flat is the ONE name r takes on the forge.
+//
+// An empty account is a repository whose upstream named none, and it flattens to
+// `_name` — which no (account, name) with an account can spell, because a name
+// never begins with the separator. So "nowhere in particular" is a coordinate of
+// its own rather than a collision with everything.
+func (r repo) flat() string { return r.account + "_" + r.name }
 
 // importer is the registered cloud.GitImporter. It carries no state: every
 // method resolves the mounted service through the package `mounted` var and
@@ -86,6 +142,12 @@ func forgeAt(ctx context.Context, s *cloud.Service[state], org string) (*forge.C
 	return c, owner, nil
 }
 
+// canonical is the destination an outcome names when the advance went INTO the
+// forge. It is empty rather than the forge's hostname: the record is about the
+// canonical store, which is one thing however this deployment addresses it, and
+// a hostname there would make a moved forge read as a second destination.
+const canonical = ""
+
 // forgeRemote is the forge end of an advance for one repository.
 func forgeRemote(c *forge.Client, owner, name string) (remote, error) {
 	r, err := c.Remote(owner, name)
@@ -99,6 +161,12 @@ func forgeRemote(c *forge.Client, owner, name string) (remote, error) {
 // credential this call was given. An empty token leaves a zero gitCred, and the
 // per-host token then applies — which is nothing for a host we hold nothing for,
 // and a public repository needs nothing.
+//
+// A credential is only ever offered to a host we mint credentials FOR
+// ([mirrorInHostAllowed]), and a call that would send one elsewhere is refused
+// rather than quietly downgraded: the URL is an argument on the internal plane,
+// the token is a live installation credential, and "fetch anonymously instead"
+// would hide the fact that somebody asked us to hand it over.
 func upstream(rawURL, token string) (remote, error) {
 	src, err := mirrorSource(rawURL)
 	if err != nil {
@@ -106,7 +174,11 @@ func upstream(rawURL, token string) (remote, error) {
 	}
 	cred := gitCred{}
 	if token != "" {
-		cred = gitCred{User: mirrorBasicUser(hostOf(src)), Token: token}
+		host := hostOf(src)
+		if !mirrorInHostAllowed(host) {
+			return remote{}, fmt.Errorf("sync: %s is not a source we hold credentials for", host)
+		}
+		cred = gitCred{User: mirrorBasicUser(host), Token: token}
 	}
 	return remote{URL: src, Cred: cred}, nil
 }
@@ -133,26 +205,27 @@ func (importer) ImportRepo(ctx context.Context, req cloud.GitImportReq) error {
 	if s == nil {
 		return fmt.Errorf("sync: not mounted")
 	}
-	name := normalizeGitName(req.Repo)
-	if !nameRE.MatchString(name) {
-		return fmt.Errorf("sync: invalid repo name")
+	org := fold(req.Org)
+	r, err := newRepo(req.Project, req.Repo)
+	if err != nil {
+		return err
 	}
 	from, err := upstream(req.CloneURL, req.Token)
 	if err != nil {
 		return err
 	}
-	c, owner, err := forgeAt(ctx, s, req.Org)
+	c, owner, err := forgeAt(ctx, s, org)
 	if err != nil {
 		return err
 	}
-	if err := c.Init(ctx, owner, name, "synced from "+hostOf(from.URL)); err != nil {
+	if err := c.Init(ctx, owner, r.flat(), "synced from "+hostOf(from.URL)); err != nil {
 		return err
 	}
-	to, err := forgeRemote(c, owner, name)
+	to, err := forgeRemote(c, owner, r.flat())
 	if err != nil {
 		return err
 	}
-	st, err := storeFor(s, req.Org)
+	st, err := storeFor(s, org)
 	if err != nil {
 		return err
 	}
@@ -166,7 +239,7 @@ func (importer) ImportRepo(ctx context.Context, req cloud.GitImportReq) error {
 		return fmt.Errorf("read the forge's refs: %w", err)
 	}
 
-	w, err := openTransit(ctx, s.DataDir, req.Org, name)
+	w, err := openTransit(ctx, s.DataDir, org, r.flat())
 	if err != nil {
 		return err
 	}
@@ -189,16 +262,18 @@ func (importer) ImportRepo(ctx context.Context, req cloud.GitImportReq) error {
 			// A tag that will not land must not fail a branch-complete import; a
 			// BRANCH that will not land means the import did not happen.
 			if strings.HasPrefix(ref, "refs/tags/") {
-				s.Log.Warn("sync import: tag", "org", req.Org, "repo", name, "ref", ref, "err", err)
+				s.Log.Warn("sync import: tag", "org", org, "repo", r.flat(), "ref", ref, "err", err)
 				continue
 			}
 			return fmt.Errorf("advance %s: %w", ref, err)
 		}
-		if err := st.Record(ctx, req.Org, name, ref, oc.reason(), now); err != nil {
-			s.Log.Warn("sync import: record", "org", req.Org, "repo", name, "ref", ref, "err", err)
+		if word, ok := oc.reason(); ok {
+			if err := st.Record(ctx, org, r, ref, canonical, word, now); err != nil {
+				s.Log.Warn("sync import: record", "org", org, "repo", r.flat(), "ref", ref, "err", err)
+			}
 		}
 		if oc.Conflict {
-			s.Log.Warn("sync.import.conflict", "org", req.Org, "repo", name, "ref", ref, "detail", oc.Detail)
+			s.Log.Warn("sync.import.conflict", "org", org, "repo", r.flat(), "ref", ref, "detail", oc.Detail)
 			continue
 		}
 		landed[ref] = oc.After
@@ -208,24 +283,31 @@ func (importer) ImportRepo(ctx context.Context, req cloud.GitImportReq) error {
 	// resolves the same default — but only once that branch is actually there,
 	// which is the only moment it is a true statement.
 	if head != "" && landed[head] != "" {
-		if err := c.Default(ctx, owner, name, strings.TrimPrefix(head, "refs/heads/")); err != nil {
-			s.Log.Warn("sync import: default branch", "org", req.Org, "repo", name, "branch", head, "err", err)
+		if err := c.Default(ctx, owner, r.flat(), strings.TrimPrefix(head, "refs/heads/")); err != nil {
+			s.Log.Warn("sync import: default branch", "org", org, "repo", r.flat(), "branch", head, "err", err)
 		}
 	}
 
 	if req.MirrorURL != "" {
-		if err := (mirrorControl{}).EnsureMirror(ctx, req.Org, req.Project, name, req.MirrorURL, true); err != nil {
-			s.Log.Warn("sync import: declare mirror", "org", req.Org, "repo", name, "err", err)
+		if err := (mirrorControl{}).EnsureMirror(ctx, org, r.account, r.name, req.MirrorURL, true); err != nil {
+			s.Log.Warn("sync import: declare mirror", "org", org, "repo", r.flat(), "err", err)
 		}
 	}
-	mirrorOut(ctx, s, w, req.Org, name, st, to, landed)
+	// The import's own success is the INBOUND advance — the canonical store moved
+	// — so a replica that could not be brought into step is logged here rather
+	// than failing an import that landed. It is not silent: mirrorOut records the
+	// divergence against that replica's host, so the console says this repository
+	// is not in step even though the import worked.
+	if _, err := mirrorOut(ctx, s, w, org, r, st, to, landed); err != nil {
+		s.Log.Warn("sync import: mirror out", "org", org, "repo", r.flat(), "err", err)
+	}
 
 	// The SAME push.landed the inbound and native push paths emit, so the code
 	// index covers this repository now rather than after its next push. Origin is
 	// the source host, so an outbound target on that host suppresses the echo.
 	if head != "" && landed[head] != "" {
 		cloud.EmitLifecycle(context.WithoutCancel(ctx), cloud.LifecycleEvent{
-			Kind: cloud.LifecyclePushLanded, Org: req.Org, Project: req.Project, Repo: name,
+			Kind: cloud.LifecyclePushLanded, Org: org, Project: r.account, Repo: r.name,
 			Branch: strings.TrimPrefix(head, "refs/heads/"), After: landed[head],
 			Origin: hostOf(from.URL),
 		})
@@ -264,9 +346,10 @@ func (importer) InboundSync(ctx context.Context, req cloud.GitInboundReq) (cloud
 	if s == nil {
 		return cloud.GitSyncResult{}, fmt.Errorf("sync: not mounted")
 	}
-	name := normalizeGitName(req.Repo)
-	if !nameRE.MatchString(name) {
-		return cloud.GitSyncResult{}, fmt.Errorf("sync: invalid repo name")
+	org := fold(req.Org)
+	r, err := newRepo(req.Project, req.Repo)
+	if err != nil {
+		return cloud.GitSyncResult{}, err
 	}
 	// A FULL ref, so branches and tags take the same path. The check is what keeps
 	// a ref from escaping its namespace or carrying a traversal, and it refuses
@@ -282,21 +365,21 @@ func (importer) InboundSync(ctx context.Context, req cloud.GitInboundReq) (cloud
 	if err != nil {
 		return cloud.GitSyncResult{}, err
 	}
-	c, owner, err := forgeAt(ctx, s, req.Org)
+	c, owner, err := forgeAt(ctx, s, org)
 	if err != nil {
 		return cloud.GitSyncResult{}, err
 	}
-	if _, err := c.Machine().Repo(ctx, owner, name); err != nil {
+	if _, err := c.Machine().Repo(ctx, owner, r.flat()); err != nil {
 		if errors.Is(err, forge.ErrNotFound) {
 			return cloud.GitSyncResult{NoOp: true, Detail: "repo not imported"}, nil
 		}
 		return cloud.GitSyncResult{}, err
 	}
-	to, err := forgeRemote(c, owner, name)
+	to, err := forgeRemote(c, owner, r.flat())
 	if err != nil {
 		return cloud.GitSyncResult{}, err
 	}
-	st, err := storeFor(s, req.Org)
+	st, err := storeFor(s, org)
 	if err != nil {
 		return cloud.GitSyncResult{}, err
 	}
@@ -310,7 +393,7 @@ func (importer) InboundSync(ctx context.Context, req cloud.GitInboundReq) (cloud
 		return cloud.GitSyncResult{}, fmt.Errorf("read the forge's %s: %w", req.Ref, err)
 	}
 
-	w, err := openTransit(ctx, s.DataDir, req.Org, name)
+	w, err := openTransit(ctx, s.DataDir, org, r.flat())
 	if err != nil {
 		return cloud.GitSyncResult{}, err
 	}
@@ -320,13 +403,15 @@ func (importer) InboundSync(ctx context.Context, req cloud.GitInboundReq) (cloud
 	if err != nil {
 		return cloud.GitSyncResult{}, err
 	}
-	if err := st.Record(ctx, req.Org, name, req.Ref, oc.reason(), time.Now().Unix()); err != nil {
-		s.Log.Warn("sync inbound: record", "org", req.Org, "repo", name, "ref", req.Ref, "err", err)
+	if word, ok := oc.reason(); ok {
+		if err := st.Record(ctx, org, r, req.Ref, canonical, word, time.Now().Unix()); err != nil {
+			s.Log.Warn("sync inbound: record", "org", org, "repo", r.flat(), "ref", req.Ref, "err", err)
+		}
 	}
 	switch {
 	case oc.Conflict:
 		s.Log.Warn("sync.inbound.conflict",
-			"org", req.Org, "repo", name, "ref", req.Ref,
+			"org", org, "repo", r.flat(), "ref", req.Ref,
 			"origin", req.Origin, "detail", oc.Detail)
 		return cloud.GitSyncResult{Conflict: true, Detail: oc.Detail}, nil
 	case oc.Applied:
@@ -334,7 +419,7 @@ func (importer) InboundSync(ctx context.Context, req cloud.GitInboundReq) (cloud
 		// canonical content changed) AND an outbound target on the source's own host
 		// suppresses the echo, so no ping-pong occurs. Other targets still receive it.
 		cloud.EmitLifecycle(ctx, cloud.LifecycleEvent{
-			Kind: cloud.LifecyclePushLanded, Org: req.Org, Project: req.Project, Repo: name,
+			Kind: cloud.LifecyclePushLanded, Org: org, Project: r.account, Repo: r.name,
 			Branch: req.Ref, Before: oc.Before, After: oc.After, Origin: req.Origin,
 		})
 		return cloud.GitSyncResult{Applied: true, Before: oc.Before, After: oc.After}, nil
@@ -356,11 +441,17 @@ func (importer) InboundSync(ctx context.Context, req cloud.GitInboundReq) (cloud
 // A name the forge does not hold is present with a ZERO status rather than
 // absent, which is what the retired implementation answered and what the plane
 // leg turns back into absence — so neither leg can be told apart by its result.
-func (importer) RepoStatus(ctx context.Context, org, _ string, names []string) (map[string]cloud.GitRepoStatus, error) {
+//
+// The names are asked about WITHIN one account, because that is the only scope
+// in which a repository name means one repository. A caller whose list spans
+// several accounts asks once per account; asking about "ai" without saying whose
+// draws one row for hanzoai/ai, hanzo-apps/ai and hanzo-docs/ai alike.
+func (importer) RepoStatus(ctx context.Context, org, account string, names []string) (map[string]cloud.GitRepoStatus, error) {
 	s := mounted.Load()
 	if s == nil {
 		return nil, fmt.Errorf("sync: not mounted")
 	}
+	org = fold(org)
 	c, owner, err := forgeAt(ctx, s, org)
 	if err != nil {
 		return nil, err
@@ -370,8 +461,8 @@ func (importer) RepoStatus(ctx context.Context, org, _ string, names []string) (
 		return nil, err
 	}
 	held := make(map[string]bool, len(repos))
-	for _, r := range repos {
-		held[normalizeGitName(r.Name)] = true
+	for _, have := range repos {
+		held[fold(have.Name)] = true
 	}
 	st, err := storeFor(s, org)
 	if err != nil {
@@ -383,15 +474,21 @@ func (importer) RepoStatus(ctx context.Context, org, _ string, names []string) (
 	}
 	out := make(map[string]cloud.GitRepoStatus, len(names))
 	for _, n := range names {
-		name := normalizeGitName(n)
+		r, err := newRepo(account, n)
+		if err != nil {
+			// A name this seam could never have imported has nothing to report, and
+			// the zero status is exactly that answer.
+			out[fold(n)] = cloud.GitRepoStatus{}
+			continue
+		}
 		v := cloud.GitRepoStatus{}
-		if held[name] {
+		if held[r.flat()] {
 			v.Imported = true
 		}
-		if r, ok := states[name]; ok {
-			v.Conflict, v.LastSyncedAt = r.Conflict, r.At
+		if roll, ok := states[r]; ok {
+			v.Conflict, v.LastSyncedAt = roll.Conflict, roll.At
 		}
-		out[name] = v
+		out[r.name] = v
 	}
 	return out, nil
 }
@@ -408,16 +505,17 @@ func (importer) RepoStatus(ctx context.Context, org, _ string, names []string) (
 // The URL passes validateMirrorTarget — https, no userinfo, on the outbound
 // allowlist — so a caller can never declare a push to an internal host, and
 // never to the forge itself.
-func (mirrorControl) EnsureMirror(ctx context.Context, org, _, repo, url string, enabled bool) error {
+func (mirrorControl) EnsureMirror(ctx context.Context, org, account, repo, url string, enabled bool) error {
 	s := mounted.Load()
 	if s == nil {
 		return fmt.Errorf("sync: not mounted")
 	}
-	name := normalizeGitName(repo)
-	if !nameRE.MatchString(name) {
-		return fmt.Errorf("sync: invalid repo name")
+	org = fold(org)
+	r, err := newRepo(account, repo)
+	if err != nil {
+		return err
 	}
-	canonical, host, err := validateMirrorTarget(url)
+	target, host, err := validateMirrorTarget(url)
 	if err != nil {
 		// A caller's own mistake, and it says so with a status: the plane op returns
 		// this error as it comes, so a bad URL must arrive as a 400 rather than as
@@ -429,28 +527,35 @@ func (mirrorControl) EnsureMirror(ctx context.Context, org, _, repo, url string,
 		return err
 	}
 	if enabled {
-		return st.SetMirror(ctx, org, name, host, canonical)
+		return st.SetMirror(ctx, org, r, host, target)
 	}
-	return st.DropMirror(ctx, org, name, host)
+	return st.DropMirror(ctx, org, r, host)
 }
 
 // pushOut advances everything the forge holds for repo out to its declared
 // targets. It is the whole of a push-only sync's reconcile: nothing comes in,
 // and what is already canonical is offered to the replicas.
-func pushOut(ctx context.Context, org, repo string) error {
+//
+// So it REPORTS whether that happened, and nothing here treats "we tried" as
+// "we synced". A push-only reconcile with no target declared, or with a target
+// that refused, moved no bytes at all — and the engine advances its cursor and
+// stamps "last synced" on what this returns, so an unconditional nil there is a
+// repository reading "synced, just now" forever while nothing leaves the forge.
+func pushOut(ctx context.Context, org, account, repo string) error {
 	s := mounted.Load()
 	if s == nil {
 		return fmt.Errorf("sync: not mounted")
 	}
-	name := normalizeGitName(repo)
-	if !nameRE.MatchString(name) {
-		return fmt.Errorf("sync: invalid repo name")
+	org = fold(org)
+	r, err := newRepo(account, repo)
+	if err != nil {
+		return err
 	}
 	c, owner, err := forgeAt(ctx, s, org)
 	if err != nil {
 		return err
 	}
-	from, err := forgeRemote(c, owner, name)
+	from, err := forgeRemote(c, owner, r.flat())
 	if err != nil {
 		return err
 	}
@@ -462,12 +567,21 @@ func pushOut(ctx context.Context, org, repo string) error {
 	if err != nil {
 		return fmt.Errorf("read the forge's refs: %w", err)
 	}
-	w, err := openTransit(ctx, s.DataDir, org, name)
+	if len(tips) == 0 {
+		return fmt.Errorf("sync: the forge holds no ref for %s", r.flat())
+	}
+	w, err := openTransit(ctx, s.DataDir, org, r.flat())
 	if err != nil {
 		return err
 	}
 	defer w.close()
-	mirrorOut(ctx, s, w, org, name, st, from, tips)
+	sent, err := mirrorOut(ctx, s, w, org, r, st, from, tips)
+	if err != nil {
+		return err
+	}
+	if sent == 0 {
+		return fmt.Errorf("sync: %s has no declared outbound target", r.flat())
+	}
 	return nil
 }
 
@@ -485,47 +599,76 @@ func pushOut(ctx context.Context, org, repo string) error {
 // them would earn a second refusal for the same fact. A push-only reconcile
 // passes everything the forge holds, because nothing came in.
 //
-// Best-effort per target: one downstream's failure is LOGGED and never affects
-// the import or the other targets. It is not written to the outcome table on
-// purpose — that table answers "could the CANONICAL store be advanced", which is
-// the question the console renders, and folding a downstream's state into the
-// same row would make one word mean two things.
+// Per target, and it REPORTS: it returns how many targets it left in step and an
+// error naming the ones it did not, and it RECORDS a refused ref against that
+// target's host. One downstream's failure still does not stop the others — the
+// loop finishes — but it does not disappear either. A push that did not land is
+// not a sync, and the caller decides what that means for the operation it is
+// part of: an import already advanced the canonical store and only logs, a
+// push-only reconcile has done nothing else and fails.
+//
+// The outcome row it writes names the TARGET'S HOST, so a replica's divergence
+// and the forge's are different facts in the same table: neither clears the
+// other, and the console's roll-up still says, in one word, that this repository
+// is not in step.
 //
 // It takes the caller's OPEN transit repository rather than opening its own: one
 // repository's objects pass through one place at a time, and asking for a second
 // while holding the first would be this function waiting for itself.
-func mirrorOut(ctx context.Context, s *cloud.Service[state], w *work, org, repo string, st *store, from remote, landed map[string]string) {
+func mirrorOut(ctx context.Context, s *cloud.Service[state], w *work, org string, r repo, st *store, from remote, landed map[string]string) (int, error) {
 	if len(landed) == 0 {
-		return
+		return 0, nil
 	}
-	targets, err := st.Mirrors(ctx, org, repo)
+	targets, err := st.Mirrors(ctx, org, r)
 	if err != nil {
-		s.Log.Warn("sync mirror-out: list targets", "org", org, "repo", repo, "err", err)
-		return
+		return 0, fmt.Errorf("list outbound targets: %w", err)
 	}
+	now := time.Now().Unix()
+	sent := 0
+	var refused []string
 	for _, target := range targets {
+		host := hostOf(target)
 		to := remote{URL: target, Cred: outboundCred(ctx, org, target)}
 		tips, _, err := refs(ctx, to)
 		if err != nil {
-			s.Log.Warn("sync mirror-out: read target", "org", org, "repo", repo,
-				"host", hostOf(target), "err", sanitizeGitErr(err.Error()))
+			s.Log.Warn("sync mirror-out: read target", "org", org, "repo", r.flat(),
+				"host", host, "err", sanitizeGitErr(err.Error()))
+			refused = append(refused, host+" is unreachable")
 			continue
 		}
+		ok := true
 		for _, ref := range sorted(landed) {
 			oc, err := w.advance(ctx, from, to, ref, tips[ref], landed[ref])
+			if err != nil {
+				s.Log.Warn("sync mirror-out: advance", "org", org, "repo", r.flat(),
+					"host", host, "ref", ref, "err", sanitizeGitErr(err.Error()))
+				refused, ok = append(refused, host+" refused "+ref), false
+				continue
+			}
+			if word, rec := oc.reason(); rec {
+				if err := st.Record(ctx, org, r, ref, host, word, now); err != nil {
+					s.Log.Warn("sync mirror-out: record", "org", org, "repo", r.flat(),
+						"host", host, "ref", ref, "err", err)
+				}
+			}
 			switch {
-			case err != nil:
-				s.Log.Warn("sync mirror-out: advance", "org", org, "repo", repo,
-					"host", hostOf(target), "ref", ref, "err", sanitizeGitErr(err.Error()))
 			case oc.Conflict:
-				s.Log.Warn("sync.mirror.conflict", "org", org, "repo", repo,
-					"host", hostOf(target), "ref", ref, "detail", oc.Detail)
+				s.Log.Warn("sync.mirror.conflict", "org", org, "repo", r.flat(),
+					"host", host, "ref", ref, "detail", oc.Detail)
+				refused, ok = append(refused, host+" has diverged on "+ref), false
 			case oc.Applied:
-				s.Log.Info("sync mirror-out: advanced", "org", org, "repo", repo,
-					"host", hostOf(target), "ref", ref)
+				s.Log.Info("sync mirror-out: advanced", "org", org, "repo", r.flat(),
+					"host", host, "ref", ref)
 			}
 		}
+		if ok {
+			sent++
+		}
 	}
+	if len(refused) > 0 {
+		return sent, fmt.Errorf("sync: %s did not reach %s", r.flat(), strings.Join(refused, "; "))
+	}
+	return sent, nil
 }
 
 // outboundCred resolves the credential for a downstream push.
@@ -540,7 +683,7 @@ func mirrorOut(ctx context.Context, s *cloud.Service[state], w *work, org, repo 
 func outboundCred(ctx context.Context, org, target string) gitCred {
 	host := hostOf(target)
 	if strings.EqualFold(host, "github.com") {
-		if tok, err := integrations.InstallationToken(ctx, org, githubOwnerOf(target)); err == nil && tok != "" {
+		if tok, err := integrations.InstallationToken(ctx, org, accountOf(target)); err == nil && tok != "" {
 			return gitCred{User: mirrorBasicUser(host), Token: tok}
 		}
 	}

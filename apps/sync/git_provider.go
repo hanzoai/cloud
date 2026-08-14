@@ -83,8 +83,12 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		return false, nil
 	}
 	owner := sy.Org
-	native := normalizeGitName(sy.Target.Locator)
+	native := fold(sy.Target.Locator)
 	source := sy.Source.Locator
+	// The ACCOUNT the source belongs to, which is half of which repository this
+	// is: a name is unique only within one, and the sync's own source URL is
+	// where this row's account is written down.
+	account := accountOf(source)
 	tok, err := gitToken(ctx, sy.Source.Provider, sy.Org, source, ev.Token)
 	if err != nil {
 		return false, err
@@ -93,7 +97,7 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		// Advance the pushed ref fast-forward only; a diverged forge ref is a
 		// Conflict (preserved) and an up-to-date ref is a no-op — both "no change".
 		res, err := cloud.InboundGitSync(cloud.For(ctx, owner), cloud.GitInboundReq{
-			Org: owner, Repo: native, Ref: ev.Ref,
+			Org: owner, Project: account, Repo: native, Ref: ev.Ref,
 			CloneURL: source, Token: tok, Origin: hostOf(source),
 		})
 		if err != nil {
@@ -118,13 +122,14 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		// wins over a stated one, so a job supplies an identity where there is
 		// none and can never launder one.
 		if err := cloud.ImportGitRepo(cloud.For(ctx, owner), cloud.GitImportReq{
-			Org: owner, Repo: native, CloneURL: source, Token: tok, MirrorURL: mirrorURL,
+			Org: owner, Project: account, Repo: native,
+			CloneURL: source, Token: tok, MirrorURL: mirrorURL,
 		}); err != nil {
 			return false, fmt.Errorf("import: %w", err)
 		}
 		changed = true
 	} else if dirPushes(sy.Direction) {
-		if err := cloud.EnsureGitMirror(ctx, owner, "", native, source, true); err != nil {
+		if err := cloud.EnsureGitMirror(ctx, owner, account, native, source, true); err != nil {
 			return false, fmt.Errorf("ensure mirror: %w", err)
 		}
 		// DECLARING A TARGET SENDS NOTHING TO IT. Push-only means nothing comes in,
@@ -132,7 +137,11 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		// without it a push-only sync recorded an intention and moved no bytes,
 		// which is what it did while the pushing lived on a lifecycle in an app
 		// that no longer receives one.
-		if err := pushOut(cloud.For(ctx, owner), owner, native); err != nil {
+		//
+		// And it is the whole of it, so its failure is this reconcile's failure:
+		// returning "changed" for a push nothing received is what stamps "last
+		// synced, just now" on a repository that is not synced at all.
+		if err := pushOut(cloud.For(ctx, owner), owner, account, native); err != nil {
 			return false, fmt.Errorf("mirror out: %w", err)
 		}
 		changed = true
@@ -162,7 +171,7 @@ func gitToken(ctx context.Context, provider, org, source, eventToken string) (st
 		return eventToken, nil
 	}
 	if strings.EqualFold(provider, provGitHub) {
-		if tok, err := integrations.InstallationToken(ctx, org, githubOwnerOf(source)); err == nil && strings.TrimSpace(tok) != "" {
+		if tok, err := integrations.InstallationToken(ctx, org, accountOf(source)); err == nil && strings.TrimSpace(tok) != "" {
 			return tok, nil
 		}
 		// NO FALLBACK TOKEN HERE, deliberately. Returning "" leaves the import with a
@@ -182,14 +191,14 @@ func gitToken(ctx context.Context, provider, org, source, eventToken string) (st
 // name (last path segment of the clone URL, minus .git) is the identity; it equals
 // the native target name for a git sync.
 func gitRepoMatches(sy Sync, ev Event) bool {
-	want := normalizeGitName(ev.Repo)
+	want := fold(ev.Repo)
 	if want == "" {
 		want = repoNameFromLocator(ev.Locator)
 	}
 	if want == "" {
 		return false
 	}
-	return want == repoNameFromLocator(sy.Source.Locator) || want == normalizeGitName(sy.Target.Locator)
+	return want == repoNameFromLocator(sy.Source.Locator) || want == fold(sy.Target.Locator)
 }
 
 // repoNameFromLocator extracts the short repo name from a clone URL or an
@@ -207,12 +216,16 @@ func repoNameFromLocator(locator string) string {
 	if i := strings.LastIndexByte(locator, '/'); i >= 0 {
 		locator = locator[i+1:]
 	}
-	return normalizeGitName(locator)
+	return fold(locator)
 }
 
-// normalizeGitName lowercases + trims a repo name (git repo names are case-folded
-// in this store, matching the git plane's normalizeName).
-func normalizeGitName(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+// fold is the canonical spelling of a name — an org, an account, a repository.
+//
+// ONE operation, because it is one question: two spellings that differ only in
+// case or in surrounding space name the same thing, upstream and on the forge
+// alike. Folding some of them and not others is what let ` Hanzo ` and `hanzo`
+// take different gates and different store files while addressing one namespace.
+func fold(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
 
 // hostOf returns the lowercased host of a URL — the loop-prevention Origin stamp the
 // outbound mirror matches. "" on a parse miss.
@@ -224,10 +237,14 @@ func hostOf(raw string) string {
 	return strings.ToLower(u.Hostname())
 }
 
-// githubOwnerOf reads the account from a GitHub source URL — the first path segment
-// of https://github.com/<owner>/<repo>.git. Empty when the URL names none, which
-// lets the single-connection case resolve as before.
-func githubOwnerOf(source string) string {
+// accountOf reads the ACCOUNT out of a clone URL — the first path segment of
+// https://host/<account>/<repo>.git. Empty when the URL names none, which lets
+// the single-connection case resolve as before.
+//
+// It is one function because it answers one question in two places: WHOSE
+// installation token to mint, and WHICH repository this is (a name is unique
+// only within an account — see [newRepo]).
+func accountOf(source string) string {
 	u, err := url.Parse(strings.TrimSpace(source))
 	if err != nil {
 		return ""
