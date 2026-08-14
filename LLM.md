@@ -718,7 +718,7 @@ package under `apps/<name>` that obeys these seams — nothing more.
   mw2, mw3, handler)` is one registration with four handlers (apps/commerce.go:151),
   and the whole `/v1/store/*` surface is that shape. A high handler count is
   therefore evidence of nothing on its own; only a subsystem that never chains
-  middleware (bots/visor/runtime) can read `len(Handlers) > 1` as a collision.
+  middleware (bots/visor) can read `len(Handlers) > 1` as a collision.
 - **Per-org data.** The ONE way any subsystem opens a per-org SQLite file is
   `cloud.OrgDB(dataDir, org, project, sub)` — or the cached `cloud.OrgStore[T]`
   (`NewOrgStore` + `For(org, project)`). Path convention:
@@ -1983,7 +1983,7 @@ command, no typed SDK method. It was 38 operations. Two things it taught:
   `plugin/ai` is `github.com/hanzoai/ai`'s beego `ControllerRegister` behind
   `zip.AdaptNetHTTP`, `plugin/licensing` is `github.com/hanzoai/licensing`'s
   `http.Handler` behind the same. Each refusal is now written AT its registration
-  (apps/dns/dns.go, apps/runtime/ops.go, apps/ai/ai.go) rather than only here.
+  (apps/dns/dns.go, apps/bots/relay.go, apps/ai/ai.go) rather than only here.
 - **`plugin/ai` is the largest hole in the fleet document, and it is upstream's.**
   That one wildcard stands for ~200 real routes — `/v1/chat/completions`,
   `/v1/models`, `/v1/messages` — so the AI API appears in openapi.yaml, in every
@@ -2076,7 +2076,8 @@ request side only. Count it from the subsets, never tally it in prose:
 
 The same pass moved `dns` and `runtime` from a refusal written in prose at the
 registration to one that is GATED — `untypedByDesign` +
-`TestEveryRouteIsTypedOrNamed` in `apps/{dns,runtime}/typed_wire_test.go`, reading
+`TestEveryRouteIsTypedOrNamed` in `apps/{dns,bots}/typed_wire_test.go` (the
+runtime half moved to `apps/bots` at `a8b952f47`, gate intact), reading
 the live router of the real `Mount`, so a route added to either is typed by
 default and a reason that stops being true goes red. `ai` and `licensing` stay
 ungated on purpose: their registrations are in another module, so there is no
@@ -3189,22 +3190,66 @@ semantic is identical — fail closed once armed, allow before.
   sibling subsystem that must ACT AS a caller (the Business AI guide's "do it for
   me") — same 403 gate, per-org concurrency bound, one metered unit, one audit
   record. Use these seams; never re-implement tool dispatch.
-- **"Bot" is three values; each has one home and one namespace.** Do not merge
-  them and do not let them share a route prefix — they did once, and the router
-  resolves byte-identical patterns by first-registration with no panic (it MERGES
-  the handlers, so counting `GetRoutes()` entries cannot see it), and visor's
-  machine list silently answered the console's run list.
-  (1) A bot RUN — a task the runtime executes on a surface — is `apps/bots` at
-  `/v1/bots`. (2) A bot MACHINE — visor-provisioned compute of kind=bot plus its
-  agent binding — is `apps/visor` at `/v1/compute/bots`; what it rents you is
-  compute, so it nests in visor's domain. (3) The runtime SERVICE — the TS bot
-  (channels/skills), never reimplemented in Go — is reached through
-  `apps/runtime`, which is a TRANSPORT, not a domain: base address, identity,
-  framing, cleartext policy, and the `/v1/bot/*` ops face. It is named for what it
-  does, not for the host it dials, and it must never import `bots`/`coding` — each
-  of those owns its own wire stub (`bots/wire.go`, `coding/task.go`) and speaks
-  through the seam. That isolation is what makes the HIP-0106/HIP-0120 ZAP swap a
-  seam swap instead of a rewrite.
+- **"Bot" is FOUR values; each has one home.** Do not merge them and do not let
+  them share a route prefix — they did once, and the router resolves
+  byte-identical patterns by first-registration with no panic (it MERGES the
+  handlers, so counting `GetRoutes()` entries cannot see it), and visor's machine
+  list silently answered the console's run list. Ask the ROUTER, never this list:
+  `go test ./manifest -run TestEveryServedPathReachesTheAppThatServesIt -v` prints
+  the app each address reaches, and that is the only statement of ownership here
+  that cannot go stale.
+
+  (1) A bot RUN — a task the executor performs on a surface — is `apps/bots` at
+  `/v1/bots` (3 ops: a 501 launch, list, stop). (2) A bot MACHINE — a
+  visor-provisioned kind=bot machine plus its agent binding — is `apps/visor` at
+  `/v1/compute/bots` (apps/visor/bots.go); what it rents you is compute, so it
+  nests in visor's domain. (3) The executor's own OPS FACE — the TS bot
+  (channels/skills), never reimplemented in Go — is `apps/bots` at `/v1/bot/*`
+  (apps/bots/relay.go), a verbatim relay carrying base address, identity, framing
+  and cleartext policy. (4) A bot NODE — one of the org's OWN machines that
+  dialled in and holds a socket — is `apps/bot` at `/v1/bot/connect`,
+  `/v1/bot/nodes`, `/v1/bot/peer/invoke` (apps/bot/subsystem.go).
+
+  **`apps/runtime` IS GONE** — deleted at `a8b952f47`, which folded the transport
+  into `apps/bots` (`runtime/ops.go`→`bots/relay.go`,
+  `runtime/runtime.go`→`bots/transport.go`) because the split was a LANGUAGE
+  boundary (Go surface, TS executor) and not a product one. `plugin/runtime` went
+  with it, and the untyped gate moved intact into
+  `apps/bots/typed_wire_test.go`. Sense (3) is therefore ALREADY merged: there is
+  nothing left to fold, and a plan that opens "fold the service sense into
+  `apps/runtime`" is reading a record older than that commit. This bullet said
+  three values and named `apps/runtime` for months after it was deleted, and it
+  dispatched two successive wrong plans before anyone read the directory.
+
+  **The name `runtime` is free at the app level and belongs to `apps/sandbox`** —
+  `apps/sandbox/runtime.go` already uses it for what a sandbox is MADE OF
+  (`runtimes` maps runc / gvisor / kata-clh / kata-fc to `{kernel, shares}`;
+  `runtimeFor` derives the isolation). A sandbox is an INSTANCE of a runtime.
+  What survives of the old squat is package-local to `apps/bots`: the `Runtime`
+  interface (imported by nothing outside it), the `state.runtime` field and ~10
+  `"runtime: …"` error prefixes in transport.go. Renaming it moves no wire and no
+  operationId, but its PROSE reaches `zipdoc_gen.go` and therefore the published
+  document, every SDK docstring and every MCP tool description — so regenerate
+  (`make -C apps/bots describe`), never hand-edit.
+
+  **TWO FOLDS THAT LOOK AVAILABLE AND ARE NOT.** A bot MACHINE is not a sandbox:
+  `apps/sandbox` is a gVisor pod addressed by pod name through the apiserver, with
+  no `os/exec`, no pool and a lease; a bot machine is a rented provider droplet
+  with a public IP, cloud-init-bootstrapped, carrying `hanzo-kind:bot` and a
+  size/region. Folding (2) into the sandbox primitive deletes a PRODUCT, not a
+  duplicate meaning. Nor are (3) and (4) one value — a relay to somebody else's
+  service is not a registry of the org's own connected machines.
+
+  **The live defect is that (3) and (4) SHARE `/v1/bot`** (`manifest/apps.go:371`
+  and `:383`). Only specificity keeps them apart: bot's three deeper prefixes beat
+  bots' bare `/v1/bot`. It is bot's to fix by vacating — its product is connected
+  machines, not a bot — and it is a WIRE BREAK with live consumers in the Rust CLI
+  (`cli/src/commands/product/generated.rs`), js-sdk (`src/api/bot-api.ts`),
+  python-sdk (`api/bot_api.py`) and `openapi/hanzo.yaml`, so it moves as a decision
+  and not as tidying. All four families have external consumers; none can vanish.
+  `go-sdk` is separately STALE on two of them — `cloud/api_bots.go` points `Visor*`
+  operations at `/v1/bots/*`, which now serves bot RUNS, so `VisorListBots` reads
+  another noun's list with a 200 rather than a 404.
 - **vm speaks TWO wires, and a call site says which — `cl.call` or `cl.op`.**
   Visor (`hanzoai/visor`) is converting its routes to typed zip ops noun by noun,
   and a typed op has no envelope: the answer IS the value, the status IS the
