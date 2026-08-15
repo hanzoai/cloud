@@ -305,24 +305,38 @@ type Parameter struct {
 // the document as an extension rather than as a tag because the tag axis already
 // means PRODUCT — `compat` had to be filtered back out of it by [Products], and a
 // second orthogonal fact in the same slot would be that wart twice.
+// Security overrides the document-level requirement for ONE operation, and a
+// pointer is what lets it say the two different things OpenAPI distinguishes:
+// absent means "inherit the document's requirement" and present-and-empty means
+// "this needs no credential at all". A plain slice collapses both onto nil and
+// could only ever say the first. Nothing sets it to a non-empty value — an
+// operation with a requirement of its own would be a second credential, and there
+// is one (openapi/security.go). [Open] is what writes it.
 type Operation struct {
-	OperationID string      `json:"operationId"`
-	Summary     string      `json:"summary,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Tags        []string    `json:"tags,omitempty"`
-	Parameters  []Parameter `json:"parameters,omitempty"`
-	RequestBody any         `json:"requestBody,omitempty"`
-	Responses   any         `json:"responses,omitempty"`
-	App         string      `json:"x-app,omitempty"`
-	Public      bool        `json:"x-public,omitempty"`
+	OperationID string         `json:"operationId"`
+	Summary     string         `json:"summary,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Tags        []string       `json:"tags,omitempty"`
+	Parameters  []Parameter    `json:"parameters,omitempty"`
+	RequestBody any            `json:"requestBody,omitempty"`
+	Responses   any            `json:"responses,omitempty"`
+	Security    *[]Requirement `json:"security,omitempty"`
+	App         string         `json:"x-app,omitempty"`
+	Public      bool           `json:"x-public,omitempty"`
 }
 
 // Components holds the named schemas operations reference by $ref, so an SDK
 // generator mints one named type per Go struct instead of an anonymous shape per
 // operation. Open-typed: Register contributes *Schema values, the typed fold
 // contributes zip's JSON Schema verbatim — both marshal to the same vocabulary.
+//
+// SecuritySchemes names the credential the API reads. It is the one component a
+// route table cannot supply, so it is declared rather than derived — see
+// openapi/security.go, and [Document.Security] for the requirement that points at
+// it.
 type Components struct {
-	Schemas map[string]any `json:"schemas,omitempty"`
+	Schemas         map[string]any            `json:"schemas,omitempty"`
+	SecuritySchemes map[string]SecurityScheme `json:"securitySchemes,omitempty"`
 }
 
 // PathItem maps a lowercased HTTP method to its operation.
@@ -365,7 +379,10 @@ type PathItem map[string]*Operation
 //   - query and header parameters — read positionally via c.Query("k") at
 //     runtime; not part of the match, so the router has never heard of them.
 //   - auth requirements — enforced by middleware and by guards wrapped around
-//     handlers (guard(s, cloud.Handle(s, listSecrets))), invisible as data.
+//     handlers (guard(s, cloud.Handle(s, listSecrets))), invisible as data. No
+//     reading of a func value recovers them, so the credential is DECLARED
+//     (openapi/security.go): one scheme, a document-level requirement every
+//     operation inherits, and [Open] on the few that need none.
 //   - summaries/descriptions — prose that exists only in Go comments (a typed
 //     op's zipdoc lift, or a refused route's Describe declaration).
 //   - wildcard semantics — a fiber `*` matches MULTIPLE segments greedily;
@@ -430,6 +447,7 @@ type Document struct {
 	OpenAPI    string              `json:"openapi"`
 	Info       Info                `json:"info"`
 	Servers    []Server            `json:"servers,omitempty"`
+	Security   []Requirement       `json:"security,omitempty"`
 	Tags       []Tag               `json:"tags,omitempty"`
 	Paths      map[string]PathItem `json:"paths"`
 	Components *Components         `json:"components,omitempty"`
@@ -662,6 +680,10 @@ func Spec(app *zip.App, info Info, servers ...Server) (*Document, error) {
 	// Project replaces doors with what is behind them, so a mark written before
 	// either would be thrown away by it. See openapi/public.go.
 	stamp(doc)
+	// And the credential, on that same finished set, for that same reason. Two
+	// facts a route table cannot carry, declared beside the routes and written
+	// here where every operation exists at its published address.
+	secure(doc)
 	return doc, nil
 }
 
@@ -798,6 +820,13 @@ func init() {
 			"to read the contract before it holds a credential, and the document grants nothing.\n\n"+
 			"Rendered once and served as bytes thereafter, so the route table's immutability is "+
 			"what makes a repeat request a memcpy rather than a re-encode of a megabyte document.")
+	// And it says so in the contract, not only in the prose above. The reasoning
+	// on [Mount] is what makes this door unauthenticated; without the declaration
+	// the document would inherit the fleet requirement and tell every generated
+	// client to hold a credential before it can read the description it needs in
+	// order to know what a credential is for. CommandPath is the same door under
+	// [serve] and gets the same answer (command.go).
+	Open(Path, http.MethodGet)
 }
 
 func serve(app *zip.App, doc func() (*Document, error)) {
