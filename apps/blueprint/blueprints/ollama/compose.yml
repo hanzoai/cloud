@@ -1,0 +1,21 @@
+# Hanzo blueprint: Ollama — serving open models on your own machine to replace a
+# managed inference endpoint.
+#
+# The estimate below is the CPU and memory the container reserves. It is NOT the
+# cost of serving a model: that is a GPU, which this compose does not request and
+# the rate card does not price. Read it as the floor.
+services:
+  ollama:
+    image: ollama/ollama:0.5.4
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          cpus: "2"
+          memory: 8G
+volumes:
+  ollama:
