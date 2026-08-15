@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -211,6 +213,62 @@ func git(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// A `run:` recipe that emits <name>-<os>-<arch> is indexed BY THAT TRIPLE, so
+// one recipe entry can publish a whole plugin set and a host resolving
+// (name, os, arch) finds each one. Recording the recipe's own name and "any"
+// instead — which is what this lane did — puts every file under one name and
+// resolves nothing, which is the whole reason cloud's plugin lane could not
+// publish through this door. The sibling test below pins the other half: a file
+// with no platform in its name still takes the recipe's name and "any".
+//
+// Both scripts run for real, so the meta.txt hand-off is exercised rather than
+// asserted.
+func TestArtifactScripts_IndexPerFileWhenTheNameCarriesThePlatform(t *testing.T) {
+	if _, err := exec.LookPath("sha256sum"); err != nil {
+		t.Skip("no sha256sum")
+	}
+	src := t.TempDir()
+	write(t, filepath.Join(src, "pack.sh"), "#!/bin/sh\nmkdir -p dist\n"+
+		"for f in o11y-linux-amd64 o11y-linux-arm64 iam-darwin-arm64 pkg-1.2.3.whl\n"+
+		"do echo payload > \"dist/$f\"; done\n")
+	git(t, src, "init", "-q")
+	git(t, src, "add", "-A")
+	git(t, src, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "src")
+
+	idx := runArtifactScripts(t, src, "plugins", "sh pack.sh", "dist/*")
+
+	got := map[string][2]string{}
+	for _, b := range idx.Binaries {
+		got[b.Name] = [2]string{b.OS, b.Arch}
+		if b.SHA256 == "" {
+			t.Errorf("%s: no digest — release.go DROPS an entry without one", b.Name)
+		}
+	}
+	// o11y appears TWICE, once per platform, under its own name — the property
+	// a single "plugins/any/any" entry cannot express.
+	var o11y []string
+	for _, b := range idx.Binaries {
+		if b.Name == "o11y" {
+			o11y = append(o11y, b.OS+"/"+b.Arch)
+		}
+	}
+	sort.Strings(o11y)
+	if want := []string{"linux/amd64", "linux/arm64"}; !slices.Equal(o11y, want) {
+		t.Errorf("o11y = %v, want %v", o11y, want)
+	}
+	if got["iam"] != [2]string{"darwin", "arm64"} {
+		t.Errorf("iam = %v, want darwin/arm64", got["iam"])
+	}
+	// The wheel is not per-platform, so it keeps the recipe's name and "any" —
+	// naming a platform it does not have would be the same lie in reverse.
+	if got["plugins"] != [2]string{"any", "any"} {
+		t.Errorf("pkg-1.2.3.whl = %v under name plugins, want any/any", got["plugins"])
+	}
+	if len(idx.Binaries) != 4 {
+		t.Errorf("index carries %d entries, want 4", len(idx.Binaries))
+	}
+}
+
 // The published index is the ci lane's schema, field for field: `name` is the
 // RECIPE entry's name (what a host asks for), not the file, which the url
 // already carries. Proven by running the two scripts back to back over a fake
@@ -225,40 +283,9 @@ func TestArtifactScripts_IndexNamesTheRecipeEntry(t *testing.T) {
 	git(t, src, "add", "-A")
 	git(t, src, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "src")
 
-	w := t.TempDir()
-	build := exec.Command("/bin/sh", "-c", strings.ReplaceAll(artifactBuildScript, "/w/", w+"/"))
-	build.Env = append(os.Environ(), "NAME=hanzo-sdk", "MAIN=", "RUN=sh pack.sh", "OUT=*.tgz",
-		"LDFLAGS=", "PLATFORMS=", "REPO_URL="+src, "REF=HEAD", "HOME="+w)
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, out)
-	}
-	// The publish half with `put` stubbed out and the readback satisfied: what is
-	// under test is the index it composes, not curl.
-	script := strings.ReplaceAll(artifactPublishScript, "/w/", w+"/")
-	script = strings.Replace(script, "put() {", "put() { :; }\nunused() {", 1)
-	script = strings.Replace(script, `code="$(curl -s -o /dev/null -w '%{http_code}' "$PUT_BASE/binaries.json")"`, `code=200`, 1)
-	pub := exec.Command("/bin/sh", "-c", script)
-	pub.Env = append(os.Environ(), "BASE=https://s3.hanzo.ai/plugins/hanzoai/demo/v1",
-		"PUT_BASE=http://s3.hanzo.svc:9000/plugins/hanzoai/demo/v1",
-		"REPO=hanzoai/demo", "TAG=v1", "S3_REGION=us-east-1",
-		"S3_ADMIN_ACCESS_KEY=k", "S3_ADMIN_SECRET_KEY=s")
-	out, err := pub.CombinedOutput()
-	if err != nil {
-		t.Fatalf("publish: %v\n%s", err, out)
-	}
-	var idx struct {
-		Repo, Tag string
-		Binaries  []struct{ Name, OS, Arch, URL, SHA256 string }
-	}
-	raw, rerr := os.ReadFile(filepath.Join(w, "dist", "binaries.json"))
-	if rerr != nil {
-		t.Fatalf("no index written: %v\n%s", rerr, out)
-	}
-	if err := json.Unmarshal(raw, &idx); err != nil {
-		t.Fatalf("index is not JSON: %v\n%s", err, raw)
-	}
+	idx := runArtifactScripts(t, src, "hanzo-sdk", "sh pack.sh", "*.tgz")
 	if len(idx.Binaries) != 1 {
-		t.Fatalf("index = %s", raw)
+		t.Fatalf("index = %+v", idx.Binaries)
 	}
 	b := idx.Binaries[0]
 	if b.Name != "hanzo-sdk" {
@@ -268,7 +295,48 @@ func TestArtifactScripts_IndexNamesTheRecipeEntry(t *testing.T) {
 		t.Errorf("url = %q — the FILE belongs in the url, not in name", b.URL)
 	}
 	if b.SHA256 == "" || idx.Repo != "hanzoai/demo" || idx.Tag != "v1" {
-		t.Errorf("index = %s", raw)
+		t.Errorf("index = %+v", idx)
+	}
+}
+
+type artifactIndex struct {
+	Repo, Tag string
+	Binaries  []struct{ Name, OS, Arch, URL, SHA256 string }
+}
+
+// runArtifactScripts runs the build half and then the publish half over one
+// workspace, so the meta.txt hand-off between them is the thing under test
+// rather than something asserted about. `put` is stubbed and the readback
+// satisfied: what is being read is the index it composes, not curl.
+func runArtifactScripts(t *testing.T, src, name, run, out string) artifactIndex {
+	t.Helper()
+	w := t.TempDir()
+	build := exec.Command("/bin/sh", "-c", strings.ReplaceAll(artifactBuildScript, "/w/", w+"/"))
+	build.Env = append(os.Environ(), "NAME="+name, "MAIN=", "RUN="+run, "OUT="+out,
+		"LDFLAGS=", "PLATFORMS=", "REPO_URL="+src, "REF=HEAD", "HOME="+w)
+	if o, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, o)
+	}
+	script := strings.ReplaceAll(artifactPublishScript, "/w/", w+"/")
+	script = strings.Replace(script, "put() {", "put() { :; }\nunused() {", 1)
+	script = strings.Replace(script, `code="$(curl -s -o /dev/null -w '%{http_code}' "$PUT_BASE/binaries.json")"`, `code=200`, 1)
+	pub := exec.Command("/bin/sh", "-c", script)
+	pub.Env = append(os.Environ(), "BASE=https://s3.hanzo.ai/plugins/hanzoai/demo/v1",
+		"PUT_BASE=http://s3.hanzo.svc:9000/plugins/hanzoai/demo/v1",
+		"REPO=hanzoai/demo", "TAG=v1", "S3_REGION=us-east-1",
+		"S3_ADMIN_ACCESS_KEY=k", "S3_ADMIN_SECRET_KEY=s")
+	o, err := pub.CombinedOutput()
+	if err != nil {
+		t.Fatalf("publish: %v\n%s", err, o)
+	}
+	raw, rerr := os.ReadFile(filepath.Join(w, "dist", "binaries.json"))
+	if rerr != nil {
+		t.Fatalf("no index written: %v\n%s", rerr, o)
+	}
+	var idx artifactIndex
+	if err := json.Unmarshal(raw, &idx); err != nil {
+		t.Fatalf("index is not JSON: %v\n%s", err, raw)
 	}
 	t.Logf("index: %s", raw)
+	return idx
 }
