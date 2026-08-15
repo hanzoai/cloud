@@ -107,7 +107,15 @@ concurrency:
   # new push to it cancels only its own stale run. cancel-in-progress is now an
   # expression that evaluates to a real boolean rather than a literal whose
   # truthiness was being argued about.
-  group: cicd-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'release' }}
+  #
+  # A hand-started run takes a slot of its own for the same reason a pull request
+  # does. It is asked for on a side branch to answer a question, it runs the full
+  # forty minutes, and while it holds the release slot every push to main queues
+  # behind it and is coalesced away by the next one — so a day of probing releases
+  # nothing, and the runs that never shipped read as a failing pipeline rather than
+  # as a slot that was already occupied. Keyed by run number because two probes are
+  # two questions; neither is the release, and neither should wait on the other.
+  group: cicd-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'workflow_dispatch' && format('probe-{0}', github.run_number) || 'release' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
