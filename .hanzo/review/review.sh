@@ -52,11 +52,37 @@ fi
 # `req` and `resp` are created further down, so the trap defaults them: under
 # `set -u` a trap that expands an unset name fails, and a failing trap replaces
 # the exit status the script chose.
+# GENERATED ARTIFACTS ARE NOT READ, and the drift gate is why that is safe.
+#
+# These six paths are written by `make -f mk/fleet.mk check`, which regenerates
+# them FROM SOURCE and refuses any porcelain change (mk/fleet.mk — the same list,
+# and it is the list because that gate is what defines it). So they are a
+# projection of code that IS reviewed, and a hostile hunk cannot hide in one: to
+# survive it would have to be reproduced by the generator, which means it is in
+# the generator, which is source. `image` needs `gate`, so the regeneration has
+# always already run by the time an image exists.
+#
+# Reading them anyway is not neutral, it is what stopped releases. Measured
+# against v1.801.536: the whole diff was 1,449,734B against a 400,000B bound —
+# and 1,331,591B of that, 92%, was these six. The bound then REFUSED (correctly,
+# it will not truncate), and because the base is the last release TAG the backlog
+# only grew with each push: no release, bigger diff, refused again. A reviewer
+# that cannot read a change because it is full of machine output is not reviewing
+# the change, and here it was also the thing preventing the change from shipping.
+#
+# The bound stays 400,000B. What changed is that the budget is spent on prose a
+# person wrote: the same range measures 118,143B once these are dropped.
+generated=(
+  ':(exclude)openapi.yaml' ':(exclude)public.yaml'
+  ':(exclude)openapi/floor.json' ':(exclude)openapi/closure.json'
+  ':(exclude)fleet/catalog.json' ':(exclude)plugin/*/openapi.json'
+)
+
 diff_file=$(mktemp); trap 'rm -f "$diff_file" "${req:-}" "${resp:-}" 2>/dev/null' EXIT
-git diff --no-color "$BASE".."$HEAD" > "$diff_file" 2>/dev/null || die "could not read the diff $BASE..$HEAD"
+git diff --no-color "$BASE".."$HEAD" -- . "${generated[@]}" > "$diff_file" 2>/dev/null || die "could not read the diff $BASE..$HEAD"
 
 bytes=$(wc -c < "$diff_file")
-files=$(git diff --name-only "$BASE".."$HEAD" | wc -l)
+files=$(git diff --name-only "$BASE".."$HEAD" -- . "${generated[@]}" | wc -l)
 [ "$bytes" -gt 0 ] || { echo "review: empty diff — nothing to read"; exit 0; }
 [ "$bytes" -le "$MAXBYTES" ] || die "diff is ${bytes}B over the ${MAXBYTES}B bound — split the change; a truncated review is not a review"
 
