@@ -117,8 +117,15 @@ func forward(kv map[string]string) {
 // the two disagree in the first place.
 func doorConfig() zip.Config {
 	return zip.Config{
-		AppName:        "cloud",
-		MCP:            zip.MCPConfig{Disabled: true},
+		AppName: "cloud",
+		MCP:     zip.MCPConfig{Disabled: true},
+		// The ceiling on plugin PROCESSES, stated here because zip enforces it
+		// where a plugin starts rather than on the reaper's ticker. It has to be:
+		// the door below asks every subsystem at once, which starts children far
+		// faster than any sweep runs, and a bound restored a minute later is not a
+		// bound — that is how this pod came to hold every child it had, stop
+		// answering its own liveness probe, and get killed.
+		Warm:           manifest.Warm,
 		ReadBufferSize: edge.ReadBufferSize(),
 		BodyLimit:      edge.BodyLimit(),
 	}
@@ -179,7 +186,11 @@ func run(addr, zapAddr string) error {
 	// decides what happens when more than 48 are genuinely in use. It is not read
 	// from the cgroup, because the cgroup carries the LIMIT and the number worth
 	// sizing against is the REQUEST, which a process cannot see.
-	stopReaping := app.Reap(time.Minute, 48)
+	// The ceiling itself is in doorConfig, enforced at every start; this only puts
+	// the AGE bound on a ticker. One reaper: there were two on this app, both a
+	// minute apart with the same number written twice, and a second sweep buys
+	// nothing a single one does not already do.
+	stopReaping := app.Reap(time.Minute)
 	defer stopReaping()
 
 	// THE POD'S WRITER LEASE, and this is the only process that may take it.
@@ -421,9 +432,6 @@ func run(addr, zapAddr string) error {
 	// The sweep is cheap (a timestamp compare per plugin) so a minute is often
 	// enough to be precise without being noisy. Stopped before Shutdown runs,
 	// because a sweep in flight reads state Shutdown writes.
-	stopReaper := app.Reap(time.Minute, manifest.Warm)
-	defer stopReaper()
-
 	// Both transports, same router — the pair cloud.Listen listens on. A bare
 	// address is ZAP (zip's default scheme); HTTP has to be spelled out, and
 	// omitting it is why a curl against the host answers with a frame-size error
