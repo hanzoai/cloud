@@ -38,11 +38,33 @@ type echoOut struct {
 	Org string `json:"org"`
 }
 
+// declared is what the children below PUBLISH, which is a different fact from
+// what they serve and is now the only one the door reads.
+//
+// The door used to ask a running subsystem what it had; it lists from the
+// build-time catalog and asks nothing, because one question about names was
+// costing a process per subsystem. These children are built here rather than by
+// the fleet's generator, so nothing embeds their operations and the harness has
+// to state them — which is exactly the case fleet.Door.Catalog documents.
+//
+// Written by subsystem, read by fleetDoor. Both run on the test's own goroutine
+// and the calls to subsystem are ARGUMENTS to fleetDoor, so they are complete
+// before the map is read; these tests do not run in parallel.
+var declared = map[string][]fleet.Op{}
+
 // subsystem starts one app serving the named ops on its own socket, the shape
 // cloud.Serve gives every plugin binary. Each op echoes its input AND the org it
 // was reached as, so a test can prove the run's tenant travelled the whole way.
 func subsystem(t *testing.T, name string, ops ...string) string {
 	t.Helper()
+	pub := make([]fleet.Op, 0, len(ops))
+	for _, id := range ops {
+		// The same sentence WithSummary puts on the live op, so what the door
+		// lists and what the child would have answered cannot drift apart here.
+		pub = append(pub, fleet.Op{ID: id, Doc: "what " + name + " does at " + id})
+	}
+	declared[name] = pub
+	t.Cleanup(func() { delete(declared, name) })
 	sock := shortDir(t) + "/" + name + ".sock"
 	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
 	for _, id := range ops {
@@ -84,6 +106,10 @@ func fleetDoor(t *testing.T, at map[string]string, inside map[string]string) {
 		return sock, manifest.FrameworkMCPPath, nil
 	}
 	d := fleet.Mount(host, manifest.MCPPath, apps, edge)
+	// nil would mean the catalog THIS binary embeds, which is the real fleet's —
+	// it does not carry these children, so the door would list nothing for them
+	// and every assertion below would read as "the agent was offered 0".
+	d.Catalog = func(app string) []fleet.Op { return declared[app] }
 
 	door := zip.New(zip.Config{AppName: "plane", DisableStartupMessage: true})
 	d.Serve(door, manifest.MCPPath, func(app string) (addr, path string, err error) {
@@ -228,6 +254,11 @@ func guarded(t *testing.T, name, op string) (edge, plane string) {
 	t.Helper()
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
+
+	// Publishing is a separate act from serving, and this child owes it for the
+	// same reason subsystem's do: the door lists from the catalog and never asks.
+	declared[name] = []fleet.Op{{ID: op, Doc: "what " + name + " does at " + op}}
+	t.Cleanup(func() { delete(declared, name) })
 
 	app := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
 	cloud.Identify(app, &cloud.Config{})

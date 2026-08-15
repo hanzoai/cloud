@@ -92,6 +92,14 @@ func doors(t *testing.T) (fromEdge, fromInside *zip.App) {
 
 	d := fleet.Mount(fromEdge, manifest.MCPPath, []string{"websearch"},
 		func(string) (string, string, error) { return edge, manifest.FrameworkMCPPath, nil })
+	// The door lists from the build-time catalog and asks nothing, so a child
+	// this binary did not build publishes nothing and every route below is
+	// "unknown tool". Saying what it publishes is what fleet.Door.Catalog is for;
+	// the Doc is the sentence its own WithSummary carries, so what the door lists
+	// and what the op says about itself cannot drift apart here.
+	d.Catalog = func(string) []fleet.Op {
+		return []fleet.Op{{ID: tenantOp, Doc: "what this op resolves about its caller"}}
+	}
 	d.Serve(fromInside, manifest.MCPPath,
 		func(string) (string, string, error) { return plane, manifest.MCPPath, nil })
 	return fromEdge, fromInside
