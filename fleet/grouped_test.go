@@ -55,9 +55,9 @@ const slackKeeps = 128
 // it. The reading lives in fleet/corpus_test.go, because the naming tests are
 // inside the package and read the same one — a corpus with two loaders is the
 // second source this package exists to delete.
-func corpus(t *testing.T) map[string][]fleet.Op {
+func corpus(t *testing.T) map[string][]fleet.CorpusOp {
 	t.Helper()
-	out := map[string][]fleet.Op{}
+	out := map[string][]fleet.CorpusOp{}
 	for _, op := range fleet.Corpus(t) {
 		out[op.App] = append(out[op.App], op)
 	}
@@ -71,7 +71,7 @@ func corpus(t *testing.T) map[string][]fleet.Op {
 // derives a tool name from the route only when nobody declared one, and every op
 // here declares. Carrying the real doc comment is what makes the byte
 // measurement below a measurement — an enum's prose is a projection of it.
-func serving(t *testing.T, by map[string][]fleet.Op) *zip.App {
+func serving(t *testing.T, by map[string][]fleet.CorpusOp) *zip.App {
 	t.Helper()
 	dir := planetest.Dir(t)
 	kids := map[string]*child{}
@@ -86,7 +86,7 @@ func serving(t *testing.T, by map[string][]fleet.Op) *zip.App {
 	return host(t, apps, kids)
 }
 
-func serve(t *testing.T, dir, name string, ops []fleet.Op) *child {
+func serve(t *testing.T, dir, name string, ops []fleet.CorpusOp) *child {
 	t.Helper()
 	sock := filepath.Join(dir, name+".sock")
 	a := zip.New(zip.Config{AppName: name, DisableStartupMessage: true})
@@ -105,11 +105,11 @@ func serve(t *testing.T, dir, name string, ops []fleet.Op) *child {
 // shape of the surface rather than what the fleet documents.
 func declaring(t *testing.T, by map[string][]string) *zip.App {
 	t.Helper()
-	ops := map[string][]fleet.Op{}
+	ops := map[string][]fleet.CorpusOp{}
 	for app, list := range by {
-		ops[app] = make([]fleet.Op, 0, len(list))
+		ops[app] = make([]fleet.CorpusOp, 0, len(list))
 		for _, id := range list {
-			ops[app] = append(ops[app], fleet.Op{App: app, ID: id, Doc: "what " + app + " does at " + id})
+			ops[app] = append(ops[app], fleet.CorpusOp{App: app, ID: id, Doc: "what " + app + " does at " + id})
 		}
 	}
 	return serving(t, ops)

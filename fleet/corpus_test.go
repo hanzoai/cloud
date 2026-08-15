@@ -3,9 +3,6 @@
 package fleet
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"sort"
 	"testing"
 )
@@ -23,7 +20,7 @@ import (
 // package no other way to share a helper, and two loaders over one directory is
 // the kind of second source this whole package exists to delete.
 
-// Op is one operation of the corpus: the subsystem that declares it, the id it
+// CorpusOp is one operation of the corpus: the subsystem that declares it, the id it
 // declares, and what that subsystem wrote about it.
 //
 // Doc is the OpenAPI `description`, not the `summary`, because that is what a
@@ -31,7 +28,7 @@ import (
 // comment the generator lifted and falls back to the summary (zip@v1.27.0
 // mcp.go). A fixture built on summaries would measure prose the fleet does not
 // send.
-type Op struct {
+type CorpusOp struct {
 	App string
 	ID  string
 	Doc string
@@ -40,43 +37,16 @@ type Op struct {
 // Corpus reads every operation this fleet declares, ordered by subsystem and
 // then by id — the order gather would see before it sorts by [rank], so a test
 // that prints it prints something stable.
-func Corpus(t *testing.T) []Op {
+func Corpus(t *testing.T) []CorpusOp {
 	t.Helper()
-	specs, err := filepath.Glob(filepath.Join("..", "plugin", "*", "openapi.json"))
-	if err != nil || len(specs) == 0 {
-		t.Fatalf("no plugin specs at ../plugin/*/openapi.json (%v): the corpus is this fleet's own ops, not invented ones", err)
+	var out []CorpusOp
+	for app, ops := range catalog {
+		for _, op := range ops {
+			out = append(out, CorpusOp{App: app, ID: op.ID, Doc: op.Doc})
+		}
 	}
-	var out []Op
-	for _, path := range specs {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		var doc struct {
-			Paths map[string]map[string]struct {
-				OperationID string `json:"operationId"`
-				Summary     string `json:"summary"`
-				Description string `json:"description"`
-			} `json:"paths"`
-		}
-		if err := json.Unmarshal(raw, &doc); err != nil {
-			t.Fatalf("%s: %v", path, err)
-		}
-		app := filepath.Base(filepath.Dir(path))
-		seen := map[string]bool{}
-		for _, methods := range doc.Paths {
-			for _, op := range methods {
-				if op.OperationID == "" || seen[op.OperationID] {
-					continue
-				}
-				seen[op.OperationID] = true
-				d := op.Description
-				if d == "" {
-					d = op.Summary
-				}
-				out = append(out, Op{App: app, ID: op.OperationID, Doc: d})
-			}
-		}
+	if len(out) == 0 {
+		t.Fatal("the catalog is empty: run `go run ./plugin/gen-fleet-catalog .`")
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].App != out[j].App {
