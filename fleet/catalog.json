@@ -5120,6 +5120,14 @@
    "doc": "Starts a wallet sign-in: it returns a one-time challenge for the wallet\nto sign. The challenge is good once and is tied to the site that asked for it,\nso a signature collected elsewhere cannot be replayed here."
   },
   {
+   "id": "get_iam_webauthn_signin_begin",
+   "doc": "Starts a passkey sign-in: it returns the challenge the person's\nauthenticator signs.\n\nThe account is named in the query, and the challenge is bound to it, so what may\nanswer is decided here — by the server, from the row — and the finish checks the\nanswer against that decision rather than recomputing it."
+  },
+  {
+   "id": "get_iam_webauthn_signup_begin",
+   "doc": "Starts enrolling a passkey for the signed-in person: it returns the\noptions their browser hands to the authenticator.\n\nPasskeys already on the account are EXCLUDED, so a second enrollment on a device\nthat already holds one is refused by the authenticator itself rather than\nsilently producing a duplicate the person cannot tell apart."
+  },
+  {
    "id": "get_iam_whoami",
    "doc": "Tells you who the current caller is — the lightweight check a\npage makes on load to decide whether to render signed-in or signed-out.\n\nIt answers for a session cookie or a bearer token alike, and says plainly when\nnobody is signed in rather than failing."
   },
@@ -5520,6 +5528,14 @@
    "doc": "Completes a wallet sign-in: it verifies the signed challenge and, if it\nholds, signs the wallet's owner in.\n\nThis IS the login — it answers exactly as a password sign-in does, so the rest\nof your flow does not branch on how somebody arrived."
   },
   {
+   "id": "post_iam_webauthn_signin_finish",
+   "doc": "Verifies the signed challenge and signs the person in.\n\nIt answers exactly as a password sign-in does — the same envelope, through the\nsame grant — so nothing downstream branches on how somebody arrived."
+  },
+  {
+   "id": "post_iam_webauthn_signup_finish",
+   "doc": "Verifies the newly created passkey and stores it, so the person\ncan sign in with their device from then on."
+  },
+  {
    "id": "post_iam_workspaces",
    "doc": "Makes a workspace inside your organization — the scope a team works in,\nalongside projects rather than instead of them. A name already used in the\norganization is refused."
   },
@@ -5550,6 +5566,10 @@
   {
    "id": "put_iam_scim_v2_users_by_owner_by_name",
    "doc": "Overwrites a person's SCIM attributes with what your identity\nprovider sends — how a change made there lands here.\n\nOnly the attributes SCIM describes are replaced. Anything the standard does not\ncover — their multi-factor enrolment above all — survives untouched, so a\nroutine sync from your IdP can never quietly strip someone's second factor or\nbring a deleted account back."
+  },
+  {
+   "id": "setOrganizationAvatar",
+   "doc": "Changes how an organization appears across Hanzo: the square mark\nbeside its name, as an uploaded image or as a single emoji. Sending an image\nclears the emoji and sending an emoji clears the image — an organization has\none mark, not a preference order — and sending neither clears both, which is\nhow it goes back to being drawn as its initial.\n\nAn image is an https link or the bytes inline as a data URL, up to 96 KiB.\nAnyone who administers the organization may set this; it is not reserved to\nthe platform.\n\nIt writes the two fields onto the stored row and touches nothing else, which\nupdate cannot do: update replaces the whole record, and a record read back\nfirst arrives masked, so a read-modify-write through it would persist the mask\nover the organization's own credential settings."
   },
   {
    "id": "updateOrganization",
