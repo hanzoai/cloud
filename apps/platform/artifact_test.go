@@ -468,3 +468,62 @@ func runArtifactScripts(t *testing.T, src, name, run, out string) artifactIndex 
 	t.Logf("index: %s", raw)
 	return idx
 }
+
+// An UNDECLARED recipe field is OMITTED, never sent empty.
+//
+// This is the invariant behind three separate outages, each of which reported
+// success: an empty PLATFORMS defeated a makefile's conditional default ("0
+// binaries for 0 platforms"), and the index recorded a triple it did not have.
+// An unset variable lets the recipe's own default stand; an empty one overrides
+// it with nothing, which is the one answer that is never true.
+//
+// The script reads every optional field as ${VAR:-}, so absence is legal under
+// `set -u` — that pairing is what makes omission safe, and both halves are
+// asserted here so neither can be undone alone.
+func TestRecipeEnv_OmitsWhatTheRecipeDidNotDeclare(t *testing.T) {
+	names := func(b binarySpec) map[string]string {
+		got := map[string]string{}
+		for _, e := range recipeEnv("https://git.hanzo.ai/hanzoai/cloud", "v1", b) {
+			m := e.(map[string]any)
+			got[m["name"].(string)] = m["value"].(string)
+		}
+		return got
+	}
+
+	// A run: recipe declares no platforms, no main, no ldflags.
+	run := names(binarySpec{Name: "plugins", Run: "make dist", Out: "dist/*"})
+	for _, absent := range []string{"PLATFORMS", "MAIN", "LDFLAGS"} {
+		if v, ok := run[absent]; ok {
+			t.Errorf("%s must be OMITTED for a run: recipe, got %q — an empty value defeats the recipe's own default", absent, v)
+		}
+	}
+	for k, want := range map[string]string{"RUN": "make dist", "OUT": "dist/*", "NAME": "plugins"} {
+		if run[k] != want {
+			t.Errorf("%s = %q, want %q", k, run[k], want)
+		}
+	}
+
+	// The Go lane declares them, so it gets them.
+	gol := names(binarySpec{Name: "cloud", Main: "./cmd/cloud", Ldflags: "-s -w", Platforms: []string{"linux/amd64", "linux/arm64"}})
+	if gol["PLATFORMS"] != "linux/amd64 linux/arm64" || gol["MAIN"] != "./cmd/cloud" || gol["LDFLAGS"] != "-s -w" {
+		t.Errorf("the Go lane must receive what it declared, got %v", gol)
+	}
+	if _, ok := gol["RUN"]; ok {
+		t.Error("RUN must be omitted for the Go lane")
+	}
+
+	// The workspace is the JOB's own knowledge, always stated.
+	for _, k := range []string{"HOME", "GOPATH", "npm_config_cache", "REPO_URL", "REF"} {
+		if run[k] == "" {
+			t.Errorf("%s must always be set", k)
+		}
+	}
+
+	// Absence must be LEGAL: the script is `set -eu`, so every optional read has
+	// to tolerate an unset variable or omitting it turns into a fatal error.
+	for _, v := range []string{"MAIN", "RUN", "OUT", "LDFLAGS", "PLATFORMS"} {
+		if !strings.Contains(artifactBuildScript, "${"+v+":-}") {
+			t.Errorf("the script must read $%s as ${%s:-} — it runs under set -u and the field may be absent", v, v)
+		}
+	}
+}
