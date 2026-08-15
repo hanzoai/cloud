@@ -1072,6 +1072,8 @@ github.com/hanzoai/csqlite v0.1.2 h1:4DzdgUfKADhzEP66Y30/HwepuBLrwt7NsemJMfrPGl4
 github.com/hanzoai/csqlite v0.1.2/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
 github.com/hanzoai/dashscopego v0.6.0/go.mod h1:ciV938pktk0Tw6ssGYzEdxwS8OaHgv3xCWiy7W5664E=
+github.com/hanzoai/dataroom v1.1.7 h1:zEOzJWrTfHUYfouHxtugGm1bsO5A+3bXXYkxfPmM70s=
+github.com/hanzoai/dataroom v1.1.7/go.mod h1:V/X9pCYy59piMeLCBECtS/182BEOBTsl5XegO666Q2E=
 github.com/hanzoai/dbx v1.17.2 h1:EBADhGuOMxCsc4eHj5cJmtE9c7tSKaviyl8URx31NOQ=
 github.com/hanzoai/dbx v1.17.2/go.mod h1:u7f8kFoy1tS6YRzVNEurA/NlkRF9Uq9ZhDEqOchFtSM=
 github.com/hanzoai/decimal v0.1.2 h1:QUprOn6BSxQCZfj9YwISV+ouPoN0S9p6LZYk7O7JIYA=

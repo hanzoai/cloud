@@ -17,6 +17,7 @@ require (
 	github.com/hanzoai/account v0.3.1
 	github.com/hanzoai/cek v0.2.7
 	github.com/hanzoai/commerce v1.50.48
+	github.com/hanzoai/dataroom v1.1.7
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
