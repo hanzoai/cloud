@@ -129,20 +129,20 @@ func sessionFor(ctx context.Context, bearer string, ttl time.Duration) (iam.Sess
 	return iam.Exchange(ctx, cloud.IAMBase(), id, secret, bearer, ttl)
 }
 
-// script is what makes the tools inside a sandbox work as its owner.
-// It runs ONCE, with the token on stdin and never in argv or the environment,
-// where `ps` and /proc would publish it to every process in the pod.
+// script is what makes the tools inside a sandbox work as its owner. It reads the
+// token from STDIN and never from argv or the environment, where `ps` and /proc
+// would publish it to every process in the pod.
 //
 // `git config` writes the file rather than this composing one, so git owns the
 // quoting of its own format. The helper asks `hanzo` for the current token
 // instead of holding a copy, so there is ONE credential in the pod and no second
 // one on disk to be left behind when the first is replaced.
 //
-// A TOOL THAT IS NOT THERE IS NOT A FAILURE. A caller may name its own image, and
-// an image without `git` has nothing to configure and one without `hanzo` has
-// nothing to sign in — so each half is skipped rather than failing a lease over a
-// credential its image could not have spent. A tool that IS there and fails still
-// fails the lease, which is the case worth hearing about.
+// A TOOL THAT IS NOT THERE IS NOT ASKED. A caller may name its own image, and an
+// image without `git` has nothing to configure and one without `hanzo` has
+// nothing to sign in — so each half asks before it acts, and an image that
+// carries neither is a clean exit rather than a line in the log about a
+// credential it could not have spent.
 //
 // HOME is the IMAGE's, and /home/sandbox only when the image states none. An exec
 // session inherits whatever the image set, and writing to our own guess would put
