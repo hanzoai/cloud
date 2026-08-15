@@ -1,85 +1,80 @@
 package sandbox
 
-// cred.go — WHAT A SUPERADMIN'S OWN SANDBOX IS HANDED, and why nothing else is
-// handed anything.
+// cred.go — WHAT A SANDBOX IS HANDED, and whose it is.
 //
-// runtime.go states the invariant this file is the other half of: the admin image
-// carries no credential, so kubectl with no kubeconfig and doctl with no token
-// are argument parsers, and what a pod is handed is decided by the IDENTITY that
-// leased it rather than by the bytes it booted. This is that decision, made once
-// and in one place.
+// A sandbox runs code its owner submitted, on our nodes, and the tools inside it
+// — `hanzo`, `git`, the coding tools — are useless without an identity. So every
+// lease is handed ONE credential: a short-lived IAM token for THE OWNER, and
+// nothing else. Two facts make that safe to say out loud:
 //
-// ONE PREDICATE answers both halves. `admin` below decides which bytes the pod
-// boots AND which credentials it holds, because they are the same fact asked
-// twice: a lease that took the admin image without the credentials is a shell
-// whose kubectl reaches nothing, and a lease that took the credentials without
-// the image has no kubectl to spend them. Two lines that must agree are one line.
+//	IT IS THE CALLER'S OWN. The token is not minted from an authority of ours; it
+//	is EXCHANGED (RFC 8693) for the token the caller presented on the create call.
+//	Possession of that token is the whole authorization, so this path cannot reach
+//	an identity that did not just call us. A sandbox therefore holds exactly what
+//	its owner already held and never a shared, admin, or cross-tenant credential.
 //
-// NOTHING IS MINTED HERE. IAM is all auth and tokens, and this file issues no
-// credential, names no new one and validates none. It READS a secret KMS already
-// holds and DigitalOcean already issued, and puts the SuperAdmin's own account
-// credentials in the SuperAdmin's own pod — the same two values they would paste
-// in by hand. That is what makes it a delivery rather than the fourth rejected
-// credential design: there is no new authority, and no second answer to "may this
-// pod do X".
+//	IT DIES WITH THE LEASE. The exchange asks for the lease's own remaining life
+//	(IAM clamps it one way, so this can only ever shorten), and no refresh token is
+//	issued — nothing inside the pod can renew what it holds. A 15-minute exec
+//	sandbox gets a 15-minute credential.
 //
-// EACH CREDENTIAL ARRIVES WHERE ITS TOOL LOOKS FOR IT. There are two routes and
-// neither is an accident:
+// EACH CREDENTIAL ARRIVES WHERE ITS TOOL LOOKS FOR IT, and every one of them
+// arrives through the EXEC CHANNEL rather than the Pod spec. A value in the spec
+// is a value in etcd and in every `kubectl describe` of that pod; written through
+// exec it lives in the container's ephemeral rootfs, in NO Kubernetes object at
+// all, and dies with the pod — which is exactly the lifetime a credential for one
+// lease should have. That is why the ordinary lease's Pod spec is byte-identical
+// to the one it had before any of this existed: it carries no `env` key at all.
 //
-//	doctl   reads DIGITALOCEAN_ACCESS_TOKEN from the environment, so the token is
-//	        an env var on the pod.
-//	kubectl reads a FILE, and KUBECONFIG names its path — no env var carries
-//	        kubeconfig CONTENT — so the kubeconfig is written into the pod
-//	        through the exec channel, which is already the one way into a sandbox.
+//	hanzo   keeps its own credential store, so the token is PIPED to
+//	        `hanzo auth login --token -` and this file never writes that format.
+//	        One store, owned by the tool that owns it.
+//	git     reads a credential helper, so the helper is configured to ask `hanzo`
+//	        for the current token — one copy of the credential, never a second on
+//	        disk to go stale, and SCOPED TO THE FORGE HOST so the token is offered
+//	        to git.<brand> and to nothing else a checkout might point at.
+//	kubectl reads a FILE and KUBECONFIG names its path, so the SuperAdmin's
+//	        kubeconfig is written into the pod.
 //
-// THE BIGGER CREDENTIAL TAKES THE SAFER ROUTE, on purpose. A DOKS kubeconfig is
-// cluster-admin for that cluster; written through exec it lives in the pod's
-// ephemeral rootfs and in NO Kubernetes object at all — not in the Pod spec, not
-// in a Secret, nowhere in etcd, nowhere a pod-listing dashboard renders it.
-//
-// The DO token does sit inline in the Pod spec, and the alternative was worse.
-// A Secret needs `hanzo-sandboxes` RBAC widened to secrets; the names are minted
-// per lease so the grant cannot be narrowed with resourceNames; so it would let
-// this process read EVERY secret in that namespace for EVERY sandbox, forever, in
-// order to hide one value from a Pod object that exists for one admin lease and
-// is deleted with it. And a Secret is base64, not encryption: it buys obscurity
-// and costs a permanent widening of a boundary that today reads "no secrets at
-// all". The narrower change is the inline one.
-//
-// AND NOTHING ELSE GETS ANY OF IT. credFor is called on exactly one branch and
-// the branch is `admin`. Every other lease carries the zero cred: its env is
-// empty, so podSpec states no `env` key — absent, not empty — and start writes no
-// file. An ordinary caller's pod is byte-identical to the one they got before this
-// file existed. cred_test.go asserts precisely that, because it is the half that
-// would be a P0.
+// THE SUPERADMIN'S OWN SHELL IS THE ONE THAT GETS MORE. `admin` below is the one
+// predicate deciding both which bytes the pod boots and whether it also holds the
+// DigitalOcean credentials the operator would otherwise paste in by hand. It is
+// the same fact asked twice — a shell with the admin image but no credential has
+// a kubectl that reaches nothing — so it is one line.
 
 import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
+	"time"
 
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
 	"github.com/hanzoai/cloud/apps/fleet"
+	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/iam"
 
 	luxlog "github.com/luxfi/log"
 )
 
-// kubePath is where kubectl is TOLD to look, rather than left to find its own
-// default. A `kubectl exec` session inherits no HOME unless something sets one,
-// so `~/.kube/config` is a guess about the shell while this is a fact about the
-// pod. The directory is the image's own home — /home/sandbox, uid 1000, created
-// by `useradd -m` in hanzoai/bot's Dockerfile.box.
+// home is the image's own home directory — uid 1000, created by `useradd -m` in
+// the sandbox image — and it is STATED rather than inherited: an exec session
+// carries no HOME unless something sets one, so `~` is a guess about the shell
+// while this is a fact about the pod.
 //
-// It is deliberately NOT under the workdir. A `dev` sandbox mounts its project
-// PVC there and a PVC OUTLIVES the lease, so a credential written into it would
-// still be sitting there for the next session — and for whoever leases that
-// project next. The container rootfs dies with the pod, which is exactly the
-// lifetime this credential should have.
-const kubePath = "/home/sandbox/.kube/config"
+// Nothing here is under the workdir on purpose. A `dev` sandbox mounts its
+// project PVC there and a PVC OUTLIVES the lease, so a credential written into it
+// would still be sitting there for the next session — and for whoever leases that
+// project next. The container rootfs dies with the pod.
+const home = "/home/sandbox"
+
+// kubePath is where kubectl is TOLD to look, for the same reason.
+const kubePath = home + "/.kube/config"
 
 // admin is the ONE combination that is a SuperAdmin's own shell: platform sudo,
 // asking for the class that has a toolchain to spend credentials with.
@@ -91,17 +86,71 @@ const kubePath = "/home/sandbox/.kube/config"
 // trust_test.go exists to keep.
 func admin(class string, super bool) bool { return super && class == "dev" }
 
-// cred is what one admin lease is handed. It is a VALUE passed alongside the
-// sandbox and never a field on it: the row is STORED, so a credential on it would
-// be a credential at rest in the org's own database, returned by every later read
-// of that row and outliving the pod it was for. Same argument that made `super` a
-// parameter on Lease — this is a fact about the lease, not about the sandbox.
+// cred is what one lease is handed. It is a VALUE passed alongside the sandbox
+// and never a field on it: the row is STORED, so a credential on it would be a
+// credential at rest in the org's own database, returned by every later read of
+// that row and outliving the pod it was for.
 type cred struct {
-	// env reaches the pod in its spec, because that is where doctl looks.
+	// session is the owner's own short-lived token. It reaches the pod through the
+	// exec channel and this file never writes the CLI's store format — the tool
+	// that owns the store writes it.
+	session iam.Session
+	// env reaches the pod in its spec, because that is where doctl looks. Empty for
+	// every lease but a SuperAdmin's own, so the ordinary Pod spec states no `env`.
 	env map[string]string
 	// kube reaches the pod through the exec channel, because kubectl reads a file
-	// and no Kubernetes object should hold a cluster-admin credential for this.
+	// and no Kubernetes object should hold a cluster-admin credential.
 	kube []byte
+}
+
+// sessionFor exchanges the caller's own token for one bound to this lease.
+//
+// bearer is the credential the caller authenticated the create call with, relayed
+// unchanged from the request. It is the SUBJECT of the exchange, which is what
+// makes the result the caller's own identity and nobody else's: IAM mints for the
+// subject the presented token names, so a caller can only ever land their own
+// identity in their own sandbox.
+//
+// ttl is the lease. The token is asked to live no longer, so a credential that
+// escapes a pod outlives that pod by nothing.
+//
+// An empty bearer is NOT an error — an API key is not a relayable bearer
+// (cloud.CallerBearer returns "" for one) and the agent plane carries no user
+// token at all. Those leases simply start without a session, exactly as every
+// lease did before this existed.
+func sessionFor(ctx context.Context, bearer string, ttl time.Duration) (iam.Session, error) {
+	if strings.TrimSpace(bearer) == "" {
+		return iam.Session{}, nil
+	}
+	id, secret := environ.Or("IAM_MINT_CLIENT_ID", ""), environ.Or("IAM_MINT_CLIENT_SECRET", "")
+	if id == "" || secret == "" {
+		return iam.Session{}, nil // the deployment wires no mint client
+	}
+	return iam.Exchange(ctx, cloud.IAMBase(), id, secret, bearer, ttl)
+}
+
+// signIn is the script that makes the tools inside a sandbox work as its owner.
+// It runs ONCE, with the token on stdin and never in argv or the environment,
+// where `ps` and /proc would publish it to every process in the pod.
+//
+// `git config` writes the file rather than this composing one, so git owns the
+// quoting of its own format. The helper asks `hanzo` for the current token
+// instead of holding a copy, so there is ONE credential in the pod and no second
+// one on disk to be left behind when the first is replaced.
+func signIn(s iam.Session, brandID string) string {
+	q := func(v string) string { return shellQuote(v) }
+	set := func(k, v string) string {
+		if strings.TrimSpace(v) == "" {
+			return ""
+		}
+		return "git config --global " + k + " " + q(v) + "\n"
+	}
+	helper := `!f() { test "$1" = get && printf "username=hanzo\npassword=%s\n" "$(hanzo auth token)"; }; f`
+	return "set -e\numask 077\nexport HOME=" + q(home) + "\n" +
+		set("user.name", s.Display) +
+		set("user.email", s.Email) +
+		"git config --global " + q("credential.https://"+brand.GitHost(brandID)+".helper") + " " + q(helper) + "\n" +
+		"hanzo auth login --brand " + q(brandID) + " --token - >/dev/null\n"
 }
 
 // credFor reads the SuperAdmin's DigitalOcean credentials and builds one
