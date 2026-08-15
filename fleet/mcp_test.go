@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -102,13 +103,30 @@ func waitFor(t *testing.T, sock string) {
 func host(t *testing.T, apps []string, kids map[string]*child) *zip.App {
 	t.Helper()
 	h := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
-	fleet.Mount(h, "/v1/mcp", apps, func(app string) (addr, path string, err error) {
+	d := fleet.Mount(h, "/v1/mcp", apps, func(app string) (addr, path string, err error) {
 		k := kids[app]
 		if k == nil {
 			return "", "", &net.AddrError{Err: "no instance running", Addr: app}
 		}
 		return k.addr, manifest.FrameworkMCPPath, nil
 	})
+	// The door lists what a subsystem PUBLISHED and asks nothing, so a fixture has
+	// to say what these children publish. They are real apps, so their own
+	// registries are the publication — the same value plugin/gen-fleet-catalog
+	// reads out of each app's openapi.json for the embedded catalog.
+	d.Catalog = func(app string) []fleet.Op {
+		k := kids[app]
+		if k == nil {
+			return nil
+		}
+		var ops []fleet.Op
+		for _, tl := range k.app.MCPTools() {
+			name, _ := tl["name"].(string)
+			desc, _ := tl["description"].(string)
+			ops = append(ops, fleet.Op{ID: name, Doc: desc})
+		}
+		return ops
+	}
 	return h
 }
 
@@ -246,55 +264,6 @@ func TestDoorAnswersTheChildsOwnProjection(t *testing.T) {
 	}
 }
 
-// TestADownChildIsReportedNotSilentlyOmitted is the reason this change is worth
-// making at all.
-//
-// A stale file and a silently-short list are the SAME defect — the caller cannot
-// tell a subsystem that serves nothing from one that did not answer — so swapping
-// one for the other would have been a waste. The working child's tools still
-// arrive (blanking a healthy fleet for one outage is a worse answer), and the
-// outage is NAMED.
-func TestADownChildIsReportedNotSilentlyOmitted(t *testing.T) {
-	kids := map[string]*child{"alpha": start(t, "alpha", 2)}
-	// beta is composed into the door and has no instance: the deliberately
-	// stopped child.
-	h := host(t, []string{"alpha", "beta"}, kids)
-
-	if got, want := listed(t, h), []string{"alpha_opa", "alpha_opb"}; strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("the reachable child's tools must still be served: got %v, want %v", got, want)
-	}
-	u := unavailable(t, h)
-	if _, named := u["beta"]; !named {
-		t.Fatalf("beta is down and the door did not say so — the list is short and silent, which is "+
-			"exactly the defect the committed catalogue was. _meta[%q] = %v", fleet.Unavailable, u)
-	}
-	if u["beta"] == "" {
-		t.Error("beta is reported unavailable with no reason; an operator cannot act on that")
-	}
-	if _, wrong := u["alpha"]; wrong {
-		t.Errorf("alpha answered and must not be reported unavailable: %v", u)
-	}
-}
-
-// TestAChildThatDIESMidLifeIsReported: the same signal for a child that was up
-// and stopped, which is the rollout case — the address resolves, the socket does
-// not answer.
-func TestAChildThatDIESMidLifeIsReported(t *testing.T) {
-	kids := map[string]*child{"alpha": start(t, "alpha", 2), "beta": start(t, "beta", 1)}
-	h := host(t, []string{"alpha", "beta"}, kids)
-	if got := listed(t, h); len(got) != 3 {
-		t.Fatalf("both children up: want 3 tools, got %v", got)
-	}
-
-	die(t, kids["beta"])
-	if got, want := listed(t, h), []string{"alpha_opa", "alpha_opb"}; strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("after beta stopped the door lists %v, want %v", got, want)
-	}
-	if u := unavailable(t, h); u["beta"] == "" {
-		t.Fatalf("beta was stopped and the door reported no outage: %v", u)
-	}
-}
-
 // TestToolsCallReachesTheOwnersOwnHandler: the tool RUNS, in the child that
 // declared it, and the child's own reply comes back verbatim.
 func TestToolsCallReachesTheOwnersOwnHandler(t *testing.T) {
@@ -357,5 +326,42 @@ func TestInitializeAndPingAnswerWithoutTouchingAChild(t *testing.T) {
 	}
 	if res := rpc(t, h, `{"jsonrpc":"2.0","id":2,"method":"ping"}`); res == nil {
 		t.Fatal("ping did not answer")
+	}
+}
+
+// TestALISTIsAFactOfTHERELEASENotOfWhoIsUp is the contract that replaced four
+// tests, and the replacement is a narrowing rather than a loosening.
+//
+// Those four pinned the door NAMING a subsystem it could not reach: it asked
+// every running child, so a child that had stopped produced an error and the
+// answer carried hanzo.ai/unavailable. That reporting was real and it was paid
+// for by asking, and asking is what the door may no longer do — one list took 92
+// seconds against Cloudflare's 100-second ceiling and three in a row drove the
+// pod past its own liveness probe until the kubelet killed it.
+//
+// So the two facts are separated. WHAT the fleet serves is a property of the
+// release: generated from each subsystem's own document at build time, identical
+// on every replica, unchanged by a restart. WHETHER a subsystem is up is a
+// property of this instant, and it is answered where it matters — by CALLING one.
+// A list that quietly depended on liveness could not give either answer honestly.
+func TestALISTIsAFactOfTHERELEASENotOfWhoIsUp(t *testing.T) {
+	alpha := startNamed(t, "alpha", "opa", "opb")
+	beta := startNamed(t, "beta", "opa")
+	h := host(t, []string{"alpha", "beta"}, map[string]*child{"alpha": alpha, "beta": beta})
+
+	before := order(t, h)
+	_ = beta.app.Shutdown() // gone, and the release did not change
+
+	if after := order(t, h); !slices.Equal(before, after) {
+		t.Errorf("the list moved when a subsystem stopped: %v -> %v — it is supposed to "+
+			"describe the release, not who happens to be up", before, after)
+	}
+
+	// And the honest answer about liveness comes from a CALL, which is the only
+	// thing that has to reach the subsystem at all.
+	got := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":`+
+		`{"name":"beta","arguments":{"op":"beta_opa","input":{}}}}`)
+	if got["error"] == nil && got["isError"] == nil {
+		t.Errorf("calling a stopped subsystem reported success: %v", got)
 	}
 }
