@@ -87,6 +87,52 @@ type Door struct {
 	mu    sync.RWMutex
 	owner map[string]string
 	alias map[string]string
+
+	// Warm reports whether a subsystem is already running. Discovery asks the
+	// ones that are and reads the catalog for the ones that are not, so listing
+	// what the fleet serves starts nothing. Nil asks every subsystem, which is
+	// what a host with no plugin table (a test, a single-process build) needs.
+	//
+	// It is a function rather than a set because the answer changes underneath
+	// the door: a subsystem starts on the first request to its prefix and stops
+	// again when it goes idle, and the door reads it as of this call.
+	Warm func(app string) bool
+}
+
+// descriptorOf is what the door hands back for a published operation: the same
+// shape a child's own registry projects, carrying the two fields a catalog can
+// hold. The input schema is not among them — [Door.describe] asks the owner for
+// that, which starts ONE subsystem rather than the fleet.
+func descriptorOf(app string, op Op) json.RawMessage {
+	raw, err := json.Marshal(map[string]any{
+		"name":        op.ID,
+		"description": op.Doc,
+		"inputSchema": map[string]any{"type": "object"},
+	})
+	if err != nil {
+		return json.RawMessage(`{"name":"` + op.ID + `"}`)
+	}
+	return raw
+}
+
+// split divides the fleet into the subsystems worth asking and the ones the
+// catalog answers for.
+//
+// A subsystem the catalog does not carry is ASKED even when it is cold: it was
+// added since the last generate, and a door that silently omitted it would
+// publish a fleet smaller than the one it routes.
+func (d *Door) split() (ask, published []string) {
+	if d.Warm == nil {
+		return d.apps, nil
+	}
+	for _, a := range d.apps {
+		if d.Warm(a) || Published(a) == nil {
+			ask = append(ask, a)
+			continue
+		}
+		published = append(published, a)
+	}
+	return ask, published
 }
 
 // Mount serves the fleet's agent door at path, over apps, reaching one with at.
@@ -346,17 +392,41 @@ func (d *Door) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 	var down []Outage
 	held := 0
 	owner := map[string]string{}
-	for _, a := range Ask(at, d.apps, req) {
-		if a.Err != nil {
-			down = append(down, Outage{App: a.App, Error: a.Err.Error()})
+
+	// A subsystem that is running answers for itself; one that is not is read
+	// from what it published, and stays down. See fleet/catalog.go.
+	ask, published := d.split()
+
+	// One loop over (app, its tools), however the tools were obtained, so the
+	// gate, the routing table and the collision rule below cannot treat an asked
+	// subsystem differently from a published one.
+	type contribution struct {
+		app   string
+		tools []named
+		err   error
+	}
+	var in []contribution
+	for _, a := range Ask(at, ask, req) {
+		c := contribution{app: a.App, err: a.Err}
+		if c.err == nil {
+			c.tools, c.err = toolsOf(a.Body)
+		}
+		in = append(in, c)
+	}
+	for _, a := range published {
+		c := contribution{app: a}
+		for _, op := range Published(a) {
+			c.tools = append(c.tools, named{name: op.ID, desc: op.Doc, raw: descriptorOf(a, op)})
+		}
+		in = append(in, c)
+	}
+
+	for _, a := range in {
+		if a.err != nil {
+			down = append(down, Outage{App: a.app, Error: a.err.Error()})
 			continue
 		}
-		tools, err := toolsOf(a.Body)
-		if err != nil {
-			down = append(down, Outage{App: a.App, Error: err.Error()})
-			continue
-		}
-		for _, t := range tools {
+		for _, t := range a.tools {
 			// The gate, before the routing table. See fleet/surface.go.
 			if refuse(t.name) {
 				held++
@@ -369,11 +439,11 @@ func (d *Door) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 			// identical to one that was never declared.
 			if held, dup := owner[t.name]; dup {
 				d.host.Logger().Warn("fleet mcp: two subsystems claim one tool name; the first in mount order serves it",
-					"tool", t.name, "serving", held, "shadowed", a.App)
+					"tool", t.name, "serving", held, "shadowed", a.app)
 				continue
 			}
-			owner[t.name] = a.App
-			t.app = a.App
+			owner[t.name] = a.app
+			t.app = a.app
 			all = append(all, t)
 		}
 	}
