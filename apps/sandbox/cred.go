@@ -129,7 +129,7 @@ func sessionFor(ctx context.Context, bearer string, ttl time.Duration) (iam.Sess
 	return iam.Exchange(ctx, cloud.IAMBase(), id, secret, bearer, ttl)
 }
 
-// signIn is the script that makes the tools inside a sandbox work as its owner.
+// script is what makes the tools inside a sandbox work as its owner.
 // It runs ONCE, with the token on stdin and never in argv or the environment,
 // where `ps` and /proc would publish it to every process in the pod.
 //
@@ -147,7 +147,7 @@ func sessionFor(ctx context.Context, bearer string, ttl time.Duration) (iam.Sess
 // HOME is the IMAGE's, and /home/sandbox only when the image states none. An exec
 // session inherits whatever the image set, and writing to our own guess would put
 // the credential where that image's tools do not look.
-func signIn(s iam.Session, brandID string) string {
+func script(s iam.Session, brandID string) string {
 	q := func(v string) string { return shellQuote(v) }
 	set := func(k, v string) string {
 		if strings.TrimSpace(v) == "" {
