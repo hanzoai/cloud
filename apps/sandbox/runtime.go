@@ -43,6 +43,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/k8s"
 	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/iam"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -610,26 +611,17 @@ func (r *runtime) start(ctx context.Context, m Sandbox, cr cred) error {
 	// time. Not flaky: waitRunning had already proven the pod was up, and the only
 	// thing that disagreed was a stale field in a local struct.
 	m.Status = "running"
-	// EVERY CREDENTIAL ARRIVES LAST AND THROUGH THE EXEC CHANNEL, so it exists in
-	// the pod and in no Kubernetes object — see cred.go for why that is the route.
+	// THE KUBECONFIG ARRIVES LAST AND THROUGH THE EXEC CHANNEL, so it exists in
+	// the pod and in no Kubernetes object — see cred.go for why the bigger
+	// credential takes this route and the DO token does not. It is empty for every
+	// lease but a SuperAdmin's own, so this is one comparison for everybody else.
 	//
-	// A failure here FAILS THE LEASE. The caller gets the 503 and the row records
-	// why, which is the same shape a failed pod create already has; the
-	// alternative is a shell whose tools reach nothing and only say so the first
-	// time somebody trusts them.
-	if cr.session.Token != "" {
-		// The token goes in on STDIN. In argv it would be published by `ps` and by
-		// /proc to every process in the pod, which is the population this credential
-		// is scoped against in the first place.
-		res, err := r.exec(ctx, m, []string{"sh", "-c", signIn(cr.session, r.brand)},
-			strings.NewReader(cr.session.Token), 0, nil)
-		if err != nil {
-			return fmt.Errorf("sign in: %w", err)
-		}
-		if res.ExitCode != 0 {
-			return fmt.Errorf("sign in: %s", strings.TrimSpace(res.Stderr))
-		}
-	}
+	// A failure here FAILS THE LEASE, because a lease that asked for the admin
+	// image asked for the toolchain that spends this: the caller gets the 503 and
+	// the row records why, rather than a shell whose kubectl reaches nothing and
+	// only says so the first time somebody trusts it. The OWNER SESSION is
+	// delivered by Lease and does not fail one — the policies differ, so they live
+	// with the decision rather than in the mechanism.
 	if len(cr.kube) == 0 {
 		return nil
 	}
@@ -639,6 +631,27 @@ func (r *runtime) start(ctx context.Context, m Sandbox, cr cred) error {
 	}
 	if res.ExitCode != 0 {
 		return fmt.Errorf("write kubeconfig: %s", strings.TrimSpace(res.Stderr))
+	}
+	return nil
+}
+
+// signIn hands the pod its owner's session, over the exec channel that is already
+// the one way in. The token goes in on STDIN: in argv it would be published by
+// `ps` and by /proc to every process in the pod, which is the population this
+// credential is scoped against in the first place.
+//
+// A zero session is nothing to deliver and no error — that is the pod every
+// lease got before this existed.
+func (r *runtime) signIn(ctx context.Context, m Sandbox, s iam.Session) error {
+	if s.Token == "" {
+		return nil
+	}
+	res, err := r.exec(ctx, m, []string{"sh", "-c", signIn(s, r.brand)}, strings.NewReader(s.Token), 0, nil)
+	if err != nil {
+		return err
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("%s", strings.TrimSpace(res.Stderr))
 	}
 	return nil
 }

@@ -59,11 +59,15 @@ publish to every process in the pod — and keeps its own store. `git` is pointe
 at that store through a credential helper SCOPED TO THE FORGE HOST, so there is
 one credential in the pod and it is offered nowhere else.
 
-**An identity outage is not a sandbox outage.** The exchange reaches IAM, and a
-lease whose exchange fails still happens — the pod holds nothing, which is the
-sandbox everybody had before this existed. Refusing the lease would turn one
-unreachable dependency into a total sandbox outage while denying nothing that is
-not already denied, so the failure is LOUD in the log and the lease continues.
+**An identity outage is not a sandbox outage.** The exchange reaches IAM and the
+delivery reaches the pod, and neither failing takes the lease with it — the pod
+holds nothing, which is the sandbox everybody had before this existed. Refusing
+would turn one unreachable dependency into a total sandbox outage while denying
+nothing that is not already denied. Both halves are therefore ONE policy, stated
+in `Lease` where the lease is decided rather than in the mechanism: loud in the
+log, and the lease continues. The SuperAdmin kubeconfig keeps the opposite policy
+and still fails its lease, because a caller who asked for the admin image asked
+for the toolchain that spends it.
 
 **Two doors, one of them silent.** The HTTP door relays `cloud.CallerBearer`. The
 agent plane passes "" — a plane call carries an ATTESTED caller, not the caller's
