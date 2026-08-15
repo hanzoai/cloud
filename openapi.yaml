@@ -47361,6 +47361,16 @@ components:
         project:
           type: string
       type: object
+  securitySchemes:
+    bearer:
+      description: 'The caller''s credential, sent as `Authorization: Bearer <token>`.
+        It is either an access token minted by Hanzo IAM or an API key (pk-/sk-).
+        X-Authorization, and HTTP Basic carrying the token as the password, are accepted
+        spellings of the same header for clients that cannot set Authorization; a
+        browser presents the session cookie instead. Every operation requires it unless
+        it says `security: []`.'
+      scheme: bearer
+      type: http
 info:
   description: 'Composed from each subsystem''s own projection of its router, in the
     fleet''s mount order — every operation below is a route the subsystem that publishes
@@ -54210,6 +54220,12 @@ paths:
         row so completion resolution falls back to the global Hanzo account (no BYO), and
         best-effort tombstones the sealed secret. Idempotent.
       operationId: delete_ai_connections_by_provider
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
       summary: 'Disconnects a third-party AI account: it deactivates the org''s row
         so completion resolution falls back to the global Hanzo account (no BYO),
         and best-effort tombstones the sealed secret.'
@@ -54222,6 +54238,12 @@ paths:
         row so completion resolution falls back to the global Hanzo account (no BYO), and
         best-effort tombstones the sealed secret. Idempotent.
       operationId: post_ai_connections_by_provider
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
       summary: 'Disconnects a third-party AI account: it deactivates the org''s row
         so completion resolution falls back to the global Hanzo account (no BYO),
         and best-effort tombstones the sealed secret.'
@@ -54238,6 +54260,12 @@ paths:
         {authorizeUrl} in the standard envelope. The org is the VERIFIED principal, so
         only the caller's own connection can result.
       operationId: get_ai_connections_by_provider_authorize
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
       summary: 'Begins an OAuth connection for the caller''s org: it binds the org
         into a signed state and sends the caller to the provider''s authorize URL.'
       tags:
@@ -54255,6 +54283,12 @@ paths:
         token in a victim org — which is why this endpoint is state-authenticated rather
         than credential-gated.
       operationId: get_ai_connections_by_provider_callback
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
       summary: 'Completes OAuth: the org is recovered from the SIGNED state (not a
         header), the code is exchanged for a token, the token is SEALED into KMS (never
         the row/logs) through the same path as a BYOK key, and the org''s provider
@@ -54272,6 +54306,12 @@ paths:
         return a 200 ProviderUsage with connected/available flags + a human note — the UI's
         honest-empty states — never a fabricated figure.
       operationId: get_ai_connections_by_provider_usage
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
       summary: Imports the caller org's usage for a connected third-party account.
       tags:
       - ai
@@ -67297,6 +67337,7 @@ paths:
 
         Rendered once and served as bytes thereafter, under a strong ETag.
       operationId: get_commands
+      security: []
       summary: Every operation this API answers, as a command
       tags:
       - commands
@@ -74312,6 +74353,12 @@ paths:
         Handles GET /v1/documents/:file_id/context — every chunk of
         a file, as LangChain Documents (used when RAG_USE_FULL_CONTEXT is on).
       operationId: get_documents_by_file_id_context
+      parameters:
+      - in: path
+        name: file_id
+        required: true
+        schema:
+          type: string
       summary: Handles GET /v1/documents/:file_id/context — every chunk of a file,
         as LangChain Documents (used when RAG_USE_FULL_CONTEXT is on).
       tags:
@@ -75017,7 +75064,7 @@ paths:
       description: |-
         Answers the document, the recipient it identifies, the fields THAT recipient must fill, and the PDF to display. The first open also marks the recipient as having opened it and records that on the audit trail, so this read has a side effect by design.
 
-        This is the signer's door and it takes NO account: the signing token is the entire credential, and it names the recipient, so a signer sees only their own fields and never the other recipients' tokens. The `:org` segment selects which tenant's store is opened, and the token is then looked up inside it — so a token presented under the wrong org simply does not resolve. An unknown or wrong-org token is a 401, never a hint that some other document exists.
+        This is the signer's door and it takes NO account: the signing token is the entire credential, and it names the recipient, so a signer sees only their own fields and never the other recipients' tokens. The token resolves to its owning tenant FIRST, before any per-tenant store is opened, and the `:org` segment is only checked against that answer. An unknown or wrong-org token is one and the same 404, never a hint that some other document exists.
       operationId: get_esign_o_by_org_sign_by_token
       parameters:
       - in: path
@@ -75039,7 +75086,7 @@ paths:
       description: |-
         Marks this recipient as done and answers whether the DOCUMENT sealed with it. When every signing recipient has completed, sealing happens right here in the same call: the collected values are rendered onto the PDF, a real x509 PKCS#7 signature is applied, the sealed bytes are stored beside the untouched original, and the document moves to `COMPLETED`. Until then the answer is the recipient's own completion with the document still pending.
 
-        It refuses to complete a half-filled signature: a recipient with any unfilled field is a 400 naming how many remain. A document not out for signature is a 409, as is a recipient who has already completed, and under SEQUENTIAL order a signer out of turn is a 403. The token is the whole credential — no account, and a token that does not resolve under `:org` is a 401. Sealing and completion are one transaction, so a failure anywhere leaves the document exactly as it was.
+        It refuses to complete a half-filled signature: a recipient with any unfilled field is a 400 naming how many remain. A document not out for signature is a 409, as is a recipient who has already completed, and under SEQUENTIAL order a signer out of turn is a 403. The token is the whole credential — no account, and a token that does not resolve under `:org` is a 404. Sealing and completion are one transaction, so a failure anywhere leaves the document exactly as it was.
       operationId: post_esign_o_by_org_sign_by_token_complete
       parameters:
       - in: path
@@ -75088,7 +75135,7 @@ paths:
       description: |-
         Records this recipient's refusal and moves the WHOLE DOCUMENT to `REJECTED` — one declining signer ends it for everyone, and there is no route back: the document cannot then be signed or completed. An optional `reason` is stored and written onto the audit trail with the rejection, which is what the sender sees.
 
-        A document not out for signature is a 409, and so is a recipient who has already signed or already rejected — a refusal cannot be taken back or repeated. The token is the whole credential; one that does not resolve under `:org` is a 401.
+        A document not out for signature is a 409, and so is a recipient who has already signed or already rejected — a refusal cannot be taken back or repeated. The token is the whole credential; one that does not resolve under `:org` is a 404.
       operationId: post_esign_o_by_org_sign_by_token_reject
       parameters:
       - in: path
@@ -90551,6 +90598,7 @@ paths:
         anyone willing to type three characters, so there is no confidentiality delta, only
         an honesty one.
       operationId: get_models
+      security: []
       summary: Returns the list of available models from the routing table.
       tags:
       - models
@@ -90598,6 +90646,7 @@ paths:
         keys, URLs, or config are returned, and it reports a SET of names, never
         which provider serves which model.
       operationId: get_models_providers
+      security: []
       summary: Public, secret-free list of the providers serving the models that GET
         /v1/models lists — the same source, projected.
       tags:
@@ -102206,6 +102255,7 @@ paths:
 
         Rendered once and served as bytes thereafter, so the route table's immutability is what makes a repeat request a memcpy rather than a re-encode of a megabyte document.
       operationId: get_openapi.json
+      security: []
       summary: The API description this SDK was generated from
       x-app: openapi
   /v1/oracles:
@@ -116579,6 +116629,12 @@ paths:
         actual cost and records the billable usage event (exactly once). Returns the
         OpenAI-shaped video object.
       operationId: get_videos_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
       summary: Implements GET /v1/videos/{id} — poll a job's status.
       tags:
       - videos
@@ -116595,6 +116651,12 @@ paths:
         the client that downloads without first polling to completion) — idempotent
         with the poll path via job.markCompleted.
       operationId: get_videos_by_id_content
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
       summary: Implements GET /v1/videos/{id}/content — download the finished MP4.
       tags:
       - videos
@@ -117363,6 +117425,12 @@ paths:
     get:
       description: Verify WeChat work bot callback URL
       operationId: get_wecom-bot_callback_by_botid
+      parameters:
+      - in: path
+        name: botId
+        required: true
+        schema:
+          type: string
       summary: Verify WeChat work bot callback URL
       tags:
       - wecom-bot
@@ -117370,6 +117438,12 @@ paths:
     post:
       description: Process WeChat work bot messages
       operationId: post_wecom-bot_callback_by_botid
+      parameters:
+      - in: path
+        name: botId
+        required: true
+        schema:
+          type: string
       summary: Process WeChat work bot messages
       tags:
       - wecom-bot
@@ -117572,6 +117646,8 @@ paths:
       operationId: get_ws_query_progress
       summary: Watch one running query's progress over a websocket
       x-app: o11y
+security:
+- bearer: []
 servers:
 - url: https://api.hanzo.ai
 tags:
