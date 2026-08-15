@@ -61,6 +61,33 @@ const (
 	untypedOps = 85
 )
 
+// ceremony is the WebAuthn handshake, and it is NAMED rather than counted.
+//
+// iam v1.34.56 added operator passkey sign-in, which is four raw handlers and
+// took the untyped total from 85 to 89. Moving the ceiling to 89 would have
+// cleared it and told a later reader nothing — that is how this number reached 98
+// once before, four unremarked handlers at a time, which is the story the comment
+// above the ceiling tells.
+//
+// These four are a different KIND of untyped from the backlog the ceiling counts.
+// The wire is not ours: `navigator.credentials.create()` and `.get()` decide the
+// shape, the browser fills it, and the fields are base64url values a W3C document
+// defines. It is the same rule the ai surface is held to — a compatibility wire is
+// TRANSCRIBED from its external contract and pinned with fixtures, never designed
+// here — so typing them would be inventing a Go shape for a structure we do not
+// own, and getting it subtly wrong breaks passkey login rather than failing a test.
+//
+// Naming them keeps the ceiling honest in both directions: the convertible backlog
+// still may only fall, and a FIFTH raw handler still fails this test by making the
+// remainder exceed it. An entry that stops being served stops being allowed for.
+// Delete a line here the day iam types it.
+var ceremony = map[string]bool{
+	"GET /v1/iam/webauthn/signin/begin":   true,
+	"POST /v1/iam/webauthn/signin/finish": true,
+	"GET /v1/iam/webauthn/signup/begin":   true,
+	"POST /v1/iam/webauthn/signup/finish": true,
+}
+
 // mountApp mounts iam the way plugin/iam does — the whole Mount, so the ledgers below
 // read the surface a deployed binary serves and not a test-only subset.
 func mountApp(t *testing.T) *zip.App {
@@ -130,11 +157,21 @@ func TestGraftRecoveredTheNestedRegistry(t *testing.T) {
 		t.Errorf("%d typed operations, want at least %d — the graft lost some of the nested registry",
 			len(typed), typedOps)
 	}
-	if got := len(served) - len(typed); got > untypedOps {
-		t.Errorf("%d untyped operations, want at most %d — a raw handler was added in "+
-			"github.com/hanzoai/iam. A route that is not a typed op has no schema, no prose, no MCP "+
-			"tool, no CLI command and no SDK method; convert it there (zip.Get/Post/... ) and this "+
-			"ratchet falls on the next bump.", got, untypedOps)
+	// The backlog ceiling counts the CONVERTIBLE remainder, so the ceremony below
+	// is subtracted before it is compared — and only where it is actually served,
+	// so an address that goes away takes its allowance with it instead of leaving
+	// slack for the next raw handler.
+	backlog := len(served) - len(typed)
+	for op := range ceremony {
+		if served[op] {
+			backlog--
+		}
+	}
+	if backlog > untypedOps {
+		t.Errorf("%d untyped operations after the ceremony allowance, want at most %d — a raw "+
+			"handler was added in github.com/hanzoai/iam. A route that is not a typed op has no "+
+			"schema, no prose, no MCP tool, no CLI command and no SDK method; convert it there "+
+			"(zip.Get/Post/... ) and this ratchet falls on the next bump.", backlog, untypedOps)
 	}
 
 	// Every typed op must publish real detail, not a bare id. This is what the five
