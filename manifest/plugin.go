@@ -183,26 +183,32 @@ const idleAfter = 15 * time.Minute
 
 // Warm is how many plugin processes this host may hold at once. Age bounds the
 // steady state; this bounds the BURST, which age cannot reach — IdleAfter only
-// reclaims a plugin that has already been quiet for its whole window, so in the
-// minutes after a cold start, when every prefix that gets a request starts a
-// child and none is old enough to be idle, it reclaims nothing.
+// reclaims a plugin quiet for its whole window, so in the minutes after a cold
+// start, when every prefix that gets a request starts a child and none is old
+// enough to be idle, it reclaims nothing. zip enforces this at the START path,
+// not on the reaper's ticker: the fleet's MCP door asks every subsystem at once
+// and starts children far faster than a sweep runs, and a bound restored a minute
+// later is not a bound — that is how this pod came to hold every child it had,
+// stop answering its own liveness probe, and get killed.
 //
 // It is a COUNT because the cost is the count. Measured in the running pod, the
-// per-child distribution is flat: the largest is o11y at 272MiB, the mean is
-// ~152MiB across 37 children, and no single subsystem dominates. So the bill is
-// how many are up, and a count is a bound the burst cannot outrun.
+// per-child distribution is flat: 33 children, mean 167MiB, largest 251MiB. No
+// single subsystem dominates, so how many are up IS the bill.
 //
-// FORTY-EIGHT, from the two numbers that bracket it. The working set is 37
-// children (~5.6GiB) — real traffic, since every one of them was touched inside
-// its 15-minute window — and the container limit is 11Gi, which ~72 children
-// reach. A bound BELOW the working set does not save memory, it thrashes: the
-// 38th request evicts something that is about to be asked for again. So this
-// sits above the working set and well under the limit: 48 x ~152MiB is ~7.3GiB,
-// leaving ~3.5GiB for the host and for spikes.
+// THIRTY-SIX, AND THE BINDING NUMBER IS THE REQUEST, NOT THE LIMIT. The container
+// requests 6Gi and is limited to 11Gi, and the kubelet scores eviction candidacy
+// against the REQUEST — so a pod comfortably inside its limit is still first in
+// line once it exceeds what it reserved, which is exactly how this one was evicted
+// for node memory and took the API down with it. 36 x 167MiB is ~5.9GiB plus a
+// ~200MiB host: at the request, not past it. An earlier 48 was sized against the
+// limit and allowed ~7.8GiB, 30% over the reservation.
 //
-// Lowering it is not the way to a smaller pod — GOMEMLIMIT is, because it bounds
-// each child's heap and this only bounds how many of them there are.
-const Warm = 48
+// It sits just above the observed working set of 33, and that narrowness is the
+// real finding rather than a tuning choice: this pod's reservation barely covers
+// its own catalog. The levers are the REQUEST or the per-child GOMEMLIMIT, not
+// this number — lowering it below the working set would not save memory, it would
+// thrash, evicting something about to be asked for again.
+const Warm = 36
 
 func (a App) resolve() zip.Plugin {
 	env := "CLOUD_" + strings.ToUpper(strings.NewReplacer("-", "_").Replace(a.Name))
