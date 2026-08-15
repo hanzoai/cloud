@@ -351,7 +351,7 @@ func run(addr, zapAddr string) error {
 	// The sweep is cheap (a timestamp compare per plugin) so a minute is often
 	// enough to be precise without being noisy. Stopped before Shutdown runs,
 	// because a sweep in flight reads state Shutdown writes.
-	stopReaper := app.ReapIdle(time.Minute)
+	stopReaper := app.Reap(time.Minute, manifest.Warm)
 	defer stopReaper()
 
 	// Both transports, same router — the pair cloud.Listen listens on. A bare
