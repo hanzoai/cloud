@@ -5782,6 +5782,10 @@
    "doc": "Returns the repo's Pages status, live URL, custom domain and build\nsource. The repo is resolved against the org installation's GRANTED set, so a\ncaller can never address a repo the App was not granted; 404 when the repo has no\nPages site."
   },
   {
+   "id": "get_integrations_gitlab_projects",
+   "doc": "Lists the projects the org's GitLab connection can reach —\nmembership projects, most recently active first."
+  },
+  {
    "id": "get_integrations_slack_install",
    "doc": "The address behind Slack's \"Add to Slack\" and Marketplace Install buttons. It answers a 302 to Slack's own consent screen and does nothing else — it is a redirector by design.\n\nIt exists because Slack refuses a slack.com URL in that field and requires one of ours that redirects there, which makes the field an ATTRIBUTION hook: routing the click through our own address is what lets an install be counted, and always answering the redirect is what keeps the counter from becoming a detour that never reaches consent. The destination is the same consent URL every time, built from the same scopes the console's Connect button asks for, so a workspace is asked to grant one thing however the install began.\n\nIt is PUBLIC and carries no principal, because whoever clicks Install in Slack's directory has no Hanzo session yet. It binds no org either, and that is deliberate rather than missing: the org is resolved at the shared provider callback, from the signed state a console connect minted or from the workspace's existing connection. Minting an org for an anonymous click is the one thing that would break tenant isolation, so an install begun here finishes under exactly the rules every other install obeys.\n\nWhere the app is not configured it answers 503, rather than a consent URL carrying an empty client_id that Slack would render as its own dead-end error page."
   },
