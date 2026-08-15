@@ -2478,6 +2478,38 @@
         }
       }
     },
+    "/v1/iam/organizations/avatar": {
+      "post": {
+        "operationId": "setOrganizationAvatar",
+        "summary": "Changes how an organization appears across Hanzo: the square mark beside its name, as an uploaded image or as a single emoji.",
+        "description": "Changes how an organization appears across Hanzo: the square mark\nbeside its name, as an uploaded image or as a single emoji. Sending an image\nclears the emoji and sending an emoji clears the image — an organization has\none mark, not a preference order — and sending neither clears both, which is\nhow it goes back to being drawn as its initial.\n\nAn image is an https link or the bytes inline as a data URL, up to 96 KiB.\nAnyone who administers the organization may set this; it is not reserved to\nthe platform.\n\nIt writes the two fields onto the stored row and touches nothing else, which\nupdate cannot do: update replaces the whole record, and a record read back\nfirst arrives masked, so a read-modify-write through it would persist the mask\nover the organization's own credential settings.",
+        "tags": [
+          "iam"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.SetAvatarInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Organization"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/iam/organizations/delete": {
       "post": {
         "operationId": "deleteOrganization",
@@ -4654,6 +4686,46 @@
         }
       }
     },
+    "/v1/iam/webauthn/signin/begin": {
+      "get": {
+        "operationId": "get_iam_webauthn_signin_begin",
+        "summary": "Starts a passkey sign-in: it returns the challenge the person's authenticator signs.",
+        "description": "Starts a passkey sign-in: it returns the challenge the person's\nauthenticator signs.\n\nThe account is named in the query, and the challenge is bound to it, so what may\nanswer is decided here — by the server, from the row — and the finish checks the\nanswer against that decision rather than recomputing it.",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/v1/iam/webauthn/signin/finish": {
+      "post": {
+        "operationId": "post_iam_webauthn_signin_finish",
+        "summary": "Verifies the signed challenge and signs the person in.",
+        "description": "Verifies the signed challenge and signs the person in.\n\nIt answers exactly as a password sign-in does — the same envelope, through the\nsame grant — so nothing downstream branches on how somebody arrived.",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/v1/iam/webauthn/signup/begin": {
+      "get": {
+        "operationId": "get_iam_webauthn_signup_begin",
+        "summary": "Starts enrolling a passkey for the signed-in person: it returns the options their browser hands to the authenticator.",
+        "description": "Starts enrolling a passkey for the signed-in person: it returns the\noptions their browser hands to the authenticator.\n\nPasskeys already on the account are EXCLUDED, so a second enrollment on a device\nthat already holds one is refused by the authenticator itself rather than\nsilently producing a duplicate the person cannot tell apart.",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/v1/iam/webauthn/signup/finish": {
+      "post": {
+        "operationId": "post_iam_webauthn_signup_finish",
+        "summary": "Verifies the newly created passkey and stores it, so the person can sign in with their device from then on.",
+        "description": "Verifies the newly created passkey and stores it, so the person\ncan sign in with their device from then on.",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
     "/v1/iam/whoami": {
       "get": {
         "operationId": "get_iam_whoami",
@@ -5433,6 +5505,9 @@
           "accountMenu": {
             "type": "string"
           },
+          "avatar": {
+            "type": "string"
+          },
           "balanceCredit": {
             "type": "number"
           },
@@ -5471,6 +5546,9 @@
             "type": "boolean"
           },
           "displayName": {
+            "type": "string"
+          },
+          "emoji": {
             "type": "string"
           },
           "enableSoftDeletion": {
@@ -6065,6 +6143,10 @@
           "accountMenu": {
             "type": "string"
           },
+          "avatar": {
+            "description": "How the organization appears across Hanzo — the square mark beside its\nname — as an image or as one emoji, never both. It is the pair a person\ncarries (User.Avatar) under the same names, resolved the same way, so a\nscreen draws a subject without asking which kind of subject it has. Both\nhalves live on the row: a mark that appears everywhere cannot be kept on\none device. Written through schema.MarkOf; Logo and LogoDark above are a\ndifferent thing, the wordmark a login screen draws.",
+            "type": "string"
+          },
           "balanceCredit": {
             "type": "number"
           },
@@ -6103,6 +6185,9 @@
             "type": "boolean"
           },
           "displayName": {
+            "type": "string"
+          },
+          "emoji": {
             "type": "string"
           },
           "enableSoftDeletion": {
@@ -6839,6 +6924,23 @@
         ],
         "type": "object"
       },
+      "iam.SetAvatarInput": {
+        "properties": {
+          "avatar": {
+            "type": "string"
+          },
+          "emoji": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "iam.SigninItem": {
         "properties": {
           "customCss": {
@@ -7064,6 +7166,9 @@
           "accountMenu": {
             "type": "string"
           },
+          "avatar": {
+            "type": "string"
+          },
           "balanceCredit": {
             "type": "number"
           },
@@ -7102,6 +7207,9 @@
             "type": "boolean"
           },
           "displayName": {
+            "type": "string"
+          },
+          "emoji": {
             "type": "string"
           },
           "enableSoftDeletion": {
@@ -7925,6 +8033,10 @@
             "type": "string"
           },
           "attachment": {
+            "type": "string"
+          },
+          "attestationFormat": {
+            "description": "AttestationFormat is the statement format the authenticator attested in\n(\"packed\", \"apple\", \"none\", …), which is a DIFFERENT value from the\nattestation type above. The library reads it back when resolving the FIDO\nAppID extension, so a row that dropped it would round-trip a credential the\nverifier no longer recognises as the one it stored.",
             "type": "string"
           },
           "attestationType": {
