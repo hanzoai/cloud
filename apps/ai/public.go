@@ -51,10 +51,19 @@ import (
 
 func init() {
 	// THE CATALOG — what can be called, and by whom. Both are unauthenticated and
-	// secret-free by their own declaration; a client that cannot read the catalog
-	// before it holds a credential cannot show a model picker.
+	// secret-free; a client that cannot read the catalog before it holds a
+	// credential cannot show a model picker.
+	//
+	// Two facts about the same two operations, and they are orthogonal: Public is
+	// AUDIENCE (this is part of the published contract) and Open is CREDENTIAL
+	// (this needs none). Every other line in this file is Public and not Open —
+	// inference is billed, so it is a call you make as somebody. The catalog is the
+	// call you make before you are anybody, and saying so is what stops five
+	// generated SDKs demanding a token to list models that answer 200 without one.
 	openapi.Public("/v1/models", http.MethodGet)
 	openapi.Public("/v1/models/providers", http.MethodGet)
+	openapi.Open("/v1/models", http.MethodGet)
+	openapi.Open("/v1/models/providers", http.MethodGet)
 
 	// TEXT. Four wire formats over one router: OpenAI's chat and legacy
 	// completions, OpenAI's Responses, and Anthropic's Messages. They are not

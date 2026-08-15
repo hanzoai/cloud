@@ -351,5 +351,9 @@ func Weave(parts []Part) (*Document, error) {
 	if err := uniqueOperationIDs(out); err != nil {
 		return nil, err
 	}
+	// The credential is IDENTITY, like the info and server blocks above: one API,
+	// one scheme, stated by this package rather than inherited from whichever part
+	// happened to carry it (openapi/security.go).
+	secure(out)
 	return out, nil
 }
