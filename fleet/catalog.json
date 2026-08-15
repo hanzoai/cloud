@@ -2407,6 +2407,7 @@
    "doc": "Browse searches AND browses the cross-org catalog: every project, app and site\nthe fleet has built, whichever org built it.\n\nIt reads TWO corpora and returns them as one page — the published,\nworld-readable catalog that every caller sees, plus the caller's OWN org's\nprivate entries when the request carries a validated principal. Each row says\nwhich it came from in `scope`, so a client can warn before sharing a link. An\nanonymous caller simply gets the published one; no filter can ever widen a\ncaller into another tenant's corpus, because the query that would return it is\nnever run for them.\n\nA request with no q is a browse rather than a search, and both answer the same\nshape: the page, the total before paging, and the facet counts over the whole\nmatching set."
   }
  ],
+ "catalogsync": [],
  "channels": [
   {
    "id": "get_channels",
@@ -5913,6 +5914,7 @@
    "doc": "Sets or clears the custom domain (cname) and updates HTTPS\nenforcement, build type, or source. ONLY the provided fields are sent to GitHub,\nso an update never resets a setting the caller did not mention."
   }
  ],
+ "kafka": [],
  "kms": [
   {
    "id": "delete_kms_secrets_by_wildcard1",
@@ -9091,6 +9093,7 @@
    "doc": "State reports the caller organisation's own model: what it has learned, whether\nit is live or still in shadow, the threshold in force, the appetite it stated\nbeside the share it actually realised, every refusal by reason, every feature\nthat read blind, and how much of the organisation's own event surface has been\nfolded in.\n\nIt covers ONE organisation. A caller cannot learn another's volumes, alert rate\nor behaviour from it, because the state is read out of a model that holds only\nits own."
   }
  ],
+ "rollingcap": [],
  "sandboxes": [
   {
    "id": "delete_sandboxes_by_id",
@@ -10127,6 +10130,7 @@
    "doc": "Settlement reads one x402 payment receipt by id.\n\nIt is scoped to the caller's PAYER org — the ledger that was debited — so one\ntenant can never read another's settlement, and an id that exists but belongs\nto somebody else is a 404 exactly like one that does not exist. A caller with\nno billable identity is refused outright."
   }
  ],
+ "zen": [],
  "zt": [
   {
    "id": "get_mesh_services",
