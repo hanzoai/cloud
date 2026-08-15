@@ -283,9 +283,17 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 			return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "admin credentials: %v", err)
 		}
 	}
-	if cr.session, err = sessionFor(ctx, bearer, time.Duration(ttl)*time.Second); err != nil {
-		return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "owner session: %v", err)
+	// AN IDENTITY THAT CANNOT BE MINTED DOES NOT COST THE SANDBOX. The exchange
+	// reaches IAM, and a sandbox that starts without a session is exactly the
+	// sandbox everybody got before this existed — useful, and holding nothing.
+	// Refusing the lease instead would turn an identity outage into a total sandbox
+	// outage, and it would deny nothing that is not already denied: the failure
+	// leaves the pod with no credential either way. So it is LOUD and it continues.
+	sess, err := sessionFor(ctx, bearer, time.Duration(ttl)*time.Second)
+	if err != nil {
+		s.Log.Warn("sandbox starts with no owner session", "org", org, "class", class, "err", err)
 	}
+	cr.session = sess
 
 	id, err := genID()
 	if err != nil {
