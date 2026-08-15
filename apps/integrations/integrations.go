@@ -975,6 +975,11 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/integrations/telegram/link", cloud.Handle(s, telegramLink))
 	app.Get("/v1/integrations/telegram/link/auth", cloud.Handle(s, telegramLinkAuth))
 	app.Get("/v1/integrations/telegram/link/callback", cloud.Handle(s, telegramLinkCallback))
+	// What the GitLab connection reaches (gitlab_projects.go). Literal, so it is
+	// matched before the /:provider wildcards below. The token stays in KMS: a
+	// caller asks this package to read GitLab, the way the GitHub routes above
+	// already work, rather than asking for the credential.
+	zip.Get(zapp, "/v1/integrations/gitlab/projects", o.gitlabProjects)
 	zip.Get(zapp, "/v1/integrations/:provider", o.get)
 	zip.Post(zapp, "/v1/integrations/:provider/connect", o.connect)
 	// PUBLIC, state-authed, RAW (302). RedirectPath == this path for every provider

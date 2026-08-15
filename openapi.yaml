@@ -19422,6 +19422,55 @@ components:
             vocabulary means one thing to learn, and it is theirs.
           type: string
       type: object
+    gitlabProjectView:
+      properties:
+        cloneUrl:
+          description: CloneURL is the https remote to clone.
+          type: string
+        defaultBranch:
+          description: |-
+            DefaultBranch is the branch a clone lands on ("main" when GitLab names none,
+            which is what an empty project reports).
+          type: string
+        description:
+          description: Description is the project's own, empty when it has none.
+          type: string
+        fullName:
+          description: |-
+            FullName is the namespace path ("acme/widgets", "acme/team/widgets" for a
+            subgroup) — the string GitLab calls path_with_namespace.
+          type: string
+        htmlUrl:
+          description: HTMLURL is the project's page.
+          type: string
+        name:
+          description: Name is the project's path segment ("widgets"), not its display
+            name.
+          type: string
+        private:
+          description: Private is true for anything not publicly visible (private
+            or internal).
+          type: boolean
+        pushedAt:
+          description: PushedAt is RFC3339 last activity, so a client can sort or
+            say "2h ago".
+          type: string
+      type: object
+    gitlabProjectsOut:
+      properties:
+        account:
+          description: |-
+            Account is the connected GitLab username, so a client can label the list
+            without a second call. Empty when the connection recorded none.
+          type: string
+        projects:
+          description: |-
+            Projects is every project the token reaches, newest activity first. Never
+            null; [] when the account has none.
+          items:
+            $ref: '#/components/schemas/gitlabProjectView'
+          type: array
+      type: object
     gpuAlertList:
       properties:
         alerts:
@@ -86598,6 +86647,34 @@ paths:
         The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
       operationId: post_integrations_github_webhook
       summary: GitHub App webhook
+      tags:
+      - integrations
+      x-app: integrations
+  /v1/integrations/gitlab/projects:
+    get:
+      description: |-
+        Lists the projects the org's GitLab connection can reach —
+        membership projects, most recently active first.
+      operationId: get_integrations_gitlab_projects
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                account: acme
+                projects:
+                - cloneUrl: https://gitlab.com/acme/widgets.git
+                  defaultBranch: main
+                  fullName: acme/widgets
+                  htmlUrl: https://gitlab.com/acme/widgets
+                  name: widgets
+                  private: true
+                  pushedAt: "2026-07-01T10:00:00Z"
+              schema:
+                $ref: '#/components/schemas/gitlabProjectsOut'
+          description: ok
+      summary: Lists the projects the org's GitLab connection can reach — membership
+        projects, most recently active first.
       tags:
       - integrations
       x-app: integrations
