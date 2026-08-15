@@ -1,6 +1,6 @@
 {
-  "paths": 1821,
-  "operations": 2486,
+  "paths": 1822,
+  "operations": 2487,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -8,6 +8,7 @@
     "agent": 4,
     "agents": 32,
     "ai": 208,
+    "allowance": 1,
     "analytics": 4,
     "appearance": 2,
     "ask": 2,
