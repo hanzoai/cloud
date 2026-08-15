@@ -1259,7 +1259,11 @@ of them refuted a claim that had been repeated confidently for weeks.
   `cloud 0.0.0`, describing `/healthz` and `/readyz` over one `probeOut` schema —
   and `/docs`, zip's Swagger page, rendered that. The tell was the header: every
   other address carries `x-api-version`, and this one carried none.
-  It is not a Cloudflare or Traefik router in front. **`zip.SpecPath` IS
+  It is not a Cloudflare or Traefik router in front — CHECKED, because that was the
+  one hypothesis the cloud tree cannot refute on its own: in
+  `universe/infra/k8s/ingress/routes.yaml` every router above the `api-hanzo-ai`
+  catch-all (priority 1) is a `/v1/...` PathPrefix, so nothing claims `/.well-known`
+  and the request reaches `cloud.hanzo.svc:8000`. **`zip.SpecPath` IS
   `/.well-known/openapi.json`**, and zip auto-mounts a document there from its
   OWN typed-op registry (`installOpenAPIRoutes`, called from `prepare()` at
   Serve). On the light host that registry is nearly empty, so the address RFC
