@@ -155,6 +155,7 @@ func run(addr, zapAddr string) error {
 	// deferred call of Reap itself — that form evaluates at defer-run time
 	// and would start the sweep during shutdown, which is the mistake serveWake
 	// records one door over.
+	//
 	// warm=0 applies the IDLE bound only: an app nobody has called for its
 	// IdleAfter is stopped, and nothing is evicted merely for being one process
 	// too many. zip also offers an LRU ceiling as the second argument — the bound
@@ -334,15 +335,39 @@ func run(addr, zapAddr string) error {
 	// has drained, so cancelling on the way out stops the poll with the process.
 	consoleCtx, stopConsole := context.WithCancel(context.Background())
 	defer stopConsole()
-	consoleSrc, err := release.Load(consoleCtx, release.ConfigFromEnv(), app.Logger())
-	if err != nil {
-		return fmt.Errorf("console: %w", err)
+	consoleSrc, consoleErr := release.Load(consoleCtx, release.ConfigFromEnv(), app.Logger())
+	if consoleErr != nil {
+		// Loud, and ALIVE. This used to return the error, and the difference is
+		// what an unreadable 404.html cost: the object store dropped one read, the
+		// front door refused to boot, and api.hanzo.ai answered 503 to every
+		// caller — including everyone who never opens a browser. Exiting does not
+		// save the console, because a dead process serves a blank page too; it
+		// only adds the API to what is lost. There is no state of the world where
+		// it leaves a user better off, so it is not the stricter choice, just the
+		// more expensive one.
+		//
+		// The alert this was reaching for is the log line, not the exit. A running
+		// process ships it; a CrashLoop takes the telemetry front door down with
+		// it and ships nothing.
+		app.Logger().Error("console: no release mounted — serving the API without it",
+			"err", consoleErr)
+	} else {
+		// A publish reaches users through this loop, in one poll interval — the
+		// whole point of taking the console out of the binary. Stopped when run
+		// returns.
+		go consoleSrc.Watch(consoleCtx)
 	}
-	// A publish reaches users through this loop, in one poll interval — the whole
-	// point of taking the console out of the binary. Stopped when run returns.
-	go consoleSrc.Watch(consoleCtx)
 
-	if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
+	// nil is webui's stated "this process serves no console": the catch-all still
+	// keeps the API namespaces honest and still answers the agent door, and a
+	// console path gets a 503 saying so. Mounting an empty release ERRORS, so this
+	// is conditional for the same reason cloud.Listen's is — doing it
+	// unconditionally turns "serves none" back into "starts none".
+	if consoleErr == nil {
+		if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
+			return fmt.Errorf("console: %w", err)
+		}
+	} else if err := webui.Mount(app, nil); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
 
