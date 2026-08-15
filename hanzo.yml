@@ -349,6 +349,30 @@ test:
       # -tags: the cgo floor above. CGO_ENABLED=1 without sqlite_math_functions
       # cannot compile the 47 packages that reach hanzoai/base/core, so this step
       # reported "[build failed]" for them instead of running their tests.
-      go test -count=1 -timeout 30m -tags "sqlite_fts5 sqlite_math_functions" \
+      #
+      # -p BOUNDS THE LINKS, AND WITHOUT IT THIS STEP DIES ON MEMORY, INTERMITTENTLY.
+      # `go test` runs up to GOMAXPROCS package binaries at once and Go derives that
+      # from the CGROUP since 1.25 — but on this runner the pod's own cpu.max is not
+      # visible in its cgroup namespace (only the root controllers are), so the
+      # derivation falls back to nproc, which reports the NODE's 16 while the pod is
+      # limited to 6 CPU and 26Gi. mk/fleet.mk records the other half: a link peaks
+      # at 1.67 GB for the heaviest package and ~1.4 GB median. Sixteen concurrent
+      # links is therefore ~26 GB against a 26Gi ceiling, so the kernel kills a
+      # linker whenever the wrong packages land together. It kills a CHILD, so the
+      # pod does not restart and nothing here says "memory": the step just fails in
+      # under a minute where a pass takes 19-25, and it looked like flake for as long
+      # as anyone has been re-running it. Measured on this repo: ./... is green twice
+      # over on a box with headroom, and every individual step in this file passes on
+      # the same commit — the only variable was how many links shared the ceiling.
+      #
+      # Six is the pod's own CPU limit, which is also the number mk/fleet.mk's memory
+      # bound arrives at (26Gi / 3 GiB per concurrent app is 8, and 6 is under it).
+      # It is written here rather than read from the cgroup because the cgroup is
+      # exactly what this runner will not show us; when it does, delete the literal
+      # and let Go derive it. GOMAXPROCS, not just -p, so the parallelism INSIDE a
+      # test binary follows the same ceiling instead of each of the six spawning
+      # sixteen more.
+      GOMAXPROCS=6 go test -count=1 -p 6 -timeout 30m \
+        -tags "sqlite_fts5 sqlite_math_functions" \
         -skip 'TestRecord_DebitsFinanceInProcess|TestIndexerUnreachableHonestEmpty' \
         ./...
