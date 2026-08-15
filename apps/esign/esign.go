@@ -24,9 +24,12 @@
 // TENANCY. Owner routes (/v1/esign/documents/*) resolve the tenant from the
 // VALIDATED cloud principal (principal.Org), never a client header. Recipient
 // token routes (/v1/esign/o/:org/sign/:token) are unauthenticated capability
-// links: the :org segment selects the tenant DB and the crypto-random token
-// authorizes — a wrong org simply cannot hold a valid token. NewBase pre-routes
-// the bundle's db to that tenant, so isolation is a host property.
+// links: the crypto-random token is the whole credential, and it is what selects
+// the tenant DB — resolved through the cross-tenant token index (index.go)
+// BEFORE any per-tenant store is opened. The :org segment is the caller's claim
+// about which tenant they mean and is only checked against that answer. NewBase
+// pre-routes the bundle's db to the resolved tenant, so isolation is a host
+// property.
 //
 // ACTIVATION: esign is NOT staged — it mounts under the mount-all default (empty
 // CLOUD_ENABLE), so the one binary serves /v1/esign/* from first boot. The
@@ -59,7 +62,8 @@ const maxBody = 32 << 20
 
 // state is esign's own data; shared deps live in the embedded cloud.Base.
 type state struct {
-	host *goja.BaseHost
+	host  *goja.BaseHost
+	index *tokenIndex
 }
 
 // mounted is the active service so shutdown can release the per-tenant stores.
@@ -117,7 +121,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("esign.Mount: goja NewBase host: %w", err)
 	}
-	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "esign"), State: state{host: host}}
+	// The signer's door cannot open without this: it is what resolves a token to
+	// its tenant, and resolving is what has to happen before any per-tenant store
+	// is touched. Without it there is no safe way to serve /o/:org/sign/*, so
+	// serve health-only (cloud stays up) rather than fall back to trusting the
+	// caller's `:org`.
+	index, err := openTokenIndex(deps.DataDir)
+	if err != nil {
+		_ = host.Close()
+		luxlog.Default().Error("esign token index failed — serving /v1/esign/health only", "err", err)
+		return nil
+	}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "esign"), State: state{host: host, index: index}}
 	mounted = s
 	routes(app, s)
 
@@ -243,10 +258,10 @@ func init() {
 			"design.\n\n"+
 			"This is the signer's door and it takes NO account: the signing token is the entire "+
 			"credential, and it names the recipient, so a signer sees only their own fields and "+
-			"never the other recipients' tokens. The `:org` segment selects which tenant's store "+
-			"is opened, and the token is then looked up inside it — so a token presented under "+
-			"the wrong org simply does not resolve. An unknown or wrong-org token is a 401, "+
-			"never a hint that some other document exists.")
+			"never the other recipients' tokens. The token resolves to its owning tenant FIRST, "+
+			"before any per-tenant store is opened, and the `:org` segment is only checked "+
+			"against that answer. An unknown or wrong-org token is one and the same 404, never "+
+			"a hint that some other document exists.")
 	openapi.Describe("/v1/esign/o/:org/sign/:token/fields/:fieldId", http.MethodPost,
 		"Fill in one of your fields",
 		"Records a value for one field and marks it inserted. A signature field takes `value` "+
@@ -273,7 +288,7 @@ func init() {
 			"is a 400 naming how many remain. A document not out for signature is a 409, as is a "+
 			"recipient who has already completed, and under SEQUENTIAL order a signer out of turn "+
 			"is a 403. The token is the whole credential — no account, and a token that does not "+
-			"resolve under `:org` is a 401. Sealing and completion are one transaction, so a "+
+			"resolve under `:org` is a 404. Sealing and completion are one transaction, so a "+
 			"failure anywhere leaves the document exactly as it was.")
 	openapi.Describe("/v1/esign/o/:org/sign/:token/reject", http.MethodPost,
 		"Decline to sign, with an optional reason",
@@ -283,7 +298,7 @@ func init() {
 			"the audit trail with the rejection, which is what the sender sees.\n\n"+
 			"A document not out for signature is a 409, and so is a recipient who has already "+
 			"signed or already rejected — a refusal cannot be taken back or repeated. The token "+
-			"is the whole credential; one that does not resolve under `:org` is a 401.")
+			"is the whole credential; one that does not resolve under `:org` is a 404.")
 }
 
 // routes wires the /v1/esign/* owner + recipient-token surface. The native
@@ -329,16 +344,37 @@ func ownerID(s *cloud.Service[state], route string, readBody bool) zip.Handler {
 	}
 }
 
-// token builds a handler for an unauthenticated recipient capability route. The
-// :org path segment selects the tenant DB; the bundle authorizes the :token
-// against THAT org's recipients. All path params are threaded through.
+// token builds a handler for an unauthenticated recipient capability route.
+//
+// The TOKEN resolves first, against the cross-tenant index, and the org it
+// resolves to is what selects the tenant store. The `:org` segment is only the
+// claim the caller makes about which tenant they are addressing, and it is
+// checked against the answer — never used to select anything.
+//
+// Reading it the other way round (open the store `:org` names, then look the
+// token up inside it) is what let an unauthenticated caller mint tenant
+// databases: opening a per-tenant store CREATES the encrypted file and runs the
+// schema DDL, so the refusal for a bad token arrived after the file existed, and
+// any string was a new database. The path was sanitized, so this was never
+// traversal — it was ordering. A token that does not resolve is refused here,
+// before any per-tenant file is touched, and a token that resolves under a
+// different org is refused identically, so the answer never separates "no such
+// token" from "not yours".
 func token(s *cloud.Service[state], route string, readBody bool) zip.Handler {
 	return func(c *zip.Ctx) error {
-		org := c.Param("org")
-		if org == "" {
-			return zip.ErrBadRequest("org required")
+		tok := c.Param("token")
+		if tok == "" {
+			return zip.ErrNotFound("unknown signing token")
 		}
-		params := map[string]string{"org": org, "token": c.Param("token")}
+		org, ok, err := s.State.index.org(tok)
+		if err != nil {
+			s.Log.Error("esign token index read failed", "err", err)
+			return zip.Errorf(http.StatusInternalServerError, "token resolution failed")
+		}
+		if !ok || org != c.Param("org") {
+			return zip.ErrNotFound("unknown signing token")
+		}
+		params := map[string]string{"org": org, "token": tok}
 		if fid := c.Param("fieldId"); fid != "" {
 			params["fieldId"] = fid
 		}
@@ -369,6 +405,16 @@ func dispatch(s *cloud.Service[state], c *zip.Ctx, route, tenant string, params 
 	if err != nil {
 		s.Log.Error("esign dispatch failed", "route", route, "err", err)
 		return zip.Errorf(http.StatusInternalServerError, "esign dispatch failed")
+	}
+	// The cross-tenant index is part of the operation, not a follow-up: a
+	// recipient's only way in is the token, and a token absent from the index
+	// opens for nobody. Failing the call is what keeps a signing link that
+	// nobody could open from being handed back as usable.
+	if resp.Status < 300 {
+		if err := s.State.index.record(route, tenant, resp.Body); err != nil {
+			s.Log.Error("esign token index write failed", "route", route, "err", err)
+			return zip.Errorf(http.StatusInternalServerError, "token index write failed")
+		}
 	}
 	c.SetHeader("Content-Type", "application/json")
 	return c.Bytes(resp.Status, resp.Body)
@@ -402,12 +448,23 @@ func migrateDataDir(dataDir string, log luxlog.Logger) error {
 	return nil
 }
 
-// shutdown closes the per-tenant stores + the goja engine. Idempotent.
+// shutdown closes the per-tenant stores + the goja engine + the token index.
+// Idempotent.
 func Shutdown(context.Context) error {
-	if mounted == nil || mounted.State.host == nil {
+	if mounted == nil {
 		return nil
 	}
-	err := mounted.State.host.Close()
+	var firstErr error
+	if mounted.State.host != nil {
+		if err := mounted.State.host.Close(); err != nil {
+			firstErr = err
+		}
+	}
+	if mounted.State.index != nil {
+		if err := mounted.State.index.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
 	mounted = nil
-	return err
+	return firstErr
 }
