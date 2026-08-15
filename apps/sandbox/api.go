@@ -291,7 +291,7 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 	// leaves the pod with no credential either way. So it is LOUD and it continues.
 	sess, err := sessionFor(ctx, bearer, time.Duration(ttl)*time.Second)
 	if err != nil {
-		s.Log.Warn("sandbox starts with no owner session", "org", org, "class", class, "err", err)
+		s.Log.Warn("no owner session to hand the sandbox", "org", org, "class", class, "err", err)
 	}
 	cr.session = sess
 
@@ -343,7 +343,7 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 	// lease got before this existed. Both halves of "the owner could not be signed
 	// in" are therefore ONE policy, stated here where the lease is decided.
 	if err := s.State.rt.signIn(ctx, m, cr.session); err != nil {
-		s.Log.Warn("sandbox starts with no owner session", "sandbox", m.ID, "org", org, "err", err)
+		s.Log.Warn("the sandbox could not take the owner session", "sandbox", m.ID, "org", org, "err", err)
 	}
 
 	// Recorded only once it RUNS. The gate above already refused a balance that
