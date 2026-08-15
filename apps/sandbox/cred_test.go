@@ -286,7 +286,7 @@ func TestNoMintClientIsNoSession(t *testing.T) {
 // the population this credential is scoped against.
 func TestTheTokenNeverAppearsInTheScript(t *testing.T) {
 	s := iam.Session{Token: "header.payload.signature", Email: "a@hanzo.ai", Display: "A"}
-	if got := signIn(s, "hanzo"); strings.Contains(got, s.Token) {
+	if got := script(s, "hanzo"); strings.Contains(got, s.Token) {
 		t.Fatalf("the script carries the token:\n%s", got)
 	}
 }
@@ -296,7 +296,7 @@ func TestTheTokenNeverAppearsInTheScript(t *testing.T) {
 // whatever host a checkout inside the sandbox points at — on the first fetch.
 func TestTheGitCredentialIsScopedToTheForge(t *testing.T) {
 	for brandID, host := range map[string]string{"hanzo": "git.hanzo.ai", "lux": "git.lux.network", "zoo": "git.zoo.ngo"} {
-		got := signIn(iam.Session{Token: "t"}, brandID)
+		got := script(iam.Session{Token: "t"}, brandID)
 		want := "'credential.https://" + host + ".helper'"
 		if !strings.Contains(got, want) {
 			t.Fatalf("%s: script does not scope the helper to %s:\n%s", brandID, host, got)
@@ -313,7 +313,7 @@ func TestTheGitCredentialIsScopedToTheForge(t *testing.T) {
 // value crossing into the script is quoted, so a name that looks like a command is
 // a name.
 func TestAnIdentityCannotBecomeACommand(t *testing.T) {
-	got := signIn(iam.Session{
+	got := script(iam.Session{
 		Token:   "t",
 		Display: "'; touch /tmp/pwned; echo '",
 		Email:   "$(touch /tmp/pwned)@hanzo.ai",
@@ -335,7 +335,7 @@ func TestAnIdentityCannotBecomeACommand(t *testing.T) {
 // git's identity unset rather than writing an empty one, which git reports
 // honestly the first time somebody commits.
 func TestAnAbsentIdentityIsNotWritten(t *testing.T) {
-	got := signIn(iam.Session{Token: "t"}, "hanzo")
+	got := script(iam.Session{Token: "t"}, "hanzo")
 	for _, k := range []string{"user.name", "user.email"} {
 		if strings.Contains(got, k) {
 			t.Fatalf("script writes %s from an empty claim:\n%s", k, got)
@@ -365,7 +365,7 @@ func TestTheSessionIsNeverInTheKubernetesObject(t *testing.T) {
 // one without hanzo has nothing to sign in, so each half asks before it acts —
 // a lease is not failed over a credential its image could not have spent.
 func TestAnImageWithoutTheToolsIsNotAFailedLease(t *testing.T) {
-	got := signIn(iam.Session{Token: "t", Email: "a@hanzo.ai"}, "hanzo")
+	got := script(iam.Session{Token: "t", Email: "a@hanzo.ai"}, "hanzo")
 	for _, tool := range []string{"git", "hanzo"} {
 		if !strings.Contains(got, "if command -v "+tool+" >/dev/null; then") {
 			t.Fatalf("the script runs %s without asking whether it is there:\n%s", tool, got)

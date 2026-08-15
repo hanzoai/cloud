@@ -646,7 +646,7 @@ func (r *runtime) signIn(ctx context.Context, m Sandbox, s iam.Session) error {
 	if s.Token == "" {
 		return nil
 	}
-	res, err := r.exec(ctx, m, []string{"sh", "-c", signIn(s, r.brand)}, strings.NewReader(s.Token), 0, nil)
+	res, err := r.exec(ctx, m, []string{"sh", "-c", script(s, r.brand)}, strings.NewReader(s.Token), 0, nil)
 	if err != nil {
 		return err
 	}
