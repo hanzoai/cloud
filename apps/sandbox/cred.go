@@ -137,20 +137,34 @@ func sessionFor(ctx context.Context, bearer string, ttl time.Duration) (iam.Sess
 // quoting of its own format. The helper asks `hanzo` for the current token
 // instead of holding a copy, so there is ONE credential in the pod and no second
 // one on disk to be left behind when the first is replaced.
+//
+// A TOOL THAT IS NOT THERE IS NOT A FAILURE. A caller may name its own image, and
+// an image without `git` has nothing to configure and one without `hanzo` has
+// nothing to sign in — so each half is skipped rather than failing a lease over a
+// credential its image could not have spent. A tool that IS there and fails still
+// fails the lease, which is the case worth hearing about.
+//
+// HOME is the IMAGE's, and /home/sandbox only when the image states none. An exec
+// session inherits whatever the image set, and writing to our own guess would put
+// the credential where that image's tools do not look.
 func signIn(s iam.Session, brandID string) string {
 	q := func(v string) string { return shellQuote(v) }
 	set := func(k, v string) string {
 		if strings.TrimSpace(v) == "" {
 			return ""
 		}
-		return "git config --global " + k + " " + q(v) + "\n"
+		return "  git config --global " + k + " " + q(v) + "\n"
 	}
 	helper := `!f() { test "$1" = get && printf "username=hanzo\npassword=%s\n" "$(hanzo auth token)"; }; f`
-	return "set -e\numask 077\nexport HOME=" + q(home) + "\n" +
+	return "set -e\numask 077\nexport HOME=\"${HOME:-" + home + "}\"\n" +
+		"if command -v git >/dev/null; then\n" +
 		set("user.name", s.Display) +
 		set("user.email", s.Email) +
-		"git config --global " + q("credential.https://"+brand.GitHost(brandID)+".helper") + " " + q(helper) + "\n" +
-		"hanzo auth login --brand " + q(brandID) + " --token - >/dev/null\n"
+		"  git config --global " + q("credential.https://"+brand.GitHost(brandID)+".helper") + " " + q(helper) + "\n" +
+		"fi\n" +
+		"if command -v hanzo >/dev/null; then\n" +
+		"  hanzo auth login --brand " + q(brandID) + " --token - >/dev/null\n" +
+		"fi\n"
 }
 
 // credFor reads the SuperAdmin's DigitalOcean credentials and builds one

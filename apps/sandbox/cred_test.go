@@ -326,8 +326,8 @@ func TestAnIdentityCannotBecomeACommand(t *testing.T) {
 			t.Fatalf("an identity escaped its quotes:\n%s", got)
 		}
 	}
-	if !strings.Contains(got, "export HOME="+shellQuote(home)) {
-		t.Fatalf("the script does not state HOME:\n%s", got)
+	if !strings.Contains(got, `export HOME="${HOME:-`+home+`}"`) {
+		t.Fatalf("the script does not settle HOME:\n%s", got)
 	}
 }
 
@@ -358,5 +358,17 @@ func TestTheSessionIsNeverInTheKubernetesObject(t *testing.T) {
 	}
 	if _, stated := c["env"]; stated {
 		t.Fatalf("a session-bearing ordinary sandbox states env %v", c["env"])
+	}
+}
+
+// A caller may name its own image. One without git has nothing to configure and
+// one without hanzo has nothing to sign in, so each half asks before it acts —
+// a lease is not failed over a credential its image could not have spent.
+func TestAnImageWithoutTheToolsIsNotAFailedLease(t *testing.T) {
+	got := signIn(iam.Session{Token: "t", Email: "a@hanzo.ai"}, "hanzo")
+	for _, tool := range []string{"git", "hanzo"} {
+		if !strings.Contains(got, "if command -v "+tool+" >/dev/null; then") {
+			t.Fatalf("the script runs %s without asking whether it is there:\n%s", tool, got)
+		}
 	}
 }
