@@ -59,6 +59,12 @@ publish to every process in the pod — and keeps its own store. `git` is pointe
 at that store through a credential helper SCOPED TO THE FORGE HOST, so there is
 one credential in the pod and it is offered nowhere else.
 
+**An identity outage is not a sandbox outage.** The exchange reaches IAM, and a
+lease whose exchange fails still happens — the pod holds nothing, which is the
+sandbox everybody had before this existed. Refusing the lease would turn one
+unreachable dependency into a total sandbox outage while denying nothing that is
+not already denied, so the failure is LOUD in the log and the lease continues.
+
 **Two doors, one of them silent.** The HTTP door relays `cloud.CallerBearer`. The
 agent plane passes "" — a plane call carries an ATTESTED caller, not the caller's
 own token, so there is nothing to exchange and substituting a credential of ours
