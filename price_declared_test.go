@@ -115,6 +115,11 @@ var unpricedRoot = map[string]bool{
 	// The generator that scaffolds the other roots. It writes Price declarations;
 	// it does not make one.
 	"gen-app-cmds": true,
+	// Writes fleet/catalog.json from the apps' own published subsets, so the
+	// agent door can answer tools/list without starting a process per subsystem.
+	// It READS what every surface serves and emits a file; it registers no route
+	// and is never mounted, so there is nothing here for the edge to price.
+	"gen-fleet-catalog": true,
 }
 
 // isCloudPlugin reports whether an expression names the cloud.Plugin type.
