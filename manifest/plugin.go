@@ -181,6 +181,29 @@ func (a App) Plugin() zip.Plugin { return a.resolve() }
 // non-lazy and therefore never a candidate.
 const idleAfter = 15 * time.Minute
 
+// Warm is how many plugin processes this host may hold at once. Age bounds the
+// steady state; this bounds the BURST, which age cannot reach — IdleAfter only
+// reclaims a plugin that has already been quiet for its whole window, so in the
+// minutes after a cold start, when every prefix that gets a request starts a
+// child and none is old enough to be idle, it reclaims nothing.
+//
+// It is a COUNT because the cost is the count. Measured in the running pod, the
+// per-child distribution is flat: the largest is o11y at 272MiB, the mean is
+// ~152MiB across 37 children, and no single subsystem dominates. So the bill is
+// how many are up, and a count is a bound the burst cannot outrun.
+//
+// FORTY-EIGHT, from the two numbers that bracket it. The working set is 37
+// children (~5.6GiB) — real traffic, since every one of them was touched inside
+// its 15-minute window — and the container limit is 11Gi, which ~72 children
+// reach. A bound BELOW the working set does not save memory, it thrashes: the
+// 38th request evicts something that is about to be asked for again. So this
+// sits above the working set and well under the limit: 48 x ~152MiB is ~7.3GiB,
+// leaving ~3.5GiB for the host and for spikes.
+//
+// Lowering it is not the way to a smaller pod — GOMEMLIMIT is, because it bounds
+// each child's heap and this only bounds how many of them there are.
+const Warm = 48
+
 func (a App) resolve() zip.Plugin {
 	env := "CLOUD_" + strings.ToUpper(strings.NewReplacer("-", "_").Replace(a.Name))
 	if addr := strings.TrimSpace(os.Getenv(env + "_ADDR")); addr != "" {
