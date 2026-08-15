@@ -41,7 +41,15 @@ source for the generated per-language SDKs.
 - `deps.go` / `cloud.Deps` — process-wide handles · `apps/<name>/` — every subsystem
 - `openapi/` — the document pipeline: the spec is a projection of the live router,
   and `openapi.yaml` at the root is a GOLDEN of it (written by `make openapi`,
-  verified by `make test` — not a second source)
+  verified by `make test` — not a second source). Four facts a route table cannot
+  hold are DECLARED beside the routes instead, each with its own seam and all four
+  rendering only on an operation the router already carries: bodies (`Register`),
+  prose (`Describe`), audience (`Public` → `x-public`, default-deny), and the
+  credential (`security.go`). The credential is ONE `bearer` scheme with a
+  document-level requirement every operation inherits — default-REQUIRE — and
+  `Open(path, method)` is the per-operation override that renders `security: []`.
+  Adding the scheme is what makes generated SDKs send a token at all: a document
+  naming no scheme produces a client with no auth in every language
 - `manifest/apps.go` — hand-authored source of truth; what `cmd/cloud` knows about the fleet
 
 ---
