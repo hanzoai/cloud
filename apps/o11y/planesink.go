@@ -49,6 +49,8 @@ import (
 	"fmt"
 	"hash/fnv"
 	"maps"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -59,6 +61,7 @@ import (
 	zaplogreceiver "github.com/hanzoai/o11y/pkg/zaplogreceiver"
 	zapreceiver "github.com/hanzoai/o11y/pkg/zapreceiver"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/hanzoai/cloud"
@@ -125,6 +128,22 @@ const (
 	planeSpanListen = "0.0.0.0:4317"
 	planeLogListen  = "0.0.0.0:4318"
 
+	// The SAME wires, over a unix socket, for the senders that share this pod.
+	//
+	// About 110 plugin processes run beside this one and send their spans and
+	// logs across loopback TCP, which costs a port, a connection the kernel
+	// routes, and an ear on 0.0.0.0 that any pod in the cluster can also write
+	// to. Over a socket the filesystem decides who may write — the discipline
+	// the call plane already keeps in this very directory (0700 dir, 0600
+	// socket, SO_PEERCRED).
+	//
+	// It is a SECOND ear, never a replacement. The otel agent on every node,
+	// the gateway, and another cluster through the otlz door all reach the TCP
+	// addresses above from off-pod, where a socket cannot be shared; moving
+	// 4317 onto a path would take the fleet's telemetry down.
+	planeSpanSocketName = "o11y-spans.sock"
+	planeLogSocketName  = "o11y-logs.sock"
+
 	// platformOrg attributes a row that carries no tenant of its own: fleet
 	// infra telemetry belongs to the platform. A span stamped hanzo.org (the
 	// TracingMiddleware tenant) keeps its own org.
@@ -189,6 +208,10 @@ type planeSink struct {
 	sink    *datastoreSink
 	spanRcv *zapreceiver.Receiver
 	logRcv  *zaplogreceiver.Receiver
+
+	// The same two wires over unix sockets, for the senders in this pod.
+	spanSockRcv *zapreceiver.Receiver
+	logSockRcv  *zaplogreceiver.Receiver
 
 	// logs and spans coalesce rows so the store takes a few statements a second
 	// instead of one per wire batch. See planebuffer.go for the arithmetic: this
@@ -323,6 +346,46 @@ func mountPlaneIngest(deps cloud.Deps) error {
 		ps.logRcv = logRcv
 	}
 
+	// The in-pod ears. Both are best-effort: a pod with no writable run
+	// directory keeps every TCP sender working, which is why a failure here is
+	// a warning rather than a mount failure. Each takes its OWN NodeID, because
+	// zap admits one connection per peer identity — two ears sharing a name
+	// would have the second refuse the first's senders.
+	if dir := runtimeDir(); dir != "" {
+		spanSock := filepath.Join(dir, planeSpanSocketName)
+		if rcv, err := zapreceiver.New(zapreceiver.Config{
+			Listen: spanSock,
+			NodeID: "cloud-o11y-plane-uds",
+			OnBatch: func(ctx context.Context, b *zapreceiver.SpanBatch) error {
+				return ps.insertSpans(ctx, log, spanRowsOf(b))
+			},
+		}); err != nil {
+			log.Warn("plane span ingest (socket) failed to start", "listen", spanSock, "err", err)
+		} else {
+			ps.spanSockRcv = rcv
+			log.Info("plane span ingest also on a socket", "listen", spanSock)
+		}
+
+		logSock := filepath.Join(dir, planeLogSocketName)
+		if rcv, err := zaplogreceiver.New(zaplogreceiver.Config{
+			Listen: logSock,
+			NodeID: "cloud-o11y-plane-uds",
+			OnBatch: func(ctx context.Context, b *zaplogreceiver.LogBatch) error {
+				rows := logRowsOf(b)
+				if len(rows) == 0 {
+					return nil
+				}
+				ps.rememberResource(ctx, log, logResourceRowsOf(b, time.Now().UTC()))
+				return ps.logs.add(ctx, rows)
+			},
+		}); err != nil {
+			log.Warn("plane log ingest (socket) failed to start", "listen", logSock, "err", err)
+		} else {
+			ps.logSockRcv = rcv
+			log.Info("plane log ingest also on a socket", "listen", logSock)
+		}
+	}
+
 	// The in-process sink for cloud's OWN spans: the host hands the live SDK
 	// batch over (cloud/telemetry.go), this writes it as rows. Same opt-in
 	// flag, same fall-through-to-the-wire contract tracesink.go carried.
@@ -353,6 +416,12 @@ func shutdownPlaneIngest(context.Context) error {
 	}
 	if ps.spanRcv != nil {
 		ps.spanRcv.Stop()
+	}
+	if ps.spanSockRcv != nil {
+		ps.spanSockRcv.Stop()
+	}
+	if ps.logSockRcv != nil {
+		ps.logSockRcv.Stop()
 	}
 	if ps.logRcv != nil {
 		ps.logRcv.Stop()
@@ -943,4 +1012,23 @@ func (s *datastoreSink) Close() error {
 		return s.conn.Close()
 	}
 	return nil
+}
+
+// runtimeDir is the directory this pod's sockets live in — the SAME one the
+// call plane binds, so telemetry and calls share one answer to "where do our
+// sockets go" instead of each keeping its own.
+//
+// Empty when there is nowhere to write, which is the case worth handling: a
+// dev process with no run directory keeps every TCP ear and simply binds no
+// socket, rather than failing to start over an optimisation.
+func runtimeDir() string {
+	sock := zip.SocketPath("o11y")
+	if sock == "" {
+		return ""
+	}
+	dir := filepath.Dir(sock)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return ""
+	}
+	return dir
 }
