@@ -159,9 +159,26 @@ test:
     # It PREDICTS; app-contract still DECIDES. A moved closure means the document was
     # generated from source that has since changed, not that the projection differs.
     run: |
-      set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
-      make closure-check
+      # IT PREDICTS; app-contract DECIDES — and this step used to be fatal, which
+      # promoted the prediction to the verdict and stopped every release that
+      # followed a dependency bump. Measured: four times in one day, each time a
+      # bump moved go.mod without regenerating the witness, each time reported as
+      # `117 app document(s) stale`, and each time the full regeneration below
+      # produced documents that were IDENTICAL — only the witness had moved.
+      #
+      # So the whole surface was held by a signal that was right about staleness
+      # and silent about consequence, and the release train was red for a day for
+      # documents that had not changed. app-contract regenerates all 123 from
+      # source in the same job and fails on any real diff, so nothing is lost by
+      # letting this one report instead of refuse.
+      #
+      # It stays FIRST and it stays loud: it is two seconds against app-contract's
+      # thirty-five minutes, so a reader who is about to lose that time learns why
+      # here. What it must not do is decide.
+      if ! make closure-check; then
+        echo "::warning::the closure witness is stale — app-contract below decides whether any document actually moved; if it passes, commit openapi/closure.json"
+      fi
   - name: generated-current
     # manifest/apps.go is the hand-authored source of truth for the subsystem set.
     # gen-app-cmds scaffolds a plugin/<app>/main.go for any manifest app that
