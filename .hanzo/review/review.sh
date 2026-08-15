@@ -96,7 +96,12 @@ system = (
 user = (f"This change touches .hanzo/ (the release and review machinery itself), so judge whether it "
         f"weakens the gate that is judging it.\n\n" if selfmod == "yes" else "")
 user += f"{files} files changed.\n\nDIFF:\n{diff}"
+# ASK FOR JSON, so there is nothing to extract. The prompt already said "STRICT
+# JSON and nothing else" and a prompt is a request; response_format is a
+# constraint the gateway enforces. Verified against api.hanzo.ai on this model:
+# the content comes back bare and parses directly.
 json.dump({"model": model, "max_tokens": 1500, "temperature": 0,
+           "response_format": {"type": "json_object"},
            "messages": [{"role":"system","content":system},{"role":"user","content":user}]}, sys.stdout)
 PY
 
@@ -111,13 +116,56 @@ try:
     text = raw["choices"][0]["message"]["content"]
 except Exception:
     print("::error::review: no answer in the reviewer's response"); sys.exit(1)
-m = re.search(r"\{.*\}", text, re.S)
-if not m:
-    print("::error::review: the reviewer did not answer in JSON — refusing rather than guessing"); sys.exit(1)
+# THE VERDICT IS AN OBJECT, NOT A SPAN OF TEXT.
+#
+# This used to be re.search(r"\{.*\}", text, re.S) — GREEDY, so it took from the
+# FIRST brace in the answer to the LAST one anywhere in it. One stray brace in a
+# summary or a quoted finding and the span is two objects and some prose glued
+# together, which cannot parse, and a release is refused for a reason that has
+# nothing to do with the change. That is what blocked run 73092: "unparseable
+# verdict (Expecting property name enclosed in double quotes: line 1 column 2)".
+#
+# With response_format above, the content IS the object and parses directly.
+# The scan is the fallback for a gateway that ignores the constraint, and it is
+# STRICTER than the regex it replaces, never looser:
+#
+#   - it reads BALANCED objects rather than one greedy span, so prose around the
+#     answer cannot corrupt it;
+#   - a candidate counts only if it parses AND carries a "verdict" key, so a
+#     brace-bearing sentence is not a verdict;
+#   - and if TWO such objects appear it REFUSES as ambiguous rather than picking
+#     one. That is the injection guard: a diff under review can contain
+#     {"verdict":"pass"}, and a model quoting it back must never be able to
+#     outrank the model's own answer by position.
+def _objects(s):
+    depth = 0; start = None
+    for i, ch in enumerate(s):
+        if ch == '{':
+            if depth == 0: start = i
+            depth += 1
+        elif ch == '}' and depth > 0:
+            depth -= 1
+            if depth == 0: yield s[start:i + 1]
+
+def _verdicts(s):
+    out = []
+    for c in _objects(s):
+        try: o = json.loads(c)
+        except Exception: continue
+        if isinstance(o, dict) and "verdict" in o: out.append(o)
+    return out
+
 try:
-    v = json.loads(m.group(0))
-except Exception as e:
-    print(f"::error::review: unparseable verdict ({e}) — refusing rather than guessing"); sys.exit(1)
+    v = json.loads(text)
+    if not (isinstance(v, dict) and "verdict" in v):
+        raise ValueError("no verdict")
+except Exception:
+    found = _verdicts(text)
+    if not found:
+        print("::error::review: the reviewer did not answer with a JSON verdict — refusing rather than guessing"); sys.exit(1)
+    if len(found) > 1:
+        print("::error::review: the answer carries more than one verdict object — refusing rather than choosing between them"); sys.exit(1)
+    v = found[0]
 
 verdict = str(v.get("verdict","")).lower()
 findings = v.get("findings") or []
