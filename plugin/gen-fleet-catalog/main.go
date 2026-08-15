@@ -73,10 +73,19 @@ func main() {
 				ops = append(ops, op{ID: o.OperationID, Doc: pick(o.Description, o.Summary)})
 			}
 		}
-		if len(ops) == 0 {
-			continue
-		}
+		// AN APP WITH NO OPERATIONS STILL GETS AN ENTRY, and the difference matters
+		// now that the door reads this and asks nothing. Skipping made "publishes no
+		// tools" and "was never generated" the same absence, and the door's fallback
+		// for absence used to be to ASK the subsystem — so a missing entry cost a
+		// cold start and was invisible. With no asking left, the same absence would
+		// silently publish less than the fleet routes.
+		//
+		// Present-and-empty says the app was read and had nothing; absent now means
+		// missing, which fleet's coverage gate can refuse.
 		sort.Slice(ops, func(i, j int) bool { return ops[i].ID < ops[j].ID })
+		if ops == nil {
+			ops = []op{}
+		}
 		out[app] = ops
 	}
 
