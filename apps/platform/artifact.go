@@ -184,22 +184,11 @@ if [ ! -d .git ]; then
   git -c protocol.version=2 fetch -q --depth 1 origin "$REF"
   git checkout -q FETCH_HEAD
 fi
-if [ -n "$RUN" ]; then
-  # PLATFORMS belongs to the GO lane. A run: recipe declares none, so the Job
-  # exports it EMPTY — and an empty env var is still SET, which silently defeats
-  # a makefile's own conditional default and builds nothing for nothing.
-  # Measured: cloud's fleet sweep answered "0 binaries for 0 platforms" with no
-  # error, because make assigns a conditional default only when the variable is
-  # undefined, and empty is defined.
-  #
-  # So the recipe inherits the variable only when this lane actually has a value
-  # to state. Unsetting is the honest shape: the Job knows no platform list here,
-  # and saying nothing lets the recipe's own default stand.
-  [ -n "$PLATFORMS" ] || unset PLATFORMS
-  echo "== $NAME: $RUN"
-  sh -c "$RUN"
+if [ -n "${RUN:-}" ]; then
+  echo "== $NAME: ${RUN:-}"
+  sh -c "${RUN:-}"
   n=0
-  for f in $OUT; do
+  for f in ${OUT:-}; do
     [ -f "$f" ] || continue
     b="$(basename "$f")"
     [ "$f" -ef "/w/dist/$b" ] || cp "$f" /w/dist/
@@ -220,15 +209,15 @@ if [ -n "$RUN" ]; then
     printf '%s\t%s\t%s\t%s\n' "$b" "$fos" "$farch" "$fname" >> /w/meta.txt
     n=$((n+1))
   done
-  [ "$n" -gt 0 ] || { echo "$NAME: out: '$OUT' matched no file the recipe produced"; exit 1; }
+  [ "$n" -gt 0 ] || { echo "$NAME: out: '${OUT:-}' matched no file the recipe produced"; exit 1; }
 else
-  for plat in $PLATFORMS; do
+  for plat in ${PLATFORMS:-}; do
     os="${plat%%/*}"; arch="${plat##*/}"
     f="$NAME-$os-$arch"
     case "$os" in windows) f="$f.exe";; esac
-    echo "== $NAME: go build $MAIN -> $f ($os/$arch)"
+    echo "== $NAME: go build ${MAIN:-} -> $f ($os/$arch)"
     CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" GOFLAGS=-mod=mod \
-      go build -trimpath -ldflags "$LDFLAGS" -o "/w/dist/$f" "$MAIN"
+      go build -trimpath -ldflags "${LDFLAGS:-}" -o "/w/dist/$f" "${MAIN:-}"
     printf '%s\t%s\t%s\t%s\n' "$f" "$os" "$arch" "$NAME" >> /w/meta.txt
   done
 fi
@@ -397,6 +386,41 @@ func secretEnv(name, key string) any {
 	}}
 }
 
+// recipeEnv is what a recipe container is told, and the rule is ONE line long:
+// state what the recipe DECLARED, and be silent about the rest.
+//
+// This exists because the same defect bit three times, each time as a different
+// field, each time reported as success:
+//
+//   - the index recorded {os: any, arch: any} for every file, so 242 plugins
+//     landed under one name and no host could resolve any of them;
+//   - PLATFORMS was exported EMPTY for a run: recipe, and an empty variable is
+//     still SET, which defeats a makefile's conditional default — "0 binaries
+//     for 0 platforms", no error;
+//   - and the same shape waits in LDFLAGS, MAIN and OUT for whoever declares a
+//     recipe that reads them.
+//
+// Every one is the Job asserting a value it does not have. An unset variable
+// lets the recipe's own default stand; an empty one overrides it with nothing,
+// which is the one answer that is never true. So an undeclared field is OMITTED
+// rather than sent empty, and the next field cannot repeat this on its own.
+//
+// The fixed values below are not recipe data: HOME/GOPATH/npm_config_cache are
+// this Job's workspace, which the Job genuinely does know, and a non-root uid has
+// no writable HOME in a toolchain image without them.
+func recipeEnv(repoURL, ref string, b binarySpec) []any {
+	out := []any{env("REPO_URL", repoURL), env("REF", ref), env("NAME", b.Name)}
+	for _, kv := range [][2]string{
+		{"MAIN", b.Main}, {"RUN", b.Run}, {"OUT", b.Out}, {"LDFLAGS", b.Ldflags},
+		{"PLATFORMS", strings.Join(b.Platforms, " ")},
+	} {
+		if kv[1] != "" {
+			out = append(out, env(kv[0], kv[1]))
+		}
+	}
+	return append(out, env("HOME", "/w"), env("GOPATH", "/w/go"), env("npm_config_cache", "/w/.npm"))
+}
+
 // artifactJobSpec renders the build: one initContainer per recipe entry (they
 // run in order and share /w) followed by the publisher. The pod is non-root with
 // fsGroup 1000 so the shared emptyDir is writable without any container being
@@ -434,18 +458,11 @@ func (k *k8sClient) artifactJobSpec(jobName, repoURL, ref, tag, base, putBase st
 	})
 	for _, b := range bins {
 		inits = append(inits, map[string]any{
-			"name":       truncate("build-"+strings.ToLower(b.Name), 63),
-			"image":      b.Image,
-			"command":    []any{"/bin/sh", "-c", artifactBuildScript},
-			"workingDir": "/w",
-			"env": []any{
-				env("REPO_URL", repoURL), env("REF", ref), env("NAME", b.Name),
-				env("MAIN", b.Main), env("RUN", b.Run), env("OUT", b.Out),
-				env("LDFLAGS", b.Ldflags), env("PLATFORMS", strings.Join(b.Platforms, " ")),
-				// A non-root uid has no writable HOME in a toolchain image, and
-				// every toolchain wants one (GOCACHE, npm's cache, cargo's).
-				env("HOME", "/w"), env("GOPATH", "/w/go"), env("npm_config_cache", "/w/.npm"),
-			},
+			"name":         truncate("build-"+strings.ToLower(b.Name), 63),
+			"image":        b.Image,
+			"command":      []any{"/bin/sh", "-c", artifactBuildScript},
+			"workingDir":   "/w",
+			"env":          recipeEnv(repoURL, ref, b),
 			"volumeMounts": []any{map[string]any{"name": "w", "mountPath": "/w"}},
 		})
 	}
