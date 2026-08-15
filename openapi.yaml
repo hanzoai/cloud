@@ -47457,6 +47457,16 @@ paths:
         a standards-compliant client at so it can find every other endpoint on its
         own, instead of you configuring them by hand.
       x-app: iam
+  /.well-known/openapi.json:
+    get:
+      description: |-
+        The same document /v1/openapi.json serves, at the address RFC 8615 reserves for discovery — one handler over one render, so the two cannot describe different APIs.
+
+        It exists because a client that has never seen this API probes here first. Prefer /v1/openapi.json when you already know the API: it is canonical, and it is what the document's own self-description names.
+      operationId: get_.well-known_openapi.json
+      security: []
+      summary: The API description, at the conventional address
+      x-app: openapi
   /.well-known/openid-configuration:
     get:
       description: |-
