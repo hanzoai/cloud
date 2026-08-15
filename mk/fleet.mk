@@ -167,8 +167,8 @@ FLEET_P ?= 2
 # a plain number, which is what "max" and an absent cgroup both look like.
 JOBS := $(or $(JOBS),$(shell \
 	  m=$$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null); \
-	  [ -n "$${m%%[!0-9]*}" ] || m=$$(awk '/MemAvailable/{print $$2*1024}' /proc/meminfo 2>/dev/null); \
-	  [ -n "$$m" ] || m=8589934592; \
+	  [ -n "$${m%%[!0-9]*}" ] || m=$$(awk '/MemAvailable/{printf "%d", $$2*1024}' /proc/meminfo 2>/dev/null); \
+	  [ -n "$${m%%[!0-9]*}" ] || m=8589934592; \
 	  c=$$(( $(NPROC) / $(FLEET_P) )); j=$$((m / 3221225472)); \
 	  [ "$$j" -gt "$$c" ] && j=$$c; [ "$$j" -lt 1 ] && j=1; echo $$j))
 
