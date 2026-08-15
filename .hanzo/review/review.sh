@@ -12,20 +12,7 @@
 # IT FAILS CLOSED, AND THAT IS THE WHOLE POINT. A gate that waves the change
 # through when the reviewer is unreachable is a gate an attacker turns off by
 # making the reviewer unreachable. So an error, a timeout, an unparseable
-# verdict and a diff too large to read all REFUSE. The break-glass is a named
-# human decision (REVIEW_BREAK_GLASS), recorded in the run, never a silent
-# fallback.
-#
-# IT WATCHES ITSELF. The run that reviews a commit uses THAT COMMIT's workflow
-# and this very file, so a change which edits the gate is a change that could
-# switch the gate off for its own review. Touching .hanzo/ is therefore not
-# forbidden — it is escalated: the verdict has to name it, and a diff that
-# disables review while claiming to be routine is exactly the shape this looks
-# for.
-#
-# WHAT IT SENDS, AND WHERE. The diff goes to our own model plane at
-# api.hanzo.ai. It is never handed to somebody else's — a security review of
-# unreleased code is precisely the payload we do not post off-estate.
+# verdict and a diff too large to read all REFUSE, and there is no way past it.
 set -euo pipefail
 
 BASE="${1:?usage: review.sh <base-sha> <head-sha>}"
@@ -40,12 +27,6 @@ KEY="${REVIEW_API_KEY:-}"
 MAXBYTES="${REVIEW_MAX_BYTES:-400000}"
 
 die() { echo "::error::review: $*" >&2; exit 1; }
-
-if [ -n "${REVIEW_BREAK_GLASS:-}" ]; then
-  echo "::warning::review BYPASSED by break-glass: ${REVIEW_BREAK_GLASS}"
-  echo "review: bypassed — ${REVIEW_BREAK_GLASS}" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
-  exit 0
-fi
 
 [ -n "$KEY" ] || die "no REVIEW_API_KEY — the reviewer cannot run, so the change cannot pass"
 
