@@ -253,6 +253,12 @@ paths:
         actual cost and records the billable usage event (exactly once). Returns the
         OpenAI-shaped video object.
       operationId: get_videos_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
       summary: Implements GET /v1/videos/{id} — poll a job's status.
       tags:
       - videos
@@ -269,6 +275,12 @@ paths:
         the client that downloads without first polling to completion) — idempotent
         with the poll path via job.markCompleted.
       operationId: get_videos_by_id_content
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
       summary: Implements GET /v1/videos/{id}/content — download the finished MP4.
       tags:
       - videos
