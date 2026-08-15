@@ -73,6 +73,32 @@ import (
 // and never a v2 — the document's own shape is versioned by its `openapi` field.
 const Path = "/v1/openapi.json"
 
+// WellKnown is where a client that has never seen this API looks first. RFC 8615
+// reserves /.well-known/ for exactly that, so every generator, IDE and crawler
+// probes it before it probes anything of ours.
+//
+// It is an ALIAS, not a second document: [serve] answers both from the one lazy
+// render, so the two addresses cannot describe different APIs. Path stays
+// canonical and is what the spec's own self-description names.
+//
+// THE ADDRESS IS ZIP'S, and so is the name — spelling the string here a second
+// time is how two copies of one fact come to disagree after a framework bump.
+//
+// It also already ANSWERS, which is the whole reason this exists. zip auto-mounts
+// a document of its own there from its own typed-op registry ([zip.App.Registry]),
+// installed at Serve. On the light host that registry is almost empty, so what
+// api.hanzo.ai publishes at the address every generator probes is an 841-byte
+// document titled "cloud 0.0.0" describing /healthz and /readyz — measured, and
+// it is what /docs renders too. A generator reading it produces an empty client
+// AND REPORTS SUCCESS; a 404 would at least be honest.
+//
+// Registering here WINS rather than collides: zip's projections are control
+// routes, materialised after every ordinary route (zip build.go), and fiber
+// resolves a duplicate pattern by first registration. So this is not a second
+// answer added beside zip's — it is the one answer, in front of a weaker one
+// that stops being reachable.
+const WellKnown = zip.SpecPath
+
 // Route is one live route, reduced to what the router actually knows: where a
 // request goes. Method and Path are the whole of it.
 //
@@ -805,8 +831,8 @@ func Mount(app *zip.App, info Info, servers ...Server) {
 // duplicate — a self-description that panicked the second time a process mounted
 // would be worse than none.
 //
-// It is the one operation with no owning subsystem, so nothing else would ever
-// declare it, and it was the last route in the fleet publishing an operationId and
+// Neither address has an owning subsystem, so nothing else would ever declare
+// them, and Path was the last route in the fleet publishing an operationId and
 // nothing else. A generated SDK offers it as a method; a spec-derived CLI offers it
 // as a command. Both should be able to say what it is.
 func init() {
@@ -827,6 +853,23 @@ func init() {
 	// order to know what a credential is for. CommandPath is the same door under
 	// [serve] and gets the same answer (command.go).
 	Open(Path, http.MethodGet)
+
+	// The alias owes the same two declarations, because the document does not
+	// know it is an alias: [WellKnown] is a second address in the published
+	// contract, so silence there is an SDK method and a CLI command carrying an
+	// operationId and nothing else — the exact hole Path's own prose was written
+	// to close. Its summary says WHICH of the two it is, since a reader meets
+	// them side by side in a list of operations and the difference is the whole
+	// content of this one.
+	Describe(WellKnown, http.MethodGet,
+		"The API description, at the conventional address",
+		"The same document /v1/openapi.json serves, at the address RFC 8615 reserves "+
+			"for discovery — one handler over one render, so the two cannot describe "+
+			"different APIs.\n\n"+
+			"It exists because a client that has never seen this API probes here first. "+
+			"Prefer /v1/openapi.json when you already know the API: it is canonical, and "+
+			"it is what the document's own self-description names.")
+	Open(WellKnown, http.MethodGet)
 }
 
 func serve(app *zip.App, doc func() (*Document, error)) {
@@ -837,14 +880,19 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 		}
 		return json.Marshal(d)
 	})
-	app.Get(Path, func(c *zip.Ctx) error {
+	answer := func(c *zip.Ctx) error {
 		body, err := render()
 		if err != nil {
 			return zip.ErrInternal(err.Error())
 		}
 		c.SetHeader("Content-Type", "application/json")
 		return c.Bytes(200, body)
-	})
+	}
+	app.Get(Path, answer)
+	// Both addresses, one handler over one render, so the canonical path and the
+	// conventional one cannot come to describe different APIs. See [WellKnown]
+	// for why the alias has to exist at all.
+	app.Get(WellKnown, answer)
 	// The command projection reads the SAME render, so both addresses are two
 	// readings of one artifact. Here rather than in either mount, because both
 	// document sources go through serve and the fifth projection belongs to
@@ -868,4 +916,4 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 // So it is stated once, beside the code that makes it true. The second door
 // arrived and all three were wrong the same afternoon — the cost of a literal is
 // that it is right until it isn't and says nothing when it stops.
-func Door(path string) bool { return path == Path || path == CommandPath }
+func Door(path string) bool { return path == Path || path == WellKnown || path == CommandPath }

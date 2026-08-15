@@ -1254,6 +1254,36 @@ of them refuted a claim that had been repeated confidently for weeks.
   against your branch's golden measures the deploy lag, not the defect.
 - **`GET /v1/commands` is live**: 2448 commands over 194 services, under a strong
   ETag that answers 304 to a matching `If-None-Match`.
+- **THE DISCOVERY ADDRESS WAS ANSWERING WITH SOMEBODY ELSE'S DOCUMENT.**
+  `GET api.hanzo.ai/.well-known/openapi.json` served **841 bytes** titled
+  `cloud 0.0.0`, describing `/healthz` and `/readyz` over one `probeOut` schema —
+  and `/docs`, zip's Swagger page, rendered that. The tell was the header: every
+  other address carries `x-api-version`, and this one carried none.
+  It is not a Cloudflare or Traefik router in front. **`zip.SpecPath` IS
+  `/.well-known/openapi.json`**, and zip auto-mounts a document there from its
+  OWN typed-op registry (`installOpenAPIRoutes`, called from `prepare()` at
+  Serve). On the light host that registry is nearly empty, so the address RFC
+  8615 reserves for discovery — the one every SDK generator, IDE and crawler
+  probes FIRST — published a two-probe API, 200 OK. A generator reading it emits
+  an empty client AND REPORTS SUCCESS, which is why nothing ever filed it.
+  `openapi.serve` now registers `Path` and `WellKnown` as one handler over one
+  lazy render. It WINS rather than collides, and the reason is structural rather
+  than lucky: zip's projections are CONTROL routes, materialised after every
+  ordinary route (zip `build.go` `materialise`), and fiber resolves a duplicate
+  pattern by first registration. `WellKnown = zip.SpecPath` — the address has one
+  name and it is zip's; spelling the string twice is how the two come to disagree
+  at a framework bump.
+  **`App.Test` cannot see any of this**, and that is the reusable lesson: `prepare()`
+  runs from Serve and from nothing else, so under `App.Test` zip's competing route
+  DOES NOT EXIST and a precedence assertion passes for the wrong reason. The first
+  draft of `openapi/wellknown_test.go` did exactly that and was green while proving
+  nothing; it listens on a socket now, and asserts `info.title` rather than "is
+  this a document" — zip's answer is a valid document too, which is the whole
+  reason the defect was invisible. Mutation-checked: drop the registration and it
+  names zip's title.
+  `openapi.Door` gained the third address in the same change, which the fleet-scoping
+  gate needed — its own comment already records this exact recurrence ("the second
+  door arrived and all three were wrong the same afternoon").
 - **`POST /v1/mcp` works end to end**: `tools/list` returns 88 tools —
   `describe` plus ONE tool per subsystem, each carrying its operations in an
   `op` enum — and `tools/call` on `describe` returns the prose zipdoc lifted
