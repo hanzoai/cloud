@@ -9,15 +9,17 @@
 //
 // WRAP, DON'T REWRITE — the read-WRITE variant, on the SHARED binding. The dataroom
 // business logic (documents, data rooms, shareable links with access controls,
-// viewers, per-page view analytics) is a self-contained goja bundle (bundle.js, the
-// ESM-free port of the Papermark API handlers). It runs in-process on the REUSABLE
+// viewers, per-page view analytics) is a self-contained goja bundle — the ESM-free
+// port of the Papermark API handlers, taken as a PINNED module
+// (github.com/hanzoai/dataroom, checksummed in go.sum) rather than copied in, the
+// same way the sign and captable folds take theirs. It runs in-process on the REUSABLE
 // clients/goja host — the SAME RW-Base binding captable (#97) pilots and esign
 // (#100) reuses — which injects __db/__newId/__now and one SQLite file per tenant,
 // one transaction per request. This leaf adds only: the per-tenant Schema, the
 // object-storage seam for document bytes, a bcrypt HostFn for link passwords, and
 // the public link→org index. Zero domain logic lives in Go.
 //
-//	dataroom bundle (bundle.js, go:embed)  +  per-tenant Schema  +  __bcrypt HostFn
+//	dataroom bundle (pinned module)  +  per-tenant Schema  +  __bcrypt HostFn
 //	                    │
 //	             clients/goja.NewBase(...)   ← __db/__newId/__now, per-tenant Base,
 //	                    │                       one transaction per request
@@ -45,7 +47,6 @@ package dataroom
 import (
 	"context"
 	"crypto/rand"
-	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -59,11 +60,9 @@ import (
 	"github.com/hanzoai/cloud/apps/goja"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
+	dataroombundle "github.com/hanzoai/dataroom"
 	"github.com/zap-proto/zip"
 )
-
-//go:embed bundle.js
-var bundleJS []byte
 
 // maxBody caps a JSON request body (document BYTES use the separate upload path).
 const maxBody = 1 << 20 // 1 MiB
@@ -108,9 +107,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return c.JSON(http.StatusOK, map[string]string{"service": "dataroom", "status": "ok"})
 	})
 
+	bundle, err := dataroombundle.Bundle()
+	if err != nil {
+		log.Error("dataroom bundle failed to load — serving health-only (cloud stays up)", "err", err)
+		return nil
+	}
 	host, err := goja.NewBase(goja.BaseConfig{
 		Name:    "dataroom",
-		Bundle:  bundleJS,
+		Bundle:  bundle,
 		Schema:  schema,
 		DataDir: deps.DataDir,
 		HostFns: bcryptHostFns(), // __bcrypt.hash/verify — link passwords hashed in Go
