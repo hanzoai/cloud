@@ -185,6 +185,17 @@ if [ ! -d .git ]; then
   git checkout -q FETCH_HEAD
 fi
 if [ -n "$RUN" ]; then
+  # PLATFORMS belongs to the GO lane. A run: recipe declares none, so the Job
+  # exports it EMPTY — and an empty env var is still SET, which silently defeats
+  # a makefile's own conditional default and builds nothing for nothing.
+  # Measured: cloud's fleet sweep answered "0 binaries for 0 platforms" with no
+  # error, because make assigns a conditional default only when the variable is
+  # undefined, and empty is defined.
+  #
+  # So the recipe inherits the variable only when this lane actually has a value
+  # to state. Unsetting is the honest shape: the Job knows no platform list here,
+  # and saying nothing lets the recipe's own default stand.
+  [ -n "$PLATFORMS" ] || unset PLATFORMS
   echo "== $NAME: $RUN"
   sh -c "$RUN"
   n=0
