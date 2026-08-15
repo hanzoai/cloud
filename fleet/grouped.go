@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/valyala/fasthttp"
 	"github.com/zap-proto/zip"
 )
 
@@ -46,10 +47,13 @@ import (
 //   - ONE DISPATCH. The envelope is a DECODING, not a second route: it yields
 //     the (name, message) a direct tools/call carries, and [Door.call] runs the
 //     same owner lookup and the same hop on both.
-//   - NOTHING REMEMBERED. Describe re-asks. A descriptor kept between requests
-//     would be plugin/<app>/mcp.json again — the committed catalogue this
-//     package exists to delete — and it could go stale in the one way that
-//     matters, by describing an operation the rule has since refused.
+//   - NO DESCRIPTOR REMEMBERED. Describe re-asks its owner, always. Names and
+//     prose come from the catalog for a subsystem that is not running (see
+//     fleet/catalog.go) and SCHEMAS never do — a descriptor kept between requests
+//     would be plugin/<app>/mcp.json again, and the way that one went stale is
+//     the way this one cannot: the gate runs over catalog entries and live ones
+//     alike, in the same loop, so an operation the rule has since refused is in
+//     no enum whichever it came from.
 
 // A TOOL IS NAMED FOR WHAT IT IS, and nothing else.
 //
@@ -271,6 +275,34 @@ func callBody(id json.RawMessage, op string, input json.RawMessage) []byte {
 // owning subsystem's OWN descriptor bytes, the same ones the flat list used to
 // carry. So an operation is describable exactly when it is listable and exactly
 // when it is callable: there is one set, computed one way, and no third answer.
+// descriptor asks t's owner for the operation as that owner declares it, and
+// reports whether it got one. It is the fetch half of a surface whose enums
+// carry names: one subsystem is reached, and only because a caller named an
+// operation it serves.
+func (d *Door) descriptor(c *zip.Ctx, t named, at At) (json.RawMessage, bool) {
+	hop := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(hop)
+	c.Fiber().Request().CopyTo(hop)
+	hop.Header.SetMethod("POST")
+	hop.Header.SetContentType("application/json")
+	hop.SetBody([]byte(`{"jsonrpc":"2.0","id":0,"method":"tools/list"}`))
+
+	ans := Ask(at, []string{t.app}, hop)[0]
+	if ans.Err != nil {
+		return nil, false
+	}
+	tools, err := toolsOf(ans.Body)
+	if err != nil {
+		return nil, false
+	}
+	for _, live := range tools {
+		if live.name == t.name {
+			return live.raw, true
+		}
+	}
+	return nil, false
+}
+
 func (d *Door) describe(c *zip.Ctx, req message, args json.RawMessage, at At) error {
 	var in struct {
 		Op string `json:"op"`
@@ -282,11 +314,22 @@ func (d *Door) describe(c *zip.Ctx, req message, args json.RawMessage, at At) er
 		// Either spelling: the name the enum published, or the id the owner knows.
 		// The gathered set carries both, so this needs no table and cannot answer
 		// out of a different one than list() and call() read.
-		if t.as == in.Op || t.name == in.Op {
-			return c.JSON(200, rpcResult(req.ID, map[string]any{
-				"content": []map[string]any{{"type": "text", "text": string(t.raw)}},
-			}))
+		if t.as != in.Op && t.name != in.Op {
+			continue
 		}
+		// THE FETCH IS WHERE A SUBSYSTEM STARTS. The catalog holds names and prose
+		// and no schema, so an operation read from it is described by asking its
+		// owner — one subsystem, the one the caller picked, rather than the fleet
+		// that a listing used to wake. An owner that cannot be reached answers with
+		// what was published, which is more than nothing and honest about its
+		// shape.
+		raw := t.raw
+		if live, ok := d.descriptor(c, t, at); ok {
+			raw = live
+		}
+		return c.JSON(200, rpcResult(req.ID, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": string(raw)}},
+		}))
 	}
 	// The same answer for "nobody serves it" and "policy withheld it", for the
 	// same reason [Door.call] gives one answer for both: naming which it was
