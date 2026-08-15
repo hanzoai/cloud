@@ -20300,6 +20300,8 @@ components:
           type: array
         accountMenu:
           type: string
+        avatar:
+          type: string
         balanceCredit:
           type: number
         balanceCurrency:
@@ -20326,6 +20328,8 @@ components:
         disableSignin:
           type: boolean
         displayName:
+          type: string
+        emoji:
           type: string
         enableSoftDeletion:
           type: boolean
@@ -20738,6 +20742,16 @@ components:
           type: array
         accountMenu:
           type: string
+        avatar:
+          description: |-
+            How the organization appears across Hanzo — the square mark beside its
+            name — as an image or as one emoji, never both. It is the pair a person
+            carries (User.Avatar) under the same names, resolved the same way, so a
+            screen draws a subject without asking which kind of subject it has. Both
+            halves live on the row: a mark that appears everywhere cannot be kept on
+            one device. Written through schema.MarkOf; Logo and LogoDark above are a
+            different thing, the wordmark a login screen draws.
+          type: string
         balanceCredit:
           type: number
         balanceCurrency:
@@ -20764,6 +20778,8 @@ components:
         disableSignin:
           type: boolean
         displayName:
+          type: string
+        emoji:
           type: string
         enableSoftDeletion:
           type: boolean
@@ -21283,6 +21299,17 @@ components:
       - name
       - application
       type: object
+    iam.SetAvatarInput:
+      properties:
+        avatar:
+          type: string
+        emoji:
+          type: string
+        name:
+          type: string
+        owner:
+          type: string
+      type: object
     iam.SigninItem:
       properties:
         customCss:
@@ -21457,6 +21484,8 @@ components:
           type: array
         accountMenu:
           type: string
+        avatar:
+          type: string
         balanceCredit:
           type: number
         balanceCurrency:
@@ -21483,6 +21512,8 @@ components:
         disableSignin:
           type: boolean
         displayName:
+          type: string
+        emoji:
           type: string
         enableSoftDeletion:
           type: boolean
@@ -22088,6 +22119,14 @@ components:
           contentEncoding: base64
           type: string
         attachment:
+          type: string
+        attestationFormat:
+          description: |-
+            AttestationFormat is the statement format the authenticator attested in
+            ("packed", "apple", "none", …), which is a DIFFERENT value from the
+            attestation type above. The library reads it back when resolving the FIDO
+            AppID extension, so a row that dropped it would round-trip a credential the
+            verifier no longer recognises as the one it stored.
           type: string
         attestationType:
           type: string
@@ -83011,6 +83050,42 @@ paths:
       tags:
       - iam
       x-app: iam
+  /v1/iam/organizations/avatar:
+    post:
+      description: |-
+        Changes how an organization appears across Hanzo: the square mark
+        beside its name, as an uploaded image or as a single emoji. Sending an image
+        clears the emoji and sending an emoji clears the image — an organization has
+        one mark, not a preference order — and sending neither clears both, which is
+        how it goes back to being drawn as its initial.
+
+        An image is an https link or the bytes inline as a data URL, up to 96 KiB.
+        Anyone who administers the organization may set this; it is not reserved to
+        the platform.
+
+        It writes the two fields onto the stored row and touches nothing else, which
+        update cannot do: update replaces the whole record, and a record read back
+        first arrives masked, so a read-modify-write through it would persist the mask
+        over the organization's own credential settings.
+      operationId: setOrganizationAvatar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.SetAvatarInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Organization'
+          description: ok
+      summary: 'Changes how an organization appears across Hanzo: the square mark
+        beside its name, as an uploaded image or as a single emoji.'
+      tags:
+      - iam
+      x-app: iam
   /v1/iam/organizations/delete:
     post:
       description: |-
@@ -84883,6 +84958,59 @@ paths:
           description: ok
       summary: Renames a registered passkey or security key, so a person can tell
         their devices apart.
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/webauthn/signin/begin:
+    get:
+      description: |-
+        Starts a passkey sign-in: it returns the challenge the person's
+        authenticator signs.
+
+        The account is named in the query, and the challenge is bound to it, so what may
+        answer is decided here — by the server, from the row — and the finish checks the
+        answer against that decision rather than recomputing it.
+      operationId: get_iam_webauthn_signin_begin
+      summary: 'Starts a passkey sign-in: it returns the challenge the person''s authenticator
+        signs.'
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/webauthn/signin/finish:
+    post:
+      description: |-
+        Verifies the signed challenge and signs the person in.
+
+        It answers exactly as a password sign-in does — the same envelope, through the
+        same grant — so nothing downstream branches on how somebody arrived.
+      operationId: post_iam_webauthn_signin_finish
+      summary: Verifies the signed challenge and signs the person in.
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/webauthn/signup/begin:
+    get:
+      description: |-
+        Starts enrolling a passkey for the signed-in person: it returns the
+        options their browser hands to the authenticator.
+
+        Passkeys already on the account are EXCLUDED, so a second enrollment on a device
+        that already holds one is refused by the authenticator itself rather than
+        silently producing a duplicate the person cannot tell apart.
+      operationId: get_iam_webauthn_signup_begin
+      summary: 'Starts enrolling a passkey for the signed-in person: it returns the
+        options their browser hands to the authenticator.'
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/webauthn/signup/finish:
+    post:
+      description: |-
+        Verifies the newly created passkey and stores it, so the person
+        can sign in with their device from then on.
+      operationId: post_iam_webauthn_signup_finish
+      summary: Verifies the newly created passkey and stores it, so the person can
+        sign in with their device from then on.
       tags:
       - iam
       x-app: iam
