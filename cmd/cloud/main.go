@@ -152,10 +152,18 @@ func run(addr, zapAddr string) error {
 	// it again by the path that already exists.
 	//
 	// The stop function is bound HERE and deferred, not called through a
-	// deferred call of ReapIdle itself — that form evaluates at defer-run time
+	// deferred call of Reap itself — that form evaluates at defer-run time
 	// and would start the sweep during shutdown, which is the mistake serveWake
 	// records one door over.
-	stopReaping := app.ReapIdle(time.Minute)
+	// warm=0 applies the IDLE bound only: an app nobody has called for its
+	// IdleAfter is stopped, and nothing is evicted merely for being one process
+	// too many. zip also offers an LRU ceiling as the second argument — the bound
+	// that would stop a single fleet-wide tools/list from holding every subsystem
+	// resident at once — but the number it takes is this pod's memory budget,
+	// which is a deployment fact and a decision of its own. Choosing one here,
+	// inside a build fix, is how a compile error becomes a change in what the pod
+	// does at runtime.
+	stopReaping := app.Reap(time.Minute, 0)
 	defer stopReaping()
 
 	// THE POD'S WRITER LEASE, and this is the only process that may take it.
