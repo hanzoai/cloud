@@ -1,0 +1,25 @@
+# Hanzo blueprint: the metrics half of an observability stack you would run
+# yourself — Prometheus scraping, Grafana reading it, Loki holding the logs.
+# Traces are a fourth service again; this is the floor, not the whole thing.
+services:
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana:/var/lib/grafana
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    restart: unless-stopped
+    volumes:
+      - prometheus:/prometheus
+  loki:
+    image: grafana/loki:3.2.0
+    restart: unless-stopped
+    volumes:
+      - loki:/loki
+volumes:
+  grafana:
+  prometheus:
+  loki:
