@@ -156,15 +156,30 @@ func run(addr, zapAddr string) error {
 	// and would start the sweep during shutdown, which is the mistake serveWake
 	// records one door over.
 	//
-	// warm=0 applies the IDLE bound only: an app nobody has called for its
-	// IdleAfter is stopped, and nothing is evicted merely for being one process
-	// too many. zip also offers an LRU ceiling as the second argument — the bound
-	// that would stop a single fleet-wide tools/list from holding every subsystem
-	// resident at once — but the number it takes is this pod's memory budget,
-	// which is a deployment fact and a decision of its own. Choosing one here,
-	// inside a build fix, is how a compile error becomes a change in what the pod
-	// does at runtime.
-	stopReaping := app.Reap(time.Minute, 0)
+	// The second argument is an LRU CEILING on resident subsystems, and it is what
+	// keeps this pod inside the memory it was PROMISED rather than the memory it is
+	// permitted. Those are different numbers and only one of them decides whether
+	// the pod survives a busy node.
+	//
+	// Measured in production, 2026-08-15: 125 processes, 11,115 MB — the whole
+	// 123-app manifest resident at once, against requests 6Gi / limits 11Gi. The
+	// kubelet's own words when it killed it: "was using 11406568Ki, request is
+	// 6Gi, has larger consumption of memory." Under node pressure a pod is
+	// reclaimed on how far it has run past its REQUEST, so the 11Gi limit was never
+	// the line that mattered — and at replicas:1 with Recreate, each reclaim is a
+	// full API outage. There were three.
+	//
+	// 48 x ~89 MB (the measured mean) + the host is ~4.7 GB, comfortably under the
+	// 6Gi request, which takes this pod out of the first rank of eviction
+	// candidates. Hot subsystems stay warm because the bound is least-recently-
+	// used; a cold one pays a start on its next request, single-flighted through
+	// the same path a first request already takes.
+	//
+	// The idle bound still runs first and still does most of the work: this only
+	// decides what happens when more than 48 are genuinely in use. It is not read
+	// from the cgroup, because the cgroup carries the LIMIT and the number worth
+	// sizing against is the REQUEST, which a process cannot see.
+	stopReaping := app.Reap(time.Minute, 48)
 	defer stopReaping()
 
 	// THE POD'S WRITER LEASE, and this is the only process that may take it.
