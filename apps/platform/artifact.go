@@ -270,6 +270,43 @@ cat binaries.json
 // on an unauthenticated PUT rather than the Job being unschedulable.
 const artifactS3Secret = "artifact-s3"
 
+// forgeTokenSecret holds the read credential for OUR OWN forge, in the build
+// namespace. It is mounted on the `fetch` container alone — never on a recipe
+// container, and never on the publisher.
+const forgeTokenSecret = "forge-token"
+
+// gitFetchImage runs the clone. A stock git image and nothing a recipe chooses:
+// this container is the one that holds a credential, so what it runs must not be
+// influenced by the request.
+const gitFetchImage = "alpine/git:2.47.2"
+
+// artifactFetchScript puts the source in /w/src, and is the ONLY script that
+// sees a git credential.
+//
+// The token rides `-c http.extraheader` rather than the remote URL because `-c`
+// is per-invocation: it is not written to .git/config, so it does not survive
+// onto the shared volume that every later container reads. With no token it
+// fetches anonymously, which is correct for a public source.
+//
+// It fetches ONE ref at depth 1 and checks out FETCH_HEAD, matching what
+// artifactBuildScript did inline — that script's `[ ! -d .git ]` guard is what
+// makes this a hand-off rather than a duplicate fetch.
+const artifactFetchScript = `set -eu
+mkdir -p /w/src /w/dist
+cd /w/src
+git init -q
+git remote add origin "$REPO_URL"
+if [ -n "${GIT_TOKEN:-}" ]; then
+  AUTH=$(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 | tr -d '\n')
+  git -c http.extraheader="Authorization: Basic $AUTH" \
+      -c protocol.version=2 fetch -q --depth 1 origin "$REF"
+else
+  git -c protocol.version=2 fetch -q --depth 1 origin "$REF"
+fi
+git checkout -q FETCH_HEAD
+git --no-pager log --oneline -1
+`
+
 // artifactBase is the PUBLISHED URL prefix for one build:
 //
 //	https://<public s3 host>/<bucket>/<owner>/<repo>/<tag>/
@@ -355,7 +392,35 @@ func secretEnv(name, key string) any {
 // root, mounts NO service-account token, and is pinned to the same isolated
 // namespace + CI pool as every other build.
 func (k *k8sClient) artifactJobSpec(jobName, repoURL, ref, tag, base, putBase string, bins []binarySpec) *unstructured.Unstructured {
-	inits := make([]any, 0, len(bins))
+	// THE FETCH IS ITS OWN CONTAINER, AND IT IS THE ONLY ONE HOLDING A GIT
+	// CREDENTIAL. A recipe's `run:` is arbitrary shell with the same trust as a
+	// Dockerfile RUN, so it must never see one — the same reason the object-store
+	// credential lives only on the publisher. Splitting the clone out is what lets
+	// a PRIVATE source be built without handing the recipe a forge token.
+	//
+	// It needs no change to artifactBuildScript: that script already guards its
+	// fetch with `[ ! -d .git ]`, so with the source already in /w/src every
+	// recipe container skips it and runs with no token in its environment.
+	//
+	// The token rides `-c http.extraheader`, which is per-invocation and is NOT
+	// written to .git/config — so it does not land on the shared volume where the
+	// next container would read it. Putting it in the remote URL would.
+	inits := make([]any, 0, len(bins)+1)
+	inits = append(inits, map[string]any{
+		"name":       "fetch",
+		"image":      gitFetchImage,
+		"command":    []any{"/bin/sh", "-c", artifactFetchScript},
+		"workingDir": "/w",
+		"env": []any{
+			env("REPO_URL", repoURL), env("REF", ref), env("HOME", "/w"),
+			// Optional: a public source needs none, and the fetch falls back to
+			// anonymous rather than the job failing on a missing secret.
+			map[string]any{"name": "GIT_TOKEN", "valueFrom": map[string]any{
+				"secretKeyRef": map[string]any{"name": forgeTokenSecret, "key": "token", "optional": true},
+			}},
+		},
+		"volumeMounts": []any{map[string]any{"name": "w", "mountPath": "/w"}},
+	})
 	for _, b := range bins {
 		inits = append(inits, map[string]any{
 			"name":       truncate("build-"+strings.ToLower(b.Name), 63),
