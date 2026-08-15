@@ -190,8 +190,23 @@ if [ -n "$RUN" ]; then
   n=0
   for f in $OUT; do
     [ -f "$f" ] || continue
-    cp "$f" /w/dist/
-    printf '%s\tany\tany\t%s\n' "$(basename "$f")" "$NAME" >> /w/meta.txt
+    b="$(basename "$f")"
+    [ "$f" -ef "/w/dist/$b" ] || cp "$f" /w/dist/
+    # THE FILENAME DECIDES, when it carries the triple.
+    #
+    # A wheel or a tarball is not per-platform, so the recipe's own name and
+    # "any" are the honest answer for it. But a recipe that emits
+    # <name>-<os>-<arch> — the shape the Go lane below writes, and the shape
+    # manifest/release.go resolves a plugin BY — is naming its platform, and
+    # recording the recipe name and "any" for it makes the index unreadable:
+    # every file lands under one name and a host asking for (o11y, linux,
+    # amd64) matches nothing. One naming convention, either lane.
+    fos=any; farch=any; fname="$NAME"; stem="${b%.exe}"
+    case "$stem" in
+      *-linux-amd64|*-linux-arm64|*-darwin-amd64|*-darwin-arm64|*-windows-amd64|*-windows-arm64)
+        farch="${stem##*-}"; rest="${stem%-*}"; fos="${rest##*-}"; fname="${rest%-*}" ;;
+    esac
+    printf '%s\t%s\t%s\t%s\n' "$b" "$fos" "$farch" "$fname" >> /w/meta.txt
     n=$((n+1))
   done
   [ "$n" -gt 0 ] || { echo "$NAME: out: '$OUT' matched no file the recipe produced"; exit 1; }
