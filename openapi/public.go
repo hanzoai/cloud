@@ -234,6 +234,10 @@ func Publish(d *Document) (*Document, error) {
 		}
 		out.Components = &Components{Schemas: kept}
 	}
+	// LAST, after the components block this projection builds for itself: the
+	// credential rides in it, and a fresh block assigned over it would drop the one
+	// component every published SDK needs to send a token at all.
+	secure(out)
 	return out, nil
 }
 

@@ -1,3 +1,14 @@
+components:
+  securitySchemes:
+    bearer:
+      description: 'The caller''s credential, sent as `Authorization: Bearer <token>`.
+        It is either an access token minted by Hanzo IAM or an API key (pk-/sk-).
+        X-Authorization, and HTTP Basic carrying the token as the password, are accepted
+        spellings of the same header for clients that cannot set Authorization; a
+        browser presents the session cookie instead. Every operation requires it unless
+        it says `security: []`.'
+      scheme: bearer
+      type: http
 info:
   description: 'The public Hanzo Cloud API: the operations declared part of the published
     contract, and only those. It is a SUBSET of the full document — an operation absent
@@ -181,6 +192,7 @@ paths:
         anyone willing to type three characters, so there is no confidentiality delta, only
         an honesty one.
       operationId: get_models
+      security: []
       summary: Returns the list of available models from the routing table.
       tags:
       - models
@@ -194,6 +206,7 @@ paths:
         keys, URLs, or config are returned, and it reports a SET of names, never
         which provider serves which model.
       operationId: get_models_providers
+      security: []
       summary: Public, secret-free list of the providers serving the models that GET
         /v1/models lists — the same source, projected.
       tags:
@@ -281,6 +294,8 @@ paths:
       - videos
       x-app: github.com/hanzoai/ai
       x-public: true
+security:
+- bearer: []
 servers:
 - url: https://api.hanzo.ai
 tags:

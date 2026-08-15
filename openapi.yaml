@@ -47361,6 +47361,16 @@ components:
         project:
           type: string
       type: object
+  securitySchemes:
+    bearer:
+      description: 'The caller''s credential, sent as `Authorization: Bearer <token>`.
+        It is either an access token minted by Hanzo IAM or an API key (pk-/sk-).
+        X-Authorization, and HTTP Basic carrying the token as the password, are accepted
+        spellings of the same header for clients that cannot set Authorization; a
+        browser presents the session cookie instead. Every operation requires it unless
+        it says `security: []`.'
+      scheme: bearer
+      type: http
 info:
   description: 'Composed from each subsystem''s own projection of its router, in the
     fleet''s mount order — every operation below is a route the subsystem that publishes
@@ -67297,6 +67307,7 @@ paths:
 
         Rendered once and served as bytes thereafter, under a strong ETag.
       operationId: get_commands
+      security: []
       summary: Every operation this API answers, as a command
       tags:
       - commands
@@ -90551,6 +90562,7 @@ paths:
         anyone willing to type three characters, so there is no confidentiality delta, only
         an honesty one.
       operationId: get_models
+      security: []
       summary: Returns the list of available models from the routing table.
       tags:
       - models
@@ -90598,6 +90610,7 @@ paths:
         keys, URLs, or config are returned, and it reports a SET of names, never
         which provider serves which model.
       operationId: get_models_providers
+      security: []
       summary: Public, secret-free list of the providers serving the models that GET
         /v1/models lists — the same source, projected.
       tags:
@@ -102206,6 +102219,7 @@ paths:
 
         Rendered once and served as bytes thereafter, so the route table's immutability is what makes a repeat request a memcpy rather than a re-encode of a megabyte document.
       operationId: get_openapi.json
+      security: []
       summary: The API description this SDK was generated from
       x-app: openapi
   /v1/oracles:
@@ -117572,6 +117586,8 @@ paths:
       operationId: get_ws_query_progress
       summary: Watch one running query's progress over a websocket
       x-app: o11y
+security:
+- bearer: []
 servers:
 - url: https://api.hanzo.ai
 tags:

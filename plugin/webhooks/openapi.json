@@ -10,6 +10,11 @@
       "url": "https://api.hanzo.ai"
     }
   ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
   "tags": [
     {
       "name": "webhooks"
@@ -465,6 +470,13 @@
           }
         },
         "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
       }
     }
   }
