@@ -1745,6 +1745,12 @@
    "doc": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own."
   }
  ],
+ "allowance": [
+  {
+   "id": "get_allowance",
+   "doc": "Answers what the CALLER has left of their plan's free-call allowance this period,\nand the instant the count starts again.\n\nThis is the number a product shows beside the composer — \"17 of 20 left today\" —\nand the moment to offer a plan is when it reaches zero. It READS: asking does not\nspend, so a page that polls it costs the caller nothing.\n\nThe subject is the caller's own, resolved from the verified credential, and can\nnever be named in the request — so this is a mirror, not a lookup of someone else.\nAn unauthenticated caller is refused: there is no allowance without someone to\nhold it.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  }
+ ],
  "analytics": [
   {
    "id": "get_analytics_health",
