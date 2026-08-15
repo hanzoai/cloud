@@ -334,6 +334,17 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 		_ = store.Put(ctx, m)
 		return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "start sandbox: %v", err)
 	}
+	// THE POD IS UP; SAY SO BEFORE ANYTHING TALKS TO IT. exec refuses a sandbox that
+	// is not running, and the row this holds still reads pending.
+	m.Status = "running"
+	// THE OWNER'S SESSION, into a pod that is now running — and its failure does not
+	// take the sandbox with it, for the same reason the exchange's does not: the pod
+	// holds nothing either way, and a shell without an identity is the shell every
+	// lease got before this existed. Both halves of "the owner could not be signed
+	// in" are therefore ONE policy, stated here where the lease is decided.
+	if err := s.State.rt.signIn(ctx, m, cr.session); err != nil {
+		s.Log.Warn("sandbox starts with no owner session", "sandbox", m.ID, "org", org, "err", err)
+	}
 
 	// Recorded only once it RUNS. The gate above already refused a balance that
 	// could not cover it, and metering a lease that failed to start would bill for
@@ -343,7 +354,6 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 		Model:       class + "/" + m.Runtime,
 		AmountCents: fee,
 	})
-	m.Status = "running"
 	if err := store.Put(ctx, m); err != nil {
 		return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "put: %v", err)
 	}
