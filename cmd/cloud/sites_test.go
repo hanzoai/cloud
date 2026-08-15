@@ -123,3 +123,36 @@ func TestSitesConfigIsNotResolvedHere(t *testing.T) {
 		t.Error("a CLOUD_SITES_* key is spelled in this binary; the env contract lives in apps/sites/env.go")
 	}
 }
+
+// The front door serves the API even when it cannot read the console.
+//
+// Pinned in run()'s source for the reason the tests above are: this is a fact
+// about the ENTRYPOINT's control flow, and there is no seam that returns it.
+//
+// It is matched on the mount call rather than on the absence of a `return`,
+// because "no return of consoleErr" is a claim about every line and would pass
+// the day someone spells the return differently — a test that stops looking.
+// webui.Mount(app, nil) is the positive act of choosing the no-console path, so
+// deleting it to restore the fatal is what fails here.
+func TestAnUnreadableConsoleDoesNotStopTheFrontDoor(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	i := strings.Index(string(src), "func run(")
+	if i < 0 {
+		t.Fatal("run() not found — this test is pinned to the router's entrypoint")
+	}
+	run := string(src)[i:]
+
+	if !strings.Contains(run, "webui.Mount(app, nil)") {
+		t.Fatal("run() never mounts the no-console path — a console the store cannot serve " +
+			"takes the whole API down with it, which is the 2026-08-15 outage")
+	}
+	for _, line := range strings.Split(run, "\n") {
+		if strings.Contains(line, "return") && strings.Contains(line, "consoleErr") {
+			t.Fatalf("run() returns the console load error (%q) — exiting does not save the "+
+				"console, it only adds the API to what is lost", strings.TrimSpace(line))
+		}
+	}
+}
