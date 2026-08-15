@@ -117,8 +117,8 @@ jobs:
   # This reads the diff and refuses it.
   #
   # It fails CLOSED — an unreachable reviewer is how an attacker turns a reviewer
-  # off — and the break-glass is a named human decision (REVIEW_BREAK_GLASS),
-  # recorded in the run, never a silent fallback.
+  # off. There is no way past it. A reviewer with a way past it is one an attacker
+  # reaches for, and the way past outlives the reason it was opened.
   review:
     runs-on: [hanzo-build-linux-amd64]
     timeout-minutes: 20
@@ -132,7 +132,6 @@ jobs:
       - name: read the change, and refuse it if it carries an attack
         env:
           REVIEW_API_KEY: ${{ secrets.REVIEW_API_KEY }}
-          REVIEW_BREAK_GLASS: ${{ vars.REVIEW_BREAK_GLASS }}
         run: |
           set -euo pipefail
           base="${{ github.event.before }}"
