@@ -111,6 +111,6 @@ func (a App) remote() (zip.Plugin, bool) {
 		URL:       at.url,
 		Sum:       at.sum,
 		Lazy:      !a.Eager,
-		IdleAfter: Idle(),
+		IdleAfter: idleAfter,
 	}, true
 }

@@ -134,7 +134,12 @@ say "booting cloud on $BASE (data: $DATA_DIR)"
 # commerce carries the money plane the billing surface reads, and todo supplies a
 # gated create that depends on nothing but the local store — so a 402 in spec 136 is
 # the billing gate and not some absent upstream answering first.
-./bin/cloud --enable=iam,base,kms,marketing,notify,billing,commerce,todo --brand=hanzo --listen=":$HTTP_PORT" >"$LOG" 2>&1 &
+# The app set is a property of the BINARY, not of this script: cmd/cloud mounts
+# what manifest.Apps lists and resolves each plugin as a file beside itself, so
+# `--enable` was removed (ecafb31c5) and stating the set here a second time is
+# what took devnet down twice. Build the plugins this suite needs with
+# `make plugin APP=<name>`; the host mounts whichever ones it finds.
+./bin/cloud --brand=hanzo --listen=":$HTTP_PORT" >"$LOG" 2>&1 &
 CLOUD_PID=$!
 
 # Readiness is the HOST answering /healthz on its own app port. Liveness belongs to
