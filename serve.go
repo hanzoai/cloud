@@ -413,8 +413,16 @@ func Listen(plugins []Plugin, enable []string) error {
 	if consoleErr != nil {
 		luxlog.Default().Warn("console: no release mounted — this process serves no console UI", "err", consoleErr)
 	}
-	if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
-		return fmt.Errorf("console: %w", err)
+	// Mounting is conditional on the load, which is what the paragraph above
+	// describes: a process that could not resolve a release serves no console
+	// rather than refusing to serve at all. Mounting an empty release errors, so
+	// doing it unconditionally turned "serves none" into "starts none" — and the
+	// API, the agent door and every /v1 route went down with a browser bundle
+	// nothing headless asks for.
+	if consoleErr == nil {
+		if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
+			return fmt.Errorf("console: %w", err)
+		}
 	}
 
 	// This process's AGENT DOOR on that same plane, before the sockets bind, so a
