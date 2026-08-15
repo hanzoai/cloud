@@ -6,13 +6,20 @@
 <title>Terminal</title>
 <style>__CSS__</style>
 <style>
+  /* ONE font stack, named once. The terminal used to take xterm.css's own
+     `monospace` fallback while the status text beside it named a real stack —
+     so a shell rendered in whatever the browser calls monospace (Courier, on a
+     Mac) next to a message in the system's actual mono face. */
+  :root { --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   html, body { margin: 0; height: 100%; background: #000; }
-  #t { position: absolute; inset: 0; padding: 8px; }
+  /* A terminal is measured in rows and columns you can read, and this padding
+     is subtracted from every one of them — four times over in a tiled pane. */
+  #t { position: absolute; inset: 0; padding: 4px; }
   #s {
     position: absolute; inset: 0; display: flex; align-items: center;
     justify-content: center; gap: 12px; flex-direction: column;
     background: #000; color: #8b8b8b;
-    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font: 13px/1.5 var(--mono);
   }
   #s[hidden] { display: none; }
   #s button {
@@ -73,7 +80,18 @@
   }
 
   var Fit = (window.FitAddon && window.FitAddon.FitAddon) || window.FitAddon
-  var term = new window.Terminal({ cursorBlink: true, fontSize: 13, scrollback: 5000 })
+  var mono = getComputedStyle(document.documentElement).getPropertyValue('--mono').trim()
+  var term = new window.Terminal({
+    cursorBlink: true,
+    // The stack the page already names for its own text. Left unset, xterm
+    // falls back to the browser's `monospace`, which on a Mac is Courier.
+    fontFamily: mono,
+    fontSize: 12,
+    // 1.0 is xterm's own default and is stated here so a later reader sees
+    // that the tight leading is a choice, not an omission.
+    lineHeight: 1,
+    scrollback: 5000,
+  })
   var fit = new Fit()
   term.loadAddon(fit)
   term.open(document.getElementById('t'))
@@ -90,6 +108,24 @@
     }
   }
   new ResizeObserver(measure).observe(document.body)
+
+  // The reader's own type size, from the host that frames this page — the
+  // reverse leg of the channel `post` already uses, so a change reaches a LIVE
+  // terminal. It cannot be a reload: a ticket is spent by the socket that
+  // presents it, so re-opening this document needs a fresh one.
+  //
+  // Only the parent is heard, and only a size is read. A message is a number in
+  // a bounded range or it is nothing, so the widest thing this channel can do
+  // to a terminal is set its type too large.
+  window.addEventListener('message', function (e) {
+    if (e.source !== window.parent) return
+    var m = e.data
+    if (!m || m.source !== 'hanzo-term' || typeof m.fontSize !== 'number') return
+    var n = Math.round(m.fontSize)
+    if (n < 8 || n > 32 || n === term.options.fontSize) return
+    term.options.fontSize = n
+    measure()
+  })
 
   ws.onopen = function () {
     status.hidden = true
