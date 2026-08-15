@@ -1,0 +1,19 @@
+# Hanzo blueprint: Traefik — the ingress and certificate manager you would run to
+# put your own services on the internet with TLS.
+services:
+  traefik:
+    image: traefik:v3.2
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.tlschallenge=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik:/letsencrypt
+volumes:
+  traefik:

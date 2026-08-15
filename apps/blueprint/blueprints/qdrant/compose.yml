@@ -1,0 +1,13 @@
+# Hanzo blueprint: Qdrant — the vector database you would run to replace a
+# managed vector index. One service, and its storage is the whole operational
+# story: it is yours to size, snapshot and restore.
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant:/qdrant/storage
+volumes:
+  qdrant:
