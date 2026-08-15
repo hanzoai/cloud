@@ -1,0 +1,106 @@
+// Command gen-fleet-catalog writes what each subsystem serves, so the fleet's
+// agent door can answer tools/list without a process per subsystem.
+//
+// THE SOURCE IS EACH APP'S OWN SPEC, plugin/<app>/openapi.json, which that app's
+// own binary emits from its own live router. That is the whole reason this can
+// exist: an earlier catalogue was hand-kept per app and drifted — one subsystem
+// declared 12 tools while it served 365 — because nothing regenerated it from
+// the thing it described. These subsets are regenerated from source by
+// `make -f mk/fleet.mk check` and held against openapi.yaml by the weave, so a
+// catalogue derived from them is red in CI the moment it disagrees.
+//
+// It carries operation ids and prose, and no schemas. The door publishes one
+// tool per subsystem whose `op` enum holds names, and a model fetches the schema
+// for the one it picked — that fetch reaches the owning subsystem, which is one
+// process rather than a hundred.
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+)
+
+// op is one operation as its own subsystem published it.
+type op struct {
+	ID  string `json:"id"`
+	Doc string `json:"doc"`
+}
+
+func main() {
+	root := "."
+	if len(os.Args) > 1 {
+		root = os.Args[1]
+	}
+	specs, err := filepath.Glob(filepath.Join(root, "plugin", "*", "openapi.json"))
+	if err != nil || len(specs) == 0 {
+		fmt.Fprintf(os.Stderr, "gen-fleet-catalog: no specs at %s/plugin/*/openapi.json (%v)\n", root, err)
+		os.Exit(1)
+	}
+
+	out := map[string][]op{}
+	for _, path := range specs {
+		app := filepath.Base(filepath.Dir(path))
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "gen-fleet-catalog: read %s: %v\n", path, err)
+			os.Exit(1)
+		}
+		var doc struct {
+			Paths map[string]map[string]struct {
+				OperationID string `json:"operationId"`
+				Summary     string `json:"summary"`
+				Description string `json:"description"`
+			} `json:"paths"`
+		}
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			fmt.Fprintf(os.Stderr, "gen-fleet-catalog: parse %s: %v\n", path, err)
+			os.Exit(1)
+		}
+		seen := map[string]bool{}
+		var ops []op
+		for _, methods := range doc.Paths {
+			for method, o := range methods {
+				// The document's own junk keys are not operations.
+				if method == "parameters" || o.OperationID == "" || seen[o.OperationID] {
+					continue
+				}
+				seen[o.OperationID] = true
+				// The description, falling back to the summary — the same
+				// preference a child's own descriptor carries.
+				ops = append(ops, op{ID: o.OperationID, Doc: pick(o.Description, o.Summary)})
+			}
+		}
+		if len(ops) == 0 {
+			continue
+		}
+		sort.Slice(ops, func(i, j int) bool { return ops[i].ID < ops[j].ID })
+		out[app] = ops
+	}
+
+	body, err := json.MarshalIndent(out, "", " ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gen-fleet-catalog: encode: %v\n", err)
+		os.Exit(1)
+	}
+	body = append(body, '\n')
+	dst := filepath.Join(root, "fleet", "catalog.json")
+	if err := os.WriteFile(dst, body, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "gen-fleet-catalog: write %s: %v\n", dst, err)
+		os.Exit(1)
+	}
+	n := 0
+	for _, ops := range out {
+		n += len(ops)
+	}
+	fmt.Printf("%s: %d subsystems, %d operations\n", dst, len(out), n)
+}
+
+func pick(first, second string) string {
+	if first != "" {
+		return first
+	}
+	return second
+}

@@ -244,6 +244,14 @@ func run(addr, zapAddr string) error {
 	// table and one curation rule for both directions.
 	mcp := fleet.Mount(app, manifest.MCPPath, routed(composed), locate(app))
 
+	// LISTING WHAT THE FLEET SERVES MUST NOT START THE FLEET. Discovery asks a
+	// subsystem, and asking a lazy one starts it — so one tools/list started every
+	// subsystem this host composes, and the pod's resident cost became the size of
+	// the catalog rather than of the work. The door asks the ones that are already
+	// running and reads the rest from what they published (fleet/catalog.go); this
+	// is the half only the host can answer, because the plugin table is its.
+	mcp.Warm = warm(app)
+
 	// The bare /mcp needs no route here. webui's terminal handler answers it from
 	// manifest.MCPPath (webui/mcp.go) — one rule, in the one place that can tell a
 	// machine door from a client-side console route. A route registered here would
@@ -471,6 +479,31 @@ func routed(composed []string) []string {
 // the app's prefix takes, so a burst of askers still produces one process. A
 // remotely mounted app is never started, so Start has nothing to report about it
 // and would name it unavailable forever.
+// warm reports whether a subsystem is running right now, WITHOUT starting it.
+//
+// A subsystem mounted at an address this host did not start (CLOUD_<NAME>_ADDR)
+// is warm by definition: it is somebody else's process, already up, and asking
+// it costs this host nothing.
+func warm(app *zip.App) func(string) bool {
+	remote := map[string]bool{}
+	for _, a := range manifest.Apps {
+		if a.Plugin().Addr != "" {
+			remote[a.Name] = true
+		}
+	}
+	return func(name string) bool {
+		if remote[name] {
+			return true
+		}
+		for _, p := range app.Plugins() {
+			if p.Name == name {
+				return p.Running
+			}
+		}
+		return false
+	}
+}
+
 func locate(app *zip.App) fleet.At {
 	remote := map[string]string{}
 	for _, a := range manifest.Apps {

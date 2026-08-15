@@ -376,7 +376,8 @@ describe: ## Every app describes itself (one binary per app, all at once).
 check: describe ## Regenerate every document + openapi.yaml FROM SOURCE and fail on any diff. The drift gate.
 	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi OUT=$(ROOT)/openapi.yaml 2>&1) \
 	  || { echo "$$out"; echo "!! the compose refused; nothing was written"; exit 1; }
-	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml public.yaml openapi/floor.json openapi/closure.json plugin/); \
+	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-fleet-catalog . >/dev/null
+	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml public.yaml openapi/floor.json openapi/closure.json fleet/catalog.json plugin/); \
 	only_witness=$$(printf '%s\n' "$$stale" | grep -vc 'openapi/closure.json' 2>/dev/null || true); \
 	if [ -n "$$stale" ] && [ "$$only_witness" = "0" ]; then \
 	  echo ">> the witness moved and no document did: a dependency changed, and every one of"; \
