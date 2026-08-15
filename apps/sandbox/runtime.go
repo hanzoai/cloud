@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/authz"
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/k8s"
 	"github.com/hanzoai/cloud/internal/environ"
 
@@ -151,6 +152,10 @@ type runtime struct {
 	ns    string
 	image string // oci.hanzo.ai/hanzoai/sandbox, without a tag
 	tag   string
+	// brand is which deployment this is — hanzo, lux, zoo — and it names the hosts
+	// a sandbox's credential is scoped to. Read once here rather than per lease so
+	// the answer cannot differ between two pods of the same fleet.
+	brand string
 	// bare is the boundary our OWN code takes — the one with no kernel of its
 	// own — and it is empty until the cluster keeps that boundary to nodes of its
 	// own. Resolved once, against the cluster, because containment is the
@@ -172,6 +177,7 @@ func newRuntime() *runtime {
 		// and a sandbox must not sit beside the datastores it is forbidden to
 		// reach. One namespace, one policy, everything that runs submitted code.
 		ns:           environ.Or("SANDBOX_NAMESPACE", "hanzo-sandboxes"),
+		brand:        environ.Or("CLOUD_BRAND", cloud.DefaultBrand),
 		image:        environ.Or("SANDBOX_IMAGE_REPO", "oci.hanzo.ai/hanzoai/sandbox"),
 		tag:          environ.Or("SANDBOX_IMAGE_TAG", ""),
 		startTimeout: time.Duration(atoiOr(os.Getenv("SANDBOX_START_TIMEOUT_SEC"), 120)) * time.Second,
@@ -604,15 +610,26 @@ func (r *runtime) start(ctx context.Context, m Sandbox, cr cred) error {
 	// time. Not flaky: waitRunning had already proven the pod was up, and the only
 	// thing that disagreed was a stale field in a local struct.
 	m.Status = "running"
-	// THE KUBECONFIG ARRIVES LAST AND THROUGH THE EXEC CHANNEL, so it exists in
-	// the pod and in no Kubernetes object — see cred.go for why the bigger
-	// credential takes this route and the DO token does not. It is empty for every
-	// lease but a SuperAdmin's own, so this is one comparison for everybody else.
+	// EVERY CREDENTIAL ARRIVES LAST AND THROUGH THE EXEC CHANNEL, so it exists in
+	// the pod and in no Kubernetes object — see cred.go for why that is the route.
 	//
 	// A failure here FAILS THE LEASE. The caller gets the 503 and the row records
 	// why, which is the same shape a failed pod create already has; the
-	// alternative is a shell whose kubectl reaches nothing and only says so the
-	// first time somebody trusts it.
+	// alternative is a shell whose tools reach nothing and only say so the first
+	// time somebody trusts them.
+	if cr.session.Token != "" {
+		// The token goes in on STDIN. In argv it would be published by `ps` and by
+		// /proc to every process in the pod, which is the population this credential
+		// is scoped against in the first place.
+		res, err := r.exec(ctx, m, []string{"sh", "-c", signIn(cr.session, r.brand)},
+			strings.NewReader(cr.session.Token), 0, nil)
+		if err != nil {
+			return fmt.Errorf("sign in: %w", err)
+		}
+		if res.ExitCode != 0 {
+			return fmt.Errorf("sign in: %s", strings.TrimSpace(res.Stderr))
+		}
+	}
 	if len(cr.kube) == 0 {
 		return nil
 	}
