@@ -53,8 +53,8 @@ var unwired = []string{
 // to wiring, or proves it is cloud's own machinery that belongs below apps/ —
 // either way the pin comes off.
 var unextracted = []string{
-	"admission", "ads", "affiliates", "agents", "answer", "ask", "auditlog",
-	"authors", "automations", "benchmark", "blueprint", "books", "bots",
+	"admission", "ads", "affiliates", "agents", "allowance", "answer", "ask",
+	"auditlog", "authors", "automations", "benchmark", "blueprint", "books", "bots",
 	"campaign", "catalog", "catalogsync", "channels", "cloudflare", "cms",
 	"code", "coding", "company", "compliance", "connectorruntime", "content",
 	"controlplane", "crawl", "crm", "cron", "dataset",

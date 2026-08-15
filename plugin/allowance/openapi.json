@@ -1,0 +1,82 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package allowance is how much a plan lets you do without paying, and how much of it you have left today.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "allowance"
+    }
+  ],
+  "paths": {
+    "/v1/allowance": {
+      "get": {
+        "operationId": "get_allowance",
+        "summary": "Answers what the CALLER has left of their plan's free-call allowance this period, and the instant the count starts again.",
+        "description": "Answers what the CALLER has left of their plan's free-call allowance this period,\nand the instant the count starts again.\n\nThis is the number a product shows beside the composer — \"17 of 20 left today\" —\nand the moment to offer a plan is when it reaches zero. It READS: asking does not\nspend, so a page that polls it costs the caller nothing.\n\nThe subject is the caller's own, resolved from the verified credential, and can\nnever be named in the request — so this is a mirror, not a lookup of someone else.\nAn unauthenticated caller is refused: there is no allowance without someone to\nhold it.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "allowance"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Allowance"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Allowance": {
+        "properties": {
+          "limit": {
+            "description": "calls the plan allows per period; 0 = unbounded",
+            "type": "integer"
+          },
+          "plan": {
+            "description": "the tier the limit came from",
+            "type": "string"
+          },
+          "resets": {
+            "description": "unix seconds; when the count starts again",
+            "type": "integer"
+          },
+          "spent": {
+            "description": "the subject is at the limit",
+            "type": "boolean"
+          },
+          "used": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

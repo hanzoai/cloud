@@ -76,6 +76,14 @@ const (
 	// everywhere. Absence of an ANSWER may never read as permission.
 	ProjectsOwnership = "projects_ownership"
 
+	// AllowanceTake counts one zero-priced call against a subject's plan allowance
+	// and answers what is left. It is on the plane for the reason the balance is:
+	// the store has ONE writer and the READER is the AI gate, which runs in its own
+	// process. A gate that opened the file itself would be a second writer, and a
+	// gate that asked over HTTP would ask through the edge that exists for
+	// customers.
+	AllowanceTake = "allowance_take"
+
 	FinanceAuthorize = "finance_authorize" // the prepaid gate
 	FinanceBalance   = "finance_balance"
 	FinanceRecord    = "finance_record" // the meter
@@ -657,6 +665,28 @@ type Recorded struct {
 type BalanceIn struct {
 	Subject  string `json:"subject"`
 	Currency string `json:"currency" validate:"required"`
+}
+
+// ---- allowance -------------------------------------------------------------
+
+// AllowanceIn names the subject whose plan allowance is being counted or read. The
+// ORG is the caller's and cannot be named here, so one tenant can never spend
+// another's allowance.
+type AllowanceIn struct {
+	Subject string `json:"subject" validate:"required"`
+}
+
+// Allowance is how much of a plan's periodic call allowance a subject has left, and
+// when the count starts again.
+//
+// Limit 0 means the subject's plan does not bound them; Used and Spent are then 0
+// and false, and Resets is meaningless — there is no period to end.
+type Allowance struct {
+	Plan   string `json:"plan,omitempty"` // the tier the limit came from
+	Limit  int64  `json:"limit"`          // calls the plan allows per period; 0 = unbounded
+	Used   int64  `json:"used"`
+	Spent  bool   `json:"spent"`  // the subject is at the limit
+	Resets int64  `json:"resets"` // unix seconds; when the count starts again
 }
 
 // Balance is what is left to spend.
