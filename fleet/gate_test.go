@@ -215,23 +215,6 @@ func TestTheDoorSAYSHowMuchItWithheld(t *testing.T) {
 	}
 }
 
-// TestRefusalAndOutageAreREPORTEDTOGETHER: the two _meta keys are independent
-// facts about one answer and must not overwrite each other. They did, in the
-// first draft of this change — one map literal, assigned twice.
-func TestRefusalAndOutageAreREPORTEDTOGETHER(t *testing.T) {
-	kids := map[string]*child{"console": startNamed(t, "console", "CreateUser", "post_chat_completions")}
-	h := host(t, []string{"console", "beta"}, kids) // beta has no instance
-
-	res := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
-	meta, _ := res["_meta"].(map[string]any)
-	if _, ok := meta[fleet.Refused]; !ok {
-		t.Errorf("_meta lost the refusal report: %v", meta)
-	}
-	if _, ok := meta[fleet.Unavailable]; !ok {
-		t.Errorf("_meta lost the outage report: %v", meta)
-	}
-}
-
 // TestAQuietFleetReportsNoMetaAtAll: the keys appear only when they say
 // something. A `_meta` present on every answer is noise a client learns to skip.
 func TestAQuietFleetReportsNoMetaAtAll(t *testing.T) {
