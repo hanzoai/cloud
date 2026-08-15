@@ -45,6 +45,101 @@ func TestRunnerArtifact_LaunchesAndIndexes(t *testing.T) {
 	}
 }
 
+// THE RECIPE THE RELEASE SENDS, checked here rather than by a red release.
+//
+// .hanzo/workflows/cicd.yml's `plugins` job POSTs exactly this to publish the
+// plugin set for a release. Every field in it is one this door VALIDATES — the
+// git host, the flat tag segment, the recipe's own shape — so a typo there is a
+// 400 nobody sees until a tag build, and the artifacts for that release simply
+// never exist. Keeping the body here makes it a compile-and-test-time fact.
+//
+// It also pins the two things a host depends on: the publish layout is keyed by
+// the TAG (so `CLOUD_PLUGINS` for v1.801.533 names that release and not the
+// commit), and the forge — not the mirror — is an accepted git host, which
+// matters because the tag a release claims exists only on the forge and the
+// build Job clones with no credential.
+func TestRunnerArtifact_TheReleaseRecipeIsAccepted(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
+
+	// THE FORGE MUST BE A TRUSTED BUILD SOURCE, AND IT IS NOT TRUSTED BY DEFAULT.
+	// hostAllowed trusts `selfGitHost` — brand.Apex(deps.Domain), set at Mount —
+	// plus the four public providers. Measured: brand.Apex("") is "", CLOUD_DOMAIN
+	// is set NOWHERE in the cloud deployment, and neither GitHub mirror carries a
+	// release tag. So on a deployment that names neither its domain nor
+	// CLOUD_PLATFORM_GIT_HOSTS, this recipe is refused 400 and the plugin set for
+	// every release silently does not exist.
+	//
+	// Setting it here is what Mount does on a deployment that names its domain;
+	// the sibling below pins the refusal, so the requirement cannot be forgotten
+	// by anyone reading only the happy path.
+	prev := selfGitHost
+	selfGitHost = "hanzo.ai"
+	t.Cleanup(func() { selfGitHost = prev })
+
+	app := runnerApp(t)
+	code, body := postRunner(t, app, testBuildTok, map[string]any{
+		"repo":   "https://git.hanzo.ai/hanzoai/cloud",
+		"sha":    "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
+		"tag":    "v1.801.533",
+		"bucket": "plugins",
+		"binaries": []any{
+			map[string]any{"name": "plugins", "run": "make -f mk/fleet.mk dist", "out": "dist/*"},
+		},
+	})
+	if code != http.StatusAccepted {
+		t.Fatalf("the release recipe was refused: %d (%s)", code, body)
+	}
+	var resp runnerBuildResp
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	want := "https://s3.hanzo.ai/plugins/hanzoai/cloud/v1.801.533/binaries.json"
+	if resp.Index != want {
+		t.Fatalf("index = %q, want %q — this is the URL CLOUD_PLUGINS is pointed at", resp.Index, want)
+	}
+}
+
+// The other half, so the deployment requirement above is a fact and not a
+// comment: with no domain and no CLOUD_PLATFORM_GIT_HOSTS, the release recipe is
+// REFUSED. This is the production configuration as measured, and it is why the
+// `plugins` job carries the env var it does. The day the forge is trusted by
+// some other derivation, this test goes red and says so.
+func TestRunnerArtifact_ForgeIsRefusedUntilTheDeploymentTrustsIt(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
+	prev := selfGitHost
+	selfGitHost = ""
+	t.Cleanup(func() { selfGitHost = prev })
+
+	app := runnerApp(t)
+	code, body := postRunner(t, app, testBuildTok, map[string]any{
+		"repo": "https://git.hanzo.ai/hanzoai/cloud",
+		"sha":  "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
+		"tag":  "v1.801.533", "bucket": "plugins",
+		"binaries": []any{
+			map[string]any{"name": "plugins", "run": "make -f mk/fleet.mk dist", "out": "dist/*"},
+		},
+	})
+	if code != http.StatusBadRequest {
+		t.Fatalf("want 400 for an untrusted forge, got %d (%s)", code, body)
+	}
+	if !strings.Contains(string(body), "not an allowed git provider") {
+		t.Fatalf("refusal should name the reason, got %s", body)
+	}
+	// github.com stays trusted with no configuration at all, which is what makes
+	// this a MISSING TRUST rather than a broken door.
+	code, body = postRunner(t, app, testBuildTok, map[string]any{
+		"repo": "https://github.com/hanzoai/cloud",
+		"sha":  "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
+		"tag":  "v1.801.533", "bucket": "plugins",
+		"binaries": []any{
+			map[string]any{"name": "plugins", "run": "make -f mk/fleet.mk dist", "out": "dist/*"},
+		},
+	})
+	if code != http.StatusAccepted {
+		t.Fatalf("github.com should need no configuration, got %d (%s)", code, body)
+	}
+}
+
 // One initContainer per recipe entry, each in ITS OWN toolchain image, and the
 // publisher — which is the only container that sees the object-store credential.
 func TestArtifactJobSpec_ToolchainPerEntryAndCredentialOnlyInPublisher(t *testing.T) {
