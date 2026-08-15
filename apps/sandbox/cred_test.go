@@ -372,3 +372,27 @@ func TestAnImageWithoutTheToolsIsNotAFailedLease(t *testing.T) {
 		}
 	}
 }
+
+// AN IDENTITY OUTAGE IS NOT A SANDBOX OUTAGE. When the exchange cannot be made,
+// the lease still happens and the pod holds nothing — which is the sandbox
+// everybody had before any of this existed. The alternative would have let one
+// unreachable dependency stop every sandbox on the fleet, and it would have
+// denied nothing that is not already denied.
+func TestAnIdentityOutageStillLeases(t *testing.T) {
+	t.Setenv("IAM_MINT_CLIENT_ID", "hanzo-console")
+	t.Setenv("IAM_MINT_CLIENT_SECRET", "secret")
+	t.Setenv("IAM_URL", "http://127.0.0.1:1") // nothing answers here
+	s, err := sessionFor(context.Background(), "a.b.c", time.Minute)
+	if err == nil {
+		t.Fatal("an unreachable IAM was reported as success")
+	}
+	if s.Token != "" {
+		t.Fatal("an unreachable IAM produced a token")
+	}
+	// And the pod that gets that zero session is the one this package has always
+	// built: no env, nothing to deliver.
+	_, c := podWith(t, "exec", cred{session: s})
+	if _, stated := c["env"]; stated {
+		t.Fatalf("a session-less sandbox states env %v", c["env"])
+	}
+}
