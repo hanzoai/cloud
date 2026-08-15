@@ -925,6 +925,108 @@ jobs:
             || { echo "::error::no smoke receipt for ${{ steps.img.outputs.digest }} — these bytes have never been proven to boot. Nothing downstream may pin them."; exit 1; }
           echo "${{ steps.img.outputs.digest }} is smoked"
 
+  # ══ NOT A CAR ══ THE PLUGIN SET, PUBLISHED BESIDE THE IMAGE.
+  #
+  # NOTHING `needs:` THIS, DELIBERATELY. It hangs off `image` for the version and
+  # runs alongside rollout, so a slow or failed plugin publish can never hold a
+  # release — which is the whole point of a light host, and the reason this is not
+  # a car. It still FAILS LOUDLY when the index does not appear: a job nobody
+  # depends on going red is a signal someone reads, and a silent publish is how a
+  # host ends up resolving a plugin set that was never there.
+  #
+  # It builds nothing here. `POST /v1/runner` with a `binaries:` recipe launches
+  # an in-cluster Job, and the ONLY container in it that ever sees the object-store
+  # credential is the publisher, from the artifact-s3 KMSSecret in the build
+  # namespace — so this runner holds no bucket key and names no bucket. That is
+  # why the S3_ADMIN_* provisioning hanzo.yml used to ask for is not needed.
+  #
+  # The repo is the FORGE, not the mirror. The forge is canonical, the tag this
+  # release just claimed exists only there, and it is anonymously cloneable — the
+  # Job does a bare `git fetch` with no credential, so a mirror URL would fetch a
+  # ref that is not there. Measured: neither github.com/hanzoai/cloud nor
+  # github.com/hanzo-inc/cloud carries a release tag or forge/main.
+  #
+  # DEPLOYMENT REQUIREMENT, and it is not optional: cloud must TRUST the forge as
+  # a build source. hostAllowed (apps/platform/validate.go) trusts the four public
+  # providers plus `selfGitHost` = brand.Apex(deps.Domain) — and CLOUD_DOMAIN is
+  # set nowhere in the cloud deployment, so brand.Apex("") is "" and this recipe
+  # is refused 400 `host "git.hanzo.ai" is not an allowed git provider`. The lever
+  # is CLOUD_PLATFORM_GIT_HOSTS, which REPLACES the default set, so it must name
+  # the four defaults AND the forge; it is set in hanzoai/universe
+  # charts/app/values/hanzo/cloud.yaml and takes effect at the next rollout.
+  # Both halves are pinned by apps/platform/artifact_test.go — the accepted recipe
+  # and the refusal — so neither this job nor that env var can drift silently.
+  plugins:
+    needs: image
+    if: github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/')
+    runs-on: [hanzo-build-linux-amd64]
+    timeout-minutes: 45
+    steps:
+      - name: Publish the plugin set for this release
+        env:
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
+          CLOUD_API: ${{ vars.CLOUD_API || 'https://api.hanzo.ai' }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.image.outputs.version }}"
+          REPO="https://git.hanzo.ai/hanzoai/cloud"
+
+          # Same KMS path convention as the pin token: there is no org in a KMS
+          # path, the store root comes from the validated claim.
+          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
+            | jq -r '.accessToken // empty' || true)
+          [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
+
+          BUILD_TOKEN=$(curl -sS \
+            "${KMS_ENDPOINT}/v1/kms/secrets/deploy/PLATFORM_BUILD_CALLBACK_TOKEN?env=${KMS_SECRET_ENV}" \
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
+          [ -n "$BUILD_TOKEN" ] || { echo "::error::PLATFORM_BUILD_CALLBACK_TOKEN missing in KMS at deploy/ (env ${KMS_SECRET_ENV}, org from the KMS credential)"; exit 1; }
+          echo "::add-mask::${BUILD_TOKEN}"
+
+          # ONE recipe entry, not 121: the app set lives in manifest/apps.go and
+          # restating it here would be a second copy of it in YAML — and 121
+          # entries would blow the door's own 16-binary bound. PLATFORMS lives in
+          # mk/fleet.mk, so the platform list is not restated either.
+          body=$(jq -nc --arg repo "$REPO" --arg sha "${{ github.sha }}" --arg tag "v${VERSION}" \
+            '{repo:$repo, sha:$sha, tag:$tag, bucket:"plugins",
+              binaries:[{name:"plugins", run:"make -f mk/fleet.mk dist", out:"dist/*"}]}')
+
+          resp=$(curl -sS -X POST "${CLOUD_API}/v1/runner" \
+            -H "Authorization: Bearer ${BUILD_TOKEN}" \
+            -H 'Content-Type: application/json' -d "$body")
+          index=$(printf '%s' "$resp" | jq -r '.index // empty')
+          job=$(printf '%s' "$resp" | jq -r '.buildJobId // empty')
+          [ -n "$index" ] || { echo "::error::/v1/runner did not accept the recipe: $resp"; exit 1; }
+          echo "queued ${job:-?} -> ${index}"
+
+          # Poll the INDEX, not the build status: the index is the one file a host
+          # reads, and the publisher writes it LAST and then re-reads it with NO
+          # credential — so its appearance is the whole property, already proven
+          # readable. Bounded, because a job that waits forever is a held runner.
+          for i in $(seq 1 80); do
+            code=$(curl -sS -o /tmp/idx.json -w '%{http_code}' "$index" || echo 000)
+            if [ "$code" = 200 ]; then
+              n=$(jq '.binaries | length' /tmp/idx.json)
+              echo "published ${n} artifacts at ${index}"
+              # A plugin the host cannot RESOLVE is the defect this lane was
+              # blocked on, so assert the shape rather than the count: a real
+              # triple, on a plugin the fleet actually runs.
+              jq -e '.binaries[] | select(.name=="o11y" and .os=="linux" and .arch=="amd64" and (.sha256|length)==64)' \
+                /tmp/idx.json >/dev/null \
+                || { echo "::error::index has ${n} entries but no resolvable o11y/linux/amd64 — a host reading it finds nothing"; jq -c '.binaries[:3]' /tmp/idx.json; exit 1; }
+              echo "o11y/linux/amd64 resolves — the index is readable by a host"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::${index} never appeared (40 min). The release SHIPPED — nothing depends on this job — but a host with no baked plugins has no index for v${VERSION}."
+          exit 1
+
   # ══ CAR 2 ══ ROLL OUT, AND PROVE IT IS LIVE.
   #
   # The train used to stop at "pin pushed". A pin is not a release — the RUNNING
