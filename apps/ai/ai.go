@@ -29,6 +29,7 @@ import (
 	aiweb "github.com/hanzoai/ai/web"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/crawl"
+	"github.com/hanzoai/cloud/apps/tenant"
 	"github.com/hanzoai/cloud/apps/websearch"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
@@ -361,6 +362,33 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			return false, nil // no cap installed → uncapped, the same semantics a nil hook had
 		}
 		return f(ctx, subject, namespace)
+	})
+	// The free lane's ceiling. It crosses the plane for the reason the balance does
+	// — the counter has ONE writer and it is another process — and it is the only
+	// bound on a route priced at zero, where the wallet has nothing to refuse.
+	//
+	// WHO FAILS OPEN IS DECIDED HERE, because this is the layer that knows the
+	// vocabulary. The gate treats an error as "allow", which is right for a tenant we
+	// can name: a plane blip must not take the free models away from a customer whose
+	// priced routes still work. It is wrong for the public lane. A route STATED at
+	// zero is not always served by our own compute — a vendor can be behind it and
+	// bills us either way — so "we could not ask" must never become "a stranger may
+	// have as much as they want". An unanswerable ask in that lane is refused.
+	aiobject.SetAllowance(func(ctx context.Context, subject, namespace string) (bool, error) {
+		out, err := cloud.Ask[plane.AllowanceIn, plane.Allowance](
+			cloud.For(ctx, namespace), "allowance", plane.AllowanceTake,
+			&plane.AllowanceIn{Subject: subject})
+		switch {
+		case err != nil && namespace == tenant.Public:
+			return true, nil // spent: an unnamed caller gets no benefit of the doubt
+		case err != nil:
+			return false, fmt.Errorf("plane allowance take: %w", err)
+		case out == nil && namespace == tenant.Public:
+			return true, nil
+		case out == nil:
+			return false, fmt.Errorf("plane allowance take: the counter answered nothing")
+		}
+		return out.Spent, nil
 	})
 	// ONE CORS AUTHORITY. cloud.EdgeCORS decides which browser origins may read
 	// this edge; this takes ai's own answer out of the request.
