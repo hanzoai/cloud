@@ -144,6 +144,20 @@ func run(addr, zapAddr string) error {
 	// simply missing — GET /mcp answered 200 text/html for as long as that lasted.
 	app := zip.New(doorConfig())
 
+	// A lazy child that has served once stays resident forever unless something
+	// stops it, so the pod's process count follows the CATALOG rather than the
+	// traffic — and this fleet's catalog is a hundred subsystems under one
+	// memory cap. The sweep gives that back: an app nobody has called for
+	// manifest.Idle() is stopped, and the next request through its prefix starts
+	// it again by the path that already exists.
+	//
+	// The stop function is bound HERE and deferred, not called through a
+	// deferred call of ReapIdle itself — that form evaluates at defer-run time
+	// and would start the sweep during shutdown, which is the mistake serveWake
+	// records one door over.
+	stopReaping := app.ReapIdle(time.Minute)
+	defer stopReaping()
+
 	// THE POD'S WRITER LEASE, and this is the only process that may take it.
 	//
 	// The lease says "this pod owns this volume", so it belongs to the ROOT of the

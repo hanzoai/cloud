@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/zap-proto/zip"
 )
@@ -171,7 +172,7 @@ func (a App) resolve() zip.Plugin {
 	// An explicit path is honoured as given: the operator named this file, so
 	// silently running something else instead would be a lie.
 	if path := strings.TrimSpace(os.Getenv(env + "_BIN")); path != "" {
-		return zip.Plugin{Name: a.Name, Path: path, Lazy: !a.Eager}
+		return zip.Plugin{Name: a.Name, Path: path, Lazy: !a.Eager, IdleAfter: Idle()}
 	}
 	dir := ""
 	if self, err := os.Executable(); err == nil {
@@ -191,6 +192,23 @@ func (a App) resolve() zip.Plugin {
 
 func found(path string) bool { _, err := os.Stat(path); return err == nil }
 
+// Idle is how long a lazy subsystem may go unused before the host stops its
+// process. The next request through its prefix starts it again, so the host's
+// resident cost tracks the subsystems in USE rather than every one that has
+// ever been called once — which for a fleet this size is the difference
+// between a working set and a catalog.
+//
+// Read here rather than at each resolve site so the three ladder rungs cannot
+// disagree about it. Env CLOUD_PLUGIN_IDLE; zero switches it off.
+func Idle() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("CLOUD_PLUGIN_IDLE")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return 15 * time.Minute
+}
+
 // pluginIn is the sibling-directory half of the ladder, split out because the
 // choice it makes depends on what is ON DISK next to the host — and a test whose
 // answer comes from os.Executable() can only ever see the test binary's own
@@ -201,5 +219,5 @@ func (a App) pluginIn(dir string) zip.Plugin {
 	// <dir>/<name> or it does not resolve on disk at all. A missing one is named
 	// in the failure, because that is the binary a developer expects to have
 	// built (or the release ladder below fills in over the network).
-	return zip.Plugin{Name: a.Name, Path: filepath.Join(dir, a.Name), Lazy: !a.Eager}
+	return zip.Plugin{Name: a.Name, Path: filepath.Join(dir, a.Name), Lazy: !a.Eager, IdleAfter: Idle()}
 }
