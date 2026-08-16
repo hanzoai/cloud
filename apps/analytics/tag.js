@@ -83,9 +83,15 @@
     queue = []
     // sendBeacon cannot set a header, so the key rides the query — the carrier
     // publishable.go ingestKey already reads.
+    //
+    // The body is text/plain because that type is CORS-safelisted, which makes the
+    // POST a SIMPLE request: no preflight, and an unloading document gets no second
+    // round trip. This tag runs on a customer's own domain, so the beacon is always
+    // cross-origin. handle reads the raw body and dispatches on its first non-space
+    // byte, so the type names the CORS class and nothing else.
     if (beacon && navigator.sendBeacon) {
       try {
-        var blob = new Blob([body], { type: 'application/json' })
+        var blob = new Blob([body], { type: 'text/plain' })
         if (navigator.sendBeacon(url + '?ingest_key=' + encodeURIComponent(key), blob)) return
       } catch (e) {}
     }
