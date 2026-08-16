@@ -57,6 +57,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
+	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -173,6 +174,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// cache is live — the GitHub App webhook + backfill (clients/integrations) reach
 	// the todo through it without importing this package (todo.go inversion).
 	registerIssueSink()
+	// The board becomes callable by an agent. Registered here, after the store
+	// cache is live, for the same reason the issue sink is: a provider that can
+	// be listed before it can reach a store would answer its first call with an
+	// error that reads like a missing board.
+	tools.Register(todoToolProvider{})
 	// The same upsert, offered to the process the feeder actually runs in —
 	// integrations holds the GitHub App, and it is not this one (upsert_plane.go).
 	exposeUpsert()
