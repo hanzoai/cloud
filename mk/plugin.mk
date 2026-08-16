@@ -81,11 +81,26 @@ generate: ## Lift this app's typed-handler doc comments into zipdoc_gen.go.
 # up, where the apps are (mk/fleet.mk), which is the level that can actually
 # bound how many links run at once. Measured, the heaviest link in this repo is
 # o11y at 1.67 GB resident; that number is what mk/fleet.mk divides the box by.
+# -trimpath IS THE DIGEST, not a size flag. Measured on plugin/todo: it saves
+# 99 KB (24.88 MB -> 24.78 MB, 0.4%) and removes 146 embedded copies of the
+# absolute source path. The size is incidental; the paths are the point.
+#
+# A published plugin is fetched BY sha256 (manifest/release.go caches on it and
+# never re-downloads a digest it has run). Without -trimpath the binary carries
+# the directory it was built in, so the same source built in the Job's /w/src and
+# in a developer's checkout are different bytes, different digest, and every host
+# re-downloads every plugin on every release even when nothing about that plugin
+# changed. That is the one thing digest-addressing exists to prevent.
+#
+# It is a build FLAG and not GOFLAGS on purpose: mk/fleet.mk's `fan` passes
+# GOFLAGS=-p=N on the make command line, which beats the environment, so a
+# -trimpath parked in GOFLAGS would be silently dropped for every fleet sweep —
+# i.e. for exactly the builds that publish.
 build: generate ## Build this app's binary into <root>/bin.
 	@mkdir -p $(BIN) $(TMPDIR)
 	@for a in $(APPS); do \
 	  echo ">> build $$a$(SUFFIX)"; \
-	  CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN)/$$a$(SUFFIX) $(ROOT)/plugin/$$a || exit 1; \
+	  CGO_ENABLED=$(CGO_ENABLED) $(GO) build -trimpath -ldflags="$(LDFLAGS)" -o $(BIN)/$$a$(SUFFIX) $(ROOT)/plugin/$$a || exit 1; \
 	done
 
 test: ## Run this app's tests.
