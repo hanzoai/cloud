@@ -159,8 +159,8 @@ func TestArtifactJobSpec_ToolchainPerEntryAndCredentialOnlyInPublisher(t *testin
 		t.Fatalf("pod spec: %v", err)
 	}
 	inits, _ := pod["initContainers"].([]any)
-	if len(inits) != 3 {
-		t.Fatalf("initContainers = %d, want 3 (fetch + one per recipe entry)", len(inits))
+	if len(inits) != 4 {
+		t.Fatalf("initContainers = %d, want 4 (fetch + deps + one per recipe entry)", len(inits))
 	}
 
 	// [0] is the FETCH, and it is the only container holding a git credential.
@@ -194,15 +194,33 @@ func TestArtifactJobSpec_ToolchainPerEntryAndCredentialOnlyInPublisher(t *testin
 		t.Error("the token must not be embedded in the remote URL — it would persist to .git/config on the shared volume")
 	}
 
-	// [1..] run the RECIPE, and carry no secret at all.
+	// [1] is DEPS: the second and last credentialed container, and like the fetch
+	// it runs a constant image and a constant script. Its HOME must not be the
+	// shared volume — `git config --global` would write the token there, where
+	// every recipe container could read it.
+	deps := inits[1].(map[string]any)
+	if deps["name"] != "deps" || deps["image"] != defaultToolchainImage {
+		t.Fatalf("initContainer[1] = %v/%v, want the deps step on the constant toolchain", deps["name"], deps["image"])
+	}
+	if got := deps["command"].([]any)[2]; got != artifactDepsScript {
+		t.Error("deps must run the constant deps script, nothing recipe-supplied")
+	}
+	for _, e := range deps["env"].([]any) {
+		m := e.(map[string]any)
+		if m["name"] == "HOME" && m["value"] == "/w" {
+			t.Error("deps HOME must not be the shared volume — git config --global would leak the token onto it")
+		}
+	}
+
+	// [2..] run the RECIPE, and carry no secret at all.
 	for i, want := range []string{defaultToolchainImage, "docker.io/library/node:22-bookworm"} {
-		c := inits[i+1].(map[string]any)
+		c := inits[i+2].(map[string]any)
 		if c["image"] != want {
-			t.Errorf("initContainer[%d] image = %v, want %s", i+1, c["image"], want)
+			t.Errorf("initContainer[%d] image = %v, want %s", i+2, c["image"], want)
 		}
 		for _, e := range c["env"].([]any) {
 			if _, secret := e.(map[string]any)["valueFrom"]; secret {
-				t.Errorf("initContainer[%d] (runs the recipe) must carry NO secret env: %v", i+1, e)
+				t.Errorf("initContainer[%d] (runs the recipe) must carry NO secret env: %v", i+2, e)
 			}
 		}
 	}
