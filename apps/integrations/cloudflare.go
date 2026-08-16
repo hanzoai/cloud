@@ -55,6 +55,11 @@ const (
 // fabricated success.
 var cloudflareScopes = []string{
 	"Zone:DNS:Edit", "Zone:Read", "Zone:Analytics:Read",
+	// Cache Purge backs the edge in front of every published site: a deploy
+	// invalidates by cache-tag so the release is live immediately instead of
+	// after the TTL. Added under the rule above rather than against it — the
+	// endpoint is callable now (apps/sites/cloudflare), so the scope is earned.
+	"Zone:Cache Purge",
 	"Account:Cloudflare Pages:Edit",
 	"Account:Workers Scripts:Edit", "Zone:Workers Routes:Edit",
 	"Account:Workers R2 Storage:Edit", "Account:Workers KV Storage:Edit",
