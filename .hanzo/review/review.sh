@@ -57,7 +57,6 @@ generated=(
   ':(exclude)openapi.yaml' ':(exclude)public.yaml'
   ':(exclude)openapi/floor.json' ':(exclude)openapi/closure.json'
   ':(exclude)fleet/catalog.json' ':(exclude)plugin/*/openapi.json'
-  ':(exclude)apps/skills/catalog/*'
 )
 
 diff_file=$(mktemp); trap 'rm -f "$diff_file" "${req:-}" "${resp:-}" 2>/dev/null' EXIT
