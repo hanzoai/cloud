@@ -3,3 +3,10 @@ node_modules/
 *.test
 /cloud
 /.dev/
+
+# Key material a local run writes beside the binary. Secrets belong in KMS, and
+# this repo's main is published — an `add -A` here puts a data encryption key on
+# a public remote.
+*.dek
+*.cek
+*.cek.lock
