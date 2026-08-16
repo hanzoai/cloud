@@ -13,7 +13,7 @@ import "context"
 // Declared HERE, by the consumer, for the same reason `apps/domain` declares
 // Registrar and Zones next to the code that calls them rather than next to
 // name.com: the interface belongs to whoever depends on it, so a second provider
-// is a new implementation and not an edit to this file. CloudflareEdge is the
+// is a new implementation and not an edit to this file. cloudflare.Edge is the
 // first one; a site served through another CDN, or through none, satisfies this
 // with its own type and `apps/sites` does not change.
 //
@@ -59,3 +59,17 @@ type NoEdge struct{}
 func (NoEdge) PurgeTags(context.Context, ...string) error { return nil }
 func (NoEdge) Configured() bool                           { return false }
 func (NoEdge) EnsureVerbatim(context.Context)             {}
+
+// CacheTag is the ONE canonical edge cache-tag for a project's site objects. The
+// site server (streamSite) emits it as the Cache-Tag response header on every
+// served object; the edge targets it on deploy, domain-bind, delete, and the
+// dedicated POST .../purge. Both derive it from server-owned Org+Slug so the
+// emitted tag and the purged tag never diverge.
+//
+// It lives HERE, with the interface, because it is the vocabulary the two sides
+// share rather than anything a provider decides: the server stamps the tag and
+// the edge purges it, and a tag format that lived with one of them would be a
+// contract only half the code could see. It followed the first provider into
+// its own package for a moment and the compiler caught it, which is the seam
+// doing its job — the shared word belongs to the seam.
+func CacheTag(org, slug string) string { return "site-" + org + "-" + slug }
