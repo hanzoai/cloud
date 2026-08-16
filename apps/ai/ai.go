@@ -192,7 +192,13 @@ func debitOverPlane(ctx context.Context, u aiobject.UsageEvent) error {
 // line that already watches this seam.
 func record(money aiobject.UsageRecorderFunc) aiobject.UsageRecorderFunc {
 	return func(ctx context.Context, u aiobject.UsageEvent) error {
-		return errors.Join(countFree(ctx, u), money(ctx, u))
+		// BOTH HALVES ALWAYS RUN. A count that cannot land must not hold back a debit,
+		// and a debit that fails must not quietly drop a count.
+		count, paid := countFree(ctx, u), money(ctx, u)
+		if count == nil {
+			return paid // a call that counted nothing answers with the debit's own error
+		}
+		return errors.Join(count, paid)
 	}
 }
 
