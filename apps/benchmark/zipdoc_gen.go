@@ -64,6 +64,7 @@ func init() {
 		Fields: map[string]string{
 			"LeaderRow.claims":         "Claims is how many independent claims exist for this model on this\nbenchmark. More than one means several sources reported it.",
 			"LeaderRow.gap":            "published − measured (the arena signal)",
+			"LeaderRow.mean":           "Mean is the unweighted average of every claim, which answers a different\nquestion from Published: what the field says on average, rather than what\nthe vendor says about itself. With one claim the two are equal.",
 			"LeaderRow.measured":       "hanzo-measured accuracy % (nil if unrun)",
 			"LeaderRow.model":          "the model this row scores",
 			"LeaderRow.n":              "coverage — NEVER compare across different n",
