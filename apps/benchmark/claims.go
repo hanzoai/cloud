@@ -208,6 +208,28 @@ func selectClaim(cs []publishedClaim) (publishedClaim, bool) {
 	return best, ok
 }
 
+// claimMean is the average of every claim for a model, and it is a DIFFERENT
+// number from the selected one on purpose. Published answers "what does the
+// vendor say"; Mean answers "what does the field say on average", which is the
+// more honest summary when several independent sources have measured the same
+// model and disagree.
+//
+// Unweighted. Weighting by source would require ranking the sources, and this
+// arena's position is that a claim is checked against a MEASUREMENT rather than
+// against an opinion of who reports carefully — so every reading counts once and
+// the spread beside it says how much they diverge.
+func claimMean(cs []publishedClaim) *float64 {
+	if len(cs) == 0 {
+		return nil
+	}
+	var sum float64
+	for _, c := range cs {
+		sum += c.Score
+	}
+	m := sum / float64(len(cs))
+	return &m
+}
+
 // claimSpread is the distance between the highest and lowest claim for a model,
 // and it is nil when there is only one. It is the disagreement among sources,
 // which a reader cannot infer from a single selected number.

@@ -65,3 +65,33 @@ func TestASecondSourceIsKeptAndARestatementReplaces(t *testing.T) {
 		t.Errorf("rows on disk = %d, want 2 — append-only keeps the superseded value", n)
 	}
 }
+
+// Published, Mean and Spread answer three different questions and must not be
+// confused: what the vendor says, what the field says on average, and how far
+// apart the readings are.
+func TestMeanIsNotTheSelectedClaim(t *testing.T) {
+	cs := []publishedClaim{
+		{Benchmark: "gpqa_diamond", Model: "m", Score: 94.0, Protocol: "provider-reported", Source: "card"},
+		{Benchmark: "gpqa_diamond", Model: "m", Score: 88.0, Protocol: "third-party-leaderboard", Source: "aa"},
+		{Benchmark: "gpqa_diamond", Model: "m", Score: 90.0, Protocol: "third-party-leaderboard", Source: "vals"},
+	}
+	sel, _ := selectClaim(cs)
+	if sel.Score != 94.0 {
+		t.Errorf("selected %v, want the provider claim 94", sel.Score)
+	}
+	if m := claimMean(cs); m == nil || *m < 90.6 || *m > 90.7 {
+		t.Errorf("mean = %v, want ~90.67", m)
+	}
+	if sp := claimSpread(cs); sp == nil || *sp != 6 {
+		t.Errorf("spread = %v, want 6", sp)
+	}
+	// A single claim collapses all three to the same number, which is correct
+	// and is why Mean is omitempty rather than always rendered.
+	one := cs[:1]
+	if m := claimMean(one); m == nil || *m != 94.0 {
+		t.Errorf("single-claim mean = %v, want 94", m)
+	}
+	if claimSpread(one) != nil {
+		t.Error("a single claim has no spread")
+	}
+}
