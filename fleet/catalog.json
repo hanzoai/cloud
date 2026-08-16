@@ -3572,7 +3572,7 @@
   },
   {
    "id": "get_compliance_audit",
-   "doc": "AuditRead is the compliance-scoped read of the SHARED tamper-evident audit plane —\nthe SOC 2 posture surface (privileged actions: who started/decided what, when). The\norg is PINNED to the caller's validated org and the rows are narrowed to\ncompliance.* actions. Fail-closed: no principal is a 403, no configured audit\nstore a 501."
+   "doc": "AuditRead is the compliance read of the SHARED tamper-evident audit plane —\nthe SOC 2 posture surface (privileged actions: who started/decided what, when). The\norg is PINNED to the caller's validated org and the rows are narrowed to\ncompliance.* actions. Fail-closed: no principal is a 403, no configured audit\nstore a 501."
   },
   {
    "id": "get_compliance_health",

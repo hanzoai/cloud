@@ -3,7 +3,7 @@
 //
 // It mounts the ORG-SCOPED operations surface (/v1/compliance): the company's own
 // KYC/KYB onboarding verification, accreditation STATE TRACKING, and a
-// compliance-scoped read of the tamper-evident audit trail (the SOC 2 posture
+// compliance read of the tamper-evident audit trail (the SOC 2 posture
 // surface). It is the platform TOOLING a company's compliance team uses to
 // orchestrate licensed verification providers and keep an evidence trail — with
 // professionals in the loop.
