@@ -1,6 +1,6 @@
 {
-  "paths": 1826,
-  "operations": 2492,
+  "paths": 1827,
+  "operations": 2493,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -22,7 +22,7 @@
     "balancers": 4,
     "base": 1,
     "benchmark": 6,
-    "billing": 43,
+    "billing": 44,
     "blueprint": 3,
     "books": 25,
     "bot": 9,
