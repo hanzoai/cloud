@@ -981,10 +981,16 @@ jobs:
             | jq -r '.accessToken // empty' || true)
           [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
 
+          # The path is the app that READS the secret (HIP-0136), and this bearer is
+          # read by PLATFORM: it is seeded at hanzo/prod/platform and synced from
+          # there onto platform-app (infra/k8s/kms-canonical-crs/hanzo/
+          # platform-app-kms-sync.yaml). It was written as deploy/ here by copying
+          # the pin-token step above, where deploy/ is right because the DEPLOY step
+          # is what reads THAT one. Same shape, different reader, different path.
           BUILD_TOKEN=$(curl -sS \
-            "${KMS_ENDPOINT}/v1/kms/secrets/deploy/PLATFORM_BUILD_CALLBACK_TOKEN?env=${KMS_SECRET_ENV}" \
+            "${KMS_ENDPOINT}/v1/kms/secrets/platform/PLATFORM_BUILD_CALLBACK_TOKEN?env=${KMS_SECRET_ENV}" \
             -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
-          [ -n "$BUILD_TOKEN" ] || { echo "::error::PLATFORM_BUILD_CALLBACK_TOKEN missing in KMS at deploy/ (env ${KMS_SECRET_ENV}, org from the KMS credential)"; exit 1; }
+          [ -n "$BUILD_TOKEN" ] || { echo "::error::PLATFORM_BUILD_CALLBACK_TOKEN missing in KMS at platform/ (env ${KMS_SECRET_ENV}, org from the KMS credential)"; exit 1; }
           echo "::add-mask::${BUILD_TOKEN}"
 
           # ONE recipe entry, not 121: the app set lives in manifest/apps.go and
