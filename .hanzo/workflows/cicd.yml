@@ -2,7 +2,7 @@ name: CI/CD
 # THE RELEASE TRAIN. One workflow, one graph, one release.
 #
 #   gate ──┐
-#          ├─→ image ─→ rollout ─→ reach ─→ fanout ─→ receipt
+#          ├─→ image ─→ live ─→ reach ─→ fanout ─→ receipt
 #   containment ─┘
 #
 # THE LAW: `.github/workflows` holds exactly one file — a sync nudge that runs
@@ -40,7 +40,8 @@ name: CI/CD
 # IT DOES NOT ROLL BACK. IT BLOCKS AND RESUMES. You cannot unpublish a package
 # version, so the cars are ordered by irreversibility — in-repo (gate) → registry
 # but unnamed (image; the TAG is minted only after smoke, so a tag can never name
-# an image that did not boot) → production (rollout) → the outside world (fanout).
+# an image that did not boot, and the pin moves in the same breath) → the outside
+# world (fanout).
 # Every car is idempotent on (version, digest): re-running at the same sha reuses
 # the same version, re-probes instead of re-pushing, and treats "already there,
 # same bytes" as success. A failed car leaves a hole in the receipt, and the
@@ -67,46 +68,34 @@ on:
   pull_request:
   # On-demand rebuild, and the RESUME entry point. A release that failed at
   # fanout is resumed by dispatching this workflow at the same sha: image and
-  # rollout recognise their own receipts and no-op in seconds, and the failed car
+  # live recognise their own receipts and no-op in seconds, and the failed car
   # runs again. It is also how sync-from-github.yml starts this after a
   # fast-forward — a push made with the workflow token fires no workflows.
   workflow_dispatch:
 concurrency:
-  # ONE release at a time, queued not cancelled: the image is pushed early and
-  # the tag and pin come last, so killing a run midway leaves an orphan — ten of
-  # them between v1.801.335 and v1.801.350. A pull request gets a slot of its
-  # own, so it neither queues behind a release nor holds one up, and a new push
-  # to it cancels its own stale run.
+  # Releases share one slot; each pull request gets its own, so a PR neither
+  # queues behind a release nor holds one up. Coalescing releases is deliberate:
+  # pushes arrive faster than a ~35-minute gate, and nobody wants an image per
+  # intermediate commit.
   #
-  # Two earlier readings of this are worth not repeating, because both blamed the
-  # setting and the setting was never what acted. One argued cancel-in-progress
-  # was "a literal false the forge cannot evaluate, and a non-empty string is
-  # truthy"; the other argued the cancelled runs "were superseded while still
-  # QUEUED, so cancel-in-progress was never the thing acting on them". The second
-  # is right about the mechanism and neither found the cause, which is one line
-  # lower and is the GROUP, not the flag.
-  # ── THE GROUP MUST NOT BE KEYED ON A VALUE THIS FORGE DOES NOT SET ──────────
+  # ── WHAT cancel-in-progress DOES NOT MEAN ───────────────────────────────────
   #
-  # It was `cicd-${{ github.ref }}`, and act_runner leaves the ref EMPTY: the API
-  # returns head_branch null and no ref field on ordinary pushes to main. So the
-  # group rendered as the constant `cicd-` and EVERY run in the repository — main
-  # pushes, pull requests, tag pushes — shared ONE slot.
+  # It does not mean "do not cancel". It selects which statuses a newer run in
+  # the same group sweeps: models/actions/run.go builds the kill list as
+  # {waiting, blocked} and adds {running, cancelling} ONLY when the flag is true.
+  # Jobs that have not started are forfeit to the newer run either way.
   #
-  # That is the mechanism behind the cancellations above, and it is not the
-  # cancel-in-progress setting the paragraphs above blame. Gitea coalesces a
-  # concurrency queue to depth one: an in-progress run is left alone (which is
-  # what cancel-in-progress: false buys), but a QUEUED run is cancelled when a
-  # newer one arrives for the same group. That is correct behaviour — nobody
-  # wants an image per intermediate commit — and it only became destructive
-  # because one constant group meant every pull request coalesced away the
-  # release queued behind it, and vice versa. The tell is in the API: those runs
-  # carry started_at 1970-01-01, so they were never given a runner at all.
+  # A run holds the slot only while some job is literally executing — the
+  # attempt's status is an aggregate over its jobs — so the moment one car
+  # finishes and the next is still waiting for a runner, the run simultaneously
+  # stops blocking newer runs and becomes eligible for that sweep. Finished jobs
+  # keep their result; the rest of the train is cancelled where it stands.
   #
-  # Keyed properly, the original intent holds without depending on the ref.
-  # Releases share one slot and queue; each pull request gets its own slot and a
-  # new push to it cancels only its own stale run. cancel-in-progress is now an
-  # expression that evaluates to a real boolean rather than a literal whose
-  # truthiness was being argued about.
+  # THE CONSEQUENCE, AND IT IS THE REASON THE PIN SITS WHERE IT DOES: a car that
+  # has not started yet is not a place to put work whose loss costs a deploy. No
+  # setting here can protect it, because the flag that reads as if it would only
+  # ever governed the cars that are already running. So the pin is a step of the
+  # job that proves the image rather than a car of its own — see `image`.
   group: cicd-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'release' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -436,7 +425,7 @@ jobs:
     #
     # Skipped, not failed, is the entire reason this was invisible. Run 38052
     # (7fbafa54a) is the proof: gate success, containment success, and then
-    # image/rollout/reach/fanout/receipt all `skipped`. A green tick on a run
+    # image/live/reach/fanout/receipt all `skipped`. A green tick on a run
     # that shipped nothing, with no error anywhere to read. That is "the gate is
     # green and nothing ships", and it had outlasted several fixes aimed at the
     # gate, which was never the thing failing.
@@ -457,8 +446,8 @@ jobs:
       version: ${{ steps.ver.outputs.version }}
       spec_sha256: ${{ steps.ver.outputs.spec_sha256 }}
       # THE BYTES, named by what they are rather than by what they are called. A
-      # tag is a name a registry can move; a digest is the content. rollout pins
-      # this and refuses to pin anything else.
+      # tag is a name a registry can move; a digest is the content. The pin names
+      # this and nothing else.
       digest: ${{ steps.img.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
@@ -575,7 +564,7 @@ jobs:
           # else here — the registry probe, the tag list, the max() — is a
           # READ, and a read cannot reserve anything.
           #
-          # The claim used to be taken LAST, by rollout's "Tag the release",
+          # The claim used to be taken LAST, by the deploy car's "Tag the release",
           # a whole ~20-minute build after the 404 probe that stood in for it.
           # Two lanes starting inside that window both probed 404, both built,
           # and both pushed — and A GHCR TAG IS MUTABLE, so the second push
@@ -662,7 +651,7 @@ jobs:
           # IT ANSWERS ONE QUESTION AND IT USED TO ANSWER TWO. This flag was
           # called `resumed`, and the smoke step was skipped on it — so a run that
           # PUSHED and then FAILED smoke came back, found its own bytes, declared
-          # itself resumed, and skipped both the build and the proof. rollout then
+          # itself resumed, and skipped both the build and the proof. The pin then
           # pinned an image nothing had ever booted. The registry is the authority
           # on whether bytes exist and it is the authority on nothing else: AN
           # ARTIFACT EXISTING PROVES IT WAS BUILT, NEVER THAT IT WAS TESTED.
@@ -787,7 +776,7 @@ jobs:
           echo "$img is built from ${{ github.sha }} — tag, commit and image agree"
 
           # THE DIGEST. Read from the registry's own Docker-Content-Digest, the
-          # same header universe/charts/app/pin.sh reads, so rollout can compare
+          # same header universe/charts/app/pin.sh reads, so the pin step can compare
           # what it pinned against what this run smoked without either side
           # deriving the value a second way.
           TOKEN=$(curl -fsSL -u "$GHCR_USER:$GHCR_TOKEN" \
@@ -841,7 +830,7 @@ jobs:
       # IT RUNS ON `smoked`, NEVER ON `built`, AND THE DIFFERENCE IS A RELEASE.
       # These were one flag: skip the build, skip the proof. A run that pushed and
       # then failed here came back, saw its own bytes in the registry, and skipped
-      # BOTH — handing rollout an image nothing had ever booted, with every job
+      # BOTH — pinning an image nothing had ever booted, with every job
       # green. The two conditions coincide exactly once, on a first pass. On every
       # resume they differ, and the resume is the only case this branch exists for.
       #
@@ -917,10 +906,9 @@ jobs:
           fi
 
       # NOTHING LEAVES THIS JOB UNSMOKED, re-asked of the authority rather than
-      # remembered from a step output. Cheap, and it is the assertion `rollout`
-      # would otherwise have to trust: every later car declares `needs: image`, so
-      # this is the last place the question can still be answered before an
-      # unproven image becomes a pin.
+      # remembered from a step output. Cheap, and it is the assertion the pin below
+      # would otherwise have to trust: this is the last place the question can
+      # still be answered before an unproven image becomes a pin.
       - name: These bytes have a smoke receipt
         env:
           FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
@@ -931,10 +919,130 @@ jobs:
             || { echo "::error::no smoke receipt for ${{ steps.img.outputs.digest }} — these bytes have never been proven to boot. Nothing downstream may pin them."; exit 1; }
           echo "${{ steps.img.outputs.digest }} is smoked"
 
+      # THE TAG IS NOT MINTED HERE — it was claimed before the build, as the
+      # compare-and-swap that made this version this run's to build (see the claim
+      # step above). What remains is the assertion that nothing moved underneath
+      # us. A git tag is not mutable by accident, so this is expected to be quiet;
+      # it is here because the one thing worse than a moved tag is a moved tag that
+      # shipped.
+      - name: The claimed tag still names this commit
+        env:
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="v${{ steps.ver.outputs.version }}"
+          HAVE=$(curl -fsS -H "Authorization: token ${FORGE_TOKEN}" \
+            "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/tags/${TAG}" | jq -r '.commit.sha // empty')
+          if [ -z "$HAVE" ]; then
+            echo "::error::${TAG} was claimed by this run but no longer exists — refusing to ship a release whose receipt was deleted"; exit 1
+          fi
+          if [ "$HAVE" != "${{ github.sha }}" ]; then
+            echo "::error::${TAG} now names ${HAVE}, not ${{ github.sha }} — the claim was overwritten. Nothing here may pin."; exit 1
+          fi
+          echo "${TAG} names ${{ github.sha }}, as claimed"
+
+      # ══ THE PIN ══ THE LAST ACT OF THE JOB THAT PROVED THE BYTES.
+      #
+      # cd.hanzo.ai watches hanzoai/universe, not the registry, so an image nothing
+      # points at is just bytes in ghcr. Moving that pointer used to be the first
+      # step of the NEXT job, and the gap between the two was schedulable: a job
+      # that has not started can be cancelled, and the last job of a long run is
+      # the one a newer push reaches first. v1.801.543 and .544 each built, smoked
+      # and tagged, then lost that job — production served .542 for three and a
+      # half hours with proven images sitting unreferenced in the registry.
+      #
+      # A gap that only sometimes loses the release is worse than one that always
+      # does, so it is not narrowed here, it is removed: the step that proves an
+      # image and the step that points at it are in one job, with nothing
+      # schedulable between them. Whatever the queue does to this run afterwards,
+      # the pin has already moved.
+      #
+      # pin.sh takes a VERSION, not an image: it reads the repository from the
+      # values file, resolves tag and digest in one registry answer, and refuses to
+      # go backward. See universe/charts/app/pin.sh for what else it refuses.
+      - name: Point production at these bytes
+        env:
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
+          # pin.sh probes the registry before it moves anything; these let it read
+          # a private manifest instead of falling back to anonymous.
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          # Secrets come from KMS, never from a file or a repo variable.
+          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
+            | jq -r '.accessToken // empty' || true)
+          [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
+
+          # THERE IS NO ORG IN A KMS PATH. The store root comes from the validated
+          # claim, so the org is the credential's, not the URL's — that is what
+          # makes another tenant's secret unnameable rather than merely refused.
+          PIN_TOKEN=$(curl -sS \
+            "${KMS_ENDPOINT}/v1/kms/secrets/deploy/UNIVERSE_PIN_TOKEN?env=${KMS_SECRET_ENV}" \
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
+          [ -n "$PIN_TOKEN" ] || { echo "::error::UNIVERSE_PIN_TOKEN missing in KMS at deploy/ (env ${KMS_SECRET_ENV}, org from the KMS credential)"; exit 1; }
+          echo "::add-mask::${PIN_TOKEN}"
+
+          git clone --quiet --depth 1 \
+            "https://x-access-token:${PIN_TOKEN}@git.hanzo.ai/hanzo/universe" /tmp/universe
+
+          # Another service can land its own pin between our clone and our push.
+          # A shallow clone has no common history to rebase onto, so RE-APPLY
+          # rather than merge. Pinning is idempotent and derives everything from
+          # the file it finds, so the retry also re-checks the monotonic guard.
+          for attempt in 1 2 3 4 5; do
+            # Releases overlap — the claim hands out version numbers in order, but
+            # nothing makes the builds finish in that order — so this can arrive at
+            # a universe already carrying a LATER cloud. pin.sh answers 3 for that
+            # and only that: production is past us, which is what a release wants,
+            # so it is this step's success and not its failure. Any other non-zero
+            # is a real refusal and still ends the run.
+            set +e
+            /tmp/universe/charts/app/pin.sh cloud "$VERSION"
+            pinned=$?
+            set -e
+            if [ "$pinned" = 3 ]; then
+              echo "a later release already carried production past v${VERSION}"; exit 0
+            fi
+            [ "$pinned" = 0 ] || exit "$pinned"
+
+            # THE PIN MUST NAME THE BYTES WE SMOKED. charts/app/_helpers.tpl builds
+            # `repo:tag@digest`, and in that form the registry resolves the DIGEST
+            # and the tag is prose a human reads — so a values file whose tag moved
+            # and whose digest did not deploys the old image and reports success.
+            # pin.sh writes both from one lookup and cannot write one alone, but
+            # what it wrote is still a claim about a name, made seconds after this
+            # run proved something about bytes. Compare them: they are the same
+            # image or this release does not ship.
+            PINNED=$(sed -n 's/^[[:space:]]*digest:[[:space:]]*//p' \
+              /tmp/universe/charts/app/values/hanzo/cloud.yaml | head -1)
+            if [ "$PINNED" != "${{ steps.img.outputs.digest }}" ]; then
+              echo "::error::pinned cloud.yaml names ${PINNED:-no digest}, but the bytes this run smoked are ${{ steps.img.outputs.digest }}. v${VERSION} resolved to a different image between the smoke and the pin — refusing to deploy an image nothing proved."
+              exit 1
+            fi
+            echo "pin names ${PINNED} — the digest this run smoked"
+
+            if git -C /tmp/universe push --quiet origin HEAD:main 2>/dev/null; then
+              echo "pinned cloud to v${VERSION} @ ${PINNED}"; exit 0
+            fi
+
+            echo "universe moved under us (attempt ${attempt}/5) — re-applying on the new tip"
+            git -C /tmp/universe fetch --quiet --depth 1 origin main
+            git -C /tmp/universe reset --hard --quiet FETCH_HEAD
+          done
+          echo "::error::could not push the pin after 5 attempts"; exit 1
+
   # ══ NOT A CAR ══ THE PLUGIN SET, PUBLISHED BESIDE THE IMAGE.
   #
   # NOTHING `needs:` THIS, DELIBERATELY. It hangs off `image` for the version and
-  # runs alongside rollout, so a slow or failed plugin publish can never hold a
+  # runs alongside live, so a slow or failed plugin publish can never hold a
   # release — which is the whole point of a light host, and the reason this is not
   # a car. It still FAILS LOUDLY when the index does not appear: a job nobody
   # depends on going red is a signal someone reads, and a silent publish is how a
@@ -959,7 +1067,7 @@ jobs:
   # is refused 400 `host "git.hanzo.ai" is not an allowed git provider`. The lever
   # is CLOUD_PLATFORM_GIT_HOSTS, which REPLACES the default set, so it must name
   # the four defaults AND the forge; it is set in hanzoai/universe
-  # charts/app/values/hanzo/cloud.yaml and takes effect at the next rollout.
+  # charts/app/values/hanzo/cloud.yaml and takes effect at the next pin.
   # Both halves are pinned by apps/platform/artifact_test.go — the accepted recipe
   # and the refusal — so neither this job nor that env var can drift silently.
   plugins:
@@ -1039,120 +1147,26 @@ jobs:
           echo "::error::${index} never appeared (40 min). The release SHIPPED — nothing depends on this job — but a host with no baked plugins has no index for v${VERSION}."
           exit 1
 
-  # ══ CAR 2 ══ ROLL OUT, AND PROVE IT IS LIVE.
+  # ══ CAR 2 ══ PRODUCTION IS SERVING IT.
   #
-  # The train used to stop at "pin pushed". A pin is not a release — the RUNNING
-  # VERSION is — and every car below describes a system to the outside world, so
-  # each one must key off what is deployed or it describes something that is not
-  # there.
-  rollout:
+  # THE PIN IS NOT HERE. It is the last step of `image`, beside the smoke that
+  # earns it — see that job's tail for why the two must not be separable. What is
+  # left here is the WAIT, and it is a separate car precisely because it is the
+  # part that is safe to lose: cancelling a probe costs a receipt, cancelling a
+  # pin costs a deploy.
+  #
+  # A pin is not a release either — the RUNNING VERSION is — and every car below
+  # describes a system to the outside world, so each must key off what is
+  # deployed or it describes something that is not there.
+  live:
     needs: image
     runs-on: [hanzo-build-linux-amd64]
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-
-      # THE TAG IS NOT MINTED HERE ANY MORE — it was claimed before the build, as
-      # the compare-and-swap that made this version this run's to build (see the
-      # `image` job's claim step). Minting it here was the bug: for the whole
-      # length of a build, a number was "taken" only in the sense that a lane
-      # INTENDED to take it, and two lanes intending the same number both pushed
-      # images before either reached this step. The winner's tag then named the
-      # loser's bytes, and the loser died here — after the damage.
-      #
-      # What remains is the assertion that nothing moved underneath us. A git tag
-      # is not mutable by accident, so this is expected to be quiet; it is here
-      # because the one thing worse than a moved tag is a moved tag that shipped.
-      - name: The claimed tag still names this commit
-        env:
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG="v${{ needs.image.outputs.version }}"
-          HAVE=$(curl -fsS -H "Authorization: token ${FORGE_TOKEN}" \
-            "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/tags/${TAG}" | jq -r '.commit.sha // empty')
-          if [ -z "$HAVE" ]; then
-            echo "::error::${TAG} was claimed by this run but no longer exists — refusing to ship a release whose receipt was deleted"; exit 1
-          fi
-          if [ "$HAVE" != "${{ github.sha }}" ]; then
-            echo "::error::${TAG} now names ${HAVE}, not ${{ github.sha }} — the claim was overwritten. Nothing here may pin."; exit 1
-          fi
-          echo "${TAG} names ${{ github.sha }}, as claimed"
-
-      # THE DEPLOY. cd.hanzo.ai watches hanzoai/universe, not the registry, so an
-      # image nothing points at is just bytes in ghcr.
-      - name: Ship it
-        env:
-          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
-          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
-          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
-          KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
-          # pin.sh probes the registry before it moves anything; these let it read
-          # a private manifest instead of falling back to anonymous.
-          GHCR_USER: ${{ secrets.GHCR_USER }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-        run: |
-          set -euo pipefail
-          VERSION="${{ needs.image.outputs.version }}"
-
-          # Secrets come from KMS, never from a file or a repo variable.
-          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
-            -H 'Content-Type: application/json' \
-            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
-            | jq -r '.accessToken // empty' || true)
-          [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
-
-          # THERE IS NO ORG IN A KMS PATH. The store root comes from the validated
-          # claim, so the org is the credential's, not the URL's — that is what
-          # makes another tenant's secret unnameable rather than merely refused.
-          # This asked for /v1/kms/orgs/<org>/secrets/... which is not a route the
-          # broker has, so it 404'd on every release since the car was written.
-          PIN_TOKEN=$(curl -sS \
-            "${KMS_ENDPOINT}/v1/kms/secrets/deploy/UNIVERSE_PIN_TOKEN?env=${KMS_SECRET_ENV}" \
-            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
-          [ -n "$PIN_TOKEN" ] || { echo "::error::UNIVERSE_PIN_TOKEN missing in KMS at deploy/ (env ${KMS_SECRET_ENV}, org from the KMS credential)"; exit 1; }
-          echo "::add-mask::${PIN_TOKEN}"
-
-          git clone --quiet --depth 1 \
-            "https://x-access-token:${PIN_TOKEN}@git.hanzo.ai/hanzo/universe" /tmp/universe
-
-          # Another service can land its own pin between our clone and our push.
-          # A shallow clone has no common history to rebase onto, so RE-APPLY
-          # rather than merge. Pinning is idempotent and derives everything from
-          # the file it finds, so the retry also re-checks the monotonic guard.
-          for attempt in 1 2 3 4 5; do
-            /tmp/universe/charts/app/pin.sh cloud "$VERSION"
-
-            # THE PIN MUST NAME THE BYTES WE SMOKED. charts/app/_helpers.tpl builds
-            # `repo:tag@digest`, and in that form the registry resolves the DIGEST
-            # and the tag is prose a human reads — so a values file whose tag moved
-            # and whose digest did not deploys the old image and reports success.
-            # pin.sh writes both from one lookup and cannot write one alone, but
-            # what it wrote is still a claim about a name, made seconds after this
-            # run proved something about bytes. Compare them: they are the same
-            # image or this release does not ship.
-            PINNED=$(sed -n 's/^[[:space:]]*digest:[[:space:]]*//p' \
-              /tmp/universe/charts/app/values/hanzo/cloud.yaml | head -1)
-            if [ "$PINNED" != "${{ needs.image.outputs.digest }}" ]; then
-              echo "::error::pinned cloud.yaml names ${PINNED:-no digest}, but the bytes this run smoked are ${{ needs.image.outputs.digest }}. v${VERSION} resolved to a different image between the smoke and the pin — refusing to deploy an image nothing proved."
-              exit 1
-            fi
-            echo "pin names ${PINNED} — the digest this run smoked"
-
-            if git -C /tmp/universe push --quiet origin HEAD:main 2>/dev/null; then
-              echo "pinned cloud to v${VERSION} @ ${PINNED}"; exit 0
-            fi
-
-            echo "universe moved under us (attempt ${attempt}/5) — re-applying on the new tip"
-            git -C /tmp/universe fetch --quiet --depth 1 origin main
-            git -C /tmp/universe reset --hard --quiet FETCH_HEAD
-          done
-          echo "::error::could not push the pin after 5 attempts"; exit 1
-
-      # THE PIN IS NOT THE RELEASE. cd.hanzo.ai reconciles on its own schedule,
-      # so between the pin and the running pod there is a window in which every
-      # car below would describe the PREVIOUS version. Wait for the header the
-      # image itself reports, and refuse to fan out if it never arrives.
+      # cd.hanzo.ai reconciles on its own schedule, so between the pin and the
+      # running pod there is a window in which every car below would describe the
+      # PREVIOUS version. Wait for the header the image itself reports, and refuse
+      # to fan out if it never arrives.
       - name: Prove the release is live
         run: |
           set -euo pipefail
@@ -1161,6 +1175,16 @@ jobs:
             GOT=$(curl -fsSI https://api.hanzo.ai/v1/health 2>/dev/null \
               | tr -d '\r' | sed -n 's/^[Xx]-[Aa]pi-[Vv]ersion: *//p' | head -1 || true)
             if [ "$GOT" = "$WANT" ]; then echo "api.hanzo.ai is serving ${WANT} after $((i*10))s"; exit 0; fi
+            # The question is whether production is OLDER than this release, not
+            # whether it is exactly this release. Releases overlap and cd converges
+            # on the newest pin, so a run that is overtaken between its pin and this
+            # probe would otherwise wait out the full twenty minutes for a version
+            # nothing will ever serve again — and report a release that did reach
+            # production as one that did not.
+            if [ -n "$GOT" ] && [ "${GOT#v}" != "${WANT#v}" ] \
+               && [ "$(printf '%s\n%s\n' "${GOT#v}" "${WANT#v}" | sort -V | head -1)" = "${WANT#v}" ]; then
+              echo "api.hanzo.ai is serving ${GOT}, which is past ${WANT} — a later release reached production first"; exit 0
+            fi
             sleep 10
           done
           echo "::error::api.hanzo.ai never reported ${WANT} (last saw '${GOT:-none}'). The image is published, tagged and pinned; cd.hanzo.ai has not reconciled it. Nothing downstream may describe a version that is not running — re-run this workflow at the same sha to resume once it has."
@@ -1175,7 +1199,7 @@ jobs:
   # tool in the MCP list and a command in the CLI, so a dark address is a call
   # every client offers and no caller can make.
   reach:
-    needs: [image, rollout]
+    needs: [image, live]
     runs-on: [hanzo-build-linux-amd64]
     timeout-minutes: 20
     steps:
@@ -1260,7 +1284,7 @@ jobs:
   # but it has `workflow_dispatch`, and the receivers already migrated to it:
   # every projection's cicd.yml now declares a bare `workflow_dispatch:` and
   # says so in its own comment. So this sends the verb the forge HAS, with the
-  # FORGE_TOKEN rollout already uses to read this repo's tags. Verified against
+  # FORGE_TOKEN image already uses to read this repo's tags. Verified against
   # a live projection before it was written here: POST -> 204, and the run
   # appears as event=workflow_dispatch, in_progress, on a runner.
   #
@@ -1274,7 +1298,7 @@ jobs:
   # average. Carrying the digest again means giving each projection a
   # `workflow_dispatch.inputs` contract and sending it here.
   fanout:
-    needs: [image, rollout, reach]
+    needs: [image, live, reach]
     runs-on: [hanzo-build-linux-amd64]
     timeout-minutes: 20
     outputs:
@@ -1304,7 +1328,7 @@ jobs:
             hanzo-docs/docs:deploy.yml
         run: |
           set -euo pipefail
-          [ -n "${FORGE_TOKEN:-}" ] || { echo "::error::FORGE_TOKEN is empty — the same secret rollout uses to read this repo's tags"; exit 1; }
+          [ -n "${FORGE_TOKEN:-}" ] || { echo "::error::FORGE_TOKEN is empty — the same secret image uses to read this repo's tags"; exit 1; }
           T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           ok=0; bad=""
           for entry in $PROJECTIONS; do
@@ -1350,7 +1374,7 @@ jobs:
           fi
 
   receipt:
-    needs: [image, rollout, reach, fanout]
+    needs: [image, live, reach, fanout]
     if: always() && needs.image.result == 'success'
     runs-on: [hanzo-build-linux-amd64]
     timeout-minutes: 15
@@ -1371,12 +1395,12 @@ jobs:
             --arg spec "${{ needs.image.outputs.spec_sha256 }}" \
             --arg digest "${{ needs.image.outputs.digest }}" \
             --arg image "${{ needs.image.result }}" \
-            --arg rollout "${{ needs.rollout.result }}" \
+            --arg live "${{ needs.live.result }}" \
             --arg reach "${{ needs.reach.result }}" \
             --arg fanout "${{ needs.fanout.result }}" \
             --arg n "${{ needs.fanout.outputs.dispatched }}" \
             '{version:$tag, sha:$sha, spec_sha256:$spec, digest:$digest,
-              cars:{image:$image, rollout:$rollout, reach:$reach, fanout:$fanout},
+              cars:{image:$image, live:$live, reach:$reach, fanout:$fanout},
               projections_dispatched:($n|tonumber? // 0)}' > /tmp/release.json
           cat /tmp/release.json
 
@@ -1397,14 +1421,22 @@ jobs:
           #
           # PATCH and POST below KEEP -f, because there a non-2xx really is the error.
           # `.id // empty` already reads a non-release body as "no release".
+          #
+          # SAY THE CONTENT TYPE. `curl -d` sends application/x-www-form-urlencoded,
+          # so a JSON body binds to an empty struct: tag_name arrives unset, fails
+          # Required, and the forge answers 422 — which -f turns into exit 22. That
+          # is every receipt this car has ever tried to write. The repo holds one
+          # release object, v1.801.31, from before the car existed.
           ID=$(curl -sS -H "Authorization: token ${FORGE_TOKEN}" \
             "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
           if [ -n "$ID" ]; then
             curl -fsS -X PATCH -H "Authorization: token ${FORGE_TOKEN}" \
+              -H 'Content-Type: application/json' \
               "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/releases/${ID}" \
               -d "$(jq -nc --arg b "$BODY" '{body:$b}')" >/dev/null
           else
             curl -fsS -X POST -H "Authorization: token ${FORGE_TOKEN}" \
+              -H 'Content-Type: application/json' \
               "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/releases" \
               -d "$(jq -nc --arg t "$TAG" --arg b "$BODY" '{tag_name:$t, name:$t, body:$b}')" >/dev/null
           fi
@@ -1415,7 +1447,7 @@ jobs:
           # is two days stale" is a state you can point at rather than one that
           # goes unnoticed for a week.
           if jq -e '[.cars[]] | any(. != "success")' /tmp/release.json >/dev/null; then
-            echo "::error::this release is INCOMPLETE — see the car table on the ${TAG} release. Fix the failing car and re-run this workflow at ${{ github.sha }}: image and rollout will recognise their own receipts and no-op, and only the failed car runs again."
+            echo "::error::this release is INCOMPLETE — see the car table on the ${TAG} release. Fix the failing car and re-run this workflow at ${{ github.sha }}: image and live will recognise their own receipts and no-op, and only the failed car runs again."
             exit 1
           fi
           echo "${TAG} is complete: document, image, production, reachability and all nine projections."
@@ -1435,7 +1467,7 @@ jobs:
       # published: does every version in the registry have a receipt. It runs
       # last because release.json above is this release's receipt and should be
       # written whatever the wider state is, and it runs HERE rather than in
-      # rollout because a pre-existing orphan must not be able to block a deploy
+      # the deploy car because a pre-existing orphan must not be able to block a deploy
       # — a gate that wedges production on someone else's old mess gets switched
       # off within a day, and a switched-off gate is how this started.
       #
