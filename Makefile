@@ -326,7 +326,8 @@ zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
 	# which is all of them. The walk returned NOTHING and this gate reported that
 	# every lifted file matched, on a tree where one did not. A gate that cannot be
 	# wrong is not a gate, and this one was green on macOS for every possible input.
-	# Filtering the RESULTS on a path prefix is one behavior in both greps.
+	# Filtering the RESULTS on `/.` is one behavior in both greps, and it drops a
+	# dot-directory wherever it sits rather than only at the root.
 	#
 	# EVERY stale package, never the first. `set -e` stopped this loop at the first
 	# one, which is the masking that cost the release train six red runs in a day:
@@ -336,7 +337,7 @@ zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
 	# `sort -u` because the same directory reached through `clients` and through `.`
 	# is two different strings and was checked twice.
 	@stale=""; \
-	for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | grep -v '^\./\.' | xargs -n1 dirname | sed 's|^\./||' | sort -u); do \
+	for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | grep -v '/\.' | xargs -n1 dirname | sed 's|^\./||' | sort -u); do \
 	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check >/dev/null 2>&1) || stale="$$stale $$d"; \
 	done; \
 	if [ -n "$$stale" ]; then \
