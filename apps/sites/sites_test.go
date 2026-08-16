@@ -331,6 +331,14 @@ func TestCacheControlFor(t *testing.T) {
 		"Build/game-0881644a.data": "public, max-age=31536000, immutable",
 		"orb-dd8b3278.pck":         "public, max-age=31536000, immutable",
 		"Build/game.data":          "public, max-age=3600", // not fingerprinted
+		// film, the same rule again. A marketing export is mostly video by
+		// weight — hanzo.ai ships ~105 product films — and the unfingerprinted
+		// case already answered 3600 through `default`, so what this pins is the
+		// FINGERPRINTED one: before video was a media class it could not reach
+		// `immutable` at all, which is the asset that gains the most from a year.
+		"mock/containers-a1b2c3d4.mp4": "public, max-age=31536000, immutable",
+		"hero-9f8e7d6c.webm":          "public, max-age=31536000, immutable",
+		"workload/containers.mp4":     "public, max-age=3600", // not fingerprinted
 	}
 	for key, want := range cases {
 		if got := CacheControlFor(key, ""); got != want {
