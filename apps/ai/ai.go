@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 
 	aimod "github.com/hanzoai/ai"
 	webtools "github.com/hanzoai/ai/agent/builtin_tool/web"
@@ -35,6 +37,7 @@ import (
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
+	"github.com/zap-proto/zip"
 )
 
 // The MODEL API IS THE DOOR'S REGISTRY, and it is asked rather than described.
@@ -528,6 +531,55 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		}
 		return &aiobject.Page{Title: page.Title, Markdown: page.Markdown, Metadata: page.Metadata}, nil
 	})
+	// WHO IS CALLING, carried across the adapter.
+	//
+	// ai's routes are reached through zip.AdaptNetHTTP, and the peer does not survive
+	// it: r.RemoteAddr inside one of ai's handlers is the same value for every caller.
+	// ai's public lane keys a per-visitor ceiling on the caller's address, so with one
+	// address for everyone that ceiling became one bucket for the whole internet.
+	//
+	// This host can see the connection and already owns the hardened answer, so it
+	// stamps it on the way in and hands ai a reader for it. One definition of the
+	// caller's address, in the layer that has it.
+	zapp.Use(zip.H(stampClientIP))
+	aiobject.SetClientIP(clientIPAcross)
+
 	zapp.Use(sub)
 	return nil
+}
+
+// clientIPHeader carries the caller's address across zip.AdaptNetHTTP, which is the
+// one thing the peer does not survive.
+//
+// A HEADER RATHER THAN A CONTEXT VALUE, and the reason is the adapter: it rebuilds
+// the request through fasthttp's converter, so what reliably crosses is the header
+// map. A context value is unforgeable but only useful if it arrives.
+//
+// Being forgeable is handled by always OVERWRITING it — stampClientIP sets, never
+// adds — so whatever a caller sent under this name is gone before ai reads it. That
+// is the same discipline the identity headers keep at this edge: the host's answer
+// replaces the caller's claim rather than being compared to it.
+const clientIPHeader = "X-Hanzo-Client-Ip"
+
+// stampClientIP writes this host's answer to "who is calling" onto the request,
+// replacing anything the caller put there.
+func stampClientIP(c *zip.Ctx) error {
+	// Header.Set copies the bytes into the header's own storage, so the view
+	// cloud.ClientIP returns into the reused request buffer does not need cloning
+	// here — measured: removing a clone at this end changes nothing a test can see.
+	// The read on the far side is where it matters.
+	c.Fiber().Request().Header.Set(clientIPHeader, cloud.ClientIP(c))
+	return c.Continue()
+}
+
+// clientIPAcross reads it back on the far side of the adapter. It is installed as
+// ai's ClientIP resolver, so ai never derives the address itself.
+// CLONED, and this is the clone that matters. The value comes back out of a buffer
+// fasthttp reuses between requests, so uncloned it is a view that the NEXT caller
+// overwrites — two callers in a row then read one string and become one visitor,
+// which is precisely the collapse this seam exists to end, reintroduced a layer
+// down. Measured: dropping this clone fails the adapter test; dropping the one at
+// the writing end changes nothing.
+func clientIPAcross(r *http.Request) string {
+	return strings.Clone(r.Header.Get(clientIPHeader))
 }
