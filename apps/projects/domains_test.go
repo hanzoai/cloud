@@ -12,6 +12,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/apps/sites/cloudflare"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -129,7 +130,7 @@ func TestVouchIsSuperAdminOnly(t *testing.T) {
 	store := newTestStore(t)
 	svc := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log},
-		State: state{apex: "hanzo.app", store: store, edge: sites.NewCloudflareEdge(log)},
+		State: state{apex: "hanzo.app", store: store, edge: cloudflare.New(log)},
 	}
 	bind := domainsApp(t, svc)
 	for _, org := range []string{"hanzo", "acme"} {
@@ -199,7 +200,7 @@ func TestVouchDoesNotTurnOnTheOrg(t *testing.T) {
 	store := newTestStore(t)
 	svc := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log},
-		State: state{apex: "hanzo.app", store: store, edge: sites.NewCloudflareEdge(log)},
+		State: state{apex: "hanzo.app", store: store, edge: cloudflare.New(log)},
 	}
 	bind := domainsApp(t, svc)
 
@@ -260,7 +261,7 @@ func TestOursNeverEntersHostTable(t *testing.T) {
 	store := newTestStore(t)
 	svc := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log},
-		State: state{apex: "hanzo.app", store: store, edge: sites.NewCloudflareEdge(log)},
+		State: state{apex: "hanzo.app", store: store, edge: cloudflare.New(log)},
 	}
 	bind := domainsApp(t, svc)
 	if err := store.CreateProject(ctx, mkProject("hanzo", "site", "Site")); err != nil {
@@ -452,7 +453,7 @@ func TestReleaseOnlyAddressesNamesBindCouldHaveMade(t *testing.T) {
 	store := newTestStore(t)
 	svc := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log},
-		State: state{apex: "hanzo.app", store: store, edge: sites.NewCloudflareEdge(log)},
+		State: state{apex: "hanzo.app", store: store, edge: cloudflare.New(log)},
 	}
 	app := domainApp(t, svc)
 	if err := store.CreateProject(ctx, mkProject("acme", "acme", "Acme")); err != nil {
@@ -517,7 +518,7 @@ func TestVerifyDomainPromotesOnlyOnProof(t *testing.T) {
 	dns := fakeDNS{}
 	svc := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log},
-		State: state{apex: "hanzo.app", store: store, edge: sites.NewCloudflareEdge(log), resolver: dns},
+		State: state{apex: "hanzo.app", store: store, edge: cloudflare.New(log), resolver: dns},
 	}
 	app := domainApp(t, svc)
 	if err := store.CreateProject(ctx, mkProject("acme", "acme", "Acme")); err != nil {

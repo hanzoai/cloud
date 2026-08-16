@@ -1,4 +1,4 @@
-package sites
+package cloudflare
 
 import (
 	"context"
@@ -13,19 +13,19 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// testPurger builds a CloudflareEdge the way these tests need it: a ZERO coalescing window,
+// testPurger builds a Edge the way these tests need it: a ZERO coalescing window,
 // so every call is admitted and the assertions are about the request rather than the
-// debounce, but with the two fields only NewCloudflareEdge otherwise supplies. A bare struct
+// debounce, but with the two fields only New otherwise supplies. A bare struct
 // literal left pending nil, so admit panicked writing to it, and left ceiling zero,
 // so takeToken (inMinute >= ceiling) refused every call and nothing was ever sent.
-// The tests do not use NewCloudflareEdge itself because it reads the real environment and
+// The tests do not use New itself because it reads the real environment and
 // arms a 10s window.
-func testPurger(token, zone, api string, c *http.Client) *CloudflareEdge {
-	return &CloudflareEdge{
+func testPurger(token, zone, api string, c *http.Client) *Edge {
+	return &Edge{
 		token: token, zoneID: zone, api: api, client: c,
 		log:     luxlog.New("test"),
 		pending: map[string]*purgeState{},
-		ceiling: 120, // NewCloudflareEdge's default; 0 would rate-limit every call away
+		ceiling: 120, // New's default; 0 would rate-limit every call away
 	}
 }
 
