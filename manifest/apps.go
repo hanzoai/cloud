@@ -147,7 +147,7 @@ var Apps = []App{
 	// not a child — a prefix claims a path and its subtree, so "/v1/git" holds
 	// /v1/git and /v1/git/*, and /v1/git-webhook is neither.
 	{Name: "platform", Prefixes: []string{"/v1/builds", "/v1/environments", "/v1/git-webhook", "/v1/pipelines", "/v1/platform/apps", "/v1/platform/cd", "/v1/platform/ci", "/v1/platform/fleet", "/v1/platform/health", "/v1/platform/projects", "/v1/releases", "/v1/run", "/v1/runner"}},
-	{Name: "projects", Prefixes: []string{"/v1/platform/sites", "/v1/projects", "/v1/sites", "/v1/tags"}},
+	{Name: "projects", Prefixes: []string{"/v1/edge", "/v1/platform/sites", "/v1/projects", "/v1/sites", "/v1/tags"}},
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
 	{Name: "prompts", Prefixes: []string{"/v1/prompts"}},

@@ -22,7 +22,7 @@
 //	DELETE /v1/projects/:slug                delete (+ purge S3 site)
 //	POST   /v1/projects/:slug/deploy         deploy (tar body | git json)
 //	POST   /v1/projects/:slug/purge          purge the edge cache-tag (no redeploy)
-//	GET    /v1/projects/health              whether a publish reaches readers (no auth)
+//	GET    /v1/edge                         the edge: provider, reach, cache policy
 //	GET    /v1/projects/:slug/deployments    deploy history
 //	GET    /v1/projects/:slug/deployments/:id one deployment
 //	POST   /v1/projects/:slug/deployments/:id/complete  CI completion hook
@@ -475,10 +475,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Post("/v1/projects/:slug/deploy", cloud.Handle(s, deploy))
 
 	zip.Post(r, "/v1/projects/:slug/purge", o.purge)
-	// Whether a purge would DO anything. Registered beside the purge it reports
-	// on, and before :slug so a health check is never read as a project named
-	// "health".
-	zip.Get(r, "/v1/projects/health", o.health, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+	// THE EDGE, addressed as itself. It reports on the network in front of every
+	// published site — which provider, whether it can act, what it caches and
+	// for how long — so it is not a fact about projects and does not live under
+	// them. Served by THIS app because this is the app that holds the edge; a
+	// separate process to answer one question would be a deployment for a noun.
+	zip.Get(r, "/v1/edge", o.edge, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 	// The deployment lifecycle, in the order it runs: open one and take the scoped
 	// write grant, then complete it. startDeployment is the typed half that used to
 	// share the /deploy address with the archive upload above, disambiguated by
