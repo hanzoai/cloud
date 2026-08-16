@@ -92,7 +92,7 @@ var frameworks = map[string]bool{
 type state struct {
 	store *Store
 	blob  *blobStore
-	cf    sites.Edge
+	edge  sites.Edge
 	// resolver reads the custom-domain ownership challenge (domains.go); nil ⇒ the
 	// system resolver. Tests inject a fake so verification is deterministic.
 	resolver fqdn.Resolver
@@ -272,7 +272,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{
 		store:       store,
 		blob:        openBlobStore(),
-		cf:          sites.NewCloudflareEdge(b.Log),
+		edge:        sites.NewCloudflareEdge(b.Log),
 		ai:          deps.AI, // may be nil (no gateway) — buildSite degrades to 503.
 		bill:        cloud.NewResourceMeter(deps, hostingProvider),
 		apex:        environ.Or("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
@@ -328,11 +328,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	mountTagDoor(app, s)
 
 	// The site edge must hand the browser the bytes we published, unedited: a
-	// Cloudflare zone with an HTML rewriter on breaks every hydrating app the
+	// An edge with a document rewriter on breaks every hydrating app the
 	// plane serves (see sites.rewriters). Assert it off-thread so a slow or
-	// unreachable Cloudflare cannot delay the mount, and fail-soft — it only ever
+	// unreachable edge cannot delay the mount, and fail-soft — it only ever
 	// logs.
-	go s.State.cf.EnsureVerbatim(context.Background())
+	go s.State.edge.EnsureVerbatim(context.Background())
 
 	// Nothing a publisher took private — and nothing a deleted project left
 	// behind — may be readable because this process was away when it happened

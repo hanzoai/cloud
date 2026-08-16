@@ -75,7 +75,7 @@ func onPublish(s *cloud.Service[state], ctx context.Context, org string, p *Proj
 // unconfigured, and a purge miss is logged, never fatal — the S3 origin keeps
 // serving and the edge self-heals when the short HTML TTL lapses.
 func purgeTag(s *cloud.Service[state], ctx context.Context, org, slug string) {
-	if err := s.State.cf.PurgeTags(ctx, sites.CacheTag(org, slug)); err != nil {
+	if err := s.State.edge.PurgeTags(ctx, sites.CacheTag(org, slug)); err != nil {
 		s.Log.Warn("edge cache-tag purge failed (continuing)", "org", org, "slug", slug, "err", err)
 	}
 }
