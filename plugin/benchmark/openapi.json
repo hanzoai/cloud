@@ -43,6 +43,105 @@
         }
       }
     },
+    "/v1/benchmark/claims": {
+      "get": {
+        "operationId": "get_benchmark_claims",
+        "summary": "Lists the effective published claims: what the leaderboard will use for each (benchmark, model) after the seed, the import and any stored correction are layered.",
+        "description": "Lists the effective published claims: what the leaderboard will use for\neach (benchmark, model) after the seed, the import and any stored correction\nare layered. It answers the operator's question — what does this arena\ncurrently believe someone else reported, and did we ship that or fix it.\n\nEffective values only. The history of a key lives in the append-only file and\nis not what this op is for; a list that returned every superseded row would\nmake the common question the hard one.",
+        "tags": [
+          "benchmark"
+        ],
+        "parameters": [
+          {
+            "name": "Benchmark",
+            "in": "query",
+            "required": false,
+            "description": "Benchmark filters to one benchmark id. Empty returns every benchmark.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Model",
+            "in": "query",
+            "required": false,
+            "description": "Model filters to one model. Empty returns every model.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Provider",
+            "in": "query",
+            "required": false,
+            "description": "Provider filters to one lab or leaderboard — the way to read what a single\nsource claims across every model it covers.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Source",
+            "in": "query",
+            "required": false,
+            "description": "Source filters to one citation, which is the finest grain there is: a\nsource is what makes two claims about one model independent rather than a\nrestatement of each other.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Protocol",
+            "in": "query",
+            "required": false,
+            "description": "Protocol filters by HOW a claim was scored, so provider cards can be read\napart from third parties running their own harness.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/claimsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_benchmark_claims",
+        "summary": "Records published claims: one to correct a number, many to import a leaderboard.",
+        "description": "Records published claims: one to correct a number, many to import a\nleaderboard. Every row must carry a Source, because a claim without its\ncitation is a number nobody can check — and an unattributed number in the\npublished plane is indistinguishable from a measurement, which is the one\nconfusion this whole surface is built to prevent.\n\nWrites are append-only, so this never destroys the value it replaces. A\nvendor restating a score leaves both rows on disk, which is how the restating\nitself becomes visible.",
+        "tags": [
+          "benchmark"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/putClaimsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putClaimsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/benchmark/compare": {
       "get": {
         "operationId": "get_benchmark_compare",
@@ -86,6 +185,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/pairing"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/benchmark/history": {
+      "get": {
+        "operationId": "get_benchmark_history",
+        "summary": "Returns each model's measured score per run over time, oldest first, with the change between runs.",
+        "description": "Returns each model's measured score per run over time, oldest first,\nwith the change between runs.\n\nThis is the counterweight to a leaderboard: the board shows the latest run\nbecause that is what \"how good is it\" means, and a single latest number cannot\ndistinguish a model that has always been strong from one that just improved,\nor from one that regressed after a provider changed something. Both matter for\nrouting, and only one of them is visible on a board.\n\nRuns with no id — attempts recorded before runs existed — group under the\nempty run, which is honestly what they are: one undated measurement.",
+        "tags": [
+          "benchmark"
+        ],
+        "parameters": [
+          {
+            "name": "Benchmark",
+            "in": "query",
+            "required": false,
+            "description": "Benchmark is the catalog id to read, defaulting to gpqa_diamond.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Model",
+            "in": "query",
+            "required": false,
+            "description": "Model filters to one model. Empty returns every model measured.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/historyOut"
                 }
               }
             },
@@ -243,15 +384,78 @@
         },
         "type": "object"
       },
+      "ClaimRow": {
+        "properties": {
+          "at": {
+            "description": "At is when a stored row was recorded. Zero for a seed row.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "benchmark": {
+            "description": "Benchmark is the canonical test id the claim is about, from /catalog.",
+            "type": "string"
+          },
+          "by": {
+            "description": "By is who recorded it, when the caller said.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the system the score is claimed for.",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Origin is \"seed\" for a compiled row and \"stored\" for one written through\nthis surface. It is the difference between what we shipped and what an\noperator has since corrected.",
+            "type": "string"
+          },
+          "protocol": {
+            "description": "Protocol records HOW it was scored — provider-reported, agentic,\nthird-party-leaderboard — so a provider card is never read as a measurement.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is who the claim belongs to — the lab or leaderboard whose number\nthis is.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is the reported aggregate, as a percentage.",
+            "type": "number"
+          },
+          "source": {
+            "description": "Source is the citation the row was read from.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "LeaderRow": {
         "properties": {
+          "ciHigh": {
+            "description": "CIHigh is the upper bound of that interval. Wilson rather than the normal\napproximation because the normal one produces bounds past 100 exactly where\nbenchmark scores live — at 194/198 that is the top of the board, not a\ncorner case.",
+            "type": "number"
+          },
+          "ciLow": {
+            "description": "CILow and CIHigh are the 95% Wilson interval on Measured, in percent. They\nare what makes the score comparable: at n=198 a 98% carries roughly ±2\npoints, so most differences at the top of a board are not distinguishable\nand a bare number implies a precision it does not have. Absent when there\nis no measurement.",
+            "type": "number"
+          },
+          "claims": {
+            "description": "Claims is how many independent claims exist for this model on this\nbenchmark. More than one means several sources reported it.",
+            "type": "integer"
+          },
           "gap": {
             "description": "published − measured (the arena signal)",
+            "type": "number"
+          },
+          "mean": {
+            "description": "Mean is the unweighted average of every claim, which answers a different\nquestion from Published: what the field says on average, rather than what\nthe vendor says about itself. With one claim the two are equal.",
             "type": "number"
           },
           "measured": {
             "description": "hanzo-measured accuracy % (nil if unrun)",
             "type": "number"
+          },
+          "measuredAt": {
+            "description": "MeasuredAt is when the run behind Measured was recorded.",
+            "format": "date-time",
+            "type": "string"
           },
           "model": {
             "description": "the model this row scores",
@@ -267,6 +471,34 @@
           },
           "published": {
             "description": "provider-claimed % (nil if none)",
+            "type": "number"
+          },
+          "run": {
+            "description": "Run names the measurement Measured came from, and MeasuredAt is when it\nran. A score with no date is not a fact about a model, it is a fact about\na model on a day — and models change, so the date is what makes the number\ncheckable rather than merely quoted.",
+            "type": "string"
+          },
+          "spread": {
+            "description": "Spread is the distance between the highest and lowest of them, nil when\nthere is only one. It is the disagreement AMONG sources, which a single\nPublished number cannot show — signal in the same way the\npublished-minus-measured gap is.",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "ModelHistory": {
+        "properties": {
+          "model": {
+            "description": "Model is the system these runs measured.",
+            "type": "string"
+          },
+          "points": {
+            "description": "Points is every run, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/RunPoint"
+            },
+            "type": "array"
+          },
+          "trend": {
+            "description": "Trend is the change from the first run to the last, absent when there has\nonly been one. It answers the question a list of points makes you compute.",
             "type": "number"
           }
         },
@@ -303,6 +535,32 @@
               "type": "string"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "RunPoint": {
+        "properties": {
+          "at": {
+            "description": "At is when the run was recorded.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "delta": {
+            "description": "Delta is the change in score from the previous run for this model, absent\non the first. It is the number the whole surface exists to make visible.",
+            "type": "number"
+          },
+          "n": {
+            "description": "N is how many items the run covered. Two runs are only comparable at the\nsame n, which is why it travels with every point rather than being assumed.",
+            "type": "integer"
+          },
+          "run": {
+            "description": "Run is the measurement id these attempts were recorded under.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is accuracy over the items this run covered, as a percentage.",
+            "type": "number"
           }
         },
         "type": "object"
@@ -346,6 +604,42 @@
           },
           "total": {
             "description": "Total is how many rows Data holds.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "claimsOut": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per (benchmark, model, SOURCE) — every independent claim,\nnot one per model. Effective values only: the row that wins after layering\nfor each source, never the superseded readings behind it.",
+            "items": {
+              "$ref": "#/components/schemas/ClaimRow"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many rows Data holds.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "historyOut": {
+        "properties": {
+          "benchmark": {
+            "description": "Benchmark is the catalog id these histories are about.",
+            "type": "string"
+          },
+          "data": {
+            "description": "Data is one entry per model, ordered by model name.",
+            "items": {
+              "$ref": "#/components/schemas/ModelHistory"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many models Data holds.",
             "type": "integer"
           }
         },
@@ -439,6 +733,67 @@
             "description": "Data is the blends available to compose from.",
             "items": {
               "$ref": "#/components/schemas/Preset"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "publishedClaim": {
+        "properties": {
+          "benchmark": {
+            "description": "Benchmark is the canonical test id the claim is about, from /catalog.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the system the score is claimed for.",
+            "type": "string"
+          },
+          "protocol": {
+            "description": "Protocol records HOW it was scored — provider-reported, agentic,\nthird-party-leaderboard — because a provider card and a third party running\nits own harness are different kinds of number and must not be blended.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is who the claim belongs to — the lab or leaderboard whose number\nthis is. It joins a claim to the attempts measured for that same model.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is the reported aggregate, as a percentage.",
+            "type": "number"
+          },
+          "source": {
+            "description": "Source is the citation the row was read from. A claim without one is a\nnumber nobody can check, so every write requires it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "putClaimsIn": {
+        "properties": {
+          "by": {
+            "description": "By is who is recording them — a person, or the importer's name.",
+            "type": "string"
+          },
+          "data": {
+            "description": "Data is the claims to record. One row is a correction; many is an import.\nThere is no separate bulk endpoint because there is no separate operation:\nimporting a leaderboard and fixing one number are the same write.",
+            "items": {
+              "$ref": "#/components/schemas/publishedClaim"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "putClaimsOut": {
+        "properties": {
+          "recorded": {
+            "description": "Recorded is how many rows were written.",
+            "type": "integer"
+          },
+          "rejected": {
+            "description": "Rejected names the rows that were not, and why.",
+            "items": {
+              "type": "string"
             },
             "type": "array"
           }
