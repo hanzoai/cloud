@@ -1903,6 +1903,45 @@ components:
         symbol:
           type: string
       type: object
+    ClaimRow:
+      properties:
+        at:
+          description: At is when a stored row was recorded. Zero for a seed row.
+          format: date-time
+          type: string
+        benchmark:
+          description: Benchmark is the canonical test id the claim is about, from
+            /catalog.
+          type: string
+        by:
+          description: By is who recorded it, when the caller said.
+          type: string
+        model:
+          description: Model is the system the score is claimed for.
+          type: string
+        origin:
+          description: |-
+            Origin is "seed" for a compiled row and "stored" for one written through
+            this surface. It is the difference between what we shipped and what an
+            operator has since corrected.
+          type: string
+        protocol:
+          description: |-
+            Protocol records HOW it was scored — provider-reported, agentic,
+            third-party-leaderboard — so a provider card is never read as a measurement.
+          type: string
+        provider:
+          description: |-
+            Provider is who the claim belongs to — the lab or leaderboard whose number
+            this is.
+          type: string
+        score:
+          description: Score is the reported aggregate, as a percentage.
+          type: number
+        source:
+          description: Source is the citation the row was read from.
+          type: string
+      type: object
     ClearReferenceOut:
       properties:
         cleared:
@@ -4687,12 +4726,42 @@ components:
       type: object
     LeaderRow:
       properties:
+        ciHigh:
+          description: |-
+            CIHigh is the upper bound of that interval. Wilson rather than the normal
+            approximation because the normal one produces bounds past 100 exactly where
+            benchmark scores live — at 194/198 that is the top of the board, not a
+            corner case.
+          type: number
+        ciLow:
+          description: |-
+            CILow and CIHigh are the 95% Wilson interval on Measured, in percent. They
+            are what makes the score comparable: at n=198 a 98% carries roughly ±2
+            points, so most differences at the top of a board are not distinguishable
+            and a bare number implies a precision it does not have. Absent when there
+            is no measurement.
+          type: number
+        claims:
+          description: |-
+            Claims is how many independent claims exist for this model on this
+            benchmark. More than one means several sources reported it.
+          type: integer
         gap:
           description: published − measured (the arena signal)
+          type: number
+        mean:
+          description: |-
+            Mean is the unweighted average of every claim, which answers a different
+            question from Published: what the field says on average, rather than what
+            the vendor says about itself. With one claim the two are equal.
           type: number
         measured:
           description: hanzo-measured accuracy % (nil if unrun)
           type: number
+        measuredAt:
+          description: MeasuredAt is when the run behind Measured was recorded.
+          format: date-time
+          type: string
         model:
           description: the model this row scores
           type: string
@@ -4705,6 +4774,20 @@ components:
           type: string
         published:
           description: provider-claimed % (nil if none)
+          type: number
+        run:
+          description: |-
+            Run names the measurement Measured came from, and MeasuredAt is when it
+            ran. A score with no date is not a fact about a model, it is a fact about
+            a model on a day — and models change, so the date is what makes the number
+            checkable rather than merely quoted.
+          type: string
+        spread:
+          description: |-
+            Spread is the distance between the highest and lowest of them, nil when
+            there is only one. It is the disagreement AMONG sources, which a single
+            Published number cannot show — signal in the same way the
+            published-minus-measured gap is.
           type: number
       type: object
     LeaderboardRow:
@@ -5495,6 +5578,22 @@ components:
           description: 'Type is the transform: redirectScheme, stripPrefix, addPrefix
             or headers.'
           type: string
+      type: object
+    ModelHistory:
+      properties:
+        model:
+          description: Model is the system these runs measured.
+          type: string
+        points:
+          description: Points is every run, oldest first.
+          items:
+            $ref: '#/components/schemas/RunPoint'
+          type: array
+        trend:
+          description: |-
+            Trend is the change from the first run to the last, absent when there has
+            only been one. It answers the question a list of points makes you compute.
+          type: number
       type: object
     ModelRoute:
       properties:
@@ -8050,6 +8149,29 @@ components:
             TimeoutSec bounds this ONE command, so a wedged program holds the caller for
             its own timeout rather than for the whole lease.
           type: integer
+      type: object
+    RunPoint:
+      properties:
+        at:
+          description: At is when the run was recorded.
+          format: date-time
+          type: string
+        delta:
+          description: |-
+            Delta is the change in score from the previous run for this model, absent
+            on the first. It is the number the whole surface exists to make visible.
+          type: number
+        "n":
+          description: |-
+            N is how many items the run covered. Two runs are only comparable at the
+            same n, which is why it travels with every point rather than being assumed.
+          type: integer
+        run:
+          description: Run is the measurement id these attempts were recorded under.
+          type: string
+        score:
+          description: Score is accuracy over the items this run covered, as a percentage.
+          type: number
       type: object
     SMS:
       properties:
@@ -15502,6 +15624,20 @@ components:
             makes metered spend, then "qualified", then "credited".
           type: string
       type: object
+    claimsOut:
+      properties:
+        data:
+          description: |-
+            Data is one row per (benchmark, model, SOURCE) — every independent claim,
+            not one per model. Effective values only: the row that wins after layering
+            for each source, never the superseded readings behind it.
+          items:
+            $ref: '#/components/schemas/ClaimRow'
+          type: array
+        total:
+          description: Total is how many rows Data holds.
+          type: integer
+      type: object
     clickCount:
       properties:
         counted:
@@ -19877,6 +20013,20 @@ components:
             Subject is the one-line summary of the problem. Required; longer than 300
             characters is clipped rather than refused.
           type: string
+      type: object
+    historyOut:
+      properties:
+        benchmark:
+          description: Benchmark is the catalog id these histories are about.
+          type: string
+        data:
+          description: Data is one entry per model, ordered by model name.
+          items:
+            $ref: '#/components/schemas/ModelHistory'
+          type: array
+        total:
+          description: Total is how many models Data holds.
+          type: integer
       type: object
     hit:
       properties:
@@ -40268,6 +40418,35 @@ components:
             resolve in the publisher's own scope — there are no phantom listings.
           type: string
       type: object
+    publishedClaim:
+      properties:
+        benchmark:
+          description: Benchmark is the canonical test id the claim is about, from
+            /catalog.
+          type: string
+        model:
+          description: Model is the system the score is claimed for.
+          type: string
+        protocol:
+          description: |-
+            Protocol records HOW it was scored — provider-reported, agentic,
+            third-party-leaderboard — because a provider card and a third party running
+            its own harness are different kinds of number and must not be blended.
+          type: string
+        provider:
+          description: |-
+            Provider is who the claim belongs to — the lab or leaderboard whose number
+            this is. It joins a claim to the attempts measured for that same model.
+          type: string
+        score:
+          description: Score is the reported aggregate, as a percentage.
+          type: number
+        source:
+          description: |-
+            Source is the citation the row was read from. A claim without one is a
+            number nobody can check, so every write requires it.
+          type: string
+      type: object
     pullList:
       properties:
         data:
@@ -40414,6 +40593,31 @@ components:
         sshUrl:
           description: SSHURL is the repo's scp-style SSH remote.
           type: string
+      type: object
+    putClaimsIn:
+      properties:
+        by:
+          description: By is who is recording them — a person, or the importer's name.
+          type: string
+        data:
+          description: |-
+            Data is the claims to record. One row is a correction; many is an import.
+            There is no separate bulk endpoint because there is no separate operation:
+            importing a leaderboard and fixing one number are the same write.
+          items:
+            $ref: '#/components/schemas/publishedClaim'
+          type: array
+      type: object
+    putClaimsOut:
+      properties:
+        recorded:
+          description: Recorded is how many rows were written.
+          type: integer
+        rejected:
+          description: Rejected names the rows that were not, and why.
+          items:
+            type: string
+          type: array
       type: object
     quoteList:
       properties:
@@ -61953,6 +62157,99 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
+  /v1/benchmark/claims:
+    get:
+      description: |-
+        Lists the effective published claims: what the leaderboard will use for
+        each (benchmark, model) after the seed, the import and any stored correction
+        are layered. It answers the operator's question — what does this arena
+        currently believe someone else reported, and did we ship that or fix it.
+
+        Effective values only. The history of a key lives in the append-only file and
+        is not what this op is for; a list that returned every superseded row would
+        make the common question the hard one.
+      operationId: get_benchmark_claims
+      parameters:
+      - description: Benchmark filters to one benchmark id. Empty returns every benchmark.
+        in: query
+        name: Benchmark
+        required: false
+        schema:
+          type: string
+      - description: Model filters to one model. Empty returns every model.
+        in: query
+        name: Model
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Provider filters to one lab or leaderboard — the way to read what a single
+          source claims across every model it covers.
+        in: query
+        name: Provider
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Source filters to one citation, which is the finest grain there is: a
+          source is what makes two claims about one model independent rather than a
+          restatement of each other.
+        in: query
+        name: Source
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Protocol filters by HOW a claim was scored, so provider cards can be read
+          apart from third parties running their own harness.
+        in: query
+        name: Protocol
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/claimsOut'
+          description: ok
+      summary: 'Lists the effective published claims: what the leaderboard will use
+        for each (benchmark, model) after the seed, the import and any stored correction
+        are layered.'
+      tags:
+      - benchmark
+      x-app: benchmark
+    post:
+      description: |-
+        Records published claims: one to correct a number, many to import a
+        leaderboard. Every row must carry a Source, because a claim without its
+        citation is a number nobody can check — and an unattributed number in the
+        published plane is indistinguishable from a measurement, which is the one
+        confusion this whole surface is built to prevent.
+
+        Writes are append-only, so this never destroys the value it replaces. A
+        vendor restating a score leaves both rows on disk, which is how the restating
+        itself becomes visible.
+      operationId: post_benchmark_claims
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/putClaimsIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/putClaimsOut'
+          description: ok
+      summary: 'Records published claims: one to correct a number, many to import
+        a leaderboard.'
+      tags:
+      - benchmark
+      x-app: benchmark
   /v1/benchmark/compare:
     get:
       description: |-
@@ -61994,6 +62291,46 @@ paths:
       summary: 'Is the ONLY valid arm-vs-arm test: it pairs the two models on the
         items BOTH completed, and answers rescue and damage counts with an exact-McNemar
         p.'
+      tags:
+      - benchmark
+      x-app: benchmark
+  /v1/benchmark/history:
+    get:
+      description: |-
+        Returns each model's measured score per run over time, oldest first,
+        with the change between runs.
+
+        This is the counterweight to a leaderboard: the board shows the latest run
+        because that is what "how good is it" means, and a single latest number cannot
+        distinguish a model that has always been strong from one that just improved,
+        or from one that regressed after a provider changed something. Both matter for
+        routing, and only one of them is visible on a board.
+
+        Runs with no id — attempts recorded before runs existed — group under the
+        empty run, which is honestly what they are: one undated measurement.
+      operationId: get_benchmark_history
+      parameters:
+      - description: Benchmark is the catalog id to read, defaulting to gpqa_diamond.
+        in: query
+        name: Benchmark
+        required: false
+        schema:
+          type: string
+      - description: Model filters to one model. Empty returns every model measured.
+        in: query
+        name: Model
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/historyOut'
+          description: ok
+      summary: Returns each model's measured score per run over time, oldest first,
+        with the change between runs.
       tags:
       - benchmark
       x-app: benchmark
