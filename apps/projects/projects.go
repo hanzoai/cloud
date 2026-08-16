@@ -92,7 +92,7 @@ var frameworks = map[string]bool{
 type state struct {
 	store *Store
 	blob  *blobStore
-	cf    *sites.Purger
+	cf    sites.Edge
 	// resolver reads the custom-domain ownership challenge (domains.go); nil ⇒ the
 	// system resolver. Tests inject a fake so verification is deterministic.
 	resolver fqdn.Resolver
@@ -272,7 +272,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{
 		store:       store,
 		blob:        openBlobStore(),
-		cf:          sites.NewPurger(b.Log),
+		cf:          sites.NewCloudflareEdge(b.Log),
 		ai:          deps.AI, // may be nil (no gateway) — buildSite degrades to 503.
 		bill:        cloud.NewResourceMeter(deps, hostingProvider),
 		apex:        environ.Or("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
@@ -332,7 +332,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// plane serves (see sites.rewriters). Assert it off-thread so a slow or
 	// unreachable Cloudflare cannot delay the mount, and fail-soft — it only ever
 	// logs.
-	go s.State.cf.AssertHTMLPassthrough(context.Background())
+	go s.State.cf.EnsureVerbatim(context.Background())
 
 	// Nothing a publisher took private — and nothing a deleted project left
 	// behind — may be readable because this process was away when it happened

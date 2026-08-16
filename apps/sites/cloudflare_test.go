@@ -13,19 +13,19 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// testPurger builds a Purger the way these tests need it: a ZERO coalescing window,
+// testPurger builds a CloudflareEdge the way these tests need it: a ZERO coalescing window,
 // so every call is admitted and the assertions are about the request rather than the
-// debounce, but with the two fields only NewPurger otherwise supplies. A bare struct
+// debounce, but with the two fields only NewCloudflareEdge otherwise supplies. A bare struct
 // literal left pending nil, so admit panicked writing to it, and left ceiling zero,
 // so takeToken (inMinute >= ceiling) refused every call and nothing was ever sent.
-// The tests do not use NewPurger itself because it reads the real environment and
+// The tests do not use NewCloudflareEdge itself because it reads the real environment and
 // arms a 10s window.
-func testPurger(token, zone, api string, c *http.Client) *Purger {
-	return &Purger{
+func testPurger(token, zone, api string, c *http.Client) *CloudflareEdge {
+	return &CloudflareEdge{
 		token: token, zoneID: zone, api: api, client: c,
 		log:     luxlog.New("test"),
 		pending: map[string]*purgeState{},
-		ceiling: 120, // NewPurger's default; 0 would rate-limit every call away
+		ceiling: 120, // NewCloudflareEdge's default; 0 would rate-limit every call away
 	}
 }
 
@@ -127,7 +127,7 @@ func TestAssertHTMLPassthroughPatchesOnlyDrift(t *testing.T) {
 	defer srv.Close()
 
 	p := testPurger("tok", "zone1", srv.URL, srv.Client())
-	p.AssertHTMLPassthrough(context.Background())
+	p.EnsureVerbatim(context.Background())
 
 	if len(patched) != 1 || patched[0] != "email_obfuscation=off" {
 		t.Fatalf("patched = %v, want exactly [email_obfuscation=off]", patched)
@@ -144,12 +144,12 @@ func TestAssertHTMLPassthroughPatchesOnlyDrift(t *testing.T) {
 // PurgeTags documents.
 func TestAssertHTMLPassthroughDegradesSoftly(t *testing.T) {
 	testPurger("", "", "http://127.0.0.1:0", &http.Client{Timeout: time.Second}).
-		AssertHTMLPassthrough(context.Background())
+		EnsureVerbatim(context.Background())
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer srv.Close()
 	testPurger("tok", "zone1", srv.URL, srv.Client()).
-		AssertHTMLPassthrough(context.Background())
+		EnsureVerbatim(context.Background())
 }
