@@ -52,9 +52,12 @@ type Session struct {
 // Exchange trades subject for a token of the same subject, living at most life.
 //
 // clientID/clientSecret authenticate the confidential client IAM allow-lists for
-// exchange (IAM_MINT_CLIENT_ID / IAM_MINT_CLIENT_SECRET). An empty pair, or an
-// empty subject, is "not configured" rather than an error to guess at — the
-// caller decides whether that is fatal.
+// exchange. WHICH client is the caller's choice and it decides the ceiling: IAM
+// grants the capability to act for a reserved-org subject per client, so a caller
+// handing the result somewhere untrusted passes one that does not hold it and gets
+// a refusal instead of a platform token. An empty pair, or an empty subject, is
+// "not configured" rather than an error to guess at — the caller decides whether
+// that is fatal.
 func Exchange(ctx context.Context, base, clientID, clientSecret, subject string, life time.Duration) (Session, error) {
 	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	if base == "" || clientID == "" || clientSecret == "" {
