@@ -53,6 +53,9 @@ type Edge struct {
 	window  time.Duration // per-tag coalescing window
 	ceiling int           // max API calls per minute, process-wide
 
+	zoneMu    sync.Mutex
+	zoneTried bool // one discovery attempt per process
+
 	mu       sync.Mutex
 	pending  map[string]*purgeState
 	minute   time.Time // start of the current ceiling minute
@@ -71,9 +74,11 @@ type purgeState struct {
 // it without limit. Idle entries are swept before the bound is enforced.
 const maxPendingTags = 4096
 
-// New reads CF_API_TOKEN + CF_ZONE_ID from the environment. The returned
-// Edge is safe to hold for the process; Configured() reports whether it can
-// actually reach Cloudflare. The coalescing window and the process-wide ceiling
+// New reads CF_API_TOKEN + CF_ZONE_ID from the environment — the fallback path,
+// kept for a deployment with no integrations app and for break-glass. The zone is
+// optional now: an edge given a token and no zone discovers its own (zone.go).
+// The returned Edge is safe to hold for the process; Configured() reports whether
+// it holds a credential. The coalescing window and the process-wide ceiling
 // are operator knobs with honest defaults.
 func New(log luxlog.Logger) *Edge {
 	return With(os.Getenv("CF_API_TOKEN"), os.Getenv("CF_ZONE_ID"), log)
@@ -143,7 +148,11 @@ func (p *Edge) Stop() {
 // Name identifies the provider on a status page.
 func (p *Edge) Name() string { return "cloudflare" }
 
-func (p *Edge) Configured() bool { return p.token != "" && p.zoneID != "" }
+// Configured reports whether this edge can act. It asks for a TOKEN only: the
+// zone is discovered on first use from that same token, so requiring one here
+// would report "unconfigured" for an edge that is one lookup away from working —
+// and that report is what an operator reads to decide whether a publish is live.
+func (p *Edge) Configured() bool { return p.token != "" }
 
 // PurgeTags purges every listed cache-tag. A no-op (warn-only) when unconfigured,
 // so callers invoke it unconditionally after a publish. A purge failure is
@@ -263,7 +272,14 @@ func (p *Edge) call(ctx context.Context, tags []string) error {
 	if err != nil {
 		return fmt.Errorf("cf purge: marshal: %w", err)
 	}
-	url := strings.TrimRight(p.api, "/") + "/zones/" + p.zoneID + "/purge_cache"
+	zone := p.zone(ctx)
+	if zone == "" {
+		// Discovery already said why, at Warn. Refusing here rather than POSTing
+		// to /zones//purge_cache, which Cloudflare answers as a 404 that reads
+		// like the tag was wrong.
+		return nil
+	}
+	url := strings.TrimRight(p.api, "/") + "/zones/" + zone + "/purge_cache"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("cf purge: request: %w", err)
