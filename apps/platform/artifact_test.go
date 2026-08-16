@@ -205,11 +205,15 @@ func TestArtifactJobSpec_ToolchainPerEntryAndCredentialOnlyInPublisher(t *testin
 	if got := deps["command"].([]any)[2]; got != artifactDepsScript {
 		t.Error("deps must run the constant deps script, nothing recipe-supplied")
 	}
-	for _, e := range deps["env"].([]any) {
-		m := e.(map[string]any)
-		if m["name"] == "HOME" && m["value"] == "/w" {
-			t.Error("deps HOME must not be the shared volume — git config --global would leak the token onto it")
-		}
+	// The token must never reach a file on /w, which every recipe container
+	// reads. GIT_CONFIG_COUNT keeps it in the environment of this one process,
+	// so there is no .gitconfig to place correctly or clean up.
+	if !strings.Contains(artifactDepsScript, "GIT_CONFIG_COUNT") ||
+		strings.Contains(artifactDepsScript, "git config --global") {
+		t.Error("deps must carry the credential in the environment, not write it to a .gitconfig")
+	}
+	if len(deps["env"].([]any)) != 1 {
+		t.Errorf("deps env = %v, want the token alone", deps["env"])
 	}
 
 	// [2..] run the RECIPE, and carry no secret at all.
