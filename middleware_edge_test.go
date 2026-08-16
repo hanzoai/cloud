@@ -216,6 +216,47 @@ func TestEdgeCORS_UnknownOriginGetsNothing(t *testing.T) {
 	}
 }
 
+// TestEdgeCORS_RefusedPreflightIsAnswered: a preflight this edge does not admit is
+// still ANSWERED here, because this middleware is the only thing in the process
+// that answers one. It gets 204 without Access-Control-Allow-Origin — the browser
+// blocks on the missing header, which is the true reason and the one a developer
+// can read. Continuing instead hands the preflight to a router with no OPTIONS
+// route, and the answer becomes a 404 about a door that exists.
+//
+// The refusal is the ABSENT header, never the status, so nothing about admission
+// changes here: the negative half of that is TestEdgeCORS_UnknownOriginGetsNothing
+// above, and TestPreflightAndActualAgree pins the two halves to one predicate.
+func TestEdgeCORS_RefusedPreflightIsAnswered(t *testing.T) {
+	routed := false
+	app := zip.New(zip.Config{})
+	app.Use(EdgeCORS(staticPol(t, edge.Policy{CORSOrigins: []string{"*.hanzo.ai"}})))
+	app.All("/*", func(c *zip.Ctx) error { routed = true; return c.JSON(404, map[string]string{"e": "not found"}) })
+
+	req := httptest.NewRequest(http.MethodOptions, "/v1/event", nil)
+	req.Header.Set("Origin", "https://shop.example")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "content-type")
+	res, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if res.StatusCode != 204 {
+		t.Fatalf("refused preflight status = %d, want 204 (a 404 names the wrong problem)", res.StatusCode)
+	}
+	if routed {
+		t.Fatal("a preflight must never reach the router: it has no OPTIONS route to meet")
+	}
+	if got := res.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("refused preflight must carry no ACAO, got %q", got)
+	}
+	if got := res.Header.Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Fatalf("refused preflight must carry no ACA-Credentials, got %q", got)
+	}
+	if got := res.Header.Get("Vary"); !strings.Contains(got, "Origin") {
+		t.Fatalf("Vary = %q, want Origin: this answer depends on it", got)
+	}
+}
+
 // ── EdgeRateLimit ────────────────────────────────────────────────────────────
 
 // rateApp mounts EdgeRateLimit with a small per-IP limit and a wide window so the
