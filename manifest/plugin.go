@@ -164,6 +164,52 @@ func (a App) Plugin() zip.Plugin { return a.resolve() }
 // resolve is the ladder: an operator's address, an operator's path, the binary on
 // disk beside the host, a published release, and finally the on-disk path again so
 // the failure names the file a developer expected to have built.
+// IdleAfter is how long a lazy subsystem may go unused before its process is
+// stopped, to be started again by the next request that needs it.
+//
+// Every subsystem here is its own process, and until now none of them ever
+// stopped: resident memory tracked the SIZE OF THE CATALOG rather than the
+// traffic. Measured on the fleet — 24 children, ~150MiB of live heap each,
+// ~4.4GiB, while the three that do little sat at 12-20MiB. That is what caps
+// how many subsystems this host can carry, and it is why one of them being
+// evicted for node memory took the whole API down.
+//
+// Fifteen minutes is chosen to be longer than any human's think-time between
+// two calls to the same surface, so an interactive session never pays a cold
+// start twice. A subsystem that must NEVER pay one — identity, config, anything
+// every other call goes through — declares Eager instead, which makes it
+// non-lazy and therefore never a candidate.
+const idleAfter = 15 * time.Minute
+
+// Warm is how many plugin processes this host may hold at once. Age bounds the
+// steady state; this bounds the BURST, which age cannot reach — IdleAfter only
+// reclaims a plugin quiet for its whole window, so in the minutes after a cold
+// start, when every prefix that gets a request starts a child and none is old
+// enough to be idle, it reclaims nothing. zip enforces this at the START path,
+// not on the reaper's ticker: the fleet's MCP door asks every subsystem at once
+// and starts children far faster than a sweep runs, and a bound restored a minute
+// later is not a bound — that is how this pod came to hold every child it had,
+// stop answering its own liveness probe, and get killed.
+//
+// It is a COUNT because the cost is the count. Measured in the running pod, the
+// per-child distribution is flat: 33 children, mean 167MiB, largest 251MiB. No
+// single subsystem dominates, so how many are up IS the bill.
+//
+// THIRTY-SIX, AND THE BINDING NUMBER IS THE REQUEST, NOT THE LIMIT. The container
+// requests 6Gi and is limited to 11Gi, and the kubelet scores eviction candidacy
+// against the REQUEST — so a pod comfortably inside its limit is still first in
+// line once it exceeds what it reserved, which is exactly how this one was evicted
+// for node memory and took the API down with it. 36 x 167MiB is ~5.9GiB plus a
+// ~200MiB host: at the request, not past it. An earlier 48 was sized against the
+// limit and allowed ~7.8GiB, 30% over the reservation.
+//
+// It sits just above the observed working set of 33, and that narrowness is the
+// real finding rather than a tuning choice: this pod's reservation barely covers
+// its own catalog. The levers are the REQUEST or the per-child GOMEMLIMIT, not
+// this number — lowering it below the working set would not save memory, it would
+// thrash, evicting something about to be asked for again.
+const Warm = 36
+
 func (a App) resolve() zip.Plugin {
 	env := "CLOUD_" + strings.ToUpper(strings.NewReplacer("-", "_").Replace(a.Name))
 	if addr := strings.TrimSpace(os.Getenv(env + "_ADDR")); addr != "" {
@@ -172,7 +218,7 @@ func (a App) resolve() zip.Plugin {
 	// An explicit path is honoured as given: the operator named this file, so
 	// silently running something else instead would be a lie.
 	if path := strings.TrimSpace(os.Getenv(env + "_BIN")); path != "" {
-		return zip.Plugin{Name: a.Name, Path: path, Lazy: !a.Eager, IdleAfter: Idle()}
+		return zip.Plugin{Name: a.Name, Path: path, Lazy: !a.Eager, IdleAfter: idleAfter}
 	}
 	dir := ""
 	if self, err := os.Executable(); err == nil {
@@ -192,23 +238,6 @@ func (a App) resolve() zip.Plugin {
 
 func found(path string) bool { _, err := os.Stat(path); return err == nil }
 
-// Idle is how long a lazy subsystem may go unused before the host stops its
-// process. The next request through its prefix starts it again, so the host's
-// resident cost tracks the subsystems in USE rather than every one that has
-// ever been called once — which for a fleet this size is the difference
-// between a working set and a catalog.
-//
-// Read here rather than at each resolve site so the three ladder rungs cannot
-// disagree about it. Env CLOUD_PLUGIN_IDLE; zero switches it off.
-func Idle() time.Duration {
-	if v := strings.TrimSpace(os.Getenv("CLOUD_PLUGIN_IDLE")); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
-	}
-	return 15 * time.Minute
-}
-
 // pluginIn is the sibling-directory half of the ladder, split out because the
 // choice it makes depends on what is ON DISK next to the host — and a test whose
 // answer comes from os.Executable() can only ever see the test binary's own
@@ -219,5 +248,5 @@ func (a App) pluginIn(dir string) zip.Plugin {
 	// <dir>/<name> or it does not resolve on disk at all. A missing one is named
 	// in the failure, because that is the binary a developer expects to have
 	// built (or the release ladder below fills in over the network).
-	return zip.Plugin{Name: a.Name, Path: filepath.Join(dir, a.Name), Lazy: !a.Eager, IdleAfter: Idle()}
+	return zip.Plugin{Name: a.Name, Path: filepath.Join(dir, a.Name), Lazy: !a.Eager, IdleAfter: idleAfter}
 }

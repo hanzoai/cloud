@@ -958,6 +958,17 @@ func buildFrontendCmdRev(buildCtx, dockerfile, image, revision string) []any {
 		)
 	}
 	cmd = append(cmd, "--secret", "id=GIT_AUTH_TOKEN,env=GIT_AUTH_TOKEN")
+	// The package-registry credential, for a build that installs the fabric's own
+	// packages (git.hanzo.ai serves npm, and REQUIRE_SIGNIN_VIEW gates it, so an
+	// anonymous `npm ci` 401s even on a public repo). Separate from GIT_AUTH_TOKEN
+	// because they authenticate to different things and rotate independently:
+	// that one is a git-fetch credential and this one reads packages. Optional by
+	// the same rule as the rest, and optional in the strong sense: buildkit's
+	// secretsprovider skips its stat when `env` is named and answers a missing
+	// variable with an EMPTY secret rather than an error (v0.16.0 store.go
+	// NewStore/GetSecret), so declaring this cannot fail a build that has no
+	// Secret behind it — such a build installs from public registries as before.
+	cmd = append(cmd, "--secret", "id=REGISTRY_TOKEN,env=REGISTRY_TOKEN")
 	// Hand the image's own tag to the build as VERSION, so a binary can stamp the
 	// version it was published under (cloud's Dockerfile links it into
 	// cloud.Version, the X-Api-Version header) instead of shipping the "dev"
@@ -1128,6 +1139,16 @@ func s3CacheEndpoint(ep string) string {
 // key authenticates the fabric's git fetches for private repos. Optional by
 // design: absent Secret ⇒ empty env ⇒ anonymous fetch (public repos only).
 const gitTokenSecret = "console-git-token"
+
+// registryTokenSecret is the Secret (same namespace as the build Jobs) whose
+// `token` key reads the fabric's own package registry — git.hanzo.ai serves npm
+// and Go modules, and REQUIRE_SIGNIN_VIEW gates them, so an anonymous install
+// 401s even against a public repo's packages. Kept apart from gitTokenSecret
+// because the two authenticate to different services and rotate on their own
+// schedules; folding them into one credential is how a package read starts
+// depending on a git-fetch rotation. Optional by design: absent Secret ⇒ empty
+// env ⇒ a build installs from public registries exactly as before.
+const registryTokenSecret = "forge-registry-token"
 
 // buildkitRootlessImage is the UNPRIVILEGED buildkit variant. The build Job runs
 // it rootless (uid 1000, no privileged, process sandbox disabled) so a hostile
@@ -1337,6 +1358,13 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 							// cluster without the Secret builds public repos exactly as before.
 							map[string]any{"name": "GIT_AUTH_TOKEN", "valueFrom": map[string]any{
 								"secretKeyRef": map[string]any{"name": gitTokenSecret, "key": "token", "optional": true},
+							}},
+							// Package-registry credential, surfaced as the REGISTRY_TOKEN build
+							// secret. A build that installs the fabric's own packages needs it
+							// because git.hanzo.ai's registry is behind REQUIRE_SIGNIN_VIEW;
+							// optional for the same reason as the one above.
+							map[string]any{"name": "REGISTRY_TOKEN", "valueFrom": map[string]any{
+								"secretKeyRef": map[string]any{"name": registryTokenSecret, "key": "token", "optional": true},
 							}},
 							// Object-store credential for the layer cache (cacheArgs).
 							// buildkit reads the S3 backend's keys from the environment, so

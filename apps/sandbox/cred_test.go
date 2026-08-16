@@ -16,9 +16,14 @@ package sandbox
 // the same reason: the interesting case is the one that must never happen.
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/hanzoai/cloud/internal/iam"
 )
 
 // podWith renders the object this package would actually send to the apiserver,
@@ -244,4 +249,167 @@ func renderedText(t *testing.T, v any) string {
 	}
 	walk(v)
 	return b.String()
+}
+
+// ── the owner's own session ──────────────────────────────────────────────────
+
+// A lease with no bearer to exchange gets no session and no error. An API key is
+// not a relayable bearer and the agent plane carries no user token at all, so
+// "nothing to exchange" is an ordinary outcome and must not fail a lease.
+func TestNoBearerIsNoSessionAndNoError(t *testing.T) {
+	t.Setenv("IAM_SANDBOX_CLIENT_ID", "hanzo-sandbox")
+	t.Setenv("IAM_SANDBOX_CLIENT_SECRET", "secret")
+	for _, bearer := range []string{"", "   "} {
+		s, err := sessionFor(context.Background(), bearer, time.Hour)
+		if err != nil {
+			t.Fatalf("bearer %q: %v", bearer, err)
+		}
+		if s.Token != "" {
+			t.Fatalf("bearer %q produced a token", bearer)
+		}
+	}
+}
+
+// A deployment that wires no sandbox client mints nothing — and says so by handing
+// back an empty session rather than by failing every lease on the fleet.
+func TestNoSandboxClientIsNoSession(t *testing.T) {
+	t.Setenv("IAM_SANDBOX_CLIENT_ID", "")
+	t.Setenv("IAM_SANDBOX_CLIENT_SECRET", "")
+	s, err := sessionFor(context.Background(), "a.b.c", time.Hour)
+	if err != nil || s.Token != "" {
+		t.Fatalf("session=%q err=%v; want neither", s.Token, err)
+	}
+}
+
+// THE CONSOLE CLIENT IS NOT A FALLBACK. Both credentials sit in this process, and
+// the console's may act for a reserved-org subject where this one may not — so a
+// sandbox that reached for it when its own was unset would hand a pod exactly the
+// credential the separate client exists to keep out, and would do it precisely
+// when the deployment was misconfigured. Unset means no session.
+func TestTheConsoleClientIsNeverBorrowed(t *testing.T) {
+	t.Setenv("IAM_SANDBOX_CLIENT_ID", "")
+	t.Setenv("IAM_SANDBOX_CLIENT_SECRET", "")
+	t.Setenv("IAM_MINT_CLIENT_ID", "hanzo-console")
+	t.Setenv("IAM_MINT_CLIENT_SECRET", "secret")
+	t.Setenv("IAM_URL", "http://127.0.0.1:1") // any exchange attempt would fail loudly here
+	s, err := sessionFor(context.Background(), "a.b.c", time.Hour)
+	if err != nil || s.Token != "" {
+		t.Fatalf("the console credential was borrowed: session=%q err=%v", s.Token, err)
+	}
+}
+
+// THE TOKEN IS NOT IN THE SCRIPT. It goes in on stdin, because a value in argv is
+// published by `ps` and by /proc to every process in the pod — which is exactly
+// the population this credential is scoped against.
+func TestTheTokenNeverAppearsInTheScript(t *testing.T) {
+	s := iam.Session{Token: "header.payload.signature", Email: "a@hanzo.ai", Display: "A"}
+	if got := script(s, "hanzo"); strings.Contains(got, s.Token) {
+		t.Fatalf("the script carries the token:\n%s", got)
+	}
+}
+
+// The credential is offered to the FORGE and to nothing else. A bare
+// `credential.helper` would hand the owner's platform token to github.com — or to
+// whatever host a checkout inside the sandbox points at — on the first fetch.
+func TestTheGitCredentialIsScopedToTheForge(t *testing.T) {
+	for brandID, host := range map[string]string{"hanzo": "git.hanzo.ai", "lux": "git.lux.network", "zoo": "git.zoo.ngo"} {
+		got := script(iam.Session{Token: "t"}, brandID)
+		want := "'credential.https://" + host + ".helper'"
+		if !strings.Contains(got, want) {
+			t.Fatalf("%s: script does not scope the helper to %s:\n%s", brandID, host, got)
+		}
+		for _, loose := range []string{"git config --global credential.helper ", "--global credential.helper="} {
+			if strings.Contains(got, loose) {
+				t.Fatalf("%s: script sets an unscoped credential helper:\n%s", brandID, got)
+			}
+		}
+	}
+}
+
+// An identity is DATA, and a display name is whatever IAM holds for a user. Every
+// value crossing into the script is quoted, so a name that looks like a command is
+// a name.
+func TestAnIdentityCannotBecomeACommand(t *testing.T) {
+	got := script(iam.Session{
+		Token:   "t",
+		Display: "'; touch /tmp/pwned; echo '",
+		Email:   "$(touch /tmp/pwned)@hanzo.ai",
+	}, "hanzo")
+	for _, bad := range []string{"; touch /tmp/pwned; echo ", "$(touch"} {
+		// The bytes may appear INSIDE a quoted word; what must not appear is an
+		// unquoted one. Both values are wrapped, so the shell sees literals.
+		if strings.Contains(got, bad) && !strings.Contains(got, shellQuote("'; touch /tmp/pwned; echo '")) &&
+			!strings.Contains(got, shellQuote("$(touch /tmp/pwned)@hanzo.ai")) {
+			t.Fatalf("an identity escaped its quotes:\n%s", got)
+		}
+	}
+	if !strings.Contains(got, `export HOME="${HOME:-`+home+`}"`) {
+		t.Fatalf("the script does not settle HOME:\n%s", got)
+	}
+}
+
+// An identity IAM did not state is not invented. A session with no email leaves
+// git's identity unset rather than writing an empty one, which git reports
+// honestly the first time somebody commits.
+func TestAnAbsentIdentityIsNotWritten(t *testing.T) {
+	got := script(iam.Session{Token: "t"}, "hanzo")
+	for _, k := range []string{"user.name", "user.email"} {
+		if strings.Contains(got, k) {
+			t.Fatalf("script writes %s from an empty claim:\n%s", k, got)
+		}
+	}
+}
+
+// The session is a credential and belongs nowhere near the Pod spec: a value there
+// is a value in etcd and in every `kubectl describe` of that pod.
+func TestTheSessionIsNeverInTheKubernetesObject(t *testing.T) {
+	spec, c := podWith(t, "dev", cred{session: iam.Session{Token: "header.payload.signature"}})
+	for _, m := range []map[string]any{spec, c} {
+		raw, err := json.Marshal(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), "header.payload.signature") {
+			t.Fatalf("the session token is in the Kubernetes object: %s", raw)
+		}
+	}
+	if _, stated := c["env"]; stated {
+		t.Fatalf("a session-bearing ordinary sandbox states env %v", c["env"])
+	}
+}
+
+// A caller may name its own image. One without git has nothing to configure and
+// one without hanzo has nothing to sign in, so each half asks before it acts —
+// a lease is not failed over a credential its image could not have spent.
+func TestAnImageWithoutTheToolsIsNotAFailedLease(t *testing.T) {
+	got := script(iam.Session{Token: "t", Email: "a@hanzo.ai"}, "hanzo")
+	for _, tool := range []string{"git", "hanzo"} {
+		if !strings.Contains(got, "if command -v "+tool+" >/dev/null; then") {
+			t.Fatalf("the script runs %s without asking whether it is there:\n%s", tool, got)
+		}
+	}
+}
+
+// AN IDENTITY OUTAGE IS NOT A SANDBOX OUTAGE. When the exchange cannot be made,
+// the lease still happens and the pod holds nothing — which is the sandbox
+// everybody had before any of this existed. The alternative would have let one
+// unreachable dependency stop every sandbox on the fleet, and it would have
+// denied nothing that is not already denied.
+func TestAnIdentityOutageStillLeases(t *testing.T) {
+	t.Setenv("IAM_SANDBOX_CLIENT_ID", "hanzo-sandbox")
+	t.Setenv("IAM_SANDBOX_CLIENT_SECRET", "secret")
+	t.Setenv("IAM_URL", "http://127.0.0.1:1") // nothing answers here
+	s, err := sessionFor(context.Background(), "a.b.c", time.Minute)
+	if err == nil {
+		t.Fatal("an unreachable IAM was reported as success")
+	}
+	if s.Token != "" {
+		t.Fatal("an unreachable IAM produced a token")
+	}
+	// And the pod that gets that zero session is the one this package has always
+	// built: no env, nothing to deliver.
+	_, c := podWith(t, "exec", cred{session: s})
+	if _, stated := c["env"]; stated {
+		t.Fatalf("a session-less sandbox states env %v", c["env"])
+	}
 }

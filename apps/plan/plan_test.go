@@ -173,8 +173,8 @@ func TestPlans_Ladder(t *testing.T) {
 	if err := json.Unmarshal(resp.Body, &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	price := map[string]float64{"go": 9, "dev": 19, "pro": 49, "max": 99, "team": 25}
-	lookup := map[string]string{"go": "hanzo_go_9", "dev": "hanzo_dev_19", "pro": "hanzo_pro_49", "max": "hanzo_max_99", "team": "hanzo_team_25"}
+	price := map[string]float64{"free": 0, "go": 8, "pro": 19, "max": 99, "team": 25}
+	lookup := map[string]string{"free": "", "go": "hanzo_go_8", "pro": "hanzo_pro_19", "max": "hanzo_max_99", "team": "hanzo_team_25"}
 	seen := map[string]bool{}
 	for _, p := range body.Plans {
 		want, ok := price[p.ID]
@@ -205,7 +205,7 @@ func TestPlans_Ladder(t *testing.T) {
 }
 
 // TestLicenseEntitlement_TeamProduct is the entitlement gate contract for
-// hanzo.team: a signed license for dev, pro, max AND team must carry
+// hanzo.team: a signed license for pro, max AND team must carry
 // licensing.product:team, and go (the entry tier) must NOT — the gate fails
 // closed for a tier that never bought team access.
 func TestLicenseEntitlement_TeamProduct(t *testing.T) {
@@ -214,7 +214,7 @@ func TestLicenseEntitlement_TeamProduct(t *testing.T) {
 	defer func() { host.Close(); host = prev }()
 	ctx := context.Background()
 
-	for _, id := range []string{"dev", "pro", "max", "team"} {
+	for _, id := range []string{"pro", "max", "team"} {
 		ents, feats, found, err := LicenseEntitlement(ctx, id)
 		if err != nil {
 			t.Fatalf("LicenseEntitlement(%s): %v", id, err)

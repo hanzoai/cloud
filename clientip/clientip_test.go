@@ -1,4 +1,4 @@
-package cloud
+package clientip
 
 // The client-address rule, and the attack it exists to stop.
 //

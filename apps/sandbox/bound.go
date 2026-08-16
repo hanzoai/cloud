@@ -85,6 +85,26 @@ func bindTo(ns string) (Bound, error) {
 // because a selector a caller can pass is a selector a caller can widen.
 func (b Bound) list() metav1.ListOptions { return metav1.ListOptions{LabelSelector: b.Selector} }
 
+// disks is the ONE way to enumerate project disks, and it is a second method
+// rather than an argument to the first for the reason this file exists.
+//
+// It selects on labProject, not labSandbox, because a disk BELONGS TO A PROJECT
+// and outlives every sandbox that mounts it — so the label naming one sandbox is
+// not a thing a disk can honestly carry. labProject is written by ensureVolume
+// and nothing else, which gives the disk half the same property the pod half
+// has: the set is decided here, once, and a caller cannot widen it.
+func (b Bound) disks() metav1.ListOptions { return metav1.ListOptions{LabelSelector: labProject} }
+
+// holds reports whether an object is a project disk this bound may delete — the
+// same read-it-back check `covers` makes, against the label disks actually wear.
+func (b Bound) holds(obj *unstructured.Unstructured) bool {
+	if obj == nil || obj.GetNamespace() != b.Namespace {
+		return false
+	}
+	_, ok := obj.GetLabels()[labProject]
+	return ok
+}
+
 // covers reports whether an object is one this bound may delete: right namespace,
 // and carrying this package's label. It is applied to the object READ BACK from the
 // apiserver, never to the row that named it, because the row is our belief and the

@@ -73,6 +73,32 @@ import (
 // and never a v2 — the document's own shape is versioned by its `openapi` field.
 const Path = "/v1/openapi.json"
 
+// WellKnown is where a client that has never seen this API looks first. RFC 8615
+// reserves /.well-known/ for exactly that, so every generator, IDE and crawler
+// probes it before it probes anything of ours.
+//
+// It is an ALIAS, not a second document: [serve] answers both from the one lazy
+// render, so the two addresses cannot describe different APIs. Path stays
+// canonical and is what the spec's own self-description names.
+//
+// THE ADDRESS IS ZIP'S, and so is the name — spelling the string here a second
+// time is how two copies of one fact come to disagree after a framework bump.
+//
+// It also already ANSWERS, which is the whole reason this exists. zip auto-mounts
+// a document of its own there from its own typed-op registry ([zip.App.Registry]),
+// installed at Serve. On the light host that registry is almost empty, so what
+// api.hanzo.ai publishes at the address every generator probes is an 841-byte
+// document titled "cloud 0.0.0" describing /healthz and /readyz — measured, and
+// it is what /docs renders too. A generator reading it produces an empty client
+// AND REPORTS SUCCESS; a 404 would at least be honest.
+//
+// Registering here WINS rather than collides: zip's projections are control
+// routes, materialised after every ordinary route (zip build.go), and fiber
+// resolves a duplicate pattern by first registration. So this is not a second
+// answer added beside zip's — it is the one answer, in front of a weaker one
+// that stops being reachable.
+const WellKnown = zip.SpecPath
+
 // Route is one live route, reduced to what the router actually knows: where a
 // request goes. Method and Path are the whole of it.
 //
@@ -305,24 +331,38 @@ type Parameter struct {
 // the document as an extension rather than as a tag because the tag axis already
 // means PRODUCT — `compat` had to be filtered back out of it by [Products], and a
 // second orthogonal fact in the same slot would be that wart twice.
+// Security overrides the document-level requirement for ONE operation, and a
+// pointer is what lets it say the two different things OpenAPI distinguishes:
+// absent means "inherit the document's requirement" and present-and-empty means
+// "this needs no credential at all". A plain slice collapses both onto nil and
+// could only ever say the first. Nothing sets it to a non-empty value — an
+// operation with a requirement of its own would be a second credential, and there
+// is one (openapi/security.go). [Open] is what writes it.
 type Operation struct {
-	OperationID string      `json:"operationId"`
-	Summary     string      `json:"summary,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Tags        []string    `json:"tags,omitempty"`
-	Parameters  []Parameter `json:"parameters,omitempty"`
-	RequestBody any         `json:"requestBody,omitempty"`
-	Responses   any         `json:"responses,omitempty"`
-	App         string      `json:"x-app,omitempty"`
-	Public      bool        `json:"x-public,omitempty"`
+	OperationID string         `json:"operationId"`
+	Summary     string         `json:"summary,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Tags        []string       `json:"tags,omitempty"`
+	Parameters  []Parameter    `json:"parameters,omitempty"`
+	RequestBody any            `json:"requestBody,omitempty"`
+	Responses   any            `json:"responses,omitempty"`
+	Security    *[]Requirement `json:"security,omitempty"`
+	App         string         `json:"x-app,omitempty"`
+	Public      bool           `json:"x-public,omitempty"`
 }
 
 // Components holds the named schemas operations reference by $ref, so an SDK
 // generator mints one named type per Go struct instead of an anonymous shape per
 // operation. Open-typed: Register contributes *Schema values, the typed fold
 // contributes zip's JSON Schema verbatim — both marshal to the same vocabulary.
+//
+// SecuritySchemes names the credential the API reads. It is the one component a
+// route table cannot supply, so it is declared rather than derived — see
+// openapi/security.go, and [Document.Security] for the requirement that points at
+// it.
 type Components struct {
-	Schemas map[string]any `json:"schemas,omitempty"`
+	Schemas         map[string]any            `json:"schemas,omitempty"`
+	SecuritySchemes map[string]SecurityScheme `json:"securitySchemes,omitempty"`
 }
 
 // PathItem maps a lowercased HTTP method to its operation.
@@ -365,7 +405,10 @@ type PathItem map[string]*Operation
 //   - query and header parameters — read positionally via c.Query("k") at
 //     runtime; not part of the match, so the router has never heard of them.
 //   - auth requirements — enforced by middleware and by guards wrapped around
-//     handlers (guard(s, cloud.Handle(s, listSecrets))), invisible as data.
+//     handlers (guard(s, cloud.Handle(s, listSecrets))), invisible as data. No
+//     reading of a func value recovers them, so the credential is DECLARED
+//     (openapi/security.go): one scheme, a document-level requirement every
+//     operation inherits, and [Open] on the few that need none.
 //   - summaries/descriptions — prose that exists only in Go comments (a typed
 //     op's zipdoc lift, or a refused route's Describe declaration).
 //   - wildcard semantics — a fiber `*` matches MULTIPLE segments greedily;
@@ -430,6 +473,7 @@ type Document struct {
 	OpenAPI    string              `json:"openapi"`
 	Info       Info                `json:"info"`
 	Servers    []Server            `json:"servers,omitempty"`
+	Security   []Requirement       `json:"security,omitempty"`
 	Tags       []Tag               `json:"tags,omitempty"`
 	Paths      map[string]PathItem `json:"paths"`
 	Components *Components         `json:"components,omitempty"`
@@ -662,6 +706,10 @@ func Spec(app *zip.App, info Info, servers ...Server) (*Document, error) {
 	// Project replaces doors with what is behind them, so a mark written before
 	// either would be thrown away by it. See openapi/public.go.
 	stamp(doc)
+	// And the credential, on that same finished set, for that same reason. Two
+	// facts a route table cannot carry, declared beside the routes and written
+	// here where every operation exists at its published address.
+	secure(doc)
 	return doc, nil
 }
 
@@ -783,8 +831,8 @@ func Mount(app *zip.App, info Info, servers ...Server) {
 // duplicate — a self-description that panicked the second time a process mounted
 // would be worse than none.
 //
-// It is the one operation with no owning subsystem, so nothing else would ever
-// declare it, and it was the last route in the fleet publishing an operationId and
+// Neither address has an owning subsystem, so nothing else would ever declare
+// them, and Path was the last route in the fleet publishing an operationId and
 // nothing else. A generated SDK offers it as a method; a spec-derived CLI offers it
 // as a command. Both should be able to say what it is.
 func init() {
@@ -798,6 +846,30 @@ func init() {
 			"to read the contract before it holds a credential, and the document grants nothing.\n\n"+
 			"Rendered once and served as bytes thereafter, so the route table's immutability is "+
 			"what makes a repeat request a memcpy rather than a re-encode of a megabyte document.")
+	// And it says so in the contract, not only in the prose above. The reasoning
+	// on [Mount] is what makes this door unauthenticated; without the declaration
+	// the document would inherit the fleet requirement and tell every generated
+	// client to hold a credential before it can read the description it needs in
+	// order to know what a credential is for. CommandPath is the same door under
+	// [serve] and gets the same answer (command.go).
+	Open(Path, http.MethodGet)
+
+	// The alias owes the same two declarations, because the document does not
+	// know it is an alias: [WellKnown] is a second address in the published
+	// contract, so silence there is an SDK method and a CLI command carrying an
+	// operationId and nothing else — the exact hole Path's own prose was written
+	// to close. Its summary says WHICH of the two it is, since a reader meets
+	// them side by side in a list of operations and the difference is the whole
+	// content of this one.
+	Describe(WellKnown, http.MethodGet,
+		"The API description, at the conventional address",
+		"The same document /v1/openapi.json serves, at the address RFC 8615 reserves "+
+			"for discovery — one handler over one render, so the two cannot describe "+
+			"different APIs.\n\n"+
+			"It exists because a client that has never seen this API probes here first. "+
+			"Prefer /v1/openapi.json when you already know the API: it is canonical, and "+
+			"it is what the document's own self-description names.")
+	Open(WellKnown, http.MethodGet)
 }
 
 func serve(app *zip.App, doc func() (*Document, error)) {
@@ -808,14 +880,19 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 		}
 		return json.Marshal(d)
 	})
-	app.Get(Path, func(c *zip.Ctx) error {
+	answer := func(c *zip.Ctx) error {
 		body, err := render()
 		if err != nil {
 			return zip.ErrInternal(err.Error())
 		}
 		c.SetHeader("Content-Type", "application/json")
 		return c.Bytes(200, body)
-	})
+	}
+	app.Get(Path, answer)
+	// Both addresses, one handler over one render, so the canonical path and the
+	// conventional one cannot come to describe different APIs. See [WellKnown]
+	// for why the alias has to exist at all.
+	app.Get(WellKnown, answer)
 	// The command projection reads the SAME render, so both addresses are two
 	// readings of one artifact. Here rather than in either mount, because both
 	// document sources go through serve and the fifth projection belongs to
@@ -839,4 +916,4 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 // So it is stated once, beside the code that makes it true. The second door
 // arrived and all three were wrong the same afternoon — the cost of a literal is
 // that it is right until it isn't and says nothing when it stops.
-func Door(path string) bool { return path == Path || path == CommandPath }
+func Door(path string) bool { return path == Path || path == WellKnown || path == CommandPath }

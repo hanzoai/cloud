@@ -152,6 +152,22 @@ func init() {
 		Example:  json.RawMessage(`{"repo":"widgets"}`),
 		Response: json.RawMessage(`{"repo":"widgets","status":"built","url":"https://acme.github.io/widgets/","cname":"docs.acme.com","custom404":false,"buildType":"legacy","httpsEnforced":true,"source":{"branch":"main","path":"/docs"}}`),
 	})
+	zip.Describe("GET /v1/integrations/gitlab/projects", zip.Doc{
+		Description: "Lists the projects the org's GitLab connection can reach —\nmembership projects, most recently active first.",
+		Fields: map[string]string{
+			"gitlabProjectView.cloneUrl":      "CloneURL is the https remote to clone.",
+			"gitlabProjectView.defaultBranch": "DefaultBranch is the branch a clone lands on (\"main\" when GitLab names none,\nwhich is what an empty project reports).",
+			"gitlabProjectView.description":   "Description is the project's own, empty when it has none.",
+			"gitlabProjectView.fullName":      "FullName is the namespace path (\"acme/widgets\", \"acme/team/widgets\" for a\nsubgroup) — the string GitLab calls path_with_namespace.",
+			"gitlabProjectView.htmlUrl":       "HTMLURL is the project's page.",
+			"gitlabProjectView.name":          "Name is the project's path segment (\"widgets\"), not its display name.",
+			"gitlabProjectView.private":       "Private is true for anything not publicly visible (private or internal).",
+			"gitlabProjectView.pushedAt":      "PushedAt is RFC3339 last activity, so a client can sort or say \"2h ago\".",
+			"gitlabProjectsOut.account":       "Account is the connected GitLab username, so a client can label the list\nwithout a second call. Empty when the connection recorded none.",
+			"gitlabProjectsOut.projects":      "Projects is every project the token reaches, newest activity first. Never\nnull; [] when the account has none.",
+		},
+		Response: json.RawMessage(`{"projects":[{"name":"widgets","fullName":"acme/widgets","private":true,"defaultBranch":"main","pushedAt":"2026-07-01T10:00:00Z","cloneUrl":"https://gitlab.com/acme/widgets.git","htmlUrl":"https://gitlab.com/acme/widgets"}],"account":"acme"}`),
+	})
 	zip.Describe("POST /integrations/chat-identity", zip.Doc{
 		Description: "Answers WHO a chat turn runs as, and never with what.\n\nThe org rides the request rather than the caller's plane identity, for the\nsame reason AgentsRunOnBehalf does: the tenant is the one that connected the\nworkspace, which the adapter resolved from a signed id, and the calling\nplugin's own identity is not it. No token is returned under any branch.",
 	})

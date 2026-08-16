@@ -175,28 +175,37 @@ func edgeCORS(pol *edge.Store, proven verifiedHostFn) zip.Handler {
 		// and is idempotent.
 		c.Fiber().Vary("Origin")
 
-		if !current().allowed(c.Context(), origin) {
-			// An origin we do not vouch for gets NO credentialed CORS headers, and
-			// the browser blocks the read. It is not refused here: this middleware
-			// is in front of every route, and a 403 would break the many non-browser
-			// callers that send a stray Origin, plus every same-origin POST whose
-			// host nobody thought to declare. Withholding the header is the whole
-			// enforcement — it is what the browser acts on.
-			return c.Continue()
-		}
+		// An origin we do not vouch for gets NO credentialed CORS headers, and the
+		// browser blocks the read. The REQUEST is not refused: this middleware is in
+		// front of every route, and a 403 would break the many non-browser callers
+		// that send a stray Origin, plus every same-origin POST whose host nobody
+		// thought to declare. Withholding the header is the whole enforcement — it
+		// is what the browser acts on.
+		//
 		// Admitted: reflect the exact origin. Credentialed CORS is NEVER wildcard —
 		// `*` with Access-Control-Allow-Credentials is invalid per the Fetch
 		// standard, and the value echoed here has already been matched against a
 		// declaration or resolved to a verified record.
-		c.SetHeader("Access-Control-Allow-Origin", origin)
-		c.SetHeader("Access-Control-Allow-Credentials", "true")
+		allowed := current().allowed(c.Context(), origin)
+		if allowed {
+			c.SetHeader("Access-Control-Allow-Origin", origin)
+			c.SetHeader("Access-Control-Allow-Credentials", "true")
+		}
 		if c.Method() == "OPTIONS" {
-			// The allow-headers answer now depends on what the browser asked, so the
-			// cache key has to say so for the same reason Vary: Origin does.
-			c.Fiber().Vary("Access-Control-Request-Headers")
-			c.SetHeader("Access-Control-Allow-Methods", corsAllowMethods)
-			c.SetHeader("Access-Control-Allow-Headers", corsAllowHeaders(c.Header("Access-Control-Request-Headers")))
-			c.SetHeader("Access-Control-Max-Age", corsMaxAge)
+			// This middleware OWNS the preflight: it is the only thing in the process
+			// that answers one, so it answers every one, and admission decides which
+			// headers ride along rather than whether there is a reply at all. A
+			// preflight continuing past here meets a router with no OPTIONS route and
+			// is told the door does not exist — the least true answer available, and
+			// one that hides the missing header the browser actually stopped on.
+			if allowed {
+				// The allow-headers answer depends on what the browser asked, so the
+				// cache key has to say so for the same reason Vary: Origin does.
+				c.Fiber().Vary("Access-Control-Request-Headers")
+				c.SetHeader("Access-Control-Allow-Methods", corsAllowMethods)
+				c.SetHeader("Access-Control-Allow-Headers", corsAllowHeaders(c.Header("Access-Control-Request-Headers")))
+				c.SetHeader("Access-Control-Max-Age", corsMaxAge)
+			}
 			// Short-circuit the preflight: 204, no body, no auth/rate work.
 			c.Status(204)
 			return nil

@@ -29,7 +29,7 @@ function run(attrs, opts = {}) {
     console,
     URL,
     Blob: class Blob {
-      constructor(parts) { this.text = parts.join('') }
+      constructor(parts, opts) { this.text = parts.join(''); this.type = (opts && opts.type) || '' }
     },
     crypto: { randomUUID: () => 'uuid-' + storage.size + '-' + Math.random().toString(36).slice(2, 8) },
     setTimeout: () => 1,
@@ -60,7 +60,7 @@ function run(attrs, opts = {}) {
     navigator: {
       sendBeacon: opts.noBeacon
         ? undefined
-        : (url, blob) => { sent.beacon.push({ url, body: blob.text }); return true }
+        : (url, blob) => { sent.beacon.push({ url, body: blob.text, type: blob.type }); return true }
     },
     fetch: (url, init) => { sent.fetch.push({ url, init }); return { catch: () => {} } },
     addEventListener: (name, fn) => { (listeners[name] = listeners[name] || []).push(fn) },
@@ -118,23 +118,25 @@ function anonOf(r) {
   assert.strictEqual(ev.event, undefined, 'naming is resolveEventName server-side')
 }
 
-// 4. Without sendBeacon the fetch path carries the key as a bearer. (A keyed tag also
-//    fetches /v1/tags for its browser pixels; the /v1/event POST is the one asserted.)
+// 4. Without sendBeacon the fetch path carries the key on the query, exactly as the
+//    beacon does — one carrier, one CORS class, checked for both in check 12. (A
+//    keyed tag also fetches /v1/tags for its browser pixels; the /v1/event POST is
+//    the one asserted.)
 {
   const r = run({ 'data-key': 'pk-live-abc' }, { noBeacon: true })
   r.fire('pagehide')
   const posts = r.sent.fetch.filter((f) => f.url.indexOf('/v1/event') !== -1)
   assert.strictEqual(posts.length, 1)
-  const init = posts[0].init
-  assert.strictEqual(init.headers.authorization, 'Bearer pk-live-abc')
+  const { url, init } = posts[0]
+  assert.ok(url.includes('/v1/event?ingest_key=pk-live-abc'), 'key rides the query: ' + url)
   assert.strictEqual(init.keepalive, true)
   assert.ok(JSON.parse(init.body).batch.length === 1)
+  assert.strictEqual(init.headers.authorization, undefined, 'a bearer would preflight the POST')
   // The send must not ask for cookies. A credentialed cross-origin POST is read
   // only when the response carries Access-Control-Allow-Credentials, which is
-  // granted to exact first-party origins alone — so on a customer's own site,
-  // the one place this tag is meant to run, the preflight fails and nothing is
-  // ever sent. The bearer key is the credential.
-  assert.strictEqual(init.credentials, undefined, 'the key is the credential; cookies must not ride')
+  // granted to exact first-party origins alone — and this tag's whole job is to run
+  // on a customer's own site, which is not one of them. The key is the credential.
+  assert.strictEqual(init.credentials, 'omit', 'the key is the credential; cookies must not ride')
 }
 
 // 5. The key may ride the src query, for a host that strips data-* attributes.
@@ -225,4 +227,39 @@ function anonOf(r) {
   )
 }
 
-console.log('tag.js: 11/11 behavioral checks passed')
+// 12. EVERY SEND IS A CORS-SIMPLE REQUEST — beacon and fetch alike. This tag runs
+//     on a customer's own domain, so every send is cross-origin. A simple request
+//     leaves the browser whatever origin it is on, because the browser asks
+//     permission to READ a cross-origin response, never to send one, and nothing
+//     here reads the receipt. Anything outside the safelist makes the POST
+//     preflighted instead: an unloading document gets no second round trip, and an
+//     origin that does not pass the preflight loses the batch with the queue
+//     already cleared. That is why the key rides the query (checks 3 and 4) — a
+//     header carrying it would preflight the send just as surely as a JSON type.
+{
+  const SAFELISTED = ['text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data']
+  const r = run({ 'data-key': 'pk-live-abc' })
+  r.fire('pagehide')
+  assert.strictEqual(r.sent.beacon.length, 1, 'one flush')
+  assert.ok(
+    SAFELISTED.indexOf(r.sent.beacon[0].type) !== -1,
+    'beacon body must carry a CORS-safelisted type, got: ' + JSON.stringify(r.sent.beacon[0].type)
+  )
+
+  const f = run({ 'data-key': 'pk-live-abc' }, { noBeacon: true })
+  f.fire('pagehide')
+  const post = f.sent.fetch.filter((x) => x.url.indexOf('/v1/event') !== -1)[0]
+  assert.ok(
+    SAFELISTED.indexOf(post.init.headers['content-type']) !== -1,
+    'fetch body must carry a CORS-safelisted type, got: ' + JSON.stringify(post.init.headers['content-type'])
+  )
+  // Content-Type is safelisted only for those three values; every OTHER header a
+  // send sets is outside the safelist by construction, so the count is the check.
+  assert.deepStrictEqual(
+    Object.keys(post.init.headers),
+    ['content-type'],
+    'a second header would preflight the send: ' + JSON.stringify(post.init.headers)
+  )
+}
+
+console.log('tag.js: 12/12 behavioral checks passed')

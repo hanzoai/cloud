@@ -103,7 +103,12 @@ func planeLease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
 	// the plane already carries — cloud.Who is how this door spells identity, and
 	// zip.Caller.Admin is the same attestation X-User-IsAdmin carries. One rule,
 	// stated once in imageFor; each door names the caller in its own vocabulary.
-	m, err := Lease(s, ctx, org, principal.LedgerFrom(ctx), cloud.Who(ctx).Admin, Spec{ID: in.ID, Class: in.Class,
+	// NO BEARER on this door. A plane call arrives under a capability envelope and
+	// carries an ATTESTED caller, not the caller's own token — there is nothing here
+	// to exchange, and substituting a credential of ours would put an identity in
+	// the pod that nobody presented. So a plane lease starts without a session, and
+	// the empty string says so rather than a flag saying it twice.
+	m, err := Lease(s, ctx, org, principal.LedgerFrom(ctx), cloud.Who(ctx).Admin, "", Spec{ID: in.ID, Class: in.Class,
 		Project: in.Project, Runtime: in.Runtime, TTLSec: in.TTLSec})
 	if err != nil {
 		return nil, err

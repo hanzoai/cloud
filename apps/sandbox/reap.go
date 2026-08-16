@@ -37,7 +37,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/k8s"
 	"github.com/hanzoai/namespace"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // reapEvery is how often we look. A minute is far finer than the smallest lease
@@ -81,6 +84,7 @@ func reap(ctx context.Context, s *cloud.Service[state]) {
 		case <-t.C:
 			sweep(ctx, s)
 			orphans(ctx, s)
+			reclaim(ctx, s)
 		}
 	}
 }
@@ -234,6 +238,125 @@ func orphans(ctx context.Context, s *cloud.Service[state]) {
 		}
 		s.Log.Info("reaped orphan sandbox pod", "pod", p.GetName(), "id", id)
 	}
+}
+
+// diskCold is how long a project disk may go unleased before it is reclaimed.
+//
+// Two weeks, and the number is a trade between two real costs rather than a round
+// figure. A disk holds a checkout and dependency caches — losing one costs a slow
+// first call, not work, because everything on it came from somewhere else and can
+// come from there again. Holding one costs its full size every day forever. So the
+// bound is generous enough that a project someone returns to after a holiday still
+// finds its cache warm, and short enough that a project nobody returns to is not
+// billed for a year.
+//
+// It reads against annLeased, which every lease refreshes, so "cold" means nobody
+// asked for this project for a fortnight — not that the disk is old. A disk in
+// daily use is never a day closer to being reclaimed.
+const diskCold = 14 * 24 * time.Hour
+
+// reclaim frees project disks nobody has leased for diskCold and nothing mounts.
+//
+// It is the third sweep and it closes the one gap the other two leave open BY
+// DESIGN: `end` keeps the volume, deliberately, because ending a lease must never
+// destroy what a tenant made and resume-is-cheap is the whole point of a per-project
+// disk. That is right for a project someone comes back to. It is also why a disk is
+// the one object here with no natural death — the pod goes with the lease, the row
+// goes with the pod, and the disk outlives both with nothing left to account for it.
+//
+// ensureVolume already writes the two facts a reclaim needs — the day of the last
+// lease, and the project the disk belongs to — and said in its own comment that
+// nothing read them. This reads them.
+//
+// FAIL-SAFE ON READ, the same way `known` returning nil stops the orphan sweep: a
+// pod list that cannot be had is not an empty pod list. "No pod mounts this disk"
+// and "we could not find out" are the same sentence to a caller and opposite facts
+// to a tenant, so the unreadable case reclaims NOTHING.
+//
+// Bounded by construction like every other sweep here (bound.go): listed in the
+// sandbox namespace under the project label, deleted BY NAME with a UID
+// precondition, after checking the object read back is one this bound holds.
+func reclaim(ctx context.Context, s *cloud.Service[state]) {
+	rt := s.State.rt
+	if err := rt.ready(); err != nil {
+		return
+	}
+	mounted := mountedDisks(ctx, s)
+	if mounted == nil {
+		return
+	}
+	vols := rt.dyn.Resource(k8s.Volumes).Namespace(rt.ns)
+	list, err := vols.List(ctx, rt.bound.disks())
+	if err != nil {
+		s.Log.Warn("reap: list project disks", "namespace", rt.ns, "err", err)
+		return
+	}
+	cutoff := time.Now().UTC().Add(-diskCold)
+	for i := range list.Items {
+		d := &list.Items[i]
+		if mounted[d.GetName()] {
+			continue
+		}
+		// An undated disk is KEPT. It predates the stamp, so its last use is
+		// unrecorded — and a disk that cannot be shown to be dead is not one to
+		// delete. It will be dated the next time its project is leased, and become
+		// reclaimable then, which is the only honest way for it to get there.
+		leased := d.GetAnnotations()[annLeased]
+		when, perr := time.Parse(time.DateOnly, leased)
+		if leased == "" || perr != nil || when.After(cutoff) {
+			continue
+		}
+		if !rt.bound.holds(d) {
+			continue
+		}
+		if err := vols.Delete(ctx, d.GetName(), precondition(d)); err != nil {
+			s.Log.Warn("reap: reclaim disk", "disk", d.GetName(), "err", err)
+			continue
+		}
+		s.Log.Info("reclaimed cold project disk", "disk", d.GetName(), "leased", leased)
+	}
+}
+
+// mountedDisks is every claim a pod in the sandbox namespace currently mounts, or
+// nil when that could not be determined.
+//
+// It lists the namespace WITHOUT the sandbox label, which is the one place here
+// that reads wider than the bound, and deliberately: this answer only ever
+// protects a disk. A pod that is not ours holding one of our claims is exactly the
+// case a label-narrowed read would miss, and missing it deletes a mounted disk.
+// Widening a read that can only say "keep" is safe; the delete below it is still
+// bounded.
+func mountedDisks(ctx context.Context, s *cloud.Service[state]) map[string]bool {
+	pods, err := s.State.rt.pods().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		s.Log.Warn("reap: list pods for disk sweep", "err", err)
+		return nil
+	}
+	out := map[string]bool{}
+	for i := range pods.Items {
+		vols, _, verr := unstructured.NestedSlice(pods.Items[i].Object, "spec", "volumes")
+		if verr != nil {
+			// One unreadable pod spec is not a reason to reclaim nothing, but it IS a
+			// reason not to trust this pod's mounts. Skipping it can only fail toward
+			// deleting a disk it mounted, so treat the whole answer as unusable.
+			s.Log.Warn("reap: read pod volumes", "pod", pods.Items[i].GetName(), "err", verr)
+			return nil
+		}
+		for _, v := range vols {
+			m, ok := v.(map[string]any)
+			if !ok {
+				continue
+			}
+			c, ok := m["persistentVolumeClaim"].(map[string]any)
+			if !ok {
+				continue
+			}
+			if n, ok := c["claimName"].(string); ok && n != "" {
+				out[n] = true
+			}
+		}
+	}
+	return out
 }
 
 // known is every sandbox id the stores still claim, or nil when they could not all

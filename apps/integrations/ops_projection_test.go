@@ -36,6 +36,7 @@ var typedOps = []string{
 	"GET /v1/integrations/:provider",
 	"GET /v1/integrations/github/installations",
 	"GET /v1/integrations/github/repos",
+	"GET /v1/integrations/gitlab/projects",
 	"POST /v1/integrations/github/search",
 	"POST /v1/integrations/github/fork",
 	"GET /v1/integrations/github/repos/:repo/pages",

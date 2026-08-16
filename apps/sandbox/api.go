@@ -115,6 +115,11 @@ const dirExit = 10
 // core read identity, and the reason every function in this file takes `org` as an
 // argument is that none of them may. So it arrives the way org does: named by the
 // adapter that knows it, from the one predicate that answers it.
+//
+// `bearer` is the credential the caller authenticated WITH, and it arrives the same
+// way and for the same reason. It is the subject of the token exchange that gives
+// the pod its owner's identity — see cred.go — so it is a fact about who is calling,
+// which is exactly what this core must be told rather than go looking for.
 // ResourceFee is what one lease of `class` costs, in cents.
 //
 //	SANDBOX_FEE_CENTS_EXEC / _DEV / _DESKTOP   per class
@@ -140,7 +145,7 @@ func ResourceFee(class string) int64 {
 
 const feeEnv = "SANDBOX_FEE_CENTS"
 
-func Lease(s *Service, ctx context.Context, org, ledger string, super bool, spec Spec) (Sandbox, error) {
+func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bearer string, spec Spec) (Sandbox, error) {
 	if strings.TrimSpace(org) == "" {
 		return Sandbox{}, zip.ErrForbidden("org required")
 	}
@@ -251,17 +256,44 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, spec
 		}
 	}
 
-	// THE ONE BRANCH ON WHICH AN IDENTITY REACHES A CREDENTIAL, and it is the same
-	// predicate that reached the image — see cred.go, where both live so they
-	// cannot drift apart. Read HERE, before the row and before the pod, for the
-	// reason runtimeFor is asked here: a lease that cannot be honoured must leave
-	// nothing behind, and a DigitalOcean outage should not strand a row and a PVC.
+	// The lease. Unbounded is not an option for a sandbox running submitted code on
+	// our nodes, so an unset ttl takes the class default rather than forever. It is
+	// settled HERE, ahead of the credential, because the credential is asked to live
+	// exactly this long and no longer.
+	ttl := spec.TTLSec
+	if ttl <= 0 {
+		ttl = classes[class].ttl
+	}
+	if ttl > maxTTL {
+		ttl = maxTTL
+	}
+
+	// THE CREDENTIALS, both resolved HERE — before the row and before the pod, for
+	// the reason runtimeFor is asked here: a lease that cannot be honoured must
+	// leave nothing behind, and an outage upstream should not strand a row and a
+	// PVC.
+	//
+	// The SESSION is every lease's: the caller's own identity, exchanged for a token
+	// that expires with this lease. The DigitalOcean credentials are one branch's,
+	// and it is the same predicate that reached the image — see cred.go, where both
+	// live so they cannot drift apart.
 	var cr cred
 	if admin(class, super) {
 		if cr, err = credFor(ctx, s.Log); err != nil {
 			return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "admin credentials: %v", err)
 		}
 	}
+	// AN IDENTITY THAT CANNOT BE MINTED DOES NOT COST THE SANDBOX. The exchange
+	// reaches IAM, and a sandbox that starts without a session is exactly the
+	// sandbox everybody got before this existed — useful, and holding nothing.
+	// Refusing the lease instead would turn an identity outage into a total sandbox
+	// outage, and it would deny nothing that is not already denied: the failure
+	// leaves the pod with no credential either way. So it is LOUD and it continues.
+	sess, err := sessionFor(ctx, bearer, time.Duration(ttl)*time.Second)
+	if err != nil {
+		s.Log.Warn("no owner session to hand the sandbox", "org", org, "class", class, "err", err)
+	}
+	cr.session = sess
 
 	id, err := genID()
 	if err != nil {
@@ -289,15 +321,6 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, spec
 	if err != nil {
 		return Sandbox{}, zip.ErrBadRequest(err.Error())
 	}
-	// The lease. Unbounded is not an option for a sandbox running submitted code on
-	// our nodes, so an unset ttl takes the class default rather than forever.
-	ttl := spec.TTLSec
-	if ttl <= 0 {
-		ttl = classes[class].ttl
-	}
-	if ttl > maxTTL {
-		ttl = maxTTL
-	}
 	m.ExpiresAt = now + int64(ttl)
 
 	if err := store.Put(ctx, m); err != nil {
@@ -311,6 +334,17 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, spec
 		_ = store.Put(ctx, m)
 		return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "start sandbox: %v", err)
 	}
+	// THE POD IS UP; SAY SO BEFORE ANYTHING TALKS TO IT. exec refuses a sandbox that
+	// is not running, and the row this holds still reads pending.
+	m.Status = "running"
+	// THE OWNER'S SESSION, into a pod that is now running — and its failure does not
+	// take the sandbox with it, for the same reason the exchange's does not: the pod
+	// holds nothing either way, and a shell without an identity is the shell every
+	// lease got before this existed. Both halves of "the owner could not be signed
+	// in" are therefore ONE policy, stated here where the lease is decided.
+	if err := s.State.rt.signIn(ctx, m, cr.session); err != nil {
+		s.Log.Warn("the sandbox could not take the owner session", "sandbox", m.ID, "org", org, "err", err)
+	}
 
 	// Recorded only once it RUNS. The gate above already refused a balance that
 	// could not cover it, and metering a lease that failed to start would bill for
@@ -320,7 +354,6 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, spec
 		Model:       class + "/" + m.Runtime,
 		AmountCents: fee,
 	})
-	m.Status = "running"
 	if err := store.Put(ctx, m); err != nil {
 		return Sandbox{}, zip.Errorf(http.StatusInternalServerError, "put: %v", err)
 	}

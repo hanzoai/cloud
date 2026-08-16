@@ -1481,6 +1481,10 @@
    "doc": "Implements the OpenAI-compatible chat completions API"
   },
   {
+   "id": "post_chat_public",
+   "doc": "Serves one completion to a caller with no account."
+  },
+  {
    "id": "post_completions",
    "doc": "Implements the OpenAI-compatible chat completions API"
   },
@@ -1745,6 +1749,12 @@
    "doc": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own."
   }
  ],
+ "allowance": [
+  {
+   "id": "get_allowance",
+   "doc": "Answers what the CALLER has left of their plan's free-call allowance this period,\nand the instant the count starts again.\n\nThis is the number a product shows beside the composer — \"17 of 20 left today\" —\nand the moment to offer a plan is when it reaches zero. It READS: asking does not\nspend, so a page that polls it costs the caller nothing.\n\nThe subject is the caller's own, resolved from the verified credential, and can\nnever be named in the request — so this is a mirror, not a lookup of someone else.\nAn unauthenticated caller is refused: there is no allowance without someone to\nhold it.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  }
+ ],
  "analytics": [
   {
    "id": "get_analytics_health",
@@ -2003,8 +2013,16 @@
    "doc": "Is the canonical public benchmarks this arena runs — the id, title, axis,\nitem count and upstream source of each, with native marking the ones the\nstandardized harness runs today; the rest are registered and adapter-pending.\n\nThese ids are the vocabulary the rest of the surface takes: a run names them, and\nthe leaderboard and compare read them from ?benchmark=. The catalog is\ndeployment-wide and identical for every caller — there is no tenant in it."
   },
   {
+   "id": "get_benchmark_claims",
+   "doc": "Lists the effective published claims: what the leaderboard will use for\neach (benchmark, model) after the seed, the import and any stored correction\nare layered. It answers the operator's question — what does this arena\ncurrently believe someone else reported, and did we ship that or fix it.\n\nEffective values only. The history of a key lives in the append-only file and\nis not what this op is for; a list that returned every superseded row would\nmake the common question the hard one."
+  },
+  {
    "id": "get_benchmark_compare",
    "doc": "Is the ONLY valid arm-vs-arm test: it pairs the two models on the items\nBOTH completed, and answers rescue and damage counts with an exact-McNemar p.\n\nPairing is what prevents the subset artifact — comparing one model's easy subset\nagainst another's full run — so n_common, not either arm's own coverage, is the\nnumber to read this by.\n\nBoth a and b are required. The benchmark defaults to gpqa_diamond."
+  },
+  {
+   "id": "get_benchmark_history",
+   "doc": "Returns each model's measured score per run over time, oldest first,\nwith the change between runs.\n\nThis is the counterweight to a leaderboard: the board shows the latest run\nbecause that is what \"how good is it\" means, and a single latest number cannot\ndistinguish a model that has always been strong from one that just improved,\nor from one that regressed after a provider changed something. Both matter for\nrouting, and only one of them is visible on a board.\n\nRuns with no id — attempts recorded before runs existed — group under the\nempty run, which is honestly what they are: one undated measurement."
   },
   {
    "id": "get_benchmark_leaderboard",
@@ -2013,6 +2031,10 @@
   {
    "id": "get_benchmark_presets",
    "doc": "Are the router blends available to compose from — a named set of model\narms, the rank they escalate through and the panel width that bounds fan-out —\neach served by the model layer as enso-\u003cname\u003e.\n\nToday it answers exactly one row, the reference blend: a worked example written\nin models we name, published as an example of the FORM. It is deliberately not\nthe composition of a Hanzo-served tier — the tier name exists to abstract that —\nso fork it and swap arms by what the leaderboard measures on your own tasks\nrather than reading it as a disclosure."
+  },
+  {
+   "id": "post_benchmark_claims",
+   "doc": "Records published claims: one to correct a number, many to import a\nleaderboard. Every row must carry a Source, because a claim without its\ncitation is a number nobody can check — and an unattributed number in the\npublished plane is indistinguishable from a measurement, which is the one\nconfusion this whole surface is built to prevent.\n\nWrites are append-only, so this never destroys the value it replaces. A\nvendor restating a score leaves both rows on disk, which is how the restating\nitself becomes visible."
   },
   {
    "id": "post_benchmark_presets",
@@ -2407,6 +2429,7 @@
    "doc": "Browse searches AND browses the cross-org catalog: every project, app and site\nthe fleet has built, whichever org built it.\n\nIt reads TWO corpora and returns them as one page — the published,\nworld-readable catalog that every caller sees, plus the caller's OWN org's\nprivate entries when the request carries a validated principal. Each row says\nwhich it came from in `scope`, so a client can warn before sharing a link. An\nanonymous caller simply gets the published one; no filter can ever widen a\ncaller into another tenant's corpus, because the query that would return it is\nnever run for them.\n\nA request with no q is a browse rather than a search, and both answer the same\nshape: the page, the total before paging, and the facet counts over the whole\nmatching set."
   }
  ],
+ "catalogsync": [],
  "channels": [
   {
    "id": "get_channels",
@@ -2745,6 +2768,10 @@
   {
    "id": "get_billing_credit-balance",
    "doc": "Returns the total credit still available to the caller's own subject — the sum of what the grants have left, which is the figure the console shows above the usage meter. It is the balance a metered act draws down, so it answers the one question a customer asks before spending: how much is there.\n\nLike every read in this family the subject is pinned to the caller before the handler runs, so the userId parameter the handler reads can never name another tenant. For the grants BEHIND this number — each with its original amount and its expiry — read /v1/billing/credits. A subject with no credit is zero, which is an answer and not an error."
+  },
+  {
+   "id": "get_billing_credit-balance_breakdown",
+   "doc": "Returns the same balance /v1/billing/credit-balance reports, split by the tag each grant carries, so a reader can tell trial credit from bought credit and show the earliest expiry within each group. A console needs the split to say what will lapse and when; the single number cannot.\n\nThe subject is pinned to the caller before the handler runs, exactly as in the sibling reads, so the userId parameter can never name another tenant. A subject with no grants is an empty breakdown and a zero total, which is an answer and not an error."
   },
   {
    "id": "get_billing_credits",
@@ -4094,7 +4121,7 @@
   },
   {
    "id": "get_esign_o_by_org_sign_by_token",
-   "doc": "Answers the document, the recipient it identifies, the fields THAT recipient must fill, and the PDF to display. The first open also marks the recipient as having opened it and records that on the audit trail, so this read has a side effect by design.\n\nThis is the signer's door and it takes NO account: the signing token is the entire credential, and it names the recipient, so a signer sees only their own fields and never the other recipients' tokens. The `:org` segment selects which tenant's store is opened, and the token is then looked up inside it — so a token presented under the wrong org simply does not resolve. An unknown or wrong-org token is a 401, never a hint that some other document exists."
+   "doc": "Answers the document, the recipient it identifies, the fields THAT recipient must fill, and the PDF to display. The first open also marks the recipient as having opened it and records that on the audit trail, so this read has a side effect by design.\n\nThis is the signer's door and it takes NO account: the signing token is the entire credential, and it names the recipient, so a signer sees only their own fields and never the other recipients' tokens. The token resolves to its owning tenant FIRST, before any per-tenant store is opened, and the `:org` segment is only checked against that answer. An unknown or wrong-org token is one and the same 404, never a hint that some other document exists."
   },
   {
    "id": "post_esign_documents",
@@ -4114,7 +4141,7 @@
   },
   {
    "id": "post_esign_o_by_org_sign_by_token_complete",
-   "doc": "Marks this recipient as done and answers whether the DOCUMENT sealed with it. When every signing recipient has completed, sealing happens right here in the same call: the collected values are rendered onto the PDF, a real x509 PKCS#7 signature is applied, the sealed bytes are stored beside the untouched original, and the document moves to `COMPLETED`. Until then the answer is the recipient's own completion with the document still pending.\n\nIt refuses to complete a half-filled signature: a recipient with any unfilled field is a 400 naming how many remain. A document not out for signature is a 409, as is a recipient who has already completed, and under SEQUENTIAL order a signer out of turn is a 403. The token is the whole credential — no account, and a token that does not resolve under `:org` is a 401. Sealing and completion are one transaction, so a failure anywhere leaves the document exactly as it was."
+   "doc": "Marks this recipient as done and answers whether the DOCUMENT sealed with it. When every signing recipient has completed, sealing happens right here in the same call: the collected values are rendered onto the PDF, a real x509 PKCS#7 signature is applied, the sealed bytes are stored beside the untouched original, and the document moves to `COMPLETED`. Until then the answer is the recipient's own completion with the document still pending.\n\nIt refuses to complete a half-filled signature: a recipient with any unfilled field is a 400 naming how many remain. A document not out for signature is a 409, as is a recipient who has already completed, and under SEQUENTIAL order a signer out of turn is a 403. The token is the whole credential — no account, and a token that does not resolve under `:org` is a 404. Sealing and completion are one transaction, so a failure anywhere leaves the document exactly as it was."
   },
   {
    "id": "post_esign_o_by_org_sign_by_token_fields_by_fieldid",
@@ -4122,7 +4149,7 @@
   },
   {
    "id": "post_esign_o_by_org_sign_by_token_reject",
-   "doc": "Records this recipient's refusal and moves the WHOLE DOCUMENT to `REJECTED` — one declining signer ends it for everyone, and there is no route back: the document cannot then be signed or completed. An optional `reason` is stored and written onto the audit trail with the rejection, which is what the sender sees.\n\nA document not out for signature is a 409, and so is a recipient who has already signed or already rejected — a refusal cannot be taken back or repeated. The token is the whole credential; one that does not resolve under `:org` is a 401."
+   "doc": "Records this recipient's refusal and moves the WHOLE DOCUMENT to `REJECTED` — one declining signer ends it for everyone, and there is no route back: the document cannot then be signed or completed. An optional `reason` is stored and written onto the audit trail with the rejection, which is what the sender sees.\n\nA document not out for signature is a 409, and so is a recipient who has already signed or already rejected — a refusal cannot be taken back or repeated. The token is the whole credential; one that does not resolve under `:org` is a 404."
   }
  ],
  "evals": [
@@ -5119,6 +5146,14 @@
    "doc": "Starts a wallet sign-in: it returns a one-time challenge for the wallet\nto sign. The challenge is good once and is tied to the site that asked for it,\nso a signature collected elsewhere cannot be replayed here."
   },
   {
+   "id": "get_iam_webauthn_signin_begin",
+   "doc": "Starts a passkey sign-in: it returns the challenge the person's\nauthenticator signs.\n\nThe account is named in the query, and the challenge is bound to it, so what may\nanswer is decided here — by the server, from the row — and the finish checks the\nanswer against that decision rather than recomputing it."
+  },
+  {
+   "id": "get_iam_webauthn_signup_begin",
+   "doc": "Starts enrolling a passkey for the signed-in person: it returns the\noptions their browser hands to the authenticator.\n\nPasskeys already on the account are EXCLUDED, so a second enrollment on a device\nthat already holds one is refused by the authenticator itself rather than\nsilently producing a duplicate the person cannot tell apart."
+  },
+  {
    "id": "get_iam_whoami",
    "doc": "Tells you who the current caller is — the lightweight check a\npage makes on load to decide whether to render signed-in or signed-out.\n\nIt answers for a session cookie or a bearer token alike, and says plainly when\nnobody is signed in rather than failing."
   },
@@ -5144,7 +5179,7 @@
   },
   {
    "id": "listWebauthnCredentials",
-   "doc": "Returns the passkeys and security keys registered in\nyour organization, newest first — which device each belongs to and when it was\nlast used."
+   "doc": "Returns the passkeys and security keys registered to\none person, newest first — which device each lives on and when it was\nregistered.\n\nYours by default. Name somebody else and you get them only if you already\nadminister their account, which is the same authority that governs reading\ntheir user record — so this list can never show more people than the surface\nbeside it already does.\n\nThere is no organization-wide list. It used to scope to the ORG, which handed\nan org admin every member's credential rows in one answer, and a SuperAdmin\nevery tenant's; a plain member meanwhile could not read even their own,\nbecause an unnamed target fails the Guard's tenant rule. One scope fixes both\nhalves: the answer is a person's, and the caller is the person unless they say\notherwise and may."
   },
   {
    "id": "patch_iam_scim_v2_users_by_owner_by_name",
@@ -5201,6 +5236,10 @@
   {
    "id": "post_iam_applications_update",
    "doc": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings."
+  },
+  {
+   "id": "post_iam_assume",
+   "doc": "Steps a platform operator into an organization: it returns their\nown access token re-scoped to that tenant, so they see what the tenant sees.\n\nThe token still names the operator — stepping in is not becoming somebody\nelse — and records the organization it was scoped to, so everything done with\nit is attributed to the person who did it. Only a platform operator may, and\nthe attempt is recorded whether or not it succeeds."
   },
   {
    "id": "post_iam_audit-logs",
@@ -5419,6 +5458,10 @@
    "doc": "Signs a container client in to your registry. `docker login`, and every\nbuild tool that pushes or pulls images, lands here: it exchanges the\ncredential for a short-lived token scoped to exactly the repositories that\ncredential may touch.\n\nBoth of the shapes container tooling uses are accepted, so the same login works\nwhichever client your pipeline runs."
   },
   {
+   "id": "post_iam_release",
+   "doc": "Steps a platform operator back out: it returns their own access\ntoken with no organization assumed, which is the credential they had before\nthey stepped in. Recorded like the step in."
+  },
+  {
    "id": "post_iam_revoke-user-keys",
    "doc": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. A secret key's stored value is the sk- in its\nschema.Key row."
   },
@@ -5519,6 +5562,14 @@
    "doc": "Completes a wallet sign-in: it verifies the signed challenge and, if it\nholds, signs the wallet's owner in.\n\nThis IS the login — it answers exactly as a password sign-in does, so the rest\nof your flow does not branch on how somebody arrived."
   },
   {
+   "id": "post_iam_webauthn_signin_finish",
+   "doc": "Verifies the signed challenge and signs the person in.\n\nIt answers exactly as a password sign-in does — the same envelope, through the\nsame grant — so nothing downstream branches on how somebody arrived."
+  },
+  {
+   "id": "post_iam_webauthn_signup_finish",
+   "doc": "Verifies the newly created passkey and stores it, so the person\ncan sign in with their device from then on."
+  },
+  {
    "id": "post_iam_workspaces",
    "doc": "Makes a workspace inside your organization — the scope a team works in,\nalongside projects rather than instead of them. A name already used in the\norganization is refused."
   },
@@ -5535,6 +5586,10 @@
    "doc": "Changes a workspace's settings. What it is called does not change, and\nneither does when it was created."
   },
   {
+   "id": "put_iam_account",
+   "doc": "Saves the calling person's own profile — the name they are\nshown by, their picture, a line about themselves and a link.\n\nOnly their own: the request names nobody, so it cannot reach another account.\nSend only what you are changing; a field you leave out keeps the value it had,\nand a field you send empty is cleared.\n\nA picture is an https link or an inline image up to 96 KiB, the same value an\norganization's mark is (schema.AvatarRef) — one rule for how a subject appears,\nwhether the subject is a person or an organization."
+  },
+  {
    "id": "put_iam_application",
    "doc": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings."
   },
@@ -5549,6 +5604,14 @@
   {
    "id": "put_iam_scim_v2_users_by_owner_by_name",
    "doc": "Overwrites a person's SCIM attributes with what your identity\nprovider sends — how a change made there lands here.\n\nOnly the attributes SCIM describes are replaced. Anything the standard does not\ncover — their multi-factor enrolment above all — survives untouched, so a\nroutine sync from your IdP can never quietly strip someone's second factor or\nbring a deleted account back."
+  },
+  {
+   "id": "searchOrganizations",
+   "doc": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more."
+  },
+  {
+   "id": "setOrganizationAvatar",
+   "doc": "Changes how an organization appears across Hanzo: the square mark\nbeside its name, as an uploaded image or as a single emoji. Sending an image\nclears the emoji and sending an emoji clears the image — an organization has\none mark, not a preference order — and sending neither clears both, which is\nhow it goes back to being drawn as its initial.\n\nAn image is an https link or the bytes inline as a data URL, up to 96 KiB.\nAnyone who administers the organization may set this; it is not reserved to\nthe platform.\n\nIt writes the two fields onto the stored row and touches nothing else, which\nupdate cannot do: update replaces the whole record, and a record read back\nfirst arrives masked, so a read-modify-write through it would persist the mask\nover the organization's own credential settings."
   },
   {
    "id": "updateOrganization",
@@ -5781,6 +5844,10 @@
    "doc": "Returns the repo's Pages status, live URL, custom domain and build\nsource. The repo is resolved against the org installation's GRANTED set, so a\ncaller can never address a repo the App was not granted; 404 when the repo has no\nPages site."
   },
   {
+   "id": "get_integrations_gitlab_projects",
+   "doc": "Lists the projects the org's GitLab connection can reach —\nmembership projects, most recently active first."
+  },
+  {
    "id": "get_integrations_slack_install",
    "doc": "The address behind Slack's \"Add to Slack\" and Marketplace Install buttons. It answers a 302 to Slack's own consent screen and does nothing else — it is a redirector by design.\n\nIt exists because Slack refuses a slack.com URL in that field and requires one of ours that redirects there, which makes the field an ATTRIBUTION hook: routing the click through our own address is what lets an install be counted, and always answering the redirect is what keeps the counter from becoming a detour that never reaches consent. The destination is the same consent URL every time, built from the same scopes the console's Connect button asks for, so a workspace is asked to grant one thing however the install began.\n\nIt is PUBLIC and carries no principal, because whoever clicks Install in Slack's directory has no Hanzo session yet. It binds no org either, and that is deliberate rather than missing: the org is resolved at the shared provider callback, from the signed state a console connect minted or from the workspace's existing connection. Minting an org for an anonymous click is the one thing that would break tenant isolation, so an install begun here finishes under exactly the rules every other install obeys.\n\nWhere the app is not configured it answers 503, rather than a consent URL carrying an empty client_id that Slack would render as its own dead-end error page."
   },
@@ -5913,6 +5980,7 @@
    "doc": "Sets or clears the custom domain (cname) and updates HTTPS\nenforcement, build type, or source. ONLY the provided fields are sent to GitHub,\nso an update never resets a setting the caller did not mention."
   }
  ],
+ "kafka": [],
  "kms": [
   {
    "id": "delete_kms_secrets_by_wildcard1",
@@ -9091,6 +9159,7 @@
    "doc": "State reports the caller organisation's own model: what it has learned, whether\nit is live or still in shadow, the threshold in force, the appetite it stated\nbeside the share it actually realised, every refusal by reason, every feature\nthat read blind, and how much of the organisation's own event surface has been\nfolded in.\n\nIt covers ONE organisation. A caller cannot learn another's volumes, alert rate\nor behaviour from it, because the state is read out of a model that holds only\nits own."
   }
  ],
+ "rollingcap": [],
  "sandboxes": [
   {
    "id": "delete_sandboxes_by_id",
@@ -10127,6 +10196,7 @@
    "doc": "Settlement reads one x402 payment receipt by id.\n\nIt is scoped to the caller's PAYER org — the ledger that was debited — so one\ntenant can never read another's settlement, and an id that exists but belongs\nto somebody else is a 404 exactly like one that does not exist. A caller with\nno billable identity is refused outright."
   }
  ],
+ "zen": [],
  "zt": [
   {
    "id": "get_mesh_services",

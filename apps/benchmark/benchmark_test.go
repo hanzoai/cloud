@@ -15,7 +15,7 @@ func loadFixture(t *testing.T) []attempt {
 }
 
 func TestLeaderboardServesRealMeasuredVsPublished(t *testing.T) {
-	rows := computeLeaderboard(loadFixture(t), "gpqa_diamond")
+	rows := computeLeaderboard(loadFixture(t), "gpqa_diamond", claimsFor(nil, "gpqa_diamond"))
 	if len(rows) == 0 {
 		t.Fatal("empty leaderboard")
 	}

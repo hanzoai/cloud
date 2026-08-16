@@ -319,6 +319,16 @@ zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
 	# the walk read it: 203 packages where there are 104, and it went red on a
 	# copy's o11y while nothing here had changed.
 	#
+	# THE DOT-DIRECTORIES ARE DROPPED FROM THE PATHS, NOT FROM THE WALK, because
+	# the two greps on this box do not agree about what --exclude-dir matches. GNU
+	# grep reads the pattern against a directory's NAME; BSD grep reads it against
+	# the PATH, so `.?*` matches `./anything` — every directory under the `.` root,
+	# which is all of them. The walk returned NOTHING and this gate reported that
+	# every lifted file matched, on a tree where one did not. A gate that cannot be
+	# wrong is not a gate, and this one was green on macOS for every possible input.
+	# Filtering the RESULTS on `/.` is one behavior in both greps, and it drops a
+	# dot-directory wherever it sits rather than only at the root.
+	#
 	# EVERY stale package, never the first. `set -e` stopped this loop at the first
 	# one, which is the masking that cost the release train six red runs in a day:
 	# apps/meet went stale, three runs said so, and when apps/projects went stale
@@ -327,7 +337,7 @@ zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
 	# `sort -u` because the same directory reached through `clients` and through `.`
 	# is two different strings and was checked twice.
 	@stale=""; \
-	for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' --exclude-dir='.?*' clients cmd . 2>/dev/null | xargs -n1 dirname | sed 's|^\./||' | sort -u); do \
+	for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | grep -v '/\.' | xargs -n1 dirname | sed 's|^\./||' | sort -u); do \
 	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check >/dev/null 2>&1) || stale="$$stale $$d"; \
 	done; \
 	if [ -n "$$stale" ]; then \
@@ -366,6 +376,34 @@ closure: ## Record what each app document was generated from (openapi/closure.js
 
 closure-check: ## Fail if a document was left behind by a dependency that moved. Seconds.
 	@$(GO) run ./cmd/closure -describable="$(DESCRIBABLE)"
+
+# MOVING A DEPENDENCY AND REGENERATING WHAT IT MOVES ARE ONE ACTION.
+#
+# They were two, and the second kept being skipped: three separate bumps blocked
+# every cloud release on one day — esign's prose, iam's passkey routes, ai's tool
+# — each landing on main with documents generated from the version BEFORE it.
+# The gate catches it every time and charges 22 minutes to say so, so the cost of
+# the missing step is a whole release cycle, paid by whoever pushes next.
+#
+# closure-check answers the same question in under two seconds and names the
+# exact documents, so this bumps, asks, and regenerates only what actually moved
+# — never the whole fleet. Nothing here is new machinery; it is the two commands
+# the failure message already prints, run in the order that makes the second one
+# unskippable.
+#
+#   make bump M=github.com/hanzoai/ai@v1.833.59
+bump: ## Move a dependency and regenerate the documents it moves. make bump M=<mod>@<ver>
+	@[ -n "$(M)" ] || { echo "usage: make bump M=github.com/hanzoai/ai@v1.833.59"; exit 2; }
+	$(GO) get $(M)
+	@stale=$$($(GO) run ./cmd/closure -describable="$(DESCRIBABLE)" 2>&1 \
+	   | sed -n 's|^ *plugin/\([a-z0-9-]*\)/openapi.json$$|\1|p' | sort -u); \
+	 if [ -n "$$stale" ]; then \
+	   echo ">> regenerating: $$stale"; \
+	   for a in $$stale; do $(MAKE) -f mk/fleet.mk describe/$$a || exit 1; done; \
+	   $(MAKE) -f mk/fleet.mk openapi; \
+	 else echo ">> no document moved"; fi
+	@$(MAKE) closure
+	@echo ">> commit: go.mod go.sum openapi/closure.json $$(git diff --name-only -- openapi.yaml public.yaml 'plugin/*/openapi.json' fleet/catalog.json | tr '\n' ' ')"
 
 test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ships).
 	# CHEAPEST FIRST, and that ordering is the point rather than tidiness: these two
