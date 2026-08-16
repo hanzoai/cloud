@@ -62,7 +62,6 @@ import (
 	"github.com/hanzoai/cloud/apps/base"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
-	"github.com/hanzoai/cloud/apps/sites/cloudflare"
 	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
@@ -274,7 +273,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{
 		store:       store,
 		blob:        openBlobStore(),
-		edge:        cloudflare.New(b.Log),
+		edge:        newEdge(context.Background(), b.Log),
 		ai:          deps.AI, // may be nil (no gateway) — buildSite degrades to 503.
 		bill:        cloud.NewResourceMeter(deps, hostingProvider),
 		apex:        environ.Or("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
