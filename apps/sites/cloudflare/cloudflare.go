@@ -122,6 +122,9 @@ func (p *Edge) Stop() {
 }
 
 // Configured reports whether both a token and a zone id are present.
+// Name identifies the provider on a status page.
+func (p *Edge) Name() string { return "cloudflare" }
+
 func (p *Edge) Configured() bool { return p.token != "" && p.zoneID != "" }
 
 // PurgeTags purges every listed cache-tag. A no-op (warn-only) when unconfigured,

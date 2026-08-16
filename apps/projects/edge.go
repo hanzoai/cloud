@@ -3,6 +3,8 @@ package projects
 import (
 	"context"
 	"net/http"
+
+	"github.com/hanzoai/cloud/apps/sites"
 )
 
 // Why this exists, stated plainly, because the defect it answers cost real hours.
@@ -29,9 +31,10 @@ import (
 // promptly, which is a true statement about the product and a false one about
 // the process — this app deploys fine with no edge at all. Wiring it to a probe
 // would take a working deployment out of rotation for a cache credential.
-type edgeHealth struct {
-	// Service names the subsystem answering.
-	Service string `json:"service"`
+type edgeState struct {
+	// Provider is the CDN behind this edge, or "none". It is the first thing an
+	// operator wants and the only vendor name this API returns.
+	Provider string `json:"provider"`
 	// Status is "ok" when a publish reaches readers immediately, else "degraded".
 	Status string `json:"status"`
 	// Configured is whether the edge holds credentials to act at all. False means
@@ -41,15 +44,32 @@ type edgeHealth struct {
 	// It is the sentence an operator actually wants; the booleans above are how
 	// a machine reads the same fact.
 	Freshness string `json:"freshness"`
+	// Policy is the Cache-Control this edge serves each class of object with. It
+	// is DERIVED from the one canonical function, never a second copy: half the
+	// confusion when a publish looks stale is not knowing what the TTLs are, and
+	// reading them out of the source is not something an operator should have to
+	// do to answer "how long until this is live".
+	Policy map[string]string `json:"policy"`
 	// Error is the blocker, so an operator reads it instead of guessing at it.
 	Error string `json:"error,omitempty"`
+}
+
+// policy answers the TTL question for each class the edge distinguishes, by
+// asking the same function that serves them. Representative keys, not a table:
+// a table here would be the copy that drifts.
+func policy() map[string]string {
+	return map[string]string{
+		"document":  sites.CacheControlFor("index.html", ""),
+		"immutable": sites.CacheControlFor("app.4f3a9c21.js", ""),
+		"asset":     sites.CacheControlFor("logo.svg", ""),
+	}
 }
 
 // StatusCode is 200 when a publish is immediately live and 503 when it is not.
 // The body is the answer either way — the reason IS the payload, so it rides the
 // refusal rather than being replaced by an error envelope.
-func (h *edgeHealth) StatusCode() int {
-	if h.Status == "ok" {
+func (e *edgeState) StatusCode() int {
+	if e.Status == "ok" {
 		return http.StatusOK
 	}
 	return http.StatusServiceUnavailable
@@ -62,20 +82,22 @@ func (h *edgeHealth) StatusCode() int {
 // It asks the edge and nothing else. There is no live call to the provider here:
 // Configured is a local fact, it is the fact that was missing, and a health check
 // that spends a third-party API call is one an operator learns not to run.
-func (o ops) health(_ context.Context, _ *void) (*edgeHealth, error) {
+func (o ops) edge(_ context.Context, _ *void) (*edgeState, error) {
 	if o.s.State.edge.Configured() {
-		return &edgeHealth{
-			Service:    "projects",
+		return &edgeState{
+			Provider:   o.s.State.edge.Name(),
 			Status:     "ok",
 			Configured: true,
 			Freshness:  "a publish is live at the edge immediately (purged by cache-tag)",
+			Policy:     policy(),
 		}, nil
 	}
-	return &edgeHealth{
-		Service:    "projects",
+	return &edgeState{
+		Provider:   o.s.State.edge.Name(),
 		Status:     "degraded",
 		Configured: false,
 		Freshness:  "a publish is live only after the edge TTL expires",
+		Policy:     policy(),
 		Error:      "the edge holds no credentials, so every purge is a no-op",
 	}, nil
 }
