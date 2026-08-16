@@ -125,39 +125,107 @@ func (f *claimFileStore) Put(c storedClaim) error {
 	return err
 }
 
-// claimsFor layers the three sources for one benchmark, weakest first: the
-// hand-written set, then the generated import, then whatever the store holds.
-// Later wins, so a stored correction beats an import and an import beats
-// nothing — and the seed keeps a deployment with an empty store useful.
+// claimsFor layers the sources for one benchmark and returns EVERY claim per
+// model, not one.
 //
-// Among stored rows the NEWEST wins, by `At` rather than by file order, because
-// append-only means the same key legitimately appears more than once and the
-// file is not a sequence anyone should have to trust.
-func claimsFor(store ClaimStore, bench string) map[string]publishedClaim {
-	out := map[string]publishedClaim{}
+// The key is (benchmark, model, SOURCE), which is the correction that matters
+// most here. Keyed by (benchmark, model) alone, OpenAI's card, Artificial
+// Analysis and Vals AI all collapse into whichever was written last — three
+// independent readings of one model reduced to one number, with no way to tell
+// that the others existed or disagreed. The spread BETWEEN claim sources is
+// signal in exactly the way the measured-versus-claimed gap is: a model claimed
+// at 93.6 by its vendor and 88.1 by a third party is a different situation from
+// one where every source agrees, and the arena is the thing that should be able
+// to say so.
+//
+// So two rows from the SAME source for one model are a restatement and the newer
+// wins; two rows from DIFFERENT sources are both kept. Layering is unchanged —
+// seed, then import, then store — but it now replaces per source rather than
+// per model.
+func claimsFor(store ClaimStore, bench string) map[string][]publishedClaim {
+	// keyed (model, source) so a later layer replaces the same reading rather
+	// than the whole model.
+	type key struct{ model, source string }
+	eff := map[key]publishedClaim{}
 	for _, set := range [][]publishedClaim{published, publishedImported} {
 		for _, p := range set {
 			if bench == "" || p.Benchmark == bench {
-				out[p.Model] = p
+				eff[key{p.Model, p.Source}] = p
 			}
 		}
 	}
-	if store == nil {
-		return out
-	}
-	newest := map[string]storedClaim{}
-	for _, c := range store.Claims(bench) {
-		if bench != "" && c.Benchmark != bench {
-			continue
+	if store != nil {
+		newest := map[key]storedClaim{}
+		for _, c := range store.Claims(bench) {
+			if bench != "" && c.Benchmark != bench {
+				continue
+			}
+			k := key{c.Model, c.Source}
+			if prev, ok := newest[k]; !ok || c.At.After(prev.At) {
+				newest[k] = c
+			}
 		}
-		if prev, ok := newest[c.Model]; !ok || c.At.After(prev.At) {
-			newest[c.Model] = c
+		for k, c := range newest {
+			eff[k] = c.publishedClaim
 		}
 	}
-	for model, c := range newest {
-		out[model] = c.publishedClaim
+
+	out := map[string][]publishedClaim{}
+	for k, p := range eff {
+		out[k.model] = append(out[k.model], p)
+	}
+	for model := range out {
+		sort.Slice(out[model], func(i, j int) bool { return out[model][i].Source < out[model][j].Source })
 	}
 	return out
+}
+
+// selectClaim picks the one claim a single-number column shows, and the rule is
+// stated rather than incidental: a PROVIDER-REPORTED claim wins, because the
+// arena exists to reconcile what a vendor says about its own model against what
+// our harness measures — that is the number being checked. Among equals, the
+// higher score wins, so the column shows the strongest claim made and the gap
+// is never flattered by picking a modest one.
+//
+// Everything not selected is still readable at /v1/benchmark/claims. This
+// chooses a column; it never discards a row.
+func selectClaim(cs []publishedClaim) (publishedClaim, bool) {
+	if len(cs) == 0 {
+		return publishedClaim{}, false
+	}
+	best, ok := publishedClaim{}, false
+	for _, c := range cs {
+		switch {
+		case !ok:
+		case best.Protocol == "provider-reported" && c.Protocol != "provider-reported":
+			continue
+		case c.Protocol == "provider-reported" && best.Protocol != "provider-reported":
+		case c.Score <= best.Score:
+			continue
+		}
+		best, ok = c, true
+	}
+	return best, ok
+}
+
+// claimSpread is the distance between the highest and lowest claim for a model,
+// and it is nil when there is only one. It is the disagreement among sources,
+// which a reader cannot infer from a single selected number.
+func claimSpread(cs []publishedClaim) *float64 {
+	if len(cs) < 2 {
+		return nil
+	}
+	lo, hi := cs[0].Score, cs[0].Score
+	for _, c := range cs[1:] {
+		if c.Score < lo {
+			lo = c.Score
+		}
+		if c.Score > hi {
+			hi = c.Score
+		}
+	}
+	d := hi - lo
+	return &d
 }
 
 /* ── the managed surface ──────────────────────────────────────────────────── */
@@ -195,11 +263,22 @@ type claimsIn struct {
 	Benchmark string `query:"benchmark"`
 	// Model filters to one model. Empty returns every model.
 	Model string `query:"model"`
+	// Provider filters to one lab or leaderboard — the way to read what a single
+	// source claims across every model it covers.
+	Provider string `query:"provider"`
+	// Source filters to one citation, which is the finest grain there is: a
+	// source is what makes two claims about one model independent rather than a
+	// restatement of each other.
+	Source string `query:"source"`
+	// Protocol filters by HOW a claim was scored, so provider cards can be read
+	// apart from third parties running their own harness.
+	Protocol string `query:"protocol"`
 }
 
 type claimsOut struct {
-	// Data is one row per (benchmark, model), effective values only — the row
-	// that WINS after layering, not every row ever written.
+	// Data is one row per (benchmark, model, SOURCE) — every independent claim,
+	// not one per model. Effective values only: the row that wins after layering
+	// for each source, never the superseded readings behind it.
 	Data []ClaimRow `json:"data"`
 	// Total is how many rows Data holds.
 	Total int `json:"total"`
@@ -214,42 +293,48 @@ type claimsOut struct {
 // is not what this op is for; a list that returned every superseded row would
 // make the common question the hard one.
 func (o ops) claims(ctx context.Context, in *claimsIn) (*claimsOut, error) {
-	st := o.s.State
-	stored := map[string]storedClaim{}
-	if st.claims != nil {
-		for _, c := range st.claims.Claims(in.Benchmark) {
-			key := c.Benchmark + "\x00" + c.Model
-			if prev, ok := stored[key]; !ok || c.At.After(prev.At) {
-				stored[key] = c
-			}
-		}
-	}
-
-	eff := map[string]ClaimRow{}
+	type key struct{ bench, model, source string }
+	eff := map[key]ClaimRow{}
 	for _, set := range [][]publishedClaim{published, publishedImported} {
 		for _, p := range set {
 			if in.Benchmark != "" && p.Benchmark != in.Benchmark {
 				continue
 			}
-			eff[p.Benchmark+"\x00"+p.Model] = claimRow(p, "seed", time.Time{}, "")
+			eff[key{p.Benchmark, p.Model, p.Source}] = claimRow(p, "seed", time.Time{}, "")
 		}
 	}
-	for key, c := range stored {
-		eff[key] = claimRow(c.publishedClaim, "stored", c.At, c.By)
+	if st := o.s.State; st.claims != nil {
+		newest := map[key]storedClaim{}
+		for _, c := range st.claims.Claims(in.Benchmark) {
+			k := key{c.Benchmark, c.Model, c.Source}
+			if prev, ok := newest[k]; !ok || c.At.After(prev.At) {
+				newest[k] = c
+			}
+		}
+		for k, c := range newest {
+			eff[k] = claimRow(c.publishedClaim, "stored", c.At, c.By)
+		}
 	}
 
 	out := make([]ClaimRow, 0, len(eff))
 	for _, r := range eff {
-		if in.Model != "" && r.Model != in.Model {
-			continue
+		switch {
+		case in.Model != "" && r.Model != in.Model:
+		case in.Provider != "" && r.Provider != in.Provider:
+		case in.Source != "" && r.Source != in.Source:
+		case in.Protocol != "" && r.Protocol != in.Protocol:
+		default:
+			out = append(out, r)
 		}
-		out = append(out, r)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Benchmark != out[j].Benchmark {
 			return out[i].Benchmark < out[j].Benchmark
 		}
-		return out[i].Model < out[j].Model
+		if out[i].Model != out[j].Model {
+			return out[i].Model < out[j].Model
+		}
+		return out[i].Source < out[j].Source
 	})
 	return &claimsOut{Data: out, Total: len(out)}, nil
 }

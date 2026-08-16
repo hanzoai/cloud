@@ -227,6 +227,14 @@ type LeaderRow struct {
 	Published *float64 `json:"published"`          // provider-claimed % (nil if none)
 	Gap       *float64 `json:"gap"`                // published − measured (the arena signal)
 	Protocol  string   `json:"protocol,omitempty"` // how the vendor scored their claim: single-attempt, pass@k or agentic
+	// Claims is how many independent claims exist for this model on this
+	// benchmark. More than one means several sources reported it.
+	Claims int `json:"claims,omitempty"`
+	// Spread is the distance between the highest and lowest of them, nil when
+	// there is only one. It is the disagreement AMONG sources, which a single
+	// Published number cannot show — signal in the same way the
+	// published-minus-measured gap is.
+	Spread *float64 `json:"spread,omitempty"`
 }
 
 // benchmarkQuery names the benchmark a read is about.
@@ -266,7 +274,7 @@ func (o ops) leaderboard(ctx context.Context, in *benchmarkQuery) (*leaderboard,
 // computeLeaderboard is the pure aggregation (testable): per-model measured accuracy
 // (coverage-aware) layered with the published claim, gap = published − measured. Never
 // blended; a model with only a claim shows measured=nil, and vice versa.
-func computeLeaderboard(attempts []attempt, bench string, claim map[string]publishedClaim) []LeaderRow {
+func computeLeaderboard(attempts []attempt, bench string, claim map[string][]publishedClaim) []LeaderRow {
 	type acc struct{ ok, n int }
 	m := map[string]*acc{}
 	for _, a := range attempts {
@@ -295,9 +303,14 @@ func computeLeaderboard(attempts []attempt, bench string, claim map[string]publi
 			v := float64(a.ok) / float64(a.n) * 100
 			r.Measured, r.N = &v, a.n
 		}
-		if p, ok := claim[model]; ok {
+		if cs, ok := claim[model]; ok && len(cs) > 0 {
+			// One column, every claim counted. selectClaim states which reading
+			// the column shows; Claims and Spread say how many others there were
+			// and how far apart, so a single number never hides a disagreement.
+			p, _ := selectClaim(cs)
 			v := p.Score
 			r.Published, r.Protocol = &v, p.Protocol
+			r.Claims, r.Spread = len(cs), claimSpread(cs)
 		}
 		if r.Measured != nil && r.Published != nil {
 			g := *r.Published - *r.Measured
