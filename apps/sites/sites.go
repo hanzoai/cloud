@@ -949,7 +949,16 @@ func CacheControlFor(key, htmlOverride string) string {
 		// biggest object in the deploy (Unity's .data, Godot's .pck — megabytes
 		// each) is the ONLY fingerprinted asset that still gets re-fetched every
 		// hour. Same rule, same reason: a content-hashed name cannot go stale.
-		".data", ".pck", ".unityweb", ".mem":
+		".data", ".pck", ".unityweb", ".mem",
+		// Film. The same sentence as the line above, and it was missed for the
+		// same reason — the list grew from what a page is BUILT of rather than
+		// from what it SHIPS. A marketing export is mostly video by weight now:
+		// hanzo.ai carries ~105 mp4 product films, several megabytes apiece and
+		// far heavier than any script it serves, and every one of them fell to
+		// `default`. That is the same TTL, so nothing was mis-cached — but a
+		// FINGERPRINTED film could never earn `immutable` either, which is the
+		// one asset class where a year of edge life is worth the most bytes.
+		".mp4", ".webm", ".mov", ".m4v", ".ogv":
 		if isFingerprinted(key) {
 			return "public, max-age=31536000, immutable"
 		}
