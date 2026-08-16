@@ -1,6 +1,6 @@
 {
-  "paths": 1822,
-  "operations": 2487,
+  "paths": 1823,
+  "operations": 2488,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -34,7 +34,7 @@
     "catalog": 8,
     "chains": 2,
     "channels": 7,
-    "chat": 2,
+    "chat": 3,
     "cloud": 5,
     "cloudflare": 33,
     "clusters": 6,
