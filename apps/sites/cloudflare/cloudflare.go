@@ -76,9 +76,27 @@ const maxPendingTags = 4096
 // actually reach Cloudflare. The coalescing window and the process-wide ceiling
 // are operator knobs with honest defaults.
 func New(log luxlog.Logger) *Edge {
+	return With(os.Getenv("CF_API_TOKEN"), os.Getenv("CF_ZONE_ID"), log)
+}
+
+// With builds an edge on credentials the CALLER resolved, which is the
+// difference between a provider that can only be configured one way and one that
+// can be configured at all.
+//
+// New reads the process environment, and for a long time that was the only path
+// — so the token this needed was a second, unrelated copy of a credential the
+// estate already holds: the Cloudflare INTEGRATION seals a verified, scoped token
+// per org at /orgs/{org}/integrations/cloudflare/api_token, readable through
+// integrations.TokenFor. Two stores for one vendor is how one of them ends up
+// empty while everyone believes the other is the one that matters.
+//
+// So credential SOURCING moves to the composition root, where it belongs and
+// where it can ask KMS, and this package stays what it should be: pure, importing
+// nothing from the repo, holding no opinion about where a secret lives.
+func With(token, zoneID string, log luxlog.Logger) *Edge {
 	return &Edge{
-		token:   strings.TrimSpace(os.Getenv("CF_API_TOKEN")),
-		zoneID:  strings.TrimSpace(os.Getenv("CF_ZONE_ID")),
+		token:   strings.TrimSpace(token),
+		zoneID:  strings.TrimSpace(zoneID),
 		api:     "https://api.cloudflare.com/client/v4",
 		client:  &http.Client{Timeout: 10 * time.Second},
 		log:     log.New("component", "cf-purge"),
