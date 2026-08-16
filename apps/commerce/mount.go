@@ -868,6 +868,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		commercemid.TokenRequired(),
 		commercebilling.GetCreditBalance,
 	)
+	// The same balance grouped by tag, which is how a reader tells trial credit
+	// from bought credit. Chat asks for it per session; an unregistered route
+	// answers 404 and the caller reads that as "no credit".
+	app.Get("/v1/billing/credit-balance/breakdown",
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercemid.TokenRequired(),
+		commercebilling.GetCreditBalanceBreakdown,
+	)
 	app.Get("/v1/billing/accounts",
 		commercemid.RequestContext(),
 		iammiddleware.IAMTokenRequired(),
