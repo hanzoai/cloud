@@ -280,6 +280,43 @@ const forgeTokenSecret = "forge-token"
 // influenced by the request.
 const gitFetchImage = "alpine/git:2.47.2"
 
+// artifactDepsScript warms the MODULE cache, and is the second and last script
+// that sees a credential.
+//
+// A repo whose go.mod names private modules cannot build without one: measured,
+// `make -f mk/fleet.mk dist` built 122 of 124 apps and then died on zen,
+// licensing and authz with
+//
+//	reading github.com/hanzoai/zen/go.mod: git ls-remote ...
+//	fatal: could not read Username for 'https://github.com'
+//
+// The recipe container must not hold the credential (its `run:` is arbitrary
+// shell), so the fetch pattern repeats one level down: a container with a
+// CONSTANT script and the token downloads the modules, and every recipe
+// container afterwards builds from a warm cache with nothing in its environment.
+//
+// The rewrite is the image's own (Dockerfile): github.com/hanzoai/* is served by
+// the forge, so ONE forge token covers the private set and no GitHub credential
+// is needed here at all.
+//
+// HOME is deliberately NOT /w. `git config --global` writes $HOME/.gitconfig,
+// and /w is the shared volume every recipe container reads — putting the token
+// there would hand it to the shell this split exists to keep it away from.
+//
+// GOMODCACHE is /w/go/pkg/mod because that is GOPATH/pkg/mod for the GOPATH the
+// recipe containers are given, so the cache this writes is the cache they read.
+// That is also why this is worth doing even when nothing is private: the modules
+// download ONCE for the whole fleet instead of racing N parallel builds.
+const artifactDepsScript = `set -eu
+cd /w/src
+export GOPRIVATE='github.com/hanzoai/*' GOMODCACHE=/w/go/pkg/mod GOFLAGS=-mod=mod
+if [ -n "${GIT_TOKEN:-}" ]; then
+  git config --global url."https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
+fi
+go mod download all 2>&1 | tail -20 || go mod download 2>&1 | tail -20
+echo "modules warmed into /w/go/pkg/mod"
+`
+
 // artifactFetchScript puts the source in /w/src, and is the ONLY script that
 // sees a git credential.
 //
@@ -450,6 +487,26 @@ func (k *k8sClient) artifactJobSpec(jobName, repoURL, ref, tag, base, putBase st
 			env("REPO_URL", repoURL), env("REF", ref), env("HOME", "/w"),
 			// Optional: a public source needs none, and the fetch falls back to
 			// anonymous rather than the job failing on a missing secret.
+			map[string]any{"name": "GIT_TOKEN", "valueFrom": map[string]any{
+				"secretKeyRef": map[string]any{"name": forgeTokenSecret, "key": "token", "optional": true},
+			}},
+		},
+		"volumeMounts": []any{map[string]any{"name": "w", "mountPath": "/w"}},
+	})
+	// [1] warms the MODULE cache with the same credential, in the same shape: a
+	// constant image running a constant script. A repo with private modules
+	// cannot build without this, and every repo builds FASTER with it — the
+	// modules download once here instead of being raced by N parallel builds.
+	//
+	// HOME is /root, NOT /w: `git config --global` writes $HOME/.gitconfig, and
+	// /w is the volume every recipe container reads.
+	inits = append(inits, map[string]any{
+		"name":       "deps",
+		"image":      defaultToolchainImage,
+		"command":    []any{"/bin/sh", "-c", artifactDepsScript},
+		"workingDir": "/w",
+		"env": []any{
+			env("HOME", "/root"),
 			map[string]any{"name": "GIT_TOKEN", "valueFrom": map[string]any{
 				"secretKeyRef": map[string]any{"name": forgeTokenSecret, "key": "token", "optional": true},
 			}},
