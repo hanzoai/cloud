@@ -29,7 +29,7 @@ function run(attrs, opts = {}) {
     console,
     URL,
     Blob: class Blob {
-      constructor(parts) { this.text = parts.join('') }
+      constructor(parts, opts) { this.text = parts.join(''); this.type = (opts && opts.type) || '' }
     },
     crypto: { randomUUID: () => 'uuid-' + storage.size + '-' + Math.random().toString(36).slice(2, 8) },
     setTimeout: () => 1,
@@ -60,7 +60,7 @@ function run(attrs, opts = {}) {
     navigator: {
       sendBeacon: opts.noBeacon
         ? undefined
-        : (url, blob) => { sent.beacon.push({ url, body: blob.text }); return true }
+        : (url, blob) => { sent.beacon.push({ url, body: blob.text, type: blob.type }); return true }
     },
     fetch: (url, init) => { sent.fetch.push({ url, init }); return { catch: () => {} } },
     addEventListener: (name, fn) => { (listeners[name] = listeners[name] || []).push(fn) },
@@ -225,4 +225,21 @@ function anonOf(r) {
   )
 }
 
-console.log('tag.js: 11/11 behavioral checks passed')
+// 12. THE BEACON IS A CORS-SIMPLE REQUEST. This tag runs on a customer's own
+//     domain, so every send is cross-origin, and the beacon fires from an
+//     UNLOADING document — which gets no second round trip. A body labelled with
+//     anything outside the CORS-safelisted set makes the POST preflighted, and a
+//     preflighted unload beacon is not delayed, it is never sent. The key rides
+//     the query for the same reason (check 3): a header would preflight it too.
+{
+  const SAFELISTED = ['text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data']
+  const r = run({ 'data-key': 'pk-live-abc' })
+  r.fire('pagehide')
+  assert.strictEqual(r.sent.beacon.length, 1, 'one flush')
+  assert.ok(
+    SAFELISTED.indexOf(r.sent.beacon[0].type) !== -1,
+    'beacon body must carry a CORS-safelisted type, got: ' + JSON.stringify(r.sent.beacon[0].type)
+  )
+}
+
+console.log('tag.js: 12/12 behavioral checks passed')
