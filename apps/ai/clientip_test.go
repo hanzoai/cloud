@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hanzoai/cloud/clientip"
 	"github.com/zap-proto/zip"
 )
 
@@ -31,12 +32,12 @@ func TestTwoCallersCrossTheAdapterAsTwoAddresses(t *testing.T) {
 	var seen []string
 	// Stands where ai's handler stands, and reads what ai reads.
 	landing := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = append(seen, clientIPAcross(r))
+		seen = append(seen, clientip.ClientIPAcross(r))
 		w.WriteHeader(http.StatusNoContent)
 	})
 
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Use(zip.H(stampClientIP))
+	app.Use(zip.H(clientip.StampClientIP))
 	app.All("/v1/*", zip.AdaptNetHTTP(landing))
 
 	call := func(forwarded string) {
@@ -74,16 +75,16 @@ func TestTwoCallersCrossTheAdapterAsTwoAddresses(t *testing.T) {
 func TestACallerCannotNameItself(t *testing.T) {
 	var seen string
 	landing := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = clientIPAcross(r)
+		seen = clientip.ClientIPAcross(r)
 		w.WriteHeader(http.StatusNoContent)
 	})
 
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Use(zip.H(stampClientIP))
+	app.Use(zip.H(clientip.StampClientIP))
 	app.All("/v1/*", zip.AdaptNetHTTP(landing))
 
 	req := httptest.NewRequest(http.MethodPost, "http://example.com/v1/chat/public", nil)
-	req.Header.Set(clientIPHeader, "198.51.100.255") // the forgery
+	req.Header.Set(clientip.ClientIPHeader, "198.51.100.255") // the forgery
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
 		t.Fatalf("serving through the adapter: %v", err)
