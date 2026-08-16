@@ -621,7 +621,7 @@ func (s *Server) serve(c *zip.Ctx, slug string, firstParty bool) error {
 // site's own 404.
 func (s *Server) streamSite(c *zip.Ctx, cli *s3.Client, site Site) error {
 	// Emit the edge cache-tag on every served object so a tag-purge
-	// (projects.purgeTag → Purger.PurgeTags) invalidates exactly this project's site
+	// (projects.purgeTag → Edge.PurgeTags) invalidates exactly this project's site
 	// at the edge. Derived from server-owned Org+Slug — the SAME tag the purger
 	// targets — never from the request, so emit and purge never diverge.
 	c.SetHeader("Cache-Tag", CacheTag(site.Org, site.Slug))
