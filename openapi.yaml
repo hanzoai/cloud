@@ -21270,6 +21270,15 @@ components:
             type: string
           type: array
       type: object
+    iam.SearchOrganizationsOutput:
+      properties:
+        cursor:
+          type: string
+        organizations:
+          items:
+            $ref: '#/components/schemas/iam.Organization'
+          type: array
+      type: object
     iam.Session:
       properties:
         application:
@@ -22221,6 +22230,22 @@ components:
           type: array
         updatedAt:
           format: date-time
+          type: string
+      type: object
+    iam.accountBody:
+      properties:
+        avatar:
+          type: string
+        bio:
+          type: string
+        displayName:
+          type: string
+        homepage:
+          type: string
+      type: object
+    iam.assumeBody:
+      properties:
+        org:
           type: string
       type: object
     iam.auditlogs.Input:
@@ -80570,6 +80595,54 @@ paths:
       tags:
       - iam
       x-app: iam
+    put:
+      description: |-
+        Saves the calling person's own profile — the name they are
+        shown by, their picture, a line about themselves and a link.
+
+        Only their own: the request names nobody, so it cannot reach another account.
+        Send only what you are changing; a field you leave out keeps the value it had,
+        and a field you send empty is cleared.
+
+        A picture is an https link or an inline image up to 96 KiB, the same value an
+        organization's mark is (schema.AvatarRef) — one rule for how a subject appears,
+        whether the subject is a person or an organization.
+      operationId: put_iam_account
+      parameters:
+      - in: header
+        name: Cookie
+        required: false
+        schema:
+          type: string
+      - in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.accountBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
+      summary: Saves the calling person's own profile — the name they are shown by,
+        their picture, a line about themselves and a link.
+      tags:
+      - iam
+      x-app: iam
   /v1/iam/add-application:
     post:
       description: |-
@@ -81167,6 +81240,70 @@ paths:
           description: ok
       summary: Changes an application's display, its sign-in methods and the redirect
         URIs it may return to — the call that makes login work from a new host.
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/assume:
+    post:
+      description: |-
+        Steps a platform operator into an organization: it returns their
+        own access token re-scoped to that tenant, so they see what the tenant sees.
+
+        The token still names the operator — stepping in is not becoming somebody
+        else — and records the organization it was scoped to, so everything done with
+        it is attributed to the person who did it. Only a platform operator may, and
+        the attempt is recorded whether or not it succeeds.
+      operationId: post_iam_assume
+      parameters:
+      - in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
+      - in: header
+        name: X-Forwarded-For
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.assumeBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: not found
+      summary: 'Steps a platform operator into an organization: it returns their own
+        access token re-scoped to that tenant, so they see what the tenant sees.'
       tags:
       - iam
       x-app: iam
@@ -83195,6 +83332,51 @@ paths:
       tags:
       - iam
       x-app: iam
+  /v1/iam/organizations/search:
+    get:
+      description: |-
+        Returns the organizations you can act in, the ones you belong to first
+        and the rest after, newest first, narrowed by an optional query against the
+        name or the display name.
+
+        Platform operators see every organization; everyone else sees their own. Pass
+        the cursor from the previous page to continue; an empty cursor in the answer
+        means there is nothing more.
+      operationId: searchOrganizations
+      parameters:
+      - in: header
+        name: X-Forwarded-For
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: q
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.SearchOrganizationsOutput'
+          description: ok
+      summary: Returns the organizations you can act in, the ones you belong to first
+        and the rest after, newest first, narrowed by an optional query against the
+        name or the display name.
+      tags:
+      - iam
+      x-app: iam
   /v1/iam/organizations/update:
     post:
       description: |-
@@ -83703,6 +83885,55 @@ paths:
         whichever client your pipeline runs.
       operationId: post_iam_registry_token
       summary: Signs a container client in to your registry.
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/release:
+    post:
+      description: |-
+        Steps a platform operator back out: it returns their own access
+        token with no organization assumed, which is the credential they had before
+        they stepped in. Recorded like the step in.
+      operationId: post_iam_release
+      parameters:
+      - in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
+      - in: header
+        name: X-Forwarded-For
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.assumeBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: unauthorized
+      summary: 'Steps a platform operator back out: it returns their own access token
+        with no organization assumed, which is the credential they had before they
+        stepped in.'
       tags:
       - iam
       x-app: iam
@@ -84892,13 +85123,25 @@ paths:
   /v1/iam/webauthn-credentials:
     get:
       description: |-
-        Returns the passkeys and security keys registered in
-        your organization, newest first — which device each belongs to and when it was
-        last used.
+        Returns the passkeys and security keys registered to
+        one person, newest first — which device each lives on and when it was
+        registered.
+
+        Yours by default. Name somebody else and you get them only if you already
+        administer their account, which is the same authority that governs reading
+        their user record — so this list can never show more people than the surface
+        beside it already does.
+
+        There is no organization-wide list. It used to scope to the ORG, which handed
+        an org admin every member's credential rows in one answer, and a SuperAdmin
+        every tenant's; a plain member meanwhile could not read even their own,
+        because an unnamed target fails the Guard's tenant rule. One scope fixes both
+        halves: the answer is a person's, and the caller is the person unless they say
+        otherwise and may.
       operationId: listWebauthnCredentials
       parameters:
       - in: query
-        name: owner
+        name: user
         required: false
         schema:
           type: string
@@ -84909,8 +85152,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/iam.listWebauthnCredentialsOut'
           description: ok
-      summary: Returns the passkeys and security keys registered in your organization,
-        newest first — which device each belongs to and when it was last used.
+      summary: Returns the passkeys and security keys registered to one person, newest
+        first — which device each lives on and when it was registered.
       tags:
       - iam
       x-app: iam
