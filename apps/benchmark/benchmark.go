@@ -67,12 +67,22 @@ var catalog = []Benchmark{
 // records HOW they scored (single-attempt / pass@k / agentic) — apples-to-apples only
 // on the default view; claims revealed on toggle.
 type publishedClaim struct {
-	Benchmark string  `json:"benchmark"`
-	Provider  string  `json:"provider"`
-	Model     string  `json:"model"`
-	Score     float64 `json:"score"`
-	Protocol  string  `json:"protocol"`
-	Source    string  `json:"source"`
+	// Benchmark is the canonical test id the claim is about, from /catalog.
+	Benchmark string `json:"benchmark"`
+	// Provider is who the claim belongs to — the lab or leaderboard whose number
+	// this is. It joins a claim to the attempts measured for that same model.
+	Provider string `json:"provider"`
+	// Model is the system the score is claimed for.
+	Model string `json:"model"`
+	// Score is the reported aggregate, as a percentage.
+	Score float64 `json:"score"`
+	// Protocol records HOW it was scored — provider-reported, agentic,
+	// third-party-leaderboard — because a provider card and a third party running
+	// its own harness are different kinds of number and must not be blended.
+	Protocol string `json:"protocol"`
+	// Source is the citation the row was read from. A claim without one is a
+	// number nobody can check, so every write requires it.
+	Source string `json:"source"`
 }
 
 // published holds external provider-reported claims as attributed DATA, each row
@@ -102,6 +112,11 @@ type attempt struct {
 
 type state struct {
 	store AttemptStore // the durability seam — fileStore (local dev) or cloud backend
+	// claims is the published plane's own store. Separate from `store` because
+	// the two planes must never share a write path: an attempt is something our
+	// harness did, a claim is a report of someone else's number, and one surface
+	// that could write both is one mistake away from a typed-in measurement.
+	claims ClaimStore
 }
 
 // Mount is the subsystem entrypoint (registered in apps.go).
@@ -114,8 +129,9 @@ func build(b cloud.Base) (state, error) {
 	// behind AttemptStore with no handler change (the architecture: prod is stateless,
 	// never pod-local). Attempts import idempotently by stable id.
 	store := newFileStore(b.DataDir)
+	claims := newClaimStore(b.DataDir)
 	b.Log.Info("benchmark arena", "prefix", "/v1/benchmark", "benchmarks", len(catalog), "attempts", len(store.Attempts("")))
-	return state{store: store}, nil
+	return state{store: store, claims: claims}, nil
 }
 
 // loadAttempts reads the append-only measured plane (one JSONL per model). Best-effort:
@@ -166,6 +182,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Design-your-own router blend (enso-<name>). The handlers live in presets.go
 	// for cohesion; the ADDRESSES live here, because one surface has one route
 	// table and zipdoc files an op's prose under the group it can see.
+	// The published plane, managed. A claim is other people's data and it changes
+	// when they do, so it is read and written here rather than recompiled.
+	zip.Get(g, "/claims", o.claims)
+	zip.Post(g, "/claims", o.putClaims)
+
 	zip.Get(g, "/presets", o.presets)
 	zip.Post(g, "/presets", o.compose, zip.WithStatus(http.StatusAccepted))
 }
@@ -239,13 +260,13 @@ func (o ops) leaderboard(ctx context.Context, in *benchmarkQuery) (*leaderboard,
 	if bench == "" {
 		bench = "gpqa_diamond"
 	}
-	return &leaderboard{Benchmark: bench, Rows: computeLeaderboard(o.s.State.store.Attempts(bench), bench)}, nil
+	return &leaderboard{Benchmark: bench, Rows: computeLeaderboard(o.s.State.store.Attempts(bench), bench, claimsFor(o.s.State.claims, bench))}, nil
 }
 
 // computeLeaderboard is the pure aggregation (testable): per-model measured accuracy
 // (coverage-aware) layered with the published claim, gap = published − measured. Never
 // blended; a model with only a claim shows measured=nil, and vice versa.
-func computeLeaderboard(attempts []attempt, bench string) []LeaderRow {
+func computeLeaderboard(attempts []attempt, bench string, claim map[string]publishedClaim) []LeaderRow {
 	type acc struct{ ok, n int }
 	m := map[string]*acc{}
 	for _, a := range attempts {
@@ -258,18 +279,6 @@ func computeLeaderboard(attempts []attempt, bench string) []LeaderRow {
 		m[a.Model].n++
 		if a.Correct {
 			m[a.Model].ok++
-		}
-	}
-	// Hand-curated rows first, then the generated import, so a claim written here
-	// deliberately outranks the same (benchmark, model) coming from the snapshot.
-	// The import is data read from other people's leaderboards; this file is where
-	// a human decides one of them is wrong.
-	claim := map[string]publishedClaim{}
-	for _, set := range [][]publishedClaim{publishedImported, published} {
-		for _, p := range set {
-			if p.Benchmark == bench {
-				claim[p.Model] = p
-			}
 		}
 	}
 	models := map[string]bool{}
