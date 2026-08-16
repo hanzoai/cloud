@@ -83,6 +83,64 @@
         "tags": [
           "iam"
         ]
+      },
+      "put": {
+        "operationId": "put_iam_account",
+        "summary": "Saves the calling person's own profile — the name they are shown by, their picture, a line about themselves and a link.",
+        "description": "Saves the calling person's own profile — the name they are\nshown by, their picture, a line about themselves and a link.\n\nOnly their own: the request names nobody, so it cannot reach another account.\nSend only what you are changing; a field you leave out keeps the value it had,\nand a field you send empty is cleared.\n\nA picture is an https link or an inline image up to 96 KiB, the same value an\norganization's mark is (schema.AvatarRef) — one rule for how a subject appears,\nwhether the subject is a person or an organization.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "Cookie",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.accountBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          }
+        }
       }
     },
     "/v1/iam/add-application": {
@@ -784,6 +842,96 @@
               }
             },
             "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/iam/assume": {
+      "post": {
+        "operationId": "post_iam_assume",
+        "summary": "Steps a platform operator into an organization: it returns their own access token re-scoped to that tenant, so they see what the tenant sees.",
+        "description": "Steps a platform operator into an organization: it returns their\nown access token re-scoped to that tenant, so they see what the tenant sees.\n\nThe token still names the operator — stepping in is not becoming somebody\nelse — and records the organization it was scoped to, so everything done with\nit is attributed to the person who did it. Only a platform operator may, and\nthe attempt is recorded whether or not it succeeds.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.assumeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "not found"
           }
         }
       }
@@ -2582,6 +2730,62 @@
         }
       }
     },
+    "/v1/iam/organizations/search": {
+      "get": {
+        "operationId": "searchOrganizations",
+        "summary": "Returns the organizations you can act in, the ones you belong to first and the rest after, newest first, narrowed by an optional query against the name or the display name.",
+        "description": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.SearchOrganizationsOutput"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/iam/organizations/update": {
       "post": {
         "operationId": "updateOrganization",
@@ -3192,6 +3396,76 @@
         "tags": [
           "iam"
         ]
+      }
+    },
+    "/v1/iam/release": {
+      "post": {
+        "operationId": "post_iam_release",
+        "summary": "Steps a platform operator back out: it returns their own access token with no organization assumed, which is the credential they had before they stepped in.",
+        "description": "Steps a platform operator back out: it returns their own access\ntoken with no organization assumed, which is the credential they had before\nthey stepped in. Recorded like the step in.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.assumeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "unauthorized"
+          }
+        }
       }
     },
     "/v1/iam/resolve-key": {
@@ -4531,14 +4805,14 @@
     "/v1/iam/webauthn-credentials": {
       "get": {
         "operationId": "listWebauthnCredentials",
-        "summary": "Returns the passkeys and security keys registered in your organization, newest first — which device each belongs to and when it was last used.",
-        "description": "Returns the passkeys and security keys registered in\nyour organization, newest first — which device each belongs to and when it was\nlast used.",
+        "summary": "Returns the passkeys and security keys registered to one person, newest first — which device each lives on and when it was registered.",
+        "description": "Returns the passkeys and security keys registered to\none person, newest first — which device each lives on and when it was\nregistered.\n\nYours by default. Name somebody else and you get them only if you already\nadminister their account, which is the same authority that governs reading\ntheir user record — so this list can never show more people than the surface\nbeside it already does.\n\nThere is no organization-wide list. It used to scope to the ORG, which handed\nan org admin every member's credential rows in one answer, and a SuperAdmin\nevery tenant's; a plain member meanwhile could not read even their own,\nbecause an unnamed target fails the Guard's tenant rule. One scope fixes both\nhalves: the answer is a person's, and the caller is the person unless they say\notherwise and may.",
         "tags": [
           "iam"
         ],
         "parameters": [
           {
-            "name": "owner",
+            "name": "user",
             "in": "query",
             "required": false,
             "schema": {
@@ -6864,6 +7138,20 @@
         },
         "type": "object"
       },
+      "iam.SearchOrganizationsOutput": {
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "organizations": {
+            "items": {
+              "$ref": "#/components/schemas/iam.Organization"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "iam.Session": {
         "properties": {
           "application": {
@@ -8150,6 +8438,31 @@
           },
           "updatedAt": {
             "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "iam.accountBody": {
+        "properties": {
+          "avatar": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "homepage": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "iam.assumeBody": {
+        "properties": {
+          "org": {
             "type": "string"
           }
         },
