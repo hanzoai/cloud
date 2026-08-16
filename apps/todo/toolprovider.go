@@ -50,11 +50,48 @@ const (
 // are several, because guessing is how work lands on the wrong board.
 const boardArg = `"board":{"type":"string","description":"Board key (e.g. ENG). Optional when the project has exactly one board."}`
 
+// enum renders a closed set as JSON-Schema text, and it is the ONLY place a
+// legal value is spelled for a caller.
+//
+// The set is the app's (`statuses`, `priorities` in todo.go) and stays the app's.
+// Restating one here as a string literal is a second copy of a value with an
+// owner, and that copy already cost something: with the enum written out by hand
+// the schema LOOKED authoritative, so priority went unvalidated while status was
+// checked. A copy does not merely risk drift — it disguises the absence of the
+// thing it copies.
+//
+// SORTED, and that is load-bearing rather than tidy: a Go map has no order, the
+// published document is a committed artifact the drift gate compares byte for
+// byte, and an unsorted enum would turn a green gate red at random.
+func enum(set map[string]bool) string {
+	vals := make([]string, 0, len(set))
+	for v := range set {
+		vals = append(vals, `"`+v+`"`)
+	}
+	sort.Strings(vals)
+	return "[" + strings.Join(vals, ",") + "]"
+}
+
+// oneOf is the ONE membership check, so a value the schema advertises and a value
+// the handler accepts cannot disagree. An empty string means "not asked".
+func oneOf(set map[string]bool, v, what string) error {
+	if v == "" || set[v] {
+		return nil
+	}
+	return fmt.Errorf("unknown %s %q", what, v)
+}
+
+// The schemas are BUILT from the sets, never written beside them. Adding a status
+// to the app's map moves the document, the MCP tool, the CLI and the validator at
+// once, because all four read that one map.
 var (
+	statusEnum   = enum(statuses)
+	priorityEnum = enum(priorities)
+
 	boardsSchema = []byte(`{"type":"object","properties":{},"additionalProperties":false}`)
 
 	listSchema = []byte(`{"type":"object","properties":{` + boardArg + `,
-"status":{"type":"string","enum":["backlog","todo","in_progress","done","canceled"],"description":"Only items in this column."},
+"status":{"type":"string","enum":` + statusEnum + `,"description":"Only items in this column."},
 "assignee":{"type":"string","description":"Only items held by this person."},
 "source":{"type":"string","enum":["team","git","crm","helpdesk","cms","agent"],"description":"Where the item came from. Use \"agent\" to see what agents opened for themselves."},
 "text":{"type":"string","description":"Case-insensitive match on title or description."},
@@ -64,8 +101,8 @@ var (
 	createSchema = []byte(`{"type":"object","properties":{` + boardArg + `,
 "title":{"type":"string","description":"One line naming the work."},
 "description":{"type":"string","description":"What needs doing, and why."},
-"status":{"type":"string","enum":["backlog","todo","in_progress","done","canceled"],"description":"Defaults to backlog."},
-"priority":{"type":"string","enum":["none","urgent","high","medium","low"]},
+"status":{"type":"string","enum":` + statusEnum + `,"description":"Defaults to backlog."},
+"priority":{"type":"string","enum":` + priorityEnum + `},
 "assignee":{"type":"string","description":"Who holds it."},
 "labels":{"type":"string","description":"Comma-separated labels."}},
 "required":["title"],"additionalProperties":false}`)
@@ -73,8 +110,8 @@ var (
 	updateSchema = []byte(`{"type":"object","properties":{` + boardArg + `,
 "number":{"type":"integer","description":"The item's number on its board."},
 "title":{"type":"string"},"description":{"type":"string"},
-"status":{"type":"string","enum":["backlog","todo","in_progress","done","canceled"]},
-"priority":{"type":"string","enum":["none","urgent","high","medium","low"]},
+"status":{"type":"string","enum":` + statusEnum + `},
+"priority":{"type":"string","enum":` + priorityEnum + `},
 "assignee":{"type":"string"},"labels":{"type":"string"}},
 "required":["number"],"additionalProperties":false}`)
 )
@@ -174,8 +211,8 @@ func listItems(ctx context.Context, store *Store, p tools.Principal, args map[st
 		Assignee: str(args, "assignee"),
 		Text:     str(args, "text"),
 	}
-	if f.Status != "" && !statuses[f.Status] {
-		return nil, fmt.Errorf("unknown status %q", f.Status)
+	if err := oneOf(statuses, f.Status, "status"); err != nil {
+		return nil, err
 	}
 	items, err := store.ListIssues(ctx, p.Org, b.ID, f)
 	if err != nil {
@@ -218,8 +255,13 @@ func createItem(ctx context.Context, store *Store, p tools.Principal, args map[s
 	if status == "" {
 		status = "backlog"
 	}
-	if !statuses[status] {
-		return nil, fmt.Errorf("unknown status %q", status)
+	if err := oneOf(statuses, status, "status"); err != nil {
+		return nil, err
+	}
+	// Checked, not merely advertised: the schema's enum and this call read the
+	// same set, so a value the document offers is a value the handler takes.
+	if err := oneOf(priorities, str(args, "priority"), "priority"); err != nil {
+		return nil, err
 	}
 	now := time.Now().Unix()
 	i := Issue{
@@ -277,10 +319,13 @@ func updateItem(ctx context.Context, store *Store, p tools.Principal, args map[s
 	if v, ok := args["priority"]; ok {
 		cur.Priority = fmt.Sprint(v)
 	}
+	if err := oneOf(statuses, str(args, "status"), "status"); err != nil {
+		return nil, err
+	}
+	if err := oneOf(priorities, str(args, "priority"), "priority"); err != nil {
+		return nil, err
+	}
 	if s := str(args, "status"); s != "" {
-		if !statuses[s] {
-			return nil, fmt.Errorf("unknown status %q", s)
-		}
 		cur.Status = s
 	}
 	cur.UpdatedAt = time.Now().Unix()
