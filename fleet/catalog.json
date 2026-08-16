@@ -1481,6 +1481,10 @@
    "doc": "Implements the OpenAI-compatible chat completions API"
   },
   {
+   "id": "post_chat_public",
+   "doc": "Serves one completion to a caller with no account."
+  },
+  {
    "id": "post_completions",
    "doc": "Implements the OpenAI-compatible chat completions API"
   },
@@ -5159,7 +5163,7 @@
   },
   {
    "id": "listWebauthnCredentials",
-   "doc": "Returns the passkeys and security keys registered in\nyour organization, newest first — which device each belongs to and when it was\nlast used."
+   "doc": "Returns the passkeys and security keys registered to\none person, newest first — which device each lives on and when it was\nregistered.\n\nYours by default. Name somebody else and you get them only if you already\nadminister their account, which is the same authority that governs reading\ntheir user record — so this list can never show more people than the surface\nbeside it already does.\n\nThere is no organization-wide list. It used to scope to the ORG, which handed\nan org admin every member's credential rows in one answer, and a SuperAdmin\nevery tenant's; a plain member meanwhile could not read even their own,\nbecause an unnamed target fails the Guard's tenant rule. One scope fixes both\nhalves: the answer is a person's, and the caller is the person unless they say\notherwise and may."
   },
   {
    "id": "patch_iam_scim_v2_users_by_owner_by_name",
@@ -5216,6 +5220,10 @@
   {
    "id": "post_iam_applications_update",
    "doc": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings."
+  },
+  {
+   "id": "post_iam_assume",
+   "doc": "Steps a platform operator into an organization: it returns their\nown access token re-scoped to that tenant, so they see what the tenant sees.\n\nThe token still names the operator — stepping in is not becoming somebody\nelse — and records the organization it was scoped to, so everything done with\nit is attributed to the person who did it. Only a platform operator may, and\nthe attempt is recorded whether or not it succeeds."
   },
   {
    "id": "post_iam_audit-logs",
@@ -5434,6 +5442,10 @@
    "doc": "Signs a container client in to your registry. `docker login`, and every\nbuild tool that pushes or pulls images, lands here: it exchanges the\ncredential for a short-lived token scoped to exactly the repositories that\ncredential may touch.\n\nBoth of the shapes container tooling uses are accepted, so the same login works\nwhichever client your pipeline runs."
   },
   {
+   "id": "post_iam_release",
+   "doc": "Steps a platform operator back out: it returns their own access\ntoken with no organization assumed, which is the credential they had before\nthey stepped in. Recorded like the step in."
+  },
+  {
    "id": "post_iam_revoke-user-keys",
    "doc": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. A secret key's stored value is the sk- in its\nschema.Key row."
   },
@@ -5558,6 +5570,10 @@
    "doc": "Changes a workspace's settings. What it is called does not change, and\nneither does when it was created."
   },
   {
+   "id": "put_iam_account",
+   "doc": "Saves the calling person's own profile — the name they are\nshown by, their picture, a line about themselves and a link.\n\nOnly their own: the request names nobody, so it cannot reach another account.\nSend only what you are changing; a field you leave out keeps the value it had,\nand a field you send empty is cleared.\n\nA picture is an https link or an inline image up to 96 KiB, the same value an\norganization's mark is (schema.AvatarRef) — one rule for how a subject appears,\nwhether the subject is a person or an organization."
+  },
+  {
    "id": "put_iam_application",
    "doc": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings."
   },
@@ -5572,6 +5588,10 @@
   {
    "id": "put_iam_scim_v2_users_by_owner_by_name",
    "doc": "Overwrites a person's SCIM attributes with what your identity\nprovider sends — how a change made there lands here.\n\nOnly the attributes SCIM describes are replaced. Anything the standard does not\ncover — their multi-factor enrolment above all — survives untouched, so a\nroutine sync from your IdP can never quietly strip someone's second factor or\nbring a deleted account back."
+  },
+  {
+   "id": "searchOrganizations",
+   "doc": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more."
   },
   {
    "id": "setOrganizationAvatar",
