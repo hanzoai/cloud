@@ -43,6 +43,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hanzoai/cloud/clientip"
 	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/internal/datadir"
 	"github.com/hanzoai/cloud/internal/edge"
@@ -258,6 +259,23 @@ func run(addr, zapAddr string) error {
 	// The two loops differ ONLY in which app they select and how eager it is; what
 	// a mount MEANS is one function (mount), so the failure policy cannot drift
 	// between them.
+	// WHO IS CALLING, before any child is included.
+	//
+	// Every subsystem runs as its own process, reached over a unix socket, so the
+	// request a child handles has the SOCKET as its peer — measured empty, and the
+	// same for every caller either way. Anything a child derives from it is one
+	// value for the whole internet, which is how ai's per-visitor ceiling became one
+	// bucket for everyone. Only this host can see the connection, so it answers here
+	// and the children read the answer.
+	//
+	// BEFORE the mount loop, and that is the whole of it: zip visits an included App
+	// with the middleware stack as it stood at the inclusion site, so a Use written
+	// after these mounts would reach none of them.
+	//
+	// clientip, not cloud: this host links no subsystem code (host-is-light), and
+	// reaching through the root package for one function pulls eight of them in.
+	app.Use(zip.H(clientip.StampClientIP))
+
 	for _, a := range manifest.Apps {
 		if err := mount(app, a, a.Eager, absent); err != nil {
 			return err
