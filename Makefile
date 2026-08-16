@@ -367,6 +367,34 @@ closure: ## Record what each app document was generated from (openapi/closure.js
 closure-check: ## Fail if a document was left behind by a dependency that moved. Seconds.
 	@$(GO) run ./cmd/closure -describable="$(DESCRIBABLE)"
 
+# MOVING A DEPENDENCY AND REGENERATING WHAT IT MOVES ARE ONE ACTION.
+#
+# They were two, and the second kept being skipped: three separate bumps blocked
+# every cloud release on one day — esign's prose, iam's passkey routes, ai's tool
+# — each landing on main with documents generated from the version BEFORE it.
+# The gate catches it every time and charges 22 minutes to say so, so the cost of
+# the missing step is a whole release cycle, paid by whoever pushes next.
+#
+# closure-check answers the same question in under two seconds and names the
+# exact documents, so this bumps, asks, and regenerates only what actually moved
+# — never the whole fleet. Nothing here is new machinery; it is the two commands
+# the failure message already prints, run in the order that makes the second one
+# unskippable.
+#
+#   make bump M=github.com/hanzoai/ai@v1.833.59
+bump: ## Move a dependency and regenerate the documents it moves. make bump M=<mod>@<ver>
+	@[ -n "$(M)" ] || { echo "usage: make bump M=github.com/hanzoai/ai@v1.833.59"; exit 2; }
+	$(GO) get $(M)
+	@stale=$$($(GO) run ./cmd/closure -describable="$(DESCRIBABLE)" 2>&1 \
+	   | sed -n 's|^ *plugin/\([a-z0-9-]*\)/openapi.json$$|\1|p' | sort -u); \
+	 if [ -n "$$stale" ]; then \
+	   echo ">> regenerating: $$stale"; \
+	   for a in $$stale; do $(MAKE) -f mk/fleet.mk describe/$$a || exit 1; done; \
+	   $(MAKE) -f mk/fleet.mk openapi; \
+	 else echo ">> no document moved"; fi
+	@$(MAKE) closure
+	@echo ">> commit: go.mod go.sum openapi/closure.json $$(git diff --name-only -- openapi.yaml public.yaml 'plugin/*/openapi.json' fleet/catalog.json | tr '\n' ' ')"
+
 test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ships).
 	# CHEAPEST FIRST, and that ordering is the point rather than tidiness: these two
 	# answer in seconds, and the gate below takes minutes to say the same thing.
