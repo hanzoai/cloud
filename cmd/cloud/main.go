@@ -43,6 +43,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hanzoai/cloud/clientip"
 	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/internal/datadir"
 	"github.com/hanzoai/cloud/internal/edge"
@@ -117,8 +118,15 @@ func forward(kv map[string]string) {
 // the two disagree in the first place.
 func doorConfig() zip.Config {
 	return zip.Config{
-		AppName:        "cloud",
-		MCP:            zip.MCPConfig{Disabled: true},
+		AppName: "cloud",
+		MCP:     zip.MCPConfig{Disabled: true},
+		// The ceiling on plugin PROCESSES, stated here because zip enforces it
+		// where a plugin starts rather than on the reaper's ticker. It has to be:
+		// the door below asks every subsystem at once, which starts children far
+		// faster than any sweep runs, and a bound restored a minute later is not a
+		// bound — that is how this pod came to hold every child it had, stop
+		// answering its own liveness probe, and get killed.
+		Warm:           manifest.Warm,
 		ReadBufferSize: edge.ReadBufferSize(),
 		BodyLimit:      edge.BodyLimit(),
 	}
@@ -152,10 +160,38 @@ func run(addr, zapAddr string) error {
 	// it again by the path that already exists.
 	//
 	// The stop function is bound HERE and deferred, not called through a
-	// deferred call of ReapIdle itself — that form evaluates at defer-run time
+	// deferred call of Reap itself — that form evaluates at defer-run time
 	// and would start the sweep during shutdown, which is the mistake serveWake
 	// records one door over.
-	stopReaping := app.ReapIdle(time.Minute)
+	//
+	// The second argument is an LRU CEILING on resident subsystems, and it is what
+	// keeps this pod inside the memory it was PROMISED rather than the memory it is
+	// permitted. Those are different numbers and only one of them decides whether
+	// the pod survives a busy node.
+	//
+	// Measured in production, 2026-08-15: 125 processes, 11,115 MB — the whole
+	// 123-app manifest resident at once, against requests 6Gi / limits 11Gi. The
+	// kubelet's own words when it killed it: "was using 11406568Ki, request is
+	// 6Gi, has larger consumption of memory." Under node pressure a pod is
+	// reclaimed on how far it has run past its REQUEST, so the 11Gi limit was never
+	// the line that mattered — and at replicas:1 with Recreate, each reclaim is a
+	// full API outage. There were three.
+	//
+	// 48 x ~89 MB (the measured mean) + the host is ~4.7 GB, comfortably under the
+	// 6Gi request, which takes this pod out of the first rank of eviction
+	// candidates. Hot subsystems stay warm because the bound is least-recently-
+	// used; a cold one pays a start on its next request, single-flighted through
+	// the same path a first request already takes.
+	//
+	// The idle bound still runs first and still does most of the work: this only
+	// decides what happens when more than 48 are genuinely in use. It is not read
+	// from the cgroup, because the cgroup carries the LIMIT and the number worth
+	// sizing against is the REQUEST, which a process cannot see.
+	// The ceiling itself is in doorConfig, enforced at every start; this only puts
+	// the AGE bound on a ticker. One reaper: there were two on this app, both a
+	// minute apart with the same number written twice, and a second sweep buys
+	// nothing a single one does not already do.
+	stopReaping := app.Reap(time.Minute)
 	defer stopReaping()
 
 	// THE POD'S WRITER LEASE, and this is the only process that may take it.
@@ -223,6 +259,23 @@ func run(addr, zapAddr string) error {
 	// The two loops differ ONLY in which app they select and how eager it is; what
 	// a mount MEANS is one function (mount), so the failure policy cannot drift
 	// between them.
+	// WHO IS CALLING, before any child is included.
+	//
+	// Every subsystem runs as its own process, reached over a unix socket, so the
+	// request a child handles has the SOCKET as its peer — measured empty, and the
+	// same for every caller either way. Anything a child derives from it is one
+	// value for the whole internet, which is how ai's per-visitor ceiling became one
+	// bucket for everyone. Only this host can see the connection, so it answers here
+	// and the children read the answer.
+	//
+	// BEFORE the mount loop, and that is the whole of it: zip visits an included App
+	// with the middleware stack as it stood at the inclusion site, so a Use written
+	// after these mounts would reach none of them.
+	//
+	// clientip, not cloud: this host links no subsystem code (host-is-light), and
+	// reaching through the root package for one function pulls eight of them in.
+	app.Use(zip.H(clientip.StampClientIP))
+
 	for _, a := range manifest.Apps {
 		if err := mount(app, a, a.Eager, absent); err != nil {
 			return err
@@ -264,7 +317,6 @@ func run(addr, zapAddr string) error {
 	// the catalog rather than of the work. The door asks the ones that are already
 	// running and reads the rest from what they published (fleet/catalog.go); this
 	// is the half only the host can answer, because the plugin table is its.
-	mcp.Warm = warm(app)
 
 	// The bare /mcp needs no route here. webui's terminal handler answers it from
 	// manifest.MCPPath (webui/mcp.go) — one rule, in the one place that can tell a
@@ -326,15 +378,39 @@ func run(addr, zapAddr string) error {
 	// has drained, so cancelling on the way out stops the poll with the process.
 	consoleCtx, stopConsole := context.WithCancel(context.Background())
 	defer stopConsole()
-	consoleSrc, err := release.Load(consoleCtx, release.ConfigFromEnv(), app.Logger())
-	if err != nil {
-		return fmt.Errorf("console: %w", err)
+	consoleSrc, consoleErr := release.Load(consoleCtx, release.ConfigFromEnv(), app.Logger())
+	if consoleErr != nil {
+		// Loud, and ALIVE. This used to return the error, and the difference is
+		// what an unreadable 404.html cost: the object store dropped one read, the
+		// front door refused to boot, and api.hanzo.ai answered 503 to every
+		// caller — including everyone who never opens a browser. Exiting does not
+		// save the console, because a dead process serves a blank page too; it
+		// only adds the API to what is lost. There is no state of the world where
+		// it leaves a user better off, so it is not the stricter choice, just the
+		// more expensive one.
+		//
+		// The alert this was reaching for is the log line, not the exit. A running
+		// process ships it; a CrashLoop takes the telemetry front door down with
+		// it and ships nothing.
+		app.Logger().Error("console: no release mounted — serving the API without it",
+			"err", consoleErr)
+	} else {
+		// A publish reaches users through this loop, in one poll interval — the
+		// whole point of taking the console out of the binary. Stopped when run
+		// returns.
+		go consoleSrc.Watch(consoleCtx)
 	}
-	// A publish reaches users through this loop, in one poll interval — the whole
-	// point of taking the console out of the binary. Stopped when run returns.
-	go consoleSrc.Watch(consoleCtx)
 
-	if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
+	// nil is webui's stated "this process serves no console": the catch-all still
+	// keeps the API namespaces honest and still answers the agent door, and a
+	// console path gets a 503 saying so. Mounting an empty release ERRORS, so this
+	// is conditional for the same reason cloud.Listen's is — doing it
+	// unconditionally turns "serves none" back into "starts none".
+	if consoleErr == nil {
+		if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
+			return fmt.Errorf("console: %w", err)
+		}
+	} else if err := webui.Mount(app, nil); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
 
@@ -363,6 +439,16 @@ func run(addr, zapAddr string) error {
 		_ = app.Shutdown()
 	}()
 
+	// Stop subsystems nothing is asking for. Every one is its own process, and
+	// until this they only ever accumulated: resident memory tracked the size of
+	// the catalog rather than the traffic, which is what evicted this pod for
+	// node memory and took the API down with it. A stopped plugin costs a cold
+	// start on its next request and nothing in between; an Eager one is never a
+	// candidate, so identity and config keep their process.
+	//
+	// The sweep is cheap (a timestamp compare per plugin) so a minute is often
+	// enough to be precise without being noisy. Stopped before Shutdown runs,
+	// because a sweep in flight reads state Shutdown writes.
 	// Both transports, same router — the pair cloud.Listen listens on. A bare
 	// address is ZAP (zip's default scheme); HTTP has to be spelled out, and
 	// omitting it is why a curl against the host answers with a frame-size error
@@ -480,30 +566,6 @@ func routed(composed []string) []string {
 // the app's prefix takes, so a burst of askers still produces one process. A
 // remotely mounted app is never started, so Start has nothing to report about it
 // and would name it unavailable forever.
-// warm reports whether a subsystem is running right now, WITHOUT starting it.
-//
-// A subsystem mounted at an address this host did not start (CLOUD_<NAME>_ADDR)
-// is warm by definition: it is somebody else's process, already up, and asking
-// it costs this host nothing.
-func warm(app *zip.App) func(string) bool {
-	remote := map[string]bool{}
-	for _, a := range manifest.Apps {
-		if a.Plugin().Addr != "" {
-			remote[a.Name] = true
-		}
-	}
-	return func(name string) bool {
-		if remote[name] {
-			return true
-		}
-		for _, p := range app.Plugins() {
-			if p.Name == name {
-				return p.Running
-			}
-		}
-		return false
-	}
-}
 
 func locate(app *zip.App) fleet.At {
 	remote := map[string]string{}

@@ -19,6 +19,7 @@
 package benchmark
 
 import (
+	"time"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -67,12 +68,22 @@ var catalog = []Benchmark{
 // records HOW they scored (single-attempt / pass@k / agentic) — apples-to-apples only
 // on the default view; claims revealed on toggle.
 type publishedClaim struct {
-	Benchmark string  `json:"benchmark"`
-	Provider  string  `json:"provider"`
-	Model     string  `json:"model"`
-	Score     float64 `json:"score"`
-	Protocol  string  `json:"protocol"`
-	Source    string  `json:"source"`
+	// Benchmark is the canonical test id the claim is about, from /catalog.
+	Benchmark string `json:"benchmark"`
+	// Provider is who the claim belongs to — the lab or leaderboard whose number
+	// this is. It joins a claim to the attempts measured for that same model.
+	Provider string `json:"provider"`
+	// Model is the system the score is claimed for.
+	Model string `json:"model"`
+	// Score is the reported aggregate, as a percentage.
+	Score float64 `json:"score"`
+	// Protocol records HOW it was scored — provider-reported, agentic,
+	// third-party-leaderboard — because a provider card and a third party running
+	// its own harness are different kinds of number and must not be blended.
+	Protocol string `json:"protocol"`
+	// Source is the citation the row was read from. A claim without one is a
+	// number nobody can check, so every write requires it.
+	Source string `json:"source"`
 }
 
 // published holds external provider-reported claims as attributed DATA, each row
@@ -98,10 +109,26 @@ type attempt struct {
 	Model     string `json:"model"`
 	Correct   bool   `json:"correct"`
 	Answer    string `json:"answer"`
+	// Run is which measurement this attempt belongs to. Without it every attempt
+	// ever made blends into one lifetime average, so a model that got BETTER
+	// reads as a muddied middle rather than an improvement — and re-measuring a
+	// model could only ever drag its own history along. A run is the unit that
+	// makes "measured on this date, under this harness" a thing you can say.
+	//
+	// Empty on rows written before runs existed. Those are treated as one
+	// implicit first run, which is what they were.
+	Run string `json:"run,omitempty"`
+	// At is when the attempt was recorded. Zero on pre-run rows.
+	At time.Time `json:"at,omitempty"`
 }
 
 type state struct {
 	store AttemptStore // the durability seam — fileStore (local dev) or cloud backend
+	// claims is the published plane's own store. Separate from `store` because
+	// the two planes must never share a write path: an attempt is something our
+	// harness did, a claim is a report of someone else's number, and one surface
+	// that could write both is one mistake away from a typed-in measurement.
+	claims ClaimStore
 }
 
 // Mount is the subsystem entrypoint (registered in apps.go).
@@ -114,8 +141,9 @@ func build(b cloud.Base) (state, error) {
 	// behind AttemptStore with no handler change (the architecture: prod is stateless,
 	// never pod-local). Attempts import idempotently by stable id.
 	store := newFileStore(b.DataDir)
+	claims := newClaimStore(b.DataDir)
 	b.Log.Info("benchmark arena", "prefix", "/v1/benchmark", "benchmarks", len(catalog), "attempts", len(store.Attempts("")))
-	return state{store: store}, nil
+	return state{store: store, claims: claims}, nil
 }
 
 // loadAttempts reads the append-only measured plane (one JSONL per model). Best-effort:
@@ -166,6 +194,15 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Design-your-own router blend (enso-<name>). The handlers live in presets.go
 	// for cohesion; the ADDRESSES live here, because one surface has one route
 	// table and zipdoc files an op's prose under the group it can see.
+	// The published plane, managed. A claim is other people's data and it changes
+	// when they do, so it is read and written here rather than recompiled.
+	// A score is a fact about a model ON A DAY, so the runs behind it are
+	// readable: the board shows the latest, this shows the arc.
+	zip.Get(g, "/history", o.history)
+
+	zip.Get(g, "/claims", o.claims)
+	zip.Post(g, "/claims", o.putClaims)
+
 	zip.Get(g, "/presets", o.presets)
 	zip.Post(g, "/presets", o.compose, zip.WithStatus(http.StatusAccepted))
 }
@@ -206,6 +243,36 @@ type LeaderRow struct {
 	Published *float64 `json:"published"`          // provider-claimed % (nil if none)
 	Gap       *float64 `json:"gap"`                // published − measured (the arena signal)
 	Protocol  string   `json:"protocol,omitempty"` // how the vendor scored their claim: single-attempt, pass@k or agentic
+	// Claims is how many independent claims exist for this model on this
+	// benchmark. More than one means several sources reported it.
+	Claims int `json:"claims,omitempty"`
+	// Spread is the distance between the highest and lowest of them, nil when
+	// there is only one. It is the disagreement AMONG sources, which a single
+	// Published number cannot show — signal in the same way the
+	// published-minus-measured gap is.
+	Spread *float64 `json:"spread,omitempty"`
+	// Mean is the unweighted average of every claim, which answers a different
+	// question from Published: what the field says on average, rather than what
+	// the vendor says about itself. With one claim the two are equal.
+	Mean *float64 `json:"mean,omitempty"`
+	// Run names the measurement Measured came from, and MeasuredAt is when it
+	// ran. A score with no date is not a fact about a model, it is a fact about
+	// a model on a day — and models change, so the date is what makes the number
+	// checkable rather than merely quoted.
+	Run string `json:"run,omitempty"`
+	// MeasuredAt is when the run behind Measured was recorded.
+	MeasuredAt *time.Time `json:"measuredAt,omitempty"`
+	// CILow and CIHigh are the 95% Wilson interval on Measured, in percent. They
+	// are what makes the score comparable: at n=198 a 98% carries roughly ±2
+	// points, so most differences at the top of a board are not distinguishable
+	// and a bare number implies a precision it does not have. Absent when there
+	// is no measurement.
+	CILow *float64 `json:"ciLow,omitempty"`
+	// CIHigh is the upper bound of that interval. Wilson rather than the normal
+	// approximation because the normal one produces bounds past 100 exactly where
+	// benchmark scores live — at 194/198 that is the top of the board, not a
+	// corner case.
+	CIHigh *float64 `json:"ciHigh,omitempty"`
 }
 
 // benchmarkQuery names the benchmark a read is about.
@@ -239,17 +306,37 @@ func (o ops) leaderboard(ctx context.Context, in *benchmarkQuery) (*leaderboard,
 	if bench == "" {
 		bench = "gpqa_diamond"
 	}
-	return &leaderboard{Benchmark: bench, Rows: computeLeaderboard(o.s.State.store.Attempts(bench), bench)}, nil
+	return &leaderboard{Benchmark: bench, Rows: computeLeaderboard(o.s.State.store.Attempts(bench), bench, claimsFor(o.s.State.claims, bench))}, nil
 }
 
 // computeLeaderboard is the pure aggregation (testable): per-model measured accuracy
 // (coverage-aware) layered with the published claim, gap = published − measured. Never
 // blended; a model with only a claim shows measured=nil, and vice versa.
-func computeLeaderboard(attempts []attempt, bench string) []LeaderRow {
+func computeLeaderboard(attempts []attempt, bench string, claim map[string][]publishedClaim) []LeaderRow {
+	// The LATEST run per model, not every attempt ever made. A model is
+	// re-measured when the harness improves or the model does, and blending a
+	// new run into an old one reports neither: a model that went from 88 to 94
+	// would show something in between forever, which is the opposite of what a
+	// re-measurement is for. History is not discarded — it is in the store, and
+	// /runs reads it — but the leaderboard answers "how good is it now".
+	latest := map[string]string{}
+	when := map[string]time.Time{}
+	for _, a := range attempts {
+		if a.Benchmark != bench || a.Answer == "" {
+			continue
+		}
+		if t, ok := when[a.Model]; !ok || a.At.After(t) {
+			when[a.Model], latest[a.Model] = a.At, a.Run
+		}
+	}
+
 	type acc struct{ ok, n int }
 	m := map[string]*acc{}
 	for _, a := range attempts {
 		if a.Benchmark != bench || a.Answer == "" {
+			continue
+		}
+		if a.Run != latest[a.Model] {
 			continue
 		}
 		if m[a.Model] == nil {
@@ -258,12 +345,6 @@ func computeLeaderboard(attempts []attempt, bench string) []LeaderRow {
 		m[a.Model].n++
 		if a.Correct {
 			m[a.Model].ok++
-		}
-	}
-	claim := map[string]publishedClaim{}
-	for _, p := range published {
-		if p.Benchmark == bench {
-			claim[p.Model] = p
 		}
 	}
 	models := map[string]bool{}
@@ -280,9 +361,23 @@ func computeLeaderboard(attempts []attempt, bench string) []LeaderRow {
 			v := float64(a.ok) / float64(a.n) * 100
 			r.Measured, r.N = &v, a.n
 		}
-		if p, ok := claim[model]; ok {
+		if r.Measured != nil {
+			lo, hi := wilson(m[model].ok, m[model].n)
+			r.CILow, r.CIHigh = &lo, &hi
+			r.Run = latest[model]
+			if t, ok := when[model]; ok && !t.IsZero() {
+				at := t
+				r.MeasuredAt = &at
+			}
+		}
+		if cs, ok := claim[model]; ok && len(cs) > 0 {
+			// One column, every claim counted. selectClaim states which reading
+			// the column shows; Claims and Spread say how many others there were
+			// and how far apart, so a single number never hides a disagreement.
+			p, _ := selectClaim(cs)
 			v := p.Score
 			r.Published, r.Protocol = &v, p.Protocol
+			r.Claims, r.Spread, r.Mean = len(cs), claimSpread(cs), claimMean(cs)
 		}
 		if r.Measured != nil && r.Published != nil {
 			g := *r.Published - *r.Measured

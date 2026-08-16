@@ -184,25 +184,40 @@ if [ ! -d .git ]; then
   git -c protocol.version=2 fetch -q --depth 1 origin "$REF"
   git checkout -q FETCH_HEAD
 fi
-if [ -n "$RUN" ]; then
-  echo "== $NAME: $RUN"
-  sh -c "$RUN"
+if [ -n "${RUN:-}" ]; then
+  echo "== $NAME: ${RUN:-}"
+  sh -c "${RUN:-}"
   n=0
-  for f in $OUT; do
+  for f in ${OUT:-}; do
     [ -f "$f" ] || continue
-    cp "$f" /w/dist/
-    printf '%s\tany\tany\t%s\n' "$(basename "$f")" "$NAME" >> /w/meta.txt
+    b="$(basename "$f")"
+    [ "$f" -ef "/w/dist/$b" ] || cp "$f" /w/dist/
+    # THE FILENAME DECIDES, when it carries the triple.
+    #
+    # A wheel or a tarball is not per-platform, so the recipe's own name and
+    # "any" are the honest answer for it. But a recipe that emits
+    # <name>-<os>-<arch> — the shape the Go lane below writes, and the shape
+    # manifest/release.go resolves a plugin BY — is naming its platform, and
+    # recording the recipe name and "any" for it makes the index unreadable:
+    # every file lands under one name and a host asking for (o11y, linux,
+    # amd64) matches nothing. One naming convention, either lane.
+    fos=any; farch=any; fname="$NAME"; stem="${b%.exe}"
+    case "$stem" in
+      *-linux-amd64|*-linux-arm64|*-darwin-amd64|*-darwin-arm64|*-windows-amd64|*-windows-arm64)
+        farch="${stem##*-}"; rest="${stem%-*}"; fos="${rest##*-}"; fname="${rest%-*}" ;;
+    esac
+    printf '%s\t%s\t%s\t%s\n' "$b" "$fos" "$farch" "$fname" >> /w/meta.txt
     n=$((n+1))
   done
-  [ "$n" -gt 0 ] || { echo "$NAME: out: '$OUT' matched no file the recipe produced"; exit 1; }
+  [ "$n" -gt 0 ] || { echo "$NAME: out: '${OUT:-}' matched no file the recipe produced"; exit 1; }
 else
-  for plat in $PLATFORMS; do
+  for plat in ${PLATFORMS:-}; do
     os="${plat%%/*}"; arch="${plat##*/}"
     f="$NAME-$os-$arch"
     case "$os" in windows) f="$f.exe";; esac
-    echo "== $NAME: go build $MAIN -> $f ($os/$arch)"
+    echo "== $NAME: go build ${MAIN:-} -> $f ($os/$arch)"
     CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" GOFLAGS=-mod=mod \
-      go build -trimpath -ldflags "$LDFLAGS" -o "/w/dist/$f" "$MAIN"
+      go build -trimpath -ldflags "${LDFLAGS:-}" -o "/w/dist/$f" "${MAIN:-}"
     printf '%s\t%s\t%s\t%s\n' "$f" "$os" "$arch" "$NAME" >> /w/meta.txt
   done
 fi
@@ -254,6 +269,62 @@ cat binaries.json
 // cluster without it still schedules the build; the publisher then fails loudly
 // on an unauthenticated PUT rather than the Job being unschedulable.
 const artifactS3Secret = "artifact-s3"
+
+// forgeTokenSecret holds the read credential for OUR OWN forge, in the build
+// namespace. It is mounted on the `fetch` container alone — never on a recipe
+// container, and never on the publisher.
+const forgeTokenSecret = "forge-token"
+
+// artifactPrepareScript puts the SOURCE in /w/src and the MODULES in /w/go, and
+// is the ONLY script that ever sees a credential.
+//
+// One step, because it is one job: fetch everything this build needs from the
+// places that require a credential, so nothing after it needs one. A recipe's
+// `run:` is arbitrary shell with the same trust as a Dockerfile RUN, and the
+// whole design is that it inherits a ready workspace and an empty environment.
+//
+// Both halves genuinely need the token. The source is private —
+// git.hanzo.ai/hanzoai/cloud redirects to hanzo-inc/cloud, which answers 401
+// anonymously — and go.mod names private modules: a build without this reached
+// 122 of 124 apps and died on zen, licensing and authz with "could not read
+// Username for 'https://github.com'".
+//
+// ONE mechanism covers both, and it is the ENVIRONMENT rather than a file.
+// GIT_CONFIG_COUNT is read by every git invocation in this container, including
+// the ones `go mod download` makes internally — which is why the per-call `-c`
+// this used to rely on cannot serve the module half — and it writes nothing to a
+// .gitconfig, so the token never lands on /w, the volume every recipe container
+// reads. Nothing to place correctly, nothing to clean up.
+//
+//	KEY_0  authenticates the clone of a private forge URL
+//	KEY_1  sends github.com/hanzoai/* module fetches to the forge, which serves
+//	       them — so one forge token covers the private set and no GitHub
+//	       credential is needed at all
+//
+// GOPATH is the recipe containers' own, so the cache this writes is GOPATH/pkg/mod
+// as they read it. `go mod download` with no argument is this module's build
+// list; `all` drags in test dependencies of dependencies that nothing here links.
+//
+// Measured in-cluster against the real repo: clone plus download, 54s, 4.4 GB.
+const artifactPrepareScript = `set -eu
+mkdir -p /w/src /w/dist /w/go
+cd /w/src
+if [ -n "${GIT_TOKEN:-}" ]; then
+  export GIT_CONFIG_COUNT=2 \
+    GIT_CONFIG_KEY_0="http.https://git.hanzo.ai/.extraheader" \
+    GIT_CONFIG_VALUE_0="Authorization: Basic $(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 | tr -d '\n')" \
+    GIT_CONFIG_KEY_1="url.https://git.hanzo.ai/hanzoai/.insteadOf" \
+    GIT_CONFIG_VALUE_1="https://github.com/hanzoai/"
+fi
+git init -q
+git remote add origin "$REPO_URL"
+git -c protocol.version=2 fetch -q --depth 1 origin "$REF"
+git checkout -q FETCH_HEAD
+git --no-pager log --oneline -1
+export GOPATH=/w/go GOPRIVATE='github.com/hanzoai/*'
+go mod download
+echo "prepared: source in /w/src, modules in /w/go"
+`
 
 // artifactBase is the PUBLISHED URL prefix for one build:
 //
@@ -334,27 +405,75 @@ func secretEnv(name, key string) any {
 	}}
 }
 
+// recipeEnv is what a recipe container is told, and the rule is ONE line long:
+// state what the recipe DECLARED, and be silent about the rest.
+//
+// This exists because the same defect bit three times, each time as a different
+// field, each time reported as success:
+//
+//   - the index recorded {os: any, arch: any} for every file, so 242 plugins
+//     landed under one name and no host could resolve any of them;
+//   - PLATFORMS was exported EMPTY for a run: recipe, and an empty variable is
+//     still SET, which defeats a makefile's conditional default — "0 binaries
+//     for 0 platforms", no error;
+//   - and the same shape waits in LDFLAGS, MAIN and OUT for whoever declares a
+//     recipe that reads them.
+//
+// Every one is the Job asserting a value it does not have. An unset variable
+// lets the recipe's own default stand; an empty one overrides it with nothing,
+// which is the one answer that is never true. So an undeclared field is OMITTED
+// rather than sent empty, and the next field cannot repeat this on its own.
+//
+// The fixed values below are not recipe data: HOME/GOPATH/npm_config_cache are
+// this Job's workspace, which the Job genuinely does know, and a non-root uid has
+// no writable HOME in a toolchain image without them.
+func recipeEnv(repoURL, ref string, b binarySpec) []any {
+	out := []any{env("REPO_URL", repoURL), env("REF", ref), env("NAME", b.Name)}
+	for _, kv := range [][2]string{
+		{"MAIN", b.Main}, {"RUN", b.Run}, {"OUT", b.Out}, {"LDFLAGS", b.Ldflags},
+		{"PLATFORMS", strings.Join(b.Platforms, " ")},
+	} {
+		if kv[1] != "" {
+			out = append(out, env(kv[0], kv[1]))
+		}
+	}
+	return append(out, env("HOME", "/w"), env("GOPATH", "/w/go"), env("npm_config_cache", "/w/.npm"))
+}
+
 // artifactJobSpec renders the build: one initContainer per recipe entry (they
 // run in order and share /w) followed by the publisher. The pod is non-root with
 // fsGroup 1000 so the shared emptyDir is writable without any container being
 // root, mounts NO service-account token, and is pinned to the same isolated
 // namespace + CI pool as every other build.
 func (k *k8sClient) artifactJobSpec(jobName, repoURL, ref, tag, base, putBase string, bins []binarySpec) *unstructured.Unstructured {
-	inits := make([]any, 0, len(bins))
+	// [0] PREPARE: the one credentialed container. Everything after it runs with
+	// a ready workspace and an empty environment — the whole reason it exists.
+	//
+	// It needs no change to artifactBuildScript: that script guards its fetch with
+	// `[ ! -d .git ]`, so with the source already present every recipe skips it.
+	inits := make([]any, 0, len(bins)+1)
+	inits = append(inits, map[string]any{
+		"name":       "prepare",
+		"image":      defaultToolchainImage,
+		"command":    []any{"/bin/sh", "-c", artifactPrepareScript},
+		"workingDir": "/w",
+		"env": []any{
+			env("REPO_URL", repoURL), env("REF", ref),
+			// Optional: a public source with public modules needs none, and this
+			// falls back to anonymous rather than failing on a missing secret.
+			map[string]any{"name": "GIT_TOKEN", "valueFrom": map[string]any{
+				"secretKeyRef": map[string]any{"name": forgeTokenSecret, "key": "token", "optional": true},
+			}},
+		},
+		"volumeMounts": []any{map[string]any{"name": "w", "mountPath": "/w"}},
+	})
 	for _, b := range bins {
 		inits = append(inits, map[string]any{
-			"name":       truncate("build-"+strings.ToLower(b.Name), 63),
-			"image":      b.Image,
-			"command":    []any{"/bin/sh", "-c", artifactBuildScript},
-			"workingDir": "/w",
-			"env": []any{
-				env("REPO_URL", repoURL), env("REF", ref), env("NAME", b.Name),
-				env("MAIN", b.Main), env("RUN", b.Run), env("OUT", b.Out),
-				env("LDFLAGS", b.Ldflags), env("PLATFORMS", strings.Join(b.Platforms, " ")),
-				// A non-root uid has no writable HOME in a toolchain image, and
-				// every toolchain wants one (GOCACHE, npm's cache, cargo's).
-				env("HOME", "/w"), env("GOPATH", "/w/go"), env("npm_config_cache", "/w/.npm"),
-			},
+			"name":         truncate("build-"+strings.ToLower(b.Name), 63),
+			"image":        b.Image,
+			"command":      []any{"/bin/sh", "-c", artifactBuildScript},
+			"workingDir":   "/w",
+			"env":          recipeEnv(repoURL, ref, b),
 			"volumeMounts": []any{map[string]any{"name": "w", "mountPath": "/w"}},
 		})
 	}

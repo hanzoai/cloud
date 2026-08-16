@@ -400,6 +400,25 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// typed yet — module work, per the module-handler note.
 	planapi.AdminRoute(storeV1, commercebilling.SeedRows)
 
+	// Reconcile the plan authority to the catalog this binary ships, the way the
+	// standalone does at its own boot. GET /v1/billing/plans reads the authority
+	// and falls back to the embed only when the authority is empty, so without
+	// this a repriced catalog ships in the binary and never reaches a customer —
+	// the rows keep serving whatever a past seed wrote, and the only way to move
+	// them is a hand-driven POST /v1/plans/seed.
+	//
+	// Safe on every boot by construction: seeded values ARE the embed, so it
+	// moves no charge; rows an admin edited stay authoritative; a slug the
+	// catalog stopped publishing is archived, not deleted, so renewals and
+	// invoices still price from it. Failure is logged and not fatal — a plan
+	// authority that could not be reconciled is a stale price list, which is
+	// worse to serve than to refuse booting the whole API for.
+	if created, corrected, err := commercebilling.SeedPlans(context.Background()); err != nil {
+		lg.Error("plan authority not reconciled to the shipped catalog", "err", err)
+	} else if created > 0 || corrected > 0 {
+		lg.Info("plan authority reconciled", "created", created, "corrected", corrected)
+	}
+
 	// THE MERCHANT RESOURCES, at the endpoint every Hanzo surface is told to
 	// use: api.hanzo.ai/v1/commerce/<kind> — products, variants, collections,
 	// discounts, sales channels, stock locations, subscribers, webhooks.
@@ -867,6 +886,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		accountclient.PinBillingSubject(),
 		commercemid.TokenRequired(),
 		commercebilling.GetCreditBalance,
+	)
+	// The same balance grouped by tag, which is how a reader tells trial credit
+	// from bought credit. Chat asks for it per session; an unregistered route
+	// answers 404 and the caller reads that as "no credit".
+	app.Get("/v1/billing/credit-balance/breakdown",
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercemid.TokenRequired(),
+		commercebilling.GetCreditBalanceBreakdown,
 	)
 	app.Get("/v1/billing/accounts",
 		commercemid.RequestContext(),
