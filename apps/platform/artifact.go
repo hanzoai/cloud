@@ -284,37 +284,31 @@ const gitFetchImage = "alpine/git:2.47.2"
 // that sees a credential.
 //
 // A repo whose go.mod names private modules cannot build without one: measured,
-// `make -f mk/fleet.mk dist` built 122 of 124 apps and then died on zen,
-// licensing and authz with
+// the fleet built 122 of 124 apps and then died on zen, licensing and authz with
+// "could not read Username for 'https://github.com'". Those resolve through
+// github.com/hanzoai/*, which the FORGE serves, so the one forge token already
+// here covers them and no GitHub credential is needed.
 //
-//	reading github.com/hanzoai/zen/go.mod: git ls-remote ...
-//	fatal: could not read Username for 'https://github.com'
+// The credential rides GIT_CONFIG_COUNT rather than `git config --global`, which
+// is what makes this safe to run beside the recipe: git reads that pair from the
+// ENVIRONMENT, so the token is never written to a .gitconfig — not in $HOME, and
+// certainly not on /w, the volume every recipe container reads. Nothing to place
+// correctly and nothing to clean up.
 //
-// The recipe container must not hold the credential (its `run:` is arbitrary
-// shell), so the fetch pattern repeats one level down: a container with a
-// CONSTANT script and the token downloads the modules, and every recipe
-// container afterwards builds from a warm cache with nothing in its environment.
-//
-// The rewrite is the image's own (Dockerfile): github.com/hanzoai/* is served by
-// the forge, so ONE forge token covers the private set and no GitHub credential
-// is needed here at all.
-//
-// HOME is deliberately NOT /w. `git config --global` writes $HOME/.gitconfig,
-// and /w is the shared volume every recipe container reads — putting the token
-// there would hand it to the shell this split exists to keep it away from.
-//
-// GOMODCACHE is /w/go/pkg/mod because that is GOPATH/pkg/mod for the GOPATH the
-// recipe containers are given, so the cache this writes is the cache they read.
-// That is also why this is worth doing even when nothing is private: the modules
-// download ONCE for the whole fleet instead of racing N parallel builds.
+// GOPATH is the recipe containers' own, so GOMODCACHE resolves to the same
+// $GOPATH/pkg/mod they read: one variable, and the cache this writes is the one
+// they use. `go mod download` with no argument is the build list for this
+// module — the superset `all` drags in test dependencies of dependencies that
+// nothing here links.
 const artifactDepsScript = `set -eu
 cd /w/src
-export GOPRIVATE='github.com/hanzoai/*' GOMODCACHE=/w/go/pkg/mod GOFLAGS=-mod=mod
+export GOPATH=/w/go GOPRIVATE='github.com/hanzoai/*'
 if [ -n "${GIT_TOKEN:-}" ]; then
-  git config --global url."https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
+  export GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0="url.https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/.insteadOf" \
+    GIT_CONFIG_VALUE_0="https://github.com/hanzoai/"
 fi
-go mod download all 2>&1 | tail -20 || go mod download 2>&1 | tail -20
-echo "modules warmed into /w/go/pkg/mod"
+go mod download
 `
 
 // artifactFetchScript puts the source in /w/src, and is the ONLY script that
@@ -493,20 +487,16 @@ func (k *k8sClient) artifactJobSpec(jobName, repoURL, ref, tag, base, putBase st
 		},
 		"volumeMounts": []any{map[string]any{"name": "w", "mountPath": "/w"}},
 	})
-	// [1] warms the MODULE cache with the same credential, in the same shape: a
-	// constant image running a constant script. A repo with private modules
-	// cannot build without this, and every repo builds FASTER with it — the
+	// [1] warms the MODULE cache, with the same credential and the same shape as
+	// the fetch: a constant image running a constant script. A repo with private
+	// modules cannot build without it, and every repo builds faster with it —
 	// modules download once here instead of being raced by N parallel builds.
-	//
-	// HOME is /root, NOT /w: `git config --global` writes $HOME/.gitconfig, and
-	// /w is the volume every recipe container reads.
 	inits = append(inits, map[string]any{
 		"name":       "deps",
 		"image":      defaultToolchainImage,
 		"command":    []any{"/bin/sh", "-c", artifactDepsScript},
 		"workingDir": "/w",
 		"env": []any{
-			env("HOME", "/root"),
 			map[string]any{"name": "GIT_TOKEN", "valueFrom": map[string]any{
 				"secretKeyRef": map[string]any{"name": forgeTokenSecret, "key": "token", "optional": true},
 			}},
