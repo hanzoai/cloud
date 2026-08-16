@@ -26,9 +26,16 @@ func TestBillingSubject(t *testing.T) {
 		{"acme", "alice", "acme"},       // real org: any member bills the ONE org account
 		{"hanzo", "Dave", "hanzo/dave"}, // signup org: each person bills their OWN account
 		{"hanzo", "z", "hanzo/z"},       // another signup person — their own account
-		{"hanzo", "", "hanzo"},          // no name (org-owned principal) → org pool
-		{"Hanzo", "Z", "hanzo/z"},       // folded
-		{"", "x", ""},                   // no org → empty subject (cannot bill)
+		{"acme", "", "acme"},            // a member-less credential in a POOLED org: still the pool
+		// The signup org is the one place a missing name is not "the org acting" but a
+		// credential that FAILED to name its person, and the account beside those
+		// members holds the platform's own balance. So it resolves to nothing and the
+		// caller refuses; billing it to the pool is what let a token that had resolved
+		// nobody spend that balance. A machine in this org is unaffected — it says so
+		// with Type/Machine and is answered by the org ledger before this rule.
+		{"hanzo", "", ""},
+		{"Hanzo", "Z", "hanzo/z"}, // folded
+		{"", "x", ""},             // no org → empty subject (cannot bill)
 	}
 	for _, c := range cases {
 		got := account.Payer(account.Credential{Owner: c.org, Name: c.name}).Subject()

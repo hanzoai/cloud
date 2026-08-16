@@ -296,3 +296,9 @@ func Sibling(host, label string) string {
 // literal "api.hanzo.ai" for itself, so the deployment's own host was stated
 // twice, brand-blind in both places, and nothing made the two agree.
 func APIHost(id string) string { return "api." + For(id).Domain }
+
+// GitHost is the code-hosting host of brand `id`: git.<that brand's apex> —
+// git.hanzo.ai, git.lux.network, git.zoo.ngo. Same derivation as APIHost and
+// beside it for the same reason: a caller scoping a credential to the forge must
+// name the forge, and a literal would be brand-blind.
+func GitHost(id string) string { return "git." + For(id).Domain }

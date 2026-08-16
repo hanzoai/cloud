@@ -30,7 +30,39 @@ const App = "sync"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.GitImport,
+	plane.GitInbound,
+	plane.GitMirror,
+	plane.GitStatus,
 	plane.SyncRun,
+}
+
+// GitImport create a repo on the forge and advance an upstream into it.
+//
+// Calls plane.GitImport on sync over the peer plane.
+func GitImport(ctx context.Context, in *plane.ImportIn) (*plane.Imported, error) {
+	return plane.Ask[plane.ImportIn, plane.Imported](ctx, App, plane.GitImport, in)
+}
+
+// GitInbound advance one ref from an upstream push.
+//
+// Calls plane.GitInbound on sync over the peer plane.
+func GitInbound(ctx context.Context, in *plane.InboundIn) (*plane.Synced, error) {
+	return plane.Ask[plane.InboundIn, plane.Synced](ctx, App, plane.GitInbound, in)
+}
+
+// GitMirror declare or withdraw a repo's outbound mirror target.
+//
+// Calls plane.GitMirror on sync over the peer plane.
+func GitMirror(ctx context.Context, in *plane.MirrorIn) (*plane.Mirrored, error) {
+	return plane.Ask[plane.MirrorIn, plane.Mirrored](ctx, App, plane.GitMirror, in)
+}
+
+// GitStatus which of these repos the forge holds, and which are in conflict.
+//
+// Calls plane.GitStatus on sync over the peer plane.
+func GitStatus(ctx context.Context, in *plane.StatusIn) (*plane.Statuses, error) {
+	return plane.Ask[plane.StatusIn, plane.Statuses](ctx, App, plane.GitStatus, in)
 }
 
 // SyncRun reconcile the syncs one upstream event fires.

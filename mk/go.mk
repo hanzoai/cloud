@@ -65,7 +65,26 @@ TMPDIR_READY := $(shell mkdir -p $(TMPDIR) && echo ok)
 # because `go env -w GOFLAGS=-p=6` in a developer's own config would otherwise
 # decide it, and this file exists so that a developer builds EXACTLY what CI and
 # Docker build.
-NPROC := $(or $(NPROC),$(shell nproc 2>/dev/null || echo 4))
+# GOMAXPROCS BEFORE nproc, because inside a CI job nproc is a LIE. A job runs in
+# a container the runner pod's own dockerd started, which lands at the host cgroup
+# root rather than under the pod — so there is no quota there to read and nproc
+# answers the NODE's 16 while the pod is limited to 6. The operator already
+# publishes the truth: the runner injects GOMAXPROCS=6 into every job from the
+# downward API against its own limits.cpu, so this reads that rather than keeping
+# a second copy of a number that would go stale the moment the limit moves.
+#
+# What it costs to get wrong is mk/fleet.mk's J, not just a slow build. That bound
+# is min(memory, NPROC/FLEET_P), and its memory half falls back to /proc/meminfo
+# when the cgroup is unreadable — which in this job it is — so meminfo reports the
+# NODE's and the CPU half is what actually binds. At nproc it bound J to 16/2 = 8
+# concurrent app builds, and mk/fleet.mk measures a link at 1.4-1.67 GB, so 8 x
+# 3 GiB is 24 GiB inside a 26Gi cgroup: over the edge once the module cache and
+# Go's own overhead are counted, which is a kill rather than a slow build. At
+# GOMAXPROCS it binds J to 6/2 = 3, about 9 GiB.
+#
+# Nothing changes on a workstation: GOMAXPROCS is unset there, so nproc answers
+# for the machine it is actually running on.
+NPROC := $(or $(NPROC),$(GOMAXPROCS),$(shell nproc 2>/dev/null || echo 4))
 export GOFLAGS ?= -p=$(NPROC)
 
 # The data plane has no plaintext-at-rest mode: cek refuses to open a store

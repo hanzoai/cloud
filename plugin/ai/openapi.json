@@ -10,6 +10,11 @@
       "url": "https://api.hanzo.ai"
     }
   ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
   "tags": [
     {
       "name": "ai"
@@ -1465,6 +1470,16 @@
         "tags": [
           "ai"
         ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
@@ -1473,6 +1488,16 @@
         "description": "Disconnects a third-party AI account: it deactivates the org's\nrow so completion resolution falls back to the global Hanzo account (no BYO), and\nbest-effort tombstones the sealed secret. Idempotent.",
         "tags": [
           "ai"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "x-app": "github.com/hanzoai/ai"
       }
@@ -1485,6 +1510,16 @@
         "tags": [
           "ai"
         ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "x-app": "github.com/hanzoai/ai"
       }
     },
@@ -1496,6 +1531,16 @@
         "tags": [
           "ai"
         ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "x-app": "github.com/hanzoai/ai"
       }
     },
@@ -1506,6 +1551,16 @@
         "description": "Imports the caller org's usage for a connected third-party\naccount. The org is resolved from the VERIFIED principal (requireConnectionOrg), so a\ntenant reads only its own connection. The key is unsealed SERVER-SIDE and never\nreturned. An unconnected account, a missing importer, or a scope-denied provider all\nreturn a 200 ProviderUsage with connected/available flags + a human note — the UI's\nhonest-empty states — never a fabricated figure.",
         "tags": [
           "ai"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "x-app": "github.com/hanzoai/ai"
       }
@@ -10765,6 +10820,17 @@
         "x-public": true
       }
     },
+    "/v1/chat/public": {
+      "post": {
+        "operationId": "post_chat_public",
+        "summary": "Serves one completion to a caller with no account.",
+        "description": "Serves one completion to a caller with no account.",
+        "tags": [
+          "chat"
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      }
+    },
     "/v1/completions": {
       "post": {
         "operationId": "post_completions",
@@ -10817,6 +10883,16 @@
         "description": "Handles GET /v1/documents/:file_id/context — every chunk of\na file, as LangChain Documents (used when RAG_USE_FULL_CONTEXT is on).",
         "tags": [
           "documents"
+        ],
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "x-app": "github.com/hanzoai/ai"
       }
@@ -11106,6 +11182,7 @@
         "tags": [
           "models"
         ],
+        "security": [],
         "x-public": true
       }
     },
@@ -11117,6 +11194,7 @@
         "tags": [
           "models"
         ],
+        "security": [],
         "x-public": true
       }
     },
@@ -11717,6 +11795,16 @@
         "tags": [
           "videos"
         ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "x-app": "github.com/hanzoai/ai",
         "x-public": true
       }
@@ -11728,6 +11816,16 @@
         "description": "Implements GET /v1/videos/{id}/content — download the finished MP4.\n\nIt authenticates + ownership-checks the caller, then proxies the upstream\n/content endpoint (bounded by the download concurrency ceiling) and streams the\nraw video bytes back inline. A successful download also bills the job once (for\nthe client that downloads without first polling to completion) — idempotent\nwith the poll path via job.markCompleted.",
         "tags": [
           "videos"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "x-app": "github.com/hanzoai/ai",
         "x-public": true
@@ -11741,6 +11839,16 @@
         "tags": [
           "wecom-bot"
         ],
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "x-app": "github.com/hanzoai/ai"
       },
       "post": {
@@ -11749,6 +11857,16 @@
         "description": "Process WeChat work bot messages",
         "tags": [
           "wecom-bot"
+        ],
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "x-app": "github.com/hanzoai/ai"
       }
@@ -13958,6 +14076,13 @@
           }
         },
         "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
       }
     }
   }

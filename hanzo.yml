@@ -36,7 +36,39 @@
 # NO deploy here either: the `rollout` job ends in universe/charts/app/pin.sh,
 # and cd.hanzo.ai reconciles what that pin records.
 
-# NO binaries: LANE YET, AND THE MISSING PIECE IS A CREDENTIAL NOBODY HAS.
+# NO binaries: LANE YET — AND THE CREDENTIAL IS NO LONGER THE REASON.
+#
+# Both blockers below are CLOSED. Read this first, because the text under them
+# was written when they were open and it sends you to provision an S3 key that
+# is not needed:
+#
+#   1. FIXED in hanzoai/ci (`the run:/out: lane indexes per FILE`) and in THIS
+#      repo, apps/platform/artifact.go — both lanes now derive {name, os, arch}
+#      from the filename when it carries the <name>-<os>-<arch> shape the Go lane
+#      already writes, and keep the recipe name + "any" for a wheel or a tarball.
+#      Pinned by TestArtifactScripts_IndexPerFileWhenTheNameCarriesThePlatform,
+#      which runs both scripts for real and fails on the old behaviour.
+#
+#   2. NOT A BLOCKER: the door the comment below calls "being built next door" is
+#      built, HERE. `POST /v1/runner` with a `binaries:` recipe launches the
+#      artifact Job, and the only container that ever sees the object-store
+#      credential is the publisher, from the `artifact-s3` KMSSecret in the build
+#      namespace — so a CALLER holds no bucket key and names no bucket. The gate
+#      is the ordinary one (SuperAdmin or OrgAdmin, `repoOwnerInOrg` confining an
+#      org-admin to its own owner), i.e. the IAM bearer the KMS step already
+#      mints. Live: an unauthenticated POST answers 403 `invalid build token`,
+#      which is a routed door refusing. It publishes to the same layout
+#      s3.hanzo.ai/<bucket>/<owner>/<repo>/<tag>/binaries.json that CLOUD_PLUGINS
+#      reads — one index, two front doors, exactly as apps/platform/artifact.go
+#      says. Provisioning S3_ADMIN_* to use ci's own `bucket:` lane would be a
+#      SECOND credential for a job that already has one.
+#
+# So what remains is a decision about WHERE the plugin build runs, not a missing
+# secret: ci's `bucket:` lane (on the runner, needs the key) or this door (in the
+# cluster, holds the key already, and takes the build off the release train's
+# critical path — which is the point of a light host in the first place).
+#
+# ---- written while both were open; kept for the reasoning, not the verdict ----
 #
 # The build half is done and lives in this repo: `make -f mk/fleet.mk dist` puts
 # all 121 plugins for linux/amd64 + linux/arm64 into dist/<app>-<os>-<arch> —
@@ -127,9 +159,26 @@ test:
     # It PREDICTS; app-contract still DECIDES. A moved closure means the document was
     # generated from source that has since changed, not that the projection differs.
     run: |
-      set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
-      make closure-check
+      # IT PREDICTS; app-contract DECIDES — and this step used to be fatal, which
+      # promoted the prediction to the verdict and stopped every release that
+      # followed a dependency bump. Measured: four times in one day, each time a
+      # bump moved go.mod without regenerating the witness, each time reported as
+      # `117 app document(s) stale`, and each time the full regeneration below
+      # produced documents that were IDENTICAL — only the witness had moved.
+      #
+      # So the whole surface was held by a signal that was right about staleness
+      # and silent about consequence, and the release train was red for a day for
+      # documents that had not changed. app-contract regenerates all 123 from
+      # source in the same job and fails on any real diff, so nothing is lost by
+      # letting this one report instead of refuse.
+      #
+      # It stays FIRST and it stays loud: it is two seconds against app-contract's
+      # thirty-five minutes, so a reader who is about to lose that time learns why
+      # here. What it must not do is decide.
+      if ! make closure-check; then
+        echo "::warning::the closure witness is stale — app-contract below decides whether any document actually moved; if it passes, commit openapi/closure.json"
+      fi
   - name: generated-current
     # manifest/apps.go is the hand-authored source of truth for the subsystem set.
     # gen-app-cmds scaffolds a plugin/<app>/main.go for any manifest app that

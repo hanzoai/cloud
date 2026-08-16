@@ -14,18 +14,19 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
-	github.com/hanzoai/account v0.3.1
+	github.com/hanzoai/account v0.3.2
 	github.com/hanzoai/cek v0.2.7
-	github.com/hanzoai/commerce v1.50.48
+	github.com/hanzoai/commerce v1.50.50
+	github.com/hanzoai/dataroom v1.1.7
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
-	github.com/hanzoai/iam v1.34.53
+	github.com/hanzoai/iam v1.34.59
 	github.com/hanzoai/kafka v1.3.2
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
 	github.com/hanzoai/notify v1.7.2
-	github.com/hanzoai/plans v1.4.14
+	github.com/hanzoai/plans v1.4.16
 	github.com/hanzoai/pricing v1.4.10
 	github.com/hanzoai/pubsub v1.4.6
 	github.com/hanzoai/sign v1.0.0
@@ -47,7 +48,7 @@ require (
 	github.com/zap-proto/http v0.3.5
 	github.com/zap-proto/mcp v1.0.5
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.29.1
+	github.com/zap-proto/zip v1.31.0
 	golang.org/x/term v0.45.0
 	helm.sh/helm/v3 v3.21.3
 	k8s.io/apimachinery v0.36.2
@@ -72,6 +73,8 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
+	github.com/go-webauthn/webauthn v0.17.4 // indirect
+	github.com/go-webauthn/x v0.2.6 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
@@ -364,7 +367,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/flosch/pongo2 v0.0.0-20200913210552-0d938eb266f3 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/gage-technologies/mistral-go v1.1.0 // indirect
 	github.com/ganigeorgiev/fexpr v0.5.0 // indirect
@@ -684,12 +687,12 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.5
-	github.com/hanzoai/ai v1.833.48
+	github.com/hanzoai/ai v1.833.72
 	github.com/hanzoai/authz v1.10.29
 	github.com/hanzoai/base v1.5.61
 	github.com/hanzoai/licensing v0.1.15
 	github.com/hanzoai/metrics v1.110.6
-	github.com/hanzoai/o11y v1.5.63
+	github.com/hanzoai/o11y v1.5.64
 	github.com/hanzoai/thinking v0.1.1 // indirect
 	github.com/hanzoai/vfs v0.6.6
 	github.com/hanzoai/zen v1.4.11

@@ -12,20 +12,7 @@
 # IT FAILS CLOSED, AND THAT IS THE WHOLE POINT. A gate that waves the change
 # through when the reviewer is unreachable is a gate an attacker turns off by
 # making the reviewer unreachable. So an error, a timeout, an unparseable
-# verdict and a diff too large to read all REFUSE. The break-glass is a named
-# human decision (REVIEW_BREAK_GLASS), recorded in the run, never a silent
-# fallback.
-#
-# IT WATCHES ITSELF. The run that reviews a commit uses THAT COMMIT's workflow
-# and this very file, so a change which edits the gate is a change that could
-# switch the gate off for its own review. Touching .hanzo/ is therefore not
-# forbidden — it is escalated: the verdict has to name it, and a diff that
-# disables review while claiming to be routine is exactly the shape this looks
-# for.
-#
-# WHAT IT SENDS, AND WHERE. The diff goes to our own model plane at
-# api.hanzo.ai. It is never handed to somebody else's — a security review of
-# unreleased code is precisely the payload we do not post off-estate.
+# verdict and a diff too large to read all REFUSE, and there is no way past it.
 set -euo pipefail
 
 BASE="${1:?usage: review.sh <base-sha> <head-sha>}"
@@ -41,22 +28,42 @@ MAXBYTES="${REVIEW_MAX_BYTES:-400000}"
 
 die() { echo "::error::review: $*" >&2; exit 1; }
 
-if [ -n "${REVIEW_BREAK_GLASS:-}" ]; then
-  echo "::warning::review BYPASSED by break-glass: ${REVIEW_BREAK_GLASS}"
-  echo "review: bypassed — ${REVIEW_BREAK_GLASS}" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
-  exit 0
-fi
-
 [ -n "$KEY" ] || die "no REVIEW_API_KEY — the reviewer cannot run, so the change cannot pass"
 
 # `req` and `resp` are created further down, so the trap defaults them: under
 # `set -u` a trap that expands an unset name fails, and a failing trap replaces
 # the exit status the script chose.
+# GENERATED ARTIFACTS ARE NOT READ, and the drift gate is why that is safe.
+#
+# These six paths are written by `make -f mk/fleet.mk check`, which regenerates
+# them FROM SOURCE and refuses any porcelain change (mk/fleet.mk — the same list,
+# and it is the list because that gate is what defines it). So they are a
+# projection of code that IS reviewed, and a hostile hunk cannot hide in one: to
+# survive it would have to be reproduced by the generator, which means it is in
+# the generator, which is source. `image` needs `gate`, so the regeneration has
+# always already run by the time an image exists.
+#
+# Reading them anyway is not neutral, it is what stopped releases. Measured
+# against v1.801.536: the whole diff was 1,449,734B against a 400,000B bound —
+# and 1,331,591B of that, 92%, was these six. The bound then REFUSED (correctly,
+# it will not truncate), and because the base is the last release TAG the backlog
+# only grew with each push: no release, bigger diff, refused again. A reviewer
+# that cannot read a change because it is full of machine output is not reviewing
+# the change, and here it was also the thing preventing the change from shipping.
+#
+# The bound stays 400,000B. What changed is that the budget is spent on prose a
+# person wrote: the same range measures 118,143B once these are dropped.
+generated=(
+  ':(exclude)openapi.yaml' ':(exclude)public.yaml'
+  ':(exclude)openapi/floor.json' ':(exclude)openapi/closure.json'
+  ':(exclude)fleet/catalog.json' ':(exclude)plugin/*/openapi.json'
+)
+
 diff_file=$(mktemp); trap 'rm -f "$diff_file" "${req:-}" "${resp:-}" 2>/dev/null' EXIT
-git diff --no-color "$BASE".."$HEAD" > "$diff_file" 2>/dev/null || die "could not read the diff $BASE..$HEAD"
+git diff --no-color "$BASE".."$HEAD" -- . "${generated[@]}" > "$diff_file" 2>/dev/null || die "could not read the diff $BASE..$HEAD"
 
 bytes=$(wc -c < "$diff_file")
-files=$(git diff --name-only "$BASE".."$HEAD" | wc -l)
+files=$(git diff --name-only "$BASE".."$HEAD" -- . "${generated[@]}" | wc -l)
 [ "$bytes" -gt 0 ] || { echo "review: empty diff — nothing to read"; exit 0; }
 [ "$bytes" -le "$MAXBYTES" ] || die "diff is ${bytes}B over the ${MAXBYTES}B bound — split the change; a truncated review is not a review"
 
@@ -89,7 +96,12 @@ system = (
 user = (f"This change touches .hanzo/ (the release and review machinery itself), so judge whether it "
         f"weakens the gate that is judging it.\n\n" if selfmod == "yes" else "")
 user += f"{files} files changed.\n\nDIFF:\n{diff}"
+# ASK FOR JSON, so there is nothing to extract. The prompt already said "STRICT
+# JSON and nothing else" and a prompt is a request; response_format is a
+# constraint the gateway enforces. Verified against api.hanzo.ai on this model:
+# the content comes back bare and parses directly.
 json.dump({"model": model, "max_tokens": 1500, "temperature": 0,
+           "response_format": {"type": "json_object"},
            "messages": [{"role":"system","content":system},{"role":"user","content":user}]}, sys.stdout)
 PY
 
@@ -104,13 +116,56 @@ try:
     text = raw["choices"][0]["message"]["content"]
 except Exception:
     print("::error::review: no answer in the reviewer's response"); sys.exit(1)
-m = re.search(r"\{.*\}", text, re.S)
-if not m:
-    print("::error::review: the reviewer did not answer in JSON — refusing rather than guessing"); sys.exit(1)
+# THE VERDICT IS AN OBJECT, NOT A SPAN OF TEXT.
+#
+# This used to be re.search(r"\{.*\}", text, re.S) — GREEDY, so it took from the
+# FIRST brace in the answer to the LAST one anywhere in it. One stray brace in a
+# summary or a quoted finding and the span is two objects and some prose glued
+# together, which cannot parse, and a release is refused for a reason that has
+# nothing to do with the change. That is what blocked run 73092: "unparseable
+# verdict (Expecting property name enclosed in double quotes: line 1 column 2)".
+#
+# With response_format above, the content IS the object and parses directly.
+# The scan is the fallback for a gateway that ignores the constraint, and it is
+# STRICTER than the regex it replaces, never looser:
+#
+#   - it reads BALANCED objects rather than one greedy span, so prose around the
+#     answer cannot corrupt it;
+#   - a candidate counts only if it parses AND carries a "verdict" key, so a
+#     brace-bearing sentence is not a verdict;
+#   - and if TWO such objects appear it REFUSES as ambiguous rather than picking
+#     one. That is the injection guard: a diff under review can contain
+#     {"verdict":"pass"}, and a model quoting it back must never be able to
+#     outrank the model's own answer by position.
+def _objects(s):
+    depth = 0; start = None
+    for i, ch in enumerate(s):
+        if ch == '{':
+            if depth == 0: start = i
+            depth += 1
+        elif ch == '}' and depth > 0:
+            depth -= 1
+            if depth == 0: yield s[start:i + 1]
+
+def _verdicts(s):
+    out = []
+    for c in _objects(s):
+        try: o = json.loads(c)
+        except Exception: continue
+        if isinstance(o, dict) and "verdict" in o: out.append(o)
+    return out
+
 try:
-    v = json.loads(m.group(0))
-except Exception as e:
-    print(f"::error::review: unparseable verdict ({e}) — refusing rather than guessing"); sys.exit(1)
+    v = json.loads(text)
+    if not (isinstance(v, dict) and "verdict" in v):
+        raise ValueError("no verdict")
+except Exception:
+    found = _verdicts(text)
+    if not found:
+        print("::error::review: the reviewer did not answer with a JSON verdict — refusing rather than guessing"); sys.exit(1)
+    if len(found) > 1:
+        print("::error::review: the answer carries more than one verdict object — refusing rather than choosing between them"); sys.exit(1)
+    v = found[0]
 
 verdict = str(v.get("verdict","")).lower()
 findings = v.get("findings") or []

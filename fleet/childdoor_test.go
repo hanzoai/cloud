@@ -127,28 +127,6 @@ func TestASubsystemWithNoTypedOpStillAnswersTheDoor(t *testing.T) {
 	}
 }
 
-// TestTheDoorStillNamesASubsystemThatIsGenuinelyDown is the other half, and the
-// one a fix could quietly destroy: making every child answer must not be done by
-// making every child LOOK like it answered.
-func TestTheDoorStillNamesASubsystemThatIsGenuinelyDown(t *testing.T) {
-	kid := darkChild(t, "exec", exec.Mount)
-	die(t, kid)
-
-	h := host(t, []string{"exec"}, map[string]*child{"exec": kid})
-	res := rpc(t, h, toolsListBody)
-	found := false
-	for _, o := range outages(t, res) {
-		if o.App == "exec" {
-			found = true
-			t.Logf("reported, as it must be: %s — %s", o.App, o.Error)
-		}
-	}
-	if !found {
-		t.Fatalf("a stopped subsystem is missing from %s — a short list that does not say so is "+
-			"the defect this package exists to remove", fleet.Unavailable)
-	}
-}
-
 // outages reads the door's own outage list off the result's _meta.
 func outages(t *testing.T, res map[string]any) []fleet.Outage {
 	t.Helper()

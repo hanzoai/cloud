@@ -109,6 +109,9 @@ func init() {
 			"may run is decided per request by the authorizer, on the decoded input, so a filtered "+
 			"list would be a second claim about permission that is free to be wrong.\n\n"+
 			"Rendered once and served as bytes thereafter, under a strong ETag.")
+	// The sentence above, as data. A door the prose calls unauthenticated and the
+	// contract calls credentialed is one of the two lying to a generated client.
+	Open(CommandPath, http.MethodGet)
 }
 
 // order puts the list in a TOTAL order, which is what makes the payload a
