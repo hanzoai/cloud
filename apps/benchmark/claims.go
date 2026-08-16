@@ -12,6 +12,37 @@ import (
 	"time"
 )
 
+// WHY THERE IS NO SERVING PLANE HERE, AND WHY OPENROUTER IS NOT IMPORTED.
+//
+// The obvious next move is a third store beside claims and attempts, holding
+// latency, throughput, uptime and price per model — OpenRouter publishes exactly
+// that at /api/v1/models/{author}/{slug}/endpoints (latency_last_30m,
+// throughput_last_30m, uptime_last_5m/30m/1d, pricing, quantization, status),
+// and it covers 413 models. Measured 2026-08-16; their /api/v1/models carries no
+// score, eval, elo or quality field at all, so none of it is benchmark data.
+//
+// It does not belong here, and mostly it does not need importing.
+//
+// o11y already records this FIRST-HAND. llmobstypes carries LatencyMs beside
+// Model, Provider, Cost and TotalTokens on every observation, so for every model
+// we actually route to we have per-call latency with the cost attached — which
+// is better than a third party's thirty-minute aggregate for deciding where to
+// send the next request. Importing theirs would put a second, weaker answer next
+// to a number we already measure ourselves, which is the blending mistake this
+// file exists to prevent, one domain over.
+//
+// The division, stated once so it is not re-litigated:
+//
+//	accuracy  → this arena: measured (our harness) ∥ published (their claims)
+//	serving   → o11y:       measured (our spans, per call, with cost)
+//	coverage  → models.hanzo.ai/v1/models, 529 models
+//
+// The symmetry is deliberate and so is the one gap in it: o11y has no published
+// plane. For a model we have never called we hold no latency, and a third-party
+// figure is the only thing that would fill it. If that is ever wanted it belongs
+// in o11y marked as a CLAIM, exactly as accuracy claims are marked here — never
+// in the benchmark arena, and never blended into a measured series.
+
 // The claims plane, made writable.
 //
 // A published claim is DATA — a number someone else reported, plus the citation
