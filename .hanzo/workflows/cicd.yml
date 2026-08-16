@@ -1379,7 +1379,18 @@ jobs:
                         (.|tostring) + "\n```"' /tmp/release.json)
 
           # Idempotent: create, or update the one that a previous attempt left.
-          ID=$(curl -fsS -H "Authorization: token ${FORGE_TOKEN}" \
+          # NO -f ON THE PROBE. This asks a question whose answer is normally "no": the
+          # first receipt for a tag 404s because nothing has created that release yet,
+          # and `curl -f` turns that answer into a non-zero exit which, under
+          # `set -euo pipefail`, kills the step before it can reach the POST that
+          # creates it. So the create path — the one EVERY release takes — could never
+          # run. Measured: this repo holds ONE release object, v1.801.31, whose body is
+          # a hand-written changelog, so the car has written a receipt for zero
+          # releases since it was added.
+          #
+          # PATCH and POST below KEEP -f, because there a non-2xx really is the error.
+          # `.id // empty` already reads a non-release body as "no release".
+          ID=$(curl -sS -H "Authorization: token ${FORGE_TOKEN}" \
             "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
           if [ -n "$ID" ]; then
             curl -fsS -X PATCH -H "Authorization: token ${FORGE_TOKEN}" \
