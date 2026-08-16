@@ -260,10 +260,16 @@ func computeLeaderboard(attempts []attempt, bench string) []LeaderRow {
 			m[a.Model].ok++
 		}
 	}
+	// Hand-curated rows first, then the generated import, so a claim written here
+	// deliberately outranks the same (benchmark, model) coming from the snapshot.
+	// The import is data read from other people's leaderboards; this file is where
+	// a human decides one of them is wrong.
 	claim := map[string]publishedClaim{}
-	for _, p := range published {
-		if p.Benchmark == bench {
-			claim[p.Model] = p
+	for _, set := range [][]publishedClaim{publishedImported, published} {
+		for _, p := range set {
+			if p.Benchmark == bench {
+				claim[p.Model] = p
+			}
 		}
 	}
 	models := map[string]bool{}
