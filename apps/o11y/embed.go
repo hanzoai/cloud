@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 
 	"github.com/hanzoai/cloud"
+	planeops "github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/o11y/pkg/community"
 	"github.com/hanzoai/o11y/pkg/modules/sentry/implsentry"
 	o11yrt "github.com/hanzoai/o11y/pkg/o11y"
@@ -118,12 +119,61 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 	// uses — so a publishable key attributes errors to the SAME org it attributes
 	// events to. This is what lights sentry.hanzo.ai up with the key that already
 	// feeds analytics + insights: one key, one endpoint, no per-project DSN secret.
-	implsentry.SetIngestKeyResolver(func(ctx context.Context, key string) (string, bool) {
-		org := cloud.ResolvePublishableKeyOrg(ctx, key)
-		return org, org != ""
-	})
+	implsentry.SetIngestKeyResolver(ingestKeyOrg)
 
 	return server.PublicHandler(), nil
+}
+
+// projectKeys and iamKeys are the two key spaces, as seams. They are variables so
+// the ORDER between them is a property a test can hold without standing up a plane
+// peer or an IAM — the order IS the fix, so it is the thing worth pinning.
+var (
+	projectKeys = projectKeyOrg
+	iamKeys     = func(ctx context.Context, key string) (string, bool) {
+		org := cloud.ResolvePublishableKeyOrg(ctx, key)
+		return org, org != ""
+	}
+)
+
+// ingestKeyOrg resolves a publishable ingest key to the org that owns it, asking the
+// app that MINTS the key before the one that mints the other kind.
+//
+// Absence, not preference: a key found in the projects space is not "preferred" over
+// an IAM answer, because IAM never has one to give. The order is what makes both
+// spaces reachable through one door.
+func ingestKeyOrg(ctx context.Context, key string) (string, bool) {
+	if org, ok := projectKeys(ctx, key); ok {
+		return org, true
+	}
+	return iamKeys(ctx, key)
+}
+
+// projectKeyOrg asks the app that MINTS publishable keys which org owns one.
+//
+// ONE PREFIX, TWO KEY SPACES. `pk-` is minted in two places and only one of them is
+// IAM: apps/projects generates its own from crypto/rand and keeps it on the project
+// row, and every key a customer has actually been handed is one of those. Asking IAM
+// about a projects key is not a lookup that misses, it is a question about a
+// different set — so this door refused every key that works everywhere else, and the
+// error endpoint accepted nothing at all while /v1/event accepted the same key.
+//
+// Projects first, IAM second, because the fallback is a genuine org-scoped key and
+// IAM does own those. It is the same op analytics resolves this key through
+// (apps/analytics/plane.go), so one key now means one org at both doors.
+//
+// The resolver it feeds answers a bool and carries no error, so a projects outage
+// reads here as "not this space" and falls through to IAM, which will not know the
+// key either — the caller then refuses. That is the behaviour this path already had
+// for these keys, so an outage cannot make attribution WRONG, only absent.
+func projectKeyOrg(ctx context.Context, key string) (string, bool) {
+	// Org-less by construction: the KEY is the tenant key and the answer names the
+	// org, so passing one would let a caller file errors under someone else's.
+	out, err := cloud.Ask[planeops.KeyIn, planeops.Attribution](
+		cloud.For(ctx, ""), "projects", planeops.ProjectsResolveKey, &planeops.KeyIn{Key: key})
+	if err != nil || out == nil || !out.Found {
+		return "", false
+	}
+	return out.Org, out.Org != ""
 }
 
 // applyEmbedEnvDefaults sets the env the embedded runtime needs but the operator
