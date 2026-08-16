@@ -1053,7 +1053,7 @@ type auditIn struct {
 	Result string `json:"result"`
 }
 
-// auditList is the compliance-scoped slice of the shared audit trail.
+// auditList is the compliance slice of the shared audit trail.
 type auditList struct {
 	// Data is the org's compliance.* audit rows, newest first.
 	Data []audit.Wire `json:"data"`
@@ -1062,7 +1062,7 @@ type auditList struct {
 	Disclaimer string `json:"disclaimer"`
 }
 
-// AuditRead is the compliance-scoped read of the SHARED tamper-evident audit plane —
+// AuditRead is the compliance read of the SHARED tamper-evident audit plane —
 // the SOC 2 posture surface (privileged actions: who started/decided what, when). The
 // org is PINNED to the caller's validated org and the rows are narrowed to
 // compliance.* actions. Fail-closed: no principal is a 403, no configured audit
