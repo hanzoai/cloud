@@ -32,7 +32,7 @@ func (configuredEdge) Configured() bool { return true }
 // than inferred from a CDN response, so both states are pinned: an operator has
 // to be able to tell "a publish is live now" from "a publish is live in four
 // hours" without leaving the API.
-func TestHealthReportsWhetherAPublishReachesReaders(t *testing.T) {
+func TestEdgeReportsWhetherAPublishReachesReaders(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		edge       sites.Edge
@@ -45,9 +45,9 @@ func TestHealthReportsWhetherAPublishReachesReaders(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			o := ops{s: serviceWithEdge(t, tc.edge)}
-			got, err := o.health(context.Background(), nil)
+			got, err := o.edge(context.Background(), nil)
 			if err != nil {
-				t.Fatalf("health: %v", err)
+				t.Fatalf("edge: %v", err)
 			}
 			if got.Status != tc.wantStatus {
 				t.Errorf("status = %q, want %q", got.Status, tc.wantStatus)
@@ -63,6 +63,19 @@ func TestHealthReportsWhetherAPublishReachesReaders(t *testing.T) {
 			// else sends someone to the source to find out what that means.
 			if got.Freshness == "" {
 				t.Error("freshness is empty; that is the sentence this endpoint exists to say")
+			}
+			// The provider is named even when there is none, because "none" is an
+			// answer and a blank field is a question.
+			if got.Provider == "" {
+				t.Error("provider is blank; an operator cannot tell which edge this is")
+			}
+			// The policy is DERIVED from CacheControlFor, so it cannot drift from
+			// what the server actually serves — assert it matches at the source.
+			if got.Policy["document"] != sites.CacheControlFor("index.html", "") {
+				t.Errorf("document policy = %q, want the canonical one", got.Policy["document"])
+			}
+			if got.Policy["immutable"] != sites.CacheControlFor("app.4f3a9c21.js", "") {
+				t.Errorf("immutable policy = %q, want the canonical one", got.Policy["immutable"])
 			}
 		})
 	}
