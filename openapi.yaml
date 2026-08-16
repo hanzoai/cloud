@@ -65647,6 +65647,14 @@ paths:
       - chat
       x-app: github.com/hanzoai/ai
       x-public: true
+  /v1/chat/public:
+    post:
+      description: Serves one completion to a caller with no account.
+      operationId: post_chat_public
+      summary: Serves one completion to a caller with no account.
+      tags:
+      - chat
+      x-app: github.com/hanzoai/ai
   /v1/cloud:
     get:
       description: |-

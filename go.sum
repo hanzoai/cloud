@@ -637,8 +637,6 @@ github.com/fsnotify/fsnotify v1.4.9/go.mod h1:znqG4EE+3YCdAaPaxE2ZRY/06pZUdp0tY4
 github.com/fsnotify/fsnotify v1.5.4/go.mod h1:OVB6XrOHzAwXMpEM7uPOzcehqUV2UqJxmVXmkdnm1bU=
 github.com/fsnotify/fsnotify v1.9.0 h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=
 github.com/fsnotify/fsnotify v1.9.0/go.mod h1:8jBTzvmWwFyi3Pb8djgCCO5IBqzKJ/Jwo8TRcHyHii0=
-github.com/fxamacker/cbor/v2 v2.9.1 h1:2rWm8B193Ll4VdjsJY28jxs70IdDsHRWgQYAI80+rMQ=
-github.com/fxamacker/cbor/v2 v2.9.1/go.mod h1:vM4b+DJCtHn+zz7h3FFp/hDAI9WNWCsZj23V5ytsSxQ=
 github.com/fxamacker/cbor/v2 v2.9.2 h1:X4Ksno9+x3cz0TZv69ec1hxP/+tymuR8PXQJyDwfh78=
 github.com/fxamacker/cbor/v2 v2.9.2/go.mod h1:vM4b+DJCtHn+zz7h3FFp/hDAI9WNWCsZj23V5ytsSxQ=
 github.com/gabriel-vasile/mimetype v1.4.13 h1:46nXokslUBsAJE/wMsp5gtO500a4F3Nkz9Ufpk2AcUM=
@@ -895,6 +893,8 @@ github.com/google/go-querystring v1.2.0 h1:yhqkPbu2/OH+V9BfpCVPZkNmUXhb2gBxJArfh
 github.com/google/go-querystring v1.2.0/go.mod h1:8IFJqpSRITyJ8QhQ13bmbeMBDfmeEJZD5A0egEOmkqU=
 github.com/google/go-tpm v0.9.8 h1:slArAR9Ft+1ybZu0lBwpSmpwhRXaa85hWtMinMyRAWo=
 github.com/google/go-tpm v0.9.8/go.mod h1:h9jEsEECg7gtLis0upRBQU+GhYVH6jMjrFxI8u6bVUY=
+github.com/google/go-tpm-tools v0.3.13-0.20230620182252-4639ecce2aba h1:qJEJcuLzH5KDR0gKc0zcktin6KSAwL7+jWKBYceddTc=
+github.com/google/go-tpm-tools v0.3.13-0.20230620182252-4639ecce2aba/go.mod h1:EFYHy8/1y2KfgTAsx7Luu7NGhoxtuVHnNo8jE7FikKc=
 github.com/google/gofuzz v1.0.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
 github.com/google/gofuzz v1.2.0 h1:xRy4A+RhZaiKjJ1bPfwQ8sedCA+YS2YcCHW6ec7JMi0=
 github.com/google/gofuzz v1.2.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
@@ -994,10 +994,8 @@ github.com/hanzoai/account v0.3.2 h1:6dC9ePgE73xZmIPckWfnFLYGbqtOoDV97iKs6wksbFY
 github.com/hanzoai/account v0.3.2/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
 github.com/hanzoai/agent v1.0.5 h1:RWe4cSyie+5wAt2s0kAIqxQ4m6ID5JlqI/xUEUxhFEI=
 github.com/hanzoai/agent v1.0.5/go.mod h1:3bqSx+EkF4Lm0BxJEEb7TbV0Ck1EsBgt6tteHJmX1nk=
-github.com/hanzoai/ai v1.833.54 h1:vKYSyHFeIHc+723wK3WVRCSkY2zgdEkIQ+ZCzi3HPAE=
-github.com/hanzoai/ai v1.833.54/go.mod h1:cUqnDnUBfe38be6C+2HJmB4RmJU95YLRZuYmiJ0ykzs=
-github.com/hanzoai/ai v1.833.55 h1:CZfE8/l3mXwC1tNGBH3tDVnqVylhhamtKpGvOLhgF/Y=
-github.com/hanzoai/ai v1.833.55/go.mod h1:cUqnDnUBfe38be6C+2HJmB4RmJU95YLRZuYmiJ0ykzs=
+github.com/hanzoai/ai v1.833.58 h1:sKNnWbswm+RvfAdeJEwBBAGKJiAKxrhV11G7/SeyERs=
+github.com/hanzoai/ai v1.833.58/go.mod h1:cUqnDnUBfe38be6C+2HJmB4RmJU95YLRZuYmiJ0ykzs=
 github.com/hanzoai/authz v1.10.29 h1:b4vWtI9g4Mvay1zizW7cwly/hDk06r+oAdA/y+317Do=
 github.com/hanzoai/authz v1.10.29/go.mod h1:xkzFdiIFx4UQMlU0NkmSRz0dgRQYqSXpKgVjn8ijn3E=
 github.com/hanzoai/base v1.5.61 h1:UDCQDHjB5GnFDvj7XVB3Muq9223SrpxnCkGJmI5Jm1c=
@@ -1044,10 +1042,6 @@ github.com/hanzoai/govaluate v0.1.0 h1:8Ajg4pNw2zFssXO2Ixj3fa73HawZUQiMwcP2NakUj
 github.com/hanzoai/govaluate v0.1.0/go.mod h1:0kZEEPJJmWLx67swZ7wAbE7xahX+CQzm9u/O4dNF5u4=
 github.com/hanzoai/ha v0.2.0 h1:zgIbr3mjeuFfF26lkIKf/47ZM5kYBubWIPjEA24Yu7g=
 github.com/hanzoai/ha v0.2.0/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
-github.com/hanzoai/iam v1.34.54 h1:YK6/iSiSBiAl8BoNV3OzOUjVpM39vklA0sCedTEYn7w=
-github.com/hanzoai/iam v1.34.54/go.mod h1:qfUXW8LhH+BkgBt1csXfJrDebFvNWgvL/7i1ZP7N42A=
-github.com/hanzoai/iam v1.34.56 h1:eCnpxWiK98uigjBlmsa6RAZPGBcH2YAQrUxEr5V9ihs=
-github.com/hanzoai/iam v1.34.56/go.mod h1:dMm9lAMYekIQVuAw9q0ayZKFIRBx3vZpBdmXFNthnTc=
 github.com/hanzoai/iam v1.34.57 h1:nOW43rxVTe5Wr4nC7fRhnHDMamijv+4WvMtWKTpbeAo=
 github.com/hanzoai/iam v1.34.57/go.mod h1:dMm9lAMYekIQVuAw9q0ayZKFIRBx3vZpBdmXFNthnTc=
 github.com/hanzoai/kafka v1.3.2 h1:oiU77wsU7lWuXAOmCfzkcaT2RTX4PdLqzw1vRMHM44A=

@@ -10820,6 +10820,17 @@
         "x-public": true
       }
     },
+    "/v1/chat/public": {
+      "post": {
+        "operationId": "post_chat_public",
+        "summary": "Serves one completion to a caller with no account.",
+        "description": "Serves one completion to a caller with no account.",
+        "tags": [
+          "chat"
+        ],
+        "x-app": "github.com/hanzoai/ai"
+      }
+    },
     "/v1/completions": {
       "post": {
         "operationId": "post_completions",
