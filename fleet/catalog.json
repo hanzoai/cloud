@@ -2758,6 +2758,10 @@
    "doc": "Returns the total credit still available to the caller's own subject — the sum of what the grants have left, which is the figure the console shows above the usage meter. It is the balance a metered act draws down, so it answers the one question a customer asks before spending: how much is there.\n\nLike every read in this family the subject is pinned to the caller before the handler runs, so the userId parameter the handler reads can never name another tenant. For the grants BEHIND this number — each with its original amount and its expiry — read /v1/billing/credits. A subject with no credit is zero, which is an answer and not an error."
   },
   {
+   "id": "get_billing_credit-balance_breakdown",
+   "doc": "Returns the same balance /v1/billing/credit-balance reports, split by the tag each grant carries, so a reader can tell trial credit from bought credit and show the earliest expiry within each group. A console needs the split to say what will lapse and when; the single number cannot.\n\nThe subject is pinned to the caller before the handler runs, exactly as in the sibling reads, so the userId parameter can never name another tenant. A subject with no grants is an empty breakdown and a zero total, which is an answer and not an error."
+  },
+  {
    "id": "get_billing_credits",
    "doc": "Returns the caller org's credit grants — each with its original amount, what remains and when it expires — so a customer can see what was given and what is left before metered spend draws it down. It is a READ of the caller's own subject, pinned before the handler runs, so a grant belonging to another tenant is simply absent. Granting credit is not this route and never has been: minting lands on the mint-gated POST /v1/billing/credit, which no browser can reach. Reading an empty balance is an empty array, not an error."
   },
