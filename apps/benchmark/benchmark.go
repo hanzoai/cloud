@@ -235,6 +235,10 @@ type LeaderRow struct {
 	// Published number cannot show — signal in the same way the
 	// published-minus-measured gap is.
 	Spread *float64 `json:"spread,omitempty"`
+	// Mean is the unweighted average of every claim, which answers a different
+	// question from Published: what the field says on average, rather than what
+	// the vendor says about itself. With one claim the two are equal.
+	Mean *float64 `json:"mean,omitempty"`
 }
 
 // benchmarkQuery names the benchmark a read is about.
@@ -310,7 +314,7 @@ func computeLeaderboard(attempts []attempt, bench string, claim map[string][]pub
 			p, _ := selectClaim(cs)
 			v := p.Score
 			r.Published, r.Protocol = &v, p.Protocol
-			r.Claims, r.Spread = len(cs), claimSpread(cs)
+			r.Claims, r.Spread, r.Mean = len(cs), claimSpread(cs), claimMean(cs)
 		}
 		if r.Measured != nil && r.Published != nil {
 			g := *r.Published - *r.Measured
