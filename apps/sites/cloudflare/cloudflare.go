@@ -1,4 +1,4 @@
-package sites
+package cloudflare
 
 import (
 	"bytes"
@@ -18,13 +18,13 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// CloudflareEdge purges the Cloudflare edge cache by cache-tag so a redeploy is instantly
+// Edge purges the Cloudflare edge cache by cache-tag so a redeploy is instantly
 // live at the edge. It is deliberately minimal: one POST to the zone purge API
 // with the tags we stamped onto every site object (Cache-Tag: site-<org>-<slug>).
 //
 // Credentials come ONLY from the environment the operator injects from KMS
 // (CF_API_TOKEN, CF_ZONE_ID) — never hard-coded, never logged. When either is
-// unset the CloudflareEdge is a no-op that warns once per call: a missing CF token must
+// unset the Edge is a no-op that warns once per call: a missing CF token must
 // degrade to "stale-until-TTL", never fail a deploy.
 //
 // The Cloudflare account and its purge quota are SHARED BY EVERY TENANT, so an
@@ -43,7 +43,7 @@ import (
 //     ultimately protects the shared quota from a tenant that spreads load
 //     across many sites. Exceeding it degrades to stale-until-TTL — the same
 //     documented failure mode as an unconfigured token — and says so at Warn.
-type CloudflareEdge struct {
+type Edge struct {
 	token  string
 	zoneID string
 	api    string // purge endpoint base (override in tests); default Cloudflare v4
@@ -71,12 +71,12 @@ type purgeState struct {
 // it without limit. Idle entries are swept before the bound is enforced.
 const maxPendingTags = 4096
 
-// NewCloudflareEdge reads CF_API_TOKEN + CF_ZONE_ID from the environment. The returned
-// CloudflareEdge is safe to hold for the process; Configured() reports whether it can
+// New reads CF_API_TOKEN + CF_ZONE_ID from the environment. The returned
+// Edge is safe to hold for the process; Configured() reports whether it can
 // actually reach Cloudflare. The coalescing window and the process-wide ceiling
 // are operator knobs with honest defaults.
-func NewCloudflareEdge(log luxlog.Logger) *CloudflareEdge {
-	return &CloudflareEdge{
+func New(log luxlog.Logger) *Edge {
+	return &Edge{
 		token:   strings.TrimSpace(os.Getenv("CF_API_TOKEN")),
 		zoneID:  strings.TrimSpace(os.Getenv("CF_ZONE_ID")),
 		api:     "https://api.cloudflare.com/client/v4",
@@ -109,7 +109,7 @@ func envInt(key string, def int) int {
 // Stop cancels every scheduled trailing purge and makes further scheduling a
 // no-op. It is idempotent, and the process shutdown path calls it so a pending
 // timer can never outlive the subsystem that created it.
-func (p *CloudflareEdge) Stop() {
+func (p *Edge) Stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.stopped = true
@@ -122,7 +122,7 @@ func (p *CloudflareEdge) Stop() {
 }
 
 // Configured reports whether both a token and a zone id are present.
-func (p *CloudflareEdge) Configured() bool { return p.token != "" && p.zoneID != "" }
+func (p *Edge) Configured() bool { return p.token != "" && p.zoneID != "" }
 
 // PurgeTags purges every listed cache-tag. A no-op (warn-only) when unconfigured,
 // so callers invoke it unconditionally after a publish. A purge failure is
@@ -131,7 +131,7 @@ func (p *CloudflareEdge) Configured() bool { return p.token != "" && p.zoneID !=
 //
 // A COALESCED call returns nil: being folded into the burst's trailing purge is
 // not a failure, and the tag will be purged.
-func (p *CloudflareEdge) PurgeTags(ctx context.Context, tags ...string) error {
+func (p *Edge) PurgeTags(ctx context.Context, tags ...string) error {
 	if len(tags) == 0 {
 		return nil
 	}
@@ -149,7 +149,7 @@ func (p *CloudflareEdge) PurgeTags(ctx context.Context, tags ...string) error {
 // edge of a quiet period it says yes. Inside the window it says no and — unless
 // one is already scheduled — arms a single trailing purge, so a burst costs two
 // API calls and still ends with the final state purged.
-func (p *CloudflareEdge) admit(tags []string) bool {
+func (p *Edge) admit(tags []string) bool {
 	key := strings.Join(tags, "\x00")
 	now := time.Now()
 
@@ -178,7 +178,7 @@ func (p *CloudflareEdge) admit(tags []string) bool {
 // sweepLocked drops idle entries, and if the map is still at its bound drops the
 // oldest idle one, so the coalescing map cannot grow without limit. Entries with
 // a scheduled trailing purge are never dropped — that purge is owed.
-func (p *CloudflareEdge) sweepLocked(now time.Time) {
+func (p *Edge) sweepLocked(now time.Time) {
 	if len(p.pending) < maxPendingTags {
 		return
 	}
@@ -191,7 +191,7 @@ func (p *CloudflareEdge) sweepLocked(now time.Time) {
 
 // flush runs a burst's trailing purge on its own bounded context — the request
 // that scheduled it is long gone, so its context must not govern this call.
-func (p *CloudflareEdge) flush(key string, tags []string) {
+func (p *Edge) flush(key string, tags []string) {
 	p.mu.Lock()
 	st, ok := p.pending[key]
 	if !ok || p.stopped {
@@ -215,7 +215,7 @@ func (p *CloudflareEdge) flush(key string, tags []string) {
 // minute boundary (a fixed window); exceeding the ceiling returns false and the
 // caller degrades to stale-until-TTL — the same documented failure mode as an
 // unconfigured token.
-func (p *CloudflareEdge) takeToken() bool {
+func (p *Edge) takeToken() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := time.Now()
@@ -232,7 +232,7 @@ func (p *CloudflareEdge) takeToken() bool {
 
 // call performs the purge API request, subject to the process-wide ceiling that
 // protects the shared account quota from any single tenant.
-func (p *CloudflareEdge) call(ctx context.Context, tags []string) error {
+func (p *Edge) call(ctx context.Context, tags []string) error {
 	if !p.takeToken() {
 		p.log.Warn("cloudflare purge ceiling reached (serving stale until TTL)",
 			"tags", tags, "perMinute", p.ceiling)
@@ -297,7 +297,7 @@ var rewriters = map[string]string{
 // a failure — a token that cannot read zone settings must never stop the site
 // server from booting. The Warn names the setting and the value it needs, so an
 // operator can fix it from the log line alone.
-func (p *CloudflareEdge) EnsureVerbatim(ctx context.Context) {
+func (p *Edge) EnsureVerbatim(ctx context.Context) {
 	if !p.Configured() {
 		p.log.Warn("cloudflare html-passthrough unchecked (CF_API_TOKEN/CF_ZONE_ID unset)")
 		return
@@ -325,7 +325,7 @@ func (p *CloudflareEdge) EnsureVerbatim(ctx context.Context) {
 
 // zoneSetting GETs or PATCHes one zone setting and returns its resulting value.
 // A PATCH sends {"value": v}; a GET sends no body.
-func (p *CloudflareEdge) zoneSetting(ctx context.Context, method, id, value string) (string, error) {
+func (p *Edge) zoneSetting(ctx context.Context, method, id, value string) (string, error) {
 	var body io.Reader
 	if method == http.MethodPatch {
 		payload, err := json.Marshal(map[string]string{"value": value})
@@ -360,10 +360,3 @@ func (p *CloudflareEdge) zoneSetting(ctx context.Context, method, id, value stri
 	}
 	return out.Result.Value, nil
 }
-
-// CacheTag is the ONE canonical edge cache-tag for a project's site objects. The
-// site server (streamSite) emits it as the Cache-Tag response header on every
-// served object; the CloudflareEdge targets it on deploy, domain-bind, delete, and the
-// dedicated POST .../purge. Both derive it from server-owned Org+Slug so the
-// emitted tag and the purged tag never diverge.
-func CacheTag(org, slug string) string { return "site-" + org + "-" + slug }
