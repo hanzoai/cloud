@@ -57,9 +57,11 @@ func expose() {
 // a request that dies before any model leaves the count exactly where it found it.
 //
 // The ORG is the CALLER'S — the gateway's assertion — and can never be named in the
-// input, so one tenant cannot read another's allowance. The SUBJECT is the caller's
-// to choose, but only within that org: it is a caller inside the tenancy the
-// credential already pinned.
+// input. It selects the TIER, which is the ceiling this subject is held to. The row
+// itself is addressed by subject alone (see Store), so what keeps one caller out of
+// another's count is the subject the gate resolved from a verified credential, and
+// the plane's own boundary: this answers on a unix socket inside the pod and has no
+// address on the edge.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeRead(ctx context.Context, in *plane.AllowanceIn) (*plane.Allowance, error) {
@@ -93,9 +95,9 @@ func scope(ctx context.Context, in *plane.AllowanceIn) (org, subject string, err
 // the ceiling, the count, whether it is now spent, and when it starts again.
 //
 // The ORG is the CALLER'S — the gateway's assertion — and can never be named in the
-// input, so one tenant cannot spend another's allowance. The SUBJECT is the caller's
-// to choose, but only within that org: it is a caller inside the tenancy the
-// credential already pinned.
+// input; it selects the TIER whose ceiling applies. The row is addressed by subject
+// alone, so what keeps one caller out of another's count is the subject the gate
+// resolved from a verified credential, and the plane's own boundary.
 //
 // A CALL IS COUNTED WHERE IT ANSWERED. The ceiling bounds spend and spend is incurred
 // when a model is reached, so the gate asks AllowanceRead before the call and this is
