@@ -159,72 +159,52 @@ func TestArtifactJobSpec_ToolchainPerEntryAndCredentialOnlyInPublisher(t *testin
 		t.Fatalf("pod spec: %v", err)
 	}
 	inits, _ := pod["initContainers"].([]any)
-	if len(inits) != 4 {
-		t.Fatalf("initContainers = %d, want 4 (fetch + deps + one per recipe entry)", len(inits))
+	if len(inits) != 3 {
+		t.Fatalf("initContainers = %d, want 3 (prepare + one per recipe entry)", len(inits))
 	}
 
-	// [0] is the FETCH, and it is the only container holding a git credential.
-	// A private source cannot be built without one, and a recipe's `run:` is
-	// arbitrary shell — so the clone is split out rather than given a token.
-	fetch := inits[0].(map[string]any)
-	if fetch["name"] != "fetch" {
-		t.Fatalf("initContainer[0] = %v, want the fetch", fetch["name"])
+	// [0] PREPARE is the ONE credentialed container: a constant image running a
+	// constant script, holding the only token in the Job. Everything the recipe
+	// needs from a credentialed place is fetched here so the recipe needs none.
+	prep := inits[0].(map[string]any)
+	if prep["name"] != "prepare" || prep["image"] != defaultToolchainImage {
+		t.Fatalf("initContainer[0] = %v/%v, want prepare on the constant toolchain", prep["name"], prep["image"])
 	}
-	if fetch["image"] != gitFetchImage {
-		t.Errorf("fetch image = %v, want the constant %s — a credentialed container must not run a recipe-chosen image", fetch["image"], gitFetchImage)
+	if got := prep["command"].([]any)[2]; got != artifactPrepareScript {
+		t.Error("prepare must run the constant script, nothing recipe-supplied")
 	}
-	if got := fetch["command"].([]any)[2]; got != artifactFetchScript {
-		t.Error("fetch must run the constant fetch script, nothing recipe-supplied")
-	}
-	var fetchSecrets []string
-	for _, e := range fetch["env"].([]any) {
-		m := e.(map[string]any)
-		if vf, ok := m["valueFrom"].(map[string]any); ok {
-			fetchSecrets = append(fetchSecrets, vf["secretKeyRef"].(map[string]any)["name"].(string))
+	var secrets []string
+	for _, e := range prep["env"].([]any) {
+		if vf, ok := e.(map[string]any)["valueFrom"].(map[string]any); ok {
+			secrets = append(secrets, vf["secretKeyRef"].(map[string]any)["name"].(string))
 		}
 	}
-	if !slices.Equal(fetchSecrets, []string{forgeTokenSecret}) {
-		t.Errorf("fetch secrets = %v, want exactly [%s] — never the object-store credential", fetchSecrets, forgeTokenSecret)
+	if !slices.Equal(secrets, []string{forgeTokenSecret}) {
+		t.Errorf("prepare secrets = %v, want exactly [%s]", secrets, forgeTokenSecret)
 	}
-	// The token must not be written where a later container can read it: `-c
-	// http.extraheader` is per-invocation, a token in the remote URL would land
-	// in .git/config on the shared volume.
-	if strings.Contains(artifactFetchScript, "remote add origin \"https://x-access-token") ||
-		strings.Contains(artifactFetchScript, "$GIT_TOKEN@") {
-		t.Error("the token must not be embedded in the remote URL — it would persist to .git/config on the shared volume")
+	// The token stays in the ENVIRONMENT. Written to a .gitconfig it would land
+	// on /w, which every recipe container reads.
+	if !strings.Contains(artifactPrepareScript, "GIT_CONFIG_COUNT") ||
+		strings.Contains(artifactPrepareScript, "git config --global") {
+		t.Error("prepare must carry the credential in the environment, not a .gitconfig")
 	}
-
-	// [1] is DEPS: the second and last credentialed container, and like the fetch
-	// it runs a constant image and a constant script. Its HOME must not be the
-	// shared volume — `git config --global` would write the token there, where
-	// every recipe container could read it.
-	deps := inits[1].(map[string]any)
-	if deps["name"] != "deps" || deps["image"] != defaultToolchainImage {
-		t.Fatalf("initContainer[1] = %v/%v, want the deps step on the constant toolchain", deps["name"], deps["image"])
-	}
-	if got := deps["command"].([]any)[2]; got != artifactDepsScript {
-		t.Error("deps must run the constant deps script, nothing recipe-supplied")
-	}
-	// The token must never reach a file on /w, which every recipe container
-	// reads. GIT_CONFIG_COUNT keeps it in the environment of this one process,
-	// so there is no .gitconfig to place correctly or clean up.
-	if !strings.Contains(artifactDepsScript, "GIT_CONFIG_COUNT") ||
-		strings.Contains(artifactDepsScript, "git config --global") {
-		t.Error("deps must carry the credential in the environment, not write it to a .gitconfig")
-	}
-	if len(deps["env"].([]any)) != 1 {
-		t.Errorf("deps env = %v, want the token alone", deps["env"])
+	// Both halves, one mechanism: the clone is authenticated AND module fetches
+	// are pointed at the forge.
+	for _, want := range []string{".extraheader", "insteadOf", "go mod download"} {
+		if !strings.Contains(artifactPrepareScript, want) {
+			t.Errorf("prepare must do %q — it is the only credentialed step", want)
+		}
 	}
 
-	// [2..] run the RECIPE, and carry no secret at all.
+	// [1..] run the RECIPE, and carry no secret at all.
 	for i, want := range []string{defaultToolchainImage, "docker.io/library/node:22-bookworm"} {
-		c := inits[i+2].(map[string]any)
+		c := inits[i+1].(map[string]any)
 		if c["image"] != want {
-			t.Errorf("initContainer[%d] image = %v, want %s", i+2, c["image"], want)
+			t.Errorf("initContainer[%d] image = %v, want %s", i+1, c["image"], want)
 		}
 		for _, e := range c["env"].([]any) {
 			if _, secret := e.(map[string]any)["valueFrom"]; secret {
-				t.Errorf("initContainer[%d] (runs the recipe) must carry NO secret env: %v", i+2, e)
+				t.Errorf("initContainer[%d] (runs the recipe) must carry NO secret env: %v", i+1, e)
 			}
 		}
 	}
