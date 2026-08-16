@@ -146,6 +146,17 @@ func describeBilling() {
 			"expiry — read /v1/billing/credits. A subject with no credit is zero, which is an "+
 			"answer and not an error.")
 
+	openapi.Describe("/v1/billing/credit-balance/breakdown", http.MethodGet,
+		"What is left of your credit, grouped by where it came from",
+		"Returns the same balance /v1/billing/credit-balance reports, split by the tag each "+
+			"grant carries, so a reader can tell trial credit from bought credit and show the "+
+			"earliest expiry within each group. A console needs the split to say what will "+
+			"lapse and when; the single number cannot.\n\n"+
+			"The subject is pinned to the caller before the handler runs, exactly as in the "+
+			"sibling reads, so the userId parameter can never name another tenant. A subject "+
+			"with no grants is an empty breakdown and a zero total, which is an answer and not "+
+			"an error.")
+
 	openapi.Describe("/v1/billing/accounts", http.MethodGet,
 		"The billing account you are signed in to",
 		"Returns the billing accounts visible to the caller. One organisation is exactly one "+
