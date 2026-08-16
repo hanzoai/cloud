@@ -76,12 +76,21 @@ const (
 	// everywhere. Absence of an ANSWER may never read as permission.
 	ProjectsOwnership = "projects_ownership"
 
-	// AllowanceTake counts one zero-priced call against a subject's plan allowance
-	// and answers what is left. It is on the plane for the reason the balance is:
-	// the store has ONE writer and the READER is the AI gate, which runs in its own
-	// process. A gate that opened the file itself would be a second writer, and a
-	// gate that asked over HTTP would ask through the edge that exists for
-	// customers.
+	// AllowanceRead answers what a subject has left of their plan's free calls this
+	// period, without counting anything. It is the ADMISSION half: the AI gate asks
+	// it before a call and refuses a subject at the ceiling, and asking costs the
+	// subject nothing, so a refusal is never usage.
+	AllowanceRead = "allowance_read"
+
+	// AllowanceTake counts one SERVED zero-priced call against a subject's plan
+	// allowance and answers what is left. It is the other half, and the split is the
+	// point: the ceiling bounds spend, spend is incurred when a model is reached, so
+	// a call is counted where it answered and not where it arrived.
+	//
+	// Both are on the plane for the reason the balance is: the store has ONE writer
+	// and the caller is the AI gate, which runs in its own process. A gate that
+	// opened the file itself would be a second writer, and a gate that asked over
+	// HTTP would ask through the edge that exists for customers.
 	AllowanceTake = "allowance_take"
 
 	FinanceAuthorize = "finance_authorize" // the prepaid gate

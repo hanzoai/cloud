@@ -24,47 +24,94 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The counter has ONE writer — this process — and its reader is the AI gate, which
-// runs in a program of its own. So the count is ASKED, not opened: this is the op
-// that answers, on the internal plane (ZAP on this app's canonical unix socket).
+// The counter has ONE writer — this process — and its caller is the AI gate, which
+// runs in a program of its own. So the count is ASKED, not opened: these are the ops
+// that answer, on the internal plane (ZAP on this app's canonical unix socket).
 //
-// It stays deliberately dumb about identity. The caller resolves WHOSE allowance it
-// is spending — the gate holds the request, the credential and the billing subject —
-// and this takes it. Deriving a subject here would be a second resolver working from
-// facts it does not carry.
+// TWO OPS BECAUSE THERE ARE TWO MOMENTS. A call is admitted before it runs and counted
+// after it answered. One verb doing both counts the ATTEMPT, and an attempt that
+// reaches no model has cost us nothing to serve. Read admits; take counts what was
+// served.
+//
+// They stay deliberately dumb about identity. The caller resolves WHOSE allowance this
+// is — it holds the request, the credential and the billing subject — and these
+// answer. Deriving a subject here would be a second resolver working from facts it
+// does not carry.
 
 // expose publishes the count. Mount calls it.
 func expose() {
+	zip.Post[plane.AllowanceIn, plane.Allowance](cloud.Plane(), "/allowance/read", planeRead,
+		zip.WithOperationID(plane.AllowanceRead),
+		zip.WithSummary("Read what a subject has left of their plan's free calls"))
 	zip.Post[plane.AllowanceIn, plane.Allowance](cloud.Plane(), "/allowance/take", planeTake,
 		zip.WithOperationID(plane.AllowanceTake),
-		zip.WithSummary("Count one free call against a subject's plan allowance"))
+		zip.WithSummary("Count one served free call against a subject's plan allowance"))
 }
 
-// Counts ONE zero-priced call against a subject's plan allowance for the current
-// period and answers what stands after it: the tier the ceiling came from, the
-// ceiling, the count, whether it is now spent, and when it starts again.
+// Answers what a subject has left of their plan's free-call allowance this period,
+// without counting anything: the tier the ceiling came from, the ceiling, the count,
+// whether it is spent, and when it starts again.
+//
+// THIS IS THE ADMISSION HALF. The gate asks it before a call and refuses a subject at
+// the ceiling; asking costs the subject nothing, so a refusal never becomes usage and
+// a request that dies before any model leaves the count exactly where it found it.
+//
+// The ORG is the CALLER'S — the gateway's assertion — and can never be named in the
+// input, so one tenant cannot read another's allowance. The SUBJECT is the caller's
+// to choose, but only within that org: it is a caller inside the tenancy the
+// credential already pinned.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeRead(ctx context.Context, in *plane.AllowanceIn) (*plane.Allowance, error) {
+	org, subject, err := scope(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return mounted.read(ctx, org, subject, time.Now())
+}
+
+// scope resolves whose allowance a plane call is about, and refuses a call that
+// cannot say. It is ONE rule for both ops: the org is the caller's, asserted by the
+// gateway and never nameable in the input, and the subject is theirs to choose only
+// within it.
+func scope(ctx context.Context, in *plane.AllowanceIn) (org, subject string, err error) {
+	org = cloud.Who(ctx).Org
+	if org == "" {
+		return "", "", zip.ErrForbidden("allowance: no org on the call")
+	}
+	if in == nil || in.Subject == "" {
+		return "", "", zip.ErrForbidden("allowance: no subject on the call")
+	}
+	if mounted == nil {
+		return "", "", fmt.Errorf("allowance: no store in the process that owns it")
+	}
+	return org, in.Subject, nil
+}
+
+// Counts ONE SERVED zero-priced call against a subject's plan allowance for the
+// current period and answers what stands after it: the tier the ceiling came from,
+// the ceiling, the count, whether it is now spent, and when it starts again.
 //
 // The ORG is the CALLER'S — the gateway's assertion — and can never be named in the
 // input, so one tenant cannot spend another's allowance. The SUBJECT is the caller's
 // to choose, but only within that org: it is a caller inside the tenancy the
 // credential already pinned.
 //
-// TAKING IS THE ANSWER, not a step before it. A read followed by a separate
-// increment is two calls racing for the same last unit, and both would be admitted;
-// one call under one transaction cannot be. A subject already at the ceiling is
-// answered spent=true with their count unchanged — refusals are not usage.
+// A CALL IS COUNTED WHERE IT ANSWERED. The ceiling bounds spend and spend is incurred
+// when a model is reached, so the gate asks AllowanceRead before the call and this is
+// reached only from the caller's record of a served one. Nothing else may reach it:
+// counting an attempt charges a customer for an outage of ours.
+//
+// The read and the increment inside it are ONE statement in ONE transaction, so two
+// served calls arriving together cannot both write the same count. A subject already
+// at the ceiling is answered spent=true with their count unchanged — refusals are not
+// usage.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeTake(ctx context.Context, in *plane.AllowanceIn) (*plane.Allowance, error) {
-	org := cloud.Who(ctx).Org
-	if org == "" {
-		return nil, zip.ErrForbidden("allowance: no org on the call")
+	org, subject, err := scope(ctx, in)
+	if err != nil {
+		return nil, err
 	}
-	if in == nil || in.Subject == "" {
-		return nil, zip.ErrForbidden("allowance: no subject on the call")
-	}
-	if mounted == nil {
-		return nil, fmt.Errorf("allowance: no store in the process that owns it")
-	}
-	return mounted.take(ctx, org, in.Subject, time.Now())
+	return mounted.take(ctx, org, subject, time.Now())
 }

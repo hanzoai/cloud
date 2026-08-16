@@ -19,6 +19,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	aimod "github.com/hanzoai/ai"
@@ -169,6 +170,46 @@ func debitOverPlane(ctx context.Context, u aiobject.UsageEvent) error {
 		})
 	if err != nil {
 		return fmt.Errorf("plane usage debit: %w", err)
+	}
+	return nil
+}
+
+// record settles what ONE SERVED CALL consumed: money for a priced call, a count for a
+// free one. They are the same act — this call happened — so both are reached through
+// the one hook the ai module calls after an answer, and neither can be reached any
+// other way.
+//
+// THE POSITION IS STRUCTURAL RATHER THAN CONVENTIONAL. A count is a FIELD on the
+// record of a served call (aiobject.UsageEvent.Allowance), this is the only hook that
+// carries one, and the module produces one only for a success — so counting a free
+// call REQUIRES having recorded that a call was served. A ceiling on spend is reached
+// where spend is incurred, and no separate verb survives that anything could call
+// earlier: not the gate, which reads, and not a controller, which has nothing to call.
+//
+// The two halves are independent facts, not two writes of one, so there is no
+// half-applied state anywhere to recover. A count that does not land costs us one free
+// call and leaves the debit exactly as it was; both errors travel back through the one
+// line that already watches this seam.
+func record(money aiobject.UsageRecorderFunc) aiobject.UsageRecorderFunc {
+	return func(ctx context.Context, u aiobject.UsageEvent) error {
+		return errors.Join(countFree(ctx, u), money(ctx, u))
+	}
+}
+
+// countFree counts one served free call against its subject's plan allowance.
+//
+// A priced call names no subject here and counts nothing: money already bounds those,
+// and a second bound over them would refuse work a subscriber has paid for. The
+// subject is the caller's own except on the public lane, where it is the visitor the
+// lane served — one shared subject would spend every stranger's day at once.
+func countFree(ctx context.Context, u aiobject.UsageEvent) error {
+	if u.Allowance == "" {
+		return nil
+	}
+	if _, err := cloud.Ask[plane.AllowanceIn, plane.Allowance](
+		cloud.For(ctx, u.Namespace), "allowance", plane.AllowanceTake,
+		&plane.AllowanceIn{Subject: u.Allowance}); err != nil {
+		return fmt.Errorf("plane allowance count: %w", err)
 	}
 	return nil
 }
@@ -339,16 +380,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Neither branch names the act. cloud.UsageEvent has no Ref to carry one and
 	// debitOverPlane sends none, so on both paths the ledger's key is minted by whoever
 	// writes the entry — never by the request that asked for the work.
+	money := debitOverPlane
 	if f := cloud.UsageRecorder(); f != nil {
-		aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
+		money = func(ctx context.Context, u aiobject.UsageEvent) error {
 			return f(ctx, cloud.UsageEvent{
 				Subject: u.Subject, Namespace: u.Namespace, USD: u.USD,
 				Currency: u.Currency, Model: u.Model, Provider: u.Provider,
 			})
-		})
-	} else {
-		aiobject.SetUsageRecorder(debitOverPlane)
+		}
 	}
+	aiobject.SetUsageRecorder(record(money))
 	if d := cloud.IngestDialer(); d != nil {
 		aiobject.SetIngestDialer(d)
 	}
@@ -367,6 +408,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// — the counter has ONE writer and it is another process — and it is the only
 	// bound on a route priced at zero, where the wallet has nothing to refuse.
 	//
+	// IT READS, AND READING IS ALL IT DOES. The count rises where the call was SERVED
+	// (see record, above), so this asks only whether the caller is already out. A
+	// caller refused at the ceiling keeps their count, and so does one whose request
+	// dies before any model — an unresolvable route, a vendor that never answered, a
+	// pod being rolled. A caller pays for answers.
+	//
 	// WHO FAILS OPEN IS DECIDED HERE, because this is the layer that knows the
 	// vocabulary. The gate treats an error as "allow", which is right for a tenant we
 	// can name: a plane blip must not take the free models away from a customer whose
@@ -374,19 +421,19 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// zero is not always served by our own compute — a vendor can be behind it and
 	// bills us either way — so "we could not ask" must never become "a stranger may
 	// have as much as they want". An unanswerable ask in that lane is refused.
-	aiobject.SetAllowance(func(ctx context.Context, subject, namespace string) (bool, error) {
+	aiobject.SetSpent(func(ctx context.Context, subject, namespace string) (bool, error) {
 		out, err := cloud.Ask[plane.AllowanceIn, plane.Allowance](
-			cloud.For(ctx, namespace), "allowance", plane.AllowanceTake,
+			cloud.For(ctx, namespace), "allowance", plane.AllowanceRead,
 			&plane.AllowanceIn{Subject: subject})
 		switch {
 		case err != nil && namespace == tenant.Public:
 			return true, nil // spent: an unnamed caller gets no benefit of the doubt
 		case err != nil:
-			return false, fmt.Errorf("plane allowance take: %w", err)
+			return false, fmt.Errorf("plane allowance read: %w", err)
 		case out == nil && namespace == tenant.Public:
 			return true, nil
 		case out == nil:
-			return false, fmt.Errorf("plane allowance take: the counter answered nothing")
+			return false, fmt.Errorf("plane allowance read: the counter answered nothing")
 		}
 		return out.Spent, nil
 	})

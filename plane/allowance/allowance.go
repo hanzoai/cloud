@@ -30,10 +30,18 @@ const App = "allowance"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.AllowanceRead,
 	plane.AllowanceTake,
 }
 
-// AllowanceTake count one free call against a subject's plan allowance.
+// AllowanceRead read what a subject has left of their plan's free calls.
+//
+// Calls plane.AllowanceRead on allowance over the peer plane.
+func AllowanceRead(ctx context.Context, in *plane.AllowanceIn) (*plane.Allowance, error) {
+	return plane.Ask[plane.AllowanceIn, plane.Allowance](ctx, App, plane.AllowanceRead, in)
+}
+
+// AllowanceTake count one served free call against a subject's plan allowance.
 //
 // Calls plane.AllowanceTake on allowance over the peer plane.
 func AllowanceTake(ctx context.Context, in *plane.AllowanceIn) (*plane.Allowance, error) {
