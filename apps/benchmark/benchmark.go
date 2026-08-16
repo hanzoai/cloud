@@ -19,6 +19,7 @@
 package benchmark
 
 import (
+	"time"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -108,6 +109,17 @@ type attempt struct {
 	Model     string `json:"model"`
 	Correct   bool   `json:"correct"`
 	Answer    string `json:"answer"`
+	// Run is which measurement this attempt belongs to. Without it every attempt
+	// ever made blends into one lifetime average, so a model that got BETTER
+	// reads as a muddied middle rather than an improvement — and re-measuring a
+	// model could only ever drag its own history along. A run is the unit that
+	// makes "measured on this date, under this harness" a thing you can say.
+	//
+	// Empty on rows written before runs existed. Those are treated as one
+	// implicit first run, which is what they were.
+	Run string `json:"run,omitempty"`
+	// At is when the attempt was recorded. Zero on pre-run rows.
+	At time.Time `json:"at,omitempty"`
 }
 
 type state struct {
@@ -184,6 +196,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// table and zipdoc files an op's prose under the group it can see.
 	// The published plane, managed. A claim is other people's data and it changes
 	// when they do, so it is read and written here rather than recompiled.
+	// A score is a fact about a model ON A DAY, so the runs behind it are
+	// readable: the board shows the latest, this shows the arc.
+	zip.Get(g, "/history", o.history)
+
 	zip.Get(g, "/claims", o.claims)
 	zip.Post(g, "/claims", o.putClaims)
 
@@ -239,6 +255,13 @@ type LeaderRow struct {
 	// question from Published: what the field says on average, rather than what
 	// the vendor says about itself. With one claim the two are equal.
 	Mean *float64 `json:"mean,omitempty"`
+	// Run names the measurement Measured came from, and MeasuredAt is when it
+	// ran. A score with no date is not a fact about a model, it is a fact about
+	// a model on a day — and models change, so the date is what makes the number
+	// checkable rather than merely quoted.
+	Run string `json:"run,omitempty"`
+	// MeasuredAt is when the run behind Measured was recorded.
+	MeasuredAt *time.Time `json:"measuredAt,omitempty"`
 }
 
 // benchmarkQuery names the benchmark a read is about.
@@ -279,10 +302,30 @@ func (o ops) leaderboard(ctx context.Context, in *benchmarkQuery) (*leaderboard,
 // (coverage-aware) layered with the published claim, gap = published − measured. Never
 // blended; a model with only a claim shows measured=nil, and vice versa.
 func computeLeaderboard(attempts []attempt, bench string, claim map[string][]publishedClaim) []LeaderRow {
+	// The LATEST run per model, not every attempt ever made. A model is
+	// re-measured when the harness improves or the model does, and blending a
+	// new run into an old one reports neither: a model that went from 88 to 94
+	// would show something in between forever, which is the opposite of what a
+	// re-measurement is for. History is not discarded — it is in the store, and
+	// /runs reads it — but the leaderboard answers "how good is it now".
+	latest := map[string]string{}
+	when := map[string]time.Time{}
+	for _, a := range attempts {
+		if a.Benchmark != bench || a.Answer == "" {
+			continue
+		}
+		if t, ok := when[a.Model]; !ok || a.At.After(t) {
+			when[a.Model], latest[a.Model] = a.At, a.Run
+		}
+	}
+
 	type acc struct{ ok, n int }
 	m := map[string]*acc{}
 	for _, a := range attempts {
 		if a.Benchmark != bench || a.Answer == "" {
+			continue
+		}
+		if a.Run != latest[a.Model] {
 			continue
 		}
 		if m[a.Model] == nil {
@@ -306,6 +349,13 @@ func computeLeaderboard(attempts []attempt, bench string, claim map[string][]pub
 		if a := m[model]; a != nil && a.n > 0 {
 			v := float64(a.ok) / float64(a.n) * 100
 			r.Measured, r.N = &v, a.n
+		}
+		if r.Measured != nil {
+			r.Run = latest[model]
+			if t, ok := when[model]; ok && !t.IsZero() {
+				at := t
+				r.MeasuredAt = &at
+			}
 		}
 		if cs, ok := claim[model]; ok && len(cs) > 0 {
 			// One column, every claim counted. selectClaim states which reading
