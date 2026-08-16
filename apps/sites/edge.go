@@ -29,6 +29,13 @@ type Edge interface {
 	// deployed, and the edge will catch up when the TTL expires.
 	PurgeTags(ctx context.Context, tags ...string) error
 
+	// Name is the provider behind this edge, lowercase, for an operator reading a
+	// status page. It is the ONE place a vendor name is allowed to reach an API
+	// response: everything else about the provider stays on its side of the seam,
+	// but "which CDN is in front of my site" is a fair question and the answer
+	// cannot come from anywhere else.
+	Name() string
+
 	// Configured reports whether this edge can actually act. False means every
 	// purge is a no-op and content is live only after its TTL.
 	Configured() bool
@@ -56,6 +63,7 @@ type Edge interface {
 // and panics on a deploy path that must never fail.
 type NoEdge struct{}
 
+func (NoEdge) Name() string                               { return "none" }
 func (NoEdge) PurgeTags(context.Context, ...string) error { return nil }
 func (NoEdge) Configured() bool                           { return false }
 func (NoEdge) EnsureVerbatim(context.Context)             {}
