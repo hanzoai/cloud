@@ -231,3 +231,66 @@ func TestEveryJobEmptyDirIsCapped(t *testing.T) {
 		})
 	}
 }
+
+// The fabric's own package registry sits behind the forge's REQUIRE_SIGNIN_VIEW,
+// so an anonymous `npm ci` for an @hanzoteam/* dependency 401s even though the
+// repo is public. The build therefore carries a registry credential — separate
+// from GIT_AUTH_TOKEN, which authenticates a git fetch and rotates on its own
+// schedule. Both are optional: a cluster with neither Secret builds exactly as it
+// did before, which is what lets this land without touching any existing repo.
+func TestBuildCarriesAPackageRegistryCredentialApartFromTheGitOne(t *testing.T) {
+	k := fakeK8s()
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+	cs, _, err := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "containers")
+	if err != nil || len(cs) == 0 {
+		t.Fatalf("no containers: %v", err)
+	}
+	env, _ := cs[0].(map[string]any)["env"].([]any)
+
+	from := map[string]string{}
+	for _, e := range env {
+		m, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		vf, ok := m["valueFrom"].(map[string]any)
+		if !ok {
+			continue
+		}
+		skr, ok := vf["secretKeyRef"].(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := m["name"].(string)
+		from[name], _ = skr["name"].(string)
+		if opt, _ := skr["optional"].(bool); !opt && name == "REGISTRY_TOKEN" {
+			t.Fatal("REGISTRY_TOKEN is not optional; a cluster without the Secret would fail to schedule every build")
+		}
+	}
+
+	if from["REGISTRY_TOKEN"] != registryTokenSecret {
+		t.Fatalf("REGISTRY_TOKEN comes from %q, want %q", from["REGISTRY_TOKEN"], registryTokenSecret)
+	}
+	if from["GIT_AUTH_TOKEN"] != gitTokenSecret {
+		t.Fatalf("GIT_AUTH_TOKEN comes from %q, want %q", from["GIT_AUTH_TOKEN"], gitTokenSecret)
+	}
+	if registryTokenSecret == gitTokenSecret {
+		t.Fatal("the two credentials share one Secret; a package read now depends on a git-fetch rotation")
+	}
+}
+
+// A secret the solve never receives is a secret the Dockerfile cannot mount, so
+// the env wiring above is only half the contract.
+func TestTheRegistryCredentialReachesTheSolve(t *testing.T) {
+	cmd := buildFrontendCmd("git://x", "Dockerfile", "oci.hanzo.ai/ns/app:1")
+	var joined string
+	for _, a := range cmd {
+		s, _ := a.(string)
+		joined += s + " "
+	}
+	for _, want := range []string{"id=REGISTRY_TOKEN,env=REGISTRY_TOKEN", "id=GIT_AUTH_TOKEN,env=GIT_AUTH_TOKEN"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("the solve never receives %q, so no Dockerfile can mount it", want)
+		}
+	}
+}
