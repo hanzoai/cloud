@@ -81,33 +81,34 @@
     if (!queue.length) return
     var body = JSON.stringify({ batch: queue })
     queue = []
-    // sendBeacon cannot set a header, so the key rides the query — the carrier
-    // publishable.go ingestKey already reads.
+    // BOTH carriers send a SIMPLE request, and for the same reason. The key rides
+    // the query — the carrier publishable.go ingestKey already reads, the only one
+    // of the three that costs no header — and the body is text/plain, the
+    // CORS-safelisted type. A simple request is sent whatever origin it is on,
+    // because the browser asks permission to READ a cross-origin response, never to
+    // send one. Nothing here reads the receipt.
     //
-    // The body is text/plain because that type is CORS-safelisted, which makes the
-    // POST a SIMPLE request: no preflight, and an unloading document gets no second
-    // round trip. This tag runs on a customer's own domain, so the beacon is always
-    // cross-origin. handle reads the raw body and dispatches on its first non-space
-    // byte, so the type names the CORS class and nothing else.
+    // That property is what lets this tag work at all. It runs on a customer's own
+    // domain, so every send is cross-origin; an Authorization header or a JSON
+    // content type makes the POST preflighted instead, and a preflight the origin
+    // does not pass drops the batch right here, with the queue already cleared.
+    //
+    // handle reads the raw body and dispatches on its first non-space byte, so the
+    // type names the CORS class and nothing else.
+    var wire = url + '?ingest_key=' + encodeURIComponent(key)
     if (beacon && navigator.sendBeacon) {
       try {
-        var blob = new Blob([body], { type: 'text/plain' })
-        if (navigator.sendBeacon(url + '?ingest_key=' + encodeURIComponent(key), blob)) return
+        if (navigator.sendBeacon(wire, new Blob([body], { type: 'text/plain' }))) return
       } catch (e) {}
     }
     try {
-      // No credentials mode. The publishable key IS the credential, and asking
-      // for cookies costs the send: a credentialed cross-origin request is only
-      // read once the response carries Access-Control-Allow-Credentials, which
-      // is granted to exact first-party origins alone. This tag's whole job is
-      // to run on a customer's own domain, which is not one of them — the
-      // preflight would fail and every event would be dropped, on their site
-      // and on ours. Cookies also have no business riding along on a page that
-      // is not ours.
-      fetch(url, {
+      // The publishable key IS the credential, so no cookies: they have no business
+      // riding along on a page that is not ours.
+      fetch(wire, {
         method: 'POST',
         keepalive: true,
-        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
+        credentials: 'omit',
+        headers: { 'content-type': 'text/plain' },
         body: body
       }).catch(noop)
     } catch (e) {}
