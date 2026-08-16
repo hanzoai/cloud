@@ -378,6 +378,13 @@ var allowedRequestUses = map[string]string{
 		"itself. ONE function, so all 37 typed ops share one seam, delegating to the same org() the " +
 		"untyped deploy handler beside them uses; it fails closed off the HTTP path, where there is no " +
 		"attested caller and therefore no tenant.",
+	"apps/allowance/allowance.go": "get — the allowance holder is a WALLET, not an org. The key is the " +
+		"payer principal.WalletOf resolves, which reads the signed `billing_account` claim, the validated " +
+		"user name and the SuperAdmin bit besides the org — none of which principal.OrgFrom carries, and " +
+		"keying on the org half alone would show every member of a pooled tenant one shared count. The " +
+		"same read marks itself no-store, which is a RESPONSE header a typed op's signature drops. It may " +
+		"never be an In field: a subject a caller states is someone else's allowance. ONE call site; it " +
+		"fails closed off the HTTP path, where there is no principal and so no `own` count to answer.",
 	"apps/prefs/prefs.go": "subjectFrom — the preference OWNER, and it is not the org. The isolation " +
 		"key is the canonical `<owner>/<name>` identity, so it needs the validated USER claim " +
 		"(X-User-Id) and validated-ness itself alongside the org; principal.OrgFrom carries only the " +

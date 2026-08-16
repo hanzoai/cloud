@@ -83,14 +83,26 @@ func signaturePNG(t *testing.T) string {
 // subsystems (captable) use for their end-to-end wire proofs.
 func mountApp(t *testing.T) (*zip.App, *memVFS) {
 	t.Helper()
+	vfs := newMemVFS()
+	return mountOn(t, t.TempDir(), vfs), vfs
+}
+
+// mountAt mounts on a data directory the caller names, for the tests that read
+// what the subsystem put on disk.
+func mountAt(t *testing.T, dataDir string) *zip.App {
+	t.Helper()
+	return mountOn(t, dataDir, newMemVFS())
+}
+
+func mountOn(t *testing.T, dataDir string, vfs *memVFS) *zip.App {
+	t.Helper()
 	_ = Shutdown(nil) // reset process-global state between tests
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	vfs := newMemVFS()
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: vfs}); err != nil {
+	if err := Mount(app, cloud.Deps{DataDir: dataDir, VFS: vfs}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(nil) })
-	return app, vfs
+	return app
 }
 
 // do issues an HTTP request against the app. org!="" sets a VALIDATED principal
@@ -336,9 +348,11 @@ func TestTenantIsolation(t *testing.T) {
 	if code, _ := do(t, app, http.MethodGet, "/v1/esign/documents/"+docID, "orgA", nil); code != http.StatusOK {
 		t.Fatalf("owner read want 200, got %d", code)
 	}
-	// a bogus token under any org is unauthorized
-	if code, _ := do(t, app, http.MethodGet, "/v1/esign/o/orgA/sign/deadbeefdeadbeefdeadb", "", nil); code != http.StatusUnauthorized {
-		t.Fatalf("bogus token want 401, got %d", code)
+	// A bogus token under any org does not resolve, so it never reaches a store.
+	// TestUnknownTokenOpensNothing is what proves nothing was created on the way
+	// to this answer; here it is only the status.
+	if code, _ := do(t, app, http.MethodGet, "/v1/esign/o/orgA/sign/deadbeefdeadbeefdeadb", "", nil); code != http.StatusNotFound {
+		t.Fatalf("bogus token want 404, got %d", code)
 	}
 }
 

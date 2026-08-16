@@ -10,6 +10,11 @@
       "url": "https://api.hanzo.ai"
     }
   ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
   "tags": [
     {
       "name": "billing"
@@ -161,6 +166,16 @@
         "operationId": "get_billing_credit-balance",
         "summary": "What is left of your credit, as one number",
         "description": "Returns the total credit still available to the caller's own subject — the sum of what the grants have left, which is the figure the console shows above the usage meter. It is the balance a metered act draws down, so it answers the one question a customer asks before spending: how much is there.\n\nLike every read in this family the subject is pinned to the caller before the handler runs, so the userId parameter the handler reads can never name another tenant. For the grants BEHIND this number — each with its original amount and its expiry — read /v1/billing/credits. A subject with no credit is zero, which is an answer and not an error.",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/credit-balance/breakdown": {
+      "get": {
+        "operationId": "get_billing_credit-balance_breakdown",
+        "summary": "What is left of your credit, grouped by where it came from",
+        "description": "Returns the same balance /v1/billing/credit-balance reports, split by the tag each grant carries, so a reader can tell trial credit from bought credit and show the earliest expiry within each group. A console needs the split to say what will lapse and when; the single number cannot.\n\nThe subject is pinned to the caller before the handler runs, exactly as in the sibling reads, so the userId parameter can never name another tenant. A subject with no grants is an empty breakdown and a zero total, which is an answer and not an error.",
         "tags": [
           "billing"
         ]
@@ -4051,6 +4066,13 @@
           }
         },
         "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
       }
     }
   }

@@ -4,10 +4,13 @@ package fleet
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
 	"testing"
+
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // TestCatalogIsTheSpecs proves the catalog says what the per-app specs say.
@@ -78,40 +81,87 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 // TestListingStartsNothing is the property the catalog exists for: asking what
 // the fleet serves must not run the fleet.
 //
-// It reads split() rather than a live door because that is where the decision
-// is: a subsystem that is not warm and is published is not in the asked set, and
-// the asked set is the only thing that reaches [Ask], which is the only thing
-// that starts a child.
+// It is structural now rather than a decision to inspect. gather reads Published
+// for every app and there is no asked set, so there is nothing to reach [Ask],
+// which is the only thing that starts a child. The door used to ask any subsystem
+// that was already running, on the reasoning that asking something up is free —
+// which held per subsystem and not for the one caller that touches all of them:
+// measured on the deployed host, a single list took 92 seconds against
+// Cloudflare's 100-second ceiling and three in a row drove the pod past its own
+// liveness probe until the kubelet killed it.
+//
+// The assertion is that a door over apps NOBODY has started still answers with
+// their tools, and that it answers the same both times — a live-asking door
+// cannot do the first and a caching one cannot promise the second.
 func TestListingStartsNothing(t *testing.T) {
-	published := ""
+	var apps []string
 	for app := range catalog {
-		published = app
-		break
+		if len(catalog[app]) > 0 {
+			apps = append(apps, app)
+		}
+		if len(apps) == 3 {
+			break
+		}
 	}
-	if published == "" {
+	if len(apps) == 0 {
 		t.Skip("the catalog is empty")
 	}
+	sort.Strings(apps)
 
-	d := &Door{apps: []string{published}, Warm: func(string) bool { return false }}
-	ask, cold := d.split()
-	if len(ask) != 0 {
-		t.Errorf("a cold published subsystem was asked: %v — listing would start it", ask)
+	// An At that FAILS every reach: if anything asked a subsystem, the tools it
+	// contributed would be missing and this would notice.
+	refuse := func(string) (string, string, error) {
+		return "", "", errors.New("nothing may be asked to answer a tools/list")
 	}
-	if len(cold) != 1 || cold[0] != published {
-		t.Errorf("cold set = %v, want [%s]", cold, published)
+	d := &Door{apps: apps, owner: map[string]string{}}
+
+	first, down, _ := d.gather(nil, refuse)
+	if len(down) != 0 {
+		t.Errorf("a list reported %d subsystems unavailable, but it asked none: %v", len(down), down)
+	}
+	want := 0
+	for _, a := range apps {
+		want += len(catalog[a])
+	}
+	if len(first) == 0 || len(first) > want {
+		t.Fatalf("gathered %d tools from a published catalog of %d", len(first), want)
 	}
 
-	// Warm is the other half: a subsystem that is up is asked, because it is up
-	// and its answer is the live one.
-	d.Warm = func(string) bool { return true }
-	if ask, _ = d.split(); len(ask) != 1 {
-		t.Errorf("a running subsystem was not asked: %v", ask)
+	// Same answer twice, from a door that holds no cache: the reply is a function
+	// of the release, which is what lets two replicas agree.
+	second, _, _ := d.gather(nil, refuse)
+	if len(second) != len(first) {
+		t.Fatalf("two lists disagreed: %d then %d", len(first), len(second))
 	}
+	for i := range first {
+		if first[i].name != second[i].name {
+			t.Fatalf("two lists disagreed at %d: %q vs %q", i, first[i].name, second[i].name)
+		}
+	}
+}
 
-	// And a subsystem the catalog does not carry is asked whether or not it is
-	// warm — a door that omitted it would publish less than it routes.
-	d = &Door{apps: []string{"a-subsystem-the-catalog-has-never-heard-of"}, Warm: func(string) bool { return false }}
-	if ask, _ = d.split(); len(ask) != 1 {
-		t.Errorf("an unpublished subsystem was not asked: %v", ask)
+// TestEverySubsystemThePublicDoorListsIsInTheCatalog is the gate that replaces
+// the runtime fallback. The door reads the catalog and asks nothing, so an app
+// the generator skipped publishes NOTHING — the door would offer fewer tools than
+// the fleet routes, silently, and no request would fail to say so.
+//
+// present-and-empty is a legitimate answer (an app that serves no typed op);
+// ABSENT is not, and it is what this refuses. The remedy is one command, so it is
+// named rather than described.
+func TestEverySubsystemThePublicDoorListsIsInTheCatalog(t *testing.T) {
+	var missing []string
+	for _, a := range manifest.Apps {
+		if manifest.Coresident(a.Name) {
+			continue // never mounted on its own, so the door never lists it
+		}
+		if _, ok := catalog[a.Name]; !ok {
+			missing = append(missing, a.Name)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Fatalf("%d subsystems have no catalog entry, so the door publishes nothing for them: %v\n"+
+			"\tfix: make -f mk/fleet.mk check (regenerates plugin/*/openapi.json, then the catalog)",
+			len(missing), missing)
 	}
 }

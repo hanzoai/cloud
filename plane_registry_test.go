@@ -20,9 +20,11 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/allowance"
 	"github.com/hanzoai/cloud/apps/analytics"
 	"github.com/hanzoai/cloud/apps/commerce"
 	"github.com/hanzoai/cloud/apps/risk"
+	allowancepeer "github.com/hanzoai/cloud/plane/allowance"
 	analyticspeer "github.com/hanzoai/cloud/plane/analytics"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	riskpeer "github.com/hanzoai/cloud/plane/risk"
@@ -98,6 +100,23 @@ func TestGeneratedAnalyticsSurfaceIsTheLiveSurface(t *testing.T) {
 	sameSurface(t, "analytics", analyticspeer.Ops, live,
 		"analytics registered no plane ops at all — every peer that states a fact about "+
 			"its own work writes nothing, and nothing says so. build must call exposeCapture.")
+}
+
+// TestGeneratedAllowanceSurfaceIsTheLiveSurface holds the FREE-CALL COUNTER to the
+// same gate, and the pair of ops is why it needs one.
+//
+// The counter answers two ops that must both exist and must stay distinct: a READ
+// that admits a call and a TAKE that counts one that was served. They are reached by
+// the AI gate in another binary and by nothing else. Lose the read and every free
+// caller is refused by a gate that cannot ask; lose the take and the ceiling stops
+// counting while every route keeps answering — free inference, unbounded, and nothing
+// says so. So both registrations are asserted, from the running registry.
+func TestGeneratedAllowanceSurfaceIsTheLiveSurface(t *testing.T) {
+	live := liveOps(t, allowancepeer.App, allowance.Mount, false)
+	t.Cleanup(func() { _ = allowance.Shutdown(t.Context()) })
+	sameSurface(t, "allowance", allowancepeer.Ops, live,
+		"allowance registered no plane ops at all — the AI gate can neither admit a free "+
+			"caller nor count one, and nothing says so. Mount must call expose.")
 }
 
 // sameSurface holds a generated peer client to the surface its app actually

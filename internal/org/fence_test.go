@@ -201,3 +201,53 @@ func TestCASFencerConcurrentClaimsUniqueRoundPerOwner(t *testing.T) {
 }
 
 var _ ha.Leases = (*CASFencer)(nil)
+
+// TestAShortLeaseReadIsNeverAbsence is the safety property behind an error that
+// looks like it wants softening.
+//
+// Production reads .owner and gets "unexpected EOF": Stat says the object is
+// there, then fewer bytes arrive. The obvious fix is to treat that as an absent
+// lease and carry on — and it is the one fix that must never be made. Absent means
+// "nobody owns this org, claim round 1", so a short read reported as absence hands
+// a second replica ownership of a database another replica already holds. Losing
+// the read costs a 500; guessing it costs two writers on one prefix, which is the
+// failure the fence exists to prevent.
+//
+// So: a truncated or empty lease must ERROR, and must not read as round 0.
+func TestAShortLeaseReadIsNeverAbsence(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		data []byte
+	}{
+		{"empty object", []byte{}},
+		{"header cut short", []byte("olse1")},
+		{"magic but no round", []byte(leaseMagic)},
+		{"round cut short", append([]byte(leaseMagic), 0, 0, 0)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st := newFakeCondStore()
+			st.objects[leaseKey("acme")] = &fakeSlot{data: tc.data, ver: 1}
+			f := &CASFencer{store: st}
+
+			round, owner, _, err := f.readLease(context.Background(), leaseKey("acme"))
+			if err == nil {
+				t.Fatalf("a %s read as round=%d owner=%q with no error; absence means "+
+					"'claim round 1', so this would elect a second writer", tc.name, round, owner)
+			}
+			if round != 0 || owner != "" {
+				t.Errorf("failed read still yielded round=%d owner=%q; it must yield nothing", round, owner)
+			}
+		})
+	}
+}
+
+// TestAnAbsentLeaseIsRound0 is the other half: a key that genuinely does not exist
+// IS absence, and the first owner claims round 1. Without this the pair above
+// could be satisfied by refusing everything.
+func TestAnAbsentLeaseIsRound0(t *testing.T) {
+	f := &CASFencer{store: newFakeCondStore()}
+	round, owner, version, err := f.readLease(context.Background(), leaseKey("acme"))
+	if err != nil || round != 0 || owner != "" || version != "" {
+		t.Fatalf("absent lease = (%d,%q,%q,%v); want (0,\"\",\"\",nil) so the first owner can claim", round, owner, version, err)
+	}
+}

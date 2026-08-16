@@ -41,7 +41,15 @@ source for the generated per-language SDKs.
 - `deps.go` / `cloud.Deps` — process-wide handles · `apps/<name>/` — every subsystem
 - `openapi/` — the document pipeline: the spec is a projection of the live router,
   and `openapi.yaml` at the root is a GOLDEN of it (written by `make openapi`,
-  verified by `make test` — not a second source)
+  verified by `make test` — not a second source). Four facts a route table cannot
+  hold are DECLARED beside the routes instead, each with its own seam and all four
+  rendering only on an operation the router already carries: bodies (`Register`),
+  prose (`Describe`), audience (`Public` → `x-public`, default-deny), and the
+  credential (`security.go`). The credential is ONE `bearer` scheme with a
+  document-level requirement every operation inherits — default-REQUIRE — and
+  `Open(path, method)` is the per-operation override that renders `security: []`.
+  Adding the scheme is what makes generated SDKs send a token at all: a document
+  naming no scheme produces a client with no auth in every language
 - `manifest/apps.go` — hand-authored source of truth; what `cmd/cloud` knows about the fleet
 
 ---
@@ -1246,6 +1254,40 @@ of them refuted a claim that had been repeated confidently for weeks.
   against your branch's golden measures the deploy lag, not the defect.
 - **`GET /v1/commands` is live**: 2448 commands over 194 services, under a strong
   ETag that answers 304 to a matching `If-None-Match`.
+- **THE DISCOVERY ADDRESS WAS ANSWERING WITH SOMEBODY ELSE'S DOCUMENT.**
+  `GET api.hanzo.ai/.well-known/openapi.json` served **841 bytes** titled
+  `cloud 0.0.0`, describing `/healthz` and `/readyz` over one `probeOut` schema —
+  and `/docs`, zip's Swagger page, rendered that. The tell was the header: every
+  other address carries `x-api-version`, and this one carried none.
+  It is not a Cloudflare or Traefik router in front — CHECKED, because that was the
+  one hypothesis the cloud tree cannot refute on its own: in
+  `universe/infra/k8s/ingress/routes.yaml` every router above the `api-hanzo-ai`
+  catch-all (priority 1) is a `/v1/...` PathPrefix, so nothing claims `/.well-known`
+  and the request reaches `cloud.hanzo.svc:8000`. **`zip.SpecPath` IS
+  `/.well-known/openapi.json`**, and zip auto-mounts a document there from its
+  OWN typed-op registry (`installOpenAPIRoutes`, called from `prepare()` at
+  Serve). On the light host that registry is nearly empty, so the address RFC
+  8615 reserves for discovery — the one every SDK generator, IDE and crawler
+  probes FIRST — published a two-probe API, 200 OK. A generator reading it emits
+  an empty client AND REPORTS SUCCESS, which is why nothing ever filed it.
+  `openapi.serve` now registers `Path` and `WellKnown` as one handler over one
+  lazy render. It WINS rather than collides, and the reason is structural rather
+  than lucky: zip's projections are CONTROL routes, materialised after every
+  ordinary route (zip `build.go` `materialise`), and fiber resolves a duplicate
+  pattern by first registration. `WellKnown = zip.SpecPath` — the address has one
+  name and it is zip's; spelling the string twice is how the two come to disagree
+  at a framework bump.
+  **`App.Test` cannot see any of this**, and that is the reusable lesson: `prepare()`
+  runs from Serve and from nothing else, so under `App.Test` zip's competing route
+  DOES NOT EXIST and a precedence assertion passes for the wrong reason. The first
+  draft of `openapi/wellknown_test.go` did exactly that and was green while proving
+  nothing; it listens on a socket now, and asserts `info.title` rather than "is
+  this a document" — zip's answer is a valid document too, which is the whole
+  reason the defect was invisible. Mutation-checked: drop the registration and it
+  names zip's title.
+  `openapi.Door` gained the third address in the same change, which the fleet-scoping
+  gate needed — its own comment already records this exact recurrence ("the second
+  door arrived and all three were wrong the same afternoon").
 - **`POST /v1/mcp` works end to end**: `tools/list` returns 88 tools —
   `describe` plus ONE tool per subsystem, each carrying its operations in an
   `op` enum — and `tools/call` on `describe` returns the prose zipdoc lifted
@@ -5013,7 +5055,7 @@ they understated a control that exists, which invites building a redundant one.
 So, by claim class:
 
 - **§ "The plane, in numbers", § 1 trigger, § 2 join, § 3 evidence, § 5 privacy** —
-  verified against the LIVE warehouse (`datastore-0`, ClickHouse) and are
+  verified against the LIVE warehouse (`datastore-0`) and are
   line-independent: the DDL owner is the sibling repo `hanzoai/o11y`, not either
   cloud line.
 - **§ 6 containment, § 9 composition** — verified against the LIVE door

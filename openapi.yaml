@@ -282,6 +282,23 @@ components:
         updatedAt:
           type: integer
       type: object
+    Allowance:
+      properties:
+        limit:
+          description: calls the plan allows per period; 0 = unbounded
+          type: integer
+        plan:
+          description: the tier the limit came from
+          type: string
+        resets:
+          description: unix seconds; when the count starts again
+          type: integer
+        spent:
+          description: the subject is at the limit
+          type: boolean
+        used:
+          type: integer
+      type: object
     Analysis:
       properties:
         alpha:
@@ -1884,6 +1901,45 @@ components:
         repo:
           type: string
         symbol:
+          type: string
+      type: object
+    ClaimRow:
+      properties:
+        at:
+          description: At is when a stored row was recorded. Zero for a seed row.
+          format: date-time
+          type: string
+        benchmark:
+          description: Benchmark is the canonical test id the claim is about, from
+            /catalog.
+          type: string
+        by:
+          description: By is who recorded it, when the caller said.
+          type: string
+        model:
+          description: Model is the system the score is claimed for.
+          type: string
+        origin:
+          description: |-
+            Origin is "seed" for a compiled row and "stored" for one written through
+            this surface. It is the difference between what we shipped and what an
+            operator has since corrected.
+          type: string
+        protocol:
+          description: |-
+            Protocol records HOW it was scored — provider-reported, agentic,
+            third-party-leaderboard — so a provider card is never read as a measurement.
+          type: string
+        provider:
+          description: |-
+            Provider is who the claim belongs to — the lab or leaderboard whose number
+            this is.
+          type: string
+        score:
+          description: Score is the reported aggregate, as a percentage.
+          type: number
+        source:
+          description: Source is the citation the row was read from.
           type: string
       type: object
     ClearReferenceOut:
@@ -4670,12 +4726,42 @@ components:
       type: object
     LeaderRow:
       properties:
+        ciHigh:
+          description: |-
+            CIHigh is the upper bound of that interval. Wilson rather than the normal
+            approximation because the normal one produces bounds past 100 exactly where
+            benchmark scores live — at 194/198 that is the top of the board, not a
+            corner case.
+          type: number
+        ciLow:
+          description: |-
+            CILow and CIHigh are the 95% Wilson interval on Measured, in percent. They
+            are what makes the score comparable: at n=198 a 98% carries roughly ±2
+            points, so most differences at the top of a board are not distinguishable
+            and a bare number implies a precision it does not have. Absent when there
+            is no measurement.
+          type: number
+        claims:
+          description: |-
+            Claims is how many independent claims exist for this model on this
+            benchmark. More than one means several sources reported it.
+          type: integer
         gap:
           description: published − measured (the arena signal)
+          type: number
+        mean:
+          description: |-
+            Mean is the unweighted average of every claim, which answers a different
+            question from Published: what the field says on average, rather than what
+            the vendor says about itself. With one claim the two are equal.
           type: number
         measured:
           description: hanzo-measured accuracy % (nil if unrun)
           type: number
+        measuredAt:
+          description: MeasuredAt is when the run behind Measured was recorded.
+          format: date-time
+          type: string
         model:
           description: the model this row scores
           type: string
@@ -4688,6 +4774,20 @@ components:
           type: string
         published:
           description: provider-claimed % (nil if none)
+          type: number
+        run:
+          description: |-
+            Run names the measurement Measured came from, and MeasuredAt is when it
+            ran. A score with no date is not a fact about a model, it is a fact about
+            a model on a day — and models change, so the date is what makes the number
+            checkable rather than merely quoted.
+          type: string
+        spread:
+          description: |-
+            Spread is the distance between the highest and lowest of them, nil when
+            there is only one. It is the disagreement AMONG sources, which a single
+            Published number cannot show — signal in the same way the
+            published-minus-measured gap is.
           type: number
       type: object
     LeaderboardRow:
@@ -5478,6 +5578,22 @@ components:
           description: 'Type is the transform: redirectScheme, stripPrefix, addPrefix
             or headers.'
           type: string
+      type: object
+    ModelHistory:
+      properties:
+        model:
+          description: Model is the system these runs measured.
+          type: string
+        points:
+          description: Points is every run, oldest first.
+          items:
+            $ref: '#/components/schemas/RunPoint'
+          type: array
+        trend:
+          description: |-
+            Trend is the change from the first run to the last, absent when there has
+            only been one. It answers the question a list of points makes you compute.
+          type: number
       type: object
     ModelRoute:
       properties:
@@ -8033,6 +8149,29 @@ components:
             TimeoutSec bounds this ONE command, so a wedged program holds the caller for
             its own timeout rather than for the whole lease.
           type: integer
+      type: object
+    RunPoint:
+      properties:
+        at:
+          description: At is when the run was recorded.
+          format: date-time
+          type: string
+        delta:
+          description: |-
+            Delta is the change in score from the previous run for this model, absent
+            on the first. It is the number the whole surface exists to make visible.
+          type: number
+        "n":
+          description: |-
+            N is how many items the run covered. Two runs are only comparable at the
+            same n, which is why it travels with every point rather than being assumed.
+          type: integer
+        run:
+          description: Run is the measurement id these attempts were recorded under.
+          type: string
+        score:
+          description: Score is accuracy over the items this run covered, as a percentage.
+          type: number
       type: object
     SMS:
       properties:
@@ -15485,6 +15624,20 @@ components:
             makes metered spend, then "qualified", then "credited".
           type: string
       type: object
+    claimsOut:
+      properties:
+        data:
+          description: |-
+            Data is one row per (benchmark, model, SOURCE) — every independent claim,
+            not one per model. Effective values only: the row that wins after layering
+            for each source, never the superseded readings behind it.
+          items:
+            $ref: '#/components/schemas/ClaimRow'
+          type: array
+        total:
+          description: Total is how many rows Data holds.
+          type: integer
+      type: object
     clickCount:
       properties:
         counted:
@@ -19422,6 +19575,55 @@ components:
             vocabulary means one thing to learn, and it is theirs.
           type: string
       type: object
+    gitlabProjectView:
+      properties:
+        cloneUrl:
+          description: CloneURL is the https remote to clone.
+          type: string
+        defaultBranch:
+          description: |-
+            DefaultBranch is the branch a clone lands on ("main" when GitLab names none,
+            which is what an empty project reports).
+          type: string
+        description:
+          description: Description is the project's own, empty when it has none.
+          type: string
+        fullName:
+          description: |-
+            FullName is the namespace path ("acme/widgets", "acme/team/widgets" for a
+            subgroup) — the string GitLab calls path_with_namespace.
+          type: string
+        htmlUrl:
+          description: HTMLURL is the project's page.
+          type: string
+        name:
+          description: Name is the project's path segment ("widgets"), not its display
+            name.
+          type: string
+        private:
+          description: Private is true for anything not publicly visible (private
+            or internal).
+          type: boolean
+        pushedAt:
+          description: PushedAt is RFC3339 last activity, so a client can sort or
+            say "2h ago".
+          type: string
+      type: object
+    gitlabProjectsOut:
+      properties:
+        account:
+          description: |-
+            Account is the connected GitLab username, so a client can label the list
+            without a second call. Empty when the connection recorded none.
+          type: string
+        projects:
+          description: |-
+            Projects is every project the token reaches, newest activity first. Never
+            null; [] when the account has none.
+          items:
+            $ref: '#/components/schemas/gitlabProjectView'
+          type: array
+      type: object
     gpuAlertList:
       properties:
         alerts:
@@ -19811,6 +20013,20 @@ components:
             Subject is the one-line summary of the problem. Required; longer than 300
             characters is clipped rather than refused.
           type: string
+      type: object
+    historyOut:
+      properties:
+        benchmark:
+          description: Benchmark is the catalog id these histories are about.
+          type: string
+        data:
+          description: Data is one entry per model, ordered by model name.
+          items:
+            $ref: '#/components/schemas/ModelHistory'
+          type: array
+        total:
+          description: Total is how many models Data holds.
+          type: integer
       type: object
     hit:
       properties:
@@ -20251,6 +20467,8 @@ components:
           type: array
         accountMenu:
           type: string
+        avatar:
+          type: string
         balanceCredit:
           type: number
         balanceCurrency:
@@ -20277,6 +20495,8 @@ components:
         disableSignin:
           type: boolean
         displayName:
+          type: string
+        emoji:
           type: string
         enableSoftDeletion:
           type: boolean
@@ -20689,6 +20909,16 @@ components:
           type: array
         accountMenu:
           type: string
+        avatar:
+          description: |-
+            How the organization appears across Hanzo — the square mark beside its
+            name — as an image or as one emoji, never both. It is the pair a person
+            carries (User.Avatar) under the same names, resolved the same way, so a
+            screen draws a subject without asking which kind of subject it has. Both
+            halves live on the row: a mark that appears everywhere cannot be kept on
+            one device. Written through schema.MarkOf; Logo and LogoDark above are a
+            different thing, the wordmark a login screen draws.
+          type: string
         balanceCredit:
           type: number
         balanceCurrency:
@@ -20715,6 +20945,8 @@ components:
         disableSignin:
           type: boolean
         displayName:
+          type: string
+        emoji:
           type: string
         enableSoftDeletion:
           type: boolean
@@ -21188,6 +21420,15 @@ components:
             type: string
           type: array
       type: object
+    iam.SearchOrganizationsOutput:
+      properties:
+        cursor:
+          type: string
+        organizations:
+          items:
+            $ref: '#/components/schemas/iam.Organization'
+          type: array
+      type: object
     iam.Session:
       properties:
         application:
@@ -21233,6 +21474,17 @@ components:
       - owner
       - name
       - application
+      type: object
+    iam.SetAvatarInput:
+      properties:
+        avatar:
+          type: string
+        emoji:
+          type: string
+        name:
+          type: string
+        owner:
+          type: string
       type: object
     iam.SigninItem:
       properties:
@@ -21408,6 +21660,8 @@ components:
           type: array
         accountMenu:
           type: string
+        avatar:
+          type: string
         balanceCredit:
           type: number
         balanceCurrency:
@@ -21434,6 +21688,8 @@ components:
         disableSignin:
           type: boolean
         displayName:
+          type: string
+        emoji:
           type: string
         enableSoftDeletion:
           type: boolean
@@ -22040,6 +22296,14 @@ components:
           type: string
         attachment:
           type: string
+        attestationFormat:
+          description: |-
+            AttestationFormat is the statement format the authenticator attested in
+            ("packed", "apple", "none", …), which is a DIFFERENT value from the
+            attestation type above. The library reads it back when resolving the FIDO
+            AppID extension, so a row that dropped it would round-trip a credential the
+            verifier no longer recognises as the one it stored.
+          type: string
         attestationType:
           type: string
         backupEligible:
@@ -22116,6 +22380,22 @@ components:
           type: array
         updatedAt:
           format: date-time
+          type: string
+      type: object
+    iam.accountBody:
+      properties:
+        avatar:
+          type: string
+        bio:
+          type: string
+        displayName:
+          type: string
+        homepage:
+          type: string
+      type: object
+    iam.assumeBody:
+      properties:
+        org:
           type: string
       type: object
     iam.auditlogs.Input:
@@ -40138,6 +40418,35 @@ components:
             resolve in the publisher's own scope — there are no phantom listings.
           type: string
       type: object
+    publishedClaim:
+      properties:
+        benchmark:
+          description: Benchmark is the canonical test id the claim is about, from
+            /catalog.
+          type: string
+        model:
+          description: Model is the system the score is claimed for.
+          type: string
+        protocol:
+          description: |-
+            Protocol records HOW it was scored — provider-reported, agentic,
+            third-party-leaderboard — because a provider card and a third party running
+            its own harness are different kinds of number and must not be blended.
+          type: string
+        provider:
+          description: |-
+            Provider is who the claim belongs to — the lab or leaderboard whose number
+            this is. It joins a claim to the attempts measured for that same model.
+          type: string
+        score:
+          description: Score is the reported aggregate, as a percentage.
+          type: number
+        source:
+          description: |-
+            Source is the citation the row was read from. A claim without one is a
+            number nobody can check, so every write requires it.
+          type: string
+      type: object
     pullList:
       properties:
         data:
@@ -40284,6 +40593,31 @@ components:
         sshUrl:
           description: SSHURL is the repo's scp-style SSH remote.
           type: string
+      type: object
+    putClaimsIn:
+      properties:
+        by:
+          description: By is who is recording them — a person, or the importer's name.
+          type: string
+        data:
+          description: |-
+            Data is the claims to record. One row is a correction; many is an import.
+            There is no separate bulk endpoint because there is no separate operation:
+            importing a leaderboard and fixing one number are the same write.
+          items:
+            $ref: '#/components/schemas/publishedClaim'
+          type: array
+      type: object
+    putClaimsOut:
+      properties:
+        recorded:
+          description: Recorded is how many rows were written.
+          type: integer
+        rejected:
+          description: Rejected names the rows that were not, and why.
+          items:
+            type: string
+          type: array
       type: object
     quoteList:
       properties:
@@ -47361,6 +47695,16 @@ components:
         project:
           type: string
       type: object
+  securitySchemes:
+    bearer:
+      description: 'The caller''s credential, sent as `Authorization: Bearer <token>`.
+        It is either an access token minted by Hanzo IAM or an API key (pk-/sk-).
+        X-Authorization, and HTTP Basic carrying the token as the password, are accepted
+        spellings of the same header for clients that cannot set Authorization; a
+        browser presents the session cookie instead. Every operation requires it unless
+        it says `security: []`.'
+      scheme: bearer
+      type: http
 info:
   description: 'Composed from each subsystem''s own projection of its router, in the
     fleet''s mount order — every operation below is a route the subsystem that publishes
@@ -47447,6 +47791,16 @@ paths:
         a standards-compliant client at so it can find every other endpoint on its
         own, instead of you configuring them by hand.
       x-app: iam
+  /.well-known/openapi.json:
+    get:
+      description: |-
+        The same document /v1/openapi.json serves, at the address RFC 8615 reserves for discovery — one handler over one render, so the two cannot describe different APIs.
+
+        It exists because a client that has never seen this API probes here first. Prefer /v1/openapi.json when you already know the API: it is canonical, and it is what the document's own self-description names.
+      operationId: get_.well-known_openapi.json
+      security: []
+      summary: The API description, at the conventional address
+      x-app: openapi
   /.well-known/openid-configuration:
     get:
       description: |-
@@ -54210,6 +54564,12 @@ paths:
         row so completion resolution falls back to the global Hanzo account (no BYO), and
         best-effort tombstones the sealed secret. Idempotent.
       operationId: delete_ai_connections_by_provider
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
       summary: 'Disconnects a third-party AI account: it deactivates the org''s row
         so completion resolution falls back to the global Hanzo account (no BYO),
         and best-effort tombstones the sealed secret.'
@@ -54222,6 +54582,12 @@ paths:
         row so completion resolution falls back to the global Hanzo account (no BYO), and
         best-effort tombstones the sealed secret. Idempotent.
       operationId: post_ai_connections_by_provider
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
       summary: 'Disconnects a third-party AI account: it deactivates the org''s row
         so completion resolution falls back to the global Hanzo account (no BYO),
         and best-effort tombstones the sealed secret.'
@@ -54238,6 +54604,12 @@ paths:
         {authorizeUrl} in the standard envelope. The org is the VERIFIED principal, so
         only the caller's own connection can result.
       operationId: get_ai_connections_by_provider_authorize
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
       summary: 'Begins an OAuth connection for the caller''s org: it binds the org
         into a signed state and sends the caller to the provider''s authorize URL.'
       tags:
@@ -54255,6 +54627,12 @@ paths:
         token in a victim org — which is why this endpoint is state-authenticated rather
         than credential-gated.
       operationId: get_ai_connections_by_provider_callback
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
       summary: 'Completes OAuth: the org is recovered from the SIGNED state (not a
         header), the code is exchanged for a token, the token is SEALED into KMS (never
         the row/logs) through the same path as a BYOK key, and the org''s provider
@@ -54272,6 +54650,12 @@ paths:
         return a 200 ProviderUsage with connected/available flags + a human note — the UI's
         honest-empty states — never a fabricated figure.
       operationId: get_ai_connections_by_provider_usage
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
       summary: Imports the caller org's usage for a connected third-party account.
       tags:
       - ai
@@ -60078,6 +60462,35 @@ paths:
       tags:
       - ai
       x-app: github.com/hanzoai/ai
+  /v1/allowance:
+    get:
+      description: |-
+        Answers what the CALLER has left of their plan's free-call allowance this period,
+        and the instant the count starts again.
+
+        This is the number a product shows beside the composer — "17 of 20 left today" —
+        and the moment to offer a plan is when it reaches zero. It READS: asking does not
+        spend, so a page that polls it costs the caller nothing.
+
+        The subject is the caller's own, resolved from the verified credential, and can
+        never be named in the request — so this is a mirror, not a lookup of someone else.
+        An unauthenticated caller is refused: there is no allowance without someone to
+        hold it.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: get_allowance
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Allowance'
+          description: ok
+      summary: Answers what the CALLER has left of their plan's free-call allowance
+        this period, and the instant the count starts again.
+      tags:
+      - allowance
+      x-app: allowance
   /v1/analytics/health:
     get:
       description: |-
@@ -61744,6 +62157,99 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
+  /v1/benchmark/claims:
+    get:
+      description: |-
+        Lists the effective published claims: what the leaderboard will use for
+        each (benchmark, model) after the seed, the import and any stored correction
+        are layered. It answers the operator's question — what does this arena
+        currently believe someone else reported, and did we ship that or fix it.
+
+        Effective values only. The history of a key lives in the append-only file and
+        is not what this op is for; a list that returned every superseded row would
+        make the common question the hard one.
+      operationId: get_benchmark_claims
+      parameters:
+      - description: Benchmark filters to one benchmark id. Empty returns every benchmark.
+        in: query
+        name: Benchmark
+        required: false
+        schema:
+          type: string
+      - description: Model filters to one model. Empty returns every model.
+        in: query
+        name: Model
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Provider filters to one lab or leaderboard — the way to read what a single
+          source claims across every model it covers.
+        in: query
+        name: Provider
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Source filters to one citation, which is the finest grain there is: a
+          source is what makes two claims about one model independent rather than a
+          restatement of each other.
+        in: query
+        name: Source
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Protocol filters by HOW a claim was scored, so provider cards can be read
+          apart from third parties running their own harness.
+        in: query
+        name: Protocol
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/claimsOut'
+          description: ok
+      summary: 'Lists the effective published claims: what the leaderboard will use
+        for each (benchmark, model) after the seed, the import and any stored correction
+        are layered.'
+      tags:
+      - benchmark
+      x-app: benchmark
+    post:
+      description: |-
+        Records published claims: one to correct a number, many to import a
+        leaderboard. Every row must carry a Source, because a claim without its
+        citation is a number nobody can check — and an unattributed number in the
+        published plane is indistinguishable from a measurement, which is the one
+        confusion this whole surface is built to prevent.
+
+        Writes are append-only, so this never destroys the value it replaces. A
+        vendor restating a score leaves both rows on disk, which is how the restating
+        itself becomes visible.
+      operationId: post_benchmark_claims
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/putClaimsIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/putClaimsOut'
+          description: ok
+      summary: 'Records published claims: one to correct a number, many to import
+        a leaderboard.'
+      tags:
+      - benchmark
+      x-app: benchmark
   /v1/benchmark/compare:
     get:
       description: |-
@@ -61785,6 +62291,46 @@ paths:
       summary: 'Is the ONLY valid arm-vs-arm test: it pairs the two models on the
         items BOTH completed, and answers rescue and damage counts with an exact-McNemar
         p.'
+      tags:
+      - benchmark
+      x-app: benchmark
+  /v1/benchmark/history:
+    get:
+      description: |-
+        Returns each model's measured score per run over time, oldest first,
+        with the change between runs.
+
+        This is the counterweight to a leaderboard: the board shows the latest run
+        because that is what "how good is it" means, and a single latest number cannot
+        distinguish a model that has always been strong from one that just improved,
+        or from one that regressed after a provider changed something. Both matter for
+        routing, and only one of them is visible on a board.
+
+        Runs with no id — attempts recorded before runs existed — group under the
+        empty run, which is honestly what they are: one undated measurement.
+      operationId: get_benchmark_history
+      parameters:
+      - description: Benchmark is the catalog id to read, defaulting to gpqa_diamond.
+        in: query
+        name: Benchmark
+        required: false
+        schema:
+          type: string
+      - description: Model filters to one model. Empty returns every model measured.
+        in: query
+        name: Model
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/historyOut'
+          description: ok
+      summary: Returns each model's measured score per run over time, oldest first,
+        with the change between runs.
       tags:
       - benchmark
       x-app: benchmark
@@ -62056,6 +62602,17 @@ paths:
         Like every read in this family the subject is pinned to the caller before the handler runs, so the userId parameter the handler reads can never name another tenant. For the grants BEHIND this number — each with its original amount and its expiry — read /v1/billing/credits. A subject with no credit is zero, which is an answer and not an error.
       operationId: get_billing_credit-balance
       summary: What is left of your credit, as one number
+      tags:
+      - billing
+      x-app: commerce
+  /v1/billing/credit-balance/breakdown:
+    get:
+      description: |-
+        Returns the same balance /v1/billing/credit-balance reports, split by the tag each grant carries, so a reader can tell trial credit from bought credit and show the earliest expiry within each group. A console needs the split to say what will lapse and when; the single number cannot.
+
+        The subject is pinned to the caller before the handler runs, exactly as in the sibling reads, so the userId parameter can never name another tenant. A subject with no grants is an empty breakdown and a zero total, which is an answer and not an error.
+      operationId: get_billing_credit-balance_breakdown
+      summary: What is left of your credit, grouped by where it came from
       tags:
       - billing
       x-app: commerce
@@ -65463,6 +66020,14 @@ paths:
       - chat
       x-app: github.com/hanzoai/ai
       x-public: true
+  /v1/chat/public:
+    post:
+      description: Serves one completion to a caller with no account.
+      operationId: post_chat_public
+      summary: Serves one completion to a caller with no account.
+      tags:
+      - chat
+      x-app: github.com/hanzoai/ai
   /v1/cloud:
     get:
       description: |-
@@ -67297,6 +67862,7 @@ paths:
 
         Rendered once and served as bytes thereafter, under a strong ETag.
       operationId: get_commands
+      security: []
       summary: Every operation this API answers, as a command
       tags:
       - commands
@@ -74312,6 +74878,12 @@ paths:
         Handles GET /v1/documents/:file_id/context — every chunk of
         a file, as LangChain Documents (used when RAG_USE_FULL_CONTEXT is on).
       operationId: get_documents_by_file_id_context
+      parameters:
+      - in: path
+        name: file_id
+        required: true
+        schema:
+          type: string
       summary: Handles GET /v1/documents/:file_id/context — every chunk of a file,
         as LangChain Documents (used when RAG_USE_FULL_CONTEXT is on).
       tags:
@@ -75017,7 +75589,7 @@ paths:
       description: |-
         Answers the document, the recipient it identifies, the fields THAT recipient must fill, and the PDF to display. The first open also marks the recipient as having opened it and records that on the audit trail, so this read has a side effect by design.
 
-        This is the signer's door and it takes NO account: the signing token is the entire credential, and it names the recipient, so a signer sees only their own fields and never the other recipients' tokens. The `:org` segment selects which tenant's store is opened, and the token is then looked up inside it — so a token presented under the wrong org simply does not resolve. An unknown or wrong-org token is a 401, never a hint that some other document exists.
+        This is the signer's door and it takes NO account: the signing token is the entire credential, and it names the recipient, so a signer sees only their own fields and never the other recipients' tokens. The token resolves to its owning tenant FIRST, before any per-tenant store is opened, and the `:org` segment is only checked against that answer. An unknown or wrong-org token is one and the same 404, never a hint that some other document exists.
       operationId: get_esign_o_by_org_sign_by_token
       parameters:
       - in: path
@@ -75039,7 +75611,7 @@ paths:
       description: |-
         Marks this recipient as done and answers whether the DOCUMENT sealed with it. When every signing recipient has completed, sealing happens right here in the same call: the collected values are rendered onto the PDF, a real x509 PKCS#7 signature is applied, the sealed bytes are stored beside the untouched original, and the document moves to `COMPLETED`. Until then the answer is the recipient's own completion with the document still pending.
 
-        It refuses to complete a half-filled signature: a recipient with any unfilled field is a 400 naming how many remain. A document not out for signature is a 409, as is a recipient who has already completed, and under SEQUENTIAL order a signer out of turn is a 403. The token is the whole credential — no account, and a token that does not resolve under `:org` is a 401. Sealing and completion are one transaction, so a failure anywhere leaves the document exactly as it was.
+        It refuses to complete a half-filled signature: a recipient with any unfilled field is a 400 naming how many remain. A document not out for signature is a 409, as is a recipient who has already completed, and under SEQUENTIAL order a signer out of turn is a 403. The token is the whole credential — no account, and a token that does not resolve under `:org` is a 404. Sealing and completion are one transaction, so a failure anywhere leaves the document exactly as it was.
       operationId: post_esign_o_by_org_sign_by_token_complete
       parameters:
       - in: path
@@ -75088,7 +75660,7 @@ paths:
       description: |-
         Records this recipient's refusal and moves the WHOLE DOCUMENT to `REJECTED` — one declining signer ends it for everyone, and there is no route back: the document cannot then be signed or completed. An optional `reason` is stored and written onto the audit trail with the rejection, which is what the sender sees.
 
-        A document not out for signature is a 409, and so is a recipient who has already signed or already rejected — a refusal cannot be taken back or repeated. The token is the whole credential; one that does not resolve under `:org` is a 401.
+        A document not out for signature is a 409, and so is a recipient who has already signed or already rejected — a refusal cannot be taken back or repeated. The token is the whole credential; one that does not resolve under `:org` is a 404.
       operationId: post_esign_o_by_org_sign_by_token_reject
       parameters:
       - in: path
@@ -80371,6 +80943,54 @@ paths:
       tags:
       - iam
       x-app: iam
+    put:
+      description: |-
+        Saves the calling person's own profile — the name they are
+        shown by, their picture, a line about themselves and a link.
+
+        Only their own: the request names nobody, so it cannot reach another account.
+        Send only what you are changing; a field you leave out keeps the value it had,
+        and a field you send empty is cleared.
+
+        A picture is an https link or an inline image up to 96 KiB, the same value an
+        organization's mark is (schema.AvatarRef) — one rule for how a subject appears,
+        whether the subject is a person or an organization.
+      operationId: put_iam_account
+      parameters:
+      - in: header
+        name: Cookie
+        required: false
+        schema:
+          type: string
+      - in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.accountBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
+      summary: Saves the calling person's own profile — the name they are shown by,
+        their picture, a line about themselves and a link.
+      tags:
+      - iam
+      x-app: iam
   /v1/iam/add-application:
     post:
       description: |-
@@ -80968,6 +81588,70 @@ paths:
           description: ok
       summary: Changes an application's display, its sign-in methods and the redirect
         URIs it may return to — the call that makes login work from a new host.
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/assume:
+    post:
+      description: |-
+        Steps a platform operator into an organization: it returns their
+        own access token re-scoped to that tenant, so they see what the tenant sees.
+
+        The token still names the operator — stepping in is not becoming somebody
+        else — and records the organization it was scoped to, so everything done with
+        it is attributed to the person who did it. Only a platform operator may, and
+        the attempt is recorded whether or not it succeeds.
+      operationId: post_iam_assume
+      parameters:
+      - in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
+      - in: header
+        name: X-Forwarded-For
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.assumeBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: not found
+      summary: 'Steps a platform operator into an organization: it returns their own
+        access token re-scoped to that tenant, so they see what the tenant sees.'
       tags:
       - iam
       x-app: iam
@@ -82905,6 +83589,42 @@ paths:
       tags:
       - iam
       x-app: iam
+  /v1/iam/organizations/avatar:
+    post:
+      description: |-
+        Changes how an organization appears across Hanzo: the square mark
+        beside its name, as an uploaded image or as a single emoji. Sending an image
+        clears the emoji and sending an emoji clears the image — an organization has
+        one mark, not a preference order — and sending neither clears both, which is
+        how it goes back to being drawn as its initial.
+
+        An image is an https link or the bytes inline as a data URL, up to 96 KiB.
+        Anyone who administers the organization may set this; it is not reserved to
+        the platform.
+
+        It writes the two fields onto the stored row and touches nothing else, which
+        update cannot do: update replaces the whole record, and a record read back
+        first arrives masked, so a read-modify-write through it would persist the mask
+        over the organization's own credential settings.
+      operationId: setOrganizationAvatar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.SetAvatarInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Organization'
+          description: ok
+      summary: 'Changes how an organization appears across Hanzo: the square mark
+        beside its name, as an uploaded image or as a single emoji.'
+      tags:
+      - iam
+      x-app: iam
   /v1/iam/organizations/delete:
     post:
       description: |-
@@ -82957,6 +83677,51 @@ paths:
           description: ok
       summary: 'Returns one organization: its display, its defaults and the sign-in
         rules everyone in it inherits.'
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/organizations/search:
+    get:
+      description: |-
+        Returns the organizations you can act in, the ones you belong to first
+        and the rest after, newest first, narrowed by an optional query against the
+        name or the display name.
+
+        Platform operators see every organization; everyone else sees their own. Pass
+        the cursor from the previous page to continue; an empty cursor in the answer
+        means there is nothing more.
+      operationId: searchOrganizations
+      parameters:
+      - in: header
+        name: X-Forwarded-For
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: q
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.SearchOrganizationsOutput'
+          description: ok
+      summary: Returns the organizations you can act in, the ones you belong to first
+        and the rest after, newest first, narrowed by an optional query against the
+        name or the display name.
       tags:
       - iam
       x-app: iam
@@ -83468,6 +84233,55 @@ paths:
         whichever client your pipeline runs.
       operationId: post_iam_registry_token
       summary: Signs a container client in to your registry.
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/release:
+    post:
+      description: |-
+        Steps a platform operator back out: it returns their own access
+        token with no organization assumed, which is the credential they had before
+        they stepped in. Recorded like the step in.
+      operationId: post_iam_release
+      parameters:
+      - in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
+      - in: header
+        name: X-Forwarded-For
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.assumeBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: ok
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: bad request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Answer'
+          description: unauthorized
+      summary: 'Steps a platform operator back out: it returns their own access token
+        with no organization assumed, which is the credential they had before they
+        stepped in.'
       tags:
       - iam
       x-app: iam
@@ -84657,13 +85471,25 @@ paths:
   /v1/iam/webauthn-credentials:
     get:
       description: |-
-        Returns the passkeys and security keys registered in
-        your organization, newest first — which device each belongs to and when it was
-        last used.
+        Returns the passkeys and security keys registered to
+        one person, newest first — which device each lives on and when it was
+        registered.
+
+        Yours by default. Name somebody else and you get them only if you already
+        administer their account, which is the same authority that governs reading
+        their user record — so this list can never show more people than the surface
+        beside it already does.
+
+        There is no organization-wide list. It used to scope to the ORG, which handed
+        an org admin every member's credential rows in one answer, and a SuperAdmin
+        every tenant's; a plain member meanwhile could not read even their own,
+        because an unnamed target fails the Guard's tenant rule. One scope fixes both
+        halves: the answer is a person's, and the caller is the person unless they say
+        otherwise and may.
       operationId: listWebauthnCredentials
       parameters:
       - in: query
-        name: owner
+        name: user
         required: false
         schema:
           type: string
@@ -84674,8 +85500,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/iam.listWebauthnCredentialsOut'
           description: ok
-      summary: Returns the passkeys and security keys registered in your organization,
-        newest first — which device each belongs to and when it was last used.
+      summary: Returns the passkeys and security keys registered to one person, newest
+        first — which device each lives on and when it was registered.
       tags:
       - iam
       x-app: iam
@@ -84777,6 +85603,59 @@ paths:
           description: ok
       summary: Renames a registered passkey or security key, so a person can tell
         their devices apart.
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/webauthn/signin/begin:
+    get:
+      description: |-
+        Starts a passkey sign-in: it returns the challenge the person's
+        authenticator signs.
+
+        The account is named in the query, and the challenge is bound to it, so what may
+        answer is decided here — by the server, from the row — and the finish checks the
+        answer against that decision rather than recomputing it.
+      operationId: get_iam_webauthn_signin_begin
+      summary: 'Starts a passkey sign-in: it returns the challenge the person''s authenticator
+        signs.'
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/webauthn/signin/finish:
+    post:
+      description: |-
+        Verifies the signed challenge and signs the person in.
+
+        It answers exactly as a password sign-in does — the same envelope, through the
+        same grant — so nothing downstream branches on how somebody arrived.
+      operationId: post_iam_webauthn_signin_finish
+      summary: Verifies the signed challenge and signs the person in.
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/webauthn/signup/begin:
+    get:
+      description: |-
+        Starts enrolling a passkey for the signed-in person: it returns the
+        options their browser hands to the authenticator.
+
+        Passkeys already on the account are EXCLUDED, so a second enrollment on a device
+        that already holds one is refused by the authenticator itself rather than
+        silently producing a duplicate the person cannot tell apart.
+      operationId: get_iam_webauthn_signup_begin
+      summary: 'Starts enrolling a passkey for the signed-in person: it returns the
+        options their browser hands to the authenticator.'
+      tags:
+      - iam
+      x-app: iam
+  /v1/iam/webauthn/signup/finish:
+    post:
+      description: |-
+        Verifies the newly created passkey and stores it, so the person
+        can sign in with their device from then on.
+      operationId: post_iam_webauthn_signup_finish
+      summary: Verifies the newly created passkey and stores it, so the person can
+        sign in with their device from then on.
       tags:
       - iam
       x-app: iam
@@ -86541,6 +87420,34 @@ paths:
         The caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.
       operationId: post_integrations_github_webhook
       summary: GitHub App webhook
+      tags:
+      - integrations
+      x-app: integrations
+  /v1/integrations/gitlab/projects:
+    get:
+      description: |-
+        Lists the projects the org's GitLab connection can reach —
+        membership projects, most recently active first.
+      operationId: get_integrations_gitlab_projects
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                account: acme
+                projects:
+                - cloneUrl: https://gitlab.com/acme/widgets.git
+                  defaultBranch: main
+                  fullName: acme/widgets
+                  htmlUrl: https://gitlab.com/acme/widgets
+                  name: widgets
+                  private: true
+                  pushedAt: "2026-07-01T10:00:00Z"
+              schema:
+                $ref: '#/components/schemas/gitlabProjectsOut'
+          description: ok
+      summary: Lists the projects the org's GitLab connection can reach — membership
+        projects, most recently active first.
       tags:
       - integrations
       x-app: integrations
@@ -90551,6 +91458,7 @@ paths:
         anyone willing to type three characters, so there is no confidentiality delta, only
         an honesty one.
       operationId: get_models
+      security: []
       summary: Returns the list of available models from the routing table.
       tags:
       - models
@@ -90598,6 +91506,7 @@ paths:
         keys, URLs, or config are returned, and it reports a SET of names, never
         which provider serves which model.
       operationId: get_models_providers
+      security: []
       summary: Public, secret-free list of the providers serving the models that GET
         /v1/models lists — the same source, projected.
       tags:
@@ -102206,6 +103115,7 @@ paths:
 
         Rendered once and served as bytes thereafter, so the route table's immutability is what makes a repeat request a memcpy rather than a re-encode of a megabyte document.
       operationId: get_openapi.json
+      security: []
       summary: The API description this SDK was generated from
       x-app: openapi
   /v1/oracles:
@@ -116579,6 +117489,12 @@ paths:
         actual cost and records the billable usage event (exactly once). Returns the
         OpenAI-shaped video object.
       operationId: get_videos_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
       summary: Implements GET /v1/videos/{id} — poll a job's status.
       tags:
       - videos
@@ -116595,6 +117511,12 @@ paths:
         the client that downloads without first polling to completion) — idempotent
         with the poll path via job.markCompleted.
       operationId: get_videos_by_id_content
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
       summary: Implements GET /v1/videos/{id}/content — download the finished MP4.
       tags:
       - videos
@@ -117363,6 +118285,12 @@ paths:
     get:
       description: Verify WeChat work bot callback URL
       operationId: get_wecom-bot_callback_by_botid
+      parameters:
+      - in: path
+        name: botId
+        required: true
+        schema:
+          type: string
       summary: Verify WeChat work bot callback URL
       tags:
       - wecom-bot
@@ -117370,6 +118298,12 @@ paths:
     post:
       description: Process WeChat work bot messages
       operationId: post_wecom-bot_callback_by_botid
+      parameters:
+      - in: path
+        name: botId
+        required: true
+        schema:
+          type: string
       summary: Process WeChat work bot messages
       tags:
       - wecom-bot
@@ -117572,6 +118506,8 @@ paths:
       operationId: get_ws_query_progress
       summary: Watch one running query's progress over a websocket
       x-app: o11y
+security:
+- bearer: []
 servers:
 - url: https://api.hanzo.ai
 tags:
@@ -117595,6 +118531,9 @@ tags:
     a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
     cannot INSTALL.
   name: ai
+- description: Package allowance is how much a plan lets you do without paying, and
+    how much of it you have left today.
+  name: allowance
 - description: 'Package analytics is product analytics: send an event, read back who
     did what.'
   name: analytics
