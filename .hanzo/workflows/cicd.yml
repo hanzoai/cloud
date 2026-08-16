@@ -235,6 +235,13 @@ jobs:
       # AND the image built AND it smoked, so a tag build re-tests a proven
       # commit — and app-contract alone is 108 links. Run it once, not twice.
       tests: ${{ github.ref_type != 'tag' }}
+      # This repo is the reason that flag exists. The gate builds 122 app
+      # binaries to regenerate their documents and runs 18-27 minutes cold,
+      # wide enough that most runs are cancelled before finishing — 39 of 43
+      # recently. The cache is per-runner and ephemeral, so this is a partial
+      # warm and not a guarantee; it is still the difference between
+      # recompiling the world and relinking it.
+      go-cache: "true"
     secrets: inherit
 
   # Guards the Stage-1 byzantine ceremony containment (apps/controlplane,
