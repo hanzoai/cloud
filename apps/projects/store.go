@@ -97,7 +97,7 @@ type Project struct {
 	// the honest default (public, max-age=60, s-maxage=86400). Content-hashed
 	// assets are always immutable regardless of this override.
 	CacheControl string
-	// LastPurgeAt is the unix time of the last successful (or attempted) Cloudflare
+	// LastPurgeAt is the unix time of the last successful (or attempted) edge
 	// edge purge for this site. Surfaced on the API so a console can show cache freshness.
 	LastPurgeAt int64
 	CreatedAt   int64
