@@ -182,6 +182,51 @@ func TestUpdateLeavesUnnamedFieldsAlone(t *testing.T) {
 	}
 }
 
+// The schema is DERIVED from the app's own closed sets, so adding a value there
+// moves the document, the tool schema and the validator together. A literal here
+// would be a second copy — and that copy is what hid the missing priority check.
+func TestSchemasAreDerivedFromTheAppsOwnSets(t *testing.T) {
+	for _, tc := range []struct {
+		set    map[string]bool
+		schema []byte
+		what   string
+	}{
+		{statuses, createSchema, "status"},
+		{priorities, createSchema, "priority"},
+		{statuses, updateSchema, "status"},
+		{statuses, listSchema, "status"},
+	} {
+		for v := range tc.set {
+			if !strings.Contains(string(tc.schema), `"`+v+`"`) {
+				t.Fatalf("%s %q is legal and absent from the published schema", tc.what, v)
+			}
+		}
+	}
+	// Sorted, or the committed document differs run to run and the drift gate
+	// goes red at random.
+	if got := enum(map[string]bool{"b": true, "a": true, "c": true}); got != `["a","b","c"]` {
+		t.Fatalf("enum = %s, want sorted", got)
+	}
+}
+
+// Advertising a closed set and not checking it is worse than not advertising it.
+func TestUnknownPriorityIsRefused(t *testing.T) {
+	mountTools(t)
+	seedBoard(t, "acme", "default", "ENG")
+	p := tools.Principal{Org: "acme", Project: "default"}
+
+	if _, err := call(t, p, toolCreate, map[string]any{"title": "x", "priority": "banana"}); err == nil {
+		t.Fatal("want a refusal for a priority outside the board's set")
+	}
+	if _, err := call(t, p, toolCreate, map[string]any{"title": "ok", "priority": "urgent"}); err != nil {
+		t.Fatalf("a legal priority must be accepted: %v", err)
+	}
+	// And on the update path, which is a separate call site.
+	if _, err := call(t, p, toolUpdate, map[string]any{"number": float64(1), "priority": "banana"}); err == nil {
+		t.Fatal("update must refuse it too")
+	}
+}
+
 func TestUnknownStatusIsRefused(t *testing.T) {
 	mountTools(t)
 	seedBoard(t, "acme", "default", "ENG")
