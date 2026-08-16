@@ -34,7 +34,10 @@ func init() {
 			"ClaimRow.source":    "Source is the citation the row was read from.",
 			"claimsIn.Benchmark": "Benchmark filters to one benchmark id. Empty returns every benchmark.",
 			"claimsIn.Model":     "Model filters to one model. Empty returns every model.",
-			"claimsOut.data":     "Data is one row per (benchmark, model), effective values only — the row\nthat WINS after layering, not every row ever written.",
+			"claimsIn.Protocol":  "Protocol filters by HOW a claim was scored, so provider cards can be read\napart from third parties running their own harness.",
+			"claimsIn.Provider":  "Provider filters to one lab or leaderboard — the way to read what a single\nsource claims across every model it covers.",
+			"claimsIn.Source":    "Source filters to one citation, which is the finest grain there is: a\nsource is what makes two claims about one model independent rather than a\nrestatement of each other.",
+			"claimsOut.data":     "Data is one row per (benchmark, model, SOURCE) — every independent claim,\nnot one per model. Effective values only: the row that wins after layering\nfor each source, never the superseded readings behind it.",
 			"claimsOut.total":    "Total is how many rows Data holds.",
 		},
 	})
@@ -59,12 +62,14 @@ func init() {
 	zip.Describe("GET /v1/benchmark/leaderboard", zip.Doc{
 		Description: "Answers one row per model for the benchmark named — what our own\nharness measured, beside what the vendor claims, and the gap between them.\n\nThe gap is the point of the arena; provider-reported claims have run materially\nhot against one standardized harness.\n\nThe two planes are NEVER blended, and that is the rule to read the rows by: a\nmodel we have measured but no vendor has claimed for shows published null, a\nmodel with only a claim shows measured null, and gap exists only where both do.\n\nn is coverage and is not decoration: two measured numbers taken over different\nitem counts are not comparable, so read the row's n before reading its accuracy.",
 		Fields: map[string]string{
+			"LeaderRow.claims":         "Claims is how many independent claims exist for this model on this\nbenchmark. More than one means several sources reported it.",
 			"LeaderRow.gap":            "published − measured (the arena signal)",
 			"LeaderRow.measured":       "hanzo-measured accuracy % (nil if unrun)",
 			"LeaderRow.model":          "the model this row scores",
 			"LeaderRow.n":              "coverage — NEVER compare across different n",
 			"LeaderRow.protocol":       "how the vendor scored their claim: single-attempt, pass@k or agentic",
 			"LeaderRow.published":      "provider-claimed % (nil if none)",
+			"LeaderRow.spread":         "Spread is the distance between the highest and lowest of them, nil when\nthere is only one. It is the disagreement AMONG sources, which a single\nPublished number cannot show — signal in the same way the\npublished-minus-measured gap is.",
 			"benchmarkQuery.benchmark": "Benchmark is the catalog id to read, defaulting to gpqa_diamond.",
 			"leaderboard.benchmark":    "Benchmark is the catalog id these rows are about.",
 			"leaderboard.rows":         "Rows is one per model, ordered by measured accuracy descending.",
