@@ -262,6 +262,17 @@ type LeaderRow struct {
 	Run string `json:"run,omitempty"`
 	// MeasuredAt is when the run behind Measured was recorded.
 	MeasuredAt *time.Time `json:"measuredAt,omitempty"`
+	// CILow and CIHigh are the 95% Wilson interval on Measured, in percent. They
+	// are what makes the score comparable: at n=198 a 98% carries roughly ±2
+	// points, so most differences at the top of a board are not distinguishable
+	// and a bare number implies a precision it does not have. Absent when there
+	// is no measurement.
+	CILow *float64 `json:"ciLow,omitempty"`
+	// CIHigh is the upper bound of that interval. Wilson rather than the normal
+	// approximation because the normal one produces bounds past 100 exactly where
+	// benchmark scores live — at 194/198 that is the top of the board, not a
+	// corner case.
+	CIHigh *float64 `json:"ciHigh,omitempty"`
 }
 
 // benchmarkQuery names the benchmark a read is about.
@@ -351,6 +362,8 @@ func computeLeaderboard(attempts []attempt, bench string, claim map[string][]pub
 			r.Measured, r.N = &v, a.n
 		}
 		if r.Measured != nil {
+			lo, hi := wilson(m[model].ok, m[model].n)
+			r.CILow, r.CIHigh = &lo, &hi
 			r.Run = latest[model]
 			if t, ok := when[model]; ok && !t.IsZero() {
 				at := t
