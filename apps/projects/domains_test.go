@@ -129,7 +129,7 @@ func TestVouchIsSuperAdminOnly(t *testing.T) {
 	store := newTestStore(t)
 	svc := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log},
-		State: state{apex: "hanzo.app", store: store, cf: sites.NewCloudflareEdge(log)},
+		State: state{apex: "hanzo.app", store: store, edge: sites.NewCloudflareEdge(log)},
 	}
 	bind := domainsApp(t, svc)
 	for _, org := range []string{"hanzo", "acme"} {
@@ -199,7 +199,7 @@ func TestVouchDoesNotTurnOnTheOrg(t *testing.T) {
 	store := newTestStore(t)
 	svc := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log},
-		State: state{apex: "hanzo.app", store: store, cf: sites.NewCloudflareEdge(log)},
+		State: state{apex: "hanzo.app", store: store, edge: sites.NewCloudflareEdge(log)},
 	}
 	bind := domainsApp(t, svc)
 
@@ -260,7 +260,7 @@ func TestOursNeverEntersHostTable(t *testing.T) {
 	store := newTestStore(t)
 	svc := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log},
-		State: state{apex: "hanzo.app", store: store, cf: sites.NewCloudflareEdge(log)},
+		State: state{apex: "hanzo.app", store: store, edge: sites.NewCloudflareEdge(log)},
 	}
 	bind := domainsApp(t, svc)
 	if err := store.CreateProject(ctx, mkProject("hanzo", "site", "Site")); err != nil {
@@ -452,7 +452,7 @@ func TestReleaseOnlyAddressesNamesBindCouldHaveMade(t *testing.T) {
 	store := newTestStore(t)
 	svc := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log},
-		State: state{apex: "hanzo.app", store: store, cf: sites.NewCloudflareEdge(log)},
+		State: state{apex: "hanzo.app", store: store, edge: sites.NewCloudflareEdge(log)},
 	}
 	app := domainApp(t, svc)
 	if err := store.CreateProject(ctx, mkProject("acme", "acme", "Acme")); err != nil {
@@ -517,7 +517,7 @@ func TestVerifyDomainPromotesOnlyOnProof(t *testing.T) {
 	dns := fakeDNS{}
 	svc := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log},
-		State: state{apex: "hanzo.app", store: store, cf: sites.NewCloudflareEdge(log), resolver: dns},
+		State: state{apex: "hanzo.app", store: store, edge: sites.NewCloudflareEdge(log), resolver: dns},
 	}
 	app := domainApp(t, svc)
 	if err := store.CreateProject(ctx, mkProject("acme", "acme", "Acme")); err != nil {
