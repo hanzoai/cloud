@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/apps/sites/cloudflare"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -88,7 +88,7 @@ func TestPublishedURLIsTheHostWeOwn(t *testing.T) {
 	log := luxlog.New("test")
 	svc := &cloud.Service[state]{
 		Base:  cloud.Base{Log: log},
-		State: state{apex: "hanzo.app", store: newTestStore(t), edge: sites.NewCloudflareEdge(log)},
+		State: state{apex: "hanzo.app", store: newTestStore(t), edge: cloudflare.New(log)},
 	}
 	hz, ac := mkProject("hanzo", "maxpower", "Hanzo Max"), mkProject("acme", "maxpower", "Acme Max")
 
