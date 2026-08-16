@@ -57,10 +57,11 @@ func opsUnderTest(t *testing.T) (served map[string]bool, typed map[string]string
 // op nor named above — so the next route added here is typed by default.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	served, typed, _ := opsUnderTest(t)
-	// 8 since the published plane became readable and writable: GET /claims and
-	// POST /claims. Updated deliberately, which is what this gate asks for.
-	if len(served) != 8 {
-		t.Errorf("benchmark serves %d operations, expected 8 — update this gate deliberately", len(served))
+	// 9 since the published plane became readable and writable (GET/POST /claims)
+	// and measurement became readable over time (GET /history). Updated
+	// deliberately, which is what this gate asks for.
+	if len(served) != 9 {
+		t.Errorf("benchmark serves %d operations, expected 9 — update this gate deliberately", len(served))
 	}
 
 	var untyped []string

@@ -59,6 +59,24 @@ func init() {
 			"pairing.rescue_b_over_a": "RescueBOverA is how many items B got right and A got wrong.",
 		},
 	})
+	zip.Describe("GET /v1/benchmark/history", zip.Doc{
+		Description: "Returns each model's measured score per run over time, oldest first,\nwith the change between runs.\n\nThis is the counterweight to a leaderboard: the board shows the latest run\nbecause that is what \"how good is it\" means, and a single latest number cannot\ndistinguish a model that has always been strong from one that just improved,\nor from one that regressed after a provider changed something. Both matter for\nrouting, and only one of them is visible on a board.\n\nRuns with no id — attempts recorded before runs existed — group under the\nempty run, which is honestly what they are: one undated measurement.",
+		Fields: map[string]string{
+			"ModelHistory.model":   "Model is the system these runs measured.",
+			"ModelHistory.points":  "Points is every run, oldest first.",
+			"ModelHistory.trend":   "Trend is the change from the first run to the last, absent when there has\nonly been one. It answers the question a list of points makes you compute.",
+			"RunPoint.at":          "At is when the run was recorded.",
+			"RunPoint.delta":       "Delta is the change in score from the previous run for this model, absent\non the first. It is the number the whole surface exists to make visible.",
+			"RunPoint.n":           "N is how many items the run covered. Two runs are only comparable at the\nsame n, which is why it travels with every point rather than being assumed.",
+			"RunPoint.run":         "Run is the measurement id these attempts were recorded under.",
+			"RunPoint.score":       "Score is accuracy over the items this run covered, as a percentage.",
+			"historyIn.Benchmark":  "Benchmark is the catalog id to read, defaulting to gpqa_diamond.",
+			"historyIn.Model":      "Model filters to one model. Empty returns every model measured.",
+			"historyOut.benchmark": "Benchmark is the catalog id these histories are about.",
+			"historyOut.data":      "Data is one entry per model, ordered by model name.",
+			"historyOut.total":     "Total is how many models Data holds.",
+		},
+	})
 	zip.Describe("GET /v1/benchmark/leaderboard", zip.Doc{
 		Description: "Answers one row per model for the benchmark named — what our own\nharness measured, beside what the vendor claims, and the gap between them.\n\nThe gap is the point of the arena; provider-reported claims have run materially\nhot against one standardized harness.\n\nThe two planes are NEVER blended, and that is the rule to read the rows by: a\nmodel we have measured but no vendor has claimed for shows published null, a\nmodel with only a claim shows measured null, and gap exists only where both do.\n\nn is coverage and is not decoration: two measured numbers taken over different\nitem counts are not comparable, so read the row's n before reading its accuracy.",
 		Fields: map[string]string{
@@ -66,10 +84,12 @@ func init() {
 			"LeaderRow.gap":            "published − measured (the arena signal)",
 			"LeaderRow.mean":           "Mean is the unweighted average of every claim, which answers a different\nquestion from Published: what the field says on average, rather than what\nthe vendor says about itself. With one claim the two are equal.",
 			"LeaderRow.measured":       "hanzo-measured accuracy % (nil if unrun)",
+			"LeaderRow.measuredAt":     "MeasuredAt is when the run behind Measured was recorded.",
 			"LeaderRow.model":          "the model this row scores",
 			"LeaderRow.n":              "coverage — NEVER compare across different n",
 			"LeaderRow.protocol":       "how the vendor scored their claim: single-attempt, pass@k or agentic",
 			"LeaderRow.published":      "provider-claimed % (nil if none)",
+			"LeaderRow.run":            "Run names the measurement Measured came from, and MeasuredAt is when it\nran. A score with no date is not a fact about a model, it is a fact about\na model on a day — and models change, so the date is what makes the number\ncheckable rather than merely quoted.",
 			"LeaderRow.spread":         "Spread is the distance between the highest and lowest of them, nil when\nthere is only one. It is the disagreement AMONG sources, which a single\nPublished number cannot show — signal in the same way the\npublished-minus-measured gap is.",
 			"benchmarkQuery.benchmark": "Benchmark is the catalog id to read, defaulting to gpqa_diamond.",
 			"leaderboard.benchmark":    "Benchmark is the catalog id these rows are about.",
