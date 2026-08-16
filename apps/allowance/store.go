@@ -89,13 +89,13 @@ func Midnight(t time.Time) time.Time {
 	return time.Date(u.Year(), u.Month(), u.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, 1)
 }
 
-// Take counts ONE call against subject's allowance for period and answers the count
-// that stands afterwards, plus whether the subject is now out.
+// Take counts ONE SERVED call against subject's allowance for period and answers the
+// count that stands afterwards, plus whether the subject is now out.
 //
 // The read and the increment are ONE statement inside ONE transaction on the single
 // serialized connection, because a read followed by a write is two calls racing for
-// the same last unit — both would see it free and both would be admitted. Under the
-// transaction the loser sees the winner's count.
+// the same row — both would see the same count and one increment would vanish. Under
+// the transaction the loser sees the winner's count, so a served call is never lost.
 //
 // AT THE CEILING THE COUNT STOPS. A subject already at the limit is answered
 // spent=true and their count is left where it is, so the number a customer reads is

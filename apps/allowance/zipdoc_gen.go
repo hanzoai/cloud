@@ -16,8 +16,17 @@ func init() {
 			"Allowance.spent":  "the subject is at the limit",
 		},
 	})
+	zip.Describe("POST /allowance/read", zip.Doc{
+		Description: "Answers what a subject has left of their plan's free-call allowance this period,\nwithout counting anything: the tier the ceiling came from, the ceiling, the count,\nwhether it is spent, and when it starts again.\n\nTHIS IS THE ADMISSION HALF. The gate asks it before a call and refuses a subject at\nthe ceiling; asking costs the subject nothing, so a refusal never becomes usage and\na request that dies before any model leaves the count exactly where it found it.\n\nThe ORG is the CALLER'S — the gateway's assertion — and can never be named in the\ninput, so one tenant cannot read another's allowance. The SUBJECT is the caller's\nto choose, but only within that org: it is a caller inside the tenancy the\ncredential already pinned.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"Allowance.limit":  "calls the plan allows per period; 0 = unbounded",
+			"Allowance.plan":   "the tier the limit came from",
+			"Allowance.resets": "unix seconds; when the count starts again",
+			"Allowance.spent":  "the subject is at the limit",
+		},
+	})
 	zip.Describe("POST /allowance/take", zip.Doc{
-		Description: "Counts ONE zero-priced call against a subject's plan allowance for the current\nperiod and answers what stands after it: the tier the ceiling came from, the\nceiling, the count, whether it is now spent, and when it starts again.\n\nThe ORG is the CALLER'S — the gateway's assertion — and can never be named in the\ninput, so one tenant cannot spend another's allowance. The SUBJECT is the caller's\nto choose, but only within that org: it is a caller inside the tenancy the\ncredential already pinned.\n\nTAKING IS THE ANSWER, not a step before it. A read followed by a separate\nincrement is two calls racing for the same last unit, and both would be admitted;\none call under one transaction cannot be. A subject already at the ceiling is\nanswered spent=true with their count unchanged — refusals are not usage.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Description: "Counts ONE SERVED zero-priced call against a subject's plan allowance for the\ncurrent period and answers what stands after it: the tier the ceiling came from,\nthe ceiling, the count, whether it is now spent, and when it starts again.\n\nThe ORG is the CALLER'S — the gateway's assertion — and can never be named in the\ninput, so one tenant cannot spend another's allowance. The SUBJECT is the caller's\nto choose, but only within that org: it is a caller inside the tenancy the\ncredential already pinned.\n\nA CALL IS COUNTED WHERE IT ANSWERED. The ceiling bounds spend and spend is incurred\nwhen a model is reached, so the gate asks AllowanceRead before the call and this is\nreached only from the caller's record of a served one. Nothing else may reach it:\ncounting an attempt charges a customer for an outage of ours.\n\nThe read and the increment inside it are ONE statement in ONE transaction, so two\nserved calls arriving together cannot both write the same count. A subject already\nat the ceiling is answered spent=true with their count unchanged — refusals are not\nusage.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Allowance.limit":  "calls the plan allows per period; 0 = unbounded",
 			"Allowance.plan":   "the tier the limit came from",

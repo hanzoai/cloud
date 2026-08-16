@@ -30,8 +30,17 @@
 //
 // The surface:
 //
-//	GET /v1/allowance   what the CALLER has left this period, and when it turns over
-//	plane allowance_take  count one call and answer the same, for the AI gate
+//	GET /v1/allowance     what the CALLER has left this period, and when it turns over
+//	plane allowance_read  the same, for the AI gate, before it admits a call
+//	plane allowance_take  count one SERVED call and answer the same
+//
+// A CALL IS COUNTED WHERE IT ANSWERED. The gate reads the ceiling to admit a call and
+// the count rises when one has been served, because the ceiling bounds spend and spend
+// is incurred when a model is reached. A request that reaches none — an unresolvable
+// route, a vendor that never replied, a pod being rolled — costs the caller nothing.
+// Two calls from one subject can therefore both be admitted by the same last unit;
+// serving six on a ceiling of five is the generous direction, and the caller feels the
+// other one.
 //
 // The gate is in another process (the pod runs each subsystem as its own program),
 // so it ASKS rather than opening the file — the same discipline the prepaid ledger
