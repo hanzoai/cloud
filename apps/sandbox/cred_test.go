@@ -257,8 +257,8 @@ func renderedText(t *testing.T, v any) string {
 // not a relayable bearer and the agent plane carries no user token at all, so
 // "nothing to exchange" is an ordinary outcome and must not fail a lease.
 func TestNoBearerIsNoSessionAndNoError(t *testing.T) {
-	t.Setenv("IAM_MINT_CLIENT_ID", "hanzo-console")
-	t.Setenv("IAM_MINT_CLIENT_SECRET", "secret")
+	t.Setenv("IAM_SANDBOX_CLIENT_ID", "hanzo-sandbox")
+	t.Setenv("IAM_SANDBOX_CLIENT_SECRET", "secret")
 	for _, bearer := range []string{"", "   "} {
 		s, err := sessionFor(context.Background(), bearer, time.Hour)
 		if err != nil {
@@ -270,14 +270,31 @@ func TestNoBearerIsNoSessionAndNoError(t *testing.T) {
 	}
 }
 
-// A deployment that wires no mint client mints nothing — and says so by handing
+// A deployment that wires no sandbox client mints nothing — and says so by handing
 // back an empty session rather than by failing every lease on the fleet.
-func TestNoMintClientIsNoSession(t *testing.T) {
-	t.Setenv("IAM_MINT_CLIENT_ID", "")
-	t.Setenv("IAM_MINT_CLIENT_SECRET", "")
+func TestNoSandboxClientIsNoSession(t *testing.T) {
+	t.Setenv("IAM_SANDBOX_CLIENT_ID", "")
+	t.Setenv("IAM_SANDBOX_CLIENT_SECRET", "")
 	s, err := sessionFor(context.Background(), "a.b.c", time.Hour)
 	if err != nil || s.Token != "" {
 		t.Fatalf("session=%q err=%v; want neither", s.Token, err)
+	}
+}
+
+// THE CONSOLE CLIENT IS NOT A FALLBACK. Both credentials sit in this process, and
+// the console's may act for a reserved-org subject where this one may not — so a
+// sandbox that reached for it when its own was unset would hand a pod exactly the
+// credential the separate client exists to keep out, and would do it precisely
+// when the deployment was misconfigured. Unset means no session.
+func TestTheConsoleClientIsNeverBorrowed(t *testing.T) {
+	t.Setenv("IAM_SANDBOX_CLIENT_ID", "")
+	t.Setenv("IAM_SANDBOX_CLIENT_SECRET", "")
+	t.Setenv("IAM_MINT_CLIENT_ID", "hanzo-console")
+	t.Setenv("IAM_MINT_CLIENT_SECRET", "secret")
+	t.Setenv("IAM_URL", "http://127.0.0.1:1") // any exchange attempt would fail loudly here
+	s, err := sessionFor(context.Background(), "a.b.c", time.Hour)
+	if err != nil || s.Token != "" {
+		t.Fatalf("the console credential was borrowed: session=%q err=%v", s.Token, err)
 	}
 }
 
@@ -379,8 +396,8 @@ func TestAnImageWithoutTheToolsIsNotAFailedLease(t *testing.T) {
 // unreachable dependency stop every sandbox on the fleet, and it would have
 // denied nothing that is not already denied.
 func TestAnIdentityOutageStillLeases(t *testing.T) {
-	t.Setenv("IAM_MINT_CLIENT_ID", "hanzo-console")
-	t.Setenv("IAM_MINT_CLIENT_SECRET", "secret")
+	t.Setenv("IAM_SANDBOX_CLIENT_ID", "hanzo-sandbox")
+	t.Setenv("IAM_SANDBOX_CLIENT_SECRET", "secret")
 	t.Setenv("IAM_URL", "http://127.0.0.1:1") // nothing answers here
 	s, err := sessionFor(context.Background(), "a.b.c", time.Minute)
 	if err == nil {

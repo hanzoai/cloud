@@ -5,13 +5,20 @@ package sandbox
 // A sandbox runs code its owner submitted, on our nodes, and the tools inside it
 // — `hanzo`, `git`, the coding tools — are useless without an identity. So every
 // lease is handed ONE credential: a short-lived IAM token for THE OWNER, and
-// nothing else. Two facts make that safe to say out loud:
+// nothing else. Three facts make that safe to say out loud:
 //
 //	IT IS THE CALLER'S OWN. The token is not minted from an authority of ours; it
 //	is EXCHANGED (RFC 8693) for the token the caller presented on the create call.
 //	Possession of that token is the whole authorization, so this path cannot reach
-//	an identity that did not just call us. A sandbox therefore holds exactly what
-//	its owner already held and never a shared, admin, or cross-tenant credential.
+//	an identity that did not just call us.
+//
+//	AND IT IS NEVER A PLATFORM ONE. The exchange acts as `hanzo-sandbox`, a client
+//	kept for this and nothing else, and IAM will not act for a reserved-org subject
+//	unless the acting client holds the separate admin-mint capability — which this
+//	one is deliberately not granted. So the ceiling on what a pod can be handed is
+//	the CLIENT that fetched it, not the privilege of whoever asked: an operator's
+//	own lease starts with no session at all rather than with platform sudo inside a
+//	boundary built to run code we assume is hostile.
 //
 //	IT DIES WITH THE LEASE. The exchange asks for the lease's own remaining life
 //	(IAM clamps it one way, so this can only ever shorten), and no refresh token is
@@ -118,13 +125,20 @@ type cred struct {
 // (cloud.CallerBearer returns "" for one) and the agent plane carries no user
 // token at all. Those leases simply start without a session, exactly as every
 // lease did before this existed.
+//
+// IAM_SANDBOX_* is this subsystem's OWN client, and the separation is the point.
+// The console credential a few files over may act for a reserved-org subject
+// because minting an operator their own bearer is what a console is for; this one
+// may not, because what it fetches is handed to a pod. Two capabilities cannot
+// share one registration, so they do not share one name — and there is no fallback
+// to the wider client, since a fallback is just the wide capability arriving late.
 func sessionFor(ctx context.Context, bearer string, ttl time.Duration) (iam.Session, error) {
 	if strings.TrimSpace(bearer) == "" {
 		return iam.Session{}, nil
 	}
-	id, secret := environ.Or("IAM_MINT_CLIENT_ID", ""), environ.Or("IAM_MINT_CLIENT_SECRET", "")
+	id, secret := environ.Or("IAM_SANDBOX_CLIENT_ID", ""), environ.Or("IAM_SANDBOX_CLIENT_SECRET", "")
 	if id == "" || secret == "" {
-		return iam.Session{}, nil // the deployment wires no mint client
+		return iam.Session{}, nil // the deployment wires no sandbox client
 	}
 	return iam.Exchange(ctx, cloud.IAMBase(), id, secret, bearer, ttl)
 }
