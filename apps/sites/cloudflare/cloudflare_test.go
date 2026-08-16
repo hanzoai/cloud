@@ -13,14 +13,14 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// testPurger builds a Edge the way these tests need it: a ZERO coalescing window,
+// testEdge builds a Edge the way these tests need it: a ZERO coalescing window,
 // so every call is admitted and the assertions are about the request rather than the
 // debounce, but with the two fields only New otherwise supplies. A bare struct
 // literal left pending nil, so admit panicked writing to it, and left ceiling zero,
 // so takeToken (inMinute >= ceiling) refused every call and nothing was ever sent.
 // The tests do not use New itself because it reads the real environment and
 // arms a 10s window.
-func testPurger(token, zone, api string, c *http.Client) *Edge {
+func testEdge(token, zone, api string, c *http.Client) *Edge {
 	return &Edge{
 		token: token, zoneID: zone, api: api, client: c,
 		log:     luxlog.New("test"),
@@ -29,8 +29,8 @@ func testPurger(token, zone, api string, c *http.Client) *Edge {
 	}
 }
 
-func TestPurgerUnconfiguredIsNoop(t *testing.T) {
-	p := testPurger("", "", "http://127.0.0.1:0", &http.Client{Timeout: time.Second})
+func TestEdgeUnconfiguredIsNoop(t *testing.T) {
+	p := testEdge("", "", "http://127.0.0.1:0", &http.Client{Timeout: time.Second})
 	if p.Configured() {
 		t.Fatal("expected unconfigured")
 	}
@@ -41,7 +41,7 @@ func TestPurgerUnconfiguredIsNoop(t *testing.T) {
 	}
 }
 
-func TestPurgerPostsTagsWithAuth(t *testing.T) {
+func TestEdgePostsTagsWithAuth(t *testing.T) {
 	var gotAuth, gotPath, gotCT string
 	var gotTags []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +59,7 @@ func TestPurgerPostsTagsWithAuth(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := testPurger("tok-secret", "zone123", srv.URL, srv.Client())
+	p := testEdge("tok-secret", "zone123", srv.URL, srv.Client())
 	if !p.Configured() {
 		t.Fatal("expected configured")
 	}
@@ -80,32 +80,32 @@ func TestPurgerPostsTagsWithAuth(t *testing.T) {
 	}
 }
 
-func TestPurgerPropagatesServerError(t *testing.T) {
+func TestEdgePropagatesServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(403)
 	}))
 	defer srv.Close()
-	p := testPurger("t", "z", srv.URL, srv.Client())
+	p := testEdge("t", "z", srv.URL, srv.Client())
 	if err := p.PurgeTags(context.Background(), "site-x-y"); err == nil {
 		t.Fatal("expected error on non-2xx")
 	}
 }
 
-func TestPurgerEmptyTagsIsNoop(t *testing.T) {
-	p := testPurger("t", "z", "http://127.0.0.1:0", &http.Client{Timeout: time.Second})
+func TestEdgeEmptyTagsIsNoop(t *testing.T) {
+	p := testEdge("t", "z", "http://127.0.0.1:0", &http.Client{Timeout: time.Second})
 	if err := p.PurgeTags(context.Background()); err != nil {
 		t.Fatalf("empty PurgeTags: %v", err)
 	}
 }
 
-// TestAssertHTMLPassthroughPatchesOnlyDrift is the regression guard for the
+// TestEnsureVerbatimPatchesOnlyDrift is the regression guard for the
 // savor.hanzo.app outage: the zone had email_obfuscation ON, so Cloudflare
 // rewrote every email address in the served markup and React's hydration
 // compared markup it never rendered — #418/#425 → #423 → "Application error"
 // on the slow loads. The assertion must turn a drifted rewriter OFF and must
 // leave a compliant one alone (a needless PATCH burns the shared account's
 // quota on every pod start).
-func TestAssertHTMLPassthroughPatchesOnlyDrift(t *testing.T) {
+func TestEnsureVerbatimPatchesOnlyDrift(t *testing.T) {
 	state := map[string]string{"email_obfuscation": "on", "rocket_loader": "off"}
 	var patched []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -126,7 +126,7 @@ func TestAssertHTMLPassthroughPatchesOnlyDrift(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := testPurger("tok", "zone1", srv.URL, srv.Client())
+	p := testEdge("tok", "zone1", srv.URL, srv.Client())
 	p.EnsureVerbatim(context.Background())
 
 	if len(patched) != 1 || patched[0] != "email_obfuscation=off" {
@@ -142,14 +142,14 @@ func TestAssertHTMLPassthroughPatchesOnlyDrift(t *testing.T) {
 // An unconfigured or unauthorized zone must never be fatal: the site server has
 // to boot and serve even when it cannot read Cloudflare — the same degradation
 // PurgeTags documents.
-func TestAssertHTMLPassthroughDegradesSoftly(t *testing.T) {
-	testPurger("", "", "http://127.0.0.1:0", &http.Client{Timeout: time.Second}).
+func TestEnsureVerbatimDegradesSoftly(t *testing.T) {
+	testEdge("", "", "http://127.0.0.1:0", &http.Client{Timeout: time.Second}).
 		EnsureVerbatim(context.Background())
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer srv.Close()
-	testPurger("tok", "zone1", srv.URL, srv.Client()).
+	testEdge("tok", "zone1", srv.URL, srv.Client()).
 		EnsureVerbatim(context.Background())
 }

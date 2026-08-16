@@ -35,12 +35,11 @@ const edgeOrg = "hanzo"
 // runs the site plane WITHOUT the integrations app still needs an edge, and a
 // break-glass override should not require a connection flow.
 //
-// ZONE IS STILL ENVIRONMENT. The integration stores account id and label, never a
-// zone id — a token spans an account and the site plane purges ONE zone, so the
-// zone is a fact about this deployment rather than about the connection. It could
-// be discovered (Zone:Read is in scope, GET /zones?name= would answer it), and
-// that is the better end state; it is not done here because a lookup at
-// construction turns a pure constructor into one that can block and fail.
+// THE ZONE IS DISCOVERED, so CF_ZONE_ID is now a fallback rather than a
+// requirement. A token spans an account and an account can be asked which zone
+// serves a name — Zone:Read is already in the integration's scopes, so nothing
+// new is granted for it. The lookup is lazy and lives in the provider (zone.go);
+// passing the env value here just lets an operator pin it.
 //
 // FAIL SOFT, ALWAYS. Every failure below returns an edge rather than an error:
 // unmounted integrations, no connection, a KMS refusal. A missing purge credential
