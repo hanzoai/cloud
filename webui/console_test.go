@@ -362,3 +362,27 @@ func TestRouteShell_ServedForExportedRoutes(t *testing.T) {
 		t.Errorf("GET /signin.html Cache-Control = %q, want no-cache", rec.Header().Get("Cache-Control"))
 	}
 }
+
+// A REGISTERED route still answers when this process has no console bundle.
+//
+// TestNoBundleIsA503_NotAShell already pins what the terminal handler says with
+// no bytes (503 on a console path, 404 on an API namespace) and is not restated
+// here. What that one cannot reach is the router: it drives the handler directly,
+// so it says nothing about a real route mounted beside the catch-all.
+//
+// That is the property the front door leans on. A console it cannot read used to
+// abort the boot, so on 2026-08-15 one unreadable object answered every caller
+// 503 — including everyone who never opens a browser. Serving on is only the
+// better choice if the API genuinely survives, so the API is what this asserts.
+func TestNoBundle_ARegisteredRouteStillAnswers(t *testing.T) {
+	app := zip.New(zip.Config{})
+	app.Get("/v1/models", func(c *zip.Ctx) error {
+		return c.JSON(http.StatusOK, map[string]any{"object": "list"})
+	})
+	if err := Mount(app, nil); err != nil {
+		t.Fatalf("Mount(app, nil): %v — nil is the stated no-console case, not an error", err)
+	}
+	if code, _, _ := do(t, app, http.MethodGet, "/v1/models", nil); code != http.StatusOK {
+		t.Fatalf("GET /v1/models = %d, want 200 — a missing console must not cost the API", code)
+	}
+}

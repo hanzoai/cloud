@@ -107,13 +107,27 @@ func WalletOf(c *zip.Ctx) (Wallet, bool) {
 // A blank name is the org itself (the pool). A name is a NAME, not a key: a "/" in
 // it would silently address a different account than the one asked for, so it is
 // refused rather than flattened.
+//
+// THE BLANK NAME IS ADDRESSED, NOT INFERRED. account.Payer refuses a nameless
+// credential in the signup org, because there a missing name means a token FAILED
+// to resolve its person and answering with the org would hand a stranger the
+// platform's own balance. That refusal is about credentials, and this function has
+// none — it says so three paragraphs up: the target is not the caller, and there is
+// no request to read. Here a blank name is a caller deliberately naming the ORG'S
+// account, which is how the platform pool itself is credited. Routing it through
+// the credential rule would make funding that pool impossible in the one org that
+// holds it, so the org account is addressed directly and Payer is asked only when
+// there is a name for it to resolve.
 func WalletFor(org, name string) (Wallet, bool) {
 	org = strings.TrimSpace(org)
 	name = strings.TrimSpace(name)
 	if org == "" || strings.Contains(name, "/") {
 		return Wallet{}, false
 	}
-	acct := account.Payer(account.Credential{Owner: org, Name: name})
+	acct := account.Org(org)
+	if name != "" {
+		acct = account.Payer(account.Credential{Owner: org, Name: name})
+	}
 	if acct.Zero() {
 		return Wallet{}, false
 	}

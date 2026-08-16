@@ -2,6 +2,7 @@ package core
 
 import (
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/account"
@@ -43,9 +44,14 @@ func TestGrantAddressIsTheSpendAddress(t *testing.T) {
 			t.Errorf("WalletFor(%q,%q) account = %q, want %q", tc.org, tc.user, w.Account, tc.want)
 		}
 		// The two halves must come from one resolved Account, or a folded subject
-		// could sit under an unfolded ledger and address a second file.
-		if w.Ledger != account.Payer(account.Credential{Owner: tc.org, Name: tc.user}).Org() {
-			t.Errorf("WalletFor(%q,%q) ledger = %q — not the folded org the subject was built from", tc.org, tc.user, w.Ledger)
+		// could sit under an unfolded ledger and address a second file. Stated as
+		// the relationship itself rather than by re-deriving the ledger through
+		// Payer: Payer answers for a CREDENTIAL and refuses a nameless one in the
+		// signup org, while a blank name here is a caller deliberately addressing
+		// that org's account — so asking it would compare against the answer to a
+		// different question.
+		if w.Account != w.Ledger && !strings.HasPrefix(w.Account, w.Ledger+"/") {
+			t.Errorf("WalletFor(%q,%q) = ledger %q, account %q — not two halves of one Account", tc.org, tc.user, w.Ledger, w.Account)
 		}
 	}
 }

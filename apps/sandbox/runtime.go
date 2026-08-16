@@ -40,8 +40,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/authz"
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/k8s"
 	"github.com/hanzoai/cloud/internal/environ"
+	"github.com/hanzoai/cloud/internal/iam"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -151,6 +153,10 @@ type runtime struct {
 	ns    string
 	image string // oci.hanzo.ai/hanzoai/sandbox, without a tag
 	tag   string
+	// brand is which deployment this is — hanzo, lux, zoo — and it names the hosts
+	// a sandbox's credential is scoped to. Read once here rather than per lease so
+	// the answer cannot differ between two pods of the same fleet.
+	brand string
 	// bare is the boundary our OWN code takes — the one with no kernel of its
 	// own — and it is empty until the cluster keeps that boundary to nodes of its
 	// own. Resolved once, against the cluster, because containment is the
@@ -172,6 +178,7 @@ func newRuntime() *runtime {
 		// and a sandbox must not sit beside the datastores it is forbidden to
 		// reach. One namespace, one policy, everything that runs submitted code.
 		ns:           environ.Or("SANDBOX_NAMESPACE", "hanzo-sandboxes"),
+		brand:        environ.Or("CLOUD_BRAND", cloud.DefaultBrand),
 		image:        environ.Or("SANDBOX_IMAGE_REPO", "oci.hanzo.ai/hanzoai/sandbox"),
 		tag:          environ.Or("SANDBOX_IMAGE_TAG", ""),
 		startTimeout: time.Duration(atoiOr(os.Getenv("SANDBOX_START_TIMEOUT_SEC"), 120)) * time.Second,
@@ -609,10 +616,12 @@ func (r *runtime) start(ctx context.Context, m Sandbox, cr cred) error {
 	// credential takes this route and the DO token does not. It is empty for every
 	// lease but a SuperAdmin's own, so this is one comparison for everybody else.
 	//
-	// A failure here FAILS THE LEASE. The caller gets the 503 and the row records
-	// why, which is the same shape a failed pod create already has; the
-	// alternative is a shell whose kubectl reaches nothing and only says so the
-	// first time somebody trusts it.
+	// A failure here FAILS THE LEASE, because a lease that asked for the admin
+	// image asked for the toolchain that spends this: the caller gets the 503 and
+	// the row records why, rather than a shell whose kubectl reaches nothing and
+	// only says so the first time somebody trusts it. The OWNER SESSION is
+	// delivered by Lease and does not fail one — the policies differ, so they live
+	// with the decision rather than in the mechanism.
 	if len(cr.kube) == 0 {
 		return nil
 	}
@@ -622,6 +631,27 @@ func (r *runtime) start(ctx context.Context, m Sandbox, cr cred) error {
 	}
 	if res.ExitCode != 0 {
 		return fmt.Errorf("write kubeconfig: %s", strings.TrimSpace(res.Stderr))
+	}
+	return nil
+}
+
+// signIn hands the pod its owner's session, over the exec channel that is already
+// the one way in. The token goes in on STDIN: in argv it would be published by
+// `ps` and by /proc to every process in the pod, which is the population this
+// credential is scoped against in the first place.
+//
+// A zero session is nothing to deliver and no error — that is the pod every
+// lease got before this existed.
+func (r *runtime) signIn(ctx context.Context, m Sandbox, s iam.Session) error {
+	if s.Token == "" {
+		return nil
+	}
+	res, err := r.exec(ctx, m, []string{"sh", "-c", script(s, r.brand)}, strings.NewReader(s.Token), 0, nil)
+	if err != nil {
+		return err
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("%s", strings.TrimSpace(res.Stderr))
 	}
 	return nil
 }

@@ -25,82 +25,64 @@ ever built `Run{Org: "acme"}`. Containment held everywhere except the reserved
 org, which is the only place that mattered. A test that never constructs the
 privileged case proves nothing about it.
 
-## What a tenant agent should be handed
+## The fourth answer: the sandbox is signed in as the owner who leased it
 
-Today a SuperAdmin's sandbox gets the SuperAdmin's own DO token and kubeconfig,
-and **a tenant's sandbox gets nothing** — so a tenant agent cannot reach
-inference, or anything else, on its own behalf.
-
-The identity is IAM's, and it belongs to the ORG:
+Every lease now carries a token for the caller who asked for it, and it clears the
+bar `cred.go` set: nothing is minted on an authority of ours.
 
 ```
-org  →  IAM application  <org>-agent      provisioned, never promoted
-        a run gets a short-lived token from THAT application
-        subject = the person who asked
-        scope   = the ops an agent run may call
-        life    = the run
+create call  →  the caller's own bearer  →  RFC 8693 exchange (IAM)
+                                            subject = the caller
+                                            life    = the lease
+                                            refresh = none
 ```
 
-Five properties, each killing one of the failures above:
+**The caller's token IS the authorization.** IAM mints for the subject the
+presented token names, so this path cannot reach an identity that did not just
+call — there is no "act as user X" anywhere in it, and a sandbox holds exactly
+what its owner already held. That is the property the three reverted designs
+lacked and the `<org>-agent` proposal this section used to describe could not
+have: an org machine identity is a NEW credential, one that exists whether or not
+anybody asked for it, and it authenticates as the org rather than as a person.
 
-- **IAM mints and validates it.** Cloud delivers. One auth, one gate — the same
-  rule that makes this a delivery rather than a fourth rejected design.
-- **Org-scoped by construction.** The application belongs to the org, so there is
-  no cross-tenant scope to reach. That is what makes the `admin`-org escalation
-  impossible rather than merely unlikely.
-- **Carries the asking person as subject.** `planeRunOnBehalf` already refuses an
-  empty subject rather than defaulting to the org — "a turn that lost its caller
-  must not run AS THE ORG: that would bill the tenant for an unattributable act."
-  That invariant does this work for free.
-- **Scoped to the ops an agent may call**, and handed to the ONE door that needs
-  it — never to a general resolver. Every failure above is the inverse.
-- **Dies with the run.**
+**It dies with the lease.** The exchange asks for the lease's own remaining life
+(IAM's `lifetime`, clamped one way — a request can shorten a token and never
+lengthen it), and token exchange issues no refresh token, so nothing inside the
+pod can renew what it holds. A 15-minute `exec` sandbox gets a 15-minute
+credential.
 
-**Provision, never promote** — the same rule as SuperAdmin (AC-6(5), AC-5).
-Giving an org an agent identity means CREATING `<org>-agent` in IAM, not
-elevating something that exists.
+**It arrives through the exec channel**, so it exists in the container and in no
+Kubernetes object: an ordinary Pod spec still states no `env` key at all, which
+is what `TestAnOrdinarySandboxIsHandedNothing` has always asserted and still
+does. `hanzo` is handed the token on STDIN — never argv, which `ps` and /proc
+publish to every process in the pod — and keeps its own store. `git` is pointed
+at that store through a credential helper SCOPED TO THE FORGE HOST, so there is
+one credential in the pod and it is offered nowhere else.
 
-**The machinery already exists — VERIFIED, not assumed.** IAM serves
-`POST /v1/iam/applications` (create) and `POST /v1/iam/oauth/token`
-(client-credentials), and `internal/provision/provision.go:504` already upserts
-applications programmatically against `/v1/iam/admin/applications/upsert`. So
-this needs NO new auth machinery, which is the whole reason the previous three
-attempts were wrong: each invented a credential rather than asking the service
-whose job it is.
+**An identity outage is not a sandbox outage.** The exchange reaches IAM and the
+delivery reaches the pod, and neither failing takes the lease with it — the pod
+holds nothing, which is the sandbox everybody had before this existed. Refusing
+would turn one unreachable dependency into a total sandbox outage while denying
+nothing that is not already denied. Both halves are therefore ONE policy, stated
+in `Lease` where the lease is decided rather than in the mechanism: loud in the
+log, and the lease continues. The SuperAdmin kubeconfig keeps the opposite policy
+and still fails its lease, because a caller who asked for the admin image asked
+for the toolchain that spends it.
 
-What is missing is only the two ends:
-1. nothing CREATES `<org>-agent` — the natural place is wherever an org is
-   created, beside whatever else an org gets by default;
-2. nothing DELIVERS its token to a sandbox — `cred.go` is where that belongs,
-   next to the SuperAdmin delivery it already does, and by the same rule: read a
-   credential the issuing service already made, mint nothing.
+**Two doors, one of them silent.** The HTTP door relays `cloud.CallerBearer`. The
+agent plane passes "" — a plane call carries an ATTESTED caller, not the caller's
+own token, so there is nothing to exchange and substituting a credential of ours
+would put an identity in the pod nobody presented. An opaque API key is likewise
+not a relayable bearer, so those leases start with no session rather than with a
+key in a shell.
 
-Sequence matters. (1) is inert on its own — an application nobody uses — so it
-can land and be reviewed by itself. (2) is the part that hands a capability to a
-running pod and is the part to review hardest.
-
-**Where it is created, and there is only one answer.** An earlier version of
-this file listed three "options" — boot seeding, IAM's internal reconcile, the
-public API — which was a mistake: those are three MECHANISMS, and the question is
-who OWNS the act. The owner already exists.
-
-`apps/account/iam.go` holds an `iamClient` that creates an org's IAM objects
-with cloud's own machine identity (`c.basicAuth()`), and already calls
-`POST /v1/iam/add-organization`. `<org>-agent` is created there, beside
-`createOrganization`, by that client. One place, one authority, nothing new.
-
-There is no bootstrap problem: the credential doing the provisioning is cloud's
-own, it already exists, and creating IAM objects for an org is precisely what it
-is already for. The "provisioning a credential needs a credential" worry came
-from imagining a caller that does not exist instead of finding the one that does.
-
-`iam/pkg/store` stays read-only and is not the path — it is how cloud READS IAM
-in-process. Creation is an act, and acts go through the client that holds the
-authority for them.
-
-`apps/iam` and `apps/sandbox` are separate PROCESSES, so a sandbox never reads
-this itself; it asks over the plane. Noted in advance because that mistake has
-been made five times in this codebase and caught five times afterwards.
+**The far end.** `git.hanzo.ai` accepts the same token as a git credential
+(hanzoai/git `services/auth/iam.go`), verified against this deployment's own OIDC
+login source and resolved to an account only through the link that sign-in
+already wrote — so a subject that never signed in to the forge resolves to
+nobody, and nothing is created from a credential. Its scope there is
+`write:repository`: a credential that exists so a checkout works administers
+nothing.
 
 ## The screen, and the three things that were not obvious
 

@@ -356,7 +356,12 @@ func create(s *Service, c *zip.Ctx) error {
 	// org, attested by the identity middleware. It is read here and nowhere else in
 	// this package: what it decides is which image a `dev` sandbox runs (imageFor),
 	// and a second caller of it would be a second answer to drift from.
-	m, err := Lease(s, c.Context(), o, principal.Ledger(c), principal.IsSuperAdmin(c), Spec{
+	// cloud.CallerBearer is the credential this request authenticated with, relayed
+	// UNCHANGED — the same one the identity middleware validated the principal
+	// with, and the subject of the exchange that gives the pod its owner's identity.
+	// It answers "" for an opaque API key, which no OIDC target could validate, so
+	// those leases start with no session rather than with a key in a shell.
+	m, err := Lease(s, c.Context(), o, principal.Ledger(c), principal.IsSuperAdmin(c), cloud.CallerBearer(c), Spec{
 		Class: body.Class, Project: body.Project, Image: body.Image,
 		Runtime: body.Runtime, TTLSec: body.TTLSec})
 	if err != nil {

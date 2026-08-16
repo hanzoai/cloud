@@ -10,6 +10,11 @@
       "url": "https://api.hanzo.ai"
     }
   ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
   "tags": [
     {
       "name": "compat"
@@ -78,6 +83,64 @@
         "tags": [
           "iam"
         ]
+      },
+      "put": {
+        "operationId": "put_iam_account",
+        "summary": "Saves the calling person's own profile — the name they are shown by, their picture, a line about themselves and a link.",
+        "description": "Saves the calling person's own profile — the name they are\nshown by, their picture, a line about themselves and a link.\n\nOnly their own: the request names nobody, so it cannot reach another account.\nSend only what you are changing; a field you leave out keeps the value it had,\nand a field you send empty is cleared.\n\nA picture is an https link or an inline image up to 96 KiB, the same value an\norganization's mark is (schema.AvatarRef) — one rule for how a subject appears,\nwhether the subject is a person or an organization.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "Cookie",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.accountBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          }
+        }
       }
     },
     "/v1/iam/add-application": {
@@ -779,6 +842,96 @@
               }
             },
             "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/iam/assume": {
+      "post": {
+        "operationId": "post_iam_assume",
+        "summary": "Steps a platform operator into an organization: it returns their own access token re-scoped to that tenant, so they see what the tenant sees.",
+        "description": "Steps a platform operator into an organization: it returns their\nown access token re-scoped to that tenant, so they see what the tenant sees.\n\nThe token still names the operator — stepping in is not becoming somebody\nelse — and records the organization it was scoped to, so everything done with\nit is attributed to the person who did it. Only a platform operator may, and\nthe attempt is recorded whether or not it succeeds.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.assumeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "not found"
           }
         }
       }
@@ -2473,6 +2626,38 @@
         }
       }
     },
+    "/v1/iam/organizations/avatar": {
+      "post": {
+        "operationId": "setOrganizationAvatar",
+        "summary": "Changes how an organization appears across Hanzo: the square mark beside its name, as an uploaded image or as a single emoji.",
+        "description": "Changes how an organization appears across Hanzo: the square mark\nbeside its name, as an uploaded image or as a single emoji. Sending an image\nclears the emoji and sending an emoji clears the image — an organization has\none mark, not a preference order — and sending neither clears both, which is\nhow it goes back to being drawn as its initial.\n\nAn image is an https link or the bytes inline as a data URL, up to 96 KiB.\nAnyone who administers the organization may set this; it is not reserved to\nthe platform.\n\nIt writes the two fields onto the stored row and touches nothing else, which\nupdate cannot do: update replaces the whole record, and a record read back\nfirst arrives masked, so a read-modify-write through it would persist the mask\nover the organization's own credential settings.",
+        "tags": [
+          "iam"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.SetAvatarInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Organization"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/iam/organizations/delete": {
       "post": {
         "operationId": "deleteOrganization",
@@ -2537,6 +2722,62 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/iam.Organization"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/iam/organizations/search": {
+      "get": {
+        "operationId": "searchOrganizations",
+        "summary": "Returns the organizations you can act in, the ones you belong to first and the rest after, newest first, narrowed by an optional query against the name or the display name.",
+        "description": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.SearchOrganizationsOutput"
                 }
               }
             },
@@ -3155,6 +3396,76 @@
         "tags": [
           "iam"
         ]
+      }
+    },
+    "/v1/iam/release": {
+      "post": {
+        "operationId": "post_iam_release",
+        "summary": "Steps a platform operator back out: it returns their own access token with no organization assumed, which is the credential they had before they stepped in.",
+        "description": "Steps a platform operator back out: it returns their own access\ntoken with no organization assumed, which is the credential they had before\nthey stepped in. Recorded like the step in.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.assumeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "bad request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Answer"
+                }
+              }
+            },
+            "description": "unauthorized"
+          }
+        }
       }
     },
     "/v1/iam/resolve-key": {
@@ -4494,14 +4805,14 @@
     "/v1/iam/webauthn-credentials": {
       "get": {
         "operationId": "listWebauthnCredentials",
-        "summary": "Returns the passkeys and security keys registered in your organization, newest first — which device each belongs to and when it was last used.",
-        "description": "Returns the passkeys and security keys registered in\nyour organization, newest first — which device each belongs to and when it was\nlast used.",
+        "summary": "Returns the passkeys and security keys registered to one person, newest first — which device each lives on and when it was registered.",
+        "description": "Returns the passkeys and security keys registered to\none person, newest first — which device each lives on and when it was\nregistered.\n\nYours by default. Name somebody else and you get them only if you already\nadminister their account, which is the same authority that governs reading\ntheir user record — so this list can never show more people than the surface\nbeside it already does.\n\nThere is no organization-wide list. It used to scope to the ORG, which handed\nan org admin every member's credential rows in one answer, and a SuperAdmin\nevery tenant's; a plain member meanwhile could not read even their own,\nbecause an unnamed target fails the Guard's tenant rule. One scope fixes both\nhalves: the answer is a person's, and the caller is the person unless they say\notherwise and may.",
         "tags": [
           "iam"
         ],
         "parameters": [
           {
-            "name": "owner",
+            "name": "user",
             "in": "query",
             "required": false,
             "schema": {
@@ -4647,6 +4958,46 @@
             "description": "ok"
           }
         }
+      }
+    },
+    "/v1/iam/webauthn/signin/begin": {
+      "get": {
+        "operationId": "get_iam_webauthn_signin_begin",
+        "summary": "Starts a passkey sign-in: it returns the challenge the person's authenticator signs.",
+        "description": "Starts a passkey sign-in: it returns the challenge the person's\nauthenticator signs.\n\nThe account is named in the query, and the challenge is bound to it, so what may\nanswer is decided here — by the server, from the row — and the finish checks the\nanswer against that decision rather than recomputing it.",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/v1/iam/webauthn/signin/finish": {
+      "post": {
+        "operationId": "post_iam_webauthn_signin_finish",
+        "summary": "Verifies the signed challenge and signs the person in.",
+        "description": "Verifies the signed challenge and signs the person in.\n\nIt answers exactly as a password sign-in does — the same envelope, through the\nsame grant — so nothing downstream branches on how somebody arrived.",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/v1/iam/webauthn/signup/begin": {
+      "get": {
+        "operationId": "get_iam_webauthn_signup_begin",
+        "summary": "Starts enrolling a passkey for the signed-in person: it returns the options their browser hands to the authenticator.",
+        "description": "Starts enrolling a passkey for the signed-in person: it returns the\noptions their browser hands to the authenticator.\n\nPasskeys already on the account are EXCLUDED, so a second enrollment on a device\nthat already holds one is refused by the authenticator itself rather than\nsilently producing a duplicate the person cannot tell apart.",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/v1/iam/webauthn/signup/finish": {
+      "post": {
+        "operationId": "post_iam_webauthn_signup_finish",
+        "summary": "Verifies the newly created passkey and stores it, so the person can sign in with their device from then on.",
+        "description": "Verifies the newly created passkey and stores it, so the person\ncan sign in with their device from then on.",
+        "tags": [
+          "iam"
+        ]
       }
     },
     "/v1/iam/whoami": {
@@ -5428,6 +5779,9 @@
           "accountMenu": {
             "type": "string"
           },
+          "avatar": {
+            "type": "string"
+          },
           "balanceCredit": {
             "type": "number"
           },
@@ -5466,6 +5820,9 @@
             "type": "boolean"
           },
           "displayName": {
+            "type": "string"
+          },
+          "emoji": {
             "type": "string"
           },
           "enableSoftDeletion": {
@@ -6060,6 +6417,10 @@
           "accountMenu": {
             "type": "string"
           },
+          "avatar": {
+            "description": "How the organization appears across Hanzo — the square mark beside its\nname — as an image or as one emoji, never both. It is the pair a person\ncarries (User.Avatar) under the same names, resolved the same way, so a\nscreen draws a subject without asking which kind of subject it has. Both\nhalves live on the row: a mark that appears everywhere cannot be kept on\none device. Written through schema.MarkOf; Logo and LogoDark above are a\ndifferent thing, the wordmark a login screen draws.",
+            "type": "string"
+          },
           "balanceCredit": {
             "type": "number"
           },
@@ -6098,6 +6459,9 @@
             "type": "boolean"
           },
           "displayName": {
+            "type": "string"
+          },
+          "emoji": {
             "type": "string"
           },
           "enableSoftDeletion": {
@@ -6774,6 +7138,20 @@
         },
         "type": "object"
       },
+      "iam.SearchOrganizationsOutput": {
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "organizations": {
+            "items": {
+              "$ref": "#/components/schemas/iam.Organization"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "iam.Session": {
         "properties": {
           "application": {
@@ -6832,6 +7210,23 @@
           "name",
           "application"
         ],
+        "type": "object"
+      },
+      "iam.SetAvatarInput": {
+        "properties": {
+          "avatar": {
+            "type": "string"
+          },
+          "emoji": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "iam.SigninItem": {
@@ -7059,6 +7454,9 @@
           "accountMenu": {
             "type": "string"
           },
+          "avatar": {
+            "type": "string"
+          },
           "balanceCredit": {
             "type": "number"
           },
@@ -7097,6 +7495,9 @@
             "type": "boolean"
           },
           "displayName": {
+            "type": "string"
+          },
+          "emoji": {
             "type": "string"
           },
           "enableSoftDeletion": {
@@ -7922,6 +8323,10 @@
           "attachment": {
             "type": "string"
           },
+          "attestationFormat": {
+            "description": "AttestationFormat is the statement format the authenticator attested in\n(\"packed\", \"apple\", \"none\", …), which is a DIFFERENT value from the\nattestation type above. The library reads it back when resolving the FIDO\nAppID extension, so a row that dropped it would round-trip a credential the\nverifier no longer recognises as the one it stored.",
+            "type": "string"
+          },
           "attestationType": {
             "type": "string"
           },
@@ -8033,6 +8438,31 @@
           },
           "updatedAt": {
             "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "iam.accountBody": {
+        "properties": {
+          "avatar": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "homepage": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "iam.assumeBody": {
+        "properties": {
+          "org": {
             "type": "string"
           }
         },
@@ -9453,6 +9883,13 @@
           }
         },
         "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
       }
     }
   }

@@ -20,6 +20,27 @@ func init() {
 			"benchmarkCatalog.total": "Total is how many rows Data holds.",
 		},
 	})
+	zip.Describe("GET /v1/benchmark/claims", zip.Doc{
+		Description: "Lists the effective published claims: what the leaderboard will use for\neach (benchmark, model) after the seed, the import and any stored correction\nare layered. It answers the operator's question — what does this arena\ncurrently believe someone else reported, and did we ship that or fix it.\n\nEffective values only. The history of a key lives in the append-only file and\nis not what this op is for; a list that returned every superseded row would\nmake the common question the hard one.",
+		Fields: map[string]string{
+			"ClaimRow.at":        "At is when a stored row was recorded. Zero for a seed row.",
+			"ClaimRow.benchmark": "Benchmark is the canonical test id the claim is about, from /catalog.",
+			"ClaimRow.by":        "By is who recorded it, when the caller said.",
+			"ClaimRow.model":     "Model is the system the score is claimed for.",
+			"ClaimRow.origin":    "Origin is \"seed\" for a compiled row and \"stored\" for one written through\nthis surface. It is the difference between what we shipped and what an\noperator has since corrected.",
+			"ClaimRow.protocol":  "Protocol records HOW it was scored — provider-reported, agentic,\nthird-party-leaderboard — so a provider card is never read as a measurement.",
+			"ClaimRow.provider":  "Provider is who the claim belongs to — the lab or leaderboard whose number\nthis is.",
+			"ClaimRow.score":     "Score is the reported aggregate, as a percentage.",
+			"ClaimRow.source":    "Source is the citation the row was read from.",
+			"claimsIn.Benchmark": "Benchmark filters to one benchmark id. Empty returns every benchmark.",
+			"claimsIn.Model":     "Model filters to one model. Empty returns every model.",
+			"claimsIn.Protocol":  "Protocol filters by HOW a claim was scored, so provider cards can be read\napart from third parties running their own harness.",
+			"claimsIn.Provider":  "Provider filters to one lab or leaderboard — the way to read what a single\nsource claims across every model it covers.",
+			"claimsIn.Source":    "Source filters to one citation, which is the finest grain there is: a\nsource is what makes two claims about one model independent rather than a\nrestatement of each other.",
+			"claimsOut.data":     "Data is one row per (benchmark, model, SOURCE) — every independent claim,\nnot one per model. Effective values only: the row that wins after layering\nfor each source, never the superseded readings behind it.",
+			"claimsOut.total":    "Total is how many rows Data holds.",
+		},
+	})
 	zip.Describe("GET /v1/benchmark/compare", zip.Doc{
 		Description: "Is the ONLY valid arm-vs-arm test: it pairs the two models on the items\nBOTH completed, and answers rescue and damage counts with an exact-McNemar p.\n\nPairing is what prevents the subset artifact — comparing one model's easy subset\nagainst another's full run — so n_common, not either arm's own coverage, is the\nnumber to read this by.\n\nBoth a and b are required. The benchmark defaults to gpqa_diamond.",
 		Fields: map[string]string{
@@ -38,15 +59,40 @@ func init() {
 			"pairing.rescue_b_over_a": "RescueBOverA is how many items B got right and A got wrong.",
 		},
 	})
+	zip.Describe("GET /v1/benchmark/history", zip.Doc{
+		Description: "Returns each model's measured score per run over time, oldest first,\nwith the change between runs.\n\nThis is the counterweight to a leaderboard: the board shows the latest run\nbecause that is what \"how good is it\" means, and a single latest number cannot\ndistinguish a model that has always been strong from one that just improved,\nor from one that regressed after a provider changed something. Both matter for\nrouting, and only one of them is visible on a board.\n\nRuns with no id — attempts recorded before runs existed — group under the\nempty run, which is honestly what they are: one undated measurement.",
+		Fields: map[string]string{
+			"ModelHistory.model":   "Model is the system these runs measured.",
+			"ModelHistory.points":  "Points is every run, oldest first.",
+			"ModelHistory.trend":   "Trend is the change from the first run to the last, absent when there has\nonly been one. It answers the question a list of points makes you compute.",
+			"RunPoint.at":          "At is when the run was recorded.",
+			"RunPoint.delta":       "Delta is the change in score from the previous run for this model, absent\non the first. It is the number the whole surface exists to make visible.",
+			"RunPoint.n":           "N is how many items the run covered. Two runs are only comparable at the\nsame n, which is why it travels with every point rather than being assumed.",
+			"RunPoint.run":         "Run is the measurement id these attempts were recorded under.",
+			"RunPoint.score":       "Score is accuracy over the items this run covered, as a percentage.",
+			"historyIn.Benchmark":  "Benchmark is the catalog id to read, defaulting to gpqa_diamond.",
+			"historyIn.Model":      "Model filters to one model. Empty returns every model measured.",
+			"historyOut.benchmark": "Benchmark is the catalog id these histories are about.",
+			"historyOut.data":      "Data is one entry per model, ordered by model name.",
+			"historyOut.total":     "Total is how many models Data holds.",
+		},
+	})
 	zip.Describe("GET /v1/benchmark/leaderboard", zip.Doc{
 		Description: "Answers one row per model for the benchmark named — what our own\nharness measured, beside what the vendor claims, and the gap between them.\n\nThe gap is the point of the arena; provider-reported claims have run materially\nhot against one standardized harness.\n\nThe two planes are NEVER blended, and that is the rule to read the rows by: a\nmodel we have measured but no vendor has claimed for shows published null, a\nmodel with only a claim shows measured null, and gap exists only where both do.\n\nn is coverage and is not decoration: two measured numbers taken over different\nitem counts are not comparable, so read the row's n before reading its accuracy.",
 		Fields: map[string]string{
+			"LeaderRow.ciHigh":         "CIHigh is the upper bound of that interval. Wilson rather than the normal\napproximation because the normal one produces bounds past 100 exactly where\nbenchmark scores live — at 194/198 that is the top of the board, not a\ncorner case.",
+			"LeaderRow.ciLow":          "CILow and CIHigh are the 95% Wilson interval on Measured, in percent. They\nare what makes the score comparable: at n=198 a 98% carries roughly ±2\npoints, so most differences at the top of a board are not distinguishable\nand a bare number implies a precision it does not have. Absent when there\nis no measurement.",
+			"LeaderRow.claims":         "Claims is how many independent claims exist for this model on this\nbenchmark. More than one means several sources reported it.",
 			"LeaderRow.gap":            "published − measured (the arena signal)",
+			"LeaderRow.mean":           "Mean is the unweighted average of every claim, which answers a different\nquestion from Published: what the field says on average, rather than what\nthe vendor says about itself. With one claim the two are equal.",
 			"LeaderRow.measured":       "hanzo-measured accuracy % (nil if unrun)",
+			"LeaderRow.measuredAt":     "MeasuredAt is when the run behind Measured was recorded.",
 			"LeaderRow.model":          "the model this row scores",
 			"LeaderRow.n":              "coverage — NEVER compare across different n",
 			"LeaderRow.protocol":       "how the vendor scored their claim: single-attempt, pass@k or agentic",
 			"LeaderRow.published":      "provider-claimed % (nil if none)",
+			"LeaderRow.run":            "Run names the measurement Measured came from, and MeasuredAt is when it\nran. A score with no date is not a fact about a model, it is a fact about\na model on a day — and models change, so the date is what makes the number\ncheckable rather than merely quoted.",
+			"LeaderRow.spread":         "Spread is the distance between the highest and lowest of them, nil when\nthere is only one. It is the disagreement AMONG sources, which a single\nPublished number cannot show — signal in the same way the\npublished-minus-measured gap is.",
 			"benchmarkQuery.benchmark": "Benchmark is the catalog id to read, defaulting to gpqa_diamond.",
 			"leaderboard.benchmark":    "Benchmark is the catalog id these rows are about.",
 			"leaderboard.rows":         "Rows is one per model, ordered by measured accuracy descending.",
@@ -62,6 +108,21 @@ func init() {
 			"Preset.panel":    "fan-out width (>=1)",
 			"Preset.rank":     "escalation order over arms",
 			"presetList.data": "Data is the blends available to compose from.",
+		},
+	})
+	zip.Describe("POST /v1/benchmark/claims", zip.Doc{
+		Description: "Records published claims: one to correct a number, many to import a\nleaderboard. Every row must carry a Source, because a claim without its\ncitation is a number nobody can check — and an unattributed number in the\npublished plane is indistinguishable from a measurement, which is the one\nconfusion this whole surface is built to prevent.\n\nWrites are append-only, so this never destroys the value it replaces. A\nvendor restating a score leaves both rows on disk, which is how the restating\nitself becomes visible.",
+		Fields: map[string]string{
+			"publishedClaim.benchmark": "Benchmark is the canonical test id the claim is about, from /catalog.",
+			"publishedClaim.model":     "Model is the system the score is claimed for.",
+			"publishedClaim.protocol":  "Protocol records HOW it was scored — provider-reported, agentic,\nthird-party-leaderboard — because a provider card and a third party running\nits own harness are different kinds of number and must not be blended.",
+			"publishedClaim.provider":  "Provider is who the claim belongs to — the lab or leaderboard whose number\nthis is. It joins a claim to the attempts measured for that same model.",
+			"publishedClaim.score":     "Score is the reported aggregate, as a percentage.",
+			"publishedClaim.source":    "Source is the citation the row was read from. A claim without one is a\nnumber nobody can check, so every write requires it.",
+			"putClaimsIn.by":           "By is who is recording them — a person, or the importer's name.",
+			"putClaimsIn.data":         "Data is the claims to record. One row is a correction; many is an import.\nThere is no separate bulk endpoint because there is no separate operation:\nimporting a leaderboard and fixing one number are the same write.",
+			"putClaimsOut.recorded":    "Recorded is how many rows were written.",
+			"putClaimsOut.rejected":    "Rejected names the rows that were not, and why.",
 		},
 	})
 	zip.Describe("POST /v1/benchmark/presets", zip.Doc{

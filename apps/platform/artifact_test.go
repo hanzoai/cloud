@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -43,6 +45,101 @@ func TestRunnerArtifact_LaunchesAndIndexes(t *testing.T) {
 	}
 }
 
+// THE RECIPE THE RELEASE SENDS, checked here rather than by a red release.
+//
+// .hanzo/workflows/cicd.yml's `plugins` job POSTs exactly this to publish the
+// plugin set for a release. Every field in it is one this door VALIDATES — the
+// git host, the flat tag segment, the recipe's own shape — so a typo there is a
+// 400 nobody sees until a tag build, and the artifacts for that release simply
+// never exist. Keeping the body here makes it a compile-and-test-time fact.
+//
+// It also pins the two things a host depends on: the publish layout is keyed by
+// the TAG (so `CLOUD_PLUGINS` for v1.801.533 names that release and not the
+// commit), and the forge — not the mirror — is an accepted git host, which
+// matters because the tag a release claims exists only on the forge and the
+// build Job clones with no credential.
+func TestRunnerArtifact_TheReleaseRecipeIsAccepted(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
+
+	// THE FORGE MUST BE A TRUSTED BUILD SOURCE, AND IT IS NOT TRUSTED BY DEFAULT.
+	// hostAllowed trusts `selfGitHost` — brand.Apex(deps.Domain), set at Mount —
+	// plus the four public providers. Measured: brand.Apex("") is "", CLOUD_DOMAIN
+	// is set NOWHERE in the cloud deployment, and neither GitHub mirror carries a
+	// release tag. So on a deployment that names neither its domain nor
+	// CLOUD_PLATFORM_GIT_HOSTS, this recipe is refused 400 and the plugin set for
+	// every release silently does not exist.
+	//
+	// Setting it here is what Mount does on a deployment that names its domain;
+	// the sibling below pins the refusal, so the requirement cannot be forgotten
+	// by anyone reading only the happy path.
+	prev := selfGitHost
+	selfGitHost = "hanzo.ai"
+	t.Cleanup(func() { selfGitHost = prev })
+
+	app := runnerApp(t)
+	code, body := postRunner(t, app, testBuildTok, map[string]any{
+		"repo":   "https://git.hanzo.ai/hanzoai/cloud",
+		"sha":    "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
+		"tag":    "v1.801.533",
+		"bucket": "plugins",
+		"binaries": []any{
+			map[string]any{"name": "plugins", "run": "make -f mk/fleet.mk dist", "out": "dist/*"},
+		},
+	})
+	if code != http.StatusAccepted {
+		t.Fatalf("the release recipe was refused: %d (%s)", code, body)
+	}
+	var resp runnerBuildResp
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	want := "https://s3.hanzo.ai/plugins/hanzoai/cloud/v1.801.533/binaries.json"
+	if resp.Index != want {
+		t.Fatalf("index = %q, want %q — this is the URL CLOUD_PLUGINS is pointed at", resp.Index, want)
+	}
+}
+
+// The other half, so the deployment requirement above is a fact and not a
+// comment: with no domain and no CLOUD_PLATFORM_GIT_HOSTS, the release recipe is
+// REFUSED. This is the production configuration as measured, and it is why the
+// `plugins` job carries the env var it does. The day the forge is trusted by
+// some other derivation, this test goes red and says so.
+func TestRunnerArtifact_ForgeIsRefusedUntilTheDeploymentTrustsIt(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
+	prev := selfGitHost
+	selfGitHost = ""
+	t.Cleanup(func() { selfGitHost = prev })
+
+	app := runnerApp(t)
+	code, body := postRunner(t, app, testBuildTok, map[string]any{
+		"repo": "https://git.hanzo.ai/hanzoai/cloud",
+		"sha":  "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
+		"tag":  "v1.801.533", "bucket": "plugins",
+		"binaries": []any{
+			map[string]any{"name": "plugins", "run": "make -f mk/fleet.mk dist", "out": "dist/*"},
+		},
+	})
+	if code != http.StatusBadRequest {
+		t.Fatalf("want 400 for an untrusted forge, got %d (%s)", code, body)
+	}
+	if !strings.Contains(string(body), "not an allowed git provider") {
+		t.Fatalf("refusal should name the reason, got %s", body)
+	}
+	// github.com stays trusted with no configuration at all, which is what makes
+	// this a MISSING TRUST rather than a broken door.
+	code, body = postRunner(t, app, testBuildTok, map[string]any{
+		"repo": "https://github.com/hanzoai/cloud",
+		"sha":  "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
+		"tag":  "v1.801.533", "bucket": "plugins",
+		"binaries": []any{
+			map[string]any{"name": "plugins", "run": "make -f mk/fleet.mk dist", "out": "dist/*"},
+		},
+	})
+	if code != http.StatusAccepted {
+		t.Fatalf("github.com should need no configuration, got %d (%s)", code, body)
+	}
+}
+
 // One initContainer per recipe entry, each in ITS OWN toolchain image, and the
 // publisher — which is the only container that sees the object-store credential.
 func TestArtifactJobSpec_ToolchainPerEntryAndCredentialOnlyInPublisher(t *testing.T) {
@@ -62,17 +159,52 @@ func TestArtifactJobSpec_ToolchainPerEntryAndCredentialOnlyInPublisher(t *testin
 		t.Fatalf("pod spec: %v", err)
 	}
 	inits, _ := pod["initContainers"].([]any)
-	if len(inits) != 2 {
-		t.Fatalf("initContainers = %d, want 2", len(inits))
+	if len(inits) != 3 {
+		t.Fatalf("initContainers = %d, want 3 (prepare + one per recipe entry)", len(inits))
 	}
+
+	// [0] PREPARE is the ONE credentialed container: a constant image running a
+	// constant script, holding the only token in the Job. Everything the recipe
+	// needs from a credentialed place is fetched here so the recipe needs none.
+	prep := inits[0].(map[string]any)
+	if prep["name"] != "prepare" || prep["image"] != defaultToolchainImage {
+		t.Fatalf("initContainer[0] = %v/%v, want prepare on the constant toolchain", prep["name"], prep["image"])
+	}
+	if got := prep["command"].([]any)[2]; got != artifactPrepareScript {
+		t.Error("prepare must run the constant script, nothing recipe-supplied")
+	}
+	var secrets []string
+	for _, e := range prep["env"].([]any) {
+		if vf, ok := e.(map[string]any)["valueFrom"].(map[string]any); ok {
+			secrets = append(secrets, vf["secretKeyRef"].(map[string]any)["name"].(string))
+		}
+	}
+	if !slices.Equal(secrets, []string{forgeTokenSecret}) {
+		t.Errorf("prepare secrets = %v, want exactly [%s]", secrets, forgeTokenSecret)
+	}
+	// The token stays in the ENVIRONMENT. Written to a .gitconfig it would land
+	// on /w, which every recipe container reads.
+	if !strings.Contains(artifactPrepareScript, "GIT_CONFIG_COUNT") ||
+		strings.Contains(artifactPrepareScript, "git config --global") {
+		t.Error("prepare must carry the credential in the environment, not a .gitconfig")
+	}
+	// Both halves, one mechanism: the clone is authenticated AND module fetches
+	// are pointed at the forge.
+	for _, want := range []string{".extraheader", "insteadOf", "go mod download"} {
+		if !strings.Contains(artifactPrepareScript, want) {
+			t.Errorf("prepare must do %q — it is the only credentialed step", want)
+		}
+	}
+
+	// [1..] run the RECIPE, and carry no secret at all.
 	for i, want := range []string{defaultToolchainImage, "docker.io/library/node:22-bookworm"} {
-		c := inits[i].(map[string]any)
+		c := inits[i+1].(map[string]any)
 		if c["image"] != want {
-			t.Errorf("initContainer[%d] image = %v, want %s", i, c["image"], want)
+			t.Errorf("initContainer[%d] image = %v, want %s", i+1, c["image"], want)
 		}
 		for _, e := range c["env"].([]any) {
 			if _, secret := e.(map[string]any)["valueFrom"]; secret {
-				t.Errorf("initContainer[%d] (runs the recipe) must carry NO secret env: %v", i, e)
+				t.Errorf("initContainer[%d] (runs the recipe) must carry NO secret env: %v", i+1, e)
 			}
 		}
 	}
@@ -211,6 +343,62 @@ func git(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// A `run:` recipe that emits <name>-<os>-<arch> is indexed BY THAT TRIPLE, so
+// one recipe entry can publish a whole plugin set and a host resolving
+// (name, os, arch) finds each one. Recording the recipe's own name and "any"
+// instead — which is what this lane did — puts every file under one name and
+// resolves nothing, which is the whole reason cloud's plugin lane could not
+// publish through this door. The sibling test below pins the other half: a file
+// with no platform in its name still takes the recipe's name and "any".
+//
+// Both scripts run for real, so the meta.txt hand-off is exercised rather than
+// asserted.
+func TestArtifactScripts_IndexPerFileWhenTheNameCarriesThePlatform(t *testing.T) {
+	if _, err := exec.LookPath("sha256sum"); err != nil {
+		t.Skip("no sha256sum")
+	}
+	src := t.TempDir()
+	write(t, filepath.Join(src, "pack.sh"), "#!/bin/sh\nmkdir -p dist\n"+
+		"for f in o11y-linux-amd64 o11y-linux-arm64 iam-darwin-arm64 pkg-1.2.3.whl\n"+
+		"do echo payload > \"dist/$f\"; done\n")
+	git(t, src, "init", "-q")
+	git(t, src, "add", "-A")
+	git(t, src, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "src")
+
+	idx := runArtifactScripts(t, src, "plugins", "sh pack.sh", "dist/*")
+
+	got := map[string][2]string{}
+	for _, b := range idx.Binaries {
+		got[b.Name] = [2]string{b.OS, b.Arch}
+		if b.SHA256 == "" {
+			t.Errorf("%s: no digest — release.go DROPS an entry without one", b.Name)
+		}
+	}
+	// o11y appears TWICE, once per platform, under its own name — the property
+	// a single "plugins/any/any" entry cannot express.
+	var o11y []string
+	for _, b := range idx.Binaries {
+		if b.Name == "o11y" {
+			o11y = append(o11y, b.OS+"/"+b.Arch)
+		}
+	}
+	sort.Strings(o11y)
+	if want := []string{"linux/amd64", "linux/arm64"}; !slices.Equal(o11y, want) {
+		t.Errorf("o11y = %v, want %v", o11y, want)
+	}
+	if got["iam"] != [2]string{"darwin", "arm64"} {
+		t.Errorf("iam = %v, want darwin/arm64", got["iam"])
+	}
+	// The wheel is not per-platform, so it keeps the recipe's name and "any" —
+	// naming a platform it does not have would be the same lie in reverse.
+	if got["plugins"] != [2]string{"any", "any"} {
+		t.Errorf("pkg-1.2.3.whl = %v under name plugins, want any/any", got["plugins"])
+	}
+	if len(idx.Binaries) != 4 {
+		t.Errorf("index carries %d entries, want 4", len(idx.Binaries))
+	}
+}
+
 // The published index is the ci lane's schema, field for field: `name` is the
 // RECIPE entry's name (what a host asks for), not the file, which the url
 // already carries. Proven by running the two scripts back to back over a fake
@@ -225,40 +413,9 @@ func TestArtifactScripts_IndexNamesTheRecipeEntry(t *testing.T) {
 	git(t, src, "add", "-A")
 	git(t, src, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "src")
 
-	w := t.TempDir()
-	build := exec.Command("/bin/sh", "-c", strings.ReplaceAll(artifactBuildScript, "/w/", w+"/"))
-	build.Env = append(os.Environ(), "NAME=hanzo-sdk", "MAIN=", "RUN=sh pack.sh", "OUT=*.tgz",
-		"LDFLAGS=", "PLATFORMS=", "REPO_URL="+src, "REF=HEAD", "HOME="+w)
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, out)
-	}
-	// The publish half with `put` stubbed out and the readback satisfied: what is
-	// under test is the index it composes, not curl.
-	script := strings.ReplaceAll(artifactPublishScript, "/w/", w+"/")
-	script = strings.Replace(script, "put() {", "put() { :; }\nunused() {", 1)
-	script = strings.Replace(script, `code="$(curl -s -o /dev/null -w '%{http_code}' "$PUT_BASE/binaries.json")"`, `code=200`, 1)
-	pub := exec.Command("/bin/sh", "-c", script)
-	pub.Env = append(os.Environ(), "BASE=https://s3.hanzo.ai/plugins/hanzoai/demo/v1",
-		"PUT_BASE=http://s3.hanzo.svc:9000/plugins/hanzoai/demo/v1",
-		"REPO=hanzoai/demo", "TAG=v1", "S3_REGION=us-east-1",
-		"S3_ADMIN_ACCESS_KEY=k", "S3_ADMIN_SECRET_KEY=s")
-	out, err := pub.CombinedOutput()
-	if err != nil {
-		t.Fatalf("publish: %v\n%s", err, out)
-	}
-	var idx struct {
-		Repo, Tag string
-		Binaries  []struct{ Name, OS, Arch, URL, SHA256 string }
-	}
-	raw, rerr := os.ReadFile(filepath.Join(w, "dist", "binaries.json"))
-	if rerr != nil {
-		t.Fatalf("no index written: %v\n%s", rerr, out)
-	}
-	if err := json.Unmarshal(raw, &idx); err != nil {
-		t.Fatalf("index is not JSON: %v\n%s", err, raw)
-	}
+	idx := runArtifactScripts(t, src, "hanzo-sdk", "sh pack.sh", "*.tgz")
 	if len(idx.Binaries) != 1 {
-		t.Fatalf("index = %s", raw)
+		t.Fatalf("index = %+v", idx.Binaries)
 	}
 	b := idx.Binaries[0]
 	if b.Name != "hanzo-sdk" {
@@ -268,7 +425,107 @@ func TestArtifactScripts_IndexNamesTheRecipeEntry(t *testing.T) {
 		t.Errorf("url = %q — the FILE belongs in the url, not in name", b.URL)
 	}
 	if b.SHA256 == "" || idx.Repo != "hanzoai/demo" || idx.Tag != "v1" {
-		t.Errorf("index = %s", raw)
+		t.Errorf("index = %+v", idx)
+	}
+}
+
+type artifactIndex struct {
+	Repo, Tag string
+	Binaries  []struct{ Name, OS, Arch, URL, SHA256 string }
+}
+
+// runArtifactScripts runs the build half and then the publish half over one
+// workspace, so the meta.txt hand-off between them is the thing under test
+// rather than something asserted about. `put` is stubbed and the readback
+// satisfied: what is being read is the index it composes, not curl.
+func runArtifactScripts(t *testing.T, src, name, run, out string) artifactIndex {
+	t.Helper()
+	w := t.TempDir()
+	build := exec.Command("/bin/sh", "-c", strings.ReplaceAll(artifactBuildScript, "/w/", w+"/"))
+	build.Env = append(os.Environ(), "NAME="+name, "MAIN=", "RUN="+run, "OUT="+out,
+		"LDFLAGS=", "PLATFORMS=", "REPO_URL="+src, "REF=HEAD", "HOME="+w)
+	if o, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, o)
+	}
+	script := strings.ReplaceAll(artifactPublishScript, "/w/", w+"/")
+	script = strings.Replace(script, "put() {", "put() { :; }\nunused() {", 1)
+	script = strings.Replace(script, `code="$(curl -s -o /dev/null -w '%{http_code}' "$PUT_BASE/binaries.json")"`, `code=200`, 1)
+	pub := exec.Command("/bin/sh", "-c", script)
+	pub.Env = append(os.Environ(), "BASE=https://s3.hanzo.ai/plugins/hanzoai/demo/v1",
+		"PUT_BASE=http://s3.hanzo.svc:9000/plugins/hanzoai/demo/v1",
+		"REPO=hanzoai/demo", "TAG=v1", "S3_REGION=us-east-1",
+		"S3_ADMIN_ACCESS_KEY=k", "S3_ADMIN_SECRET_KEY=s")
+	o, err := pub.CombinedOutput()
+	if err != nil {
+		t.Fatalf("publish: %v\n%s", err, o)
+	}
+	raw, rerr := os.ReadFile(filepath.Join(w, "dist", "binaries.json"))
+	if rerr != nil {
+		t.Fatalf("no index written: %v\n%s", rerr, o)
+	}
+	var idx artifactIndex
+	if err := json.Unmarshal(raw, &idx); err != nil {
+		t.Fatalf("index is not JSON: %v\n%s", err, raw)
 	}
 	t.Logf("index: %s", raw)
+	return idx
+}
+
+// An UNDECLARED recipe field is OMITTED, never sent empty.
+//
+// This is the invariant behind three separate outages, each of which reported
+// success: an empty PLATFORMS defeated a makefile's conditional default ("0
+// binaries for 0 platforms"), and the index recorded a triple it did not have.
+// An unset variable lets the recipe's own default stand; an empty one overrides
+// it with nothing, which is the one answer that is never true.
+//
+// The script reads every optional field as ${VAR:-}, so absence is legal under
+// `set -u` — that pairing is what makes omission safe, and both halves are
+// asserted here so neither can be undone alone.
+func TestRecipeEnv_OmitsWhatTheRecipeDidNotDeclare(t *testing.T) {
+	names := func(b binarySpec) map[string]string {
+		got := map[string]string{}
+		for _, e := range recipeEnv("https://git.hanzo.ai/hanzoai/cloud", "v1", b) {
+			m := e.(map[string]any)
+			got[m["name"].(string)] = m["value"].(string)
+		}
+		return got
+	}
+
+	// A run: recipe declares no platforms, no main, no ldflags.
+	run := names(binarySpec{Name: "plugins", Run: "make dist", Out: "dist/*"})
+	for _, absent := range []string{"PLATFORMS", "MAIN", "LDFLAGS"} {
+		if v, ok := run[absent]; ok {
+			t.Errorf("%s must be OMITTED for a run: recipe, got %q — an empty value defeats the recipe's own default", absent, v)
+		}
+	}
+	for k, want := range map[string]string{"RUN": "make dist", "OUT": "dist/*", "NAME": "plugins"} {
+		if run[k] != want {
+			t.Errorf("%s = %q, want %q", k, run[k], want)
+		}
+	}
+
+	// The Go lane declares them, so it gets them.
+	gol := names(binarySpec{Name: "cloud", Main: "./cmd/cloud", Ldflags: "-s -w", Platforms: []string{"linux/amd64", "linux/arm64"}})
+	if gol["PLATFORMS"] != "linux/amd64 linux/arm64" || gol["MAIN"] != "./cmd/cloud" || gol["LDFLAGS"] != "-s -w" {
+		t.Errorf("the Go lane must receive what it declared, got %v", gol)
+	}
+	if _, ok := gol["RUN"]; ok {
+		t.Error("RUN must be omitted for the Go lane")
+	}
+
+	// The workspace is the JOB's own knowledge, always stated.
+	for _, k := range []string{"HOME", "GOPATH", "npm_config_cache", "REPO_URL", "REF"} {
+		if run[k] == "" {
+			t.Errorf("%s must always be set", k)
+		}
+	}
+
+	// Absence must be LEGAL: the script is `set -eu`, so every optional read has
+	// to tolerate an unset variable or omitting it turns into a fatal error.
+	for _, v := range []string{"MAIN", "RUN", "OUT", "LDFLAGS", "PLATFORMS"} {
+		if !strings.Contains(artifactBuildScript, "${"+v+":-}") {
+			t.Errorf("the script must read $%s as ${%s:-} — it runs under set -u and the field may be absent", v, v)
+		}
+	}
 }
