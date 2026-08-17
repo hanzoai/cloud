@@ -24,10 +24,16 @@ import (
 )
 
 // mountWithStore builds a zip app with the audit routes wired to a real audit store, and
-// returns the store + a request helper. Only the audit routes are mounted here.
-func mountWithStore(t *testing.T) (*auditstore.Recorder, func(method, path string, hdr map[string]string) (*http.Response, []byte)) {
+// returns the data dir, the store and a request helper. Only the audit routes are
+// mounted here.
+//
+// The DATA DIR is returned because the trail is a FAMILY: verify enumerates every chain
+// under it, so a test can write a sibling chain there and see whether the endpoint
+// answers for it. That is the whole defect, so it has to be reachable from a test.
+func mountWithStore(t *testing.T) (string, *auditstore.Recorder, func(method, path string, hdr map[string]string) (*http.Response, []byte)) {
 	t.Helper()
-	rec, err := auditstore.Open(t.TempDir(), "audit", nil)
+	dir := t.TempDir()
+	rec, err := auditstore.Open(dir, "audit", nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}
@@ -57,7 +63,7 @@ func mountWithStore(t *testing.T) (*auditstore.Recorder, func(method, path strin
 		b, _ := io.ReadAll(resp.Body)
 		return resp, b
 	}
-	return rec, do
+	return dir, rec, do
 }
 
 func seedAudit(t *testing.T, rec *auditstore.Recorder, n int) {
@@ -85,7 +91,7 @@ var superAdmin = map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"
 // TestAdminAudit_ReturnsRealRecords proves GET /v1/admin/audit returns the store's
 // records (newest-first) with an accurate total and an integrity summary.
 func TestAdminAudit_ReturnsRealRecords(t *testing.T) {
-	rec, do := mountWithStore(t)
+	_, rec, do := mountWithStore(t)
 	seedAudit(t, rec, 5)
 
 	resp, body := do("GET", "/v1/admin/audit", superAdmin)
@@ -101,8 +107,9 @@ func TestAdminAudit_ReturnsRealRecords(t *testing.T) {
 		} `json:"data"`
 		Total     int `json:"total"`
 		Integrity struct {
-			OK    bool   `json:"ok"`
-			Count uint64 `json:"count"`
+			Name    string `json:"name"`
+			Verdict string `json:"verdict"`
+			Count   uint64 `json:"count"`
 		} `json:"integrity"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
@@ -117,14 +124,20 @@ func TestAdminAudit_ReturnsRealRecords(t *testing.T) {
 	if env.Data[0].Hash == "" {
 		t.Error("row has no hash — chain linkage not surfaced")
 	}
-	if !env.Integrity.OK || env.Integrity.Count != 5 {
-		t.Errorf("integrity summary = %+v, want ok/count=5", env.Integrity)
+	if env.Integrity.Verdict != "intact" || env.Integrity.Count != 5 {
+		t.Errorf("integrity summary = %+v, want intact/count=5", env.Integrity)
+	}
+	// The badge must NAME its chain. Without the name a console renders one chain's
+	// verdict as the whole trail's, which is exactly the claim this listing cannot
+	// make: it read one of the deployment's chains.
+	if env.Integrity.Name != "audit" {
+		t.Errorf("integrity names chain %q, want the chain these rows came from (\"audit\")", env.Integrity.Name)
 	}
 }
 
 // TestAdminAudit_Filters proves the query filters (result) reach the store.
 func TestAdminAudit_Filters(t *testing.T) {
-	rec, do := mountWithStore(t)
+	_, rec, do := mountWithStore(t)
 	ctx := context.Background()
 	// One deny among successes.
 	_, _ = rec.Append(ctx, auditstore.Record{Action: "POST /v1/admin/roles", Actor: auditstore.Actor{Org: "admin"}, Outcome: auditstore.Outcome{Result: "deny", Status: 403}})
@@ -147,39 +160,125 @@ func TestAdminAudit_Filters(t *testing.T) {
 	}
 }
 
-// TestAdminAudit_VerifyEndpoint proves GET /v1/admin/audit/verify returns the integrity
-// result for the chain.
-func TestAdminAudit_VerifyEndpoint(t *testing.T) {
-	rec, do := mountWithStore(t)
-	seedAudit(t, rec, 8)
-
+// trailOf drives GET /v1/admin/audit/verify and decodes the trail.
+func trailOf(t *testing.T, do func(string, string, map[string]string) (*http.Response, []byte)) auditstore.Trail {
+	t.Helper()
 	resp, body := do("GET", "/v1/admin/audit/verify", superAdmin)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("verify: got %d (body=%s)", resp.StatusCode, body)
 	}
 	var env struct {
-		Data struct {
-			OK       bool   `json:"ok"`
-			Count    uint64 `json:"count"`
-			BrokenAt int64  `json:"brokenAt"`
-			HeadHash string `json:"headHash"`
-		} `json:"data"`
+		Data auditstore.Trail `json:"data"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v (body=%s)", err, body)
 	}
-	if !env.Data.OK || env.Data.Count != 8 || env.Data.BrokenAt != -1 {
-		t.Errorf("verify result = %+v, want ok/count=8/brokenAt=-1", env.Data)
+	return env.Data
+}
+
+// TestAdminAudit_VerifyEndpoint proves GET /v1/admin/audit/verify reports this
+// process's own chain, with a verdict and a head to pin externally.
+func TestAdminAudit_VerifyEndpoint(t *testing.T) {
+	_, rec, do := mountWithStore(t)
+	seedAudit(t, rec, 8)
+
+	tr := trailOf(t, do)
+	own, ok := chainNamed(tr, "audit")
+	if !ok {
+		t.Fatalf("verify did not report this process's own chain; got %+v", tr)
 	}
-	if env.Data.HeadHash == "" {
-		t.Error("verify returned no head hash")
+	if own.Verdict != auditstore.Intact || own.Count != 8 || own.BrokenAt != -1 {
+		t.Errorf("own chain = %+v, want intact/count=8/brokenAt=-1", own)
+	}
+	if own.Head == "" {
+		t.Error("verify returned no head hash to pin against tail-truncation")
+	}
+	if tr.Records != 8 {
+		t.Errorf("records = %d, want 8", tr.Records)
+	}
+	// The three verdicts must account for every chain — a chain that fell out of the
+	// counts is a chain a reader cannot see it failed to check.
+	if tr.Intact+tr.Broken+tr.Unread != len(tr.Chains) {
+		t.Errorf("counts %d/%d/%d do not sum to %d chains", tr.Intact, tr.Broken, tr.Unread, len(tr.Chains))
+	}
+}
+
+// TestAdminAudit_VerifyAnswersForEveryChain is the test the shipped defect was
+// invisible to, and it is the reason this endpoint changed shape.
+//
+// A deployment holds ONE chain PER PROCESS (audit.Name), so /v1/admin/audit/verify —
+// which runs inside the admin plugin — walked audit-admin.db and attached that one
+// chain's boolean as THE TRAIL'S. Nothing anywhere enumerated the family: measured
+// live, 128 chains and 1.7 GB, of which the surface read one. audit-iam.db (224 MB)
+// and audit-tasks.db (374 MB) were never opened, and the answer was a clean bill of
+// health for a trail that had not been looked at.
+//
+// Two sibling chains are written here, NEITHER of them the recorder the op holds. A
+// reader that sees only its own chain reports one and fails on the first assertion.
+func TestAdminAudit_VerifyAnswersForEveryChain(t *testing.T) {
+	dir, rec, do := mountWithStore(t)
+	seedAudit(t, rec, 8)
+	writeChain(t, dir, "audit-iam", 3)
+	writeChain(t, dir, "audit-tasks", 5)
+
+	tr := trailOf(t, do)
+
+	want := []string{"audit", "audit-iam", "audit-tasks"}
+	got := make([]string, 0, len(tr.Chains))
+	for _, ch := range tr.Chains {
+		got = append(got, ch.Name)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("verify reported %d chains %v, want all %d %v — the family is not being enumerated", len(got), got, len(want), want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Fatalf("chain %d = %q, want %q (chains must come back in name order)", i, got[i], w)
+		}
+	}
+
+	// Every chain must carry its OWN verdict. A set of results whose members are
+	// indistinguishable is the single boolean again, wearing a list.
+	for _, ch := range tr.Chains {
+		if ch.Verdict == "" {
+			t.Errorf("chain %q carries no verdict", ch.Name)
+		}
+	}
+	if tr.Intact+tr.Broken+tr.Unread != len(tr.Chains) {
+		t.Errorf("counts %d/%d/%d do not sum to %d chains", tr.Intact, tr.Broken, tr.Unread, len(tr.Chains))
+	}
+}
+
+// chainNamed finds one chain's verdict in a trail.
+func chainNamed(tr auditstore.Trail, name string) (auditstore.Integrity, bool) {
+	for _, ch := range tr.Chains {
+		if ch.Name == name {
+			return ch, true
+		}
+	}
+	return auditstore.Integrity{}, false
+}
+
+// writeChain creates a SIBLING chain beside the one under test and seeds it, then
+// CLOSES it — modelling another process's chain at rest. It is closed because the
+// pure-Go envelope keeps a handle-private copy and seals it on close, so leaving two
+// handles open would make the fixture, not the code, decide what is on disk.
+func writeChain(t *testing.T, dir, name string, n int) {
+	t.Helper()
+	sib, err := auditstore.Open(dir, name, nil)
+	if err != nil {
+		t.Fatalf("open sibling chain %s: %v", name, err)
+	}
+	seedAudit(t, sib, n)
+	if err := sib.Close(); err != nil {
+		t.Fatalf("close sibling chain %s: %v", name, err)
 	}
 }
 
 // TestAdminAudit_DeniedWithoutSuperAdmin proves BOTH audit endpoints fail-closed 403 for
 // a non-SuperAdmin, and — critically — the store is NEVER read on a denied request.
 func TestAdminAudit_DeniedWithoutSuperAdmin(t *testing.T) {
-	rec, do := mountWithStore(t)
+	_, rec, do := mountWithStore(t)
 	seedAudit(t, rec, 3)
 
 	cases := []struct {
