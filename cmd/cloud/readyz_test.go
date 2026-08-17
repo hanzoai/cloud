@@ -23,7 +23,7 @@ import (
 //
 // for ~30 minutes while the pod reported Ready with 0 restarts. The reason was
 // in /healthz's `absent` FIELD; the probe reads the STATUS CODE. Every
-// specifically-mounted prefix (/v1/sentry, /v1/o11y, /v1/commerce/tenant,
+// specifically-mounted prefix (/v1/sentry, /v1/o11y, /v1/commerce/catalog,
 // /v1/admin/*) kept answering from its own subsystem, so nothing else showed it.
 //
 // The tests use the REAL app name "ai" rather than a fixture, because the
