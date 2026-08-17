@@ -126,7 +126,7 @@ var Apps = []App{
 	// the same pair already works for /v1/vector (provisioning) against
 	// /v1/vector/collections (product). No route moves.
 	{Name: "storage", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
-	{Name: "provisioning", Prefixes: []string{"/v1/datastore", "/v1/docdb", "/v1/kv", "/v1/s3", "/v1/search", "/v1/sql", "/v1/vector"}},
+	{Name: "provisioning", Prefixes: []string{"/v1/instances"}},
 	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	// The free lane's ceiling, beside the priced lane's. rollingcap bounds how fast
@@ -392,6 +392,10 @@ var Apps = []App{
 	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/admin/referrals", "/v1/affiliates"}},
 	{Name: "esign", Prefixes: []string{"/v1/esign"}},
 	{Name: "product", Prefixes: []string{"/v1/search/indexes", "/v1/search/stats", "/v1/vector/collections", "/v1/vector/stats"}},
+	// search is the QUERY surface — hybrid keyword+semantic over the org's own
+	// corpora at POST /v1/search. Instance CRUD lives under /v1/instances/search
+	// (provisioning); the deeper product prefixes above still win by longest match.
+	{Name: "search", Prefixes: []string{"/v1/search"}},
 	{Name: "evals", Prefixes: []string{"/v1/evals"}},
 	{Name: "benchmark", Prefixes: []string{"/v1/benchmark"}},
 	{Name: "research", Prefixes: []string{"/v1/research"}},

@@ -251,7 +251,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // The reads and the delete are typed ops, registered by mountTyped.
 func routes(z *zip.App, s *cloud.Service[state]) {
 	for _, kind := range kinds {
-		z.Post("/v1/"+kind, create(s, kind))
+		z.Post("/v1/instances/"+kind, create(s, kind))
 	}
 	mountTyped(z, ops{s: s})
 }
@@ -328,14 +328,14 @@ const createContract = "\n\n" +
 // per Mount.
 func init() {
 	for _, kind := range kinds {
-		openapi.Register("/v1/"+kind, "POST", provisionRequest{}, provisionResult{})
+		openapi.Register("/v1/instances/"+kind, "POST", provisionRequest{}, provisionResult{})
 
 		p := createProse[kind]
 		desc := p.lead
 		if _, dedicated := dedicatedEngines[kind]; dedicated {
 			desc += dedicatedNote
 		}
-		openapi.Describe("/v1/"+kind, "POST", p.summary, desc+createContract)
+		openapi.Describe("/v1/instances/"+kind, "POST", p.summary, desc+createContract)
 	}
 }
 

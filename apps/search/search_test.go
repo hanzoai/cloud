@@ -144,7 +144,7 @@ func TestModeIsHonest(t *testing.T) {
 // which is what lets the same document found by both legs fuse into one
 // reinforced row instead of appearing twice.
 func TestLexicalListIdentity(t *testing.T) {
-	payload := map[string]Result{}
+	payload := map[string]Hit{}
 	rows := []json.RawMessage{
 		json.RawMessage(`{"doctype":"kb-page","name":"runbook","title":"Runbook"}`),
 		json.RawMessage(`{"id":"orphan"}`),

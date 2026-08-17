@@ -1,0 +1,200 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package search is one ranked result set over everything your org has stored.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "search"
+    }
+  ],
+  "paths": {
+    "/v1/search": {
+      "post": {
+        "operationId": "search",
+        "summary": "Hybrid search over the org's own corpora",
+        "description": "Is the typed op behind POST /v1/search. It does exactly two things the\nin-process entry point must not do: resolve the tenant from the validated\nprincipal, and refuse when there is none. Everything else is ForOrg.",
+        "tags": [
+          "search"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BackendStatus": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "hits": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "took_ms": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Hit": {
+        "properties": {
+          "corpus": {
+            "type": "string"
+          },
+          "doctype": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "matched": {
+            "items": {
+              "$ref": "#/components/schemas/Match"
+            },
+            "type": "array"
+          },
+          "project": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Match": {
+        "properties": {
+          "backend": {
+            "type": "string"
+          },
+          "rank": {
+            "type": "integer"
+          },
+          "score": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "Request": {
+        "properties": {
+          "doctypes": {
+            "description": "DocTypes restricts the semantic leg to a subset of indexed knowledge types.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "index": {
+            "description": "Index names the lexical index to query. Defaults to \"kb\".",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Limit bounds the FUSED result set (default 10, max 50).",
+            "type": "integer"
+          },
+          "mode": {
+            "description": "Mode selects the legs: auto (default) | text | semantic | hybrid.",
+            "type": "string"
+          },
+          "offset": {
+            "description": "Offset pages the fused result set.",
+            "type": "integer"
+          },
+          "project": {
+            "description": "Project narrows to one project scope within the org.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Query is the natural-language or keyword query. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Response": {
+        "properties": {
+          "backends": {
+            "description": "Backends is the per-leg report. Always populated.",
+            "items": {
+              "$ref": "#/components/schemas/BackendStatus"
+            },
+            "type": "array"
+          },
+          "hits": {
+            "description": "Hits is the fused, ranked result set.",
+            "items": {
+              "$ref": "#/components/schemas/Hit"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "description": "Mode is the mode actually used after `auto` resolution.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the query's overall honesty signal:\n  ok          every consulted leg answered.\n  partial     at least one leg failed; Hits holds the survivors' results.\n  unavailable every consulted leg failed; Hits is empty AND that is stated.",
+            "type": "string"
+          },
+          "took_ms": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

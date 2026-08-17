@@ -474,31 +474,31 @@ func (o ops) dropS3(ctx context.Context, in *resourceRef) (*noContent, error) {
 // app-wide by Serve, ahead of every mount, which is what parks the request these
 // ops resolve their tenant from.
 func mountTyped(z *zip.App, o ops) {
-	zip.Get(z, "/v1/sql", o.listSQL)
-	zip.Get(z, "/v1/sql/:name", o.getSQL)
-	zip.Delete(z, "/v1/sql/:name", o.dropSQL)
+	zip.Get(z, "/v1/instances/sql", o.listSQL)
+	zip.Get(z, "/v1/instances/sql/:name", o.getSQL)
+	zip.Delete(z, "/v1/instances/sql/:name", o.dropSQL)
 
-	zip.Get(z, "/v1/kv", o.listKV)
-	zip.Get(z, "/v1/kv/:name", o.getKV)
-	zip.Delete(z, "/v1/kv/:name", o.dropKV)
+	zip.Get(z, "/v1/instances/kv", o.listKV)
+	zip.Get(z, "/v1/instances/kv/:name", o.getKV)
+	zip.Delete(z, "/v1/instances/kv/:name", o.dropKV)
 
-	zip.Get(z, "/v1/datastore", o.listDatastore)
-	zip.Get(z, "/v1/datastore/:name", o.getDatastore)
-	zip.Delete(z, "/v1/datastore/:name", o.dropDatastore)
+	zip.Get(z, "/v1/instances/datastore", o.listDatastore)
+	zip.Get(z, "/v1/instances/datastore/:name", o.getDatastore)
+	zip.Delete(z, "/v1/instances/datastore/:name", o.dropDatastore)
 
-	zip.Get(z, "/v1/docdb", o.listDocDB)
-	zip.Get(z, "/v1/docdb/:name", o.getDocDB)
-	zip.Delete(z, "/v1/docdb/:name", o.dropDocDB)
+	zip.Get(z, "/v1/instances/docdb", o.listDocDB)
+	zip.Get(z, "/v1/instances/docdb/:name", o.getDocDB)
+	zip.Delete(z, "/v1/instances/docdb/:name", o.dropDocDB)
 
-	zip.Get(z, "/v1/vector", o.listVector)
-	zip.Get(z, "/v1/vector/:name", o.getVector)
-	zip.Delete(z, "/v1/vector/:name", o.dropVector)
+	zip.Get(z, "/v1/instances/vector", o.listVector)
+	zip.Get(z, "/v1/instances/vector/:name", o.getVector)
+	zip.Delete(z, "/v1/instances/vector/:name", o.dropVector)
 
-	zip.Get(z, "/v1/search", o.listSearch)
-	zip.Get(z, "/v1/search/:name", o.getSearch)
-	zip.Delete(z, "/v1/search/:name", o.dropSearch)
+	zip.Get(z, "/v1/instances/search", o.listSearch)
+	zip.Get(z, "/v1/instances/search/:name", o.getSearch)
+	zip.Delete(z, "/v1/instances/search/:name", o.dropSearch)
 
-	zip.Get(z, "/v1/s3", o.listS3)
-	zip.Get(z, "/v1/s3/:name", o.getS3)
-	zip.Delete(z, "/v1/s3/:name", o.dropS3)
+	zip.Get(z, "/v1/instances/s3", o.listS3)
+	zip.Get(z, "/v1/instances/s3/:name", o.getS3)
+	zip.Delete(z, "/v1/instances/s3/:name", o.dropS3)
 }

@@ -114,10 +114,10 @@ type Match struct {
 	Score   float64 `json:"score"`
 }
 
-// Result is one fused hit. Score is the FUSED score (see fuse.go); each backend's
+// Hit is one fused hit. Score is the FUSED score (see fuse.go); each backend's
 // native score stays in Matched, because the two are different things and
 // flattening them loses the ability to explain a ranking.
-type Result struct {
+type Hit struct {
 	ID      string  `json:"id"`
 	Corpus  string  `json:"corpus"`
 	DocType string  `json:"doctype,omitempty"`
@@ -149,7 +149,7 @@ type Response struct {
 	// Mode is the mode actually used after `auto` resolution.
 	Mode string `json:"mode"`
 	// Hits is the fused, ranked result set.
-	Hits []Result `json:"hits"`
+	Hits []Hit `json:"hits"`
 	// Backends is the per-leg report. Always populated.
 	Backends []BackendStatus `json:"backends"`
 	TookMS   int64           `json:"took_ms"`
@@ -230,7 +230,7 @@ func ForOrg(ctx context.Context, org string, in *Request) (*Response, error) {
 	// return. Splitting them is what lets rank/ stay a leaf that knows nothing
 	// about documents.
 	var lists []rank.List
-	payload := map[string]Result{}
+	payload := map[string]Hit{}
 	backends := make([]BackendStatus, 0, 2)
 
 	// ---- lexical leg ----
@@ -288,7 +288,7 @@ func ForOrg(ctx context.Context, org string, in *Request) (*Response, error) {
 			fused = fused[in.Offset:]
 		}
 	}
-	hits := make([]Result, 0, len(fused))
+	hits := make([]Hit, 0, len(fused))
 	for _, f := range fused {
 		r := payload[f.Key]
 		r.Score = f.Score
@@ -366,14 +366,14 @@ func indexUID(uid string) string {
 // The Key is doctype+name — the document's identity in the KB store — so the same
 // document found by both legs fuses into ONE reinforced result rather than
 // appearing twice.
-func semanticList(hits []knowledge.Hit, payload map[string]Result) rank.List {
+func semanticList(hits []knowledge.Hit, payload map[string]Hit) rank.List {
 	l := rank.List{Source: BackendVector}
 	for _, h := range hits {
 		key := h.DocType + "/" + h.Name
 		l.Keys = append(l.Keys, key)
 		l.Scores = append(l.Scores, h.Score)
 		if _, seen := payload[key]; !seen {
-			payload[key] = Result{
+			payload[key] = Hit{
 				ID: h.Name, Corpus: "kb", DocType: h.DocType,
 				Title: h.Title, URL: h.URL, Project: h.Project,
 			}
@@ -386,7 +386,7 @@ func semanticList(hits []knowledge.Hit, payload map[string]Result) rank.List {
 // so identity comes from the document's own id/name field. The store ranks by
 // match count and exposes no per-row score, so no score is reported: an invented
 // number here would be precision the store never had.
-func lexicalList(rows []json.RawMessage, payload map[string]Result) rank.List {
+func lexicalList(rows []json.RawMessage, payload map[string]Hit) rank.List {
 	l := rank.List{Source: BackendIndex}
 	for i, raw := range rows {
 		var d map[string]any
@@ -401,7 +401,7 @@ func lexicalList(rows []json.RawMessage, payload map[string]Result) rank.List {
 		key := doctype + "/" + name
 		l.Keys = append(l.Keys, key)
 		if _, seen := payload[key]; !seen {
-			payload[key] = Result{
+			payload[key] = Hit{
 				ID: name, Corpus: "kb", DocType: doctype,
 				Title:   firstString(d, "title", "name"),
 				URL:     firstString(d, "url"),
