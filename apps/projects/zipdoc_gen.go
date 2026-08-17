@@ -33,6 +33,19 @@ func init() {
 			"projectsDomainRef.slug": "Slug is the project the host is attached to, from the path.",
 		},
 	})
+	zip.Describe("DELETE /v1/sites/:slug", zip.Doc{
+		Description: "Deletes a project and takes its site off the internet.\n\nThe metadata delete is authoritative and everything after it is best-effort,\nin this order: the public `<slug>` subdomain binding is released so the slug is\nfree to reclaim, the release rows are dropped so a reclaimed slug never\ninherits the previous owner's rollback menu, the git source is retired on\nevery copy it has so a reclaimed slug never adopts a repository left behind\n(visibility.go), the S3 origin is purged under BOTH `<org>/<slug>/` and the\nsite's sibling release space, and the edge cache-tag is flushed. A failure in\nany of those is logged and the delete still answers 204 — resurrecting a\nproject because a purge missed would be worse than a leaked prefix.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404 and\nnothing of theirs is touched.",
+		Fields: map[string]string{
+			"projectsRef.slug": "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
+		},
+	})
+	zip.Describe("DELETE /v1/sites/:slug/domains/:host", zip.Doc{
+		Description: "Gives a custom hostname back, so the name is free to reuse.\n\nA claim is FIRST-COME and global, so an add-only surface was not ownership but\na leak: a customer who mistyped a domain, or claimed one they later moved\nelsewhere, could neither reuse it nor let anyone else. This is the third\nwriter that closes it. The release is scoped to (host, org, slug), so it can\nonly ever drop THIS tenant's own claim, and it is IDEMPOTENT: releasing a host\nwe do not hold is a clean 204, never a 404 that would let a caller probe which\nhosts other tenants hold. The edge cache-tag is flushed, since the host stops\nrouting here.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
+		Fields: map[string]string{
+			"projectsDomainRef.host": "Host is the custom hostname, from the path. It is cleaned to its canonical\nform (lowercased, trailing dot dropped) before anything is looked up.",
+			"projectsDomainRef.slug": "Slug is the project the host is attached to, from the path.",
+		},
+	})
 	zip.Describe("GET /v1/edge", zip.Doc{
 		Description: "health reports whether a publish reaches readers, rather than whether it was\naccepted. Those are different questions and only the second one was ever\nvisible.\n\nIt asks the edge and nothing else. There is no live call to the provider here:\nConfigured is a local fact, it is the fact that was missing, and a health check\nthat spends a third-party API call is one an operator learns not to run.",
 		Fields: map[string]string{
@@ -41,6 +54,7 @@ func init() {
 			"edgeState.freshness":  "Freshness says, in one phrase, how long after a publish a reader sees it.\nIt is the sentence an operator actually wants; the booleans above are how\na machine reads the same fact.",
 			"edgeState.policy":     "Policy is the Cache-Control this edge serves each class of object with. It\nis DERIVED from the one canonical function, never a second copy: half the\nconfusion when a publish looks stale is not knowing what the TTLs are, and\nreading them out of the source is not something an operator should have to\ndo to answer \"how long until this is live\".",
 			"edgeState.provider":   "Provider is the CDN behind this edge, or \"none\". It is the first thing an\noperator wants and the only vendor name this API returns.",
+			"edgeState.reach":      "Reach is the apexes a publish is invalidated on. A site is served on more\nthan one — the site plane's own and the first-party apex — and a purge that\ncovers one of them looks identical from here to a purge that covers both.",
 			"edgeState.status":     "Status is \"ok\" when a publish reaches readers immediately, else \"degraded\".",
 		},
 	})
@@ -178,6 +192,18 @@ func init() {
 			"projectsDeploymentRef.slug": "Slug is the project the deployment belongs to, from the path.",
 		},
 	})
+	zip.Describe("GET /v1/sites/:slug/domains", zip.Doc{
+		Description: "Returns every custom hostname this site holds: the live ones, plus\nany pending claim with the DNS records it still owes.\n\n`domains` is the routing answer — the hosts that are verified right now —\nwhile `claims` is the full panel, one row per host, each saying whether it is\nlive or pending and, if pending, exactly what to publish.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
+		Fields: map[string]string{
+			"Record.name":             "the record name the customer creates",
+			"Record.type":             "TXT | CNAME",
+			"Record.value":            "the record value",
+			"projectsDomains.claims":  "Claims is one row per host — live, or pending with the DNS records it still\nowes.",
+			"projectsDomains.domains": "Domains are the hostnames that are VERIFIED and routing right now.",
+			"projectsDomains.org":     "Org and Slug identify the site the panel belongs to.",
+			"projectsRef.slug":        "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
+		},
+	})
 	zip.Describe("GET /v1/sites/:slug/releases", zip.Doc{
 		Description: "Returns a site's releases newest-first, marking the active one —\nthe rollback menu.\n\nEach row carries the release id to activate, the source it was promoted from,\nits object and byte counts, and the URL if it is the one serving. Retention\nbounds the list, so it is the set that can actually still be rolled back to,\nnot a full history.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
@@ -202,6 +228,23 @@ func init() {
 		},
 	})
 	zip.Describe("PATCH /v1/projects/:slug", zip.Doc{
+		Description: "Changes a project's settings, and only the settings you send.\n\nEvery field is optional and absent means \"leave it\": `name` may not be blanked,\n`framework` must stay a known build hint, and `cacheControl` is capped at 256\ncharacters with no newlines (it becomes a response header). `visibility` flips\npublic/private under the same rule as create — public is free, private needs a\nfunded org. `upstream` and `license` are free-text credit for third-party work,\nand sending \"\" clears one. Changing anything reconciles the project's canonical\ngit repo, so a visibility change reaches the source and not just the listing.\n\n`hidden`/`hiddenReason` are platform MODERATION and are ignored unless the\ncaller is a platform admin; they remove a project from the public catalogue\nwithout touching the publisher's own visibility choice, so un-hiding restores\nexactly what they asked for.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
+		Fields: map[string]string{
+			"projectsProject.analytics":    "Analytics is the wired-by-default web-analytics flag (default true). It is the\nvalue the app's static-builder reads as deployment.analytics to inject the\nbeacon. Space is the project's Base data space (\"<org>/<slug>\") a deployed\nsite posts form/forum/data submissions to under /v1/base.",
+			"projectsProject.cacheControl": "Cache is the site's edge-cache state: the HTML/document Cache-Control policy\nin effect (TTL) and the last edge-purge time, so a console can show freshness.",
+			"projectsProject.forkedFrom":   "ForkedFrom is the parent this project was forked from (\"<org>/<slug>\" of a\npublished project, or a catalog template slug) — the attribution edge a\ngallery credits.",
+			"projectsProject.key":          "Key is the project's publishable ingest key, minted at create. It is the\nvalue the injected beacon carries and the ONE thing that attributes this\nsite's events; the static-builder reads it beside analytics.\n\nPublishable means it belongs in a page's source: it names a write scope and\nmints no principal, so it is returned in full rather than masked. Masking it\nwould only mean every caller needed a second endpoint to get the thing the\npage already ships.",
+			"projectsProject.tags":         "Tags is the site's browser tag config: platform slug → non-secret pixel id (GA\nmeasurement, Meta pixel, …) — what track.js injects and the server CAPI reads,\nper site. Omitted when none are set. The API SECRET is never here (KMS).",
+			"projectsProject.upstream":     "Upstream/License credit the third-party work this project was published\nfrom, and the terms it carries. Omitted when nothing is declared: an absent\ncredit means \"nobody has said\", not \"there is nothing to say\".",
+			"projectsProject.visibility":   "Visibility is \"public\" or \"private\", and Hidden reports platform\nmoderation. Both are always present (never omitempty) so a consumer can\ntell a real answer from \"this API is too old to say\" — and so a console\nnever renders a project as public because a field was missing.\n\nAuthorship is deliberately absent: it is Org, above.",
+			"projectsUpdate.hidden":        "Hidden is MODERATION, and the only admin-gated field on this body: it pulls\na public project out of the catalogue from admin.hanzo.ai without editing\nthe publisher's own visibility choice, so un-hiding restores exactly what\nthey asked for. A tenant sending it is ignored.",
+			"projectsUpdate.slug":          "Slug is the project to update, from the path. The URL is the addressing\nauthority — a `slug` in the body cannot move the write to another project.",
+			"projectsUpdate.tags":          "Tags sets the site's browser tag config: platform slug → non-secret pixel id\n(e.g. {\"ga4\":\"G-…\",\"meta\":\"…\"}). track.js injects these first-party and the\nserver CAPI reads them, per site. Absent LEAVES them; a present object REPLACES\nthe set (send {} to clear). The ids are public — they ship in the page — so this\nis not the SECRET path (a CAPI token is sealed via POST /v1/destinations).",
+			"projectsUpdate.upstream":      "Upstream/License credit the third-party work this app was published from —\nsettable after the fact, because the demos that need crediting most are the\nones already live. Pointers so \"\" clears a credit and absent leaves it.",
+			"projectsUpdate.visibility":    "Visibility flips an existing project between \"public\" and \"private\". Same\nONE rule as at create: public is free, private needs a paid plan.",
+		},
+	})
+	zip.Describe("PATCH /v1/sites/:slug", zip.Doc{
 		Description: "Changes a project's settings, and only the settings you send.\n\nEvery field is optional and absent means \"leave it\": `name` may not be blanked,\n`framework` must stay a known build hint, and `cacheControl` is capped at 256\ncharacters with no newlines (it becomes a response header). `visibility` flips\npublic/private under the same rule as create — public is free, private needs a\nfunded org. `upstream` and `license` are free-text credit for third-party work,\nand sending \"\" clears one. Changing anything reconciles the project's canonical\ngit repo, so a visibility change reaches the source and not just the listing.\n\n`hidden`/`hiddenReason` are platform MODERATION and are ignored unless the\ncaller is a platform admin; they remove a project from the public catalogue\nwithout touching the publisher's own visibility choice, so un-hiding restores\nexactly what they asked for.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"projectsProject.analytics":    "Analytics is the wired-by-default web-analytics flag (default true). It is the\nvalue the app's static-builder reads as deployment.analytics to inject the\nbeacon. Space is the project's Base data space (\"<org>/<slug>\") a deployed\nsite posts form/forum/data submissions to under /v1/base.",
@@ -444,11 +487,47 @@ func init() {
 			"projectsDeployment.upload": "Upload is the prefix-scoped, short-lived S3 write grant handed to CI with a\nqueued git deployment, so it needs no bucket credential (grant.go). Present\nONLY on the 202 that creates the deployment — it is never stored and never\nreplayed on a later read, so a grant cannot outlive the build it was minted\nfor by being fetched again.",
 		},
 	})
+	zip.Describe("POST /v1/sites/:slug/domains", zip.Doc{
+		Description: "Attaches one or more CUSTOM public hostnames to this org's site.\n\nBinding a host you do not own would let you shadow it at the edge, so which\noutcome you get depends on whether ownership is already established: a SuperAdmin\nvouches (the operator manages the customer's DNS, so its bind IS the proof) and\nbinds VERIFIED immediately; every other caller, INCLUDING an admin of the\ndeployment's own brand org, has the host CLAIMED as pending and gets the DNS\nchallenge back in `bound[].records`. A pending claim HOLDS the name so nobody\nelse can take it, but it does not route until POST .../domains/{host}/verify\nproves control.\n\nA hostname we operate is refused to a non-vouched caller (those are assigned\nby the platform, never claimed), a host another site already holds is a 409,\nand a name the platform holds is a 400 for EVERY caller — a vouch skips the\nownership proof, never the host table's own invariant. Claims and binds are\nidempotent for the same\n(org, slug), and re-claiming returns the SAME token rather than invalidating a\nrecord the customer has already published. The edge cache-tag is flushed\nafterwards so a newly-verified host serves the current build immediately.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
+		Fields: map[string]string{
+			"Record.name":                  "the record name the customer creates",
+			"Record.type":                  "TXT | CNAME",
+			"Record.value":                 "the record value",
+			"projectsBoundDomains.bound":   "Bound is the result of THIS call, one row per host in the request: live for\nan already-vouched host, pending with the DNS records to publish otherwise.",
+			"projectsBoundDomains.domains": "Domains are the hostnames that are VERIFIED and routing right now, after\nthis bind.",
+			"projectsBoundDomains.org":     "Org and Slug identify the site the hosts were bound to.",
+			"projectsDomainsBind.domains":  "Domains are the custom hostnames to attach, in order. An empty list is a\n400 rather than a clear — releasing a host is its own call.",
+			"projectsDomainsBind.slug":     "Slug is the site the hosts attach to, from the path.",
+		},
+	})
+	zip.Describe("POST /v1/sites/:slug/domains/:host/verify", zip.Doc{
+		Description: "Checks the DNS challenge for a pending custom hostname and, when\nit passes, promotes the host so it begins routing at the edge.\n\nIt answers 200 either way, with the host's honest current state: verified once\nthe TXT record is found, still pending — with the records to publish and the\nresolver's own explanation in `detail` — when it is not. A not-yet is not an\nerror: the check ran, DNS simply has not propagated, and the customer retries.\nAn already-verified host is returned unchanged without re-resolving. On a\nsuccessful promotion the edge cache-tag is flushed, since the host routes as\nof that moment.\n\nScope: a validated principal is required (403 without one). Both the site and\nthe claim are resolved within that principal's org, so a host claimed by\nanother tenant is \"not claimed by this site\".",
+		Fields: map[string]string{
+			"Record.name":            "the record name the customer creates",
+			"Record.type":            "TXT | CNAME",
+			"Record.value":           "the record value",
+			"projectsDomainRef.host": "Host is the custom hostname, from the path. It is cleaned to its canonical\nform (lowercased, trailing dot dropped) before anything is looked up.",
+			"projectsDomainRef.slug": "Slug is the project the host is attached to, from the path.",
+		},
+	})
 	zip.Describe("POST /v1/sites/:slug/publish", zip.Doc{
 		Description: "Promotes a build output into a new release AND goes live with it —\ncreate+activate in one call, which is the 99% path.\n\nIt is exactly the two halves in sequence with no extra semantics, so the\nstaged flow and the one-shot flow can never drift apart: `source` is promoted\nunder the same org-relative rule and the same guards CreateRelease applies,\nthen the site's pointer is flipped to it, the public host is claimed and the\nedge is purged. Idempotent on unchanged bytes — same manifest, same release id,\nno copy — and billed once, after the release exists.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404.",
 		Fields: map[string]string{
 			"projectsPublish.slug":   "Slug is the site to publish, from the path.",
 			"projectsPublish.source": "Source is the build output to promote, as a path RELATIVE to your org's own\nstorage space — never a URL and never a bucket. The org segment is prepended\nserver-side from the validated principal, so the worst a hostile source can\naddress is something your own org already owns.",
+		},
+	})
+	zip.Describe("POST /v1/sites/:slug/purge", zip.Doc{
+		Description: "Flushes the site's edge cache without redeploying anything.\n\nIt invalidates the edge cache-tag `site-<org>-<slug>` and stamps `lastPurgeAt`\n(unix seconds), and it NEVER writes or deletes the S3 origin — the live build\nkeeps serving; only stale copies held at the edge drop, so the next request\nre-fetches the current artifact from origin. Idempotent, and an edge that is\nunconfigured or failing is not fatal: `lastPurgeAt` is still stamped and the\nanswer is still the updated project.\n\nScope: a validated principal is required (403 without one) and the project is\nresolved within that principal's org, so another tenant's slug is a 404.",
+		Fields: map[string]string{
+			"projectsProject.analytics":    "Analytics is the wired-by-default web-analytics flag (default true). It is the\nvalue the app's static-builder reads as deployment.analytics to inject the\nbeacon. Space is the project's Base data space (\"<org>/<slug>\") a deployed\nsite posts form/forum/data submissions to under /v1/base.",
+			"projectsProject.cacheControl": "Cache is the site's edge-cache state: the HTML/document Cache-Control policy\nin effect (TTL) and the last edge-purge time, so a console can show freshness.",
+			"projectsProject.forkedFrom":   "ForkedFrom is the parent this project was forked from (\"<org>/<slug>\" of a\npublished project, or a catalog template slug) — the attribution edge a\ngallery credits.",
+			"projectsProject.key":          "Key is the project's publishable ingest key, minted at create. It is the\nvalue the injected beacon carries and the ONE thing that attributes this\nsite's events; the static-builder reads it beside analytics.\n\nPublishable means it belongs in a page's source: it names a write scope and\nmints no principal, so it is returned in full rather than masked. Masking it\nwould only mean every caller needed a second endpoint to get the thing the\npage already ships.",
+			"projectsProject.tags":         "Tags is the site's browser tag config: platform slug → non-secret pixel id (GA\nmeasurement, Meta pixel, …) — what track.js injects and the server CAPI reads,\nper site. Omitted when none are set. The API SECRET is never here (KMS).",
+			"projectsProject.upstream":     "Upstream/License credit the third-party work this project was published\nfrom, and the terms it carries. Omitted when nothing is declared: an absent\ncredit means \"nobody has said\", not \"there is nothing to say\".",
+			"projectsProject.visibility":   "Visibility is \"public\" or \"private\", and Hidden reports platform\nmoderation. Both are always present (never omitempty) so a consumer can\ntell a real answer from \"this API is too old to say\" — and so a console\nnever renders a project as public because a field was missing.\n\nAuthorship is deliberately absent: it is Org, above.",
+			"projectsRef.slug":             "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
 		},
 	})
 	zip.Describe("POST /v1/sites/:slug/releases", zip.Doc{
@@ -474,6 +553,22 @@ func init() {
 			"projectsSiteDeploy.slug":         "Slug is the project the site was published into, created on the fly when\nthe slug was free.",
 			"projectsSiteDeploy.status":       "Status is the deployment status, \"live\" on success.",
 			"projectsSiteDeploy.url":          "URL is the canonical live URL, https://<slug>.<apex> — empty when the\nsubdomain belongs to another tenant and this site has none.",
+		},
+	})
+	zip.Describe("POST /v1/sites/fork", zip.Doc{
+		Description: "Creates a project seeded from a PUBLISHED EXAMPLE — either a\nstarter-kit template from the ONE embedded gallery catalog, or any live\nproject on the platform (an example a seeded creator published, or another\norg's app serving at <slug>.hanzo.app). Answers 201 with the new project.\n\n`slug` names the PARENT to fork and is required. Templates resolve first, and\nthe caller org's own private templates ahead of the public gallery, so a\ncurated template slug keeps meaning the same thing even if someone later\npublishes a live project under it; `variant` picks that template's\nformat/page/theme. If no template matches, the slug resolves to the UNIQUE\nlive project that owns it across all orgs — the same resolution the site edge\nuses to serve <slug>.hanzo.app, so what you can browse is what you can fork.\n\n`name` and `target` override the derived project name and slug; everything\nelse is inherited from the parent. A live parent contributes its REPO, so the\nchild builds from the same source — the parent's deployed bytes are never\ncopied, because releases are per-tenant by design and the fork publishes its\nown. The parent it actually resolved is stamped on the child as `forkedFrom`,\nso attribution is a fact recorded at fork time rather than a claim\nreconstructed later.\n\nIt funnels through the SAME create path POST /v1/projects uses, so slug\nvalidation, org scoping, ID minting and the 409 on a slug the caller's own org\nalready uses are identical.\n\nScope: a validated principal is required (403 without one) and the child is\ncreated in THAT principal's org.",
+		Fields: map[string]string{
+			"projectsFork.name":            "target project name (optional; defaults to the parent's title)",
+			"projectsFork.slug":            "parent slug to fork — catalog template or published project (required)",
+			"projectsFork.target":          "Target overrides the derived project slug (optional; defaults to the\nparent slug). Kept distinct from Slug so callers can rename on fork.",
+			"projectsFork.variant":         "Variant picks a template's format/page/theme (optional; defaults to the\ntemplate's first shape). This is the axis the catalog used to spend\nsibling slugs on, so it is expressed here, where the user's preference is.",
+			"projectsProject.analytics":    "Analytics is the wired-by-default web-analytics flag (default true). It is the\nvalue the app's static-builder reads as deployment.analytics to inject the\nbeacon. Space is the project's Base data space (\"<org>/<slug>\") a deployed\nsite posts form/forum/data submissions to under /v1/base.",
+			"projectsProject.cacheControl": "Cache is the site's edge-cache state: the HTML/document Cache-Control policy\nin effect (TTL) and the last edge-purge time, so a console can show freshness.",
+			"projectsProject.forkedFrom":   "ForkedFrom is the parent this project was forked from (\"<org>/<slug>\" of a\npublished project, or a catalog template slug) — the attribution edge a\ngallery credits.",
+			"projectsProject.key":          "Key is the project's publishable ingest key, minted at create. It is the\nvalue the injected beacon carries and the ONE thing that attributes this\nsite's events; the static-builder reads it beside analytics.\n\nPublishable means it belongs in a page's source: it names a write scope and\nmints no principal, so it is returned in full rather than masked. Masking it\nwould only mean every caller needed a second endpoint to get the thing the\npage already ships.",
+			"projectsProject.tags":         "Tags is the site's browser tag config: platform slug → non-secret pixel id (GA\nmeasurement, Meta pixel, …) — what track.js injects and the server CAPI reads,\nper site. Omitted when none are set. The API SECRET is never here (KMS).",
+			"projectsProject.upstream":     "Upstream/License credit the third-party work this project was published\nfrom, and the terms it carries. Omitted when nothing is declared: an absent\ncredit means \"nobody has said\", not \"there is nothing to say\".",
+			"projectsProject.visibility":   "Visibility is \"public\" or \"private\", and Hidden reports platform\nmoderation. Both are always present (never omitempty) so a consumer can\ntell a real answer from \"this API is too old to say\" — and so a console\nnever renders a project as public because a field was missing.\n\nAuthorship is deliberately absent: it is Org, above.",
 		},
 	})
 }
