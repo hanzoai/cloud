@@ -1,10 +1,8 @@
-// Command lineage reports whether a commit is in the release lineage of the
-// repository that hands out cloud's version numbers.
+// Command lineage reports whether a commit is one the branch that hands out
+// cloud's version numbers has been.
 //
-// It is what the release workflow runs immediately before it claims a number, so
-// the workflow and the in-cloud release path put the same question to the same
-// arbiter through the same code (internal/lineage) rather than through two
-// implementations that can drift apart.
+// The release workflow runs it immediately before the compare-and-swap that
+// claims a number, which is the only place a number is allocated.
 //
 // Usage:
 //
