@@ -432,8 +432,11 @@ func TestCloudflareOAuthConnectReturnsAuthorizeURLWhenConfigured(t *testing.T) {
 	if q.Get("response_type") != "code" {
 		t.Fatalf("response_type want code, got %q", q.Get("response_type"))
 	}
-	if got := q.Get("scope"); got != "dns_records:edit zone:read pages:edit" {
-		t.Fatalf("scope want the DNS/zone/pages set, got %q", got)
+	// Built from the declared set rather than restated, so adding a capability
+	// does not mean editing a literal here — which is how the consent string and
+	// the apikey set drifted apart in the first place.
+	if got, want := q.Get("scope"), strings.Join(cloudflareOAuthScopes, " "); got != want {
+		t.Fatalf("scope want %q, got %q", want, got)
 	}
 	if q.Get("state") == "" {
 		t.Fatal("authorizeUrl must carry a signed state")
