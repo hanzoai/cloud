@@ -160,6 +160,14 @@ test:
     # generated from source that has since changed, not that the projection differs.
     run: |
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      # A STABLE cache home. setup-go's cache writes to the Actions cache
+      # backend, which a self-hosted forge runner may not provide — and when it
+      # does not, the flag is a no-op and every step here compiles the world.
+      # These runners keep their filesystem between jobs, so naming the two
+      # caches at a fixed path makes them persist on the host regardless. Go
+      # locks both, so concurrent jobs sharing them is safe.
+      export GOCACHE=${GOCACHE:-/var/tmp/hanzo-go/build} GOMODCACHE=${GOMODCACHE:-/var/tmp/hanzo-go/mod}
+      mkdir -p "$GOCACHE" "$GOMODCACHE"
       # IT PREDICTS; app-contract DECIDES — and this step used to be fatal, which
       # promoted the prediction to the verdict and stopped every release that
       # followed a dependency bump. Measured: four times in one day, each time a
@@ -190,6 +198,14 @@ test:
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      # A STABLE cache home. setup-go's cache writes to the Actions cache
+      # backend, which a self-hosted forge runner may not provide — and when it
+      # does not, the flag is a no-op and every step here compiles the world.
+      # These runners keep their filesystem between jobs, so naming the two
+      # caches at a fixed path makes them persist on the host regardless. Go
+      # locks both, so concurrent jobs sharing them is safe.
+      export GOCACHE=${GOCACHE:-/var/tmp/hanzo-go/build} GOMODCACHE=${GOMODCACHE:-/var/tmp/hanzo-go/mod}
+      mkdir -p "$GOCACHE" "$GOMODCACHE"
       go run ./plugin/gen-app-cmds
       # --porcelain, not `git diff`: a NEW manifest app scaffolds a NEW
       # plugin/<app>/main.go, which is untracked and therefore invisible to a diff.
@@ -238,6 +254,14 @@ test:
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      # A STABLE cache home. setup-go's cache writes to the Actions cache
+      # backend, which a self-hosted forge runner may not provide — and when it
+      # does not, the flag is a no-op and every step here compiles the world.
+      # These runners keep their filesystem between jobs, so naming the two
+      # caches at a fixed path makes them persist on the host regardless. Go
+      # locks both, so concurrent jobs sharing them is safe.
+      export GOCACHE=${GOCACHE:-/var/tmp/hanzo-go/build} GOMODCACHE=${GOMODCACHE:-/var/tmp/hanzo-go/mod}
+      mkdir -p "$GOCACHE" "$GOMODCACHE"
       # ONE gate definition, called rather than restated — the discipline
       # app-contract already follows with surface-check. This is the same target a
       # developer runs, so CI and the Makefile cannot drift apart, which is exactly
@@ -259,6 +283,14 @@ test:
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      # A STABLE cache home. setup-go's cache writes to the Actions cache
+      # backend, which a self-hosted forge runner may not provide — and when it
+      # does not, the flag is a no-op and every step here compiles the world.
+      # These runners keep their filesystem between jobs, so naming the two
+      # caches at a fixed path makes them persist on the host regardless. Go
+      # locks both, so concurrent jobs sharing them is safe.
+      export GOCACHE=${GOCACHE:-/var/tmp/hanzo-go/build} GOMODCACHE=${GOMODCACHE:-/var/tmp/hanzo-go/mod}
+      mkdir -p "$GOCACHE" "$GOMODCACHE"
       go vet -tags "sqlite_fts5 sqlite_math_functions" ./...
   - name: host-is-light
     # The light host's ONE property is that it links no subsystem: it knows where
@@ -293,6 +325,14 @@ test:
       # package, so leaving it unset makes the number CI prints disagree with the
       # number a developer measures, for no reason anyone can see.
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=0
+      # A STABLE cache home. setup-go's cache writes to the Actions cache
+      # backend, which a self-hosted forge runner may not provide — and when it
+      # does not, the flag is a no-op and every step here compiles the world.
+      # These runners keep their filesystem between jobs, so naming the two
+      # caches at a fixed path makes them persist on the host regardless. Go
+      # locks both, so concurrent jobs sharing them is safe.
+      export GOCACHE=${GOCACHE:-/var/tmp/hanzo-go/build} GOMODCACHE=${GOMODCACHE:-/var/tmp/hanzo-go/mod}
+      mkdir -p "$GOCACHE" "$GOMODCACHE"
       # apps/s3admin rides in with apps/sites (its storage leaf), not on its own.
       leak=$(go list -deps ./cmd/cloud | grep -E '^github.com/hanzoai/cloud/(apps|clients)' \
         | grep -vE '^github.com/hanzoai/cloud/apps/(sites|s3admin)$' || true)
@@ -324,7 +364,15 @@ test:
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
-      go test -count=1 ./openapi
+      # A STABLE cache home. setup-go's cache writes to the Actions cache
+      # backend, which a self-hosted forge runner may not provide — and when it
+      # does not, the flag is a no-op and every step here compiles the world.
+      # These runners keep their filesystem between jobs, so naming the two
+      # caches at a fixed path makes them persist on the host regardless. Go
+      # locks both, so concurrent jobs sharing them is safe.
+      export GOCACHE=${GOCACHE:-/var/tmp/hanzo-go/build} GOMODCACHE=${GOMODCACHE:-/var/tmp/hanzo-go/mod}
+      mkdir -p "$GOCACHE" "$GOMODCACHE"
+      go test ./openapi
   - name: app-contract
     # Every app builds, tests and describes itself through ONE shared file
     # (mk/plugin.mk), and this is the only gate that proves every per-app binary
@@ -339,6 +387,14 @@ test:
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      # A STABLE cache home. setup-go's cache writes to the Actions cache
+      # backend, which a self-hosted forge runner may not provide — and when it
+      # does not, the flag is a no-op and every step here compiles the world.
+      # These runners keep their filesystem between jobs, so naming the two
+      # caches at a fixed path makes them persist on the host regardless. Go
+      # locks both, so concurrent jobs sharing them is safe.
+      export GOCACHE=${GOCACHE:-/var/tmp/hanzo-go/build} GOMODCACHE=${GOMODCACHE:-/var/tmp/hanzo-go/mod}
+      mkdir -p "$GOCACHE" "$GOMODCACHE"
       # ONE gate definition, called here rather than restated: mk/fleet.mk's
       # check regenerates every subset AND weaves the golden, then fails
       # on any porcelain change. This step used to regenerate the subsets only,
@@ -351,6 +407,14 @@ test:
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=1
+      # A STABLE cache home. setup-go's cache writes to the Actions cache
+      # backend, which a self-hosted forge runner may not provide — and when it
+      # does not, the flag is a no-op and every step here compiles the world.
+      # These runners keep their filesystem between jobs, so naming the two
+      # caches at a fixed path makes them persist on the host regardless. Go
+      # locks both, so concurrent jobs sharing them is safe.
+      export GOCACHE=${GOCACHE:-/var/tmp/hanzo-go/build} GOMODCACHE=${GOMODCACHE:-/var/tmp/hanzo-go/mod}
+      mkdir -p "$GOCACHE" "$GOMODCACHE"
       # THE WHOLE TREE. This used to name twelve packages, which meant a red
       # package could sit on main without ever producing a red build — that is
       # exactly how apps/git and apps/entitlements went unnoticed. An
@@ -366,6 +430,6 @@ test:
       # -tags: the cgo floor above. CGO_ENABLED=1 without sqlite_math_functions
       # cannot compile the 47 packages that reach hanzoai/base/core, so this step
       # reported "[build failed]" for them instead of running their tests.
-      go test -count=1 -timeout 30m -tags "sqlite_fts5 sqlite_math_functions" \
+      go test -timeout 30m -tags "sqlite_fts5 sqlite_math_functions" \
         -skip 'TestRecord_DebitsFinanceInProcess|TestIndexerUnreachableHonestEmpty' \
         ./...
