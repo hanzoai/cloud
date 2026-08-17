@@ -33,6 +33,17 @@ func init() {
 			"projectsDomainRef.slug": "Slug is the project the host is attached to, from the path.",
 		},
 	})
+	zip.Describe("GET /v1/edge", zip.Doc{
+		Description: "health reports whether a publish reaches readers, rather than whether it was\naccepted. Those are different questions and only the second one was ever\nvisible.\n\nIt asks the edge and nothing else. There is no live call to the provider here:\nConfigured is a local fact, it is the fact that was missing, and a health check\nthat spends a third-party API call is one an operator learns not to run.",
+		Fields: map[string]string{
+			"edgeState.configured": "Configured is whether the edge holds credentials to act at all. False means\nevery purge is a no-op.",
+			"edgeState.error":      "Error is the blocker, so an operator reads it instead of guessing at it.",
+			"edgeState.freshness":  "Freshness says, in one phrase, how long after a publish a reader sees it.\nIt is the sentence an operator actually wants; the booleans above are how\na machine reads the same fact.",
+			"edgeState.policy":     "Policy is the Cache-Control this edge serves each class of object with. It\nis DERIVED from the one canonical function, never a second copy: half the\nconfusion when a publish looks stale is not knowing what the TTLs are, and\nreading them out of the source is not something an operator should have to\ndo to answer \"how long until this is live\".",
+			"edgeState.provider":   "Provider is the CDN behind this edge, or \"none\". It is the first thing an\noperator wants and the only vendor name this API returns.",
+			"edgeState.status":     "Status is \"ok\" when a publish reaches readers immediately, else \"degraded\".",
+		},
+	})
 	zip.Describe("GET /v1/platform/sites", zip.Doc{
 		Description: "Returns every project your org owns.\n\nEach row carries the slug, name, framework, visibility, status and live URL —\nthe same rows console and the builder render, because there is only one store\nbehind both. It requires a validated principal (403 without one) and is keyed\nby that principal's org, so it never contains another tenant's project.",
 		Fields: map[string]string{
