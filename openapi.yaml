@@ -7587,36 +7587,6 @@ components:
             the key the register sorts on (newest activity first).
           type: integer
       type: object
-    ReleaseState:
-      properties:
-        endedAt:
-          type: integer
-        error:
-          description: Error is why it stopped, when it failed.
-          type: string
-        id:
-          description: ID is the build id returned by the 202.
-          type: string
-        image:
-          description: Image is the tag the release publishes on success.
-          type: string
-        reached:
-          description: 'Reached is the last pipeline step completed: built, smoked,
-            tagged, pinned.'
-          type: string
-        sha:
-          description: SHA is the commit the release pinned.
-          type: string
-        startedAt:
-          description: StartedAt / EndedAt are unix seconds.
-          type: integer
-        status:
-          description: Status is "releasing", "released" or "failed".
-          type: string
-        version:
-          description: Version is that tag without the leading "v".
-          type: string
-      type: object
     ReloadIn:
       properties:
         name:
@@ -44146,13 +44116,6 @@ components:
         ref:
           description: Ref is the git ref to build when no SHA is given.
           type: string
-        release:
-          description: |-
-            Release requests native release semantics for cloud's self-publish: compute
-            the next version, build+push ghcr.io/hanzoai/cloud, smoke it, then tag (the
-            receipt) and notify universe. It owns its output image (release.go), and it
-            takes SuperAdmin.
-          type: boolean
         repo:
           description: Repo is the repository clone URL to build. Required on the
             image lane.
@@ -44170,8 +44133,8 @@ components:
     runnerBuildResp:
       properties:
         buildJobId:
-          description: BuildJobID is the queued build's id, and what a release is
-            followed by.
+          description: BuildJobID is the queued build's id, and what its progress
+            is read by.
           type: string
         image:
           description: Image is the ref the image lane will push.
@@ -44183,8 +44146,7 @@ components:
           description: RunnerPool is the runner class the build was placed on.
           type: string
         status:
-          description: Status is `queued` for an ordinary build, `releasing` for a
-            self-publish.
+          description: Status is `queued` — the build was accepted and has not finished.
           type: string
         target:
           description: Target is the multi-stage build target, echoed back.
@@ -44808,14 +44770,6 @@ components:
           description: Ref is an idempotency key. Without one each seed is a distinct
             injection.
           type: string
-      type: object
-    selfReleaseList:
-      properties:
-        data:
-          description: Data is the recorded release runs, newest first.
-          items:
-            $ref: '#/components/schemas/ReleaseState'
-          type: array
       type: object
     seriesLine:
       properties:
@@ -111266,17 +111220,15 @@ paths:
       description: |-
         Triggers a native build — an image, or the binaries a repo declares.
 
-        The fabric's own build trigger, and what `hanzo build`, git-push-to-deploy and
-        cloud's own self-release all call. It answers 202 with the build job id: a queued
-        build, not a pushed artifact.
+        The fabric's own build trigger, and what `hanzo build` and git-push-to-deploy
+        call. It answers 202 with the build job id: a queued build, not a pushed
+        artifact.
 
         Two lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and
         the output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane
         takes `binaries` — the same recipe the repo's hanzo.yml declares — and publishes
         to object storage instead; it must carry no `image`, because a build produces
-        binaries or an image, never both. `release: true` is the third mode: cloud
-        self-publishing its own image, version computed, built, smoke-tested, tagged and
-        announced.
+        binaries or an image, never both.
 
         PRIVILEGED, with exactly two credentials and never a third: the shared
         build-callback token compared in constant time — the machine path, which a user
@@ -111289,13 +111241,6 @@ paths:
         caller's own validated org — so an org admin can only publish into their own
         brand and can never overwrite another's through the shared push credential. The
         same confinement applies to the artifact lane's repo owner.
-
-        `release: true` is the exception, and takes SUPERADMIN. It publishes the
-        platform's own image — the binary the whole fleet runs — so what it lands reaches
-        every org at the next reconcile, and no role inside the caller's own org can
-        authorize that. An org admin is refused however the registry namespace lines up,
-        and the build token, which carries no identity at all, may enqueue an ordinary
-        build but never a release.
 
         The output image is parsed and validated as a single well-formed OCI ref before
         any authorization decision reads it, so a crafted ref cannot smuggle a
@@ -111315,61 +111260,6 @@ paths:
                 $ref: '#/components/schemas/runnerBuildResp'
           description: accepted
       summary: Triggers a native build — an image, or the binaries a repo declares.
-      tags:
-      - runner
-      x-app: platform
-  /v1/runner/releases:
-    get:
-      description: |-
-        Lists the self-publish releases this process has run.
-
-        It lists the platform's own release runs with their current state, so a release
-        that answered 202 with an id can be followed to its end. SuperAdmin only — this
-        is the platform's own publishing record, not a tenant surface.
-
-        The record lives in THIS process's memory, so it covers the releases this
-        instance started and does not survive a restart.
-      operationId: get_runner_releases
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/selfReleaseList'
-          description: ok
-      summary: Lists the self-publish releases this process has run.
-      tags:
-      - runner
-      x-app: platform
-  /v1/runner/releases/{id}:
-    get:
-      description: |-
-        Returns one self-publish release by the id its 202 returned.
-
-        It returns the state of one release run — which is the whole reason the trigger
-        answers with an id, because without this a release that died in the detached
-        pipeline would look exactly like one still in flight. SuperAdmin only.
-
-        A 404 means the id is unknown OR has aged out of this process's in-memory record.
-        That is the honest answer either way: the process genuinely cannot tell the two
-        apart.
-      operationId: get_runner_releases_by_id
-      parameters:
-      - description: ID is the build id the release trigger answered with, from the
-          path.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReleaseState'
-          description: ok
-      summary: Returns one self-publish release by the id its 202 returned.
       tags:
       - runner
       x-app: platform

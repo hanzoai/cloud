@@ -192,34 +192,6 @@ func init() {
 			"releaseRow.version":     "Version is the released image tag, or v<n> when the image carries none.",
 		},
 	})
-	zip.Describe("GET /v1/runner/releases", zip.Doc{
-		Description: "Lists the self-publish releases this process has run.\n\nIt lists the platform's own release runs with their current state, so a release\nthat answered 202 with an id can be followed to its end. SuperAdmin only — this\nis the platform's own publishing record, not a tenant surface.\n\nThe record lives in THIS process's memory, so it covers the releases this\ninstance started and does not survive a restart.",
-		Fields: map[string]string{
-			"ReleaseState.error":     "Error is why it stopped, when it failed.",
-			"ReleaseState.id":        "ID is the build id returned by the 202.",
-			"ReleaseState.image":     "Image is the tag the release publishes on success.",
-			"ReleaseState.reached":   "Reached is the last pipeline step completed: built, smoked, tagged, pinned.",
-			"ReleaseState.sha":       "SHA is the commit the release pinned.",
-			"ReleaseState.startedAt": "StartedAt / EndedAt are unix seconds.",
-			"ReleaseState.status":    "Status is \"releasing\", \"released\" or \"failed\".",
-			"ReleaseState.version":   "Version is that tag without the leading \"v\".",
-			"selfReleaseList.data":   "Data is the recorded release runs, newest first.",
-		},
-	})
-	zip.Describe("GET /v1/runner/releases/:id", zip.Doc{
-		Description: "Returns one self-publish release by the id its 202 returned.\n\nIt returns the state of one release run — which is the whole reason the trigger\nanswers with an id, because without this a release that died in the detached\npipeline would look exactly like one still in flight. SuperAdmin only.\n\nA 404 means the id is unknown OR has aged out of this process's in-memory record.\nThat is the honest answer either way: the process genuinely cannot tell the two\napart.",
-		Fields: map[string]string{
-			"ReleaseState.error":     "Error is why it stopped, when it failed.",
-			"ReleaseState.id":        "ID is the build id returned by the 202.",
-			"ReleaseState.image":     "Image is the tag the release publishes on success.",
-			"ReleaseState.reached":   "Reached is the last pipeline step completed: built, smoked, tagged, pinned.",
-			"ReleaseState.sha":       "SHA is the commit the release pinned.",
-			"ReleaseState.startedAt": "StartedAt / EndedAt are unix seconds.",
-			"ReleaseState.status":    "Status is \"releasing\", \"released\" or \"failed\".",
-			"ReleaseState.version":   "Version is that tag without the leading \"v\".",
-			"selfReleaseRef.id":      "ID is the build id the release trigger answered with, from the path.",
-		},
-	})
 	zip.Describe("POST /platform/fleet", zip.Doc{
 		Fields: map[string]string{
 			"App.org":      "Org is which org OWNS this app. On a reply that is a property of the thing\ndescribed, not a claim by the caller — a cross-org observer has to see it.",
@@ -398,7 +370,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/runner", zip.Doc{
-		Description: "Triggers a native build — an image, or the binaries a repo declares.\n\nThe fabric's own build trigger, and what `hanzo build`, git-push-to-deploy and\ncloud's own self-release all call. It answers 202 with the build job id: a queued\nbuild, not a pushed artifact.\n\nTwo lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and\nthe output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane\ntakes `binaries` — the same recipe the repo's hanzo.yml declares — and publishes\nto object storage instead; it must carry no `image`, because a build produces\nbinaries or an image, never both. `release: true` is the third mode: cloud\nself-publishing its own image, version computed, built, smoke-tested, tagged and\nannounced.\n\nPRIVILEGED, with exactly two credentials and never a third: the shared\nbuild-callback token compared in constant time — the machine path, which a user\nnever holds — or a validated IAM principal who is an ADMIN of their org, which is\nthe `hanzo build` user path and means one IAM login authorizes a build with no\nseparate build token. A plain member is refused.\n\nBoth paths are bounded the same way: the output must push to a registry the\nfabric owns, and on the IAM path the image's registry namespace must MATCH the\ncaller's own validated org — so an org admin can only publish into their own\nbrand and can never overwrite another's through the shared push credential. The\nsame confinement applies to the artifact lane's repo owner.\n\n`release: true` is the exception, and takes SUPERADMIN. It publishes the\nplatform's own image — the binary the whole fleet runs — so what it lands reaches\nevery org at the next reconcile, and no role inside the caller's own org can\nauthorize that. An org admin is refused however the registry namespace lines up,\nand the build token, which carries no identity at all, may enqueue an ordinary\nbuild but never a release.\n\nThe output image is parsed and validated as a single well-formed OCI ref before\nany authorization decision reads it, so a crafted ref cannot smuggle a\nbuild-exporter attribute past the check.",
+		Description: "Triggers a native build — an image, or the binaries a repo declares.\n\nThe fabric's own build trigger, and what `hanzo build` and git-push-to-deploy\ncall. It answers 202 with the build job id: a queued build, not a pushed\nartifact.\n\nTwo lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and\nthe output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane\ntakes `binaries` — the same recipe the repo's hanzo.yml declares — and publishes\nto object storage instead; it must carry no `image`, because a build produces\nbinaries or an image, never both.\n\nPRIVILEGED, with exactly two credentials and never a third: the shared\nbuild-callback token compared in constant time — the machine path, which a user\nnever holds — or a validated IAM principal who is an ADMIN of their org, which is\nthe `hanzo build` user path and means one IAM login authorizes a build with no\nseparate build token. A plain member is refused.\n\nBoth paths are bounded the same way: the output must push to a registry the\nfabric owns, and on the IAM path the image's registry namespace must MATCH the\ncaller's own validated org — so an org admin can only publish into their own\nbrand and can never overwrite another's through the shared push credential. The\nsame confinement applies to the artifact lane's repo owner.\n\nThe output image is parsed and validated as a single well-formed OCI ref before\nany authorization decision reads it, so a crafted ref cannot smuggle a\nbuild-exporter attribute past the check.",
 		Fields: map[string]string{
 			"runnerBuildReq.arch":           "Arch is the target architecture for the artifact lane.",
 			"runnerBuildReq.args":           "Args are --build-arg values. They are what lets several images off ONE\nDockerfile mean different things — the sandbox classes are three entries\ndiffering only by STAGE. Validated at the k8s choke point, with VERSION and\nREVISION taking precedence: those are receipts the builder derives from the\ntag and the commit, and a caller that could overwrite them could make an\nimage lie about which commit it is.",
@@ -412,15 +384,14 @@ func init() {
 			"runnerBuildReq.organizationId": "OrgID attributes the build to an org. On the IAM path it defaults to the\ncaller's own validated org, and a foreign one is refused unless the caller\nis a platform SuperAdmin.",
 			"runnerBuildReq.os":             "OS is the target operating system for the artifact lane.",
 			"runnerBuildReq.ref":            "Ref is the git ref to build when no SHA is given.",
-			"runnerBuildReq.release":        "Release requests native release semantics for cloud's self-publish: compute\nthe next version, build+push ghcr.io/hanzoai/cloud, smoke it, then tag (the\nreceipt) and notify universe. It owns its output image (release.go), and it\ntakes SuperAdmin.",
 			"runnerBuildReq.repo":           "Repo is the repository clone URL to build. Required on the image lane.",
 			"runnerBuildReq.sha":            "SHA is the commit to pin; it wins over Ref and Branch.",
 			"runnerBuildReq.tag":            "Tag is the publish path segment, so both front doors write ONE index at ONE\nURL. It defaults to the pinned ref, and must be named explicitly for a\nbranch.",
-			"runnerBuildResp.buildJobId":    "BuildJobID is the queued build's id, and what a release is followed by.",
+			"runnerBuildResp.buildJobId":    "BuildJobID is the queued build's id, and what its progress is read by.",
 			"runnerBuildResp.image":         "Image is the ref the image lane will push.",
 			"runnerBuildResp.index":         "Index is the binaries.json URL the artifact lane will publish.",
 			"runnerBuildResp.runnerPool":    "RunnerPool is the runner class the build was placed on.",
-			"runnerBuildResp.status":        "Status is `queued` for an ordinary build, `releasing` for a self-publish.",
+			"runnerBuildResp.status":        "Status is `queued` — the build was accepted and has not finished.",
 			"runnerBuildResp.target":        "Target is the multi-stage build target, echoed back.",
 		},
 	})

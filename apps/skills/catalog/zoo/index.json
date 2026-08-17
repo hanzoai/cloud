@@ -5,7 +5,7 @@
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
-  "skill_count": 531,
+  "skill_count": 530,
   "skills": [
     {
       "description": "Read admin affiliates: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents..",
@@ -3493,14 +3493,6 @@
       "path": "router_stats/SKILL.md",
       "service": "router",
       "sha256": "017433427f5bb95f1ff5782f8d8f01fa3b68e3ada80522cbabb3909f1ba284d7",
-      "version": "8.0.0"
-    },
-    {
-      "description": "Read runner releases: Lists the self-publish releases this process has run., Returns one self-publish release by the id its 202 returned..",
-      "name": "runner_releases",
-      "path": "runner_releases/SKILL.md",
-      "service": "runner",
-      "sha256": "6b505aee63eaf0b25b631d59be6e4023c97c3d68b9ed96afed5f03ff7b9af87d",
       "version": "8.0.0"
     },
     {
