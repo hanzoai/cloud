@@ -18157,6 +18157,43 @@ components:
           description: Yellow is how many have drifted within tolerance.
           type: integer
       type: object
+    edgeState:
+      properties:
+        configured:
+          description: |-
+            Configured is whether the edge holds credentials to act at all. False means
+            every purge is a no-op.
+          type: boolean
+        error:
+          description: Error is the blocker, so an operator reads it instead of guessing
+            at it.
+          type: string
+        freshness:
+          description: |-
+            Freshness says, in one phrase, how long after a publish a reader sees it.
+            It is the sentence an operator actually wants; the booleans above are how
+            a machine reads the same fact.
+          type: string
+        policy:
+          additionalProperties:
+            type: string
+          description: |-
+            Policy is the Cache-Control this edge serves each class of object with. It
+            is DERIVED from the one canonical function, never a second copy: half the
+            confusion when a publish looks stale is not knowing what the TTLs are, and
+            reading them out of the source is not something an operator should have to
+            do to answer "how long until this is live".
+          type: object
+        provider:
+          description: |-
+            Provider is the CDN behind this edge, or "none". It is the first thing an
+            operator wants and the only vendor name this API returns.
+          type: string
+        status:
+          description: Status is "ok" when a publish reaches readers immediately,
+            else "degraded".
+          type: string
+      type: object
     embedStatusResp:
       properties:
         app:
@@ -75149,6 +75186,35 @@ paths:
       tags:
       - download
       x-app: exec
+  /v1/edge:
+    get:
+      description: |-
+        health reports whether a publish reaches readers, rather than whether it was
+        accepted. Those are different questions and only the second one was ever
+        visible.
+
+        It asks the edge and nothing else. There is no live call to the provider here:
+        Configured is a local fact, it is the fact that was missing, and a health check
+        that spends a third-party API call is one an operator learns not to run.
+      operationId: get_edge
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/edgeState'
+          description: ok
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/edgeState'
+          description: service unavailable
+      summary: health reports whether a publish reaches readers, rather than whether
+        it was accepted.
+      tags:
+      - edge
+      x-app: projects
   /v1/embed:
     get:
       description: |-
@@ -118677,6 +118743,9 @@ tags:
 - description: 'Package exec is the code interpreter: run a snippet in a sandbox,
     and move files in and out of the session that sandbox IS.'
   name: download
+- description: 'Package projects is where your sites live: create one, deploy a build,
+    roll back to any release.'
+  name: edge
 - description: 'Package account is your own account: API keys you mint and revoke,
     and org onboarding.'
   name: embed
