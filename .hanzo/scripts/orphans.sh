@@ -16,13 +16,22 @@
 # tagged. A gate phrased in terms of a lane can only catch that lane, and the
 # lane that caused this outage was the one nobody thought to instrument.
 #
-# TAGS ARE READ FROM BOTH REPOS, and the union is what counts. cloud is canonical
-# on git.hanzo.ai, but cicd.yml claims its version by creating refs/tags/v<N>
-# through the GitHub API on hanzoai/cloud, so receipts exist in two namespaces.
-# Asking only one would paint every release red from the other, and a gate that
-# is always red is a gate someone turns off. Asking for the union answers the
-# question actually worth asking — "does a receipt for this image exist anywhere"
-# — and stays true whichever way the namespace split is later resolved.
+# A RECEIPT IS A TAG ON THE REPOSITORY THAT ISSUES THE NUMBERS, and there is one of
+# those — the repository cicd.yml claims against. A tag anywhere else is a different
+# repository's name for its own commit, and counting it here would answer "this image
+# has a receipt" precisely when two registers have handed out one number, which is
+# the case most worth catching.
+#
+# It used to read a second register too, and take the union, so that neither could
+# paint the other's releases red. That reasoning belonged to a period when numbers
+# were claimed on github; they are not, and the union now holds nothing but the
+# numbers the old register invented after it stopped issuing them.
+#
+# The arbiter is named by its own name. git.hanzo.ai answers a repository's former
+# name with a 301 to whatever holds it now, so reading the old spelling is not
+# reading the repository it names — it is reading whichever one that name resolves
+# to today, and following the redirect is how a check comes to verify something
+# other than what it says.
 #
 # WHAT IS NOT A FAILURE. The images already published untagged cannot be fixed by
 # this script, and pretending otherwise would make it red forever on day one.
@@ -40,9 +49,9 @@
 # how a verifier comes to pass by accident, so they get separate codes and the
 # caller can tell an outage from a clean run.
 #
-# Test seams, mirroring githubAPIBase in apps/platform/release.go — set to a file
-# and that source is read from it instead of the network, so the comparison can
-# be exercised with no registry, no tokens and no network at all:
+# Test seams — set one to a file and that source is read from it instead of the
+# network, so the comparison can be exercised with no registry, no tokens and no
+# network at all:
 #   ORPHANS_IMAGES    published image tags, one per line
 #   ORPHANS_TAGS      git tags, one per line
 #   ORPHANS_ACCEPTED  path to the recorded-orphans file
@@ -95,32 +104,22 @@ fi
 [ -s "$work/images" ] || { echo "orphans: no published versions found for ${IMAGE_PATH} — that is not a clean run, it is a read that returned nothing" >&2; exit 2; }
 
 # ── what is tagged ───────────────────────────────────────────────────────────
-# `git ls-remote` failing and a repo having no tags produce the same empty list,
-# so each remote is checked for the READ succeeding, separately from what it
-# returned. At least one remote must answer: a network that answered nothing
-# would otherwise make every published image look untagged and turn a broken
-# gate into 400 spurious failures.
+# `git ls-remote` failing and a repo having no tags produce the same empty list, so
+# the READ is checked for succeeding, separately from what it returned: a network
+# that answered nothing would otherwise make every published image look untagged
+# and turn a broken check into 700 spurious failures.
+ARBITER="https://git.hanzo.ai/hanzo-inc/cloud"
 if [ -n "${ORPHANS_TAGS:-}" ]; then
   [ -r "$ORPHANS_TAGS" ] || { echo "orphans: cannot read ORPHANS_TAGS=$ORPHANS_TAGS" >&2; exit 2; }
   grep -E "$SEMVER" "$ORPHANS_TAGS" | sort -u > "$work/tags" || true
 else
-  : > "$work/tags.raw"
-  answered=0
-  for remote in "https://git.hanzo.ai/hanzoai/cloud" "https://github.com/hanzoai/cloud"; do
-    url="$remote"
-    case "$remote" in
-      *github.com*) [ -n "${GH_PAT:-}" ] && url="https://x-access-token:${GH_PAT}@github.com/hanzoai/cloud" ;;
-      *git.hanzo.ai*) [ -n "${FORGE_TOKEN:-}" ] && url="https://x-access-token:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/cloud" ;;
-    esac
-    if git ls-remote --tags "$url" > "$work/ls" 2>/dev/null; then
-      answered=$((answered + 1))
-      sed 's|.*refs/tags/||; s|\^{}$||' < "$work/ls" >> "$work/tags.raw"
-    else
-      echo "orphans: ${remote} did not answer — its receipts are not in this comparison" >&2
-    fi
-  done
-  [ "$answered" -gt 0 ] || { echo "orphans: no tag remote answered — refusing to call every published image an orphan on a failed read" >&2; exit 2; }
-  grep -E "$SEMVER" "$work/tags.raw" | sort -u > "$work/tags" || true
+  url="$ARBITER"
+  [ -n "${FORGE_TOKEN:-}" ] && url="https://x-access-token:${FORGE_TOKEN}@${ARBITER#https://}"
+  if ! git -c http.followRedirects=false ls-remote --tags "$url" > "$work/ls" 2>/dev/null; then
+    echo "orphans: ${ARBITER} did not answer — refusing to call every published image an orphan on a failed read" >&2
+    exit 2
+  fi
+  sed 's|.*refs/tags/||; s|\^{}$||' < "$work/ls" | grep -E "$SEMVER" | sort -u > "$work/tags" || true
 fi
 
 # ── what is already known and recorded ───────────────────────────────────────
