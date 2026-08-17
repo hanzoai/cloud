@@ -136,7 +136,7 @@ func TestAudit_RecordsMutation(t *testing.T) {
 	if r.Hash == "" {
 		t.Error("record has no hash — not chained")
 	}
-	if iv, _ := rec.Verify(t.Context()); !iv.OK {
+	if iv, _ := rec.Verify(t.Context()); iv.Verdict != audit.Intact {
 		t.Errorf("chain broke after one record at %d (%s)", iv.BrokenAt, iv.Reason)
 	}
 }
