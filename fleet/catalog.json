@@ -8607,6 +8607,10 @@
    "doc": "Gives a custom hostname back, so the name is free to reuse.\n\nA claim is FIRST-COME and global, so an add-only surface was not ownership but\na leak: a customer who mistyped a domain, or claimed one they later moved\nelsewhere, could neither reuse it nor let anyone else. This is the third\nwriter that closes it. The release is scoped to (host, org, slug), so it can\nonly ever drop THIS tenant's own claim, and it is IDEMPOTENT: releasing a host\nwe do not hold is a clean 204, never a 404 that would let a caller probe which\nhosts other tenants hold. The edge cache-tag is flushed, since the host stops\nrouting here.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404."
   },
   {
+   "id": "get_edge",
+   "doc": "health reports whether a publish reaches readers, rather than whether it was\naccepted. Those are different questions and only the second one was ever\nvisible.\n\nIt asks the edge and nothing else. There is no live call to the provider here:\nConfigured is a local fact, it is the fact that was missing, and a health check\nthat spends a third-party API call is one an operator learns not to run."
+  },
+  {
    "id": "get_platform_sites",
    "doc": "Returns every project your org owns.\n\nEach row carries the slug, name, framework, visibility, status and live URL —\nthe same rows console and the builder render, because there is only one store\nbehind both. It requires a validated principal (403 without one) and is keyed\nby that principal's org, so it never contains another tenant's project."
   },

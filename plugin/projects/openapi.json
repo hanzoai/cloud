@@ -17,6 +17,9 @@
   ],
   "tags": [
     {
+      "name": "edge"
+    },
+    {
       "name": "platform"
     },
     {
@@ -30,6 +33,38 @@
     }
   ],
   "paths": {
+    "/v1/edge": {
+      "get": {
+        "operationId": "get_edge",
+        "summary": "health reports whether a publish reaches readers, rather than whether it was accepted.",
+        "description": "health reports whether a publish reaches readers, rather than whether it was\naccepted. Those are different questions and only the second one was ever\nvisible.\n\nIt asks the edge and nothing else. There is no live call to the provider here:\nConfigured is a local fact, it is the fact that was missing, and a health check\nthat spends a third-party API call is one an operator learns not to run.",
+        "tags": [
+          "edge"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/edgeState"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/edgeState"
+                }
+              }
+            },
+            "description": "service unavailable"
+          }
+        }
+      }
+    },
     "/v1/platform/sites": {
       "get": {
         "operationId": "get_platform_sites",
@@ -1832,6 +1867,38 @@
             "type": "string"
           }
         }
+      },
+      "edgeState": {
+        "properties": {
+          "configured": {
+            "description": "Configured is whether the edge holds credentials to act at all. False means\nevery purge is a no-op.",
+            "type": "boolean"
+          },
+          "error": {
+            "description": "Error is the blocker, so an operator reads it instead of guessing at it.",
+            "type": "string"
+          },
+          "freshness": {
+            "description": "Freshness says, in one phrase, how long after a publish a reader sees it.\nIt is the sentence an operator actually wants; the booleans above are how\na machine reads the same fact.",
+            "type": "string"
+          },
+          "policy": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Policy is the Cache-Control this edge serves each class of object with. It\nis DERIVED from the one canonical function, never a second copy: half the\nconfusion when a publish looks stale is not knowing what the TTLs are, and\nreading them out of the source is not something an operator should have to\ndo to answer \"how long until this is live\".",
+            "type": "object"
+          },
+          "provider": {
+            "description": "Provider is the CDN behind this edge, or \"none\". It is the first thing an\noperator wants and the only vendor name this API returns.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" when a publish reaches readers immediately, else \"degraded\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
       },
       "projectsBoundDomains": {
         "properties": {
