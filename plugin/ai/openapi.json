@@ -47,12 +47,6 @@
       "name": "finetune"
     },
     {
-      "name": "generate-text-to-speech-audio"
-    },
-    {
-      "name": "generate-text-to-speech-audio-stream"
-    },
-    {
       "name": "health"
     },
     {
@@ -72,9 +66,6 @@
     },
     {
       "name": "org"
-    },
-    {
-      "name": "process-speech-to-text"
     },
     {
       "name": "query"
@@ -10765,7 +10756,7 @@
       "post": {
         "operationId": "post_audio_speech",
         "summary": "The OpenAI-compatible TTS endpoint (POST /v1/audio/speech).",
-        "description": "The OpenAI-compatible TTS endpoint (POST /v1/audio/speech). It\nauthenticates the caller, resolves `model` to its TTS provider (the SAME model-route\nresolution the chat/images/video endpoints use — so a BYO node registered as a TTS\nprovider works transparently), synthesizes the audio, and streams the bytes back.\nOne code path, OpenAI-shaped, no store/message coupling (unlike the legacy\n/v1/generate-text-to-speech-audio which is bound to a chat store).",
+        "description": "The OpenAI-compatible TTS endpoint (POST /v1/audio/speech). It\nauthenticates the caller, resolves `model` to its TTS provider (the SAME model-route\nresolution the chat/images/video endpoints use — so a BYO node registered as a TTS\nprovider works transparently), synthesizes the audio, and streams the bytes back.\nThis is the ONE way to synthesize speech: OpenAI-shaped, with no store or\nmessage coupling, so a caller needs no chat to speak.",
         "tags": [
           "audio"
         ],
@@ -10777,7 +10768,7 @@
       "post": {
         "operationId": "post_audio_transcriptions",
         "summary": "The OpenAI-compatible STT endpoint (POST /v1/audio/transcriptions, multipart: file + model [+ language + response_format]).",
-        "description": "The OpenAI-compatible STT endpoint\n(POST /v1/audio/transcriptions, multipart: file + model [+ language +\nresponse_format]). It mirrors AudioSpeech exactly: authenticate the caller,\nresolve `model` to its STT provider through the SAME model-route resolution\n(so the in-cluster speech service — or any BYO node registered as an STT\nprovider — works transparently), transcribe, and return the OpenAI body.\nOne code path, OpenAI-shaped, no store coupling (unlike the legacy\n/v1/process-speech-to-text, which is bound to a chat store).",
+        "description": "The OpenAI-compatible STT endpoint\n(POST /v1/audio/transcriptions, multipart: file + model [+ language +\nresponse_format]). It mirrors AudioSpeech exactly: authenticate the caller,\nresolve `model` to its STT provider through the SAME model-route resolution\n(so the in-cluster speech service — or any BYO node registered as an STT\nprovider — works transparently), transcribe, and return the OpenAI body.\nThis is the ONE way to transcribe: OpenAI-shaped, with no store coupling, so a\ncaller needs no chat to be heard.",
         "tags": [
           "audio"
         ],
@@ -11013,28 +11004,6 @@
         "description": "Returns the new-job catalog plus, when a selection is passed\n(?baseModel\u0026method\u0026task\u0026preset[\u0026datasetExamples]), the recommended config so the\nconsole can render \"Recommended\" as a one-click, ready-to-run default.",
         "tags": [
           "finetune"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
-    "/v1/generate-text-to-speech-audio": {
-      "post": {
-        "operationId": "post_generate-text-to-speech-audio",
-        "summary": "Convert text to speech",
-        "description": "Convert text to speech",
-        "tags": [
-          "generate-text-to-speech-audio"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
-    "/v1/generate-text-to-speech-audio-stream": {
-      "get": {
-        "operationId": "get_generate-text-to-speech-audio-stream",
-        "summary": "Convert text to speech with streaming",
-        "description": "Convert text to speech with streaming",
-        "tags": [
-          "generate-text-to-speech-audio-stream"
         ],
         "x-app": "github.com/hanzoai/ai"
       }
@@ -11326,17 +11295,6 @@
         "description": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own.",
         "tags": [
           "org"
-        ],
-        "x-app": "github.com/hanzoai/ai"
-      }
-    },
-    "/v1/process-speech-to-text": {
-      "post": {
-        "operationId": "post_process-speech-to-text",
-        "summary": "Convert speech to text",
-        "description": "Convert speech to text",
-        "tags": [
-          "process-speech-to-text"
         ],
         "x-app": "github.com/hanzoai/ai"
       }
