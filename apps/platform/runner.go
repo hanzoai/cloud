@@ -1,8 +1,8 @@
 // runner.go — POST /v1/runner: the native, privileged build endpoint.
 //
-// This is the no-GitHub-builders build trigger that `hanzo build`, the
-// git-push-to-deploy hook, and cloud's own self-release all call. It replaces
-// the old /v1/arcd surface: one native build API on the runner fabric.
+// This is the no-GitHub-builders build trigger that `hanzo build` and the
+// git-push-to-deploy hook call. It replaces the old /v1/arcd surface: one native
+// build API on the runner fabric.
 //
 // It differs from the tenant path (/v1/platform/.../deploy, which FORCES a
 // per-tenant image ref): a /v1/runner build is PRIVILEGED — the caller supplies
@@ -69,12 +69,6 @@ type runnerBuildReq struct {
 	// caller's own validated org, and a foreign one is refused unless the caller
 	// is a platform SuperAdmin.
 	OrgID string `json:"organizationId,omitempty" url:"-"`
-	// Release requests native release semantics for cloud's self-publish: compute
-	// the next version, build+push ghcr.io/hanzoai/cloud, smoke it, then tag (the
-	// receipt) and notify universe. It owns its output image (release.go), and it
-	// takes SuperAdmin.
-	Release bool `json:"release,omitempty" url:"-"`
-
 	// Binaries selects the ARTIFACT lane (artifact.go): build what the repo's
 	// hanzo.yml `binaries:` block declares — a Go binary, an npm tarball, a Rust
 	// binary — and publish it to hanzoai/s3 instead of pushing an image. It is the
@@ -93,9 +87,9 @@ type runnerBuildReq struct {
 // artifact lane's output — the binaries.json a host reads — where Image is the
 // image lane's; a build produces exactly one of the two.
 type runnerBuildResp struct {
-	// BuildJobID is the queued build's id, and what a release is followed by.
+	// BuildJobID is the queued build's id, and what its progress is read by.
 	BuildJobID string `json:"buildJobId"`
-	// Status is `queued` for an ordinary build, `releasing` for a self-publish.
+	// Status is `queued` — the build was accepted and has not finished.
 	Status string `json:"status"`
 	// RunnerPool is the runner class the build was placed on.
 	RunnerPool string `json:"runnerPool"`
@@ -202,9 +196,9 @@ func imageInOrgRegistry(image, org string) bool {
 // self-serves an org named `Hanzo` — a different owner from `hanzo`, whose own
 // RoleOwner makes IsOrgAdmin true inside it — folded onto the `hanzo` key and
 // claimed the `hanzoai` namespace: push over another brand's production images,
-// and past the release gate onto ghcr.io/hanzoai/cloud, the binary the whole fleet
-// runs. A fold applied to one side of a comparison is not a normalization, it is a
-// collision, and here the collision IS a cross-tenant privilege grant.
+// ghcr.io/hanzoai/cloud among them — the binary the whole fleet runs. A fold
+// applied to one side of a comparison is not a normalization, it is a collision,
+// and here the collision IS a cross-tenant privilege grant.
 //
 // The keys are therefore the real IAM owners (brand.Default is "hanzo"); a brand
 // whose owner is spelled otherwise is named here as it is spelled there.
@@ -275,17 +269,15 @@ func runnerIAMAdmin(c *zip.Ctx) bool {
 
 // runnerBuild triggers a native build — an image, or the binaries a repo declares.
 //
-// The fabric's own build trigger, and what `hanzo build`, git-push-to-deploy and
-// cloud's own self-release all call. It answers 202 with the build job id: a queued
-// build, not a pushed artifact.
+// The fabric's own build trigger, and what `hanzo build` and git-push-to-deploy
+// call. It answers 202 with the build job id: a queued build, not a pushed
+// artifact.
 //
 // Two lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and
 // the output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane
 // takes `binaries` — the same recipe the repo's hanzo.yml declares — and publishes
 // to object storage instead; it must carry no `image`, because a build produces
-// binaries or an image, never both. `release: true` is the third mode: cloud
-// self-publishing its own image, version computed, built, smoke-tested, tagged and
-// announced.
+// binaries or an image, never both.
 //
 // PRIVILEGED, with exactly two credentials and never a third: the shared
 // build-callback token compared in constant time — the machine path, which a user
@@ -298,13 +290,6 @@ func runnerIAMAdmin(c *zip.Ctx) bool {
 // caller's own validated org — so an org admin can only publish into their own
 // brand and can never overwrite another's through the shared push credential. The
 // same confinement applies to the artifact lane's repo owner.
-//
-// `release: true` is the exception, and takes SUPERADMIN. It publishes the
-// platform's own image — the binary the whole fleet runs — so what it lands reaches
-// every org at the next reconcile, and no role inside the caller's own org can
-// authorize that. An org admin is refused however the registry namespace lines up,
-// and the build token, which carries no identity at all, may enqueue an ordinary
-// build but never a release.
 //
 // The output image is parsed and validated as a single well-formed OCI ref before
 // any authorization decision reads it, so a crafted ref cannot smuggle a
@@ -321,7 +306,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 	req := *body
 	// Auth — ONE of two credentials, never a third:
 	//   (1) the shared build-callback token (constant-time): the MACHINE path
-	//       (git-push-to-deploy, cloud self-release, the operator). A user never
+	//       (git-push-to-deploy, the operator). A user never
 	//       holds it. Or
 	//   (2) a validated IAM principal who is an admin (the IAM `isAdmin` bit, or a
 	//       platform SuperAdmin): the `hanzo build` USER path, so ONE IAM login
@@ -343,33 +328,17 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 	req.Repo = strings.TrimSpace(req.Repo)
 	req.Image = strings.TrimSpace(req.Image)
 
-	// Release self-publishes the platform's own image (compute version → build →
-	// smoke → tag → notify), and that is PLATFORM authority, not the authority an
-	// ordinary build takes. The two lanes part company here and nowhere else.
+	// EVERY BUILD HERE IS A TENANT'S BUILD, and the allowlist below is what bounds
+	// it: an ordinary build publishes ONE tenant's artifact into the namespace that
+	// tenant owns, so the caller's own org is the right bound and admin of that org
+	// is the right role.
 	//
-	// An ordinary build below publishes ONE tenant's artifact into the namespace
-	// that tenant owns, so the caller's own org bounds it (imageInOrgRegistry) and
-	// admin of that org is the right role. A release publishes releaseImage —
-	// ghcr.io/hanzoai/cloud, the binary every service in every org runs — so what it
-	// lands is OURS, on everyone, at the next reconcile. No property of the caller's
-	// own org can admit an act with that reach, which is why the gate is mayRelease
-	// (release.go) and reads cloud.Super alone.
-	//
-	// The whole decision is that one call, including the MACHINE path: cloud.Super
-	// requires a validated principal and PLATFORM_BUILD_CALLBACK_TOKEN mints none,
-	// so a leaked build token still enqueues an ordinary build and still cannot cut
-	// a release — one expression, not a second rule standing beside it.
-	//
-	// The image is taken from the CONSTANT releaseImage, never from the request:
-	// launchRelease publishes releaseImage regardless of what req.Image says, so
-	// reading the request here would decide against a value the caller chooses.
-	if req.Release {
-		if err := mayRelease(c); err != nil {
-			return nil, err
-		}
-		return startRelease(s, ctx, req)
-	}
-
+	// ghcr.io/hanzoai/cloud — the binary every service in every org runs — is not
+	// published from here at all. Its version numbers are ordered by one branch of
+	// one repository, and the compare-and-swap that allocates one runs in
+	// .hanzo/workflows/cicd.yml, beside the commit it is numbering. A second
+	// allocator reading the same registry cannot reserve anything the first one
+	// honours, so there is one.
 	ref := cmp.Or(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
 	if len(req.Binaries) > 0 {
 		return runnerArtifactBuild(s, ctx, c, req, ref, viaIAM)
@@ -395,7 +364,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 	// its own brand and can never overwrite another brand's image via the shared
 	// push credential. A real platform SuperAdmin may cross (disabled in prod); the
 	// machine-token path is fabric-trusted and keeps full owned-registry latitude
-	// (it is how cloud self-releases ghcr.io/hanzoai/cloud and the operator builds).
+	// (it is how a native push and the operator build).
 	if viaIAM && !principal.IsSuperAdmin(c) {
 		callerOrg, _ := principal.Org(c)
 		if !imageInOrgRegistry(req.Image, callerOrg) {
@@ -477,7 +446,7 @@ func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ct
 	}
 	// Same H1 confinement the image lane applies to a registry namespace: an IAM
 	// org-admin publishes only its own brand's repos. The machine token is
-	// fabric-trusted (it is how a native push and cloud's own release publish).
+	// fabric-trusted (it is how a native push publishes).
 	if viaIAM && !principal.IsSuperAdmin(c) {
 		callerOrg, _ := principal.Org(c)
 		if !repoOwnerInOrg(repoURL, callerOrg) {

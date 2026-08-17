@@ -133,8 +133,8 @@ var sigHeaders = []string{"X-Git-Signature", "X-Gitea-Signature", "X-Hub-Signatu
 //
 // The payload's own clone_url is deliberately NOT among these. It would be a
 // third-party string reaching the build path — the value buildFromPush matches an
-// application's RepoURL against, and the one isReleasePush compares to cloud's own
-// upstream — and it carries nothing this door does not already know: the host is
+// application's RepoURL against — and it carries nothing this door does not
+// already know: the host is
 // ours, and the path is the owner and name it has read and vetted anyway. So the
 // clone URL is DERIVED, and a delivery cannot aim a build at a repository the
 // forge does not serve.

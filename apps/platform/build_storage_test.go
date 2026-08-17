@@ -220,7 +220,6 @@ func TestEveryJobEmptyDirIsCapped(t *testing.T) {
 	}{
 		{"build", k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"}), "buildkitd", buildCacheLimit},
 		{"artifact", k.artifactJobSpec("pf-art-t", "https://github.com/hanzoai/runner", "main", "v1", "base", "put", nil), "w", artifactWorkspaceLimit},
-		{"smoke", k.smokeJobSpec("pf-smoke-t", "registry.hanzo.ai/hanzoai/runner:v1", "kms-key"), "data", smokeDataLimit},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := capOf(t, c.job, c.vol); got != c.want {
