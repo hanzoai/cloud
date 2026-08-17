@@ -503,6 +503,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// /v1/projects.
 	zip.Post(r, "/v1/sites", o.buildSite)
 	zip.Post(r, "/v1/sites/deploy", o.deploySite)
+	// Fork, the last verb that lived only under the older noun. Static, so it is
+	// reached before :slug — the same shape /v1/sites/deploy above already has.
+	zip.Post(r, "/v1/sites/fork", o.fork, zip.WithStatus(http.StatusCreated))
 	zip.Get(r, "/v1/sites", o.listSites)
 	// One site, by slug. Every sub-resource under a site answered — deployments,
 	// releases, publish — and the site itself did not, so the one call a client
@@ -531,6 +534,27 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// separable for a staged rollout, and activate doubles as the free rollback.
 	// Spelled out per surface rather than looped: zipdoc keys an op's prose on a
 	// LITERAL path, so a computed one would be filed under nothing.
+	// The REST of the lifecycle, on the sites noun — delete, edit, purge, and the
+	// custom domains a site is reached at. They existed only under /v1/projects and
+	// /v1/platform/sites, so a client that had correctly learned "a static site is
+	// a site" could open it, deploy to it, release it and publish it, and then had
+	// to switch nouns to rename it, point a domain at it, or take it down.
+	//
+	// Same handlers, deliberately: these are the same rows under a different
+	// address, and a second implementation of "delete a site" is a second thing
+	// that can disagree about what deleting one means.
+	//
+	// Written out per surface rather than looped, for the reason the releases block
+	// below gives: zipdoc keys an op's prose on a LITERAL path.
+	zip.Patch(r, "/v1/sites/:slug", o.update)
+	zip.Delete(r, "/v1/sites/:slug", o.del, zip.WithStatus(http.StatusNoContent))
+	app.Post("/v1/sites/:slug/deploy", cloud.Handle(s, deploy))
+	zip.Post(r, "/v1/sites/:slug/purge", o.purge)
+	zip.Get(r, "/v1/sites/:slug/domains", o.listDomains)
+	zip.Post(r, "/v1/sites/:slug/domains", o.bindDomains)
+	zip.Post(r, "/v1/sites/:slug/domains/:host/verify", o.verifyDomain)
+	zip.Delete(r, "/v1/sites/:slug/domains/:host", o.releaseDomain, zip.WithStatus(http.StatusNoContent))
+
 	zip.Post(r, "/v1/sites/:slug/publish", o.publishSiteRelease)
 	zip.Post(r, "/v1/sites/:slug/releases", o.createRelease, zip.WithStatus(http.StatusCreated))
 	zip.Get(r, "/v1/sites/:slug/releases", o.listReleases)
