@@ -254,106 +254,6 @@ func TestRunnerBuild_IAMForeignOrgRejected(t *testing.T) {
 	}
 }
 
-// RELEASING IS PLATFORM-SCOPED, AND THE ORG-ADMIN BIT IS NOT A SPELLING OF THAT.
-//
-// releaseImage is ghcr.io/hanzoai/cloud — the binary every service in every org
-// runs — so cutting one is an act against SHARED platform state, which is
-// cloud.Super by the definition in gate.go. Owning the registry namespace is what
-// bounds an ordinary PUSH, because a push lands one tenant's own artifact; it
-// cannot bound a release, because a release lands ours on everyone.
-//
-// `isAdmin` is SELF-SERVICE — the `hanzo` tenant's own admins set it on members of
-// their own org — so admitting "admin of the org that owns hanzoai" delegated the
-// fleet's binary to an authority the platform does not administer. A gate whose far
-// side can enrol its own callers is not a gate.
-//
-// hanzo owns `hanzoai` AND is the deployment's brand org, so this is exactly the
-// caller the old gate admitted, and against the parent it is admitted still: the
-// seams are stubbed to 500, so the request runs the pipeline and returns 502 —
-// the escalation, verbatim.
-func TestRunnerRelease_OwningOrgAdminRefused(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-	defer swapAPIBase(srv.URL)()
-	defer swapRegistryBase(srv.URL)()
-
-	app := runnerApp(t)
-	code, body := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "release": true,
-		"image": "ghcr.io/hanzoai/cloud:v1"})
-	if code != http.StatusForbidden {
-		t.Fatalf("EXPLOIT: the brand org's own admin cut a release of %s, the binary the "+
-			"whole fleet runs: %d (%s)", releaseImage, code, body)
-	}
-	releasing.Store(false)
-}
-
-// A DIFFERENT brand's admin may not either, and now for the SAME reason as the
-// owning brand's: not SuperAdmin. It used to be refused by the registry-namespace
-// confinement instead — which is why this case passed while the one above did not.
-// One rule refuses both; a rule that refuses only the foreign org is the bug.
-func TestRunnerRelease_ForeignOrgAdminRefused(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
-	app := runnerApp(t)
-	code, body := postRunnerAs(t, app, "lux-uuid", "lux", true, false, map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "release": true,
-		"image": "ghcr.io/hanzoai/cloud:v1"})
-	if code != http.StatusForbidden {
-		t.Fatalf("a lux admin cut hanzo's release: %d (%s)", code, body)
-	}
-}
-
-// A plain MEMBER of the owning org may not. Neither the org nor any role inside it
-// is an input to this gate any more — which is precisely why no org can enrol its
-// own callers into it.
-func TestRunnerRelease_PlainMemberRefused(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
-	app := runnerApp(t)
-	code, body := postRunnerAs(t, app, "member-uuid", "hanzo", false, false, map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "release": true,
-		"image": "ghcr.io/hanzoai/cloud:v1"})
-	if code != http.StatusForbidden {
-		t.Fatalf("a plain member cut a release: %d (%s)", code, body)
-	}
-}
-
-// The other side of that gate: a platform SuperAdmin MAY cut a release, on the
-// IAM path alone, with no machine token configured. Release reads
-// principal.IsSuperAdmin — the same predicate every other privileged surface
-// reads (HIP-0519, "the one predicate set") — so an identity trusted with KMS and
-// every tenant's data is not refused a release by a second, parallel credential.
-//
-// The gate is what this pins. Both release seams answer 500, so the request can
-// only fail INSIDE the pipeline (502) — which it reaches solely by having been
-// authorized. Stubbing them also keeps the case hermetic: an unauthorized request
-// makes no outbound call, and an authorized one must not make a real one.
-func TestRunnerBuild_SuperAdminReleaseAuthorized(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-	defer swapAPIBase(srv.URL)()
-	defer swapRegistryBase(srv.URL)()
-
-	app := runnerApp(t)
-	code, body := postRunnerAs(t, app, "root-uuid", "admin", false, true, map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "release": true,
-		"image": "ghcr.io/hanzoai/cloud:v1"})
-	if code == http.StatusForbidden {
-		t.Fatalf("SuperAdmin release: refused by the gate, want authorized (%s)", body)
-	}
-	if code != http.StatusBadGateway {
-		t.Fatalf("SuperAdmin release: want the pipeline's 502 on a failing seam, got %d (%s)", code, body)
-	}
-	if releasing.Load() {
-		t.Error("a failed release left the in-flight guard set; releases would be wedged forever")
-	}
-}
-
 // wrong token ⇒ 403.
 func TestRunnerBuild_BadToken(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
@@ -411,43 +311,17 @@ func TestRunnerBuild_Launches(t *testing.T) {
 // holder, and nothing in an audit log but "the token". It is a second auth system
 // standing beside IAM.
 //
-// It stays for the ordinary build path, because git-push-to-deploy runs on it and
-// removing a credential before its replacement exists breaks that. It is refused
-// for the RELEASE — the operation that publishes the image the whole fleet runs —
-// because that decision belongs to IAM and to nothing else.
-func TestRunnerRelease_SharedTokenCannotRelease(t *testing.T) {
+// It stays for the ordinary build path, because git-push-to-deploy runs on it, and
+// that path is the whole of what it may do.
+func TestSharedTokenBuildsAndOnlyBuilds(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "s3kr3t-fabric-token")
 	app := runnerApp(t)
 
-	// The same credential, on the same endpoint, twice — only the `release` flag
-	// differs, so the flag is provably what the gate turns on.
 	enqueue, body := postRunner(t, app, "s3kr3t-fabric-token", map[string]any{
 		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/cloud:v1"})
 	if enqueue == http.StatusForbidden {
 		t.Fatalf("the fabric token lost the ordinary build path it exists for: %d (%s)", enqueue, body)
 	}
-
-	release, body := postRunner(t, app, "s3kr3t-fabric-token", map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "release": true,
-		"image": "ghcr.io/hanzoai/cloud:v1"})
-	if release != http.StatusForbidden {
-		t.Fatalf("a shared secret cut a release: %d (%s) — IAM is the only authority for it", release, body)
-	}
-}
-
-// A malformed repo is refused BEFORE the 202, so a caller is never told a
-// release is in flight that never launched. "cloud" parses as a URL with no
-// scheme and no host, which is how a release answered 202 with an image tag and
-// started nothing.
-func TestRunnerRelease_RepoMustBeACloneURL(t *testing.T) {
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
-	app := runnerApp(t)
-	code, body := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, true, map[string]any{
-		"repo": "cloud", "release": true})
-	if code != http.StatusBadRequest {
-		t.Fatalf("bare repo name: want 400, got %d (%s)", code, body)
-	}
-	releasing.Store(false)
 }
 
 // TestRegistryOwnershipIsVerbatim: the registry-namespace lookup is keyed by the
@@ -459,9 +333,9 @@ func TestRunnerRelease_RepoMustBeACloneURL(t *testing.T) {
 // (TestMembershipMatchIsByteExact), so a tenant self-serving an org named `Hanzo`
 // — whose own RoleOwner makes IsOrgAdmin true INSIDE it — folded onto the `hanzo`
 // key and inherited the `hanzoai` namespace: push over another brand's production
-// images, and past the release gate onto ghcr.io/hanzoai/cloud, the binary every
-// pod in the fleet runs. A fold on one side of an authorization comparison is not
-// a normalization, it is a collision, and the collision IS the grant.
+// images, ghcr.io/hanzoai/cloud among them — the binary every pod in the fleet
+// runs. A fold on one side of an authorization comparison is not a normalization,
+// it is a collision, and the collision IS the grant.
 func TestRegistryOwnershipIsVerbatim(t *testing.T) {
 	// The real owners keep their namespaces, on both lanes.
 	for _, tc := range []struct{ org, image, repo string }{

@@ -8,14 +8,9 @@
 // The `image.tag` scalar in that file IS what runs. Until it moves, a release is a
 // published image nobody pulls.
 //
-// WHAT THIS REPLACES. rolloutRelease used to patch an operator `hanzo.ai/v1` App CR
-// and let the operator reconcile a Deployment. The CRD kind exists, but there has
-// never been a `cloud` CR for it to patch — cloud is reconciled by cd.hanzo.ai from
-// the values file, not by the operator — so the patch had nothing to write to and
-// every release failed at its final step with the image built, smoked and tagged
-// but NOT live. v1.801.335 was pinned by hand. Two beliefs about what makes an
-// image live disagreed in the source; this is the reconciliation, and the values
-// file wins because it is what the cluster actually reads.
+// THE VALUES FILE, NOT AN OPERATOR CR. There is a `hanzo.ai/v1` App CRD, and no
+// `cloud` CR for it: cloud is reconciled by cd.hanzo.ai from the values file. So
+// the values file is what this writes, because it is what the cluster reads.
 //
 // ── the rules are charts/app/pin.sh's rules ─────────────────────────────────
 //
@@ -37,8 +32,8 @@
 //     Carrying three more packages in the production image to shell out to logic
 //     this package already has is a worse trade than expressing the rules here:
 //     the semver gate is splitReleaseImage (STRICTER than pin.sh — it requires the
-//     `v`), and the registry probe reuses registryPullToken, the exact ghcr token
-//     flow release.go already speaks to enumerate published tags.
+//     `v`), and the registry probe is registryPullToken below, the anonymous ghcr
+//     token flow.
 //
 //   - pin.sh strips the leading `v` and pins the bare form, because that is what
 //     the registries of the services that call it hold. Cloud's registry holds the
@@ -54,10 +49,10 @@
 // removes the prefix question entirely.
 //
 // NO ROLLBACK LEVER. pin.sh takes PIN_ROLLBACK=1 because a human may deliberately
-// need to go backward. Nothing on this path ever should: computeReleaseVersion
-// mints a version strictly greater than every tag in git AND in the registry, so a
-// backward pin here is always a bug, never an intention. There is no env knob to
-// misread — backward is refused, full stop. The deliberate rollback lever stays
+// need to go backward. Nothing on this path ever should: a release claims a version
+// strictly greater than every one already claimed or published, so a backward pin
+// here is always a bug, never an intention. There is no env knob to misread —
+// backward is refused, full stop. The deliberate rollback lever stays
 // where a deliberate act belongs, with the human running pin.sh.
 
 package platform
@@ -65,11 +60,14 @@ package platform
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,9 +91,9 @@ const (
 	// pinAttempts bounds the concurrent-pin retry (see pinUniverse).
 	pinAttempts = 5
 
-	// pinDeadline bounds the whole pin. The release pipeline runs on a DETACHED
-	// context with no deadline of its own, so without this a wedged clone or push
-	// would hold the release goroutine — and the in-flight guard — forever.
+	// pinDeadline bounds the whole pin. A caller may hand this a context with no
+	// deadline of its own, so without this a wedged clone or push would hold its
+	// goroutine forever.
 	pinDeadline = 10 * time.Minute
 
 	// pinCommitUser / pinCommitEmail are the identity every pin commits under, the
@@ -107,8 +105,7 @@ const (
 
 // universeRemote is the clone/push URL of the repository that holds every pin.
 // A var (not a const) ONLY so tests can point the pin at a local repository;
-// production always uses the forge — the same idiom as githubAPIBase and
-// registryBase in release.go.
+// production always uses the forge — the same idiom as registryBase below.
 var universeRemote = "https://git.hanzo.ai/hanzo/universe"
 
 // ── the values file (pure) ───────────────────────────────────────────────────
@@ -241,6 +238,54 @@ func resolvePinFile(root, service string) (string, error) {
 	}
 }
 
+// ── ordering a version (pure) ────────────────────────────────────────────────
+
+// semver is a version this file can order. Only the ordering is modelled, because
+// ordering is the only question asked of it: is the tag being pinned newer than the
+// one already there.
+type semver struct{ major, minor, patch int }
+
+// parseSemver accepts "X.Y.Z" or "vX.Y.Z" with non-negative integer parts; anything
+// else (latest, sha-…, the major_minor "1.786", empty) reports ok=false. A pin
+// refuses rather than guesses at a version it cannot order, so the false is a
+// refusal and never a default.
+func parseSemver(s string) (semver, bool) {
+	p := strings.Split(strings.TrimPrefix(strings.TrimSpace(s), "v"), ".")
+	if len(p) != 3 {
+		return semver{}, false
+	}
+	var v semver
+	var err error
+	if v.major, err = atoiNonNeg(p[0]); err != nil {
+		return semver{}, false
+	}
+	if v.minor, err = atoiNonNeg(p[1]); err != nil {
+		return semver{}, false
+	}
+	if v.patch, err = atoiNonNeg(p[2]); err != nil {
+		return semver{}, false
+	}
+	return v, true
+}
+
+func atoiNonNeg(s string) (int, error) {
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("not a non-negative int: %q", s)
+	}
+	return n, nil
+}
+
+func (v semver) less(o semver) bool {
+	if v.major != o.major {
+		return v.major < o.major
+	}
+	if v.minor != o.minor {
+		return v.minor < o.minor
+	}
+	return v.patch < o.patch
+}
+
 // ── the refusals (pure) ──────────────────────────────────────────────────────
 
 // checkPin applies every rule that does not need the network and reports whether
@@ -278,14 +323,62 @@ func checkPin(f *pinFile, repository, tag string) (changed bool, err error) {
 	return true, nil
 }
 
+// registryBase is the OCI registry root. A var (not a const) ONLY so tests can point
+// it at an httptest server; production always uses the real registry.
+var registryBase = "https://ghcr.io"
+
+// pinHTTP is the one client for the registry reads on this path — a bounded timeout
+// so a hung registry cannot hold the pin, which runs on a detached context.
+var pinHTTP = &http.Client{Timeout: 30 * time.Second}
+
+// registryPullToken exchanges nothing for a pull-scoped bearer — the anonymous half
+// of the Docker registry token flow, all a public image's manifest requires.
+func registryPullToken(ctx context.Context, host, repo string) (string, error) {
+	var body struct {
+		Token string `json:"token"`
+	}
+	u := registryBase + "/token?service=" + url.QueryEscape(host) +
+		"&scope=" + url.QueryEscape("repository:"+repo+":pull")
+	if err := registryGet(ctx, u, "", &body); err != nil {
+		return "", fmt.Errorf("registry pull token: %w", err)
+	}
+	if body.Token == "" {
+		return "", fmt.Errorf("registry pull token: empty")
+	}
+	return body.Token, nil
+}
+
+// registryGet performs one registry read and decodes it into out. A non-200 is an
+// error: every read on this path is something the pin must know for certain, and a
+// partial answer is not one.
+func registryGet(ctx context.Context, endpoint, token string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := pinHTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GET %s: status %d", endpoint, resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode %s: %w", endpoint, err)
+	}
+	return nil
+}
+
 // imagePullable proves the registry can serve repository:tag BEFORE production is
 // pointed at it. A pin naming an image the registry does not have is an
 // ImagePullBackOff with no rollback path. Anything but a 200 fails: a 404 is a
 // phantom tag, and a network or auth error means we cannot tell — which is not good
 // enough to deploy on.
-//
-// It reuses registryPullToken, the same anonymous ghcr token flow publishedTags
-// uses, so there is ONE way this binary asks a registry a question.
 func imagePullable(ctx context.Context, repository, tag string) error {
 	host, repo, ok := strings.Cut(repository, "/")
 	if !ok {
@@ -323,7 +416,7 @@ func imagePullable(ctx context.Context, repository, tag string) error {
 		"application/vnd.oci.image.manifest.v1+json",
 		"application/vnd.docker.distribution.manifest.v2+json",
 	}, ","))
-	resp, err := releaseHTTP.Do(req)
+	resp, err := pinHTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("manifest probe %s:%s: %w", repository, tag, err)
 	}
@@ -407,9 +500,9 @@ func pushRaced(out string) bool {
 
 // pinToken reads the forge token that may push to universe. Fail-closed: an
 // unmounted KMS, a KMS that cannot answer, or an absent/empty secret each return an
-// error and NEVER a value, so a release stops rather than attempting an anonymous
-// push that would fail deep in the git seam. The error names the REF, never the
-// value — the ref is a path and is safe to log.
+// error and NEVER a value, so a pin stops rather than attempting an anonymous push
+// that would fail deep in the git seam. The error names the REF, never the value —
+// the ref is a path and is safe to log.
 func pinToken(s *cloud.Service[state], ctx context.Context) (string, error) {
 	if s.KMS == nil {
 		return "", fmt.Errorf("no KMS client mounted: cannot read %s", pinTokenRef)

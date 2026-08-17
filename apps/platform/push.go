@@ -30,21 +30,6 @@ import (
 // plane leg carries it too (plane.Built.Builds), which is what that type's comment
 // was waiting for — "the day something needs the count".
 func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPushEvent) (int, error) {
-	// Cloud's own upstream is not an Application — no row tracks it — so the
-	// self-release is dispatched from the same event, before the app scan. This is
-	// what makes a merge to main produce an image: the ONE image owner
-	// (release.go) is now driven by the push instead of waiting for someone to
-	// call /v1/runner by hand.
-	if isReleasePush(ev) {
-		if _, image, err := launchRelease(s, ctx, ev.Commit, releaseRepoURL, ""); err != nil {
-			// Never fail the push over a release we could not start — the commit is
-			// already landed, and a conflict just means one is already running.
-			s.Log.Warn("push release: not started", "commit", ev.Commit, "err", err)
-		} else {
-			s.Log.Info("push release: started", "commit", ev.Commit, "image", image)
-		}
-	}
-
 	apps, err := s.State.store.ListAllApplications(ctx, ev.Org)
 	if err != nil {
 		return 0, err
@@ -110,30 +95,6 @@ func sameRepo(a, b string) bool {
 	return a != "" && normRepo(a) == normRepo(b)
 }
 
-// releaseBranch is the only branch that cuts a release. A release publishes the
-// next version of the image the whole fleet runs, so it follows the one branch
-// that is reviewed and merged into, never a feature branch.
-// releaseRef is the full ref whose merges publish the next version. Matching on
-// the full ref rather than a short name keeps a tag named "main" from cutting a
-// release: refs/tags/main is not refs/heads/main.
-const releaseRef = "refs/heads/main"
-
-// isReleasePush reports whether a landed push is a merge to cloud's own upstream
-// default branch — the event that should publish the next version.
-//
-// It matches on the repo URL rather than the org, because the org that owns the
-// installation is not what identifies this repo. A push carrying no commit is
-// ignored: the pipeline pins an exact commit, and resolving a branch name again
-// here could build something newer than the event describes.
-//
-// It needs no forge clause of its own: hanzoai/cloud on the forge and
-// hanzoai/cloud on the upstream are ONE repository under [normRepo], so a merge
-// to main publishes a version whichever host the merge landed on. That was the
-// point of the migration and it was the half that did not work.
-func isReleasePush(ev cloud.GitPushEvent) bool {
-	return ev.Ref == releaseRef && ev.Commit != "" && sameRepo(releaseRepoURL, ev.CloneURL)
-}
-
 // upstream is where the estate's repositories are published besides the forge.
 // One repository, two spellings, for as long as the migration runs.
 const upstream = "github.com"
@@ -165,12 +126,11 @@ func mirrored(host string) bool {
 // THE PATH IS COMPARED WHOLE, never by its last two segments, and that is what
 // keeps the collapse from being an escalation. The embedded git server's clone
 // URL is https://api.hanzo.ai/v1/git/<org>/<project>/<repo>, whose tail is named
-// by a tenant: a project `hanzoai` holding a repo `cloud` would spell the
-// release repository's own coordinate, and a push to its main would cut a
-// release of the binary the whole fleet runs. Whole paths, so /v1/git/... is
-// simply a different repository — and every host outside the mirrored pair keeps
-// host + path, because two repositories that merely share a path on different
-// servers are two repositories.
+// by a tenant: a project `hanzoai` holding a repo `cloud` would spell another
+// org's coordinate, and its pushes would build that org's applications. Whole
+// paths, so /v1/git/... is simply a different repository — and every host outside
+// the mirrored pair keeps host + path, because two repositories that merely share
+// a path on different servers are two repositories.
 func normRepo(u string) string {
 	u = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(u)), "/")
 	u = strings.TrimSuffix(u, ".git")

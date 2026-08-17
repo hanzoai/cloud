@@ -5,7 +5,7 @@
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
-  "skill_count": 531,
+  "skill_count": 530,
   "skills": [
     {
       "description": "Read admin affiliates: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents..",
@@ -3493,14 +3493,6 @@
       "path": "router_stats/SKILL.md",
       "service": "router",
       "sha256": "3af7469ed4c82af2c537c3b470b2a4d5922c6e122fa52a8c3b311e3b95eadff6",
-      "version": "8.0.0"
-    },
-    {
-      "description": "Read runner releases: Lists the self-publish releases this process has run., Returns one self-publish release by the id its 202 returned..",
-      "name": "runner_releases",
-      "path": "runner_releases/SKILL.md",
-      "service": "runner",
-      "sha256": "9048d9f18dc14a1dea6a0d2e6c553b9e2f981f7c96ac567f607e261e54dd054e",
       "version": "8.0.0"
     },
     {

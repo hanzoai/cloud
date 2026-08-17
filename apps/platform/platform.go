@@ -326,15 +326,9 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	zip.Get(app, "/v1/releases", o.listReleases)
 
 	// Native build API (the no-GitHub-builders trigger, ex-/v1/arcd). Privileged:
-	// token-gated + image-ref allowlisted (runner.go). `hanzo build`, the
-	// git-push-to-deploy hook, and cloud's own self-release all POST here.
+	// token-gated + image-ref allowlisted (runner.go). `hanzo build` and the
+	// git-push-to-deploy hook both POST here.
 	zip.Post(app, "/v1/runner", o.runnerBuild, zip.WithStatus(http.StatusAccepted))
-	// A release answers 202 with an id, so the id has to be answerable. Without
-	// these a release that dies in the detached pipeline is indistinguishable from
-	// one still running — which is exactly how a release that launched nothing
-	// looked like one in flight.
-	zip.Get(app, "/v1/runner/releases", o.listSelfReleases)
-	zip.Get(app, "/v1/runner/releases/:id", o.getSelfRelease)
 }
 
 // ── tenancy ──────────────────────────────────────────────────────────────────

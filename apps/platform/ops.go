@@ -106,9 +106,9 @@ func (o ops) caller(ctx context.Context) (*zip.Ctx, string, error) {
 }
 
 // request is the caller's own request for the ops that authorize on something
-// OTHER than a tenant key — /v1/runner compares a shared build credential, and the
-// release reads run behind cloud.Super. They resolve no org, so asking for one
-// would refuse a legitimate machine caller that carries none.
+// OTHER than a tenant key: /v1/runner compares a shared build credential. It
+// resolves no org, so asking for one would refuse a legitimate machine caller that
+// carries none.
 func (o ops) request(ctx context.Context) (*zip.Ctx, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
