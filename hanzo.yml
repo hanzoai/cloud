@@ -13,12 +13,10 @@
 # namespace the version claim uses. Resume reads that fact. An artifact existing
 # proves it was built and never that it was tested, and the two questions are now
 # asked of the two systems that know — the registry, and git.
-# now the `image` job of .hanzo/workflows/cicd.yml, not apps/platform/release.go.
-#
-# release.go held it until a release could be shown to reliably kill itself: it
-# ran detached inside the single replica whose pin it moved, so its own last step
-# terminated the pod mid-pipeline and left an image published, unsmoked and
-# untagged. v1.801.328 and 330-334 and 336+ are those images.
+# the `image` job of .hanzo/workflows/cicd.yml, and nothing else. A lane that
+# publishes this image has to outlive the pin it moves, and a job on a runner does;
+# a pipeline running inside the single replica whose pin it moves does not, because
+# its own last step ends the process still executing it.
 #
 # This file still declares no image because a lane here would be a SECOND builder
 # on the same commit — the double-build that re-opens the phantom-tag hole. One
