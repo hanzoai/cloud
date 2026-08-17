@@ -1045,10 +1045,6 @@
    "doc": "Returns the new-job catalog plus, when a selection is passed\n(?baseModel\u0026method\u0026task\u0026preset[\u0026datasetExamples]), the recommended config so the\nconsole can render \"Recommended\" as a one-click, ready-to-run default."
   },
   {
-   "id": "get_generate-text-to-speech-audio-stream",
-   "doc": "Convert text to speech with streaming"
-  },
-  {
    "id": "get_health",
    "doc": "Check if the system is live"
   },
@@ -1462,11 +1458,11 @@
   },
   {
    "id": "post_audio_speech",
-   "doc": "The OpenAI-compatible TTS endpoint (POST /v1/audio/speech). It\nauthenticates the caller, resolves `model` to its TTS provider (the SAME model-route\nresolution the chat/images/video endpoints use — so a BYO node registered as a TTS\nprovider works transparently), synthesizes the audio, and streams the bytes back.\nOne code path, OpenAI-shaped, no store/message coupling (unlike the legacy\n/v1/generate-text-to-speech-audio which is bound to a chat store)."
+   "doc": "The OpenAI-compatible TTS endpoint (POST /v1/audio/speech). It\nauthenticates the caller, resolves `model` to its TTS provider (the SAME model-route\nresolution the chat/images/video endpoints use — so a BYO node registered as a TTS\nprovider works transparently), synthesizes the audio, and streams the bytes back.\nThis is the ONE way to synthesize speech: OpenAI-shaped, with no store or\nmessage coupling, so a caller needs no chat to speak."
   },
   {
    "id": "post_audio_transcriptions",
-   "doc": "The OpenAI-compatible STT endpoint\n(POST /v1/audio/transcriptions, multipart: file + model [+ language +\nresponse_format]). It mirrors AudioSpeech exactly: authenticate the caller,\nresolve `model` to its STT provider through the SAME model-route resolution\n(so the in-cluster speech service — or any BYO node registered as an STT\nprovider — works transparently), transcribe, and return the OpenAI body.\nOne code path, OpenAI-shaped, no store coupling (unlike the legacy\n/v1/process-speech-to-text, which is bound to a chat store)."
+   "doc": "The OpenAI-compatible STT endpoint\n(POST /v1/audio/transcriptions, multipart: file + model [+ language +\nresponse_format]). It mirrors AudioSpeech exactly: authenticate the caller,\nresolve `model` to its STT provider through the SAME model-route resolution\n(so the in-cluster speech service — or any BYO node registered as an STT\nprovider — works transparently), transcribe, and return the OpenAI body.\nThis is the ONE way to transcribe: OpenAI-shaped, with no store coupling, so a\ncaller needs no chat to be heard."
   },
   {
    "id": "post_audio_voice",
@@ -1513,10 +1509,6 @@
    "doc": "Validates the request, resolves efficient defaults, persists the\njob, and submits a real TrainJob CR. A submit failure (e.g. no cluster wired) is\nsurfaced honestly: the job is saved with status \"failed\" + the reason, never faked."
   },
   {
-   "id": "post_generate-text-to-speech-audio",
-   "doc": "Convert text to speech"
-  },
-  {
    "id": "post_images_generations",
    "doc": "Implements POST /v1/images/generations (OpenAI-compatible).\n\nBody: {\"model\": \"...\", \"prompt\": \"...\", \"n\"?: int, \"size\"?: \"1024x1024\",\n\n\t\"response_format\"?: \"url\"|\"b64_json\"}\n\nIt authenticates the caller, resolves the model to its upstream provider via\nthe shared routing table (zen3-image* → do-ai fal diffusion), reserves the\nper-image budget, generates the image(s) through the do-ai async image\nclient, records usage for billing, and returns the OpenAI images response."
   },
@@ -1555,10 +1547,6 @@
   {
    "id": "post_org_settings_list",
    "doc": "The HTTP transport binding for the RESTful router-config\nnouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta} and\n/v1/org/settings[/list]). It dispatches IN-PROCESS through dispatchGateway —\nthe SAME canonical ZAP gateway registry (zap_registry.go) that the MsgType 200\nhandler serves over the gateway transport. The native ZAP\nhandler is the ONE and ONLY implementation of these routes; this is purely the\napi.hanzo.ai HTTP binding, so there is NO controller twin to drift from and the\nsplit-brain the router refactor removed stays removed.\n\nWhy a bridge and not a twin controller method: every other migrated route\n(get-records, get-connections, …) carries BOTH a controller method and a\nZAP handler — the exact dual-impl drift that silently NULLed customer router\nsettings (the update-router-policy data-wipe). Routing these nouns through the\nZAP handler over one adapter keeps a single source of truth.\n\nIdentity is the request's own Bearer credential (Authorization header), which\nthe native handlers resolve exactly as the gateway does — every caller\n(console, chat, app) already sends it. The dispatched handler returns a ZAP\nmessage whose status is field 0 and body is field 4 (BuildCloudResponse /\nBuildGatewayResponse layout); both are relayed verbatim. The route is mapped\n\"*\" (any verb) because the native handler is method-aware: /v1/router/policy\nsplits GET (read) vs PUT (write), /v1/org/settings GET/PUT/DELETE, and returns\n405 for a verb it does not own."
-  },
-  {
-   "id": "post_process-speech-to-text",
-   "doc": "Convert speech to text"
   },
   {
    "id": "post_query",
