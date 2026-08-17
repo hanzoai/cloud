@@ -5,14 +5,14 @@
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
-  "skill_count": 527,
+  "skill_count": 531,
   "skills": [
     {
       "description": "Read admin affiliates: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents..",
       "name": "admin_affiliates",
       "path": "admin_affiliates/SKILL.md",
       "service": "admin",
-      "sha256": "ccc7186d7137db48199145388bb632be6c672935cddcfa735887e9f8fecedfe7",
+      "sha256": "8d93fa05c7a4b99ce5885e9146236a53e538dc37604ff2790f0d95f66426fec9",
       "version": "8.0.0"
     },
     {
@@ -20,7 +20,7 @@
       "name": "admin_aimetrics",
       "path": "admin_aimetrics/SKILL.md",
       "service": "admin",
-      "sha256": "0d88653b504437f543d06b1391b3558b445b6eb0943c79f5cda4fb974d779372",
+      "sha256": "8774d8c3649b2411d407b74cc61564fa718d1b2fb452fed3cadfd21167a4c2f6",
       "version": "8.0.0"
     },
     {
@@ -28,7 +28,7 @@
       "name": "admin_analytics",
       "path": "admin_analytics/SKILL.md",
       "service": "admin",
-      "sha256": "513ce1fe1dc296cd2bd3b2c359729ae7310a51937000da054ec6c616242fcdc9",
+      "sha256": "a48ca4ebf6ab0e64141c7000fba7a1cdd0cb0650a35de5518109995a4ec1ed5b",
       "version": "8.0.0"
     },
     {
@@ -36,7 +36,7 @@
       "name": "admin_applications",
       "path": "admin_applications/SKILL.md",
       "service": "admin",
-      "sha256": "1bb8f62921170fec0264b9671865c336ef6799de2a36c1304586650313fc7a67",
+      "sha256": "8e8fa628f84493571da5b60ae7f705ffda4797b973239b6ebb5b808442bc5fc2",
       "version": "8.0.0"
     },
     {
@@ -44,7 +44,7 @@
       "name": "admin_audit",
       "path": "admin_audit/SKILL.md",
       "service": "admin",
-      "sha256": "57900098691877e9c0a44a20855fe7d26e6c90bb5f9897bc3a3c9d3ab79bded8",
+      "sha256": "be61bcb122946db193498be732888dcb35c45e7af8cce5af37da65638e424282",
       "version": "8.0.0"
     },
     {
@@ -52,7 +52,7 @@
       "name": "admin_authors",
       "path": "admin_authors/SKILL.md",
       "service": "admin",
-      "sha256": "2ec212531db613ea3100cbe36762f547dd53b79c4f668bbd3447d068c1662599",
+      "sha256": "681eccc13f7734dde8d6dfdaa646a6ce02d81fd3f2c7b8cca1ebc6e5935ab8ec",
       "version": "8.0.0"
     },
     {
@@ -60,7 +60,7 @@
       "name": "admin_bases",
       "path": "admin_bases/SKILL.md",
       "service": "admin",
-      "sha256": "572a23c0b14a2cdbb63f430e4dd4c9aba1fc707b637e4b9cdd115323c2238368",
+      "sha256": "dad0b0ca3879ec0eed711b4727317a3cbb116ded51740048801eb61c036112ef",
       "version": "8.0.0"
     },
     {
@@ -68,7 +68,7 @@
       "name": "admin_customers",
       "path": "admin_customers/SKILL.md",
       "service": "admin",
-      "sha256": "181f802163209f8d677fac1ddabd97df5021b6051db46c3dd0fb12bc9b06217b",
+      "sha256": "80624cf40b8abc586c7d51113882df80602f5f8cd34ee3d4f6c91bdf10e7abac",
       "version": "8.0.0"
     },
     {
@@ -76,7 +76,7 @@
       "name": "admin_referrals",
       "path": "admin_referrals/SKILL.md",
       "service": "admin",
-      "sha256": "d6f8804cc7cc0de9d2bdddcf5999dfa381348aec673b6108dd6d5034f9545a7e",
+      "sha256": "48b45f908830e30c6f85c91b166820d8cf7d5f210cf92927acf708daa66dc244",
       "version": "8.0.0"
     },
     {
@@ -84,7 +84,7 @@
       "name": "admin_usage",
       "path": "admin_usage/SKILL.md",
       "service": "admin",
-      "sha256": "489f0b12aaf3943d3a67fda957a54afa03993e7359664180519f5ec4544cf5bb",
+      "sha256": "008a9ccf22774e61e4624896e25db4e237c807aa10cc615935d6ec43b4801719",
       "version": "8.0.0"
     },
     {
@@ -92,7 +92,7 @@
       "name": "ads_campaigns",
       "path": "ads_campaigns/SKILL.md",
       "service": "ads",
-      "sha256": "c3e83cf05806aaf94b07ff888a9c5d78e6a668f1061913d3883d36fb247d5d54",
+      "sha256": "077ad2f278fe914d836f8b9343804a6c96f7a8f9bc3f61cebf2b6e48a1072b98",
       "version": "8.0.0"
     },
     {
@@ -100,7 +100,7 @@
       "name": "ads_summary",
       "path": "ads_summary/SKILL.md",
       "service": "ads",
-      "sha256": "aceaaf321d6217839a8ae36171a3f908733a3caf1fa453dcce850a344ebd3b6c",
+      "sha256": "58937234c7c2a8a136581a139cc477263163a19363784bc691379b13bcfa1903",
       "version": "8.0.0"
     },
     {
@@ -108,7 +108,7 @@
       "name": "affiliates_affiliates",
       "path": "affiliates_affiliates/SKILL.md",
       "service": "affiliates",
-      "sha256": "b7c98b8397c66ececa8756b3b5e5fa128e5fffde20bfcf73b44f70c89c18d634",
+      "sha256": "57882d25acf67cb14dc61d3c6b7eccb15ebaad53b81e74db6a766f428a06395a",
       "version": "8.0.0"
     },
     {
@@ -116,7 +116,7 @@
       "name": "affiliates_leaderboard",
       "path": "affiliates_leaderboard/SKILL.md",
       "service": "affiliates",
-      "sha256": "504f60783235de5863cd6765c2546356582eb303265a62aacda62a060285cf49",
+      "sha256": "b0b3932e200273c286106267315bc8d9ac46779e47b842eb5ad7156c909bd6d6",
       "version": "8.0.0"
     },
     {
@@ -124,7 +124,7 @@
       "name": "affiliates_me",
       "path": "affiliates_me/SKILL.md",
       "service": "affiliates",
-      "sha256": "c013a9d81a1c30e7b13de3f75ec0605244597d8e04ed210f2d62d8b6da53bb18",
+      "sha256": "4900372a00a9324fc264f6847e23e6d3249435e610981eb34d363417c8a9f227",
       "version": "8.0.0"
     },
     {
@@ -132,7 +132,7 @@
       "name": "agent_conversations",
       "path": "agent_conversations/SKILL.md",
       "service": "agent",
-      "sha256": "c4fa4f14ebe7306026371ad0f89769a8578e0b0d958c165a97d560fe650243d3",
+      "sha256": "1530027332a5456c058808a58ea6e9a577dabf60c5dbc17f02d3e486b4fdc5eb",
       "version": "8.0.0"
     },
     {
@@ -140,7 +140,7 @@
       "name": "agent_presets",
       "path": "agent_presets/SKILL.md",
       "service": "agent",
-      "sha256": "5abee0a64e2c052a257f1a6775e4064ccf6fc8625fda47a8b276707f26f58e8b",
+      "sha256": "fd683dfdeb48edcead62b3c8ec9ef5f47885cd55171e8c9bdf679b602ecaeb50",
       "version": "8.0.0"
     },
     {
@@ -148,7 +148,7 @@
       "name": "agents_activity",
       "path": "agents_activity/SKILL.md",
       "service": "agents",
-      "sha256": "83487de6e5def111fcb3c5814e3ea0860913d490cbb59a35e586affbfd9eaea5",
+      "sha256": "8c6005ccbe4ae7bc58dfa26949a43d93db40f18ba38bedeb8a7f52576e544c8d",
       "version": "8.0.0"
     },
     {
@@ -156,7 +156,7 @@
       "name": "agents_agents",
       "path": "agents_agents/SKILL.md",
       "service": "agents",
-      "sha256": "d07276a55b9bb16d7e9a62c811d9f9e5dfc16f512ea26f60a101f11acdbbdcc4",
+      "sha256": "434ce469903de02042ea6b581294b64cef226acc900207817990f5100c23e374",
       "version": "8.0.0"
     },
     {
@@ -164,7 +164,7 @@
       "name": "agents_builds",
       "path": "agents_builds/SKILL.md",
       "service": "agents",
-      "sha256": "307cab5532a17c7534bba7e323e1b54c1e5eb2a5bfd1991f16acfe296c38cffc",
+      "sha256": "8a53669dad6ba3d5944ed0d41cf0df8886f7e03acc581ed8f11ccd32a5c4a711",
       "version": "8.0.0"
     },
     {
@@ -172,7 +172,7 @@
       "name": "agents_metrics",
       "path": "agents_metrics/SKILL.md",
       "service": "agents",
-      "sha256": "ec7f7510b6fdf3b32c13a7230958ec5ec47f16da89f4a1c7a78a960a167d2aff",
+      "sha256": "1c2ec664ea755be31394dcfac6cc1a2e9b7afdb883942f144e6e289660d99df3",
       "version": "8.0.0"
     },
     {
@@ -180,7 +180,7 @@
       "name": "agents_runs",
       "path": "agents_runs/SKILL.md",
       "service": "agents",
-      "sha256": "5c64945b8c688847ace5d204daa8f4765aaa68c475ec122713c2b6015fc70a00",
+      "sha256": "20ecffd94d8e95331144f13545369915dfb253cc32d1c6bb9bee588198af20d2",
       "version": "8.0.0"
     },
     {
@@ -188,7 +188,7 @@
       "name": "agents_sessions",
       "path": "agents_sessions/SKILL.md",
       "service": "agents",
-      "sha256": "1366ca7b1f890a112acef8b836dc0568812fabd753a3e29c97c6b45bfb3eb73b",
+      "sha256": "38d297e0ae252ea584ea7b1834220fdacce3d8613e75b4627708354e7c2e448b",
       "version": "8.0.0"
     },
     {
@@ -196,7 +196,7 @@
       "name": "agents_targets",
       "path": "agents_targets/SKILL.md",
       "service": "agents",
-      "sha256": "f19491239e75b07d7d1c8b52a503673788e0021f43403122c645fcf40dce1b45",
+      "sha256": "795bb5296f4bf1e29ad454506668068015a0a1741c26fd9cf1ae13aff5669ade",
       "version": "8.0.0"
     },
     {
@@ -204,7 +204,7 @@
       "name": "ai_articles",
       "path": "ai_articles/SKILL.md",
       "service": "ai",
-      "sha256": "34bdcd0526eeac578de237bd02efd7577260c28f9da4c4f96b1e8d262929b639",
+      "sha256": "9ce2aac73fad730d134663daceabfa05075583a2f001579e0b09c233af51acee",
       "version": "8.0.0"
     },
     {
@@ -212,7 +212,7 @@
       "name": "ai_chats",
       "path": "ai_chats/SKILL.md",
       "service": "ai",
-      "sha256": "87b327fad9beb1234db1ce7ec4c8d3943406e80b6d10409958d97dbd0161526a",
+      "sha256": "6d56c73c8bbf76e16340527416645606cd5c81c025cc5f3a44c8dbb6bfbc4989",
       "version": "8.0.0"
     },
     {
@@ -220,7 +220,7 @@
       "name": "ai_connections",
       "path": "ai_connections/SKILL.md",
       "service": "ai",
-      "sha256": "cf7de48e974df61d0e734c357faf476d7fdaf2c334bcbfb7598fa988cb214ce3",
+      "sha256": "fda4c24bc733aa90e1fbc8355695b4724caea8d85198792c0d3eeb6cf0660692",
       "version": "8.0.0"
     },
     {
@@ -228,7 +228,7 @@
       "name": "ai_files",
       "path": "ai_files/SKILL.md",
       "service": "ai",
-      "sha256": "3bea4af38907eeeb7c040797d833b70a5b36b608b269a29b7bb718c515252134",
+      "sha256": "2d067bfea58a475d3fda33eba27f38535a7ba3b9b785c13ee9b98e1a341c819c",
       "version": "8.0.0"
     },
     {
@@ -236,7 +236,7 @@
       "name": "ai_forms",
       "path": "ai_forms/SKILL.md",
       "service": "ai",
-      "sha256": "41efbe5635278e25c029c7a3032f72fd5eb0ff4cc528b93303b5f4172562514f",
+      "sha256": "43632e7cc642481714a15458186e75f6e1c278f68ec67e3c72556a4398b6ad5c",
       "version": "8.0.0"
     },
     {
@@ -244,7 +244,7 @@
       "name": "ai_messages",
       "path": "ai_messages/SKILL.md",
       "service": "ai",
-      "sha256": "b744fd9d34512f73c904509da5afd34914d415fafa44e6d77f9cba38e9839405",
+      "sha256": "7f0c4b613821d328371f3ff97f85acf1739d9c68936e09dc945f400249fa81a2",
       "version": "8.0.0"
     },
     {
@@ -252,7 +252,7 @@
       "name": "ai_records",
       "path": "ai_records/SKILL.md",
       "service": "ai",
-      "sha256": "443376dd2613be155097f42f52ebcf5b7785c78b82b584ac5d8f43fe3ed2d6a5",
+      "sha256": "33596b9379e776503f2943776a5b592ba0b00a6c05438a9d49a0c249ce4ed35e",
       "version": "8.0.0"
     },
     {
@@ -260,7 +260,7 @@
       "name": "ai_scales",
       "path": "ai_scales/SKILL.md",
       "service": "ai",
-      "sha256": "bfc43c5bfd39f85810d6ce4dfd51e19c8ba5f9c40a7462e6beb2b6d01817cb24",
+      "sha256": "c8582f667e159a8ba18cc24aec6ad12550a7fb804eeb8748fe7fc7e009eb8ce2",
       "version": "8.0.0"
     },
     {
@@ -268,7 +268,7 @@
       "name": "ai_stores",
       "path": "ai_stores/SKILL.md",
       "service": "ai",
-      "sha256": "7f25187e8c75443b8c9d840de951ccf6a5524cb81a17cd23ecf30cf146bf537e",
+      "sha256": "5df8d124278b1371ff8e06a18e219c3dc0348959e2bb2569e16b4544ff400d63",
       "version": "8.0.0"
     },
     {
@@ -276,7 +276,15 @@
       "name": "ai_usages",
       "path": "ai_usages/SKILL.md",
       "service": "ai",
-      "sha256": "7756a89b6235ae5cbe20a146058e789ee286c42238c36b2f6d0873adf5d46e1b",
+      "sha256": "497c717acecc767172ec774f9ecd7d1e6ffa1651351effb1279babadcbc254fe",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read allowance allowance: Answers what the CALLER has left of their plan's free-call allowance this period, and the instant the count starts again..",
+      "name": "allowance_allowance",
+      "path": "allowance_allowance/SKILL.md",
+      "service": "allowance",
+      "sha256": "841ff8576b4a84638da206e6505dbb6def7eead81a83ab5494006f200833e32e",
       "version": "8.0.0"
     },
     {
@@ -284,7 +292,7 @@
       "name": "analytics_health",
       "path": "analytics_health/SKILL.md",
       "service": "analytics",
-      "sha256": "eeada31cadc522ea3f0fb211c4db2b5bbc9a77fe11c51bd1c27b791e9c8e52fa",
+      "sha256": "845357b74b3bb9764e637f3b52588c7ef66ef98004ce5c30ee849aa42fb53686",
       "version": "8.0.0"
     },
     {
@@ -292,7 +300,7 @@
       "name": "analytics_overview",
       "path": "analytics_overview/SKILL.md",
       "service": "analytics",
-      "sha256": "9d18ccb642ead1e2e15c78ad115f13310af3d585df08827323bf4677f975d8c5",
+      "sha256": "53e0e85c3c7bf7f14c42a04b732b489b0d3fabe1a1f724314c143ece14963de8",
       "version": "8.0.0"
     },
     {
@@ -300,7 +308,7 @@
       "name": "analytics_timeseries",
       "path": "analytics_timeseries/SKILL.md",
       "service": "analytics",
-      "sha256": "39bef0f4c9aedb81c95708a6e041acbfa357b96d0b7b06e0ab3536f9e5332585",
+      "sha256": "0375b11923bcf494588212b247eeba3eda324233afcae240a195042b29c4ce88",
       "version": "8.0.0"
     },
     {
@@ -308,7 +316,7 @@
       "name": "analytics_top",
       "path": "analytics_top/SKILL.md",
       "service": "analytics",
-      "sha256": "325374ba0012130c055b9aae2211075e2b882c0ab99b1fc7c1afdab322469589",
+      "sha256": "7054a3da3b5b6f7e8ec428c111715dd1c0184e2ac6f453770f8a9234fd63697c",
       "version": "8.0.0"
     },
     {
@@ -316,7 +324,7 @@
       "name": "appearance_appearance",
       "path": "appearance_appearance/SKILL.md",
       "service": "appearance",
-      "sha256": "14a10b9f2ff665580a593658296769d3b62fe78e44a807d93fbdab29fd0ff31e",
+      "sha256": "8ab578f66bfc2c98135e4b01cd68482a95c3704c9ec066b194fa82894e0e48ac",
       "version": "8.0.0"
     },
     {
@@ -324,7 +332,7 @@
       "name": "audit_audit",
       "path": "audit_audit/SKILL.md",
       "service": "audit",
-      "sha256": "a433ca8cdb97f6ac811bd0bcd8129096a3b14afd9052ce73212aea18cd384123",
+      "sha256": "a7807a846cf26c4d71f02c8fdf1b0ab5c4ab974361e1a9cc8cecb3172158fe20",
       "version": "8.0.0"
     },
     {
@@ -332,7 +340,7 @@
       "name": "authors_authors",
       "path": "authors_authors/SKILL.md",
       "service": "authors",
-      "sha256": "349e38e77ad3b8e435b987581bfdaa484cb753574582dfd96e1df47a5afdbfa6",
+      "sha256": "732a9ce7a0f080599ffb2386b27dbf852670d4defa54e90b49a0c5b945e24b9c",
       "version": "8.0.0"
     },
     {
@@ -340,7 +348,7 @@
       "name": "authors_basis",
       "path": "authors_basis/SKILL.md",
       "service": "authors",
-      "sha256": "9a7c0cefee83bc10c0ed0a8196cd1a4be06ae2eddd6ae8c97a98269314ac76ad",
+      "sha256": "2e0b23dd3061bd4b7e001d589336c259d90177096d50431385821fdb6acfd12a",
       "version": "8.0.0"
     },
     {
@@ -348,7 +356,7 @@
       "name": "authz_health",
       "path": "authz_health/SKILL.md",
       "service": "authz",
-      "sha256": "d71c29bc82347be1787fd2e53580346ca1f340311d3a6caf7f1808faa01f08b5",
+      "sha256": "5e66a41f290a5b6e60388ea45e11537735943905c9972a107c0bbba229b95a52",
       "version": "8.0.0"
     },
     {
@@ -356,7 +364,7 @@
       "name": "authz_readyz",
       "path": "authz_readyz/SKILL.md",
       "service": "authz",
-      "sha256": "840708ddad4b0c74891a1cc3f54281ead3f5e6a0d255c356679b16bd6027d7d8",
+      "sha256": "be415a9025979b45380f286722990c403202030b57bc0b172a9db5ef4a2ea19c",
       "version": "8.0.0"
     },
     {
@@ -364,7 +372,7 @@
       "name": "auto_flows",
       "path": "auto_flows/SKILL.md",
       "service": "auto",
-      "sha256": "a1121a7f9054a2e5df0b7682348a8cd40e7216d3adbf677d2b01912ec702ac25",
+      "sha256": "e427a63fb3e8c0157ec51b250447549c775cec8ed8794162e613dffe1673231f",
       "version": "8.0.0"
     },
     {
@@ -372,7 +380,7 @@
       "name": "auto_pieces",
       "path": "auto_pieces/SKILL.md",
       "service": "auto",
-      "sha256": "932f22a75bd67be8e132fb5b34607eb3ff52028c97f2aab59fbf8421529e0721",
+      "sha256": "a34606db46c8c7dc1db35ebbe49223b94387479eab23b153b19798b80e698bfe",
       "version": "8.0.0"
     },
     {
@@ -380,7 +388,7 @@
       "name": "auto_runs",
       "path": "auto_runs/SKILL.md",
       "service": "auto",
-      "sha256": "a1c7e6654714d19b55c760bba76e9123890c84fdf5c3f2de083e187d23bcb2b0",
+      "sha256": "72531c937f0aec9ec5e11fd8419c771628b2a43e4a623cd3a677b2a878f3017b",
       "version": "8.0.0"
     },
     {
@@ -388,7 +396,7 @@
       "name": "auto_status",
       "path": "auto_status/SKILL.md",
       "service": "auto",
-      "sha256": "9cf8a363f4c297441d1d518594785aa19201d7ee7a327d28d2662ea85ca57126",
+      "sha256": "55284673fadffe4327fd59911e71925aaed8f8d2ebee0caaa06f659e3a8edbb8",
       "version": "8.0.0"
     },
     {
@@ -396,7 +404,7 @@
       "name": "automations_connectors",
       "path": "automations_connectors/SKILL.md",
       "service": "automations",
-      "sha256": "788517a891e7430c519693dea54d4ec66baeabc74a03ad25d9504ae152883b6c",
+      "sha256": "3cfa58313f28ce9e0515ab62711aa1932b2f4357ea42dfec0bf0d39227207e5e",
       "version": "8.0.0"
     },
     {
@@ -404,7 +412,7 @@
       "name": "automations_flows",
       "path": "automations_flows/SKILL.md",
       "service": "automations",
-      "sha256": "1ae67c47b38d2987d75355a3a243ead85fbcca97cbcb96f5021876e769e0ec12",
+      "sha256": "d83c44ecc2e9a9fbd596d7ae33fa09cf9c098b743d5531100481d4d4e13a5db4",
       "version": "8.0.0"
     },
     {
@@ -412,7 +420,7 @@
       "name": "automations_pieces",
       "path": "automations_pieces/SKILL.md",
       "service": "automations",
-      "sha256": "c22b29bbac64fbdaf71f4159392694b1a7e2fd3ee0fc0e15e6b48481073f9bad",
+      "sha256": "783cadb1db712c50018ceeedb16b4d3b144b060e407ac4f4881d61d5f29a9bae",
       "version": "8.0.0"
     },
     {
@@ -420,7 +428,7 @@
       "name": "automations_runs",
       "path": "automations_runs/SKILL.md",
       "service": "automations",
-      "sha256": "cc98b9d823a725f4c99ded1a4c242bcd6c03ff50d188eb561aeaab63fff13aa3",
+      "sha256": "aa4219cda091025cac8ea94f05244a0a41667bafb9b0a0a6af52d46752b3df53",
       "version": "8.0.0"
     },
     {
@@ -428,7 +436,7 @@
       "name": "avatar_avatar",
       "path": "avatar_avatar/SKILL.md",
       "service": "avatar",
-      "sha256": "e9c9862a6819cfadf921fb441f8df812f26f8ec21419c7a1a7c6f51442ea0cf7",
+      "sha256": "b3618252bfaa71e8ee512389f0659c9c8c08a83ad39138a7f313ba5a40ecb251",
       "version": "8.0.0"
     },
     {
@@ -436,7 +444,7 @@
       "name": "balancers_balancers",
       "path": "balancers_balancers/SKILL.md",
       "service": "balancers",
-      "sha256": "d65cc777f023a58751fb228dfabccdac847c33e2a5de89fef91fc62ca5830ae2",
+      "sha256": "fb2cda06e10d02f64794d12b6d0e39cc322e57d0ed4d2abd0e9490bd1e2169e8",
       "version": "8.0.0"
     },
     {
@@ -444,7 +452,7 @@
       "name": "base_health",
       "path": "base_health/SKILL.md",
       "service": "base",
-      "sha256": "d504ee6e69f0b2f7d6444314e955d40ed1a5281a4b822563a89f3d3be67a6416",
+      "sha256": "4a7cd0add8e11cf9b710abb0ab34c9f4190506c90280859fe6136f2430f8dad7",
       "version": "8.0.0"
     },
     {
@@ -452,7 +460,15 @@
       "name": "benchmark_catalog",
       "path": "benchmark_catalog/SKILL.md",
       "service": "benchmark",
-      "sha256": "5ac30ccb49c5070a6b8a6e277ee8d4efc85bbd8c2d35eb4418dfbd224b4befa3",
+      "sha256": "12390b904afefff8c0911d769161fb39c3e708fca859864ddb575406190ed73d",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read benchmark claims: Lists the effective published claims: what the leaderboard will use for each (benchmark, model) after the seed, the import and any stored correction are layered..",
+      "name": "benchmark_claims",
+      "path": "benchmark_claims/SKILL.md",
+      "service": "benchmark",
+      "sha256": "78c08ac301b78c9cdea70a75d6792baa218eedf444d5281ed95dc0e6066b853a",
       "version": "8.0.0"
     },
     {
@@ -460,7 +476,15 @@
       "name": "benchmark_compare",
       "path": "benchmark_compare/SKILL.md",
       "service": "benchmark",
-      "sha256": "8abbf1130be44f206e1e206becfefdaeaa54a25ed376e11dda288b1a6f07cf1e",
+      "sha256": "9656c1860a337bacd2da4a416ec8c97a929e7d715cd79ec9d59e6cee4103406d",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read benchmark history: Returns each model's measured score per run over time, oldest first, with the change between runs..",
+      "name": "benchmark_history",
+      "path": "benchmark_history/SKILL.md",
+      "service": "benchmark",
+      "sha256": "27c69d1a8fb0aadfed0c0892a757dd5423b87bd86be4b56a4645b0f61d47f506",
       "version": "8.0.0"
     },
     {
@@ -468,7 +492,7 @@
       "name": "benchmark_leaderboard",
       "path": "benchmark_leaderboard/SKILL.md",
       "service": "benchmark",
-      "sha256": "fd9e2ee11c568062fac7bfc7583f917c309d5f675e4516bab57422d3fd138ae9",
+      "sha256": "f4d2c3cd63c0b59edd01d18457245bb607afe4a32868648cde3579bd1b869312",
       "version": "8.0.0"
     },
     {
@@ -476,7 +500,7 @@
       "name": "benchmark_presets",
       "path": "benchmark_presets/SKILL.md",
       "service": "benchmark",
-      "sha256": "4baefe35a0c4e0ce49e80a7c678705e8f1327759b31619d207a0c9eeb1fba368",
+      "sha256": "0ca3d14dbe690a9e86ee09959c11ffcf3c25331455cb8bd8f171aa35ebf61ef8",
       "version": "8.0.0"
     },
     {
@@ -484,7 +508,7 @@
       "name": "billing_accounts",
       "path": "billing_accounts/SKILL.md",
       "service": "billing",
-      "sha256": "cb7cdc2d73056e9c3cd0b157fb4dc4bedf6d88d1a6681a8c58de40097e25f50e",
+      "sha256": "822bee46f192c045ed9e99c49abb7d1deee1a6de1c057c5e4c3436c4fc30f7c8",
       "version": "8.0.0"
     },
     {
@@ -492,7 +516,7 @@
       "name": "billing_alerts",
       "path": "billing_alerts/SKILL.md",
       "service": "billing",
-      "sha256": "e587d5855eedf8f5ca028a25f7d3a7aa99ff7b4a1d743a0247f743d54f993b29",
+      "sha256": "06868f46d2095c46e5fd005a87bcd6826f080562be162eff4a31f105b11ab259",
       "version": "8.0.0"
     },
     {
@@ -500,15 +524,15 @@
       "name": "billing_balance",
       "path": "billing_balance/SKILL.md",
       "service": "billing",
-      "sha256": "24080298a5ea9c087f60e8fff801010241f10f9fa3a5d2e6e6cf101bc319e520",
+      "sha256": "fccb664bf3a1a3726221b66ceb7e030a23b5a43a587c9d97368d99049454827d",
       "version": "8.0.0"
     },
     {
-      "description": "Read billing credit balance: What is left of your credit, as one number.",
+      "description": "Read billing credit balance: What is left of your credit, as one number, What is left of your credit, grouped by where it came from.",
       "name": "billing_credit-balance",
       "path": "billing_credit-balance/SKILL.md",
       "service": "billing",
-      "sha256": "10094b05df306207463c31c2b3f7b09499e9122164cade7bf068da85d16d6eda",
+      "sha256": "85dd72c5333062b0b731cf07798d7ed4ec480aa8efef461465a89cd2368e0e92",
       "version": "8.0.0"
     },
     {
@@ -516,7 +540,7 @@
       "name": "billing_credits",
       "path": "billing_credits/SKILL.md",
       "service": "billing",
-      "sha256": "5ce1ec5b8b8b6089d5d57f62975f8920872a07bd14d7b56d69f81e60f3179a8a",
+      "sha256": "9381e1f16cffb3cc108cf82e1561b97600f3f1c39480812f1f3c36f8aa414809",
       "version": "8.0.0"
     },
     {
@@ -524,7 +548,7 @@
       "name": "billing_crypto",
       "path": "billing_crypto/SKILL.md",
       "service": "billing",
-      "sha256": "5b66d47aa9787806f11455beec0397b0ecd2150031a228b2934fc37730f1ddc9",
+      "sha256": "d947884c743091774379769bafb475b8ee31273348219d1946266569a3640d1b",
       "version": "8.0.0"
     },
     {
@@ -532,7 +556,7 @@
       "name": "billing_invoices",
       "path": "billing_invoices/SKILL.md",
       "service": "billing",
-      "sha256": "048b2a5553f69d6bfaed35d0c308dc38b0d730c2d92fbe3433e5bb4213c37d70",
+      "sha256": "3d9efc1f7d2bb18155c720fe86c924b3aaec06ddc6549111d3f9ad105f71b891",
       "version": "8.0.0"
     },
     {
@@ -540,7 +564,7 @@
       "name": "billing_methods",
       "path": "billing_methods/SKILL.md",
       "service": "billing",
-      "sha256": "9fa23dd8f9696d586f43f30d5f36b4e095469946f8ab66bc1cba9744a969b92b",
+      "sha256": "c95733e06b2861f0d8665fd3e9ed30118caee9f86e9d328211be00086cee6f5c",
       "version": "8.0.0"
     },
     {
@@ -548,7 +572,7 @@
       "name": "billing_payouts",
       "path": "billing_payouts/SKILL.md",
       "service": "billing",
-      "sha256": "8a47748417cf34041f08df13c07248f8004063869172eb733529da416557f687",
+      "sha256": "ca1f3fd9caf3a4ef74e16af3d5fb98a05c73d8967fab955eefa39e9c80272bdb",
       "version": "8.0.0"
     },
     {
@@ -556,7 +580,7 @@
       "name": "billing_usage",
       "path": "billing_usage/SKILL.md",
       "service": "billing",
-      "sha256": "445832cdd53f585206a560dfe946aa30b011a4e654eb90f16ac0417ddcb65236",
+      "sha256": "9137733b46666d3f79a6f3c41fbc7746845363f57e99e95cdddd3dd70c905279",
       "version": "8.0.0"
     },
     {
@@ -564,7 +588,7 @@
       "name": "blueprint_blueprint",
       "path": "blueprint_blueprint/SKILL.md",
       "service": "blueprint",
-      "sha256": "65180da313808b947a40b6f409d68fd98ae494007a7d8830cde9fc79e6ea5914",
+      "sha256": "07f3f3bba11cdee00c087a439d86f3e64018fd773d3a4782f040318de9c7b9dd",
       "version": "8.0.0"
     },
     {
@@ -572,7 +596,7 @@
       "name": "blueprint_health",
       "path": "blueprint_health/SKILL.md",
       "service": "blueprint",
-      "sha256": "41bf5d61c0f5da5a8daa6c7c1de9fb262f68e38d37d93dae0a4ab48c7d9db292",
+      "sha256": "a39d080fe51428d6f7d15f45c81cfae950485fcebfb39c716c4989cc64dec7b1",
       "version": "8.0.0"
     },
     {
@@ -580,7 +604,7 @@
       "name": "blueprint_sbom",
       "path": "blueprint_sbom/SKILL.md",
       "service": "blueprint",
-      "sha256": "44b07654b8e020ab03ceb0164947436cfac787886b0dc9eb33788061b2fd87b8",
+      "sha256": "ed499102d44d3bd1bc2ee21ff84c2f14a80fb3da98602165bcc4f30f12d50595",
       "version": "8.0.0"
     },
     {
@@ -588,7 +612,7 @@
       "name": "books_accounts",
       "path": "books_accounts/SKILL.md",
       "service": "books",
-      "sha256": "210d0c4f66dd8507665321c881bfd0ccc81d89abce3de8896f5ba411277ccb8d",
+      "sha256": "b3452466d187c479e708767e6e9b2dce09294592b61e94df07acb7d1ee1ec889",
       "version": "8.0.0"
     },
     {
@@ -596,7 +620,7 @@
       "name": "books_bank",
       "path": "books_bank/SKILL.md",
       "service": "books",
-      "sha256": "5ddf18c4690fcb9a6fe32b42505db9858c7694500211f377ab9b8b72ee01f021",
+      "sha256": "74b6e8233497777adc156c680e5334984c7f763b5ffc0512d6a96451d51eb7ee",
       "version": "8.0.0"
     },
     {
@@ -604,7 +628,7 @@
       "name": "books_export",
       "path": "books_export/SKILL.md",
       "service": "books",
-      "sha256": "474eab39a2c0d770165dc4bc0bc439bd3d3509c79200f8cbf59521a1c7aa8708",
+      "sha256": "f155c1d1d1bd94dbe612e06f9a23a537a449b7ba2e0b8a49bf0595a4102fc408",
       "version": "8.0.0"
     },
     {
@@ -612,7 +636,7 @@
       "name": "books_gl",
       "path": "books_gl/SKILL.md",
       "service": "books",
-      "sha256": "17b8abe9a0ebb8d8b5858ce9708d18e42c15650d82c5d790072d06dd79a331ae",
+      "sha256": "a9c299fb02fee11d2e463c1f936974e6f3144ffa29688c7a50ce53c4541f346e",
       "version": "8.0.0"
     },
     {
@@ -620,7 +644,7 @@
       "name": "books_inbox",
       "path": "books_inbox/SKILL.md",
       "service": "books",
-      "sha256": "5a2ee99b39b29469cf28caf7c1b738c3339c4d53cc61295e0ee4a1499d73daca",
+      "sha256": "b2327bea1beb793012ecf5a11286cb1ce4254ea9672a39c2cb7189bb6b6665ff",
       "version": "8.0.0"
     },
     {
@@ -628,7 +652,7 @@
       "name": "books_metrics",
       "path": "books_metrics/SKILL.md",
       "service": "books",
-      "sha256": "38aa361994c1f180c85969488cdafbda4fde66fca88e42522c634641f4d08260",
+      "sha256": "48a1a4c9a067b679244fcedfe51ac144e839c35b6e6eed839d1f5088d46fbabc",
       "version": "8.0.0"
     },
     {
@@ -636,7 +660,7 @@
       "name": "books_pnl",
       "path": "books_pnl/SKILL.md",
       "service": "books",
-      "sha256": "4903d809fc6e7b01d397c90a96e9d798526e55c9459261bc0db95570ec4c2ac4",
+      "sha256": "19ea44acbc9efffed45490f87a02f48d51dc6da4cab7192a3a0843a3a81e7a2f",
       "version": "8.0.0"
     },
     {
@@ -644,7 +668,7 @@
       "name": "books_position",
       "path": "books_position/SKILL.md",
       "service": "books",
-      "sha256": "d5a8c08dd8375b44ca52e8cee20756bf7a2a42e18fcff0d6bb0aaeb1982f8ed7",
+      "sha256": "f2bfd08a2a0bdde8aef7a92cbfa26e5dc3823d40f55c74ca8f5f20a47b50db28",
       "version": "8.0.0"
     },
     {
@@ -652,7 +676,7 @@
       "name": "books_questions",
       "path": "books_questions/SKILL.md",
       "service": "books",
-      "sha256": "6bf50fe1727feb6cf49ef16cd2e4d3f248b18392a1fd3092791dcbb98dd8c336",
+      "sha256": "b246a40c3deb5c72af4a340771218c92badded534d597bc6a703f07ef0159541",
       "version": "8.0.0"
     },
     {
@@ -660,7 +684,7 @@
       "name": "books_rules",
       "path": "books_rules/SKILL.md",
       "service": "books",
-      "sha256": "e3d0306d60747f9790f773dac101992febe3c54884a06c6faf91f29bfe2b6576",
+      "sha256": "32e11b3708cc0ebefeb0fb676fd1e268f970d2fd9b39edf43f1981ce88844ae0",
       "version": "8.0.0"
     },
     {
@@ -668,7 +692,7 @@
       "name": "bot_bot",
       "path": "bot_bot/SKILL.md",
       "service": "bot",
-      "sha256": "4e2d7c17a3ce25a930671c2d9c67a6738a805b19fdfa92cf4d35e0e1b6fbf693",
+      "sha256": "55c70fd86bb8ef6200252a87271c16eea494440110d940676738b3462c381e93",
       "version": "8.0.0"
     },
     {
@@ -676,7 +700,7 @@
       "name": "bot_connect",
       "path": "bot_connect/SKILL.md",
       "service": "bot",
-      "sha256": "a0172ee7933e055be905400e328a3e1ea48e7cedfbd64c7c9467899d4732e117",
+      "sha256": "f98816634daf47d32e48d2e32e006ce8aa140a2f2bde1ed8a2bb3e8be90b6c88",
       "version": "8.0.0"
     },
     {
@@ -684,7 +708,7 @@
       "name": "bot_nodes",
       "path": "bot_nodes/SKILL.md",
       "service": "bot",
-      "sha256": "5af3947985e8f9631cc8c701976f9529a757358fa7c7bcbac2bb4ef6d22153f4",
+      "sha256": "a9dc0dfbfcdd365be0cb8bdfa5fe999bbef1e77c9b9aed929cfe1167f6800cfc",
       "version": "8.0.0"
     },
     {
@@ -692,7 +716,7 @@
       "name": "bots_bots",
       "path": "bots_bots/SKILL.md",
       "service": "bots",
-      "sha256": "cd5af6fb4eaacde2ae4a5671adf8a7a6786b4ff097ecde7fde73d84d96753ce2",
+      "sha256": "b0902195617dc4a7272982227e15150fb7d2575f7c8a01f05db2c25e382b2cd9",
       "version": "8.0.0"
     },
     {
@@ -700,7 +724,7 @@
       "name": "builds_builds",
       "path": "builds_builds/SKILL.md",
       "service": "builds",
-      "sha256": "915029241be11de6a666057515b9c18fb3cd0a72e083651006c17b7b37045f53",
+      "sha256": "f9fcf871b2872490d32f864da84b0f03d649b78487f69a99d7467931b16f0cab",
       "version": "8.0.0"
     },
     {
@@ -708,7 +732,7 @@
       "name": "campaign_campaign",
       "path": "campaign_campaign/SKILL.md",
       "service": "campaign",
-      "sha256": "bfbe78a6e06f7b5f20eab2262f816364c7a8d99d9a7ea494cb5752ca55344c82",
+      "sha256": "a641bfa9c7ac7ded366e6c949b44f77f583607729a392a541027cc996c83716e",
       "version": "8.0.0"
     },
     {
@@ -716,7 +740,7 @@
       "name": "campaign_metrics",
       "path": "campaign_metrics/SKILL.md",
       "service": "campaign",
-      "sha256": "0bc5b6a151dcfcc9dd1da1092b5054b109c1119e62b2530fe4cad1eaf66f2ebe",
+      "sha256": "303c77e97a48c3c54090d8f7695072594ff2d3d928679b9e8b9dc1645fb3efc3",
       "version": "8.0.0"
     },
     {
@@ -724,7 +748,7 @@
       "name": "campaign_summary",
       "path": "campaign_summary/SKILL.md",
       "service": "campaign",
-      "sha256": "ee8d3b153ff56c78b1c181b4a8a8a495344bcfa79dba20deaf4a2c1c06db0d0b",
+      "sha256": "9d875732cd3dc7e0e21ed3e92efa300a0688d7eb29cf3bcb4f598bcc19c5b6d5",
       "version": "8.0.0"
     },
     {
@@ -732,7 +756,7 @@
       "name": "captable_classes",
       "path": "captable_classes/SKILL.md",
       "service": "captable",
-      "sha256": "0110bb11da86b167a3687f13e5d75cdd7b3c452f9240be7e265119392f78178a",
+      "sha256": "3267838342eeac5800a47b52e1a8f1aa3323d3aea3610c3fcb08ee1d984bc738",
       "version": "8.0.0"
     },
     {
@@ -740,7 +764,7 @@
       "name": "captable_company",
       "path": "captable_company/SKILL.md",
       "service": "captable",
-      "sha256": "42009a817575722144955f4ef53c9f90a11f78cb88bc4b3febcae44acff0eee2",
+      "sha256": "9d093fe85889119f6b15357fec1d061ed8f8108a64099f85f2f562b0a8e7f3cc",
       "version": "8.0.0"
     },
     {
@@ -748,7 +772,7 @@
       "name": "captable_convertibles",
       "path": "captable_convertibles/SKILL.md",
       "service": "captable",
-      "sha256": "679a461cd9351305edbf717df9f937c9eff5fd8d1afe0fe5db919f38098c36db",
+      "sha256": "3909a4fadc2fe826140d665b2bb6e4a90a182ddcbe8eb2bb403512c94645604a",
       "version": "8.0.0"
     },
     {
@@ -756,7 +780,7 @@
       "name": "captable_investments",
       "path": "captable_investments/SKILL.md",
       "service": "captable",
-      "sha256": "d618b541c21353b4d7b5e0a913e3bbd2cb6e7f53fd6269e449f89f4abe07fa22",
+      "sha256": "952eee040e87a8a80471174b890b3527efecaa76a367e373d147998fa2670fd3",
       "version": "8.0.0"
     },
     {
@@ -764,7 +788,7 @@
       "name": "captable_options",
       "path": "captable_options/SKILL.md",
       "service": "captable",
-      "sha256": "e4faecb40e0ff50c43363b340452ca1c0d03454bb9081656a31ee1435957a73c",
+      "sha256": "9ddf083da8ec6b9a1125ec369af538fe25f8c1b07a9db683b6ac0c9bd483f7b1",
       "version": "8.0.0"
     },
     {
@@ -772,7 +796,7 @@
       "name": "captable_plans",
       "path": "captable_plans/SKILL.md",
       "service": "captable",
-      "sha256": "c00b8db1e905cc88075d4d64791a18049c1443839f8cb6d59ee427ecdcddf373",
+      "sha256": "3f0ee5aa1808ef112040ad3d70fd08f50726e2e274b75a8462cea88892f822c7",
       "version": "8.0.0"
     },
     {
@@ -780,7 +804,7 @@
       "name": "captable_rounds",
       "path": "captable_rounds/SKILL.md",
       "service": "captable",
-      "sha256": "7eeceee8356c20638b663a876b9650a93cc739ccba83876f80d10d2050ba8623",
+      "sha256": "918e2472a1fa8feec827e9087b1f096d31280c93220f36067c79029c2b2d1b53",
       "version": "8.0.0"
     },
     {
@@ -788,7 +812,7 @@
       "name": "captable_safes",
       "path": "captable_safes/SKILL.md",
       "service": "captable",
-      "sha256": "ee069764577fd65de14b633fc41c7e0b46ff69aa3e62f9c5b1a08965ff4d8f98",
+      "sha256": "6b60f7e9a0b8bc373f6eba0785ce30a772afa941be73876a7d91e28edacfd293",
       "version": "8.0.0"
     },
     {
@@ -796,7 +820,7 @@
       "name": "captable_shares",
       "path": "captable_shares/SKILL.md",
       "service": "captable",
-      "sha256": "b223bd515e4d9f4df4143895aee4b4b924863ef8e1a5221cd9a12face9879b7e",
+      "sha256": "55412d7105edd6b1368020999420137acec5f6cf8bbd80b5bbbd72b5045f7c94",
       "version": "8.0.0"
     },
     {
@@ -804,7 +828,7 @@
       "name": "captable_stakeholders",
       "path": "captable_stakeholders/SKILL.md",
       "service": "captable",
-      "sha256": "06f3eb03fee77adf8374d6d821eac9a0da3b47ce87c464786e0acd8238664120",
+      "sha256": "2e515e389f996445431c73cbac4a6d9ffcbf67a5bbc06ee5adec4a3d6cbe6318",
       "version": "8.0.0"
     },
     {
@@ -812,7 +836,7 @@
       "name": "cart_cart",
       "path": "cart_cart/SKILL.md",
       "service": "cart",
-      "sha256": "a944605adc7ca4625402c516f1842da26094d6cae22c3db8d3708a74aaf98e38",
+      "sha256": "61725b31bff15b46b4b622132cf9f7e029ef253e49cd9af687fd4fa813cb39d8",
       "version": "8.0.0"
     },
     {
@@ -820,7 +844,7 @@
       "name": "catalog_catalog",
       "path": "catalog_catalog/SKILL.md",
       "service": "catalog",
-      "sha256": "0db0cd670b4599c7cb24cdf264b9c7210edba6905e2c29ccdfa1de6f41c8431b",
+      "sha256": "f3d9597c3bd36254a6a1e82c9f2615c4488064921a7943f10a8780a9fc6d65c2",
       "version": "8.0.0"
     },
     {
@@ -828,7 +852,7 @@
       "name": "catalog_entries",
       "path": "catalog_entries/SKILL.md",
       "service": "catalog",
-      "sha256": "8178de6b07340a993806c46d33665ebb82fad6969f900167b0bee1fe6d7592d4",
+      "sha256": "52b477844fee24ae3abfd11f55806fe1be466136bdf165d1c7fe595f8912be0e",
       "version": "8.0.0"
     },
     {
@@ -836,7 +860,7 @@
       "name": "chains_chains",
       "path": "chains_chains/SKILL.md",
       "service": "chains",
-      "sha256": "d919b1962fdb97051854250003f85c64c0103dd240c58a155ece5e57bc1f5046",
+      "sha256": "3d4342a71b96c538b3b29e154d2e317417c967cc3438c568dfbc4602f066302b",
       "version": "8.0.0"
     },
     {
@@ -844,7 +868,7 @@
       "name": "channels_allowlist",
       "path": "channels_allowlist/SKILL.md",
       "service": "channels",
-      "sha256": "9198dec780137a043e92f3cfe1cc4e28b016dadc1138f566db42cda19522d06f",
+      "sha256": "62b3a605cf9fe17c2797b08a628d255714bbbf4b284b5775c865c2534cbf944b",
       "version": "8.0.0"
     },
     {
@@ -852,7 +876,7 @@
       "name": "channels_channels",
       "path": "channels_channels/SKILL.md",
       "service": "channels",
-      "sha256": "ee0f35e312eba7ac21c81c6475a233f7330c2063f4fe06bd7065134298df81d4",
+      "sha256": "d25b502aa4812a04c708e8b8ad1371f1731a75336d718f0d3699edc2363d4ebd",
       "version": "8.0.0"
     },
     {
@@ -860,7 +884,7 @@
       "name": "channels_inbox",
       "path": "channels_inbox/SKILL.md",
       "service": "channels",
-      "sha256": "1a274033cdf686dc0dd3a5b33b495b9ddf73ec585a3bebe2b1de9f2a674d5d0e",
+      "sha256": "514085b50c8210e973c8276ed86b7b448d73fefc214b56cb9f3c5b3094ed0e5c",
       "version": "8.0.0"
     },
     {
@@ -868,7 +892,7 @@
       "name": "channels_pairing",
       "path": "channels_pairing/SKILL.md",
       "service": "channels",
-      "sha256": "0c0fc2ebf9be82d389d8cdbe4b48784365de4bc89262ed1fd1ed4b8811905eb7",
+      "sha256": "1115fc0286f83314962c6b5ab6385982ec8fa1ae3a001d8bbb0e4b1aaaf8d759",
       "version": "8.0.0"
     },
     {
@@ -876,7 +900,7 @@
       "name": "cloud_accounts",
       "path": "cloud_accounts/SKILL.md",
       "service": "cloud",
-      "sha256": "88a00a9d50b558633114b624375c052df209d43dc5694ab53b3354de2ef5118b",
+      "sha256": "b63b4ca0f4d55bd03b55193c82124defed477b4d7c3ae53766a673d9c27b71e5",
       "version": "8.0.0"
     },
     {
@@ -884,7 +908,7 @@
       "name": "cloud_cloud",
       "path": "cloud_cloud/SKILL.md",
       "service": "cloud",
-      "sha256": "807601b9a7970a907cb5191b9822ec1f4a3e7c48bb44b52903894ee3ed97a4db",
+      "sha256": "d543050f2350b638bd4b77d3c88a54fe91dc2a38c4db385e5ff859b07b4d93e5",
       "version": "8.0.0"
     },
     {
@@ -892,7 +916,7 @@
       "name": "cloudflare_d1",
       "path": "cloudflare_d1/SKILL.md",
       "service": "cloudflare",
-      "sha256": "5e4744c09968fa5e02a4068994a511f6b52d17511eacf58297d50ba36e2ab82e",
+      "sha256": "006637a5b551187fe55a995802c2dc6082da3eebc339dfb4ce16df1c20db4ad3",
       "version": "8.0.0"
     },
     {
@@ -900,7 +924,7 @@
       "name": "cloudflare_kv",
       "path": "cloudflare_kv/SKILL.md",
       "service": "cloudflare",
-      "sha256": "b8da2d77e2a7f82c13b974864a8c14d8f831d1eefadaa4ee8a10310b59659bbb",
+      "sha256": "493389d3b8e27177dca81c79df967d5b2f44af456d599bf656dc56b93f8cd949",
       "version": "8.0.0"
     },
     {
@@ -908,7 +932,7 @@
       "name": "cloudflare_pages",
       "path": "cloudflare_pages/SKILL.md",
       "service": "cloudflare",
-      "sha256": "48cd611d7cfccb017407c251859ff2536c9f183ae9c7cdb1fdf7e76ea80864fb",
+      "sha256": "5f5fe60381b1d12754be302bd8468f3239cc89cb889ed6cbe695798a7a7b42ed",
       "version": "8.0.0"
     },
     {
@@ -916,7 +940,7 @@
       "name": "cloudflare_r2",
       "path": "cloudflare_r2/SKILL.md",
       "service": "cloudflare",
-      "sha256": "b4201f9979462b02e65373e3ab33a8cf9599b75d1acdd1e434f1f5bd829aedf0",
+      "sha256": "f61819e71b54237a4a295f68c99811ea137d0af505b622a878aa3a7452068492",
       "version": "8.0.0"
     },
     {
@@ -924,7 +948,7 @@
       "name": "cloudflare_workers",
       "path": "cloudflare_workers/SKILL.md",
       "service": "cloudflare",
-      "sha256": "dff5c43a6197c984d982b68bb3352e91b3aa60bf2eb4034c47f8c7a9d8d860e5",
+      "sha256": "c9f8f03f4470cb26b9b68775a7586649f54b6944b7316aa9e37f04de471ea190",
       "version": "8.0.0"
     },
     {
@@ -932,7 +956,7 @@
       "name": "cloudflare_zones",
       "path": "cloudflare_zones/SKILL.md",
       "service": "cloudflare",
-      "sha256": "85e1be18f75b6b7ef2081b5bc7b4807b415ddb12d355e7524464f9e9d654fdd6",
+      "sha256": "446552b62775cf21df0422f016062435b60cd4023703561f3b15a808950b9ae8",
       "version": "8.0.0"
     },
     {
@@ -940,7 +964,7 @@
       "name": "clusters_clusters",
       "path": "clusters_clusters/SKILL.md",
       "service": "clusters",
-      "sha256": "c31c812853c036a7234c9d6463f1362e739252bcee893dde02bf134d9f6ed7be",
+      "sha256": "1397c7a8a4ad7d74ddedd8e495c360ed616d9a300aabec278ba4b4932bcc97da",
       "version": "8.0.0"
     },
     {
@@ -948,7 +972,7 @@
       "name": "code_ask",
       "path": "code_ask/SKILL.md",
       "service": "code",
-      "sha256": "7bc92e565ee1a9790c74714378728cfe3aa0817638c62fccf6600a25b8d55114",
+      "sha256": "e5f65b1352bc68ab13301fd0a202aac2e4876f89e57aa5aed16a34eb282cb20c",
       "version": "8.0.0"
     },
     {
@@ -956,7 +980,7 @@
       "name": "code_file",
       "path": "code_file/SKILL.md",
       "service": "code",
-      "sha256": "9dae658673c58df991ba2e30753fdb69a61e323f46a7791079532100806380e7",
+      "sha256": "d2bba4ebf4d64e0345cdbdc54ac008a7e9db2db54ab2369a012c0ffdfc072d5d",
       "version": "8.0.0"
     },
     {
@@ -964,7 +988,7 @@
       "name": "code_search",
       "path": "code_search/SKILL.md",
       "service": "code",
-      "sha256": "f6ccdc2f3520500209c4d659fa73cadae5c84f58d9be2d0651d8dd3d32c8ade9",
+      "sha256": "95890b682683446ecdff4809eb5827739a882770f3181a72875895ee09ad6c42",
       "version": "8.0.0"
     },
     {
@@ -972,7 +996,7 @@
       "name": "code_tree",
       "path": "code_tree/SKILL.md",
       "service": "code",
-      "sha256": "a84e0468125fd95c907c947a56738ff3cc37c737e07ea3481a33ea347caa2185",
+      "sha256": "6b7ffd7a1e02c77ebb97c71520f182248783a49a73778b69e607d68284b2e530",
       "version": "8.0.0"
     },
     {
@@ -988,7 +1012,7 @@
       "name": "commerce_collection",
       "path": "commerce_collection/SKILL.md",
       "service": "commerce",
-      "sha256": "fbfcd11dc8248f3e74653bd13aca01202a4a7b8b9a6248c3fd6fc8319bcc7797",
+      "sha256": "03efbe1bc7f9418c2c0a6fd947bbf59d78928210b9bec472c73b2bfda967e6af",
       "version": "8.0.0"
     },
     {
@@ -996,7 +1020,7 @@
       "name": "commerce_disclosure",
       "path": "commerce_disclosure/SKILL.md",
       "service": "commerce",
-      "sha256": "867cfaaba0f14acb4e566bb18c8bbd8c28a918c67ec34418505846737777298e",
+      "sha256": "616879456350b0aeb3bb497cceaa79ff1c5955202a857bad3bbde54ab872fd6c",
       "version": "8.0.0"
     },
     {
@@ -1004,7 +1028,7 @@
       "name": "commerce_discount",
       "path": "commerce_discount/SKILL.md",
       "service": "commerce",
-      "sha256": "e4481ed8f138b75c9d08b3582dabb0afa3505f1f03059af67d8d0021282919ed",
+      "sha256": "727ff72aeecc458199b132d9c243ab0ea6b6414c1128c0ed22d36f2f02bf1f19",
       "version": "8.0.0"
     },
     {
@@ -1012,7 +1036,7 @@
       "name": "commerce_movie",
       "path": "commerce_movie/SKILL.md",
       "service": "commerce",
-      "sha256": "d43ba061b46e5219493159e3fffed0a820fd4ed26f3a9091b31e337b13f6beb0",
+      "sha256": "b984ea0e338947b61705b38ebf6f7e23f78040cacfb73a487612413e5a5829a8",
       "version": "8.0.0"
     },
     {
@@ -1020,7 +1044,7 @@
       "name": "commerce_note",
       "path": "commerce_note/SKILL.md",
       "service": "commerce",
-      "sha256": "e4254d88ac2d6de660eca6a345ca9acac5041ff87bbd9b453abf56440ac156b6",
+      "sha256": "5973844a2c8e63068b2de1f9a4bf761b36a76f3562ed9de443306b78d688890e",
       "version": "8.0.0"
     },
     {
@@ -1028,7 +1052,7 @@
       "name": "commerce_product",
       "path": "commerce_product/SKILL.md",
       "service": "commerce",
-      "sha256": "68de11216a5703be096a0e1528bb1886ce41ae17141e8043a8cc84a3159c2fc8",
+      "sha256": "b60fe26df8136d981d0bc0369273c2cbd1d69f8ba33d8d322d2ac0d483109e61",
       "version": "8.0.0"
     },
     {
@@ -1036,7 +1060,7 @@
       "name": "commerce_return",
       "path": "commerce_return/SKILL.md",
       "service": "commerce",
-      "sha256": "140015f753524a0e60ef0b4764989084508a7a9261ba557b7067293518242090",
+      "sha256": "9126ccc774cdca0b4a09659baf760971b3cda1c7898aa87e544727e4c61a46e4",
       "version": "8.0.0"
     },
     {
@@ -1044,7 +1068,7 @@
       "name": "commerce_saleschannel",
       "path": "commerce_saleschannel/SKILL.md",
       "service": "commerce",
-      "sha256": "2d59381f7c86432b590cff9816b2fe2ee865c979f389f11e27a5f8fde9350bfa",
+      "sha256": "7f98421890b01b127e3389fc6d4a3f8df9676d601aa461e21aec1f14b71f8584",
       "version": "8.0.0"
     },
     {
@@ -1052,7 +1076,7 @@
       "name": "commerce_stocklocation",
       "path": "commerce_stocklocation/SKILL.md",
       "service": "commerce",
-      "sha256": "372ce8766d2342fa7ede5c6ee90ae6c2de3294f1de4ed7b7c616b4873eaf7826",
+      "sha256": "6d81bdd8ac55892b3b02b022bc0a5a81fd0656d89f8dbbe0dd5a2522e689a027",
       "version": "8.0.0"
     },
     {
@@ -1060,7 +1084,7 @@
       "name": "commerce_submission",
       "path": "commerce_submission/SKILL.md",
       "service": "commerce",
-      "sha256": "00ab694415840706a1acc0803895515fc364e2391aed2d62598b0af20a67ee2b",
+      "sha256": "179e477c1dd8e9b5b776089c6aed5d55b82c9bc6fd0fbb92eda4ed409be1a9e3",
       "version": "8.0.0"
     },
     {
@@ -1068,7 +1092,7 @@
       "name": "company_company",
       "path": "company_company/SKILL.md",
       "service": "company",
-      "sha256": "dde2d0fc8dd3d3ce3d66542450de2747313653e8f4f15a91c61a79a6178b65d5",
+      "sha256": "59dda2f6123f6989bbe435d7cb352ea557e0eb6d5b2fd8a25a31459fc8e938da",
       "version": "8.0.0"
     },
     {
@@ -1076,7 +1100,7 @@
       "name": "company_register",
       "path": "company_register/SKILL.md",
       "service": "company",
-      "sha256": "dc91b13476cc18024ba3bb320767171b7b5b49f0fccc2d76bba820a9517a7c7c",
+      "sha256": "eab124a2164fde6dc4c88922c8006e8b575b5aae0165f014221c34bc7d50a62b",
       "version": "8.0.0"
     },
     {
@@ -1084,7 +1108,7 @@
       "name": "company_review",
       "path": "company_review/SKILL.md",
       "service": "company",
-      "sha256": "d3d49faba9b6b45a17c37b0c3ec72700fcda4e847727c769d5155688df5414b8",
+      "sha256": "b43af93e7dd8de4099b478f9b66aba4b10e816873448cef8e0bd5ca2180dbedc",
       "version": "8.0.0"
     },
     {
@@ -1092,7 +1116,7 @@
       "name": "compliance_accreditation",
       "path": "compliance_accreditation/SKILL.md",
       "service": "compliance",
-      "sha256": "2c74bddcc5e0332cc22db5b1e609a5b233f90d0a7ee6e4d81f35e348e92fdf8c",
+      "sha256": "69ccc88b229ec698e935f5716746031f2e6bbeda78a9abb2ec0384c00cef7896",
       "version": "8.0.0"
     },
     {
@@ -1100,7 +1124,7 @@
       "name": "compliance_audit",
       "path": "compliance_audit/SKILL.md",
       "service": "compliance",
-      "sha256": "ba41d0a4262e6c20df6d16aaacaaf4df069ca8d68b1b0115ab65c5706a43109f",
+      "sha256": "f1b2401d63f2fd0796a85f3bb13d4c617772122b268ad9393b25c64ec3ff52cb",
       "version": "8.0.0"
     },
     {
@@ -1108,7 +1132,7 @@
       "name": "compliance_health",
       "path": "compliance_health/SKILL.md",
       "service": "compliance",
-      "sha256": "160cb4fff1f0804d8a90794b12482ed9f158882ee4789a293e137eb59dcfbaae",
+      "sha256": "a9daddda0f92caddef9d50d80035ace45a66fbe4e8241c548a8f67cb8465bd38",
       "version": "8.0.0"
     },
     {
@@ -1116,7 +1140,7 @@
       "name": "compliance_records",
       "path": "compliance_records/SKILL.md",
       "service": "compliance",
-      "sha256": "9a328ddd4509538397cc83692adad19b809e1615a8cd2f80295bca2f5c5112f2",
+      "sha256": "8e100d13d98b861f58e6867974e1cd836a4bf6eca55b5cf7413a533dfc0c223b",
       "version": "8.0.0"
     },
     {
@@ -1124,7 +1148,7 @@
       "name": "compliance_status",
       "path": "compliance_status/SKILL.md",
       "service": "compliance",
-      "sha256": "5991c65c2e9ad678d65105d5ee3df42ccb3adb831fa0516afa8aa1d2484c892d",
+      "sha256": "2a297a68c12d13ffe2749db2275b35e3861b7614f131f356db20c462169a50b8",
       "version": "8.0.0"
     },
     {
@@ -1132,7 +1156,7 @@
       "name": "compliance_subjects",
       "path": "compliance_subjects/SKILL.md",
       "service": "compliance",
-      "sha256": "23f2e33374efdae7688775c18df303f540e2b46ccb36237c58733cdafa0c7ec1",
+      "sha256": "d96fd7a6a60261dc7b8fda34a8a8657fff71fdf57d1ac54dcb725bd132467e15",
       "version": "8.0.0"
     },
     {
@@ -1140,7 +1164,7 @@
       "name": "compliance_verifications",
       "path": "compliance_verifications/SKILL.md",
       "service": "compliance",
-      "sha256": "b774e77558149641b57f0c7bbbb3bf93755fa134e39c40097bd1abe872fae2a2",
+      "sha256": "92a4ac588fdcfbd00ffb21a0543176a3833d5783c1a590fb37426f9b247bbf07",
       "version": "8.0.0"
     },
     {
@@ -1148,7 +1172,7 @@
       "name": "compute_bots",
       "path": "compute_bots/SKILL.md",
       "service": "compute",
-      "sha256": "a7c4759aea5557d1795e6683122db1c353a881bb687a37fddd36845b931b8027",
+      "sha256": "fe68bbc411889204f962278f4c1fc3998343b40e70babfb729bcbed9496d2886",
       "version": "8.0.0"
     },
     {
@@ -1156,7 +1180,7 @@
       "name": "compute_regions",
       "path": "compute_regions/SKILL.md",
       "service": "compute",
-      "sha256": "e1e61840b2384d77512a0aa0618b4d7ed17c6a51a3813ede0400e01d0dfa9a01",
+      "sha256": "19b2e0adfdbe8267c9af68ae5aeb3d026aa4d7a940f8313a45ee2f5959cfbf94",
       "version": "8.0.0"
     },
     {
@@ -1164,7 +1188,7 @@
       "name": "compute_sizes",
       "path": "compute_sizes/SKILL.md",
       "service": "compute",
-      "sha256": "534abd5e76cf1d98e4639d38dbee0087ed917414cab93cafd0bda9fee9820921",
+      "sha256": "913c8d979eb5d20eebb8f5c4c4402b9c69eb8eef7b297fdca8f0f08e7747bbfc",
       "version": "8.0.0"
     },
     {
@@ -1172,7 +1196,7 @@
       "name": "connectors_connectors",
       "path": "connectors_connectors/SKILL.md",
       "service": "connectors",
-      "sha256": "172d4b2e54985783e3f47a75af692abc6b0af565d67efe68670de039ac7aa02c",
+      "sha256": "930426e1948822c466839b4f74e3b816c5868bcf201ff89072ae54dc2b3880c3",
       "version": "8.0.0"
     },
     {
@@ -1180,7 +1204,7 @@
       "name": "connectors_providers",
       "path": "connectors_providers/SKILL.md",
       "service": "connectors",
-      "sha256": "2bb6348ceab91f102dbaa43a6a798f0b5c4ed7475f06d49833483ecb70626a23",
+      "sha256": "3e7eb4eb8001b89dd3411c314f926a765c1d83b1485558430f6fdb13e9924e2e",
       "version": "8.0.0"
     },
     {
@@ -1188,7 +1212,7 @@
       "name": "connectors_token",
       "path": "connectors_token/SKILL.md",
       "service": "connectors",
-      "sha256": "d73bf578dc4d0559ed45321671ec0ac8d15716b36231c754f765d029c4b63cf5",
+      "sha256": "bb3d2052fb2496ec1620ea358d3e057375ff1a06fa076128bf7b742bdd38a6f0",
       "version": "8.0.0"
     },
     {
@@ -1196,7 +1220,7 @@
       "name": "content_board",
       "path": "content_board/SKILL.md",
       "service": "content",
-      "sha256": "168dba79789bbeac551aa769777e2896840594ecb99e0226a21918bf2badc487",
+      "sha256": "885ec74f3815970c22267644f6b4d29f81890351285dd3a1528decc313eb3473",
       "version": "8.0.0"
     },
     {
@@ -1204,7 +1228,7 @@
       "name": "content_channels",
       "path": "content_channels/SKILL.md",
       "service": "content",
-      "sha256": "b2a9b4106fb402c554eaff1f24af3e88596c128c741cbb040fac506d2ed85ff3",
+      "sha256": "571c1d3688c65ab383eec90be1f1f2d4d00f4098993650563afc993aaea39c36",
       "version": "8.0.0"
     },
     {
@@ -1212,7 +1236,7 @@
       "name": "content_lifecycle",
       "path": "content_lifecycle/SKILL.md",
       "service": "content",
-      "sha256": "d51bf81ceed0b6a3adec7df2231439efebebc5c40bdf17163fcd0b1dea248b7a",
+      "sha256": "c9fef3e6eef577de0f8d12b4ae2595c2808a9ea81a8e97abd7d4aed446e37440",
       "version": "8.0.0"
     },
     {
@@ -1220,7 +1244,7 @@
       "name": "crm_applications",
       "path": "crm_applications/SKILL.md",
       "service": "crm",
-      "sha256": "d69a8810ea17fa59966e423933db2974d22f26061ec0e112f332b05d049b8946",
+      "sha256": "ef310fb2271531358d55dc88d3c7967c7ac50aedbc92124f0c7ada4ed9660880",
       "version": "8.0.0"
     },
     {
@@ -1228,7 +1252,7 @@
       "name": "crm_companies",
       "path": "crm_companies/SKILL.md",
       "service": "crm",
-      "sha256": "0db8c4e50b15b8f563ed3be2370e0a53d4b2d4fef9ad5aa105d1079e81960a35",
+      "sha256": "a72b7c359447efda9e2968ca9b68ab0c0274708ece77da20de64710ffccf180f",
       "version": "8.0.0"
     },
     {
@@ -1236,7 +1260,7 @@
       "name": "crm_contacts",
       "path": "crm_contacts/SKILL.md",
       "service": "crm",
-      "sha256": "68439ce93c186e7c421215eae703d299c40a429b85260085267ea9abcfeb535b",
+      "sha256": "c1e5de35604e60daa108bda38f921ed3ed422af50f30b13c1b512b88e6b4ee82",
       "version": "8.0.0"
     },
     {
@@ -1244,7 +1268,7 @@
       "name": "crm_opportunities",
       "path": "crm_opportunities/SKILL.md",
       "service": "crm",
-      "sha256": "ba03d7a204842b8606335c67e30a5126819283225837e026a3be42fe4ce3206c",
+      "sha256": "6747b11b241801d536f4fd5f91777bef4c5969a078ae7c439443478799b4b02c",
       "version": "8.0.0"
     },
     {
@@ -1252,7 +1276,7 @@
       "name": "crm_summary",
       "path": "crm_summary/SKILL.md",
       "service": "crm",
-      "sha256": "b34f040113be2b1ee9b4190be4b003d140e412a84491d93d2b91d0d72e82f9e4",
+      "sha256": "69aa094cc8835e14cf4ef06fad95e024153deae559eb840ebfa249a64d65a52f",
       "version": "8.0.0"
     },
     {
@@ -1260,7 +1284,7 @@
       "name": "csrf_csrf",
       "path": "csrf_csrf/SKILL.md",
       "service": "csrf",
-      "sha256": "180623ac31ad3bf2bd77bb544f6ca3b6aa26cf07f2649a90f3cb6a0fa1874804",
+      "sha256": "e6c8fbbe0bc0d2c22522a09f7bcce40daa830503eaaad0d44506959aa5ca156a",
       "version": "8.0.0"
     },
     {
@@ -1268,7 +1292,7 @@
       "name": "dataroom_analytics",
       "path": "dataroom_analytics/SKILL.md",
       "service": "dataroom",
-      "sha256": "ab0e4b0e4ad6741916c04f1ae24f32d574ae54962967b1394d7396bdf82689ea",
+      "sha256": "7d22cb47d0eb18b960be0a782f805d553607815ae486db653dfadef7dc609bc1",
       "version": "8.0.0"
     },
     {
@@ -1276,7 +1300,7 @@
       "name": "dataroom_datarooms",
       "path": "dataroom_datarooms/SKILL.md",
       "service": "dataroom",
-      "sha256": "9c881ae72665059ea56bc44932f1c8dabe76495a4195e98ff70dc2d6f581b8cd",
+      "sha256": "02a7329052ef96e0bdb5915034e77dd1a8410df7300f144220cbda308f4c0004",
       "version": "8.0.0"
     },
     {
@@ -1284,7 +1308,7 @@
       "name": "dataroom_documents",
       "path": "dataroom_documents/SKILL.md",
       "service": "dataroom",
-      "sha256": "08e16c18f3865a63975ac6d96d13f1256b57fb2e1d5ca2a323aeebba95cf4d3f",
+      "sha256": "4e6df46ddfa8244ed8216674a0ee696cc35f46a31326621899cc646a43cd0bc4",
       "version": "8.0.0"
     },
     {
@@ -1292,7 +1316,7 @@
       "name": "dataroom_health",
       "path": "dataroom_health/SKILL.md",
       "service": "dataroom",
-      "sha256": "a660e1f91a983eb1cd1f412c1164b2077c8091c799cc09601f7076cf7aac3918",
+      "sha256": "34efbfb95b40eaaf928f4d66ea06ee7680d03b5fc3d2332ea71da31674cb7406",
       "version": "8.0.0"
     },
     {
@@ -1300,7 +1324,7 @@
       "name": "dataroom_links",
       "path": "dataroom_links/SKILL.md",
       "service": "dataroom",
-      "sha256": "4de5c845d559e2501e19b76eb84d2c6bb98969155201abf5bdbb6e330db9becb",
+      "sha256": "cdd0ba4fcd3366835529c97559659babf81b1655f9d5c11d8cd4b10a5be6ecdf",
       "version": "8.0.0"
     },
     {
@@ -1308,7 +1332,7 @@
       "name": "dataroom_view",
       "path": "dataroom_view/SKILL.md",
       "service": "dataroom",
-      "sha256": "75b40a9f870b4d19685ede040b1be877e1932df531d56c40f78d9631580da4aa",
+      "sha256": "47a7dc51050fe58e4751ccdbd8b6945b18b368e99fade1340fdf423cab86c3cc",
       "version": "8.0.0"
     },
     {
@@ -1316,7 +1340,7 @@
       "name": "datastore_datastore",
       "path": "datastore_datastore/SKILL.md",
       "service": "datastore",
-      "sha256": "cafe56a98506ad77cbcb8162fb15b9cde83d046fecc72d165d036d67bb3d4d6f",
+      "sha256": "cb3e000d214e87f8ee2616ace5329e06438936e11f2bbb00139bb85a4bf80572",
       "version": "8.0.0"
     },
     {
@@ -1324,7 +1348,7 @@
       "name": "deploy_applications",
       "path": "deploy_applications/SKILL.md",
       "service": "deploy",
-      "sha256": "987c06be593b8e0bebb7417295d10bf9636a69b4f0072eacd0d2c08b42a69937",
+      "sha256": "ba31e0adb0cace8a4f60be3b992298a7c2971275e78aa9404f281e595c799f89",
       "version": "8.0.0"
     },
     {
@@ -1332,7 +1356,7 @@
       "name": "deploy_callback",
       "path": "deploy_callback/SKILL.md",
       "service": "deploy",
-      "sha256": "244e7287aea0fed3a86f8151f70b6430c8cda0a2b4d5cad03c81e69a59f70a0a",
+      "sha256": "f9f3d93faab3b218ad6f5f3aa44f95df2e6ea254a7bfd4bc89e0be5c63911325",
       "version": "8.0.0"
     },
     {
@@ -1340,7 +1364,7 @@
       "name": "deploy_clusters",
       "path": "deploy_clusters/SKILL.md",
       "service": "deploy",
-      "sha256": "aa163f92c20f5a65ea63c51253bb9d681c57e9a8e7c814b578337923c2a8f8aa",
+      "sha256": "33655c72ed14897572970040232713a9db239da6cbe043354d61a7da2ec04b5b",
       "version": "8.0.0"
     },
     {
@@ -1348,7 +1372,7 @@
       "name": "deploy_gitops",
       "path": "deploy_gitops/SKILL.md",
       "service": "deploy",
-      "sha256": "85cd8dfc8da4295a8436dffad854b5376f7ddbaae4a8806b6ca4d3e7731f9b9f",
+      "sha256": "7a2230a52a0d19b598f90426d2c755ed50163fb498cc0ec49ff7ed234cc12681",
       "version": "8.0.0"
     },
     {
@@ -1356,7 +1380,7 @@
       "name": "deploy_health",
       "path": "deploy_health/SKILL.md",
       "service": "deploy",
-      "sha256": "ab316ee44fb01c0e1ced2e8f2448e638f64a885b3b721caeb356a6e7028ffc15",
+      "sha256": "48f42b53cc9a4c827797db882eb0011120d3100a9de78bf5c1108cf5880ef534",
       "version": "8.0.0"
     },
     {
@@ -1364,7 +1388,7 @@
       "name": "deploy_login",
       "path": "deploy_login/SKILL.md",
       "service": "deploy",
-      "sha256": "c167400f47062e7063c678ed34f5cda3fc8bc6c050747601cf8b64b35af11260",
+      "sha256": "7636d8db721843d26fd9a89522bb47d68a0999ddf0ce9edb7b31d8bf9e94b7f3",
       "version": "8.0.0"
     },
     {
@@ -1372,7 +1396,7 @@
       "name": "deploy_projects",
       "path": "deploy_projects/SKILL.md",
       "service": "deploy",
-      "sha256": "5eb68e3a1a574331105ec974889a05de7f8a9207b8709990c8a5c94bbe8e063d",
+      "sha256": "095759f9798b0367adf9f291d33ea88f3296b8aa90bd2ed9339294a6f2da86df",
       "version": "8.0.0"
     },
     {
@@ -1380,7 +1404,7 @@
       "name": "deploy_session",
       "path": "deploy_session/SKILL.md",
       "service": "deploy",
-      "sha256": "de38c6a6541e4af444cce9283d16198d3f853fd3bccd9e1d438374889d41a86c",
+      "sha256": "5b93faf508f83c2df4d56e4bac116809369142491c3d7a5452ba47ee60ec86a9",
       "version": "8.0.0"
     },
     {
@@ -1388,7 +1412,7 @@
       "name": "deploy_settings",
       "path": "deploy_settings/SKILL.md",
       "service": "deploy",
-      "sha256": "6e05b56bb5ebb156b7b250b54848152b8750847b52f88a11fc7d50e56b297e98",
+      "sha256": "9812f038905246c5e56e2ed692167a29cd05d5edda36283ee9dd937ef18d5f60",
       "version": "8.0.0"
     },
     {
@@ -1396,7 +1420,7 @@
       "name": "deploy_stream",
       "path": "deploy_stream/SKILL.md",
       "service": "deploy",
-      "sha256": "046e87ec6a473acfb90fed5d0e4e178b1370564400eca43a6625d91a8427e6d5",
+      "sha256": "09af429f330ec7c3ec6747df3215283079ac03bfe2b4225d6465eb26d79b6837",
       "version": "8.0.0"
     },
     {
@@ -1404,7 +1428,7 @@
       "name": "destinations_destinations",
       "path": "destinations_destinations/SKILL.md",
       "service": "destinations",
-      "sha256": "149787b4296b575a214e29d018dadc28ffc4d19275adf3a727cc5f3e3c12fdec",
+      "sha256": "83a26614e7d8fb8a3dd1d02e239a2748937643074894db686ee36e2f86371e1c",
       "version": "8.0.0"
     },
     {
@@ -1412,7 +1436,7 @@
       "name": "dev-bridge_dev-bridge",
       "path": "dev-bridge_dev-bridge/SKILL.md",
       "service": "dev-bridge",
-      "sha256": "029aed51f174d54b1236af9b0b42c16a719da9c945c452f8ee2aec2e205c11a1",
+      "sha256": "3ab6fb96461b11a6008f0d70730692d63e1ca5dd0c2974ecfc01c9d483c84845",
       "version": "8.0.0"
     },
     {
@@ -1420,7 +1444,7 @@
       "name": "dns_dns",
       "path": "dns_dns/SKILL.md",
       "service": "dns",
-      "sha256": "b3bc8d9db7deefa9ee5605c9aa2253745bc3aac3d33b46381356df6054412700",
+      "sha256": "d38ec6f4d4454e20c9415e3eed963ef9a7af70c352f9df8334928c7cd71ee24c",
       "version": "8.0.0"
     },
     {
@@ -1428,7 +1452,7 @@
       "name": "docdb_docdb",
       "path": "docdb_docdb/SKILL.md",
       "service": "docdb",
-      "sha256": "fcd298747608350b7c94083b5a441a9fb0dc8545fda82af000e3ebc83baa0412",
+      "sha256": "113c336eb952965a5e5d8af101d23bede60c86c99ea1e68094bbc7724baf590d",
       "version": "8.0.0"
     },
     {
@@ -1436,7 +1460,7 @@
       "name": "documents_context",
       "path": "documents_context/SKILL.md",
       "service": "documents",
-      "sha256": "fa32b8260190f1e038e1d0130bc737474fb8e076acd37d543b6d705092a32a74",
+      "sha256": "c034adbd0ef11d3a16f24b177a0bb898ac59d39ed134f6717810b05f7b845806",
       "version": "8.0.0"
     },
     {
@@ -1444,7 +1468,7 @@
       "name": "domain_availability",
       "path": "domain_availability/SKILL.md",
       "service": "domain",
-      "sha256": "bd45a6d8b2ed90a6b71cbafd5c272d5616e446f7371a30eb5b6675a5e6c091d7",
+      "sha256": "a3a4502132fa266ce25478f45033c523b16ef9184ad89afb1a25b9865007123b",
       "version": "8.0.0"
     },
     {
@@ -1452,7 +1476,7 @@
       "name": "domain_domains",
       "path": "domain_domains/SKILL.md",
       "service": "domain",
-      "sha256": "4a42b467e8e592292d86d289ddbea11778b46d3734e9ed16d5c6d71aa344e330",
+      "sha256": "6a230615720c97553e71fe8d3f064279f359c3a63c0a0d89b17f9098c4659ae2",
       "version": "8.0.0"
     },
     {
@@ -1460,7 +1484,7 @@
       "name": "domain_health",
       "path": "domain_health/SKILL.md",
       "service": "domain",
-      "sha256": "9b32153b2399a9caaed8abf4326667410ceae79ad0d8eb24dffda68a654e6c9d",
+      "sha256": "f68672dbd902e7c56892213fcd5c9f70ce48b5bce2f8e2742d5edb638dcdcd5c",
       "version": "8.0.0"
     },
     {
@@ -1468,7 +1492,7 @@
       "name": "domain_search",
       "path": "domain_search/SKILL.md",
       "service": "domain",
-      "sha256": "a72c015481c8d40c4d6898f03506b9fce7441bd2b136d7a02b1a1eb477500764",
+      "sha256": "44730ac381cb6ce4f898ba112f301dfa2c865ef539b139048eb0d31d0e51a8df",
       "version": "8.0.0"
     },
     {
@@ -1476,7 +1500,15 @@
       "name": "download_download",
       "path": "download_download/SKILL.md",
       "service": "download",
-      "sha256": "03817144421b00c0c0c45e015392e3974d8cf1e58decda2ae2b0bd99630f6ead",
+      "sha256": "83aea19e75f800be31c3c97365e02eda902f1581f3064ba9964c6bd8d397a801",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read edge edge: health reports whether a publish reaches readers, rather than whether it was accepted..",
+      "name": "edge_edge",
+      "path": "edge_edge/SKILL.md",
+      "service": "edge",
+      "sha256": "8dff596a934f99167e5939939db7d1a4451e5838d15ab43cdfda361e8d9ac1e1",
       "version": "8.0.0"
     },
     {
@@ -1484,7 +1516,7 @@
       "name": "embed_embed",
       "path": "embed_embed/SKILL.md",
       "service": "embed",
-      "sha256": "0878b7dab97e2f823f41d8eb2a5d9cbbdd7719ab24a189bc9c3c1b5e4694f117",
+      "sha256": "5055f2ad1f745fd0f380ce92c26579c23992774cfd612d8f1f73fdfc34ebf04b",
       "version": "8.0.0"
     },
     {
@@ -1492,7 +1524,7 @@
       "name": "enablement_enablement",
       "path": "enablement_enablement/SKILL.md",
       "service": "enablement",
-      "sha256": "53b2eafc76468291716c30f6619c353511d6b13b7423e9ea04cbf0b6fc75f57b",
+      "sha256": "09eff052126d00a707ab57808712eaae034e1ec260fb99c73facd24150a372ad",
       "version": "8.0.0"
     },
     {
@@ -1500,7 +1532,7 @@
       "name": "engine_model",
       "path": "engine_model/SKILL.md",
       "service": "engine",
-      "sha256": "0dd6167092e4817b3437fc83ab855a15128bf451330809b979b0f40fda877b0a",
+      "sha256": "0f420b4ba0133ddc482f7ec05fd39fced09003a74f37163eb07578de4c5c0893",
       "version": "8.0.0"
     },
     {
@@ -1508,7 +1540,7 @@
       "name": "engine_models",
       "path": "engine_models/SKILL.md",
       "service": "engine",
-      "sha256": "e5033298efb2f99493f1030049be904314c86b5f9f89b2a92f307b56fd521e0b",
+      "sha256": "ba138228c4e0427ea6386aaca60d320ae904f81352d55b91cd6172f5c3613558",
       "version": "8.0.0"
     },
     {
@@ -1516,7 +1548,7 @@
       "name": "engine_status",
       "path": "engine_status/SKILL.md",
       "service": "engine",
-      "sha256": "9c181be246d37eab771b780848cf368945088f951af7410a4b504cd34b42e191",
+      "sha256": "2902c2eeee3fd14bf64d1bc7521231e1083a16c99dd7bf1ac055e3b240bfa186",
       "version": "8.0.0"
     },
     {
@@ -1524,7 +1556,7 @@
       "name": "engine_system",
       "path": "engine_system/SKILL.md",
       "service": "engine",
-      "sha256": "651e91064bde6c70a1dad475e9688168d0a697ef1009ba3f7ae109a47c4a15aa",
+      "sha256": "a9097c503d4b825a424f26f720f9b65a544c0c85b604e8105dc61ec388fbd63b",
       "version": "8.0.0"
     },
     {
@@ -1532,7 +1564,7 @@
       "name": "entitlements_entitlements",
       "path": "entitlements_entitlements/SKILL.md",
       "service": "entitlements",
-      "sha256": "4391cd51924ff3f5fbbfbc414b9712b4010c848f7b0d9ddfd2e91fc78122f847",
+      "sha256": "d97318e1d9cafb062aec08bda3c42027bf6306e2b6f91d85e9d56b2d6343dddd",
       "version": "8.0.0"
     },
     {
@@ -1540,7 +1572,7 @@
       "name": "environments_environments",
       "path": "environments_environments/SKILL.md",
       "service": "environments",
-      "sha256": "d2506bd604ed07ab37a8c9480a2327b30d7fa2731116a9a654252567b9222693",
+      "sha256": "9668823de13e2c1b7bb3379e91731e1865ae22268c5c5ceb15b59f46eef832ea",
       "version": "8.0.0"
     },
     {
@@ -1548,7 +1580,7 @@
       "name": "errors_errors",
       "path": "errors_errors/SKILL.md",
       "service": "errors",
-      "sha256": "956e68fe421b1d9344f816ca09bde2e923de09b16873f2d62ca8765c93c4aed0",
+      "sha256": "d296aacf0788bd1cbbf04da23ed45cb664ad97ece2f6346c48cfccdf6421ea22",
       "version": "8.0.0"
     },
     {
@@ -1556,7 +1588,7 @@
       "name": "esign_documents",
       "path": "esign_documents/SKILL.md",
       "service": "esign",
-      "sha256": "05b606499b3070170f8880fa9bb80029d4ea1b21983d7f53e610f5abc1da2635",
+      "sha256": "18fad2099819be82fb382187276d1a21ef2a0b207fce97b0bbc35b124b32cbd0",
       "version": "8.0.0"
     },
     {
@@ -1564,7 +1596,7 @@
       "name": "esign_health",
       "path": "esign_health/SKILL.md",
       "service": "esign",
-      "sha256": "a30611a993d47118a15cbaf2cca256acfe2fccc0217d5ddd449f2c33cdbb9e1d",
+      "sha256": "f86aa0f6ecf4692edbe303877f96ff8e984975c413fccfe8635dd1975c70b3e1",
       "version": "8.0.0"
     },
     {
@@ -1572,7 +1604,7 @@
       "name": "esign_o",
       "path": "esign_o/SKILL.md",
       "service": "esign",
-      "sha256": "87ce3cbb6b66a5d7ea5469ba386945153d745d293670b5d585c66bbf06323a61",
+      "sha256": "90d2c03afe8d3dba5530960bcee258d6847b65f24d38ac74eed0a5dc7c493d9c",
       "version": "8.0.0"
     },
     {
@@ -1580,7 +1612,7 @@
       "name": "evals_datasets",
       "path": "evals_datasets/SKILL.md",
       "service": "evals",
-      "sha256": "7d035b8a8fe75bdf829410749de407a31771d3f61063e8e6adaf76722f8a5b40",
+      "sha256": "04d5bdd7f05b0a8bbf5f9c1b034e39da19f4398e1145dbb51118ed4dd0c840ed",
       "version": "8.0.0"
     },
     {
@@ -1588,7 +1620,7 @@
       "name": "evals_evaluators",
       "path": "evals_evaluators/SKILL.md",
       "service": "evals",
-      "sha256": "f976b3c67f42ce77b17a8913099dc769035b3f061035635b683d5105fcdd25dc",
+      "sha256": "16ce1a1ee601320d6aa5acf1d507e7336febf4890dbff373e841fc398bc2963d",
       "version": "8.0.0"
     },
     {
@@ -1596,7 +1628,7 @@
       "name": "evals_metrics",
       "path": "evals_metrics/SKILL.md",
       "service": "evals",
-      "sha256": "05f671ef3003504bcfaea75b5aa1e984032401e2544d0b8abcfa65519f39e7ea",
+      "sha256": "8199ce2a1e3d0809fae3ad5da0414498f7c268446727c9923ad53d084ce68261",
       "version": "8.0.0"
     },
     {
@@ -1604,7 +1636,7 @@
       "name": "evals_rubrics",
       "path": "evals_rubrics/SKILL.md",
       "service": "evals",
-      "sha256": "70902e2fab54b91acede63f6c7ff13adac989e79902d636df21b00d12e9f7077",
+      "sha256": "4b94cb5eaf44819ec32c385fe7fc3bd276241b8a3fcfc54e1d34c15fcdecab57",
       "version": "8.0.0"
     },
     {
@@ -1612,7 +1644,7 @@
       "name": "evals_runs",
       "path": "evals_runs/SKILL.md",
       "service": "evals",
-      "sha256": "e4aad243fe0990d937b452710646d07328290e60991fa2af2d786fa7f3ec0e21",
+      "sha256": "61cb649083f0207ccce2e8076c4e7a9c896a6f19f18127b19fa59246cb6506a8",
       "version": "8.0.0"
     },
     {
@@ -1620,7 +1652,7 @@
       "name": "evals_scores",
       "path": "evals_scores/SKILL.md",
       "service": "evals",
-      "sha256": "e3d60a5a6d530635b181ee668f7f862283d0d9305e154c8d70b83ea458dad152",
+      "sha256": "4e8230f6c207e899e1f8f30696b0e2224f3780acf0ec0f07f9d394193af94ae3",
       "version": "8.0.0"
     },
     {
@@ -1628,7 +1660,7 @@
       "name": "evals_traces",
       "path": "evals_traces/SKILL.md",
       "service": "evals",
-      "sha256": "5457fbb4f2e441590efa3fa6463ff32c67517a363b82d2afec0e052a21004799",
+      "sha256": "97d5c3d7333bb3792cb635f4b7dc827232a356c2664091c2aa9be3984556aaa4",
       "version": "8.0.0"
     },
     {
@@ -1636,7 +1668,7 @@
       "name": "experiments_assign",
       "path": "experiments_assign/SKILL.md",
       "service": "experiments",
-      "sha256": "05d6841c2b7a9db34e86dad73099d459302093d5aaa7549b5df6b9278e1a6496",
+      "sha256": "e5af5455cf244ec0184907a504072004aa5e6b2abaf6ca5b5712deee4961136b",
       "version": "8.0.0"
     },
     {
@@ -1644,7 +1676,7 @@
       "name": "experiments_experiments",
       "path": "experiments_experiments/SKILL.md",
       "service": "experiments",
-      "sha256": "b4eea75b77b918f826452193870ec64c0fb942d20f9391598bc2e72101a62dd0",
+      "sha256": "953c6434b8569d33c23c914bb634d0c05486f5bd1c02ec9dc28c45806ad63cee",
       "version": "8.0.0"
     },
     {
@@ -1652,7 +1684,7 @@
       "name": "experiments_health",
       "path": "experiments_health/SKILL.md",
       "service": "experiments",
-      "sha256": "4ed13a1669e6a84531f22867cf2205f4acb7c5d1a4bfeef1730e6e0ee686878d",
+      "sha256": "116accefbaccda7acdfaae43f444a91f6a776f322f625fbdcccb6a9a6addbfa9",
       "version": "8.0.0"
     },
     {
@@ -1660,7 +1692,7 @@
       "name": "files_files",
       "path": "files_files/SKILL.md",
       "service": "files",
-      "sha256": "cc698de1aa8a179a81f0d2f85adb9b553ee06b0a682d5989df162ea37fcd9d0e",
+      "sha256": "2717ac7df40f3d73b5b9e6dd24b10aa073fa199fe872e10a14434e446c78de07",
       "version": "8.0.0"
     },
     {
@@ -1668,7 +1700,7 @@
       "name": "finance_accounts",
       "path": "finance_accounts/SKILL.md",
       "service": "finance",
-      "sha256": "2dff735959742f9a7f2891325462ee4722b6b30a728e5e12c9132804559d3de5",
+      "sha256": "7c7447192414525f1345eec39b1b772052956cdd9389e74571b0a468c396da05",
       "version": "8.0.0"
     },
     {
@@ -1676,7 +1708,7 @@
       "name": "finance_balance",
       "path": "finance_balance/SKILL.md",
       "service": "finance",
-      "sha256": "f7b5e11c00335ca44ca4de35dbd47eed3f13ca4c68dfd2de6c5422a66aef620e",
+      "sha256": "36ff3e1a0ac81be8614f600c1ee66904f163fb4b408c829348cf11c57f162ec2",
       "version": "8.0.0"
     },
     {
@@ -1684,7 +1716,7 @@
       "name": "finance_credits",
       "path": "finance_credits/SKILL.md",
       "service": "finance",
-      "sha256": "101e1b25e410435e1c8547a9e99562d0dadd7b67dbe505c3e849f0be80905af1",
+      "sha256": "37d4b3a605a8470b9c25039732bcfedd72b0ac0c17637eca66ed80f178b1971c",
       "version": "8.0.0"
     },
     {
@@ -1692,7 +1724,7 @@
       "name": "finance_invoices",
       "path": "finance_invoices/SKILL.md",
       "service": "finance",
-      "sha256": "1b8dab9e23d3759d4994ad27ab79497d46bce1f262dc7f3835c2f52158d67300",
+      "sha256": "74dc5f531971a051f2d26e3744b9703fa361d1af12f043cf0b58c79ed16c1456",
       "version": "8.0.0"
     },
     {
@@ -1700,7 +1732,7 @@
       "name": "finance_ledger",
       "path": "finance_ledger/SKILL.md",
       "service": "finance",
-      "sha256": "f1b4898b56e0417b9e149332996ab853c4f930397e89818fcc06ae58b2ed1619",
+      "sha256": "11f87df97520e56ff0eb7949a17c36f2f8ce61139ab150fe821b0b3732d8ee66",
       "version": "8.0.0"
     },
     {
@@ -1708,7 +1740,7 @@
       "name": "finance_payment-methods",
       "path": "finance_payment-methods/SKILL.md",
       "service": "finance",
-      "sha256": "6eca6c3c3cdc35808f49acaaa795251123fd75c7454d19a390964225a399e723",
+      "sha256": "4961e9b2d24cac08d569bfd2f71571df31cbf3c4776540ac8a3ea1547f334213",
       "version": "8.0.0"
     },
     {
@@ -1716,7 +1748,7 @@
       "name": "finance_treasury",
       "path": "finance_treasury/SKILL.md",
       "service": "finance",
-      "sha256": "dd288e9235560f7add249ffa948e321a1ec0cccc20d10a83b173072d124a59a6",
+      "sha256": "090b868e612c0255ccc72b3c0f19ca3c974b8d62ac7fbd9e6acb8018ba28f17c",
       "version": "8.0.0"
     },
     {
@@ -1724,7 +1756,7 @@
       "name": "finance_usage",
       "path": "finance_usage/SKILL.md",
       "service": "finance",
-      "sha256": "d7f73b9d91d0b531dd585e8bac869f6e60470c37f47c83e064284662b5509a83",
+      "sha256": "cc23e68c1daf520ad1999d33d46bbf45c3bfb8d884a8056c8c1d787f766ac41e",
       "version": "8.0.0"
     },
     {
@@ -1732,7 +1764,7 @@
       "name": "finetune_hf",
       "path": "finetune_hf/SKILL.md",
       "service": "finetune",
-      "sha256": "02204bc812d3149454fc143683d63f584c08d7bc7e658e69eb38279efe143445",
+      "sha256": "203259b7358961b85a7ae073d204ab7684653006106c2ba0f2bffa1f0e663e14",
       "version": "8.0.0"
     },
     {
@@ -1740,7 +1772,7 @@
       "name": "finetune_job",
       "path": "finetune_job/SKILL.md",
       "service": "finetune",
-      "sha256": "a61729f710d76eccaf8239e8458017413141b3a946f9ef895deb56344c7d47f6",
+      "sha256": "13f2bee3f010e45b5fa060464ad153c2061fc5de2bc3e28fc884714998afbb66",
       "version": "8.0.0"
     },
     {
@@ -1748,7 +1780,7 @@
       "name": "finetune_jobs",
       "path": "finetune_jobs/SKILL.md",
       "service": "finetune",
-      "sha256": "a4c2cb21cc32915eee1b47aed20c0ce83fde9921fcf749ef96968f822b9fc33c",
+      "sha256": "ff4cfb8a0caa97135dc03cada8dcb334c3bc5205cf60ba296d7797bd695642d7",
       "version": "8.0.0"
     },
     {
@@ -1756,7 +1788,7 @@
       "name": "finetune_presets",
       "path": "finetune_presets/SKILL.md",
       "service": "finetune",
-      "sha256": "37932a1268a5372e95cee59d47c8eb50d07b1aeea88e0303f022c93e2324fd73",
+      "sha256": "5cd7cbe504c6ff9520c8cab911fc59bb7a9baf4a350bb44ad2aeb59d99ff586f",
       "version": "8.0.0"
     },
     {
@@ -1764,7 +1796,7 @@
       "name": "flags_activity",
       "path": "flags_activity/SKILL.md",
       "service": "flags",
-      "sha256": "7d1bbe69b1311b524a62ddbb27a7d7a45c80b0fa4c1c98f86e15cb8976368465",
+      "sha256": "6e0db7bf7633b810eeb39f52ff7247f0704e6340d058fc833b77e2f5841de779",
       "version": "8.0.0"
     },
     {
@@ -1772,7 +1804,7 @@
       "name": "flags_defs",
       "path": "flags_defs/SKILL.md",
       "service": "flags",
-      "sha256": "686883c874bcde2bbbcd588ce4874ddcc5bf36bc763ada2ce6ca2da9ceb6bd0b",
+      "sha256": "3c359244181a8dca7a9cb111792b0b23cd95e6c66c50485d5c9486c9945b30c4",
       "version": "8.0.0"
     },
     {
@@ -1780,7 +1812,7 @@
       "name": "flags_health",
       "path": "flags_health/SKILL.md",
       "service": "flags",
-      "sha256": "bed9ed3279fc626cf4c0e5fdd9d3434fa6492e5d6e6af87d57e9160756b0d547",
+      "sha256": "f3421c63fdea8c008dd679a083593a9f918ac886d5ab20fbb27a6e23b5e06eb8",
       "version": "8.0.0"
     },
     {
@@ -1788,7 +1820,7 @@
       "name": "flags_waitlist",
       "path": "flags_waitlist/SKILL.md",
       "service": "flags",
-      "sha256": "664e4df5e1b2adfa4e3e319299dac5730b66f86828dee21632c264ad3bd0cdd9",
+      "sha256": "d6b9c371010dc515a4f22cced5e342f3267c9ece194298949ccb62d7b50a2069",
       "version": "8.0.0"
     },
     {
@@ -1796,7 +1828,7 @@
       "name": "fleet_fleet",
       "path": "fleet_fleet/SKILL.md",
       "service": "fleet",
-      "sha256": "5bb23d0ffd472cd5d1e0bad812d876daf4a3e768b56d3cca1f75510e50248cfc",
+      "sha256": "ddedd123f669b39a6dce514f562b3bd964f7d7903ff4701a3ba7ba396414c5d0",
       "version": "8.0.0"
     },
     {
@@ -1804,7 +1836,7 @@
       "name": "fleet_jobs",
       "path": "fleet_jobs/SKILL.md",
       "service": "fleet",
-      "sha256": "a95f620b28993b7c45a60e23a68941e7e5d316cd112966d734ab187a4526d7ae",
+      "sha256": "0a33e2a4441ece80cebf2dac275e8e7e4c0c1915ac32903aea33f333ec9aa28a",
       "version": "8.0.0"
     },
     {
@@ -1812,7 +1844,7 @@
       "name": "fleet_samples",
       "path": "fleet_samples/SKILL.md",
       "service": "fleet",
-      "sha256": "49feca01a4ee8b6d132833c0f928163fce70d88322579d731af2a209f095fbcd",
+      "sha256": "1d3875e24a431467f092b3707654ba5078a16df3b595c0528cdef15e05e9762b",
       "version": "8.0.0"
     },
     {
@@ -1820,7 +1852,7 @@
       "name": "fleet_workers",
       "path": "fleet_workers/SKILL.md",
       "service": "fleet",
-      "sha256": "10f8b763892c4438c4ba1c94bce6f6bca9a2b1ddb200c606d9ea7703f383da64",
+      "sha256": "51d2871207579863b7227fc5e286f0192012bef3b43151f708ddebef5e582e9d",
       "version": "8.0.0"
     },
     {
@@ -1828,7 +1860,7 @@
       "name": "flow_runs",
       "path": "flow_runs/SKILL.md",
       "service": "flow",
-      "sha256": "e69d661bdfe15b39cc9fe38091eccff25e9eadc9b04e5905c0d23517695d135e",
+      "sha256": "7c149bf4d2e328f8fd53feca38ea163b209a6974ef37e4ad0f9a134e8e236fec",
       "version": "8.0.0"
     },
     {
@@ -1836,7 +1868,7 @@
       "name": "flow_status",
       "path": "flow_status/SKILL.md",
       "service": "flow",
-      "sha256": "77e1b908b7cfb515dc7685543ae2ecb7b8413d946c3295653d668c723b099263",
+      "sha256": "e5535ff5114542a10bd3db51b40e49c736e75c1d8ab1e63346920ab25640cff7",
       "version": "8.0.0"
     },
     {
@@ -1844,7 +1876,7 @@
       "name": "flow_workflows",
       "path": "flow_workflows/SKILL.md",
       "service": "flow",
-      "sha256": "b2c993b066d711a2aa29d8674f7489f3b7cd25ab4ef60fe5f460e1fed176ee03",
+      "sha256": "740273a735d276f330795adf21cf4750f72ec96d373367af47fc9bd1d40c75fd",
       "version": "8.0.0"
     },
     {
@@ -1852,7 +1884,7 @@
       "name": "framework_doctypes",
       "path": "framework_doctypes/SKILL.md",
       "service": "framework",
-      "sha256": "01c05b49d7960a94b2515a1beed4cedb0dfd29986621422de5f93cc07bd83ff3",
+      "sha256": "15ddc8d308565c5f7da983c309ca203457ab1141c9b01cc90d50a049b32f4260",
       "version": "8.0.0"
     },
     {
@@ -1860,7 +1892,7 @@
       "name": "framework_framework",
       "path": "framework_framework/SKILL.md",
       "service": "framework",
-      "sha256": "b2d4a6b5ee54ec5c3064975543d80fdd0bca5ff75082f0a31f358998fa07835f",
+      "sha256": "349747235a45058eb9c06d4415696915ab17ee22512ef97c5113fa2c944187a5",
       "version": "8.0.0"
     },
     {
@@ -1868,7 +1900,7 @@
       "name": "framework_modules",
       "path": "framework_modules/SKILL.md",
       "service": "framework",
-      "sha256": "01af7baa8fb2db5e3ea1f24f771035ac2e7205ee78f385597b8013dc33f4e0ba",
+      "sha256": "5aa72144220a0bec913045881255ad6c42aaf2543a138714f70d588559ac92b7",
       "version": "8.0.0"
     },
     {
@@ -1876,7 +1908,7 @@
       "name": "framework_roles",
       "path": "framework_roles/SKILL.md",
       "service": "framework",
-      "sha256": "b88699212836c57ad8f6c5b4cabdfb9bf6d7ada69ecdf8f4088d1920fc7e9381",
+      "sha256": "c938267458f9735278fe747322db1b07008bc67ecec6f70265925f78a08669a3",
       "version": "8.0.0"
     },
     {
@@ -1884,7 +1916,7 @@
       "name": "framework_summary",
       "path": "framework_summary/SKILL.md",
       "service": "framework",
-      "sha256": "3d882a6b7dc4e4bbb9e1d6847093bcce6b78f3094b35e2902f595638dffa6269",
+      "sha256": "110c571c211aef0e2dad4885d53481d537f4756603f0685ba9131b000c6b9d19",
       "version": "8.0.0"
     },
     {
@@ -1892,7 +1924,7 @@
       "name": "functions_deployments",
       "path": "functions_deployments/SKILL.md",
       "service": "functions",
-      "sha256": "c45df93b4829d574459b530132d6dfd825e14df79dab3db911439a27f29cd857",
+      "sha256": "d63de82a17c796ac80ec77750b03d3232db08ec91376b2348d58e38856366801",
       "version": "8.0.0"
     },
     {
@@ -1900,7 +1932,7 @@
       "name": "functions_functions",
       "path": "functions_functions/SKILL.md",
       "service": "functions",
-      "sha256": "4e54274962ad7cfc4e15a60b66e26cc90cc1b0248f4077a50b6712f410b0a923",
+      "sha256": "b6140f25d65793a516c9e4205ae47459c920fe92535f7d3b704c9c6bca5dc511",
       "version": "8.0.0"
     },
     {
@@ -1908,7 +1940,7 @@
       "name": "functions_invocations",
       "path": "functions_invocations/SKILL.md",
       "service": "functions",
-      "sha256": "8e005b801b4c646bfa0a592e6eac5194071c2c965817912bd415703fb4a66714",
+      "sha256": "c4b046ec1995e3a9c9f7d0ac7b261ae5df9fd533ad146af9aecce7d685f68a5f",
       "version": "8.0.0"
     },
     {
@@ -1916,7 +1948,7 @@
       "name": "functions_logs",
       "path": "functions_logs/SKILL.md",
       "service": "functions",
-      "sha256": "bbc6dcba98d39517b77f959ff73372d3fe240094aa64007ece6145ad075ada97",
+      "sha256": "fea1431c7443c64c77f5f51808818c15ab0507c375a0ea31162e28b80e15a7ae",
       "version": "8.0.0"
     },
     {
@@ -1924,7 +1956,7 @@
       "name": "functions_metrics",
       "path": "functions_metrics/SKILL.md",
       "service": "functions",
-      "sha256": "0bb7b67ea9eb1a1b59cfee147e5fdb405646951525f1397b8dc10cd67dd6f12c",
+      "sha256": "48135d5d9c094cad6c26aeb2dc23e9cb36cd597722e67a8100ba6e5c1601c66f",
       "version": "8.0.0"
     },
     {
@@ -1932,7 +1964,7 @@
       "name": "functions_secrets",
       "path": "functions_secrets/SKILL.md",
       "service": "functions",
-      "sha256": "40d26e4543c234bb4c64040550fc00e842fbbdb992e249b0a3e97db850c5acf8",
+      "sha256": "d27cfdbd0085309add1b965a147e7339435c7668cf5b03c4cab36cbf5976fe38",
       "version": "8.0.0"
     },
     {
@@ -1940,7 +1972,7 @@
       "name": "functions_triggers",
       "path": "functions_triggers/SKILL.md",
       "service": "functions",
-      "sha256": "8fa59f6f7130553db1169d81c4d607f07e1a360f1c69571f1206620adb292b27",
+      "sha256": "15524693af3767c9df81f0ec839e520d633ee1e9334992cfb51358c7c3b30135",
       "version": "8.0.0"
     },
     {
@@ -1948,7 +1980,7 @@
       "name": "gateway_config",
       "path": "gateway_config/SKILL.md",
       "service": "gateway",
-      "sha256": "8d08b44ef90e2d2bf5e943ed4a22fd8f337390500a3c37fa57fb7bb26b7dafbd",
+      "sha256": "4fe1d0a3e43040f0a856245db3f09700609ca2710e00864a2369fc38f1ddc759",
       "version": "8.0.0"
     },
     {
@@ -1956,15 +1988,7 @@
       "name": "gateway_traffic",
       "path": "gateway_traffic/SKILL.md",
       "service": "gateway",
-      "sha256": "cb5d1347c24eb494c4fac5bd51480be65861ccf71a90580eacf200a9e1a26808",
-      "version": "8.0.0"
-    },
-    {
-      "description": "Read generate-text-to-speech-audio-stream generate text to speech audio stream: Convert text to speech with streaming.",
-      "name": "generate-text-to-speech-audio-stream_generate-text-to-speech-audio-stream",
-      "path": "generate-text-to-speech-audio-stream_generate-text-to-speech-audio-stream/SKILL.md",
-      "service": "generate-text-to-speech-audio-stream",
-      "sha256": "e873ff485df3f021fe10b8f7eae6373a6096105e0f90828a72316c3d5939ae78",
+      "sha256": "624c16ab74d5b9c63360f9829d61ca0da4a62b84793a69701fa40fb41d916f51",
       "version": "8.0.0"
     },
     {
@@ -1972,7 +1996,7 @@
       "name": "git_info",
       "path": "git_info/SKILL.md",
       "service": "git",
-      "sha256": "bd3afc6603e6e8c8de1787281d5c829dac3e6945f41da3109c54822029fc5959",
+      "sha256": "264d2562e56a66159f7b938e04c07488318f5c47fde55ba2a3d31ad02fa903e3",
       "version": "8.0.0"
     },
     {
@@ -1980,7 +2004,7 @@
       "name": "git_keys",
       "path": "git_keys/SKILL.md",
       "service": "git",
-      "sha256": "b4fa0fc7382853dade8e5e24ad53f47a7bfb60906df7efb49f36bbfd36430816",
+      "sha256": "b429fc60a1196cba8214b40c489b38eda6444519e1b160a5a6bb9c7aadb467fb",
       "version": "8.0.0"
     },
     {
@@ -1988,7 +2012,7 @@
       "name": "git_repos",
       "path": "git_repos/SKILL.md",
       "service": "git",
-      "sha256": "05b58d303b38831f9556e51767a8eb4389b443eafe765e5e7f8390aa587940f5",
+      "sha256": "b5937a0b6686a41f11f531faa3d56eec033c7bac5b4921eb85c0c809f312c87e",
       "version": "8.0.0"
     },
     {
@@ -1996,7 +2020,7 @@
       "name": "git_usage",
       "path": "git_usage/SKILL.md",
       "service": "git",
-      "sha256": "932a97faddf089d92e00e4403d2acc6beeb833d3637465ad042d894e5114e681",
+      "sha256": "0fcf6635827bfe1210cfe9033da6af2eb730b605305fdba29f6c76c4bfd97e1e",
       "version": "8.0.0"
     },
     {
@@ -2004,7 +2028,7 @@
       "name": "gpus_alerts",
       "path": "gpus_alerts/SKILL.md",
       "service": "gpus",
-      "sha256": "4c1b5f8ee9a4a798d2bd3d512fbb8b35c1963af46e269fb08a14b4eb561bef00",
+      "sha256": "bc70182c0b675eb730a520f67449c2a1380c935db38d959166c9a0f7551db0b2",
       "version": "8.0.0"
     },
     {
@@ -2012,7 +2036,7 @@
       "name": "gpus_gpus",
       "path": "gpus_gpus/SKILL.md",
       "service": "gpus",
-      "sha256": "9febb2e3922b84f4cff7421a9ada26d125726499bc131c0aee3e5c85234a6e43",
+      "sha256": "b44aa7e39dcd5f5354dcd575d8184052e3c3ca72733da93d1755e2ac3a63c4dc",
       "version": "8.0.0"
     },
     {
@@ -2020,7 +2044,7 @@
       "name": "guide_actions",
       "path": "guide_actions/SKILL.md",
       "service": "guide",
-      "sha256": "d9bcff3278350f76da1968f6cd2170e2c7993e21a2671637529873109e852040",
+      "sha256": "4ab24d2bb18c43cdcfc75eef3b001d0725ff5f78213216f009680d4fda00b4f3",
       "version": "8.0.0"
     },
     {
@@ -2028,7 +2052,7 @@
       "name": "guide_analytics",
       "path": "guide_analytics/SKILL.md",
       "service": "guide",
-      "sha256": "8f4eea5a459ef5dac84d6c5f07f09c01c543e986e06dcd72f0b3ee52137aa37d",
+      "sha256": "4b2e01fb72665e9ef6b3fe12fb2afaecd6bb58603f455fc2be968fdb2d351de5",
       "version": "8.0.0"
     },
     {
@@ -2036,7 +2060,7 @@
       "name": "guide_blueprint",
       "path": "guide_blueprint/SKILL.md",
       "service": "guide",
-      "sha256": "ea75f642999f8f0619fa39efe07e6c243430d680a7d71e63f5943a60725fb61c",
+      "sha256": "2908a6fbe7037e68e96c0fbf2490f0d800c64299de9e6d5e076e88aa5d921827",
       "version": "8.0.0"
     },
     {
@@ -2044,7 +2068,7 @@
       "name": "guide_curriculum",
       "path": "guide_curriculum/SKILL.md",
       "service": "guide",
-      "sha256": "d93340fe3cd6a34d16abc25e56680047c2f17d55d158542ce8bb2cd15ab6188b",
+      "sha256": "f11629576a31f04eed9818322c6b6f6c73234122df3ffb8f17507cdf7d9d342c",
       "version": "8.0.0"
     },
     {
@@ -2052,7 +2076,7 @@
       "name": "guide_guide",
       "path": "guide_guide/SKILL.md",
       "service": "guide",
-      "sha256": "89b44006aef975d9cb572f55ba6077eeb78c37168b6ac9dd7e3c0ae567d6228b",
+      "sha256": "4a22be9720154ae4b4862cb8ce380c87fd62da87391af065fbf04065d4b42910",
       "version": "8.0.0"
     },
     {
@@ -2060,7 +2084,7 @@
       "name": "guide_profile",
       "path": "guide_profile/SKILL.md",
       "service": "guide",
-      "sha256": "fd3a3e2a8c7e0ef526601b70c16678e2b08adacb08879e236a8a72ba28816ceb",
+      "sha256": "6a26c9808ae34fcd4b8233364b00ef092776d1b51b42bac365011609286dbe93",
       "version": "8.0.0"
     },
     {
@@ -2068,7 +2092,7 @@
       "name": "guide_strategies",
       "path": "guide_strategies/SKILL.md",
       "service": "guide",
-      "sha256": "8802af4319b795721278e70f080af5e7a96f5cf43910ca329a06c3ce15ac4a8f",
+      "sha256": "802b1a1a030a596d73bc4e04d51168951223901911db5498de2a92d0d90a2860",
       "version": "8.0.0"
     },
     {
@@ -2076,7 +2100,7 @@
       "name": "guide_suggest",
       "path": "guide_suggest/SKILL.md",
       "service": "guide",
-      "sha256": "b4257ab8dc48411b186b179bec22602a476fc5bb413d0096dc7882777a8927b9",
+      "sha256": "2f561a30951d449b1d8eaf1765930731a44ef3fba81ab91a35def9accda4034f",
       "version": "8.0.0"
     },
     {
@@ -2084,7 +2108,7 @@
       "name": "health_health",
       "path": "health_health/SKILL.md",
       "service": "health",
-      "sha256": "f4d581e0c53fd20965eff482199ee7c859b33e3e2dd442114c8ea74ec1ba3a00",
+      "sha256": "726e12cd2586b564ef80ea97bec691510a9a9b6eace3a250fac6439eb5966f04",
       "version": "8.0.0"
     },
     {
@@ -2092,7 +2116,7 @@
       "name": "help_articles",
       "path": "help_articles/SKILL.md",
       "service": "help",
-      "sha256": "135a88a294360b2ab63c1837f595066e84f69b1cbd4eacb283c0866fcd35c0e9",
+      "sha256": "b68f2d6e87e6b2707090ecab80477e77e4918e7702c333de64092aec64d15d3f",
       "version": "8.0.0"
     },
     {
@@ -2100,7 +2124,7 @@
       "name": "help_categories",
       "path": "help_categories/SKILL.md",
       "service": "help",
-      "sha256": "dc348a299e52b9f7337d2656c9880e0d08fb4ce54d63b714adfbd477b52bc12a",
+      "sha256": "66be7f1e7388d05936fe1f61e59acc3620d73557bb4a34b0aeac27d3fafaae9f",
       "version": "8.0.0"
     },
     {
@@ -2108,7 +2132,7 @@
       "name": "iam_applications",
       "path": "iam_applications/SKILL.md",
       "service": "iam",
-      "sha256": "5233adcd8b1d90f0ca8aa0a9a951fa695582fc62300485afe82c6cb6e1c24290",
+      "sha256": "396b2b25573d9f728d011469690ff4a52e84769654ea2db713f9a0c256eb2b15",
       "version": "8.0.0"
     },
     {
@@ -2116,7 +2140,7 @@
       "name": "iam_auth",
       "path": "iam_auth/SKILL.md",
       "service": "iam",
-      "sha256": "65aaee4d8da966fbe53f1e0645c125def31802304f97a178a5c6ae8ed935c768",
+      "sha256": "d9bad51a3df6907dd92098cd11a4d40657a0445a25f1aebc74c7502fd7f5b9cc",
       "version": "8.0.0"
     },
     {
@@ -2124,7 +2148,7 @@
       "name": "iam_keys",
       "path": "iam_keys/SKILL.md",
       "service": "iam",
-      "sha256": "58ff0fb84a2c1911e326c2354e0bf811cdee09156ae7c32519e783718e927425",
+      "sha256": "a5ec899b70d0b54561c8eed7d7f609fc3d154a8c84594e6235f24355afb65131",
       "version": "8.0.0"
     },
     {
@@ -2132,15 +2156,15 @@
       "name": "iam_oauth",
       "path": "iam_oauth/SKILL.md",
       "service": "iam",
-      "sha256": "617b41e596304b0fbd2517628f0d2cc4db28572f8056a90f1fcad50d1b91c8a4",
+      "sha256": "09d4da4c23b107789992b4685e264e07a23af6d5875a121487c25a9ebae88bce",
       "version": "8.0.0"
     },
     {
-      "description": "Read iam organizations: Returns the organizations you can see, newest first., Returns one organization: its display, its defaults and the sign-in rules everyone in it inherits..",
+      "description": "Read iam organizations: Returns the organizations you can see, newest first., Returns one organization: its display, its defaults and the sign-in rules everyone in it inherits., Returns the organizations you can act in, the ones you belong to first and the rest after, newest firs",
       "name": "iam_organizations",
       "path": "iam_organizations/SKILL.md",
       "service": "iam",
-      "sha256": "2847a2b6df67c99af635506384c224ff589f2b13505d0c0a2b0269cdca015814",
+      "sha256": "14136bc932f9355f7e41a9dd8125ca68c76bf8c32cec9a4f2a578d3e7036a004",
       "version": "8.0.0"
     },
     {
@@ -2148,7 +2172,7 @@
       "name": "iam_permissions",
       "path": "iam_permissions/SKILL.md",
       "service": "iam",
-      "sha256": "51c0623b2bcd8f6981f7ea33df894740ac8d38ed74caf11fafe68112828671f1",
+      "sha256": "299e25eaaafc11ef57bc3532f4ee317665c755cd310a943bea259b2d184c8294",
       "version": "8.0.0"
     },
     {
@@ -2156,7 +2180,7 @@
       "name": "iam_registry",
       "path": "iam_registry/SKILL.md",
       "service": "iam",
-      "sha256": "4957f740dd6da6461f16a2eb4b032895045f84573501b1ebcd0f2e0ad37fec03",
+      "sha256": "cefcad4444f7abe3045a34440b7c19676cd66a23ec0b1a878f40cf210652a839",
       "version": "8.0.0"
     },
     {
@@ -2164,7 +2188,7 @@
       "name": "iam_scim",
       "path": "iam_scim/SKILL.md",
       "service": "iam",
-      "sha256": "47cec04f7a8490dee62279e2afc7e2aefcf607dadad149712a299e5c9e4f8119",
+      "sha256": "9903463a9a0038c91fe7997d875b252b89b81ec565891f71f75936d4c6504136",
       "version": "8.0.0"
     },
     {
@@ -2172,7 +2196,7 @@
       "name": "iam_users",
       "path": "iam_users/SKILL.md",
       "service": "iam",
-      "sha256": "f66db549beb680413f0fae774a91afd42e53d95802c441e9711acdff0beffd80",
+      "sha256": "6ff7b82b4e14fd50a0a2682a15ed6bb60bf05b6ca96cefbd99ca647927494bba",
       "version": "8.0.0"
     },
     {
@@ -2180,7 +2204,7 @@
       "name": "iam_well-known",
       "path": "iam_well-known/SKILL.md",
       "service": "iam",
-      "sha256": "18583ede20b8f15a2f5800f4126e59a044b550905acbc5bcbe4ffe84df98ad4d",
+      "sha256": "4d512f91160971af44ed2faef6c58b38e8fd35ba04ee62be4fd6cf2cc0c4ad3f",
       "version": "8.0.0"
     },
     {
@@ -2188,7 +2212,7 @@
       "name": "index_health",
       "path": "index_health/SKILL.md",
       "service": "index",
-      "sha256": "a04f8dbe9dd0b6a0d1ff396fc3012f2a85374a5ec3c5a8c915208cb21e7bda6c",
+      "sha256": "58b48cadb698f64feec0cc94aa5660a1ecee89df40cd5e74b11de40b9ebf94a5",
       "version": "8.0.0"
     },
     {
@@ -2196,7 +2220,7 @@
       "name": "index_indexes",
       "path": "index_indexes/SKILL.md",
       "service": "index",
-      "sha256": "96dbc61f46774426685cb724faa13ff82b3fcb70a2d16176d5548371dbc45858",
+      "sha256": "b9aa6a85cb74fa8c000caaf41ff8d325cdc756477a66422f13610794373a94a3",
       "version": "8.0.0"
     },
     {
@@ -2204,7 +2228,7 @@
       "name": "index_stats",
       "path": "index_stats/SKILL.md",
       "service": "index",
-      "sha256": "c4da471596dcb0d5ce7a222aab3a42dad12636f4fb3f3bd67953ebee4861ed70",
+      "sha256": "43438e8b9623d8e7c308ec57b340322f5259d3ef99a2084b95693271307c0bfb",
       "version": "8.0.0"
     },
     {
@@ -2212,7 +2236,7 @@
       "name": "index_tasks",
       "path": "index_tasks/SKILL.md",
       "service": "index",
-      "sha256": "50fb557ff97dc36a2e09d1c5a883b6235b493fef3ea0fed85df926b47345e78a",
+      "sha256": "ee3863d9be5415e2b9618e0a50df29d2ced51056a87e8df7af2fbda7d5e54330",
       "version": "8.0.0"
     },
     {
@@ -2220,7 +2244,7 @@
       "name": "index_version",
       "path": "index_version/SKILL.md",
       "service": "index",
-      "sha256": "0f76a2f791ac441f559bdbab49d5740b10790d2c1a35cf959e7d36697752eefd",
+      "sha256": "681d916cc879a02656a10172a453db9d8baf5923977d154d01e0ed3579cee05a",
       "version": "8.0.0"
     },
     {
@@ -2228,7 +2252,7 @@
       "name": "indexers_indexers",
       "path": "indexers_indexers/SKILL.md",
       "service": "indexers",
-      "sha256": "8ca94ae1641fdb91f299961f928c1e6ada8ffa658da0d383ece832ae88d12226",
+      "sha256": "4bf20badc1a8e22cddc2a0d92ca34ca6501bf3fa1d3fcc68f65bff741ed72db4",
       "version": "8.0.0"
     },
     {
@@ -2236,7 +2260,7 @@
       "name": "ingress_middlewares",
       "path": "ingress_middlewares/SKILL.md",
       "service": "ingress",
-      "sha256": "8328a8ad2b01c3ca3d6599f43865de8744101476b0b1be60aba3de742061a525",
+      "sha256": "67ebf6c20c85d0b4179b745e15b28188fdf2eae48283255b9a8a1922402b0cb8",
       "version": "8.0.0"
     },
     {
@@ -2244,7 +2268,7 @@
       "name": "ingress_routes",
       "path": "ingress_routes/SKILL.md",
       "service": "ingress",
-      "sha256": "e47eecb113db5294a3ea18bacdf02cc8fa4714ace912a5f1d98db19114e44a0d",
+      "sha256": "273d9066d52af3aaa542b266b5381b8c91936fcd5dbf37e3aa913afbcab179f1",
       "version": "8.0.0"
     },
     {
@@ -2252,7 +2276,7 @@
       "name": "ingress_services",
       "path": "ingress_services/SKILL.md",
       "service": "ingress",
-      "sha256": "d406a9ad330daacf2dec8d88b72a2413bdf5bd40cd4e25f0a251fa58f7a985fb",
+      "sha256": "ed8faa9ade270fbc1f98631e27a720eeabc97bd5297d55cfb48e1e8690b421d7",
       "version": "8.0.0"
     },
     {
@@ -2260,7 +2284,7 @@
       "name": "ingress_status",
       "path": "ingress_status/SKILL.md",
       "service": "ingress",
-      "sha256": "18b11ba8d23306f29752c29d966576c6b26f63ae05ec888bdb602f51937ef1df",
+      "sha256": "229e51ba1912767b686ef4b8f85c078a36f74336be9a40429ed94a8ebfb0f15e",
       "version": "8.0.0"
     },
     {
@@ -2268,7 +2292,7 @@
       "name": "ingress_tls",
       "path": "ingress_tls/SKILL.md",
       "service": "ingress",
-      "sha256": "ee6cabf08198c53fd6350e491c00dfe70c4898bcc32681567406db9e5da351b6",
+      "sha256": "20dd790ec3420ad7155c1bbe30b383a812f99fe99131a3302a38a933cec7d118",
       "version": "8.0.0"
     },
     {
@@ -2276,7 +2300,7 @@
       "name": "insights_events",
       "path": "insights_events/SKILL.md",
       "service": "insights",
-      "sha256": "1112a6767caccef47e0e88251b83c972a73eb40e5a24ba3fbd2aa6d89aa21b90",
+      "sha256": "d02d0e0ac1ae835a039b07947c408a93cc45866a35c0ca21fc94c899b575c618",
       "version": "8.0.0"
     },
     {
@@ -2284,7 +2308,7 @@
       "name": "insights_health",
       "path": "insights_health/SKILL.md",
       "service": "insights",
-      "sha256": "1a0e0ea3b406c5a4186637db1ce55115cfdfa7e17a9acb26f14c40b840b43754",
+      "sha256": "c7770ed39670a749a6e682e7fab12ec1211c59378bd64e973525779af6a8a129",
       "version": "8.0.0"
     },
     {
@@ -2292,7 +2316,7 @@
       "name": "integrations_callback",
       "path": "integrations_callback/SKILL.md",
       "service": "integrations",
-      "sha256": "83dd95e60f01e6042c7f5dd409de6c4a910796bbca2f94507cac27fae71e8512",
+      "sha256": "a8ffd55106d88acd7a8b7e17d0f68daebd7d5e4d07dc5e276a2c1e8dc912f016",
       "version": "8.0.0"
     },
     {
@@ -2300,7 +2324,7 @@
       "name": "integrations_discord",
       "path": "integrations_discord/SKILL.md",
       "service": "integrations",
-      "sha256": "0f5a3fb02115eca37bbc1d35031eb5a75179e850b6bb1908d86e4679b063e8dc",
+      "sha256": "6857b6a609235460ee6ae4fea7e962f6f018c2625985c369de748f0be0eb79cd",
       "version": "8.0.0"
     },
     {
@@ -2308,7 +2332,15 @@
       "name": "integrations_github",
       "path": "integrations_github/SKILL.md",
       "service": "integrations",
-      "sha256": "d262e3b0e082271346736167b17715e3e0da434da8186d0b32c6177d6429187e",
+      "sha256": "a964961c0b2a610c154fd4ac4e13b44f0be6f1551843be2234104ee38c5f2606",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read integrations gitlab: Lists the projects the org's GitLab connection can reach — membership projects, most recently active first..",
+      "name": "integrations_gitlab",
+      "path": "integrations_gitlab/SKILL.md",
+      "service": "integrations",
+      "sha256": "0393442064c471a63908c3d81161acb20d1618b7f653a90cc1c72c158a03d0fd",
       "version": "8.0.0"
     },
     {
@@ -2316,7 +2348,7 @@
       "name": "integrations_integrations",
       "path": "integrations_integrations/SKILL.md",
       "service": "integrations",
-      "sha256": "1b58118bdd3b2f3231cd5d9feb721eb0bf2ce8485557c76c87d8a790dcff1e83",
+      "sha256": "5d68b8fd294bceb38a6bf56b80bee0a5f9c73ecbe71134f813bb10ab4f01aef0",
       "version": "8.0.0"
     },
     {
@@ -2324,7 +2356,7 @@
       "name": "integrations_slack",
       "path": "integrations_slack/SKILL.md",
       "service": "integrations",
-      "sha256": "2135d5ebe4371dee5ce3fa5855d45f368831733a60bca399cb154130a6f7ec72",
+      "sha256": "06367745565288780a718c41fa69c395a15ff9dc3618b00c91db36f9f9f1b867",
       "version": "8.0.0"
     },
     {
@@ -2332,7 +2364,7 @@
       "name": "integrations_teams",
       "path": "integrations_teams/SKILL.md",
       "service": "integrations",
-      "sha256": "64e15e6bd3f64881df5d3f76e750ff6c376ead6dee4cae5f7d82135d3be809e0",
+      "sha256": "62b7e6e72aead266c764ce953f50607d7b2cd158cdbf08847867bc936dd99e9d",
       "version": "8.0.0"
     },
     {
@@ -2340,7 +2372,7 @@
       "name": "integrations_telegram",
       "path": "integrations_telegram/SKILL.md",
       "service": "integrations",
-      "sha256": "617ab5fb55ea291f442e3ce24620afdde671a523b6824b853809e3615a6c41e8",
+      "sha256": "1b65999a593ad2d64e65cc0313dc13da06d715dfba2964f3a3fbac01f12be655",
       "version": "8.0.0"
     },
     {
@@ -2348,7 +2380,7 @@
       "name": "k8s_clusters",
       "path": "k8s_clusters/SKILL.md",
       "service": "k8s",
-      "sha256": "885bb0e25891684ac4a2a06e8e5d95b947d2547c3905f986c4dceffb69a52967",
+      "sha256": "0a47a697c369ca60d2d5f19d9e47d78e9fe87fcc25f07de3d15f88b5e0f72f44",
       "version": "8.0.0"
     },
     {
@@ -2356,7 +2388,7 @@
       "name": "k8s_nodes",
       "path": "k8s_nodes/SKILL.md",
       "service": "k8s",
-      "sha256": "a789edc90c93d2c086dd5ddb80df928e1af7203b6fb12fde71ee62724bc25550",
+      "sha256": "727efdf1223573dcf1e69fc95d03eb01e8bd8484cc4df354f64671488a017bfc",
       "version": "8.0.0"
     },
     {
@@ -2364,7 +2396,7 @@
       "name": "kb_connectors",
       "path": "kb_connectors/SKILL.md",
       "service": "kb",
-      "sha256": "cb1a1af3b6a7c5e5530ae6e13a8ecfbd7f0284f9c46882694a932c78ef7d1d81",
+      "sha256": "e92abeb64acdbc671d7a3778b3aa5586daa376ddfe4ed616ad41f9b97d6448de",
       "version": "8.0.0"
     },
     {
@@ -2372,7 +2404,7 @@
       "name": "kb_graph",
       "path": "kb_graph/SKILL.md",
       "service": "kb",
-      "sha256": "8c11e0fc805c0678fee43b74cf9f83f4f9727145a3bd930e670cdc9de639f897",
+      "sha256": "9b6cd9c38b4aeb72070821f3c69aedba4b74886e772312b46d9f02d0a9ea1d35",
       "version": "8.0.0"
     },
     {
@@ -2380,7 +2412,7 @@
       "name": "keys_keys",
       "path": "keys_keys/SKILL.md",
       "service": "keys",
-      "sha256": "d69c4fe6ab5cbd5401409eac1105b391429af4b054ce70da8d0f7d67e1e4a649",
+      "sha256": "dc69f85fed9133c8f5c29c61270d1a7fee93e18f6b87f404bc2956498a908a5a",
       "version": "8.0.0"
     },
     {
@@ -2388,7 +2420,7 @@
       "name": "kms_config",
       "path": "kms_config/SKILL.md",
       "service": "kms",
-      "sha256": "00b55a05bdcf1227625d92834f029e5153e71c16df2913b7008ef091f42afe92",
+      "sha256": "7eca335b16b76a719e3461ee87f5495a53608b4daca7811e4c6e891568a09c15",
       "version": "8.0.0"
     },
     {
@@ -2396,7 +2428,7 @@
       "name": "kms_health",
       "path": "kms_health/SKILL.md",
       "service": "kms",
-      "sha256": "2370f267053eb196bd60a83bd9082c892c61441c40159c80844b3f8819ff2021",
+      "sha256": "9001a0e4963fd8be0c740d7074e3d0aac2f659fc3a4ebccc4a1dfd4d49ff9f2e",
       "version": "8.0.0"
     },
     {
@@ -2404,7 +2436,7 @@
       "name": "kms_secrets",
       "path": "kms_secrets/SKILL.md",
       "service": "kms",
-      "sha256": "9ba51653873ded316e94ff97b797c6b31470b3c5e3cb44a9f323f8c1c422e561",
+      "sha256": "f282782aca6af158084edd13639d1598d0aaf4e4ba15d09eee0da997a36f5ebf",
       "version": "8.0.0"
     },
     {
@@ -2412,7 +2444,7 @@
       "name": "kv_kv",
       "path": "kv_kv/SKILL.md",
       "service": "kv",
-      "sha256": "a3994080c605b35db84f4eb4f9d13ae3b92421da0c6f7fe9c17ddeb2c499f6c9",
+      "sha256": "a8f12fda3803a3885bb4bffa192aa81e1b172d9fc757704a40d0a78e729b599a",
       "version": "8.0.0"
     },
     {
@@ -2420,7 +2452,7 @@
       "name": "legal_documents",
       "path": "legal_documents/SKILL.md",
       "service": "legal",
-      "sha256": "6ac3ea259bc45cea880d756bee81253faee337c61bc1dfcfd92dcd9310ed064d",
+      "sha256": "f4ab5259fb6a3d36f46054a7b8c12f2d898f3667bebd3f7461fa18c5949a6ea0",
       "version": "8.0.0"
     },
     {
@@ -2428,7 +2460,7 @@
       "name": "legal_filings",
       "path": "legal_filings/SKILL.md",
       "service": "legal",
-      "sha256": "f06871045e71bae37a832c73c19d13b57b9c4c49af8f9351bd44f8e77bad51a1",
+      "sha256": "7ba2f528d6ab9f30296ff14fd41236ba0a72fa9a0e2a40109f54a316e521b570",
       "version": "8.0.0"
     },
     {
@@ -2436,7 +2468,7 @@
       "name": "legal_health",
       "path": "legal_health/SKILL.md",
       "service": "legal",
-      "sha256": "899a4884c29fd78e954fc1e8c1d121d01d31a82ac2c1c2ad62e5a02ea7e0e87e",
+      "sha256": "e051efc798fde48c5ff40870d25f0fd4b55add9961ac38eb7d0b7ccb13e57a1c",
       "version": "8.0.0"
     },
     {
@@ -2444,7 +2476,7 @@
       "name": "legal_templates",
       "path": "legal_templates/SKILL.md",
       "service": "legal",
-      "sha256": "18209af0f557dad10ecab1b3d2d74e3c2cda5d5a4249181c967956cf69d2888f",
+      "sha256": "9e0b4b0c4a44f8ba216902f9c62a415c5022bcda3c9e976193e1fdded262e76e",
       "version": "8.0.0"
     },
     {
@@ -2452,7 +2484,7 @@
       "name": "licensing_download",
       "path": "licensing_download/SKILL.md",
       "service": "licensing",
-      "sha256": "2623546e8d172823c7b056039450c348f31c8755c37e0f0df2e6804ca6635b41",
+      "sha256": "8914e923f46255ea005f835d71df56c8ea333e4f7ae1ca94d1f3f7a975967fe1",
       "version": "8.0.0"
     },
     {
@@ -2460,7 +2492,7 @@
       "name": "licensing_healthz",
       "path": "licensing_healthz/SKILL.md",
       "service": "licensing",
-      "sha256": "a4cc745a3c04a35efde0a0c56c857a643ccf8963e40fcb6b4a45cc0be75532e8",
+      "sha256": "03abdbfde14f0e4b5bceefce6e3b9d52f3dfcdc20c7c491ecffbdb5d6e1caf34",
       "version": "8.0.0"
     },
     {
@@ -2468,7 +2500,7 @@
       "name": "licensing_jwks",
       "path": "licensing_jwks/SKILL.md",
       "service": "licensing",
-      "sha256": "8da73f0aa62536ed5f14a36c9711ff85dc485e478138c6725e1713a9c5f42f16",
+      "sha256": "2b20a2cdfdea0b73519a3a9bf6ea1cd0e673a4787e64ba5eba46a015f412d9fd",
       "version": "8.0.0"
     },
     {
@@ -2476,7 +2508,7 @@
       "name": "licensing_pubkey",
       "path": "licensing_pubkey/SKILL.md",
       "service": "licensing",
-      "sha256": "8773c5d535a9ed54c6e2f617814413c7f92368e16dea3200db3d2b1ee50241e9",
+      "sha256": "7441e539af27d526cf3632a85bc49afa2b064de6ae7d0e74ae3e670145228ee5",
       "version": "8.0.0"
     },
     {
@@ -2484,7 +2516,7 @@
       "name": "licensing_releases",
       "path": "licensing_releases/SKILL.md",
       "service": "licensing",
-      "sha256": "1777c127e9b14927cc53ff60dcc2ed61f6ec96c867e31c28bfe13f0a789d1fb1",
+      "sha256": "0faeb5c5cb1d32c2b60303f36317de57d1ff7b630acf34281f2445f99b5ff1f4",
       "version": "8.0.0"
     },
     {
@@ -2492,7 +2524,7 @@
       "name": "links_devices",
       "path": "links_devices/SKILL.md",
       "service": "links",
-      "sha256": "1a489c799cfd6372eaf3e653740874f7f34bdb0aeacf3b80e3327a5a53b862ad",
+      "sha256": "82cc31268ae75072f41112377b420ef26686d02ea7a845df18cb9c166b659ecf",
       "version": "8.0.0"
     },
     {
@@ -2500,7 +2532,7 @@
       "name": "links_links",
       "path": "links_links/SKILL.md",
       "service": "links",
-      "sha256": "32e956b687edd18d61e1ecc178a015cea27ed7a68e4d84c0d5923c5b87886794",
+      "sha256": "3f4e705dcff525a407165ab32f2f3ef7122c63119dcd282578cca48d1395f4a9",
       "version": "8.0.0"
     },
     {
@@ -2508,7 +2540,7 @@
       "name": "links_route",
       "path": "links_route/SKILL.md",
       "service": "links",
-      "sha256": "540478074d13d9eb5db23b2b685d386afdfac2c1a90839fc43481eebec9a791e",
+      "sha256": "c8c8bc250bd69379ee446da6ccaf864fa653b5bc36eafbf1855e4dd39b8409b5",
       "version": "8.0.0"
     },
     {
@@ -2516,7 +2548,7 @@
       "name": "links_usage",
       "path": "links_usage/SKILL.md",
       "service": "links",
-      "sha256": "1beb86059e39fb4c7bfa916bb26ed7911b4bb3a85b652306cce0ba78c4826a6c",
+      "sha256": "1890551d0ef1daa2e3f5e844a5208364effdaaded49897f6e065c634e27726a4",
       "version": "8.0.0"
     },
     {
@@ -2524,7 +2556,7 @@
       "name": "logs_health",
       "path": "logs_health/SKILL.md",
       "service": "logs",
-      "sha256": "1a7c4dfe0166c18a5f2b5fe4991ef38f26f5aedd45d0b88c35c4fcfa438eef26",
+      "sha256": "d639d1b42cf67de9c3c6f53e1ef3d9c79a0ab47ead4143e054434c564ad2cdc2",
       "version": "8.0.0"
     },
     {
@@ -2532,7 +2564,7 @@
       "name": "logs_query",
       "path": "logs_query/SKILL.md",
       "service": "logs",
-      "sha256": "0e0e073e21dffb9094848f8d8d1b0ec45d18221094966a665a2642ca1245b44a",
+      "sha256": "823766da23480783cb194397c87eb311396eca14f38bf729b730d2036621425a",
       "version": "8.0.0"
     },
     {
@@ -2540,7 +2572,7 @@
       "name": "machines_agent",
       "path": "machines_agent/SKILL.md",
       "service": "machines",
-      "sha256": "2444a3cc39edf7e0e5ee85fe6d8458668a5ac8db3787e03fdfb3115d1ca92a17",
+      "sha256": "1d307e2238e9c6de53a931ca9ef9d083f89c63a9781013fcc6fdb8cd0225a1ed",
       "version": "8.0.0"
     },
     {
@@ -2548,7 +2580,7 @@
       "name": "machines_agents",
       "path": "machines_agents/SKILL.md",
       "service": "machines",
-      "sha256": "758b89a01641abc61277bf249cbdc58ef1f13ff651383753c6e7c11488060891",
+      "sha256": "ced295db5536e4e03c26fb1f6395d2b98583ebda76565541dc5a151dce3b9bd2",
       "version": "8.0.0"
     },
     {
@@ -2556,7 +2588,7 @@
       "name": "machines_machines",
       "path": "machines_machines/SKILL.md",
       "service": "machines",
-      "sha256": "de7b264874b3b58b0de05825e1643218e97bde508f7241282cb422f4b20e682e",
+      "sha256": "fda7e627b47000300e6c191f5c9dae3a8f0afbae9087bddda62dfda76fa628de",
       "version": "8.0.0"
     },
     {
@@ -2564,7 +2596,7 @@
       "name": "marketing_audiences",
       "path": "marketing_audiences/SKILL.md",
       "service": "marketing",
-      "sha256": "b2b5549e217b9704a16fba31f44c64c60faf085f536913ff942a1252609a6675",
+      "sha256": "916d7f9fec3a2a45ac4ad60b4f505077bdca0e2156840f0a67b334eff9f79e0d",
       "version": "8.0.0"
     },
     {
@@ -2572,7 +2604,7 @@
       "name": "marketing_calendar",
       "path": "marketing_calendar/SKILL.md",
       "service": "marketing",
-      "sha256": "0079e7cc365e7f54b20b224bff65e5602db7b2406992746c9e50d6e12c9917f9",
+      "sha256": "11de63f923c9e96c6578c36a4fa354f65ebdec98a873c5ffca5e79215422079d",
       "version": "8.0.0"
     },
     {
@@ -2580,7 +2612,7 @@
       "name": "marketing_campaigns",
       "path": "marketing_campaigns/SKILL.md",
       "service": "marketing",
-      "sha256": "6bd2fde8474940086dbc8ee4ade6ce18fd90aeb4e7b36dd1c15646a3ad710b72",
+      "sha256": "766411469ca954059dbc4a70201cbe19b9762b3556371853987c365b193c864f",
       "version": "8.0.0"
     },
     {
@@ -2588,7 +2620,7 @@
       "name": "marketing_promos",
       "path": "marketing_promos/SKILL.md",
       "service": "marketing",
-      "sha256": "e61a9bcba91305751eaf0080c9209a47ae66155577d09b7e91e8c9e88f6cd40b",
+      "sha256": "f780b3ee01a46cc383088c7053b8f7c1341cf8ffe6a7b396ad401f04c361b91c",
       "version": "8.0.0"
     },
     {
@@ -2596,7 +2628,7 @@
       "name": "marketing_sequences",
       "path": "marketing_sequences/SKILL.md",
       "service": "marketing",
-      "sha256": "99706b0e4559a042474b9ff0d0fa70b7f8623e4d92d00e426d4e6925333597f7",
+      "sha256": "79e1d211c4d741dceca710c8affacfa413b81bc240d7028722fd8351dcfabbc0",
       "version": "8.0.0"
     },
     {
@@ -2604,7 +2636,7 @@
       "name": "marketing_summary",
       "path": "marketing_summary/SKILL.md",
       "service": "marketing",
-      "sha256": "752b5483e0323c363359291474a6f196072691cefdbcdd1bc6661dff2347fa0b",
+      "sha256": "d544fce9888983e4c42498b16592081684c1d8575c71aa41f36ded3c26cee134",
       "version": "8.0.0"
     },
     {
@@ -2612,7 +2644,7 @@
       "name": "marketing_suppressions",
       "path": "marketing_suppressions/SKILL.md",
       "service": "marketing",
-      "sha256": "a3a76bf9c4d74388375263f76a4ad90dc1ec61dc4b3fa838fb356c7e57b000d2",
+      "sha256": "c17d511ae9d24c9b44c0f54af8046bab32d8857c5fd9b1ed39033cec9576f050",
       "version": "8.0.0"
     },
     {
@@ -2620,7 +2652,7 @@
       "name": "marketing_unsubscribe",
       "path": "marketing_unsubscribe/SKILL.md",
       "service": "marketing",
-      "sha256": "e7406cde58e26a049816135553899fe19e6760932aa8e874f20622af3d126720",
+      "sha256": "6bd4a0788d1e012872e0060e1a2e1bbcb6c6864338b28c186e35f6d127ea0a57",
       "version": "8.0.0"
     },
     {
@@ -2628,7 +2660,7 @@
       "name": "marketplace_listings",
       "path": "marketplace_listings/SKILL.md",
       "service": "marketplace",
-      "sha256": "f1272b57daedbc5cf975f46ec3af36367f590162a68f464c4dded1b357aa8c7d",
+      "sha256": "83a5b1fe7f033f10c877dcc5a32eb335ba0d0a931073351dc2313255d50ffa29",
       "version": "8.0.0"
     },
     {
@@ -2636,7 +2668,7 @@
       "name": "marketplace_marketplace",
       "path": "marketplace_marketplace/SKILL.md",
       "service": "marketplace",
-      "sha256": "071d1a36e415ffde72777d145ab157b4ad4058bbb7ca652e913d163d33eb4139",
+      "sha256": "6868734ac5065c38a2269987d3ed9cb84d694b43e68e9b1afaedcb50eb2eed1d",
       "version": "8.0.0"
     },
     {
@@ -2644,7 +2676,7 @@
       "name": "mcp_servers",
       "path": "mcp_servers/SKILL.md",
       "service": "mcp",
-      "sha256": "6aaa227fb5e86b1c2f3d54e56353a270820f0d3a9038a6ceab787ca1389b6fe3",
+      "sha256": "21ff0b2c55498a54a9ef691864d6a974bb56013640d9427d42f8d0159e393c39",
       "version": "8.0.0"
     },
     {
@@ -2652,7 +2684,7 @@
       "name": "meet_health",
       "path": "meet_health/SKILL.md",
       "service": "meet",
-      "sha256": "20e4e0dd9545a43a93fa9c9330adc2769e713594cfad5c4afb8102210cb5530e",
+      "sha256": "473b541db21a68bebe39921c9a7c980e334baff5228c3f43818aeb9efe89b91b",
       "version": "8.0.0"
     },
     {
@@ -2660,7 +2692,7 @@
       "name": "meet_session",
       "path": "meet_session/SKILL.md",
       "service": "meet",
-      "sha256": "dcb45c49ff9559fee90004a0e0416be6ced0727aa0000f21241a7fe1393bc314",
+      "sha256": "0acd1f63557b6fbb38c72404ff1bf4479b5f5f93277029229c6f647ca612adba",
       "version": "8.0.0"
     },
     {
@@ -2668,7 +2700,7 @@
       "name": "memory_facts",
       "path": "memory_facts/SKILL.md",
       "service": "memory",
-      "sha256": "20f6d93d10311ca12e851d4e2bbc354722b9477722e7eb84ce52e1f517753477",
+      "sha256": "2cd322b3cc6f4da9c6090190291d54f398ecdb91787f3744fdf2998787306c87",
       "version": "8.0.0"
     },
     {
@@ -2676,7 +2708,7 @@
       "name": "memory_list",
       "path": "memory_list/SKILL.md",
       "service": "memory",
-      "sha256": "4e4b2a74efa21cac6492c4f7937d7653e552e0321fdd5c0441924d384624eef5",
+      "sha256": "3ad0a6efb09cc9e23b2a61fb3b3b1fe5c90dc88d85176aa0bae050ffdfb7625f",
       "version": "8.0.0"
     },
     {
@@ -2684,7 +2716,7 @@
       "name": "memory_recall",
       "path": "memory_recall/SKILL.md",
       "service": "memory",
-      "sha256": "ecb0348efbdf34686019b647c0746298a7646add0db6693505921fc8fc10c603",
+      "sha256": "9b9dda864d01bf4271f8a4617a8393f981877969ae94411c47f671da2fdd96b7",
       "version": "8.0.0"
     },
     {
@@ -2692,7 +2724,7 @@
       "name": "memory_search",
       "path": "memory_search/SKILL.md",
       "service": "memory",
-      "sha256": "1a71eb25c5c43d4dbe2a667c021211eaaf7e6e481378621433ebfe48dc952613",
+      "sha256": "cf4cd23a6edbe977bf28a09a95e1ad4dc79ac6ec3dba92828b8df556763cc40e",
       "version": "8.0.0"
     },
     {
@@ -2700,7 +2732,7 @@
       "name": "mesh_services",
       "path": "mesh_services/SKILL.md",
       "service": "mesh",
-      "sha256": "4e5a5aee78a6138c9ec4fb72a11d00900cb6279a3934a1cf2975c6ccf1777dcc",
+      "sha256": "a6b54a1d16b1e37c495f89ae9e4f964809ce68651f1a8d1c8a455d02fe01658a",
       "version": "8.0.0"
     },
     {
@@ -2708,7 +2740,7 @@
       "name": "metrics_health",
       "path": "metrics_health/SKILL.md",
       "service": "metrics",
-      "sha256": "f097ac3a72c0f621bb60e5b3254582c4fc6755f55b4c80a4da2aede3ff38129a",
+      "sha256": "09ec718b07ce294bfe6608ff7defa6cd27fcbf5c82175e4fe797fd71dab59329",
       "version": "8.0.0"
     },
     {
@@ -2716,7 +2748,7 @@
       "name": "metrics_query",
       "path": "metrics_query/SKILL.md",
       "service": "metrics",
-      "sha256": "78c58dd3b2be4bb18b7f1ff7708c82a2ed32e015979a73259e8ac8cfb7a65ddc",
+      "sha256": "091e4d6ecc612f4d0815d0c293a468d8eedaca1c123b61cb6918f408d6896004",
       "version": "8.0.0"
     },
     {
@@ -2724,7 +2756,7 @@
       "name": "ml_health",
       "path": "ml_health/SKILL.md",
       "service": "ml",
-      "sha256": "56e11ff66d6b2454020859059d7bfb2e1390af92305c286b369abbdf99347b65",
+      "sha256": "2b1dba54db6fa6d19220e510c8a1ca20d79faee87cebed102c7b51cbf64d6a5d",
       "version": "8.0.0"
     },
     {
@@ -2732,7 +2764,7 @@
       "name": "ml_models",
       "path": "ml_models/SKILL.md",
       "service": "ml",
-      "sha256": "257b006547377a95c7e95c230335df7a26f2cc03658c207a14c18baca282d0dc",
+      "sha256": "d527f286cae87ccf0689a418ab7d8c262e66895e3c24611206e6b61e8b615586",
       "version": "8.0.0"
     },
     {
@@ -2740,7 +2772,7 @@
       "name": "models_access",
       "path": "models_access/SKILL.md",
       "service": "models",
-      "sha256": "c0c9d4399fda3b72e91dc0051fbdcaf68718d2b10b40e71d7586eaea36f21b67",
+      "sha256": "3f6966954a3db449a4b964695aff3d389ba2f1fbc676f72187cf429f5929d60b",
       "version": "8.0.0"
     },
     {
@@ -2764,7 +2796,7 @@
       "name": "mq_health",
       "path": "mq_health/SKILL.md",
       "service": "mq",
-      "sha256": "335d5bda2f94cfdae84a1d9e233458594679c94c2e6d93293e989a6dc5c6d0df",
+      "sha256": "b2fb56f511a5b3802b7d0545c594db2ea65ab96de10b0beb67078e1735dcee1b",
       "version": "8.0.0"
     },
     {
@@ -2772,7 +2804,7 @@
       "name": "mq_info",
       "path": "mq_info/SKILL.md",
       "service": "mq",
-      "sha256": "0aebba3ee6a1559f3c959fdc4b0e71132bb2763903e4a71e4479b38289b6521d",
+      "sha256": "2912d692d895a63cfe5c8263bff79bc138a5f67e20b2da425db7f5054ca8fdcd",
       "version": "8.0.0"
     },
     {
@@ -2780,7 +2812,7 @@
       "name": "mq_streams",
       "path": "mq_streams/SKILL.md",
       "service": "mq",
-      "sha256": "9155c023fce2e8fb2adfde0aa28ac58b4634c2d9915deca37b62ee6190e54232",
+      "sha256": "a5b39c03e5c4a2543a37724f9ccdd6a58e3fac9799a4fd10d2d40c7c8f1ebac9",
       "version": "8.0.0"
     },
     {
@@ -2788,7 +2820,7 @@
       "name": "networks_networks",
       "path": "networks_networks/SKILL.md",
       "service": "networks",
-      "sha256": "05af2b393a7da05f6a525e769b3fb70516fefa8b9089312c6b5e2e063b5f8aca",
+      "sha256": "618df518e2ab7750da786e0c4f1a5ac4310861148018eb40140fcdf87ce4e3b7",
       "version": "8.0.0"
     },
     {
@@ -2796,7 +2828,7 @@
       "name": "networks_routers",
       "path": "networks_routers/SKILL.md",
       "service": "networks",
-      "sha256": "f4c08e1b13bd08e2d0c4a46ee9e9ff704f5abdfd10b2814c9ca669765eaf4380",
+      "sha256": "ca47fcaa96a66ca5a4190e4cfe027dd3359fe1dfe0b539df4c9e4bf5a7494410",
       "version": "8.0.0"
     },
     {
@@ -2804,7 +2836,7 @@
       "name": "notify_health",
       "path": "notify_health/SKILL.md",
       "service": "notify",
-      "sha256": "03a9dd44efd36bb00e824682452e1c80f94131bd8d014df25b3ebbb3af11df23",
+      "sha256": "887a4d989eeb752bc04b8f58165507ae4588f2ba2fb8e4e6d4718b6975bfb687",
       "version": "8.0.0"
     },
     {
@@ -2812,7 +2844,7 @@
       "name": "o11y_autocomplete",
       "path": "o11y_autocomplete/SKILL.md",
       "service": "o11y",
-      "sha256": "1464f175db5a2f2e37e422488bcc46efbeff6c59eacb50aee94ed3c067369b24",
+      "sha256": "40f004324164c31cc337bc40056fa6038c2de7ee122a71dd5f478a0b0ff21757",
       "version": "8.0.0"
     },
     {
@@ -2820,7 +2852,7 @@
       "name": "o11y_dashboards",
       "path": "o11y_dashboards/SKILL.md",
       "service": "o11y",
-      "sha256": "7fc0113ed6d561d1d7e6e27fd30da497d0be0c4fd2257ae78a6c4bd63d9f9bda",
+      "sha256": "9df29894e762008ecdbb1dc8d87c30cb0eeac28a1be151e775615f2786b6eb40",
       "version": "8.0.0"
     },
     {
@@ -2828,7 +2860,7 @@
       "name": "o11y_llm",
       "path": "o11y_llm/SKILL.md",
       "service": "o11y",
-      "sha256": "d6d75c3effba6bf5d2c535bd6ff477f2f3c750e5c99c03a449e96d69025f4f8e",
+      "sha256": "895189e2bf8906b226b3f07763c4acd82bd08a7938b3d6597e2f89163b49266e",
       "version": "8.0.0"
     },
     {
@@ -2836,7 +2868,7 @@
       "name": "o11y_logs",
       "path": "o11y_logs/SKILL.md",
       "service": "o11y",
-      "sha256": "a621071e932e93b68644bb4eb49f60c229716972f49cdd030bb4b7a11dc8fc78",
+      "sha256": "6de9a4eb41e4603fae9568eb88562b2987e9b0942ff9e3a85aedc427f62602a8",
       "version": "8.0.0"
     },
     {
@@ -2844,7 +2876,7 @@
       "name": "o11y_metric-reduction-rules",
       "path": "o11y_metric-reduction-rules/SKILL.md",
       "service": "o11y",
-      "sha256": "3531510ac3b06a65aadb387f69e49ebfcad29e24a65ca765a686a92b64e1a3fb",
+      "sha256": "287c8011ebc45a1f5e2badb8737e2cadc5faca493c0b0277ec056d96a3d2db5e",
       "version": "8.0.0"
     },
     {
@@ -2852,7 +2884,7 @@
       "name": "o11y_metrics",
       "path": "o11y_metrics/SKILL.md",
       "service": "o11y",
-      "sha256": "db99e20c86a70a13d5a78983c32d2bc5e17c4cb9ba0cd55a5c7928261ef6700b",
+      "sha256": "95ba72a8bb3be86cd02958d83c69acef1797ccc8e5b3798d06f1b9414f5efb65",
       "version": "8.0.0"
     },
     {
@@ -2860,7 +2892,7 @@
       "name": "o11y_rules",
       "path": "o11y_rules/SKILL.md",
       "service": "o11y",
-      "sha256": "9f07338103758f08781aad51d7f5875e0a2a4c4f8cfa94293a61f978166f9322",
+      "sha256": "73d25c91b9d0fc261278a50ed906f996b4635ca63327bb7213201526779c7e3a",
       "version": "8.0.0"
     },
     {
@@ -2868,7 +2900,7 @@
       "name": "o11y_service-accounts",
       "path": "o11y_service-accounts/SKILL.md",
       "service": "o11y",
-      "sha256": "d726aee11aa3f139e119d8caceba464d2d11a362a06e70bb47bf5a515902ac3f",
+      "sha256": "7faefc915c9c85f2a123e6c3fd62ad35c2996c88f33a5a8c49ed71350649ef8c",
       "version": "8.0.0"
     },
     {
@@ -2876,7 +2908,7 @@
       "name": "o11y_user",
       "path": "o11y_user/SKILL.md",
       "service": "o11y",
-      "sha256": "a016139f7198de32e823c336564302c1c4b3358453fd90467c7489c69836b6bb",
+      "sha256": "84c12a924392de4a7b85f3d5a02b6da3d7e6d989263a330f8c7d45ac166f2b7c",
       "version": "8.0.0"
     },
     {
@@ -2884,7 +2916,7 @@
       "name": "o11y_users",
       "path": "o11y_users/SKILL.md",
       "service": "o11y",
-      "sha256": "1308ea668e7529e9eaef0b1fea4658dcc2324e024cb7debb59d3c121672e581c",
+      "sha256": "72577e7d14a41665ba344704e66fb16bd4fd7cc395ef2c3d71613cd525a50058",
       "version": "8.0.0"
     },
     {
@@ -2892,7 +2924,7 @@
       "name": "oracles_oracles",
       "path": "oracles_oracles/SKILL.md",
       "service": "oracles",
-      "sha256": "abc450077d42e71f969db02ddddd4bd4cc597fa84c4c96c71c207b6fe672d509",
+      "sha256": "ce6fa85e37d1366f3d429c4c9ea13455024e216ece424b0aad89cf82048d2e6d",
       "version": "8.0.0"
     },
     {
@@ -2900,7 +2932,7 @@
       "name": "org_settings",
       "path": "org_settings/SKILL.md",
       "service": "org",
-      "sha256": "59b28007732531f8b0df3a81aa6b41ccfe48569d90f643a44899e3d4b7af222e",
+      "sha256": "04d77efa5eb689f8a6782dc94d2a6bfa298422d45aee12d3f4640aacbd8339cd",
       "version": "8.0.0"
     },
     {
@@ -2908,7 +2940,7 @@
       "name": "orgs_entitlements",
       "path": "orgs_entitlements/SKILL.md",
       "service": "orgs",
-      "sha256": "b6085bf60056858863b2e1866a8d3f2f435a8c8ab99f370722d8a7afc21c5aeb",
+      "sha256": "2f0b6a6bb6237c06bdc5c5cac3a23e7b5ad108b3c188f90fdebc6dd5b8517fb0",
       "version": "8.0.0"
     },
     {
@@ -2916,7 +2948,7 @@
       "name": "payments_payments",
       "path": "payments_payments/SKILL.md",
       "service": "payments",
-      "sha256": "e58cac059607c02ae142222f0542d701a371c40c6cd6bd8f9d444cd62d66e930",
+      "sha256": "e6560a138e174f798f0a3520e005b999793ca916dae6669e2a70678ee319533e",
       "version": "8.0.0"
     },
     {
@@ -2924,7 +2956,7 @@
       "name": "pipelines_pipelines",
       "path": "pipelines_pipelines/SKILL.md",
       "service": "pipelines",
-      "sha256": "4be627b95bbca2d7589ae77a0ad3c81f9629df4fb4e49f3401a1cf82ed6ea96a",
+      "sha256": "9c6dff87c360d67d444b05aa13c89ec0f51f1ab8a3f74567c9329ba9e049062c",
       "version": "8.0.0"
     },
     {
@@ -2932,7 +2964,7 @@
       "name": "plans_blockchain",
       "path": "plans_blockchain/SKILL.md",
       "service": "plans",
-      "sha256": "f5b94ff6fc569b9869946b5e910d9d7a26a22421b0a7882498807f872c442fca",
+      "sha256": "6b3dfded926e7a11f873b2784ab943debd06ceb3283ea0f8b187799cf6717111",
       "version": "8.0.0"
     },
     {
@@ -2940,7 +2972,7 @@
       "name": "plans_cloud",
       "path": "plans_cloud/SKILL.md",
       "service": "plans",
-      "sha256": "f5a96769ff7ad67550d7fccccbeb3e47b127474b671cab0a8e0ddfaea50f033f",
+      "sha256": "133dc74f3692d10188b936ac5c5c703620606ceef8ed2fc77bb93d82d17792d1",
       "version": "8.0.0"
     },
     {
@@ -2948,7 +2980,7 @@
       "name": "plans_dns",
       "path": "plans_dns/SKILL.md",
       "service": "plans",
-      "sha256": "cb2c8be7a300fadef0e9de47e29da83125a77db108a8ec5629960790604e0274",
+      "sha256": "67c85ac6a46fb4f9b17c6ae428df0e88e8061f764ec3cd18b5ecbbae06fd39c5",
       "version": "8.0.0"
     },
     {
@@ -2956,7 +2988,7 @@
       "name": "plans_entries",
       "path": "plans_entries/SKILL.md",
       "service": "plans",
-      "sha256": "89a516d27f1bef0c3170a8bfeb2a9aac966e8b4bc3994ed514ec9c8905e17d5b",
+      "sha256": "e863b5d661016bd203240b91817ff3000eb922acd9eb7a5d2e630e656262fb1d",
       "version": "8.0.0"
     },
     {
@@ -2964,7 +2996,7 @@
       "name": "plans_gpu",
       "path": "plans_gpu/SKILL.md",
       "service": "plans",
-      "sha256": "1ff056ec2beddd9f89118329503181a30310cbae97631c89c18ab58226eba50e",
+      "sha256": "6db76e168031814e106e7c214e16de7439bdd25a32ad75c5b1b828789826714a",
       "version": "8.0.0"
     },
     {
@@ -2972,7 +3004,7 @@
       "name": "plans_health",
       "path": "plans_health/SKILL.md",
       "service": "plans",
-      "sha256": "bbff7700ecd9cc97914e1f366bfe74a855f9c91954777f5969a856ac5fe4ddaa",
+      "sha256": "d78a245eeeb209851f2ff4bdd9f2ad9691eb45340f068e057956ab21fb74c4e8",
       "version": "8.0.0"
     },
     {
@@ -2980,7 +3012,7 @@
       "name": "plans_plans",
       "path": "plans_plans/SKILL.md",
       "service": "plans",
-      "sha256": "81f8307eac11ca10b01fd8682b64b76a655139f13c900c9ded2bddeb9361cecb",
+      "sha256": "526de9d0bce7b2011253042befd27132979781bb22f82c4595026bbb5fa2c77d",
       "version": "8.0.0"
     },
     {
@@ -2988,7 +3020,7 @@
       "name": "plans_policy",
       "path": "plans_policy/SKILL.md",
       "service": "plans",
-      "sha256": "e86201de0080f374ae2b338c60fc707223416b28f81fec859dee8b9a09d0d194",
+      "sha256": "dc071f537b197b7828d5d7d6c54b96b87c0b1d7ddbcfb1686b684f23e6172ca5",
       "version": "8.0.0"
     },
     {
@@ -2996,7 +3028,7 @@
       "name": "plans_regions",
       "path": "plans_regions/SKILL.md",
       "service": "plans",
-      "sha256": "1a0f89f139bd92c0b8a023cb696ae9cdc4eca70ea8a9c86ed3a6eaa6402083ec",
+      "sha256": "0faba53dff1a14dba7a458c11ce6eda470161c36a8a823ec1881f23c608fbed4",
       "version": "8.0.0"
     },
     {
@@ -3004,7 +3036,7 @@
       "name": "plans_schema",
       "path": "plans_schema/SKILL.md",
       "service": "plans",
-      "sha256": "0f1278ce1aa602f2b6fe12d791003b4fd05c2c1a1931c918440b757bd1eb89be",
+      "sha256": "743deeca013d88e5e4bc84402c10a2d7567309451ef8943f3bf479b5f6b11a88",
       "version": "8.0.0"
     },
     {
@@ -3012,7 +3044,7 @@
       "name": "platform_apps",
       "path": "platform_apps/SKILL.md",
       "service": "platform",
-      "sha256": "31665cec2b7af9794bd59fcc566415e556b172b461ca231fc90e3b4d3faa6669",
+      "sha256": "41f5f2270f5e6ce4c5fbdda4670ae36d0169026845f36372ad966c8b04902805",
       "version": "8.0.0"
     },
     {
@@ -3020,7 +3052,7 @@
       "name": "platform_cd",
       "path": "platform_cd/SKILL.md",
       "service": "platform",
-      "sha256": "f1cfb0815088c5440d48dc7162c4e07ce5daa1f4f3a4d41a1ccc10f96783a9ed",
+      "sha256": "68c5e095afa6dc5cb5522f2ee7651b5d24e96f4de29b7cda090f1c8bfbe3cbd2",
       "version": "8.0.0"
     },
     {
@@ -3028,7 +3060,7 @@
       "name": "platform_ci",
       "path": "platform_ci/SKILL.md",
       "service": "platform",
-      "sha256": "1f858c2b9fecd50140db28cb3a97894eadfe5f89d343f10737a5ba20b1cccce6",
+      "sha256": "c7dd71f27afad5c415222fab263ba82b2c7600bb59e2c201b5b5cc04422d89b4",
       "version": "8.0.0"
     },
     {
@@ -3036,7 +3068,7 @@
       "name": "platform_fleet",
       "path": "platform_fleet/SKILL.md",
       "service": "platform",
-      "sha256": "95634a7f13204e07f3665fe58e13a5ebb55959c303ec431d1f6e2db59e174ac0",
+      "sha256": "42af9144987e07db5bee0b45a94e85d2648795ed4aba19315604ef780e44bacf",
       "version": "8.0.0"
     },
     {
@@ -3044,7 +3076,7 @@
       "name": "platform_health",
       "path": "platform_health/SKILL.md",
       "service": "platform",
-      "sha256": "ac0ebddb2c0e2183ea18ae6b4373dfd790bc3fb2ed1b6f2eba038c402c236799",
+      "sha256": "463d2abf38c5a4b535f5a2ca76ddc8a626cf35d6dc8461e5f69011ac3e9b6ee1",
       "version": "8.0.0"
     },
     {
@@ -3052,7 +3084,7 @@
       "name": "platform_projects",
       "path": "platform_projects/SKILL.md",
       "service": "platform",
-      "sha256": "5c174a92f4d17c0a4f6afcbb88502449712c483e8df76e74cb0f9730ed824339",
+      "sha256": "5b584eec17cef262ac63b3fc3311d2c87d76651070ee2a2f01772fe14de614ea",
       "version": "8.0.0"
     },
     {
@@ -3060,7 +3092,7 @@
       "name": "platform_sites",
       "path": "platform_sites/SKILL.md",
       "service": "platform",
-      "sha256": "729332803f26d2aebd64282f746ee648860d98bb1e52ac5359238d6c8f4c103e",
+      "sha256": "70ca4b0795de6a5bd70da973c81da8fd198771948c0bc4b52154292ac713e124",
       "version": "8.0.0"
     },
     {
@@ -3068,7 +3100,7 @@
       "name": "plugins_authored",
       "path": "plugins_authored/SKILL.md",
       "service": "plugins",
-      "sha256": "5a5e5c684bd1cbb88168842936c2eaf21dbd97e77fbe2aab3cf7d3a9eddd581b",
+      "sha256": "6e5836510ed24d8a34a65467b69697271c8eeb4cfecf5680294b1ee2753229d0",
       "version": "8.0.0"
     },
     {
@@ -3076,7 +3108,7 @@
       "name": "plugins_plugins",
       "path": "plugins_plugins/SKILL.md",
       "service": "plugins",
-      "sha256": "5f4d7a5c220ebbb639b5ad25653d0bffc571abdd86861fb8dee40780547d78b9",
+      "sha256": "069f77cdfa02f9bfabc48c31ebe1f7cc62d51bc7a39aaa6bd558ae58354d6f32",
       "version": "8.0.0"
     },
     {
@@ -3084,7 +3116,7 @@
       "name": "prefs_prefs",
       "path": "prefs_prefs/SKILL.md",
       "service": "prefs",
-      "sha256": "dbffc7327f523eab59f93834e1665043657c33aaf2f31ae4f84d752b486034d3",
+      "sha256": "765f29b0b89fab46e5d5fd0f456f864e31a51744ecd3d2fe7fa301993a1318eb",
       "version": "8.0.0"
     },
     {
@@ -3092,7 +3124,7 @@
       "name": "pricing_base",
       "path": "pricing_base/SKILL.md",
       "service": "pricing",
-      "sha256": "821b3447477fd077e67795faedcf946ee156b10a00c61724df8b0812e1cd0d0a",
+      "sha256": "0596bc1d3d235389fac01a7265823e3da0c99baa7e98f40e6138eaca2bbd9944",
       "version": "8.0.0"
     },
     {
@@ -3100,7 +3132,7 @@
       "name": "pricing_blockchain",
       "path": "pricing_blockchain/SKILL.md",
       "service": "pricing",
-      "sha256": "52dcc3d88464ca9f1221f00c71e714ee98c2c0e5702ce8668489a2e218873939",
+      "sha256": "3e62bcb851ae4c0a30345181b28029a2c548cd1cf700da7893f868bbaa094ab9",
       "version": "8.0.0"
     },
     {
@@ -3108,7 +3140,7 @@
       "name": "pricing_cloud",
       "path": "pricing_cloud/SKILL.md",
       "service": "pricing",
-      "sha256": "4026d6182163b00069d37e702445c990698d3ee6debf1284af99e9024765d9c9",
+      "sha256": "ff290f7eb539d3fe6fc2733d411b3333782535ce82e0bb344114a29f5c109096",
       "version": "8.0.0"
     },
     {
@@ -3116,7 +3148,7 @@
       "name": "pricing_compute",
       "path": "pricing_compute/SKILL.md",
       "service": "pricing",
-      "sha256": "67ee946d6c1863f5519df27c1e8f59394a00f6a90f3d23f59570f6a556891860",
+      "sha256": "7b952d7679ebb581020ecc1e9cc16c59960ebad6c0f69cee120fa5fea5868d79",
       "version": "8.0.0"
     },
     {
@@ -3124,7 +3156,7 @@
       "name": "pricing_datastore",
       "path": "pricing_datastore/SKILL.md",
       "service": "pricing",
-      "sha256": "2cad0a9a991e90ec6490ecf439f2258388cb6893f68d2046c47604f9363f8bcd",
+      "sha256": "f3dd939199bc54fb9c160fac8b6217f410eddbe798cd65282aefe9ba75c8db4f",
       "version": "8.0.0"
     },
     {
@@ -3132,7 +3164,7 @@
       "name": "pricing_featured",
       "path": "pricing_featured/SKILL.md",
       "service": "pricing",
-      "sha256": "85ab9816f540b08462b7067471a95b9f2f40b66b7ac580eaa24eea1996f13d1b",
+      "sha256": "9fef07f9fd59f39d12906077a9612ee17b7b111c70deabd777c668851bdb08f8",
       "version": "8.0.0"
     },
     {
@@ -3140,7 +3172,7 @@
       "name": "pricing_free",
       "path": "pricing_free/SKILL.md",
       "service": "pricing",
-      "sha256": "5863d514eaf6b116f996c216057afc78fc49f4301dcc2ec6964ed00750e57a4d",
+      "sha256": "b94d8c1d21ecdd2957a5534284b75a2451232eb86c914b61e474e37c00813406",
       "version": "8.0.0"
     },
     {
@@ -3148,7 +3180,7 @@
       "name": "pricing_gpu",
       "path": "pricing_gpu/SKILL.md",
       "service": "pricing",
-      "sha256": "3e861f1ce5399468b7230458a639a66900638bb8f3bafa894036e4d9ae163974",
+      "sha256": "0c2786e037f835b14226002cb8f96e13aa26a9925e27326d299f8d0fdfb8d1ad",
       "version": "8.0.0"
     },
     {
@@ -3156,7 +3188,7 @@
       "name": "pricing_health",
       "path": "pricing_health/SKILL.md",
       "service": "pricing",
-      "sha256": "92e9708c9b74f7cda395b73bbe58926af57a6b3a0112b7abcc35f4b3d45f750b",
+      "sha256": "f109f777ca27ee3aa0cdf30dc252a2fb06ad4e90aed91bbfc5eb1631c20592da",
       "version": "8.0.0"
     },
     {
@@ -3164,7 +3196,7 @@
       "name": "pricing_iam",
       "path": "pricing_iam/SKILL.md",
       "service": "pricing",
-      "sha256": "e6ac7275e28f05b865efd53d2224a0274532aa0aa39b940126aadf5febdf270a",
+      "sha256": "553131fdb2dc00e2e36c8d1dd90d6575ed7d0cfacb08d045e3e217f3206f762b",
       "version": "8.0.0"
     },
     {
@@ -3172,7 +3204,7 @@
       "name": "projects_deployments",
       "path": "projects_deployments/SKILL.md",
       "service": "projects",
-      "sha256": "a9ba435230e64bc31b7a23028d4f177941949a3dbadd1fec812a20a5d452e0a5",
+      "sha256": "c112efe759b08ce6d449a5fe6174fe03a90d762079a9a2f7ba0546f1af050ce5",
       "version": "8.0.0"
     },
     {
@@ -3180,7 +3212,7 @@
       "name": "projects_domains",
       "path": "projects_domains/SKILL.md",
       "service": "projects",
-      "sha256": "8b13857a13d51269cadf52657b2c8fb8fc7fa7ecfb59fbd72173d6c42de67625",
+      "sha256": "a977f507bc683aa1bf00e15bc66f750544ce0d34e53bd4fece7e1b1bf131df32",
       "version": "8.0.0"
     },
     {
@@ -3188,7 +3220,7 @@
       "name": "projects_projects",
       "path": "projects_projects/SKILL.md",
       "service": "projects",
-      "sha256": "e2b1505e11ea45ad78f2afcb497dab540469cc0d7275a4e51fc2966100a386c2",
+      "sha256": "52572b4752de69994281605bf1ec0dfe3b2010f128af28491b34a4f9717dc66e",
       "version": "8.0.0"
     },
     {
@@ -3196,7 +3228,7 @@
       "name": "prompts_catalog",
       "path": "prompts_catalog/SKILL.md",
       "service": "prompts",
-      "sha256": "acb4c17afa6e503d763397b818eeda030e9f16ae848da06aaaef3f35bcb6a7dd",
+      "sha256": "4582709bcbbe883b8e170e24aed773aeb2ddd5cfc21fe943fccb807fe8306a21",
       "version": "8.0.0"
     },
     {
@@ -3204,7 +3236,7 @@
       "name": "prompts_metrics",
       "path": "prompts_metrics/SKILL.md",
       "service": "prompts",
-      "sha256": "9545f7fb241cf9c78abe6b4226f9b6164ef4cc3091b9881250520ff9220436bb",
+      "sha256": "b2037f122636917c0dec452a8e5dcbfc479e5f2315de835189a29429d3dbf847",
       "version": "8.0.0"
     },
     {
@@ -3212,7 +3244,7 @@
       "name": "prompts_prompts",
       "path": "prompts_prompts/SKILL.md",
       "service": "prompts",
-      "sha256": "87d834206b52e45a2b8ba684ea167c543fbba9cffe2990613ba7286882fc385b",
+      "sha256": "16a29c94f89a0bfea3fc583e0537370a9376a44638ac3d17a05c5195aac75b6e",
       "version": "8.0.0"
     },
     {
@@ -3220,7 +3252,7 @@
       "name": "pubsub_jetstream",
       "path": "pubsub_jetstream/SKILL.md",
       "service": "pubsub",
-      "sha256": "996738479e1687a1a422232f3e2314308a81200af28557d3a55e5ba5ed817a4c",
+      "sha256": "e4c3bbee3b47de6f807c0a5eaa5d6c2ccdd32249275c2fdd90fdaad0bb3f2a8b",
       "version": "8.0.0"
     },
     {
@@ -3228,7 +3260,7 @@
       "name": "pubsub_kv",
       "path": "pubsub_kv/SKILL.md",
       "service": "pubsub",
-      "sha256": "05997c6bbc1d0d968183f1854e1a5681eb578d00d5ea08f6178fec8e45444d74",
+      "sha256": "26378d5949c9eede5ef08afb1c8b0054d826c5ba2ca9ec66896c98875b68ae79",
       "version": "8.0.0"
     },
     {
@@ -3236,7 +3268,7 @@
       "name": "rag_context",
       "path": "rag_context/SKILL.md",
       "service": "rag",
-      "sha256": "8741e6cc4c82e90fe0f65c85316b302c1cde279e8c769c7b2ab5a0dc9c177bed",
+      "sha256": "55d5eb76a47bbefe4bbc517dfdd374dd08d9308588627d840b2449e30878387d",
       "version": "8.0.0"
     },
     {
@@ -3244,7 +3276,7 @@
       "name": "referrals_referrals",
       "path": "referrals_referrals/SKILL.md",
       "service": "referrals",
-      "sha256": "b2c67563cd6987f222ad4718dc4567ded31f94412343d5ca0ec61643aaf5885b",
+      "sha256": "bbdbad075804b9b32830a5567abe4f608749bcfd15a346e20a72cc2baa33d964",
       "version": "8.0.0"
     },
     {
@@ -3252,7 +3284,7 @@
       "name": "registry_images",
       "path": "registry_images/SKILL.md",
       "service": "registry",
-      "sha256": "464300a9dbadaf550e40fd58e710ec01ffbef9f57be5bdbc18a65477c4a015e6",
+      "sha256": "b08a24f77aa9848fd50c65ab062d4eafc82019e1fbffff5ab44374b29b7f47fa",
       "version": "8.0.0"
     },
     {
@@ -3260,7 +3292,7 @@
       "name": "registry_packages",
       "path": "registry_packages/SKILL.md",
       "service": "registry",
-      "sha256": "4db19287b4ed1929a78d3649ef5414b580f53e741589789d9d0a305e3ea93760",
+      "sha256": "043f0d7053d9b349da1aecf649545d7e167b91a90c0c829b5ceaa9eb8c0f0ad0",
       "version": "8.0.0"
     },
     {
@@ -3268,7 +3300,7 @@
       "name": "registry_projects",
       "path": "registry_projects/SKILL.md",
       "service": "registry",
-      "sha256": "a4144c09b35ccca561bda81383b27b83bc1615a64aa0d5707a2d6a6b28e67ca3",
+      "sha256": "30ab5ffdc957bf8bc6cf8e30d007ee879b8b44014af20ce2afadf0e48e9e6513",
       "version": "8.0.0"
     },
     {
@@ -3276,7 +3308,7 @@
       "name": "registry_status",
       "path": "registry_status/SKILL.md",
       "service": "registry",
-      "sha256": "016e562930f11f5e86ed22647875391d02a0dd665fe5db4f076886516b9585b9",
+      "sha256": "73f1cc6261a8d73404d3ecbae19e4f1683374119969d390776323878231be4b9",
       "version": "8.0.0"
     },
     {
@@ -3284,7 +3316,7 @@
       "name": "registry_tags",
       "path": "registry_tags/SKILL.md",
       "service": "registry",
-      "sha256": "b623920165a745851d1102f6be733de73601b51ce17a236476612cedb02792cf",
+      "sha256": "5e6a478a9a7c64ff95bbbc2658ea80f6947a4d3ec51b9a92a74c7bdaa1f03984",
       "version": "8.0.0"
     },
     {
@@ -3292,7 +3324,7 @@
       "name": "releases_releases",
       "path": "releases_releases/SKILL.md",
       "service": "releases",
-      "sha256": "264568a91de49958cdfea1d003c2b1a63babcee9730a7a9ddc8b3e55740b6392",
+      "sha256": "d2c72ac4d3a2d5590ab70c6ed77c53f5ac979519f7a6fa3729843a90657eb248",
       "version": "8.0.0"
     },
     {
@@ -3300,7 +3332,7 @@
       "name": "research_artifacts",
       "path": "research_artifacts/SKILL.md",
       "service": "research",
-      "sha256": "4fa371b9197baa660960083fbcf7bca9585926dbb7233b3030b53f4dcde14e86",
+      "sha256": "7cbb01ee303c3dc9970d95e51eab39ecb7e9272141308a17d6bdef6d7d33d9ce",
       "version": "8.0.0"
     },
     {
@@ -3308,7 +3340,7 @@
       "name": "research_experiments",
       "path": "research_experiments/SKILL.md",
       "service": "research",
-      "sha256": "663025a8d9ddf23cadda622c4d0de38b1b38f4efc36fe6701e64a5d123ffedec",
+      "sha256": "584f1450c3c33ce6a58ca1d58a69644dac7097d662a71b339f0a54fcd8a518ba",
       "version": "8.0.0"
     },
     {
@@ -3316,7 +3348,7 @@
       "name": "research_projects",
       "path": "research_projects/SKILL.md",
       "service": "research",
-      "sha256": "e6563a458121e83c534526ae2c1e4fa60b85d3c0efaadd02979a1e55322300df",
+      "sha256": "50fb646188929ed3efddff238eb97c12941905ab02f8d4dc7d6513572295ed6e",
       "version": "8.0.0"
     },
     {
@@ -3324,7 +3356,7 @@
       "name": "research_totals",
       "path": "research_totals/SKILL.md",
       "service": "research",
-      "sha256": "3eda521ee5dcdac855099630de3870fa29119c297b8f148c7bae1caa16044ea9",
+      "sha256": "967fe61628534e80f8f3f165e79d63caeb4940e08895088d7818878df2920968",
       "version": "8.0.0"
     },
     {
@@ -3332,7 +3364,7 @@
       "name": "risk_datasets",
       "path": "risk_datasets/SKILL.md",
       "service": "risk",
-      "sha256": "e6d0e88894a32019f8cd20bd26d239df0beddae97fb773446c417d876057c49c",
+      "sha256": "287654f2222ae4478e81c69d2e7eb4fb6be1e2a73d30f1588361ecf7a69543f8",
       "version": "8.0.0"
     },
     {
@@ -3340,7 +3372,7 @@
       "name": "risk_features",
       "path": "risk_features/SKILL.md",
       "service": "risk",
-      "sha256": "bbc8a319f0efb18193b677370b8a3fa72fbf876863c6a8d5960edc915d40d882",
+      "sha256": "3d1d580e76583641a7189841dbe2841d0e149dcbc97e27e42895f33c5c5f8151",
       "version": "8.0.0"
     },
     {
@@ -3348,7 +3380,7 @@
       "name": "risk_health",
       "path": "risk_health/SKILL.md",
       "service": "risk",
-      "sha256": "f6dd2d5347e715039e101fb3b5ebb68b251b19236c4913cc3f278ee173290e30",
+      "sha256": "508fecc85a2482f1312336b34175e46f5a6c445abc7d34a730d67687a2ffd703",
       "version": "8.0.0"
     },
     {
@@ -3356,7 +3388,7 @@
       "name": "risk_labels",
       "path": "risk_labels/SKILL.md",
       "service": "risk",
-      "sha256": "98b1810a08f63f6dfc2abb9cb5406c8ef2098a63d604597c694b380a54b89481",
+      "sha256": "ca342b8bf82613e37857c29d7a528bdaed75bd68d7dbf9ba8d1803958cde94c8",
       "version": "8.0.0"
     },
     {
@@ -3364,7 +3396,7 @@
       "name": "risk_policy",
       "path": "risk_policy/SKILL.md",
       "service": "risk",
-      "sha256": "5938b1aee4af20985067b8b07daf13022e9f293449c30f864ddad40a36497668",
+      "sha256": "5271809e747b4cc3d16e40c15b53efda4495b7f03bbebfa4c090ed3e3c648b3c",
       "version": "8.0.0"
     },
     {
@@ -3372,7 +3404,7 @@
       "name": "risk_reference",
       "path": "risk_reference/SKILL.md",
       "service": "risk",
-      "sha256": "9a1f62ef6a6a446824911cef589abd38b7b3829b21e70280f43fddbec55504ff",
+      "sha256": "40eadca7be9b9ad08648efc1723514f90679225d8f70e60a22661ea521822ffd",
       "version": "8.0.0"
     },
     {
@@ -3380,7 +3412,7 @@
       "name": "risk_search",
       "path": "risk_search/SKILL.md",
       "service": "risk",
-      "sha256": "ccdbd88b9579ae753e10bc1fde5deee3f4b812f0a8a32d60016660f3964f61fb",
+      "sha256": "da5f4684b5208f03ef2155bed93e61875bb082091f22ce14073ac7ce822aae20",
       "version": "8.0.0"
     },
     {
@@ -3388,7 +3420,7 @@
       "name": "risk_state",
       "path": "risk_state/SKILL.md",
       "service": "risk",
-      "sha256": "31cc060de81288b2e66ccaee306d4656ee05326fc01a821e066ea41ef4e15089",
+      "sha256": "0b2384178bbcd1982c8ade90d90e83e29202ffa7944648a104553220772dabaf",
       "version": "8.0.0"
     },
     {
@@ -3396,7 +3428,7 @@
       "name": "router_artifact-meta",
       "path": "router_artifact-meta/SKILL.md",
       "service": "router",
-      "sha256": "837a9a24a8b7b22ef7a62ded66a86cf9160389ced9d55217bd49bec925ea7be7",
+      "sha256": "16e85680563c5faa81ea6aa7e30bd90a427df5a55db3332c8014136eb0eff97c",
       "version": "8.0.0"
     },
     {
@@ -3404,7 +3436,7 @@
       "name": "router_data",
       "path": "router_data/SKILL.md",
       "service": "router",
-      "sha256": "04a8dcf229035074445c45dda95e2e02f4fa7ce6516533259df2e8f51fe61af0",
+      "sha256": "d3b08b50253f348a3c5b2ea848feb3694492d437c120d0492fa1d87e41a4db9b",
       "version": "8.0.0"
     },
     {
@@ -3412,7 +3444,7 @@
       "name": "router_defaults",
       "path": "router_defaults/SKILL.md",
       "service": "router",
-      "sha256": "86fb50e21cd471c3dcf063bab2c5497e39a9c4ef9eda7b19eca31365e738b889",
+      "sha256": "5d44a0e8ea186fff840e8e175812a2feebed05ab0344c50dbf6c665fd397c314",
       "version": "8.0.0"
     },
     {
@@ -3420,7 +3452,7 @@
       "name": "router_history",
       "path": "router_history/SKILL.md",
       "service": "router",
-      "sha256": "f818c86976d092ab7f41d3b2f09f13f633ab407a2eb91e60744e463ddfe66da7",
+      "sha256": "1e960fcfb3580ac2863a5ec58b0b6acde1ad3b79041690e1ea522d06728a44f0",
       "version": "8.0.0"
     },
     {
@@ -3428,7 +3460,7 @@
       "name": "router_judge-panel",
       "path": "router_judge-panel/SKILL.md",
       "service": "router",
-      "sha256": "47042172043ffcf3d796ca2f3fafe5482621307581317907906b9f89d949e0ee",
+      "sha256": "c0763570433aa119758fba3fe03ea849678413705457dd04f8e080fa186eb604",
       "version": "8.0.0"
     },
     {
@@ -3436,7 +3468,7 @@
       "name": "router_ledger",
       "path": "router_ledger/SKILL.md",
       "service": "router",
-      "sha256": "24be0fec91b8bfec655a117a1ef57da01be7f4cdfed7973cfc37211bd7f2d4b5",
+      "sha256": "195a9400b7df8a07e4e68bc2ae931497e82dc6e1c59227e1ed25da9e8fe138f0",
       "version": "8.0.0"
     },
     {
@@ -3444,7 +3476,7 @@
       "name": "router_policy",
       "path": "router_policy/SKILL.md",
       "service": "router",
-      "sha256": "df71af2cabfed1d4b64884426a7d89da897be5fd4702e3cb22cb0b348c0b64fb",
+      "sha256": "aedeb3d2bf7c2f412da6f847d210316b32569cf34e9aba5b92efa902872b9db4",
       "version": "8.0.0"
     },
     {
@@ -3452,7 +3484,7 @@
       "name": "router_rewards",
       "path": "router_rewards/SKILL.md",
       "service": "router",
-      "sha256": "6e4ab7d9cafb0e7ad10d0a4e76b0f4554630db15eabfb997c09e2eb551598a05",
+      "sha256": "2541524f42fb8f50aef0f3082897cc0ed61e6959201e30ec1cf73e04a970775f",
       "version": "8.0.0"
     },
     {
@@ -3460,7 +3492,7 @@
       "name": "router_stats",
       "path": "router_stats/SKILL.md",
       "service": "router",
-      "sha256": "8ab7205448d6814aa2962beb40edb39e74d3ff24744e9dbe5e3bc9879d378f6b",
+      "sha256": "3af7469ed4c82af2c537c3b470b2a4d5922c6e122fa52a8c3b311e3b95eadff6",
       "version": "8.0.0"
     },
     {
@@ -3468,7 +3500,7 @@
       "name": "runner_releases",
       "path": "runner_releases/SKILL.md",
       "service": "runner",
-      "sha256": "f25b3d3b5c960abb7ad921bdadea49b43019a73b3bc0f6256f24d7613a41da61",
+      "sha256": "9048d9f18dc14a1dea6a0d2e6c553b9e2f981f7c96ac567f607e261e54dd054e",
       "version": "8.0.0"
     },
     {
@@ -3476,7 +3508,7 @@
       "name": "s3_buckets",
       "path": "s3_buckets/SKILL.md",
       "service": "s3",
-      "sha256": "1c4721235b60eea978f28e46c70a5eb0f94b4982089597e015b43d1099563957",
+      "sha256": "5eb2042b2dc3f6b92849baa40d2bf72b14bcbf06e7229785c7a94b76ac3c430b",
       "version": "8.0.0"
     },
     {
@@ -3484,7 +3516,7 @@
       "name": "s3_health",
       "path": "s3_health/SKILL.md",
       "service": "s3",
-      "sha256": "595b3e82fc4cd05819229d402399a8fcd5ea4672bcb5504e2a5fbd3d0e550d5c",
+      "sha256": "a1aeb8e6c47356aff51eb1d57d47cf8bbb0af84c43c481847fcf98dbe95b1573",
       "version": "8.0.0"
     },
     {
@@ -3492,7 +3524,7 @@
       "name": "s3_s3",
       "path": "s3_s3/SKILL.md",
       "service": "s3",
-      "sha256": "a3c4236f834a9421040935543bb50f7d2d9cef62164e7f9c25a632c4f4126525",
+      "sha256": "cb9692fc848d4089f5acb26e5a302d9f33a55237318b511dac3a1bc3e809ddef",
       "version": "8.0.0"
     },
     {
@@ -3500,7 +3532,7 @@
       "name": "sandboxes_fs",
       "path": "sandboxes_fs/SKILL.md",
       "service": "sandboxes",
-      "sha256": "71ca17af1569efd53517f8494d2a68a50ad9eb1037ac29e85188d556aac8133c",
+      "sha256": "715502a0d8ed0d21dc76ca78e2750b2652e8a86c4cc5d119d3dfe0819c181c45",
       "version": "8.0.0"
     },
     {
@@ -3508,7 +3540,7 @@
       "name": "sandboxes_sandboxes",
       "path": "sandboxes_sandboxes/SKILL.md",
       "service": "sandboxes",
-      "sha256": "1a673a63c712a3794ce5440f6f54f87b69820b8f7f3c2bafdf811ebaac6b5558",
+      "sha256": "bc2e7e27c030f8625e1a5ff1ff30b544dd4da8b31e05a2959837b2719b95b5bc",
       "version": "8.0.0"
     },
     {
@@ -3516,7 +3548,7 @@
       "name": "sandboxes_screen",
       "path": "sandboxes_screen/SKILL.md",
       "service": "sandboxes",
-      "sha256": "185c66d7132c106c928bd38eae89055b9a0e3ba71aebd49342765c7db6f12907",
+      "sha256": "37746149e02d60e3463b83c108cb74a82ea2834468f1613deeab90fa517d9aaf",
       "version": "8.0.0"
     },
     {
@@ -3524,7 +3556,7 @@
       "name": "sandboxes_terminal",
       "path": "sandboxes_terminal/SKILL.md",
       "service": "sandboxes",
-      "sha256": "62603b9ce9d16ab670f2142b5cd640194a0a2a053dedf071c0612e904c4d691f",
+      "sha256": "d280639abd6826587aefd11ee25645f2c6eda834dd3892fa75ece022682cec5e",
       "version": "8.0.0"
     },
     {
@@ -3532,7 +3564,7 @@
       "name": "sbom_health",
       "path": "sbom_health/SKILL.md",
       "service": "sbom",
-      "sha256": "db69aeec94444172bd40a07b8c72badf4811bc09a9af20b86e8befc2b328e7f4",
+      "sha256": "f1042b9fe150567e1cad7086954c04724f20228177104c625f4ad9b42339dac4",
       "version": "8.0.0"
     },
     {
@@ -3540,7 +3572,7 @@
       "name": "sbom_sbom",
       "path": "sbom_sbom/SKILL.md",
       "service": "sbom",
-      "sha256": "6300cf714695a4d1d0cb425a5c48a5f709f23aa387f3f7cb649d98190c893224",
+      "sha256": "edb0cdc9a137a0bb07fbd790e13f01c73907990129166cdf165fc9dbb32748af",
       "version": "8.0.0"
     },
     {
@@ -3548,7 +3580,7 @@
       "name": "search_indexes",
       "path": "search_indexes/SKILL.md",
       "service": "search",
-      "sha256": "eafae5d51c8e3c258d84f3a9fa538f8f1a514ed447e39bdff60dd98b656f13b4",
+      "sha256": "71e3eb8515c60afad900454f07334effc804953345e4f73c3ad11a5d123e9425",
       "version": "8.0.0"
     },
     {
@@ -3556,7 +3588,7 @@
       "name": "search_search",
       "path": "search_search/SKILL.md",
       "service": "search",
-      "sha256": "2bf949d190ab054ee0ceb6526d39c461cbaec440b405489b02af65993f4bf7ae",
+      "sha256": "f550a2a686e0df231755637fea4291b18fc7b3831bf4c012c96a4542bc78387b",
       "version": "8.0.0"
     },
     {
@@ -3564,7 +3596,7 @@
       "name": "search_stats",
       "path": "search_stats/SKILL.md",
       "service": "search",
-      "sha256": "b4d294e3833caeda2a02fff356a10452b0564487901e5f4aa607c5afde18d0d2",
+      "sha256": "6f5abfaa173558b442a82d1dfc78fdb072b18cb827b448e8a9afea758245e86c",
       "version": "8.0.0"
     },
     {
@@ -3572,7 +3604,7 @@
       "name": "security_findings",
       "path": "security_findings/SKILL.md",
       "service": "security",
-      "sha256": "2b745089a3f83aa97d4ae59fc6f9e32c79cbfc0148174844d471b0ef1e56956e",
+      "sha256": "7e7635e44a4795aa10c4645b166c8c32977c22cc457e9514f8c62664db04ddd2",
       "version": "8.0.0"
     },
     {
@@ -3580,7 +3612,7 @@
       "name": "security_health",
       "path": "security_health/SKILL.md",
       "service": "security",
-      "sha256": "50264efad09aff84f850448f695cb8d1613de05ff0a6eae117814fd50abd573b",
+      "sha256": "0d2495dc1170d6d2e0f632d5b76c2ad51da4a4db3626d6f108a14bcf1e166aa8",
       "version": "8.0.0"
     },
     {
@@ -3588,7 +3620,7 @@
       "name": "security_rules",
       "path": "security_rules/SKILL.md",
       "service": "security",
-      "sha256": "cc15acb544a2c0ce36ba4a901c35a236fed36f801489ea9d3a6f9cbaf836427c",
+      "sha256": "28e54b21a0eddf2528b8d7f385f96864c18fb06c19e4c0114626945fb7e3a2e5",
       "version": "8.0.0"
     },
     {
@@ -3596,7 +3628,7 @@
       "name": "security_scans",
       "path": "security_scans/SKILL.md",
       "service": "security",
-      "sha256": "384bf38fca68c1afbb3ca4b40e62d8f96ddaf6d39574e26a6e6d992660d3c9d2",
+      "sha256": "45fb5dc245d2a96e8afd35c18122f024de7ef0ba9566a54a0a6144b763bec1e7",
       "version": "8.0.0"
     },
     {
@@ -3604,7 +3636,7 @@
       "name": "sentry_events",
       "path": "sentry_events/SKILL.md",
       "service": "sentry",
-      "sha256": "a06261d8da04b848602013054e7e804e68d0eb75a2f2f9f318bda0ac42ea6de8",
+      "sha256": "67984b2e5418e8e9a3f4f8c6dd7ab7fced3f87c43ff126d253eb4cbfef4f0b4a",
       "version": "8.0.0"
     },
     {
@@ -3612,7 +3644,7 @@
       "name": "sentry_issues",
       "path": "sentry_issues/SKILL.md",
       "service": "sentry",
-      "sha256": "5ea7fd3e082e53b405ffcc5b77a2893d724ab9c9b41e2be2a7abb18e9a761118",
+      "sha256": "9a772cfaecf51709463c4942b1fd0bd6e5ccb76779ea0cce77f0e2a3aa468889",
       "version": "8.0.0"
     },
     {
@@ -3620,7 +3652,7 @@
       "name": "sentry_logs",
       "path": "sentry_logs/SKILL.md",
       "service": "sentry",
-      "sha256": "fb3a9c21632edc9e371eb81763e716298f1b21929916eb64795fb4c7bbef6257",
+      "sha256": "3550703167b8fc8a297d19b605ad00a1faf37c052113faf10aa1d5427313d304",
       "version": "8.0.0"
     },
     {
@@ -3628,7 +3660,7 @@
       "name": "sentry_projects",
       "path": "sentry_projects/SKILL.md",
       "service": "sentry",
-      "sha256": "78b15fdbce235bf4487a875d564b800119acb57c0cfbce1ead6bf3d1d07805b9",
+      "sha256": "0cfa4e1aaf32d64fc225a41d563aa057e3775015a5295bdddeddfb9b8db46c4d",
       "version": "8.0.0"
     },
     {
@@ -3636,7 +3668,7 @@
       "name": "sentry_sentry",
       "path": "sentry_sentry/SKILL.md",
       "service": "sentry",
-      "sha256": "1cb0b3f72f0f5cd8c91057a9917d42423e70182cbae61a60246d6f969e9a89ab",
+      "sha256": "4c1c159a58288064452397d4f992a5d784ab1431154624880bb9e336d84b5a69",
       "version": "8.0.0"
     },
     {
@@ -3644,7 +3676,7 @@
       "name": "sentry_stats",
       "path": "sentry_stats/SKILL.md",
       "service": "sentry",
-      "sha256": "ef7ad39297a816e5692f11bd26cd622c789612507034e16258cccb381bea5c70",
+      "sha256": "be83355555ce94115d443d236c1ee505e2f51a1715a27bd5c2a5d2a2d6329063",
       "version": "8.0.0"
     },
     {
@@ -3652,7 +3684,7 @@
       "name": "sentry_traces",
       "path": "sentry_traces/SKILL.md",
       "service": "sentry",
-      "sha256": "c758edfe8e27dc8c71f9a24fc3d89ac390cd0898bd33fd736a64239faec971a0",
+      "sha256": "6ea15f3cf20c14aed34a375f0ec5d7b38aa75a6c10820eeafe4ce09919431ed6",
       "version": "8.0.0"
     },
     {
@@ -3660,7 +3692,7 @@
       "name": "settings_settings",
       "path": "settings_settings/SKILL.md",
       "service": "settings",
-      "sha256": "3837f59edb777f197bd2a1cd0d4ec2854a2baae35dcfac5ed889385d49ed7b92",
+      "sha256": "f5e5daae8993fe8ff6c045b3de0214cb82bc0dcc65c6443e2c1f94c9b60b146c",
       "version": "8.0.0"
     },
     {
@@ -3668,7 +3700,7 @@
       "name": "share_share",
       "path": "share_share/SKILL.md",
       "service": "share",
-      "sha256": "7fa14aac30606f3a2aa9adeb6565a28f8fe5a613e4f0ca15f65b358c3ef6e185",
+      "sha256": "ffdb06094f0232becf1eec9d9c3aa366908058df495a6de19e3c2cb1edc5b7e8",
       "version": "8.0.0"
     },
     {
@@ -3676,7 +3708,7 @@
       "name": "sites_deployments",
       "path": "sites_deployments/SKILL.md",
       "service": "sites",
-      "sha256": "016809d2e9a6bdf476e80afefd0fa60b92170c7f2d0f5abd52fe61ce2cebba4b",
+      "sha256": "738fc84b322ecf401157b339a522c744265dae5b5bb32f9b9729c87cc5c4e0fb",
       "version": "8.0.0"
     },
     {
@@ -3684,7 +3716,7 @@
       "name": "sites_releases",
       "path": "sites_releases/SKILL.md",
       "service": "sites",
-      "sha256": "c42236be75f3116ed623e7e8205281f32d00fa5e208db179d512cafff4799922",
+      "sha256": "889d806236a6732dce90c2c4d11d135d126ee3919cdec025954e84ed749d83a3",
       "version": "8.0.0"
     },
     {
@@ -3692,7 +3724,7 @@
       "name": "sites_sites",
       "path": "sites_sites/SKILL.md",
       "service": "sites",
-      "sha256": "0e2721d72c01ab3dd5918e2126804586f509011af4ac49395131741285e33134",
+      "sha256": "d36be1391c97ac5b0972b23e733a75e4f0b9a1fbc94b2e638b7a5888df7b14b0",
       "version": "8.0.0"
     },
     {
@@ -3700,7 +3732,7 @@
       "name": "skills_authored",
       "path": "skills_authored/SKILL.md",
       "service": "skills",
-      "sha256": "bd3430cfa42285c882c64c4b211ea2c29e3f074a6511cf867269c049768142cf",
+      "sha256": "e1c540d3a2c8b23d9def4367be68cb2d4836b1a7054f56698eaa97931630da47",
       "version": "8.0.0"
     },
     {
@@ -3708,7 +3740,7 @@
       "name": "skills_skills",
       "path": "skills_skills/SKILL.md",
       "service": "skills",
-      "sha256": "ff7fe1efb7ffcd568272f21b7880103d078a880a875d07e79e0fb1547b55ec34",
+      "sha256": "53b372bc81e30123f8b295610e7b390f2f03e053af7cc878ca0359fdeb8518bc",
       "version": "8.0.0"
     },
     {
@@ -3716,7 +3748,7 @@
       "name": "social_accounts",
       "path": "social_accounts/SKILL.md",
       "service": "social",
-      "sha256": "4da3538f7e3e18426e895f0f3ce7b9a1f029da7bf3ad24a61d7f37e342560f3d",
+      "sha256": "d53dd6aa0b08ba99a0e40a24bb4269820e1fad0556bd17daeb349342f2870336",
       "version": "8.0.0"
     },
     {
@@ -3724,7 +3756,7 @@
       "name": "social_posts",
       "path": "social_posts/SKILL.md",
       "service": "social",
-      "sha256": "ebf91a576d2fb12dfb72c7ec240e7f6f12bc6c29199d79585d2dfad7d4bb2794",
+      "sha256": "0698dfe928f88373851095de1b668197c84c39ed62e2f7e4fbec76e4f9279993",
       "version": "8.0.0"
     },
     {
@@ -3732,7 +3764,7 @@
       "name": "social_providers",
       "path": "social_providers/SKILL.md",
       "service": "social",
-      "sha256": "a6199b1f56fb30fd49e728a0f814681edd17136de3780272458bea24e2bd0760",
+      "sha256": "87859c12ae219d50c8ab5160d45dd18e8da3757518bc50e51d2fa7df60b364e7",
       "version": "8.0.0"
     },
     {
@@ -3740,7 +3772,7 @@
       "name": "social_summary",
       "path": "social_summary/SKILL.md",
       "service": "social",
-      "sha256": "22dd9828de2e05f86e041caff87a083b1308e6e03c1279a2e3366577c5794b57",
+      "sha256": "660c4fecdf19a5a0221d16fc7482a16f9d4b1a9c13cac35f72e294e45692c45e",
       "version": "8.0.0"
     },
     {
@@ -3748,7 +3780,7 @@
       "name": "sql_sql",
       "path": "sql_sql/SKILL.md",
       "service": "sql",
-      "sha256": "a2d3d1dbdfb3745a2b35062ea350db03f95d178f7b26c0a5c348b4a727a7fb2a",
+      "sha256": "00205ea9b579e8fba5d647b5a4b72be0277425947426645f6bcdb09820ff74d6",
       "version": "8.0.0"
     },
     {
@@ -3756,7 +3788,7 @@
       "name": "store_access",
       "path": "store_access/SKILL.md",
       "service": "store",
-      "sha256": "6e11240e7722fafef330ac692e531ca6ba7454ab42f2fe4ba912d8ed5b1cfe98",
+      "sha256": "038014705b6d1fd7d0ea9376e6e1c9a0648a833aec698a4d10898cd93819c19f",
       "version": "8.0.0"
     },
     {
@@ -3764,7 +3796,7 @@
       "name": "store_bundle",
       "path": "store_bundle/SKILL.md",
       "service": "store",
-      "sha256": "1f8a5ea8e1fcb8dc73252fe90186372a9bb62173122d0a888fe30fa67e1bc05d",
+      "sha256": "13d28578bb75e39dcd716fce48fdbd9f1ecf9691be78e90f540c679b30f8ac33",
       "version": "8.0.0"
     },
     {
@@ -3772,7 +3804,7 @@
       "name": "store_current",
       "path": "store_current/SKILL.md",
       "service": "store",
-      "sha256": "a3d7df42bc18262ac8f5717653a474205a1734f71f5d4d7442f31bfef3ef4fef",
+      "sha256": "ace45de5ad72b2d7bfbe00ad4e90d748df5b3674205350864849e27b5e42edcd",
       "version": "8.0.0"
     },
     {
@@ -3780,7 +3812,7 @@
       "name": "store_listing",
       "path": "store_listing/SKILL.md",
       "service": "store",
-      "sha256": "bc642e57fa947fc8bf320ca2ac628a744eeb1621153f96f4addddcad41c57753",
+      "sha256": "a9ce582ca2996309e48c242630e7a8cf5041b82b55306ef4352a4e58a8552281",
       "version": "8.0.0"
     },
     {
@@ -3788,7 +3820,7 @@
       "name": "store_product",
       "path": "store_product/SKILL.md",
       "service": "store",
-      "sha256": "8671380f9fac118f6b003ada12f0c6a2b198adbe44b55c6153d97e5adbe46ee7",
+      "sha256": "0054e66c1dba25672394033f2d1bf523b0e15a2ac5d5249dff55322dc8e4987d",
       "version": "8.0.0"
     },
     {
@@ -3796,7 +3828,7 @@
       "name": "store_store",
       "path": "store_store/SKILL.md",
       "service": "store",
-      "sha256": "5c77b946fc5e59357835009033abddac579e4dca9d4144c7c81142243bc217e4",
+      "sha256": "8957f84f7b129aab657d5618f5862a1d914a02d4e7b96e0374cc6ddc32754375",
       "version": "8.0.0"
     },
     {
@@ -3804,7 +3836,7 @@
       "name": "store_variant",
       "path": "store_variant/SKILL.md",
       "service": "store",
-      "sha256": "53ab5f831f608b991bc4aae2f92426775a23eca0c8ead10eae7cec9c61b04dff",
+      "sha256": "919edbf3218ec7815d6c8c2ecd860c6c3ebcc3d66d8de8ffad31b5d129df2bf0",
       "version": "8.0.0"
     },
     {
@@ -3812,7 +3844,7 @@
       "name": "summary_summary",
       "path": "summary_summary/SKILL.md",
       "service": "summary",
-      "sha256": "ad697263dcb6fbf068535c708130a5cad838bd72b66f6d51c7cc0c6d947c0d91",
+      "sha256": "06be72217121d3e304ab54c377b61fbe47e4396fb1201ecb3c58f340fcd7e888",
       "version": "8.0.0"
     },
     {
@@ -3820,7 +3852,7 @@
       "name": "sync_sync",
       "path": "sync_sync/SKILL.md",
       "service": "sync",
-      "sha256": "ea692d3552e9db69bd36b85dcaa3560dfb8905f15e0f96c65fb44179ef19440f",
+      "sha256": "c12e07698e9533da5832db67a1faf1c347155eba6de1eca9e30a5c9651082afd",
       "version": "8.0.0"
     },
     {
@@ -3828,7 +3860,7 @@
       "name": "tags_tags",
       "path": "tags_tags/SKILL.md",
       "service": "tags",
-      "sha256": "616c831c6917804a85cdd098379c74c1c1896c8b0c872ba0de704d348f934e64",
+      "sha256": "befdeb437048db3dda91885457f99703fe53426b0502c69f087994849935ee96",
       "version": "8.0.0"
     },
     {
@@ -3836,7 +3868,7 @@
       "name": "tasks_tasks",
       "path": "tasks_tasks/SKILL.md",
       "service": "tasks",
-      "sha256": "9ec121e2b741273be5ca16229ede7597793b5d8c3781d57f9f53786d8e4f6106",
+      "sha256": "1432267ebc681981d4a4c1e83e6403d0ebe33190dc0abad250ff95ddc8608eaa",
       "version": "8.0.0"
     },
     {
@@ -3844,7 +3876,7 @@
       "name": "taxonomy_taxonomy",
       "path": "taxonomy_taxonomy/SKILL.md",
       "service": "taxonomy",
-      "sha256": "a42ff2ad8d3b0bd2da0e6fdd19a0736d159fcab3c4aa86b5e500c04d5a85d80e",
+      "sha256": "ffd65fe727dff759dbbf17597d84fd5412accd0948b54447cdc8ce91f1d9a3b6",
       "version": "8.0.0"
     },
     {
@@ -3852,7 +3884,7 @@
       "name": "team_account",
       "path": "team_account/SKILL.md",
       "service": "team",
-      "sha256": "99e482d9b0c9eea1aec3702153f41747cf68bd6394683b88c3d377ebea4bd3f1",
+      "sha256": "5d90e68ab5f5acac6b69d5edfc5134790c487545bb048517a3f2a06a03968e95",
       "version": "8.0.0"
     },
     {
@@ -3860,7 +3892,7 @@
       "name": "team_billing",
       "path": "team_billing/SKILL.md",
       "service": "team",
-      "sha256": "7f4b74351838e96b785f5858d159e78d06537f3b90d30c5d092d1c3fbba1df23",
+      "sha256": "ce967bcbff61798fbe97dd10dc69091cfaa20b7522b44d963eb537a10b63b8d7",
       "version": "8.0.0"
     },
     {
@@ -3868,7 +3900,7 @@
       "name": "team_bots",
       "path": "team_bots/SKILL.md",
       "service": "team",
-      "sha256": "7cf24d4cf652b1fb9ddf29bddaeeb7feb28d7243f06bfe03d4466018965107bb",
+      "sha256": "89ec276860250c26f8c1ea82bc74931881659d2148261127a8087f555186071f",
       "version": "8.0.0"
     },
     {
@@ -3876,7 +3908,7 @@
       "name": "team_files",
       "path": "team_files/SKILL.md",
       "service": "team",
-      "sha256": "352ff163723be37259c5cecb8168468bcae21a3199051959c05e4e543fa4859f",
+      "sha256": "69b19a2ca2e0551624ab419575e4df5b6aad28d9524124cfc6a80e3846c1596d",
       "version": "8.0.0"
     },
     {
@@ -3884,7 +3916,7 @@
       "name": "team_transactor",
       "path": "team_transactor/SKILL.md",
       "service": "team",
-      "sha256": "aebea30d61889ca83642f0e3d1abe8cca3c12fb9a8fb9e635634ea8c72ed8a5c",
+      "sha256": "a3afeced49c7494a32c55f63c7581c59c57d41506eb738bf57d050f7e6466dd4",
       "version": "8.0.0"
     },
     {
@@ -3892,7 +3924,7 @@
       "name": "tel_calls",
       "path": "tel_calls/SKILL.md",
       "service": "tel",
-      "sha256": "74272c378f7b0159be4fb0df30531b6bd950d4fd07e59d16cf7892f0251bcda4",
+      "sha256": "8e4c89014a9c63e3e45cb6d30eed55d45c34b08330aa4dbed2b87ef09d682115",
       "version": "8.0.0"
     },
     {
@@ -3900,7 +3932,7 @@
       "name": "tel_messages",
       "path": "tel_messages/SKILL.md",
       "service": "tel",
-      "sha256": "dfc1dfbc42629900189d86de9918e48411977600bd5d7825ce68802bea114400",
+      "sha256": "9e583ddf6b820fd197282f9aaa5d732b759ac4dbf537d573070b6705998588be",
       "version": "8.0.0"
     },
     {
@@ -3908,7 +3940,7 @@
       "name": "tel_numbers",
       "path": "tel_numbers/SKILL.md",
       "service": "tel",
-      "sha256": "baefbe4a1c70e46da063b2dbbadd8aeca8bb5971eb4bbfccdb53e5d12271d472",
+      "sha256": "d85416e81ea0627cc5129ab7097edc208b414c1454c7c55543ac932e776d71de",
       "version": "8.0.0"
     },
     {
@@ -3916,7 +3948,7 @@
       "name": "tel_summary",
       "path": "tel_summary/SKILL.md",
       "service": "tel",
-      "sha256": "6365694760e850b27d6cf342493ac875d20fbdcc4ce1e6bb6c8d9b584d09512b",
+      "sha256": "9375cfe3201a43453992746fb69afa6ccf50e2572ce793bcaa80b0316e710017",
       "version": "8.0.0"
     },
     {
@@ -3924,7 +3956,7 @@
       "name": "templates_templates",
       "path": "templates_templates/SKILL.md",
       "service": "templates",
-      "sha256": "02d47cd919c6a0db8d29ab08a8a9df76c8f39ac8b574e4c1a5262838617251ee",
+      "sha256": "6923d93418d288f15ba7d561941021e90fcabaccb52ecc375e4d1f3c9feb96e4",
       "version": "8.0.0"
     },
     {
@@ -3932,7 +3964,7 @@
       "name": "todo_board",
       "path": "todo_board/SKILL.md",
       "service": "todo",
-      "sha256": "de86ba17fc5d6ca638d4944b5e2e67862b69e2fcb7e93c6e439acf452ca6e252",
+      "sha256": "6270d9b7146f819140ff770c85ab500043a4ed5adae4532641f837649a64b8d0",
       "version": "8.0.0"
     },
     {
@@ -3940,7 +3972,7 @@
       "name": "todo_issues",
       "path": "todo_issues/SKILL.md",
       "service": "todo",
-      "sha256": "43889382a268e9eb3405adc2695bc1bcee8a19255b2e2efeb4e445ec2ee4bed7",
+      "sha256": "d01b7c474b792ff486429572dfa2ab50e8445c646e1cabe56da2144511390c25",
       "version": "8.0.0"
     },
     {
@@ -3948,7 +3980,7 @@
       "name": "todo_projects",
       "path": "todo_projects/SKILL.md",
       "service": "todo",
-      "sha256": "fb4ac83e5b0ceed12a4f0f9a1b12f3cdfd9bb5fd2ef073977ed028ac3e3c53a6",
+      "sha256": "598f0d7350566ce26f32628c35c68577b6f163471392240281df8359a1f5e1e3",
       "version": "8.0.0"
     },
     {
@@ -3956,7 +3988,7 @@
       "name": "tokens_tokens",
       "path": "tokens_tokens/SKILL.md",
       "service": "tokens",
-      "sha256": "3dc25708704a927a18515cbcf3bf7e14a01bc99d2e25630e1cd2e6347a588772",
+      "sha256": "af3adddd84d9713c5fb4eda29fdfaeffae29380334d76f7a7eb4183e43f8183e",
       "version": "8.0.0"
     },
     {
@@ -3964,7 +3996,7 @@
       "name": "tools_activation",
       "path": "tools_activation/SKILL.md",
       "service": "tools",
-      "sha256": "ee24e5a8f4287c3f0aa4a48a73e6d5049e978a129a9567136c5e9c0732acfaff",
+      "sha256": "53d1eda80256fa85f973e43087f5d70bd767f002a889fd8b7d7eab5d5f09abef",
       "version": "8.0.0"
     },
     {
@@ -3972,7 +4004,7 @@
       "name": "tools_catalog",
       "path": "tools_catalog/SKILL.md",
       "service": "tools",
-      "sha256": "c9af577da48d459fc8ef539ff881e693d621ce4dce015d22842cb2b2828bdc42",
+      "sha256": "c26018b7ced7e448afdbafb0fe18c439a7aa8b0e31733465ca5d0e83b6f4dad8",
       "version": "8.0.0"
     },
     {
@@ -3980,7 +4012,7 @@
       "name": "tools_tools",
       "path": "tools_tools/SKILL.md",
       "service": "tools",
-      "sha256": "304bbb4ada95f3b03eae01fa6801b06bc54adaa3fa41dd4b85b0ae14e25e00ae",
+      "sha256": "4f435ebcfdd8716f76da51869aac1e2dd21c38a8e95f1a36e50cfa5ea4a89780",
       "version": "8.0.0"
     },
     {
@@ -3988,7 +4020,7 @@
       "name": "traces_health",
       "path": "traces_health/SKILL.md",
       "service": "traces",
-      "sha256": "7dff112cbf12cc817fb49c1c4bfd3d066bfe1d7128706b5c435f4052522ed141",
+      "sha256": "6fd81bf0ba810021b3cdf217f041c760a889eb05ebbd761ee25d6ac201da815d",
       "version": "8.0.0"
     },
     {
@@ -3996,7 +4028,7 @@
       "name": "traces_query",
       "path": "traces_query/SKILL.md",
       "service": "traces",
-      "sha256": "20b89ccd47badbf6895f345d3caff7228179c863d6ab3147cf09b2b0cd1cb228",
+      "sha256": "d7825fa18d033be565490107b3799849081060bd58f0783b86b42a3eb7e92f7c",
       "version": "8.0.0"
     },
     {
@@ -4004,7 +4036,7 @@
       "name": "traces_trace",
       "path": "traces_trace/SKILL.md",
       "service": "traces",
-      "sha256": "1df4369b7fce4904c5e7d96ee24e6487e4386873d514e206957b65eed67262d7",
+      "sha256": "a2d85f92ac7a65a8b4bbd7d3f8e03ec865144eb369271e5ea365eddd3ca88865",
       "version": "8.0.0"
     },
     {
@@ -4012,7 +4044,7 @@
       "name": "traffic_globe",
       "path": "traffic_globe/SKILL.md",
       "service": "traffic",
-      "sha256": "33c4075ac7e1e016f1bd27af4ca8c2795eeafb88ef21f0d86f875641d1ab6664",
+      "sha256": "c0b6fddbfa64b912e9d3d8e85f7504b33ecbedc9a5d663ef006f137ba69049e6",
       "version": "8.0.0"
     },
     {
@@ -4020,7 +4052,7 @@
       "name": "translate_memory",
       "path": "translate_memory/SKILL.md",
       "service": "translate",
-      "sha256": "60c4ef546523f26f363987a8f71d5d49508e737e334dc7ab38409f7cfb8b5baa",
+      "sha256": "aa78f731a25cf423aad83e2edf51c4b7405e8d3b4df618e69b1918b65fce2a04",
       "version": "8.0.0"
     },
     {
@@ -4028,7 +4060,7 @@
       "name": "usage_activity",
       "path": "usage_activity/SKILL.md",
       "service": "usage",
-      "sha256": "71937e5f3ed531742ad66a8d3acf7b348d2f9099525840ae7e51d06d3634fe1f",
+      "sha256": "459db32d890c87a556fa8458caf596a64c8434c85353884e02a6682800a0cc7d",
       "version": "8.0.0"
     },
     {
@@ -4036,7 +4068,7 @@
       "name": "usage_analytics",
       "path": "usage_analytics/SKILL.md",
       "service": "usage",
-      "sha256": "bf9ef68bed85ffc2f5952c6cdd65aa0a7d0abdd299025d9ce9c04c197149dae6",
+      "sha256": "a6ccf415a922389a0995c9343023251a4b47c33e6e32f2ebee7dcddac286b335",
       "version": "8.0.0"
     },
     {
@@ -4044,7 +4076,7 @@
       "name": "usage_leaderboard",
       "path": "usage_leaderboard/SKILL.md",
       "service": "usage",
-      "sha256": "960609091d588692db5905bb5c1cabd89f8c420f6d8659d34c60e679e223ec0f",
+      "sha256": "c6c126e2928103bc93a61074dcd4b25e0230308d37410af92363cae7db767f25",
       "version": "8.0.0"
     },
     {
@@ -4052,7 +4084,7 @@
       "name": "usage_samples",
       "path": "usage_samples/SKILL.md",
       "service": "usage",
-      "sha256": "f58ebf943fd88c5efcaf614ec27e7b75c3730a06d117b9f8d5813b10cda5e29a",
+      "sha256": "7d6010ebd43806452336663d1e8e301c249b19e2310c227e9bdab0c0769f049f",
       "version": "8.0.0"
     },
     {
@@ -4060,7 +4092,7 @@
       "name": "usage_summary",
       "path": "usage_summary/SKILL.md",
       "service": "usage",
-      "sha256": "d0a8c5ae9aca7ff3971f19204d64ef1ec3543bfd6395adb74d021d1316187bd1",
+      "sha256": "feb1d33287268ca705495f2e2fc08552436b079200e3d31b11e488b08c095b24",
       "version": "8.0.0"
     },
     {
@@ -4068,7 +4100,7 @@
       "name": "validators_challenge",
       "path": "validators_challenge/SKILL.md",
       "service": "validators",
-      "sha256": "8d1a5087af61781ab283576c205588818ca5da4c13a6d42fb35d59f3ad34d751",
+      "sha256": "d18cc97d54c25d3194de28fd771d86cb19e42cdbd7860c5fbeb50610fb1923ab",
       "version": "8.0.0"
     },
     {
@@ -4076,7 +4108,7 @@
       "name": "validators_validators",
       "path": "validators_validators/SKILL.md",
       "service": "validators",
-      "sha256": "7dfd5f049a037aa687b85e8955c475f188fd9ccbd2a35ae3146ec136abfde3c8",
+      "sha256": "5265e2a2fc1337729f1f31100be5349c0f273cc18c2f5aef70fe454955ac2529",
       "version": "8.0.0"
     },
     {
@@ -4084,7 +4116,7 @@
       "name": "vector_collections",
       "path": "vector_collections/SKILL.md",
       "service": "vector",
-      "sha256": "0054c42e4b7202e984fedef76bd20163cf9fd01fd1dfa1a7d004c3ce6813104d",
+      "sha256": "cf7f0b811edc05837f7ebec8381168b725d1c0c642c107a290a0c40f8be7d51f",
       "version": "8.0.0"
     },
     {
@@ -4092,7 +4124,7 @@
       "name": "vector_stats",
       "path": "vector_stats/SKILL.md",
       "service": "vector",
-      "sha256": "8884be51a69e02814e03b4165cf8b83b8c319859e5ae24410b34ed68f70da539",
+      "sha256": "d2d2017af6b4359cdaa728b6c13af15dae0a647d21502873fc334d37531f08dd",
       "version": "8.0.0"
     },
     {
@@ -4100,7 +4132,7 @@
       "name": "vector_vector",
       "path": "vector_vector/SKILL.md",
       "service": "vector",
-      "sha256": "ded2ea2b482b8fe2a794b13da1e20e1db5ea6e316a9b3c86f504a32bdf652d83",
+      "sha256": "d2067184d8656ea9afdd4c540b414015f5cf9617b27650853b1536a959ad9193",
       "version": "8.0.0"
     },
     {
@@ -4108,7 +4140,7 @@
       "name": "videos_content",
       "path": "videos_content/SKILL.md",
       "service": "videos",
-      "sha256": "de9dd5f5e7e6f9b949af73127091647d362d99d38391d119ca1c134de9c3d14a",
+      "sha256": "d003e242f0151b177debba0218c92498bd007e7e282b35343c89b90083c5b58c",
       "version": "8.0.0"
     },
     {
@@ -4116,7 +4148,7 @@
       "name": "videos_videos",
       "path": "videos_videos/SKILL.md",
       "service": "videos",
-      "sha256": "8cae20bf94f2d2af52e3cafe973330a9ac26ce1b989e4c8da767f6f12c3315be",
+      "sha256": "44cd77a961e6d2c882b0e89624602f1b13cd45342cca730a9300a64190c336b0",
       "version": "8.0.0"
     },
     {
@@ -4124,7 +4156,7 @@
       "name": "vpcs_vpcs",
       "path": "vpcs_vpcs/SKILL.md",
       "service": "vpcs",
-      "sha256": "c6500c62ed158f773e3e86d3889e996985d2fc995bedc996f18798ff0d81049e",
+      "sha256": "0e944ed6b3decd61ea5ec5f13445c6381cacfcf50a3d624977b4b85fa727728c",
       "version": "8.0.0"
     },
     {
@@ -4132,7 +4164,7 @@
       "name": "wallets_accounts",
       "path": "wallets_accounts/SKILL.md",
       "service": "wallets",
-      "sha256": "9b8fb94290a151ad1ed3cf5c033756ab3e5a1fe6f10aa0d8fdd5fbe3209f77e8",
+      "sha256": "b741754e26d9377e74c035161de0bf9e1bc5db83f0dc0bec354e56dacb89fc06",
       "version": "8.0.0"
     },
     {
@@ -4140,7 +4172,7 @@
       "name": "wallets_wallets",
       "path": "wallets_wallets/SKILL.md",
       "service": "wallets",
-      "sha256": "c95f79d90af3091dbfeb7e60932cf6dc3726597108e72390d20c81ab3aafe6e5",
+      "sha256": "e9fec68bb8568bcd27782271a9f119c4a5318d3d7166af38e7cb873884f5e470",
       "version": "8.0.0"
     },
     {
@@ -4148,7 +4180,7 @@
       "name": "webhooks_deliveries",
       "path": "webhooks_deliveries/SKILL.md",
       "service": "webhooks",
-      "sha256": "a2198a447cc48bff3dbedbc317a034769522711b2c723a4cdb045c23eee2891b",
+      "sha256": "78ba6ecf2724082e5f59b4cd1c02d889a23ea0ac2ad2e85d619738896897a79b",
       "version": "8.0.0"
     },
     {
@@ -4156,7 +4188,7 @@
       "name": "webhooks_webhooks",
       "path": "webhooks_webhooks/SKILL.md",
       "service": "webhooks",
-      "sha256": "31502f472c1df808e2ab9a078020fdd8b3b96ff8435db3634fa052a47aba5186",
+      "sha256": "c0f4f403aa523b2465d21041510f7c97ebfb14edcb6faf822679dde0be9c73be",
       "version": "8.0.0"
     },
     {
@@ -4164,7 +4196,7 @@
       "name": "websearch_search",
       "path": "websearch_search/SKILL.md",
       "service": "websearch",
-      "sha256": "99d7ff03c999f647296e73c54df5ca9475b83c56f6997764bd2187b072cc3560",
+      "sha256": "4384e2b88f498a89e52a9f1537e6f5cd295b6db5ad36c8ecd78dc06ae339a45e",
       "version": "8.0.0"
     },
     {
@@ -4172,7 +4204,7 @@
       "name": "wecom-bot_callback",
       "path": "wecom-bot_callback/SKILL.md",
       "service": "wecom-bot",
-      "sha256": "b71701094ac479471dbaafed628dfd9baabd02975311e695e54336ea9b573330",
+      "sha256": "fdb2c4547364d6b8745e40eb5906f30d3977c280847e8b9e13a10e2fe1d79429",
       "version": "8.0.0"
     },
     {
@@ -4180,7 +4212,7 @@
       "name": "world_limits",
       "path": "world_limits/SKILL.md",
       "service": "world",
-      "sha256": "2987ac4e0cb1677eba5093d93e105863a3ae9e74e34dd2987becb658b56b7f14",
+      "sha256": "e402e9032a9c7f58acb1289341c72a1e9bd7d42eb5dcc81676fb0704db4f22bf",
       "version": "8.0.0"
     },
     {
@@ -4188,7 +4220,7 @@
       "name": "world_news",
       "path": "world_news/SKILL.md",
       "service": "world",
-      "sha256": "d537b1de96e053d518694eadb0946a07b2e4b984484d335fa1648d066a9f693d",
+      "sha256": "e99d30067e29f377c01e96b27fc49d44c3a244b73ca46d169d86c86d0234300a",
       "version": "8.0.0"
     },
     {
@@ -4196,7 +4228,7 @@
       "name": "world_pipeline",
       "path": "world_pipeline/SKILL.md",
       "service": "world",
-      "sha256": "5d9478ca6445f3f51c1e4b156b3d4d5cddb1011e0d165abeb6c058e56c6149fe",
+      "sha256": "634c48bff1ed74a623b65a3db14b34bc6a77dfb5e90eb6a6780aa58cde4fbeb5",
       "version": "8.0.0"
     },
     {
@@ -4204,7 +4236,7 @@
       "name": "world_stream",
       "path": "world_stream/SKILL.md",
       "service": "world",
-      "sha256": "a1c18ec641bb2f9f5ec1d18f0e8cdfb0ea85e6c95eae9bb748c64170f631c156",
+      "sha256": "7fc18970b7fbbd3107b80736d55f7bf6f6baad7c1d7770d8b2b48844cadd3dbf",
       "version": "8.0.0"
     },
     {
@@ -4212,7 +4244,7 @@
       "name": "world_world",
       "path": "world_world/SKILL.md",
       "service": "world",
-      "sha256": "71bcde0f7a42ec237633b2c318108cee1502625fb8eca7a43af4433e1cb8350e",
+      "sha256": "be70021e411623bbbdf711b4401a4d2ab0f773df27101884664f12ebb078ea83",
       "version": "8.0.0"
     },
     {
@@ -4220,7 +4252,7 @@
       "name": "x402_settlements",
       "path": "x402_settlements/SKILL.md",
       "service": "x402",
-      "sha256": "c9c76f398172c0f070a84052b1cb6543459c6fafdaecae2da9336d1d6498bd8c",
+      "sha256": "baadbe60e2e00a214ef8556cdc1f4dcf72beb35eb2991773bc77c4a066d773e6",
       "version": "8.0.0"
     }
   ],
