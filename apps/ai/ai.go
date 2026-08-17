@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	aimod "github.com/hanzoai/ai"
 	webtools "github.com/hanzoai/ai/agent/builtin_tool/web"
@@ -94,6 +95,43 @@ func init() {
 // and the door is the wrong place for that coupling — hanzoai/ai must stay able to
 // describe itself without importing a fleet document format. openapi.Typed reads
 // zip's spec the same way for the same reason.
+// describeAI states each of ai's operations for the document generator, from ai's own
+// document.
+//
+// The spelling is converted because the two layers name a parameter differently: a
+// document says {id}, a route says :id, and the generator keys on the route. One
+// place, with both spellings visible.
+//
+// A silent operation is skipped rather than given an empty sentence: Describe refuses
+// an empty declaration, and correctly — a sentence nobody wrote is not a sentence.
+func describeAI(doc map[string]any) {
+	paths, _ := doc["paths"].(map[string]any)
+	for path, raw := range paths {
+		item, _ := raw.(map[string]any)
+		for verb, rawOp := range item {
+			op, _ := rawOp.(map[string]any)
+			summary, _ := op["summary"].(string)
+			description, _ := op["description"].(string)
+			if summary == "" && description == "" {
+				continue
+			}
+			openapi.Describe(routeSpelling(path), strings.ToUpper(verb), summary, description)
+		}
+	}
+}
+
+// routeSpelling turns a document path into the route it was registered under: {id} to
+// :id, segment by segment.
+func routeSpelling(p string) string {
+	segs := strings.Split(p, "/")
+	for i, s := range segs {
+		if len(s) > 2 && s[0] == '{' && s[len(s)-1] == '}' {
+			segs[i] = ":" + s[1:len(s)-1]
+		}
+	}
+	return strings.Join(segs, "/")
+}
+
 func document() (*openapi.Document, error) {
 	raw, err := json.Marshal(aimod.Document())
 	if err != nil {
@@ -470,6 +508,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return err
 	}
+	// WHAT AI'S OPERATIONS DO, CARRIED ACROSS RATHER THAN RESTATED HERE.
+	//
+	// ai registers its real routes on its own app — around 190 of them — so this host's
+	// document generator sees every one and asks what it does. The answer has one home
+	// and it is not this file: the Go doc comment on ai's own handler, which ai lifts
+	// into its own document. This reads that document and says the same sentence at the
+	// key the generator looks it up by.
+	//
+	// None of it was needed while ai arrived as ONE wildcard behind a net/http adapter:
+	// the generator saw a single route and took the whole document from the relay
+	// declared in this package's init. Real routes are the better shape — they are what
+	// the router, the MCP tool list and the CLI all read — and this is what the shape
+	// costs.
+	describeAI(aimod.Document())
 	// The web fetch ai relays is THIS host's crawl. ai declares the shape and the
 	// host binds the implementation, so the dependency points from host into
 	// subsystem — the direction that lets a second host compose the same ai.
