@@ -1,6 +1,7 @@
 package lineage
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -205,6 +206,28 @@ func TestVerifyRefusesWithNoArbiter(t *testing.T) {
 	for _, a := range []Arbiter{{}, {Remote: "x"}, {Branch: "main"}} {
 		if err := (a).Verify(t.Context(), "", shas[0]); err == nil {
 			t.Fatalf("%+v must refuse: an unconfigured arbiter cannot admit anything", a)
+		}
+	}
+}
+
+// TestARefusalCarriesNoCredential. Every refusal names the arbiter so a reader can
+// act on it, and the arbiter is reached with a token — so the refusal is the place a
+// credential would surface if one ever reached the text. Nothing here puts it there:
+// it travels as a base64 header rather than as URL userinfo, and git prints the URL.
+//
+// The remote is a closed local port, so this asks the question with no network and no
+// forge: what matters is that a credential was set and an https fetch failed.
+func TestARefusalCarriesNoCredential(t *testing.T) {
+	const token = "s3cret-forge-token"
+	err := Arbiter{Remote: "https://127.0.0.1:1/x/y", Branch: "main"}.
+		Verify(t.Context(), token, strings.Repeat("a", 40))
+	if err == nil {
+		t.Fatal("a remote that cannot be reached must stop the claim")
+	}
+	header := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + token))
+	for _, secret := range []string{token, header} {
+		if strings.Contains(err.Error(), secret) {
+			t.Errorf("the refusal carries the credential: %v", err)
 		}
 	}
 }
