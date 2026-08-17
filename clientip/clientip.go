@@ -127,19 +127,27 @@ func TrustedProxy(addr string) bool {
 	return ok && trustedProxies().has(a)
 }
 
-// ClientIP is the caller's own address: the socket peer for a direct caller, the
-// right-most non-proxy entry of the forwarded chain for a proxied one, and "" for
-// an in-cluster caller that never transited the edge.
+// ClientIP is the caller's own address, as the FRAMEWORK resolved it.
 //
-// It is the ONE client-address read in this repo — the edge rate limiter, the
-// abuse sensor, the audit trail and every metered resource share it, so a
-// forgeable address cannot enter one of them by a side door.
-// It reads EVERY X-Forwarded-For header line, not just the first. fasthttp keeps
-// repeated headers as separate lines, and a client that sends its own line before
-// the proxy appends to a second one would otherwise hide the real address behind
-// a value it chose.
+// IT DOES NOT DERIVE ONE. zip resolves the address once at the seam and publishes
+// it (caller.go: inflight{ip: fc.IP()}), and its own logger reads that rather than
+// re-deriving, for a reason it states plainly: "an address the log line derived by
+// its own rule would be the one field on the line that disagrees with every other
+// surface". This used to be that second rule, and it did disagree — measured in
+// production, 4107 requests where zip reported a real address on the same log line
+// that this returned "".
+//
+// The disagreement was not a bug in the arithmetic. It was two trust sets: zip
+// honours a proxy header only where the APP configured TrustedProxies, and this
+// carried a private set of its own that the framework never saw. Ours counted the
+// in-cluster peer as a proxy and walked a forwarded chain that carries nothing, so
+// it answered "unknown" for every caller — correct by its own rule, and useless.
+//
+// Proxy awareness belongs in the framework's config, where fiber applies it to the
+// value everything reads. Configure zip.Config.TrustProxy/TrustedProxies; do not
+// grow a second opinion here.
 func ClientIP(c *zip.Ctx) string {
-	return clientAddr(c.Fiber().IP(), c.Fiber().Request().Header.PeekAll("X-Forwarded-For"), trustedProxies())
+	return zip.CallerOf(c.Context()).IP
 }
 
 // clientAddr IS the rule, as a pure function of the three facts it turns on: the

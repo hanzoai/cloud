@@ -151,32 +151,50 @@ func TestDefaultTrustedProxies(t *testing.T) {
 // End to end through a real request, on the process default set. fiber's test
 // connection reports the unspecified address as the peer, which the default set
 // treats as ours — so the chain is read, and the forged left-most entry loses.
-func TestClientIP_OverARealRequest(t *testing.T) {
-	var got string
-	app := zip.New(zip.Config{})
-	app.Get("/probe", func(c *zip.Ctx) error {
-		got = ClientIP(c)
-		return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
-	})
-	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
-	req.Header.Add("X-Forwarded-For", "1.2.3.4")
-	req.Header.Add("X-Forwarded-For", "203.0.113.9, 10.0.0.6")
-	if _, err := app.Test(req); err != nil {
-		t.Fatal(err)
-	}
-	if got != "203.0.113.9" {
-		t.Fatalf("ClientIP = %q, want the right-most untrusted hop 203.0.113.9", got)
+func TestClientIP_IsTheFrameworksAnswer(t *testing.T) {
+	// ONE SOURCE, and this asserts exactly that: what this returns IS what zip
+	// publishes, for the same request, always.
+	//
+	// The rule that used to live here walked the forwarded chain from the right,
+	// treating our own address space as proxies — a SECOND trust set the framework
+	// never saw. It disagreed with zip in production on 4107 requests: zip reported a
+	// real address on the same log line where this returned "". Two derivations of one
+	// value is the shape of that bug, so the invariant worth pinning is not a
+	// particular address but that there is only ever ONE answer.
+	//
+	// Deliberately not asserting a literal: app.Test synthesises no connection, so
+	// fc.IP() is empty in any harness, and a test that demanded a value here could
+	// only be satisfied by reading a header — which is how the old rule passed its
+	// tests for months while answering nothing in production.
+	check := func(t *testing.T, name string, mut func(*http.Request)) {
+		t.Helper()
+		var mine, theirs string
+		app := zip.New(zip.Config{})
+		app.Get("/probe", func(c *zip.Ctx) error {
+			mine = ClientIP(c)
+			theirs = zip.CallerOf(c.Context()).IP
+			return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
+		})
+		req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+		mut(req)
+		if _, err := app.Test(req); err != nil {
+			t.Fatal(err)
+		}
+		if mine != theirs {
+			t.Fatalf("%s: ClientIP=%q but the framework says %q — two answers to one question "+
+				"is the defect, whichever is 'right'", name, mine, theirs)
+		}
 	}
 
-	// And a request with no chain at all is an in-cluster caller: no address, so
-	// the edge limiter leaves it alone.
-	req = httptest.NewRequest(http.MethodGet, "/probe", nil)
-	if _, err := app.Test(req); err != nil {
-		t.Fatal(err)
-	}
-	if got != "" {
-		t.Fatalf("an unproxied in-cluster request must have no client address, got %q", got)
-	}
+	check(t, "bare request", func(*http.Request) {})
+	// The case that broke it: a forwarded chain the old rule walked and zip did not.
+	check(t, "with a forwarded chain", func(r *http.Request) {
+		r.Header.Add("X-Forwarded-For", "1.2.3.4")
+		r.Header.Add("X-Forwarded-For", "203.0.113.9, 10.0.0.6")
+	})
+	check(t, "with a single forged hop", func(r *http.Request) {
+		r.Header.Set("X-Forwarded-For", "198.51.100.255")
+	})
 }
 
 // TrustedProxy is the readable form of the same set — for a health report, never
