@@ -30,45 +30,84 @@ import (
 // zone empty, and an empty zone is the already-documented unconfigured posture:
 // serve stale until the TTL, say so at Warn, never fail the deploy that asked.
 
-// zoneName is the apex whose zone fronts the site plane. It is the one fact this
-// package still takes from the environment, and it is a NAME rather than an id —
-// a name is a thing an operator can read and check, and CLOUD_SITES_APEX already
-// carries it everywhere else in the estate for exactly this zone.
-func zoneName() string {
-	if v := strings.TrimSpace(getenv("CLOUD_SITES_APEX")); v != "" {
-		return v
+// zoneNames are the apexes whose zones front the site plane — plural, and that
+// is the whole correction.
+//
+// A published site is reachable on TWO apexes, not one. `<slug>.hanzo.app` is the
+// site plane's own, and CLOUD_SITES_FIRSTPARTY_APEX (hanzo.ai) serves our
+// first-party sites off an allowlist pinned to one org — sites.Server carries
+// both fields for exactly this reason. Purging only the first left every
+// first-party host serving whatever it had cached: measured on hanzo.ai and
+// cloud.hanzo.ai, both HIT with the pre-deploy bytes while the origin had the new
+// ones, and a purge that returned 200 the whole time. Right call, wrong zone.
+//
+// Names rather than ids, still: a name is a thing an operator can read and check,
+// and both already exist in the environment for this exact purpose. Deduplicated
+// because a deployment may point both at one apex, and purging a zone twice is
+// two calls against a quota shared by every tenant.
+func zoneNames() []string {
+	out := make([]string, 0, 2)
+	seen := map[string]bool{}
+	add := func(v string) {
+		v = strings.ToLower(strings.TrimSpace(v))
+		if v != "" && !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
 	}
-	return "hanzo.app"
+	if v := getenv("CLOUD_SITES_APEX"); strings.TrimSpace(v) != "" {
+		add(v)
+	} else {
+		add("hanzo.app")
+	}
+	if v := getenv("CLOUD_SITES_FIRSTPARTY_APEX"); strings.TrimSpace(v) != "" {
+		add(v)
+	} else {
+		add("hanzo.ai")
+	}
+	return out
 }
 
-// zone returns the zone id, discovering it once if it was not supplied.
+// zones returns every zone id a purge must reach, discovering them once.
+//
+// An explicitly supplied zone (CF_ZONE_ID) is honoured as the whole answer: an
+// operator who pins one is saying which zone they mean, and discovering more
+// behind their back would purge zones they did not ask for.
 //
 // The caller holds no lock: discovery is guarded here, and a second purge that
-// arrives mid-lookup simply waits for the same answer rather than issuing a
-// second identical request against a shared quota.
-func (p *Edge) zone(ctx context.Context) string {
+// arrives mid-lookup waits for the same answer rather than issuing a second
+// identical request against a shared quota. One attempt per process either way —
+// a retry loop here hammers a quota shared by every tenant.
+func (p *Edge) zones(ctx context.Context) []string {
 	p.zoneMu.Lock()
 	defer p.zoneMu.Unlock()
-	if p.zoneID != "" || p.token == "" || p.zoneTried {
-		return p.zoneID
+	if p.zoneID != "" {
+		return []string{p.zoneID}
 	}
-	p.zoneTried = true // one attempt per process; a retry loop here would hammer a shared quota
+	if p.token == "" || p.zoneTried {
+		return p.zoneIDs
+	}
+	p.zoneTried = true
 
-	name := zoneName()
-	id, err := p.lookupZone(ctx, name)
-	if err != nil {
-		p.log.Warn("cloudflare zone lookup failed; publishes are live only after the edge TTL",
-			"zone", name, "err", err)
-		return ""
+	for _, name := range zoneNames() {
+		id, err := p.lookupZone(ctx, name)
+		switch {
+		case err != nil:
+			p.log.Warn("cloudflare zone lookup failed; publishes on it are live only after the edge TTL",
+				"zone", name, "err", err)
+		case id == "":
+			// Not an error: a deployment need not own every apex it is
+			// configured with, and one it does not own has nothing to purge.
+			p.log.Info("cloudflare account holds no zone by that name; skipping it", "zone", name)
+		default:
+			p.zoneIDs = append(p.zoneIDs, id)
+			p.log.Info("cloudflare zone discovered", "zone", name, "id", id)
+		}
 	}
-	if id == "" {
-		p.log.Warn("cloudflare account holds no zone by that name; publishes are live only after the edge TTL",
-			"zone", name)
-		return ""
+	if len(p.zoneIDs) == 0 {
+		p.log.Warn("cloudflare resolved no zone at all; publishes are live only after the edge TTL")
 	}
-	p.zoneID = id
-	p.log.Info("cloudflare zone discovered", "zone", name, "id", id)
-	return id
+	return p.zoneIDs
 }
 
 // lookupZone asks which zone serves a name. It reads the FIRST match: a
