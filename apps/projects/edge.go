@@ -44,6 +44,10 @@ type edgeState struct {
 	// It is the sentence an operator actually wants; the booleans above are how
 	// a machine reads the same fact.
 	Freshness string `json:"freshness"`
+	// Reach is the apexes a publish is invalidated on. A site is served on more
+	// than one — the site plane's own and the first-party apex — and a purge that
+	// covers one of them looks identical from here to a purge that covers both.
+	Reach []string `json:"reach"`
 	// Policy is the Cache-Control this edge serves each class of object with. It
 	// is DERIVED from the one canonical function, never a second copy: half the
 	// confusion when a publish looks stale is not knowing what the TTLs are, and
@@ -86,6 +90,7 @@ func (o ops) edge(_ context.Context, _ *void) (*edgeState, error) {
 	if o.s.State.edge.Configured() {
 		return &edgeState{
 			Provider:   o.s.State.edge.Name(),
+			Reach:      o.s.State.edge.Reach(),
 			Status:     "ok",
 			Configured: true,
 			Freshness:  "a publish is live at the edge immediately (purged by cache-tag)",
@@ -94,6 +99,7 @@ func (o ops) edge(_ context.Context, _ *void) (*edgeState, error) {
 	}
 	return &edgeState{
 		Provider:   o.s.State.edge.Name(),
+		Reach:      o.s.State.edge.Reach(),
 		Status:     "degraded",
 		Configured: false,
 		Freshness:  "a publish is live only after the edge TTL expires",
