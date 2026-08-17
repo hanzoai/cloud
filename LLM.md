@@ -3189,16 +3189,21 @@ semantic is identical — fail closed once armed, allow before.
   apps and growing, so the next ten subsystems put the door back over the cap; the
   move then is to group by product surface (`productStems`, 17 buckets), not to add
   a second projection.
-  🔴 **THE DOOR ADVERTISES OPERATIONS THE CHILDREN CANNOT DISPATCH, AND SAYS SO
-  INSIDE A SUCCESSFUL RESULT.** Measured live 2026-08-17 against api.hanzo.ai:
-  `storage`/`list_s3_buckets` answers `{"content":[{"text":"unknown tool:
-  get_s3_buckets"}]}` — no JSON-RPC error, no `isError`, so a model reads the
-  sentence as the answer and reports it as data. It is not the rename: `offer`
-  and `alias` round-trip correctly, which `describe` proves by returning that
-  op's real descriptor. It is `published` (fleet/mcp.go), which sources the enum
-  from a CATALOG rather than from what the child can actually invoke, and a
-  catalog carries every route while only a TYPED op earns a tool. So the door
-  publishes the untyped remainder and the child rejects its own published name.
+  🔴 **THE DOOR ADVERTISES OPERATIONS THE CHILDREN CANNOT DISPATCH.** Measured
+  live 2026-08-17 against api.hanzo.ai: `storage`/`list_s3_buckets` answers
+  `unknown tool: get_s3_buckets`. The failure IS flagged — the result carries
+  `isError: true`, which is what the spec asks for and what zip documents, so a
+  compliant client reads it as a failure and not as data. (An earlier revision of
+  this note claimed otherwise; it read `result.content` and never looked at the
+  sibling field. Check `isError` before calling a tool reply dishonest.) What is
+  wrong is upstream of that: the name should never have been offered. It is not
+  the rename either — `offer` and `alias` round-trip correctly, which `describe`
+  proves by returning that op's real descriptor. It is `published`
+  (fleet/mcp.go), which sources the enum from a CATALOG rather than from what the
+  child can actually invoke, and a catalog carries every route while only a TYPED
+  op earns a tool. So the door publishes the untyped remainder and the child
+  rejects its own published name — `noCallerTools.Call` (app.go), whose comment
+  states the invariant this breaks: "the fleet's door never routes one here".
   The correlation is exact, not statistical: `apps/storage` registers 0 typed ops
   and all 8 of its ops are dead; `apps/projects` registers 46 and its ops answer.
   **10 apps register zero typed ops, stranding 157 advertised operations** — iam
@@ -3207,11 +3212,16 @@ semantic is identical — fail closed once armed, allow before.
   type some routes still strand the rest, so the true figure is larger and is
   per-OP, not per-app: `exec`'s `create_exec` reaches its handler while its
   `get_download` does not, and `git`, `sandboxes`, `agents` and `websearch` all
-  answer `unknown tool` on the ops sampled. Two things follow. The gap closes as
-  the typed migration lands, so it needs no scheme of its own — but until then
-  the door must not publish what it cannot route, and an undispatchable name must
-  come back as an ERROR rather than as prose in a 200, because the present shape
-  is indistinguishable from a tool that ran and had something to say.
+  answer `unknown tool` on the ops sampled. The gap closes as the typed migration
+  lands, so it needs no scheme of its own; what it needs before then is for the
+  catalog to carry what a child's REGISTRY answers to rather than what its
+  document describes. `Op`'s own doc comment already says that — "the id its own
+  registry answers to" — so the generator is what disagrees with the type it
+  fills. Reading `plugin/<app>/openapi.json` cannot tell the two apart (storage's
+  untyped routes carry prose from `openapi.Describe`, and `openapi.Register`d
+  ones carry schemas), so the fix is a dump mode beside `<binary> openapi <file>`
+  that emits the app's own MCP tool names — build-time still, so the process
+  explosion the catalog exists to prevent stays prevented.
   **The tools carry no prefix.** They shipped as `hanzo_<app>` + `hanzo_describe`
   and were renamed hours later to the bare app names + `describe`, in one change
   with no aliases. The MCP server is the namespace — a client reaches these names
