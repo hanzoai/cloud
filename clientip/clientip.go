@@ -284,7 +284,26 @@ const ClientIPHeader = "X-Hanzo-Client-Ip"
 // plugin mounts never reaches them — the same rule that makes composition order
 // harmless one level down makes it load-bearing here.
 func StampClientIP(c *zip.Ctx) error {
-	c.Fiber().Request().Header.Set(ClientIPHeader, ClientIP(c))
+	addr := ClientIP(c)
+	c.Fiber().Request().Header.Set(ClientIPHeader, addr)
+	// WHAT A SUBSYSTEM IN ANOTHER PROCESS WILL READ AS THE CALLER, said out loud.
+	//
+	// Kept, not a probe. Five separate times this estate could not answer "what did
+	// that header carry" without a release, and each time the answer was inferred and
+	// each inference was wrong at the rung that ships. One line answers it for the
+	// next reader too, and the empty case is the interesting one: an empty stamp means
+	// the address was not resolvable HERE, which is a different fault from a child
+	// that never received the header at all.
+	//
+	// Debug because it is per-request and says nothing a healthy system needs; if it
+	// is ever too loud that is a level to change, not a line to delete.
+	if log := c.Log(); log != nil {
+		log.Debug("client address stamped for another process",
+			"addr", addr,
+			"empty", addr == "",
+			"header", ClientIPHeader,
+			"path", string(c.Fiber().Request().URI().Path()))
+	}
 	return c.Continue()
 }
 
