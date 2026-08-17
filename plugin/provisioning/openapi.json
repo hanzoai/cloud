@@ -17,35 +17,17 @@
   ],
   "tags": [
     {
-      "name": "datastore"
-    },
-    {
-      "name": "docdb"
-    },
-    {
-      "name": "kv"
-    },
-    {
-      "name": "s3"
-    },
-    {
-      "name": "search"
-    },
-    {
-      "name": "sql"
-    },
-    {
-      "name": "vector"
+      "name": "instances"
     }
   ],
   "paths": {
-    "/v1/datastore": {
+    "/v1/instances/datastore": {
       "get": {
-        "operationId": "get_datastore",
+        "operationId": "get_instances_datastore",
         "summary": "Lists the caller org's Hanzo Datastore warehouses.",
         "description": "Lists the caller org's Hanzo Datastore warehouses. Each one is\na DEDICATED analytical instance the org alone runs, so the host is that\ninstance's own in-cluster Service and the port is its HTTP port, 8123.",
         "tags": [
-          "datastore"
+          "instances"
         ],
         "responses": {
           "200": {
@@ -64,11 +46,11 @@
         }
       },
       "post": {
-        "operationId": "post_datastore",
+        "operationId": "post_instances_datastore",
         "summary": "Provision a Hanzo Datastore instance for your org",
         "description": "Launches your org's OWN Hanzo Datastore instance and answers with its `datastore://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
         "tags": [
-          "datastore"
+          "instances"
         ],
         "requestBody": {
           "content": {
@@ -93,13 +75,13 @@
         }
       }
     },
-    "/v1/datastore/{name}": {
+    "/v1/instances/datastore/{name}": {
       "delete": {
-        "operationId": "delete_datastore_by_name",
+        "operationId": "delete_instances_datastore_by_name",
         "summary": "Deprovisions one Hanzo Datastore warehouse.",
         "description": "Deprovisions one Hanzo Datastore warehouse. It reverts any app\ninstance bound to it back to Base BEFORE tearing down the org's dedicated\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
         "tags": [
-          "datastore"
+          "instances"
         ],
         "parameters": [
           {
@@ -120,11 +102,11 @@
         }
       },
       "get": {
-        "operationId": "get_datastore_by_name",
+        "operationId": "get_instances_datastore_by_name",
         "summary": "Returns one Hanzo Datastore warehouse's metadata.",
         "description": "Returns one Hanzo Datastore warehouse's metadata. It carries the\nwarehouse's status, its instance address and the admin user the instance\nbooted with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view rather than the row.",
         "tags": [
-          "datastore"
+          "instances"
         ],
         "parameters": [
           {
@@ -152,13 +134,13 @@
         }
       }
     },
-    "/v1/docdb": {
+    "/v1/instances/docdb": {
       "get": {
-        "operationId": "get_docdb",
+        "operationId": "get_instances_docdb",
         "summary": "ListDocDB lists the caller org's Hanzo DocDB document databases.",
         "description": "ListDocDB lists the caller org's Hanzo DocDB document databases. Each one is\na DEDICATED FerretDB instance the org alone runs, speaking the MongoDB wire\nprotocol, so the host is that instance's own in-cluster Service and the port\nis 27017.",
         "tags": [
-          "docdb"
+          "instances"
         ],
         "responses": {
           "200": {
@@ -177,11 +159,11 @@
         }
       },
       "post": {
-        "operationId": "post_docdb",
+        "operationId": "post_instances_docdb",
         "summary": "Provision a document database for your org",
         "description": "Launches your org's OWN document-database instance — it speaks the MongoDB wire protocol, so existing MongoDB drivers connect unchanged — and answers with its `mongodb://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
         "tags": [
-          "docdb"
+          "instances"
         ],
         "requestBody": {
           "content": {
@@ -206,13 +188,13 @@
         }
       }
     },
-    "/v1/docdb/{name}": {
+    "/v1/instances/docdb/{name}": {
       "delete": {
-        "operationId": "delete_docdb_by_name",
+        "operationId": "delete_instances_docdb_by_name",
         "summary": "DropDocDB deprovisions one Hanzo DocDB database.",
         "description": "DropDocDB deprovisions one Hanzo DocDB database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated FerretDB\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
         "tags": [
-          "docdb"
+          "instances"
         ],
         "parameters": [
           {
@@ -233,11 +215,11 @@
         }
       },
       "get": {
-        "operationId": "get_docdb_by_name",
+        "operationId": "get_instances_docdb_by_name",
         "summary": "GetDocDB returns one Hanzo DocDB database's metadata.",
         "description": "GetDocDB returns one Hanzo DocDB database's metadata. It carries the\ndatabase's status, its instance address and the SCRAM user the instance was\nset up with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view.",
         "tags": [
-          "docdb"
+          "instances"
         ],
         "parameters": [
           {
@@ -265,13 +247,13 @@
         }
       }
     },
-    "/v1/kv": {
+    "/v1/instances/kv": {
       "get": {
-        "operationId": "get_kv",
+        "operationId": "get_instances_kv",
         "summary": "ListKV lists the caller org's Hanzo KV stores.",
         "description": "ListKV lists the caller org's Hanzo KV stores. Each one is a DEDICATED Valkey\ninstance the org alone runs, so the host is that instance's own in-cluster\nService and the port is 6379.",
         "tags": [
-          "kv"
+          "instances"
         ],
         "responses": {
           "200": {
@@ -290,11 +272,11 @@
         }
       },
       "post": {
-        "operationId": "post_kv",
+        "operationId": "post_instances_kv",
         "summary": "Provision a key-value store for your org",
         "description": "Launches your org's OWN key-value instance and answers with its `kv://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
         "tags": [
-          "kv"
+          "instances"
         ],
         "requestBody": {
           "content": {
@@ -319,13 +301,13 @@
         }
       }
     },
-    "/v1/kv/{name}": {
+    "/v1/instances/kv/{name}": {
       "delete": {
-        "operationId": "delete_kv_by_name",
+        "operationId": "delete_instances_kv_by_name",
         "summary": "DropKV deprovisions one Hanzo KV store.",
         "description": "DropKV deprovisions one Hanzo KV store. It reverts any app instance bound to\nit back to Base BEFORE tearing down the org's dedicated Valkey instance, then\ndeletes the sealed credential and removes the metadata row. Answers 204 with\nno body; a second call is a 404.",
         "tags": [
-          "kv"
+          "instances"
         ],
         "parameters": [
           {
@@ -346,11 +328,11 @@
         }
       },
       "get": {
-        "operationId": "get_kv_by_name",
+        "operationId": "get_instances_kv_by_name",
         "summary": "GetKV returns one Hanzo KV store's metadata.",
         "description": "GetKV returns one Hanzo KV store's metadata. It carries the store's status,\nits instance address and the Valkey user it authenticates as (\"default\", the\nonly user a requirepass instance has) — never the password. A still-booting\ninstance reads \"provisioning\", reconciled from the operator's live view.",
         "tags": [
-          "kv"
+          "instances"
         ],
         "parameters": [
           {
@@ -378,13 +360,13 @@
         }
       }
     },
-    "/v1/s3": {
+    "/v1/instances/s3": {
       "get": {
-        "operationId": "get_s3",
+        "operationId": "get_instances_s3",
         "summary": "Lists the caller org's object-storage buckets.",
         "description": "Lists the caller org's object-storage buckets. A bucket lives in an\nalready-live shared object store and is reached through the public gateway.\nThe names here are the friendly ones the org provisioned; the physical bucket\nis org-namespaced underneath, which is what keeps two tenants' buckets\ndistinct.",
         "tags": [
-          "s3"
+          "instances"
         ],
         "responses": {
           "200": {
@@ -403,11 +385,11 @@
         }
       },
       "post": {
-        "operationId": "post_s3",
+        "operationId": "post_instances_s3",
         "summary": "Provision an object storage bucket for your org",
         "description": "Creates an S3-compatible bucket inside the already-running shared object store and answers with the endpoint that reaches it.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
         "tags": [
-          "s3"
+          "instances"
         ],
         "requestBody": {
           "content": {
@@ -432,13 +414,13 @@
         }
       }
     },
-    "/v1/s3/{name}": {
+    "/v1/instances/s3/{name}": {
       "delete": {
-        "operationId": "delete_s3_by_name",
+        "operationId": "delete_instances_s3_by_name",
         "summary": "Deletes one bucket from the shared object store and removes its metadata row.",
         "description": "Deletes one bucket from the shared object store and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
-          "s3"
+          "instances"
         ],
         "parameters": [
           {
@@ -459,11 +441,11 @@
         }
       },
       "get": {
-        "operationId": "get_s3_by_name",
+        "operationId": "get_instances_s3_by_name",
         "summary": "Returns one bucket's metadata.",
         "description": "Returns one bucket's metadata. It carries the bucket's status and the\ngateway address it is reached at, and no username: the object store\nauthenticates with a shared, out-of-band key rather than a per-bucket\ncredential.",
         "tags": [
-          "s3"
+          "instances"
         ],
         "parameters": [
           {
@@ -491,13 +473,13 @@
         }
       }
     },
-    "/v1/search": {
+    "/v1/instances/search": {
       "get": {
-        "operationId": "get_search",
+        "operationId": "get_instances_search",
         "summary": "Lists the caller org's search indexes.",
         "description": "Lists the caller org's search indexes. An index is a logical\nresource inside an already-live shared backend, so every one of them is\nreached through the public gateway rather than at an instance of its own.",
         "tags": [
-          "search"
+          "instances"
         ],
         "responses": {
           "200": {
@@ -516,11 +498,11 @@
         }
       },
       "post": {
-        "operationId": "post_search",
+        "operationId": "post_instances_search",
         "summary": "Provision a search index for your org",
         "description": "Creates a search index inside the already-running shared search backend and answers with the endpoint that reaches it.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
         "tags": [
-          "search"
+          "instances"
         ],
         "requestBody": {
           "content": {
@@ -545,13 +527,13 @@
         }
       }
     },
-    "/v1/search/{name}": {
+    "/v1/instances/search/{name}": {
       "delete": {
-        "operationId": "delete_search_by_name",
+        "operationId": "delete_instances_search_by_name",
         "summary": "Deletes one search index from the shared backend and removes its metadata row.",
         "description": "Deletes one search index from the shared backend and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
-          "search"
+          "instances"
         ],
         "parameters": [
           {
@@ -572,11 +554,11 @@
         }
       },
       "get": {
-        "operationId": "get_search_by_name",
+        "operationId": "get_instances_search_by_name",
         "summary": "Returns one search index's metadata.",
         "description": "Returns one search index's metadata. It carries the index's status\nand the gateway address it is reached at, and no username: the backend\nauthenticates with a shared, out-of-band key rather than a per-index\ncredential.",
         "tags": [
-          "search"
+          "instances"
         ],
         "parameters": [
           {
@@ -604,13 +586,13 @@
         }
       }
     },
-    "/v1/sql": {
+    "/v1/instances/sql": {
       "get": {
-        "operationId": "get_sql",
+        "operationId": "get_instances_sql",
         "summary": "ListSQL lists the caller org's Hanzo SQL databases.",
         "description": "ListSQL lists the caller org's Hanzo SQL databases. Each one is a DEDICATED\nPostgreSQL instance the org alone runs, so the host is that instance's own\nin-cluster Service and the port is 5432.",
         "tags": [
-          "sql"
+          "instances"
         ],
         "responses": {
           "200": {
@@ -629,11 +611,11 @@
         }
       },
       "post": {
-        "operationId": "post_sql",
+        "operationId": "post_instances_sql",
         "summary": "Provision a PostgreSQL database for your org",
         "description": "Launches your org's OWN PostgreSQL instance and answers with its `postgres://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
         "tags": [
-          "sql"
+          "instances"
         ],
         "requestBody": {
           "content": {
@@ -658,13 +640,13 @@
         }
       }
     },
-    "/v1/sql/{name}": {
+    "/v1/instances/sql/{name}": {
       "delete": {
-        "operationId": "delete_sql_by_name",
+        "operationId": "delete_instances_sql_by_name",
         "summary": "DropSQL deprovisions one Hanzo SQL database.",
         "description": "DropSQL deprovisions one Hanzo SQL database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated Postgres\ninstance — never a live app pointed at a deleted backend — then deletes the\nsealed credential and removes the metadata row. Answers 204 with no body; a\nsecond call is a 404, not a second delete.",
         "tags": [
-          "sql"
+          "instances"
         ],
         "parameters": [
           {
@@ -685,11 +667,11 @@
         }
       },
       "get": {
-        "operationId": "get_sql_by_name",
+        "operationId": "get_instances_sql_by_name",
         "summary": "GetSQL returns one Hanzo SQL database's metadata.",
         "description": "GetSQL returns one Hanzo SQL database's metadata. It carries the database's\nstatus, its instance address and the admin user Postgres booted with — never\nthe password, which is returned once at create and otherwise lives only in\nHanzo KMS. A still-booting instance reads \"provisioning\", reconciled from the\noperator's live view rather than from the row.",
         "tags": [
-          "sql"
+          "instances"
         ],
         "parameters": [
           {
@@ -717,13 +699,13 @@
         }
       }
     },
-    "/v1/vector": {
+    "/v1/instances/vector": {
       "get": {
-        "operationId": "get_vector",
+        "operationId": "get_instances_vector",
         "summary": "Lists the caller org's vector collections.",
         "description": "Lists the caller org's vector collections. A collection is a\nlogical resource inside an already-live shared backend, so every one of them\nis reached through the public gateway rather than at an instance of its own.",
         "tags": [
-          "vector"
+          "instances"
         ],
         "responses": {
           "200": {
@@ -742,11 +724,11 @@
         }
       },
       "post": {
-        "operationId": "post_vector",
+        "operationId": "post_instances_vector",
         "summary": "Provision a vector collection for your org",
         "description": "Creates a vector collection inside the already-running shared vector backend and answers with the endpoint that reaches it.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
         "tags": [
-          "vector"
+          "instances"
         ],
         "requestBody": {
           "content": {
@@ -771,13 +753,13 @@
         }
       }
     },
-    "/v1/vector/{name}": {
+    "/v1/instances/vector/{name}": {
       "delete": {
-        "operationId": "delete_vector_by_name",
+        "operationId": "delete_instances_vector_by_name",
         "summary": "Deletes one vector collection from the shared backend and removes its metadata row.",
         "description": "Deletes one vector collection from the shared backend and removes\nits metadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
-          "vector"
+          "instances"
         ],
         "parameters": [
           {
@@ -798,11 +780,11 @@
         }
       },
       "get": {
-        "operationId": "get_vector_by_name",
+        "operationId": "get_instances_vector_by_name",
         "summary": "Returns one vector collection's metadata.",
         "description": "Returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report.",
         "tags": [
-          "vector"
+          "instances"
         ],
         "parameters": [
           {

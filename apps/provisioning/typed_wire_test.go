@@ -67,7 +67,7 @@ const denyReason = "the pre-provision balance gate answers 402/503 through cloud
 
 func init() {
 	for _, kind := range kinds {
-		untypedByDesign["POST /v1/"+kind] = denyReason
+		untypedByDesign["POST /v1/instances/"+kind] = denyReason
 	}
 }
 
@@ -254,20 +254,20 @@ func TestTheCreatesStillDeclareTheirBodies(t *testing.T) {
 		t.Fatalf("spec: %v", err)
 	}
 	for _, kind := range kinds {
-		op := doc.Paths["/v1/"+kind]["post"]
+		op := doc.Paths["/v1/instances/"+kind]["post"]
 		if op == nil {
-			t.Fatalf("POST /v1/%s is not in the document at all", kind)
+			t.Fatalf("POST /v1/instances/%s is not in the document at all", kind)
 		}
 		// RequestBody is `any` on the shared Operation — the untyped seam and the
 		// typed fold produce different (JSON-identical) shapes — so assert on the
 		// one Register builds.
 		rb, ok := op.RequestBody.(*openapi.RequestBody)
 		if !ok {
-			t.Errorf("POST /v1/%s publishes no request body (%T) — an SDK caller has nowhere to put the name", kind, op.RequestBody)
+			t.Errorf("POST /v1/instances/%s publishes no request body (%T) — an SDK caller has nowhere to put the name", kind, op.RequestBody)
 			continue
 		}
 		if _, ok := rb.Content["application/json"]; !ok {
-			t.Errorf("POST /v1/%s request body is not application/json", kind)
+			t.Errorf("POST /v1/instances/%s request body is not application/json", kind)
 		}
 	}
 	for _, name := range []string{"provisionRequest", "provisionResult"} {
