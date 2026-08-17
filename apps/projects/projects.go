@@ -413,13 +413,23 @@ func init() {
 		"configured (503); an archive that does not walk is a 400 and one over the size cap is a " +
 		"413."
 
-	// Both live archive addresses, spelled out per surface rather than looped —
-	// the same rule routes() follows, so a reader grepping either literal path
-	// finds the declaration that governs it. Register states the two facts the
-	// router cannot: the body is BYTES (openapi.Binary — the declaration no Go
-	// struct can make) and the answer is a deployment.
+	// EVERY live archive address, spelled out per surface rather than looped — the
+	// same rule routes() follows, so a reader grepping any literal path finds the
+	// declaration that governs it. Register states the two facts the router cannot:
+	// the body is BYTES (openapi.Binary — the declaration no Go struct can make)
+	// and the answer is a deployment.
+	//
+	// There are three, and one of them was missing. routes() posts this handler at
+	// three addresses; a surface declared on the wire and not here reaches the
+	// document with nothing to say about itself, which is what `describe` refuses —
+	// so the omission stopped the whole fleet's document from regenerating rather
+	// than costing one route its sentence.
 	openapi.Register("/v1/projects/:slug/deploy", http.MethodPost, openapi.Binary{}, projectsDeployment{})
 	openapi.Describe("/v1/projects/:slug/deploy", http.MethodPost,
+		"Upload a built site as one archive and serve it", archiveProse)
+
+	openapi.Register("/v1/sites/:slug/deploy", http.MethodPost, openapi.Binary{}, projectsDeployment{})
+	openapi.Describe("/v1/sites/:slug/deploy", http.MethodPost,
 		"Upload a built site as one archive and serve it", archiveProse)
 
 	openapi.Register("/v1/platform/sites/:slug/deploy", http.MethodPost, openapi.Binary{}, projectsDeployment{})
