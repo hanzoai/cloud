@@ -295,9 +295,21 @@ func StampClientIP(c *zip.Ctx) error {
 	// the address was not resolvable HERE, which is a different fault from a child
 	// that never received the header at all.
 	//
-	// Debug because it is per-request and says nothing a healthy system needs; if it
-	// is ever too loud that is a level to change, not a line to delete.
+	// ONCE AT INFO, then per-request at debug.
+	//
+	// The once is not a nicety, it is the whole point: this deployment emits no debug
+	// at all — measured, 0 debug lines in 8000 — and reads no level knob, so a
+	// debug-only line is not quiet, it is invisible, and shipping one would have cost
+	// another release to learn nothing. One info line per process says what this host
+	// computes for a caller, which is the fact that has been unavailable all day, and
+	// one line per pod lifetime is not noise.
+	//
+	// The per-request line stays at debug for whoever turns it on.
 	if log := c.Log(); log != nil {
+		first.Do(func() {
+			log.Info("client address stamped for another process (first of this process)",
+				"addr", addr, "empty", addr == "", "header", ClientIPHeader)
+		})
 		log.Debug("client address stamped for another process",
 			"addr", addr,
 			"empty", addr == "",
@@ -306,6 +318,10 @@ func StampClientIP(c *zip.Ctx) error {
 	}
 	return c.Continue()
 }
+
+// first bounds the info line to one per process. A per-request info line on the
+// busiest path in the fleet is how an observability line becomes an outage.
+var first sync.Once
 
 // ClientIPAcross reads the address back inside a child. Subsystems install it rather
 // than deriving an address of their own.
