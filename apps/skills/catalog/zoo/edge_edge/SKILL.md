@@ -1,12 +1,12 @@
 ---
-name: health_health
+name: edge_edge
 version: "8.0.0"
-description: "Read health health: Check if the system is live."
+description: "Read edge edge: health reports whether a publish reaches readers, rather than whether it was accepted.."
 ---
 
-# Zoo · HEALTH · health
+# Zoo · EDGE · edge
 
-Read-only Zoo capability derived from the `health` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `edge` OpenAPI service. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,16 +14,16 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/health` — Check if the system is live
+- `GET https://api.zoo.ngo/v1/edge` — health reports whether a publish reaches readers, rather than whether it was accepted.
 
 ## Response
 
-- `/v1/health` → JSON body.
+- `/v1/edge` → `edgeState` object with fields: `configured`, `error`, `freshness`, `policy`, `provider`, `status`.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/v1/health" \
+curl -sS "https://api.zoo.ngo/v1/edge" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
