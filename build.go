@@ -1164,10 +1164,14 @@ func MountMetrics(app Router, deps Deps) error {
 	if a == nil {
 		return fmt.Errorf("metrics: router is not a zip app")
 	}
-	return metrics.Mount(a, metrics.Deps{
+	if err := metrics.Mount(a, metrics.Deps{
 		Logger: luxlog.Default(), DataDir: deps.DataDir, Brand: deps.Brand,
 		Org: principal.Org,
-	})
+	}); err != nil {
+		return err
+	}
+	describeMetrics()
+	return nil
 }
 
 // The prose for the operations this repo PUBLISHES but does not REGISTER.
@@ -1182,15 +1186,15 @@ func MountMetrics(app Router, deps Deps) error {
 //     depends on the three things it uses). Importing hanzoai/cloud to describe
 //     itself would give that up to buy prose.
 //
-// hanzoai/licensing USED to be the second case: its Mount registered one untyped
-// wildcard, app.All("/v1/licensing/*"), so its prose had to be declared here. At
-// v0.1.10 it types its own ops instead — app.Group("/v1/licensing") with
-// zip.Post(g, "/issue", ...) and siblings — and a typed op carries its prose in the
-// handler's doc comment, which zipdoc lifts. The seven wildcard descriptions that
-// lived here now name no operation at all, so they render nowhere while reading, in
-// this file, as though they had landed. They are deleted with the route they
-// described; the surface gate is what noticed.
-func init() {
+// hanzoai/licensing is no longer such a case: since v0.1.10 it types its own ops,
+// and a typed op carries its prose in the handler's doc comment, which zipdoc lifts.
+//
+// Called from MountMetrics, never from init: prose keyed to an address is only
+// true of a document that also carries the route, and every app in this repo links
+// this package while only one mounts these eleven. Registered at init, the other
+// apps' documents each grew eleven descriptions naming nothing — which is the one
+// thing the surface gate refuses, so no app document could be generated at all.
+func describeMetrics() {
 	// ── metrics: one native store, three signals ──────────────────────────────
 	//
 	// The tenancy rule is repeated on each operation on purpose: each description
@@ -1329,14 +1333,6 @@ func init() {
 			"take a slot against `limit`. Assembling one trace is /v1/traces/trace. The tenant is "+
 			"the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then "+
 			"`default`.")
-
-	// ── licensing: one wildcard route, seven published methods, two served ────
-	//
-	// app.All publishes the subtree under every method; the net/http mux behind it
-	// registers GET and POST only. That gap is the fact a reader would otherwise
-	// get wrong, so each of the five unserved methods says so in its own words
-	// rather than leaving the operation bare.
-
 }
 
 // App describes one subsystem to mount. There is NO Order field: the slice
