@@ -682,9 +682,38 @@ jobs:
           echo "built=$BUILT" >> "$GITHUB_OUTPUT"
           echo "highest seen v$LAST (registry + git tags) -> v$NEXT, claimed at ${SHA} (document sha256:$SPEC_SHA)"
 
-      - uses: docker/setup-buildx-action@v3
+      # A NAMED, PERSISTENT builder — this is what makes the build incremental.
+      #
+      # The action was creating an anonymous docker-container builder on every
+      # run. The Dockerfile is written for incremental compilation — cache mounts
+      # on /go/pkg/mod and /root/.cache/go-build, ids and all — but those mounts
+      # live INSIDE the builder, so a fresh container starts with both empty and
+      # all 121 plugin binaries recompile from source. "13-26 min cold" is that,
+      # every push: cold because the cache was discarded, not because it is a
+      # large tree.
+      #
+      # These runners are self-hosted, so the daemon outlives the job and a named
+      # builder is still there next time. Same driver, same network opt, one name.
+      #
+      # Reused by hand rather than through the action's `name:` because create is
+      # not idempotent — `buildx create` on an existing name errors, and this must
+      # never be the step that breaks a release. Inspect first, create only if
+      # absent, and if anything here fails fall back to the anonymous builder,
+      # which is exactly today's behaviour: slow, never broken.
+      - name: Reuse the persistent builder, so the Go caches survive between runs
         if: steps.ver.outputs.built == '0'
-        with: { driver: docker-container, driver-opts: network=host }
+        run: |
+          set -uo pipefail
+          if ! docker buildx inspect cloud-cache >/dev/null 2>&1; then
+            docker buildx create --name cloud-cache \
+              --driver docker-container --driver-opt network=host >/dev/null 2>&1 || true
+          fi
+          if docker buildx use cloud-cache 2>/dev/null && docker buildx inspect --bootstrap cloud-cache >/dev/null 2>&1; then
+            echo "builder: cloud-cache (warm; Go module and build caches preserved)"
+          else
+            echo "::warning::persistent builder unavailable — falling back to a fresh one, this build is cold"
+            docker buildx create --use --driver docker-container --driver-opt network=host >/dev/null
+          fi
 
       - uses: docker/build-push-action@v6
         if: steps.ver.outputs.built == '0'
