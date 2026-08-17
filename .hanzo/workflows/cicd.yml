@@ -453,6 +453,13 @@ jobs:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
 
+      # For cmd/lineage, which the claim below runs. That command imports nothing
+      # outside this module and the standard library, so it needs no module cache
+      # and no private-module credential — only a toolchain.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -487,6 +494,28 @@ jobs:
         run: |
           set -euo pipefail
           [ -n "${SHA:-}" ] || { echo "::error::no commit sha — refusing to claim a version for an unknown commit"; exit 1; }
+
+          # WHICH COMMIT MAY HOLD THIS NUMBER. The sequence counts along ONE branch
+          # of ONE repository — the same one the claim below writes to — so a number
+          # only means something for a commit on it: v1.801.551 says "the release
+          # after v1.801.550", and that ordering exists nowhere else.
+          #
+          # The question goes to that repository and is answered from the commit
+          # graph, never from a name. This runner's checkout, its remotes and this
+          # workflow's own file are all things that can be pointed somewhere else,
+          # and every one of them is a name; reachability is a property of the
+          # objects, so it is the only thing worth asking. cmd/lineage asks it —
+          # the same code the in-cloud release path calls, so the two cannot come
+          # to disagree about which history numbers this sequence.
+          #
+          # It runs BEFORE the compare-and-swap below, so a commit that cannot hold
+          # a number never takes one: no tag, not even the inert hole an abandoned
+          # build leaves.
+          if ! LINE=$(go run ./cmd/lineage "$SHA" 2>&1); then
+            echo "::error::${LINE}"
+            exit 1
+          fi
+          echo "$LINE"
 
           # THE DIGEST OF THE DOCUMENT, computed here and carried by every car
           # below. This is the coupler: a projection generated from any other
