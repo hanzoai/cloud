@@ -284,9 +284,44 @@ const ClientIPHeader = "X-Hanzo-Client-Ip"
 // plugin mounts never reaches them — the same rule that makes composition order
 // harmless one level down makes it load-bearing here.
 func StampClientIP(c *zip.Ctx) error {
-	c.Fiber().Request().Header.Set(ClientIPHeader, ClientIP(c))
+	addr := ClientIP(c)
+	c.Fiber().Request().Header.Set(ClientIPHeader, addr)
+	// WHAT A SUBSYSTEM IN ANOTHER PROCESS WILL READ AS THE CALLER, said out loud.
+	//
+	// Kept, not a probe. Five separate times this estate could not answer "what did
+	// that header carry" without a release, and each time the answer was inferred and
+	// each inference was wrong at the rung that ships. One line answers it for the
+	// next reader too, and the empty case is the interesting one: an empty stamp means
+	// the address was not resolvable HERE, which is a different fault from a child
+	// that never received the header at all.
+	//
+	// ONCE AT INFO, then per-request at debug.
+	//
+	// The once is not a nicety, it is the whole point: this deployment emits no debug
+	// at all — measured, 0 debug lines in 8000 — and reads no level knob, so a
+	// debug-only line is not quiet, it is invisible, and shipping one would have cost
+	// another release to learn nothing. One info line per process says what this host
+	// computes for a caller, which is the fact that has been unavailable all day, and
+	// one line per pod lifetime is not noise.
+	//
+	// The per-request line stays at debug for whoever turns it on.
+	if log := c.Log(); log != nil {
+		first.Do(func() {
+			log.Info("client address stamped for another process (first of this process)",
+				"addr", addr, "empty", addr == "", "header", ClientIPHeader)
+		})
+		log.Debug("client address stamped for another process",
+			"addr", addr,
+			"empty", addr == "",
+			"header", ClientIPHeader,
+			"path", string(c.Fiber().Request().URI().Path()))
+	}
 	return c.Continue()
 }
+
+// first bounds the info line to one per process. A per-request info line on the
+// busiest path in the fleet is how an observability line becomes an outage.
+var first sync.Once
 
 // ClientIPAcross reads the address back inside a child. Subsystems install it rather
 // than deriving an address of their own.
