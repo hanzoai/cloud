@@ -40,6 +40,16 @@ type Edge interface {
 	// purge is a no-op and content is live only after its TTL.
 	Configured() bool
 
+	// Reach is the apexes this edge invalidates, by name.
+	//
+	// Config, never discovered state: a report that had to resolve zones would
+	// make a status call spend a provider round-trip, and the question an operator
+	// actually has is "will a publish reach hanzo.ai" — which the configuration
+	// answers before anything is looked up. It is the fact that was missing when a
+	// purge returned 200 for hours while a first-party host served stale bytes,
+	// because nothing anywhere said which zones the purge covered.
+	Reach() []string
+
 	// EnsureVerbatim makes the edge serve our documents byte-for-byte, correcting
 	// it if it does not. A CDN that "optimises" HTML — minifying it, rewriting
 	// links, injecting a loader script — is serving something we did not build,
@@ -64,6 +74,7 @@ type Edge interface {
 type NoEdge struct{}
 
 func (NoEdge) Name() string                               { return "none" }
+func (NoEdge) Reach() []string                            { return nil }
 func (NoEdge) PurgeTags(context.Context, ...string) error { return nil }
 func (NoEdge) Configured() bool                           { return false }
 func (NoEdge) EnsureVerbatim(context.Context)             {}
