@@ -570,20 +570,32 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(r, "/v1/sites/:slug/releases", o.listReleases)
 	zip.Post(r, "/v1/sites/:slug/releases/:release/activate", o.activateRelease)
 
-	// /v1/platform/sites — the PaaS static-site surface. Static sites are the
-	// S3-backed part of the platform (container apps live at /v1/platform/projects,
-	// clients/platform); this is the SAME engine as /v1/projects, exposed under the
-	// platform namespace so a user's one flow is: create a site → upload a zip (or
-	// tar.gz) → bind a custom domain → live. Org/project scope is the IAM-minted
-	// X-Org-Id, exactly as the /v1/projects surface. hanzo.app's upload UI posts a
-	// zip to POST /v1/platform/sites/:slug/deploy.
+	// /v1/platform/sites — the PaaS static-site surface, and the third name for one
+	// thing. Same engine as /v1/projects: every handler below is the identical
+	// function bound at a second address, exposed under the platform namespace so a
+	// user's one flow reads create → upload → bind a domain → live.
+	//
+	// NO KNOWN CALLER, measured rather than assumed. Nothing in the workspace
+	// references it outside this repo, and inside this repo the only mentions are
+	// this router, the generated zipdoc, the tests, and two comments. It stays
+	// because it is published in plugin/projects/openapi.json, so SDK methods exist
+	// for it and an unknown client may hold one — removing it is a deprecation with
+	// callers, not a refactor.
+	//
+	// The sentence that used to end this paragraph — "hanzo.app's upload UI posts a
+	// zip to POST /v1/platform/sites/:slug/deploy" — was FALSE. hanzo.app proxies
+	// /v1/projects verbatim through a BFF (app/v1/projects/[[...path]]/route.ts,
+	// whose own header documents POST /v1/projects/:slug/deploy) and the string
+	// "platform/sites" appears nowhere in that repo. A comment naming a consumer is
+	// the kind that outlives the consumer, and this one was the sole evidence that
+	// this surface had a user at all.
 	zip.Post(r, "/v1/platform/sites", o.create, zip.WithStatus(http.StatusCreated))
 	zip.Get(r, "/v1/platform/sites", o.list)
 	zip.Get(r, "/v1/platform/sites/:slug", o.get)
 	zip.Patch(r, "/v1/platform/sites/:slug", o.update)
 	zip.Delete(r, "/v1/platform/sites/:slug", o.del, zip.WithStatus(http.StatusNoContent))
 	// The same polymorphic wire, refused for the same reason as its /v1/projects
-	// twin — and this is the surface hanzo.app's upload UI actually posts zips to.
+	// twin, which is the address hanzo.app actually posts zips to.
 	app.Post("/v1/platform/sites/:slug/deploy", cloud.Handle(s, deploy))
 	zip.Post(r, "/v1/platform/sites/:slug/purge", o.purge)
 	zip.Post(r, "/v1/platform/sites/:slug/deployments", o.startDeployment, zip.WithStatus(http.StatusAccepted))
