@@ -1,12 +1,12 @@
 ---
-name: health_health
+name: benchmark_history
 version: "8.0.0"
-description: "Read health health: Check if the system is live."
+description: "Read benchmark history: Returns each model's measured score per run over time, oldest first, with the change between runs.."
 ---
 
-# Zoo · HEALTH · health
+# Zoo · BENCHMARK · history
 
-Read-only Zoo capability derived from the `health` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `benchmark` OpenAPI service. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,16 +14,23 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/health` — Check if the system is live
+- `GET https://api.zoo.ngo/v1/benchmark/history` — Returns each model's measured score per run over time, oldest first, with the change between runs.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+|---|---|---|---|---|
+| `Benchmark` | query | no | string | Benchmark is the catalog id to read, defaulting to gpqa_diamond. |
+| `Model` | query | no | string | Model filters to one model. Empty returns every model measured. |
 
 ## Response
 
-- `/v1/health` → JSON body.
+- `/v1/benchmark/history` → `historyOut` object with fields: `benchmark`, `data`, `total`.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/v1/health" \
+curl -sS "https://api.zoo.ngo/v1/benchmark/history" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

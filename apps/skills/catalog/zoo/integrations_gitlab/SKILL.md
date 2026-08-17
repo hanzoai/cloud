@@ -1,12 +1,12 @@
 ---
-name: health_health
+name: integrations_gitlab
 version: "8.0.0"
-description: "Read health health: Check if the system is live."
+description: "Read integrations gitlab: Lists the projects the org's GitLab connection can reach — membership projects, most recently active first.."
 ---
 
-# Zoo · HEALTH · health
+# Zoo · INTEGRATIONS · gitlab
 
-Read-only Zoo capability derived from the `health` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `integrations` OpenAPI service. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,16 +14,16 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/health` — Check if the system is live
+- `GET https://api.zoo.ngo/v1/integrations/gitlab/projects` — Lists the projects the org's GitLab connection can reach — membership projects, most recently active first.
 
 ## Response
 
-- `/v1/health` → JSON body.
+- `/v1/integrations/gitlab/projects` → `gitlabProjectsOut` object with fields: `account`, `projects`.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/v1/health" \
+curl -sS "https://api.zoo.ngo/v1/integrations/gitlab/projects" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
