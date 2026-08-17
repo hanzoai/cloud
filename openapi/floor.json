@@ -1,6 +1,6 @@
 {
-  "paths": 1829,
-  "operations": 2496,
+  "paths": 1826,
+  "operations": 2493,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -84,8 +84,6 @@
     "framework": 19,
     "functions": 11,
     "gateway": 3,
-    "generate-text-to-speech-audio": 1,
-    "generate-text-to-speech-audio-stream": 1,
     "git": 40,
     "git-webhook": 1,
     "gpus": 2,
@@ -134,7 +132,6 @@
     "plugins": 4,
     "prefs": 2,
     "pricing": 25,
-    "process-speech-to-text": 1,
     "projects": 16,
     "prompts": 6,
     "pubsub": 18,
