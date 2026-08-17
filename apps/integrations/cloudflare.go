@@ -232,7 +232,15 @@ const (
 
 // cloudflareOAuthScopes is the consent scope set — the OAuth-flow spelling of the
 // same DNS/zone/pages access the apikey token path requests.
-var cloudflareOAuthScopes = []string{"dns_records:edit", "zone:read", "pages:edit"}
+//
+// cache_purge:edit is here for the same reason Zone:Cache Purge is in the apikey
+// set: the edge in front of every published site invalidates by cache-tag on
+// deploy, and a token that cannot purge turns every release into stale-until-TTL.
+// It has to be in BOTH lists because nothing downstream knows which path minted
+// the token — that is the point of sealing them to one KMS coordinate — so a
+// capability present in one spelling and absent from the other is a connection
+// that works or does not depending on which button someone pressed.
+var cloudflareOAuthScopes = []string{"dns_records:edit", "zone:read", "pages:edit", "cache_purge:edit"}
 
 // cfOAuthBase is Cloudflare's OAuth2 origin (…/auth authorize + …/token exchange).
 // Overridable via CLOUDFLARE_OAUTH_BASE for tests and CF-compatible endpoints; read
