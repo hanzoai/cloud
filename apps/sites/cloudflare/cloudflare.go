@@ -54,7 +54,8 @@ type Edge struct {
 	ceiling int           // max API calls per minute, process-wide
 
 	zoneMu    sync.Mutex
-	zoneTried bool // one discovery attempt per process
+	zoneTried bool     // one discovery attempt per process
+	zoneIDs   []string // every zone a purge must reach, discovered once
 
 	mu       sync.Mutex
 	pending  map[string]*purgeState
@@ -268,16 +269,34 @@ func (p *Edge) call(ctx context.Context, tags []string) error {
 			"tags", tags, "perMinute", p.ceiling)
 		return nil
 	}
-	payload, err := json.Marshal(map[string]any{"tags": tags})
-	if err != nil {
-		return fmt.Errorf("cf purge: marshal: %w", err)
-	}
-	zone := p.zone(ctx)
-	if zone == "" {
+	zones := p.zones(ctx)
+	if len(zones) == 0 {
 		// Discovery already said why, at Warn. Refusing here rather than POSTing
 		// to /zones//purge_cache, which Cloudflare answers as a 404 that reads
 		// like the tag was wrong.
 		return nil
+	}
+	// One call per zone. A site is reachable on the site-plane apex AND the
+	// first-party apex, and a tag purged in one zone means nothing in the other —
+	// which is exactly how a 200 came back while both public hosts kept serving
+	// what they had. A zone that refuses does not stop the rest: partial
+	// invalidation beats none, and the failure is returned so the caller logs it.
+	var firstErr error
+	for _, zone := range zones {
+		if err := p.purgeZone(ctx, zone, tags); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// purgeZone is the single-zone call, unchanged apart from taking the zone it
+// acts on. Split out so the fan-out above reads as a loop over zones rather than
+// as a rewrite of the request.
+func (p *Edge) purgeZone(ctx context.Context, zone string, tags []string) error {
+	payload, err := json.Marshal(map[string]any{"tags": tags})
+	if err != nil {
+		return fmt.Errorf("cf purge: marshal: %w", err)
 	}
 	url := strings.TrimRight(p.api, "/") + "/zones/" + zone + "/purge_cache"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
