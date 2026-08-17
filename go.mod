@@ -16,7 +16,7 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.3.2
 	github.com/hanzoai/cek v0.2.7
-	github.com/hanzoai/commerce v1.50.50
+	github.com/hanzoai/commerce v1.50.51
 	github.com/hanzoai/dataroom v1.1.7
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
@@ -441,7 +441,7 @@ require (
 	github.com/hanzoai/go-openrouter v1.0.0 // indirect
 	github.com/hanzoai/goauthorizenet v1.0.0 // indirect
 	github.com/hanzoai/gochimp3 v1.0.0 // indirect
-	github.com/hanzoai/orm v0.6.25
+	github.com/hanzoai/orm v0.6.26
 	github.com/hanzoai/pdf v1.2.0 // indirect
 	github.com/hanzoai/pubsub-go v1.53.0
 	github.com/hanzoai/search-go v0.36.0 // indirect
