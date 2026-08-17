@@ -4028,10 +4028,14 @@ beside `UNIVERSE_PIN_TOKEN`. Until it exists the fanout car fails loudly and
 names it; that is deliberate — a release that quietly skips its projections is
 the failure this train was built to end.
 
-The image and its `v*` tags used to have a different owner, `apps/platform/release.go`:
-compute the next version → build → SMOKE the pushed image → tag → roll out. The
-tag is still a RECEIPT for a proven image; what moved is where the receipt is
-minted.
+The image and its `v*` tags have ONE owner, the `image` job of
+`.hanzo/workflows/cicd.yml`: claim the next version → build → SMOKE the pushed
+image → verify the claim → roll out. cloud once published itself as well, reading
+and writing a DIFFERENT repository's tags to do it, so one sequence was numbered by
+two registers; that lane is gone. A version is allocated by the compare-and-swap
+that creates `refs/tags/v<N>` on the repository whose branch orders the sequence,
+and `internal/lineage` refuses the claim for any commit that branch has never
+been.
 
 The final step has ONE writer, and for a first-party service it is **universe git,
 not the cluster**. `clients/paas.releaseService` REFUSES to patch the operator

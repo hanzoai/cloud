@@ -1179,7 +1179,6 @@ const (
 	// the build cache, and for the same reason: a recipe that loops is bounded
 	// by this or by the node.
 	artifactWorkspaceLimit = "50Gi"
-
 )
 
 // buildPushSecretPrefix + buildPushSecret select the PER-ORG push credential a
