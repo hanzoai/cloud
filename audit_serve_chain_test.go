@@ -16,6 +16,8 @@ package cloud
 
 import (
 	"testing"
+
+	"github.com/hanzoai/cloud/audit"
 )
 
 // TestAuditChainIsPerProcess pins the one-writer rule for the audit chain.
@@ -44,8 +46,8 @@ func TestAuditChainIsPerProcess(t *testing.T) {
 		{"visor", "audit-visor"},
 	} {
 		t.Run(tc.proc, func(t *testing.T) {
-			if got := auditName(tc.proc); got != tc.want {
-				t.Fatalf("auditName(%q) = %q, want %q", tc.proc, got, tc.want)
+			if got := audit.Name(tc.proc); got != tc.want {
+				t.Fatalf("audit.Name(%q) = %q, want %q", tc.proc, got, tc.want)
 			}
 		})
 	}
@@ -53,7 +55,7 @@ func TestAuditChainIsPerProcess(t *testing.T) {
 	// The property that actually matters: distinct processes never collide.
 	seen := map[string]string{}
 	for _, p := range []string{"cloud", "tasks", "integrations", "visor", "commerce", "iam"} {
-		n := auditName(p)
+		n := audit.Name(p)
 		if prev, dup := seen[n]; dup {
 			t.Fatalf("processes %q and %q share audit chain %q — two writers on one hash chain", prev, p, n)
 		}
