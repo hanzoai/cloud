@@ -104,6 +104,60 @@ func TestEveryBoundMerchantLeafIsRoutedToCommerce(t *testing.T) {
 	}
 }
 
+// TestEveryClaimedMerchantLeafIsServed is the other direction, and it is the one
+// that was missing.
+//
+// The test above catches a leaf commerce SERVES that the host does not route —
+// the caller gets ai's 404. This catches a leaf the host ROUTES that commerce
+// does not serve, which fails the same way from outside and is harder to see:
+// the host hands the path to commerce, commerce has no handler, and the 404 that
+// comes back is commerce's. Measured live: /v1/commerce/tenant answered 404 while
+// /v1/commerce/org answered 200, because commerce deleted its tenant registry
+// ("the IAM org is the org") and the manifest kept claiming the path after the
+// handler went. A claim is not free — it is the host promising a subsystem will
+// answer.
+//
+// The two exemptions are CHECKED, not assumed. Both are served by a commerce
+// bundle other than the merchant resources leaf, so boundLeaves cannot see them:
+// catalog is the public storefront read wired by commerce's own setupRoutes, and
+// currencies is api/currency's PublicRoute. An entry added here without that
+// check turns this guard into a rubber stamp for the exact stale claim it exists
+// to catch.
+func TestEveryClaimedMerchantLeafIsServed(t *testing.T) {
+	servedElsewhere := map[string]bool{
+		"catalog":    true,
+		"currencies": true,
+	}
+
+	bound := map[string]bool{}
+	for _, leaf := range boundLeaves(t) {
+		bound[leaf] = true
+	}
+
+	checked := 0
+	for _, p := range manifest.PrefixesFor("commerce") {
+		leaf, ok := strings.CutPrefix(p, "/v1/commerce/")
+		if !ok || leaf == "" || strings.Contains(leaf, "/") {
+			continue // the stem itself, or a deeper address this leaf does not own
+		}
+		checked++
+		if bound[leaf] || servedElsewhere[leaf] {
+			continue
+		}
+		t.Errorf("%s is named on commerce's manifest row and NOTHING in this binary serves it — "+
+			"the host routes the path to commerce and commerce 404s it, which from outside is "+
+			"indistinguishable from a route that was never built. Drop it from the commerce row "+
+			"in manifest/apps.go, or name the bundle that serves it here.", p)
+	}
+
+	// Without this the loop above passes vacuously the day PrefixesFor changes
+	// shape — which is how the first version of the sibling guard reported
+	// fourteen routes checked while skipping the one it was written for.
+	if checked == 0 {
+		t.Fatal("no /v1/commerce/<leaf> prefixes were checked — this guard measured nothing")
+	}
+}
+
 // TestOneKindRegistersOnce pins the rule that makes this leaf load-bearing: an
 // address may be DECLARED once, and a second declaration is refused at boot.
 //

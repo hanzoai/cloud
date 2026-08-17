@@ -74,7 +74,7 @@ func init() {
 // this file opens for the store/catalog/plan bundle as a claim on ALL of /v1 and
 // hand commerce every request in the fleet. Same list, one owner, stated once.
 var Prefixes = []string{
-	"/v1/commerce", // public checkout + tenant + catalog + deposits
+	"/v1/commerce", // public checkout + org + catalog + deposits
 	"/_/commerce",  // tenant-admin surface
 	// The BARE store surface: GET /v1/store/current (the org-scoped default
 	// store the admin dashboard AND the content storefront edge resolve), the
