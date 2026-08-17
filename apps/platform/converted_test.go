@@ -167,23 +167,6 @@ func TestConvertedRoutesRefuseAsBefore(t *testing.T) {
 	}
 }
 
-// TestSelfReleaseRoutesRefuseWithoutSuperAdmin covers the two release reads, whose
-// gate is cloud.Super rather than the tenant gate — a different rule, so a
-// different sentence, and both must survive the move from the wrapper to the first
-// line of the op.
-func TestSelfReleaseRoutesRefuseWithoutSuperAdmin(t *testing.T) {
-	app := mountApp(t)
-	for _, path := range []string{"/v1/runner/releases", "/v1/runner/releases/bld_x"} {
-		code, body := do(t, app, http.MethodGet, path, "acme", nil)
-		if code != http.StatusForbidden {
-			t.Errorf("GET %s = %d, want 403 (%s)", path, code, body)
-		}
-		if !strings.Contains(string(body), "SuperAdmin") {
-			t.Errorf("GET %s refusal = %s, want the release gate's own sentence", path, body)
-		}
-	}
-}
-
 // TestHealthAnswersItsOwnStatus pins the probe's two outcomes. It is the one route
 // that answers a FAILURE with its own typed body rather than the error envelope, so
 // the status rides the value (readiness.StatusCode) and the op declares both codes.

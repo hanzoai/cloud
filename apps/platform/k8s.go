@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -1181,13 +1180,6 @@ const (
 	// by this or by the node.
 	artifactWorkspaceLimit = "50Gi"
 
-	// smokeDataLimit bounds the smoke job's /data. This one is scratch for a
-	// single 120s boot test — a fresh SQLite and whatever the image writes at
-	// startup — so it is small on purpose. It is capped anyway because the
-	// failure mode is not this pod's: an image that loops writing on boot would
-	// fill the runner's rootfs and evict its NEIGHBOURS while staying well
-	// inside its own resource limits.
-	smokeDataLimit = "10Gi"
 )
 
 // buildPushSecretPrefix + buildPushSecret select the PER-ORG push credential a
@@ -1457,13 +1449,8 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, im
 	return jobName, nil
 }
 
-// jobPollInterval is how often waitForJob re-reads a Job's terminal state, and
-// smokeJobDeadline bounds one smoke boot (a healthy boot is ~1-2s; the ceiling only
-// guards a cold image pull on the node).
-const (
-	jobPollInterval  = 5 * time.Second
-	smokeJobDeadline = 5 * time.Minute
-)
+// jobPollInterval is how often waitForJob re-reads a Job's terminal state.
+const jobPollInterval = 5 * time.Second
 
 // waitForJob blocks until a Job reaches a terminal state (succeeded → nil, failed →
 // error) or deadline elapses, reading the SAME jobResult the build reconciler uses —
@@ -1489,108 +1476,6 @@ func (k *k8sClient) waitForJob(ctx context.Context, jobName string, deadline tim
 		case <-t.C:
 		}
 	}
-}
-
-// smokeScript boots the built image's /cloud entrypoint in the background and
-// asserts it reaches "zip listening" with no startup-crash signature — the in-container
-// mirror of release.yml's docker-run smoke. It exits 0 (Job succeeds) only on a
-// clean boot; 1 (Job fails) on any crash signature, a missing "listening" line, or a
-// process that died after logging it. backoffLimit 0 + restartPolicy Never make the
-// Job's terminal state the smoke verdict, read by waitForJob/jobResult.
-// smokeBootSeconds is the window the script waits for "zip listening", and it is
-// spent TWICE: once by the loop below, and once by the Job's activeDeadlineSeconds.
-// Those were two constants — 180 here, 120 there — so kubelet killed the pod a
-// minute before the script had finished waiting, and every boot landing in that
-// gap was reported as "never reached listening" by a script that never got to
-// say so. The contract test asserts the SCRIPT's window and passed throughout,
-// because the ceiling that actually applied was not in the script.
-//
-// One number, and the deadline derives from it with slack for scheduling and the
-// image pull, which happen before the script starts and are not part of the boot
-// this is measuring.
-const smokeBootSeconds = 180
-
-var smokeScript = `set -u
-/cloud >/tmp/boot.log 2>&1 &
-pid=$!
-listening=0
-for _ in $(seq 1 ` + strconv.Itoa(smokeBootSeconds) + `); do
-  if grep -q '"message":"zip listening"' /tmp/boot.log 2>/dev/null; then listening=1; break; fi
-  kill -0 "$pid" 2>/dev/null || break
-  sleep 1
-done
-cat /tmp/boot.log
-if grep -Eiq 'metrics\.Mount|mount metrics|panic|want \*zip\.App' /tmp/boot.log; then echo 'SMOKE FAIL: startup-crash signature'; exit 1; fi
-if [ "$listening" -ne 1 ]; then echo 'SMOKE FAIL: never reached listening'; exit 1; fi
-kill -0 "$pid" 2>/dev/null || { echo 'SMOKE FAIL: exited after listening'; exit 1; }
-echo 'SMOKE PASS'
-`
-
-// launchSmokeJob boots image as an in-cluster Job that runs smokeScript — the native
-// mirror of release.yml's smoke gate. kmsKey is a throwaway 32-byte master key so the
-// KMS plane mounts on its normal ready path (no real secret) and the boot reaches
-// "listening" exactly as prod does. buildID is the idempotency key (a retry collides
-// on the Job name rather than spawning a duplicate). Returns the Job name to wait on.
-func (k *k8sClient) launchSmokeJob(ctx context.Context, image, kmsKey, buildID string) (string, error) {
-	if err := k.ready(); err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(image) == "" {
-		return "", fmt.Errorf("smoke: empty image")
-	}
-	jobName := truncate("pf-smoke-"+jobIDSuffix(buildID), 63)
-	job := k.smokeJobSpec(jobName, image, kmsKey)
-	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
-		return "", err
-	}
-	return jobName, nil
-}
-
-// smokeJobSpec is the boot-test Job: the built image under a sh wrapper (smokeScript)
-// with a production-representative boot env — a writable /data emptyDir, CLOUD_ENV=smoke,
-// and the throwaway KMS master key. It pulls from GHCR with the build namespace's secret
-// the build Job uses and runs on the same CI pool, so a green smoke proves the exact
-// pushed image boots on the exact cluster it will deploy to.
-func (k *k8sClient) smokeJobSpec(jobName, image, kmsKey string) *unstructured.Unstructured {
-	return &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "batch/v1",
-		"kind":       "Job",
-		"metadata": map[string]any{
-			"name":      jobName,
-			"namespace": k.buildNS,
-			"labels": map[string]any{
-				"hanzo.ai/org":        platformBuildOrg,
-				"hanzo.ai/managed-by": "platform",
-				"hanzo.ai/release":    "smoke",
-			},
-		},
-		"spec": map[string]any{
-			"backoffLimit":            int64(0),
-			"ttlSecondsAfterFinished": int64(3600),
-			"activeDeadlineSeconds":   int64(smokeBootSeconds + 120), // boot window + scheduling/pull slack
-			"template": map[string]any{
-				"spec": map[string]any{
-					"restartPolicy":                "Never",
-					"nodeSelector":                 map[string]any{"runner-pool": "32g"},
-					"tolerations":                  []any{map[string]any{"key": "dedicated", "operator": "Equal", "value": "ci-runner", "effect": "NoSchedule"}},
-					"imagePullSecrets":             []any{map[string]any{"name": buildPullSecret}},
-					"automountServiceAccountToken": false,
-					"containers": []any{map[string]any{
-						"name":    "smoke",
-						"image":   image,
-						"command": []any{"/bin/sh", "-c", smokeScript},
-						"env": []any{
-							map[string]any{"name": "CLOUD_DATA_DIR", "value": "/data"},
-							map[string]any{"name": "CLOUD_ENV", "value": "smoke"},
-							map[string]any{"name": "CLOUD_KMS_MASTER_KEY_REF", "value": kmsKey},
-						},
-						"volumeMounts": []any{map[string]any{"name": "data", "mountPath": "/data"}},
-					}},
-					"volumes": []any{map[string]any{"name": "data", "emptyDir": map[string]any{"sizeLimit": smokeDataLimit}}},
-				},
-			},
-		},
-	}}
 }
 
 // admitBuild refuses a build when the org already holds as many as it may.
