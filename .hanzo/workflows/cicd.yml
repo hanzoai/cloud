@@ -877,9 +877,9 @@ jobs:
           echo "smoked=$SMOKED" >> "$GITHUB_OUTPUT"
 
       # THE SMOKE GATE. Boot the image that was actually pushed and require it to
-      # reach "zip listening" without a crash signature, on release.go's boot env
-      # — a writable /data, CLOUD_ENV=smoke and a throwaway 32-byte master key so
-      # the KMS plane mounts on its normal ready path rather than a degraded one.
+      # reach "zip listening" without a crash signature, on the boot env a real pod
+      # gets — a writable /data, CLOUD_ENV=smoke and a throwaway 32-byte master key
+      # so the KMS plane mounts on its normal ready path rather than a degraded one.
       #
       # The script is handed over base64 because it contains both single and
       # double quotes (the `"message":"zip listening"` needle), and re-quoting it
