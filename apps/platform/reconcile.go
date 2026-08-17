@@ -36,7 +36,7 @@ const (
 	// 17m and 20m42s — so the release became a coin flip, and losing the toss cost
 	// more than the wait: the build had already pushed its image, so failing the
 	// wait discarded a good image AND burned that version number permanently
-	// (nextVersion folds published image tags in, by design, so the number is never
+	// (a claim folds published image tags in, by design, so the number is never
 	// reused). A deadline exists to catch a Job that is STUCK; it should not be
 	// close enough to a healthy build to fire on one.
 	//

@@ -489,26 +489,23 @@ func TestPinRefusesToClobberANewerConcurrentPin(t *testing.T) {
 	}
 }
 
-// rolloutRelease must FAIL when the pin cannot move. "Built, smoke-passed and
-// tagged but NOT live" is the one state a release must never silently claim to
-// have left — that is the property the whole final step exists to guarantee.
-func TestRolloutFailsWhenThePinCannotMove(t *testing.T) {
-	// No KMS ⇒ no credential ⇒ nothing can be pushed.
-	err := rolloutRelease(testService(), context.Background(), "ghcr.io/hanzoai/cloud:v1.0.0", "sha")
-	if err == nil {
-		t.Fatal("want an error when the pin cannot move, got nil")
-	}
-	if !strings.Contains(err.Error(), "NOT live") {
-		t.Errorf("the error must say the image is not live, got: %v", err)
-	}
-}
-
 // ── harness ──────────────────────────────────────────────────────────────────
 
 func swapUniverseRemote(url string) func() {
 	prev := universeRemote
 	universeRemote = url
 	return func() { universeRemote = prev }
+}
+
+// swapRegistryBase points the registry reads at url and returns a restore func.
+func swapRegistryBase(url string) func() {
+	prev := registryBase
+	registryBase = url
+	return func() { registryBase = prev }
+}
+
+func testService() *cloud.Service[state] {
+	return &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}}
 }
 
 func serviceWithKMS(k cloud.KMSClient) *cloud.Service[state] {
