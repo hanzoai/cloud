@@ -70,7 +70,12 @@ func TestTheCallersAddressCrossesTheProcessBoundary(t *testing.T) {
 		t.Fatalf("proxying to the child: %v", perr)
 	}
 	host := zip.New(zip.Config{DisableStartupMessage: true})
+	var hostStamped string
 	host.Use(zip.H(clientip.StampClientIP))
+	host.Use(zip.H(func(c *zip.Ctx) error {
+		hostStamped = string(c.Fiber().Request().Header.Peek(clientip.ClientIPHeader))
+		return c.Continue()
+	}))
 	host.Use(remote)
 
 	call := func(forwarded string) arrival {
@@ -92,22 +97,24 @@ func TestTheCallersAddressCrossesTheProcessBoundary(t *testing.T) {
 	}
 
 	a := call("203.0.113.10")
+	aHost := hostStamped
 	b := call("203.0.113.11")
+	bHost := hostStamped
 
 	// THE OBSERVATION. What the child sees on its own is the same for every caller,
 	// which is exactly why the host has to tell it.
 	t.Logf("child RemoteAddr: %q and %q", a.remote, b.remote)
 	t.Logf("stamped by host:  %q and %q", a.stamped, b.stamped)
 
-	if a.stamped == "" || b.stamped == "" {
-		t.Fatalf("no address survived the process boundary: %q and %q", a.stamped, b.stamped)
-	}
-	if a.stamped == b.stamped {
-		t.Fatalf("two callers arrived at the child as ONE address (%q): the per-visitor ceiling "+
-			"is one bucket for everyone", a.stamped)
-	}
-	if a.remote == b.remote && a.remote != "" {
-		t.Logf("confirmed: the child's own RemoteAddr is constant (%q) — anything derived "+
-			"from it is one visitor for the whole internet", a.remote)
+	// TRANSIT FIDELITY is what this test owns: whatever the host stamped must arrive
+	// at the child unchanged. It deliberately does NOT demand a non-empty value —
+	// app.Test synthesises no connection, so the framework resolves no peer here, and
+	// an earlier version of this test demanded a value and got one only because
+	// ClientIP was walking a forwarded header. It passed for exactly as long as the
+	// bug existed. Whether the address is non-empty is ClientIP's contract, pinned in
+	// clientip's own one-source test.
+	if a.stamped != aHost || b.stamped != bHost {
+		t.Fatalf("the value changed in transit: host stamped %q/%q, child read %q/%q",
+			aHost, bHost, a.stamped, b.stamped)
 	}
 }
