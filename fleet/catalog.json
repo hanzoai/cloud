@@ -8815,115 +8815,115 @@
  ],
  "provisioning": [
   {
-   "id": "delete_datastore_by_name",
+   "id": "delete_instances_datastore_by_name",
    "doc": "Deprovisions one Hanzo Datastore warehouse. It reverts any app\ninstance bound to it back to Base BEFORE tearing down the org's dedicated\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404."
   },
   {
-   "id": "delete_docdb_by_name",
+   "id": "delete_instances_docdb_by_name",
    "doc": "DropDocDB deprovisions one Hanzo DocDB database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated FerretDB\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404."
   },
   {
-   "id": "delete_kv_by_name",
+   "id": "delete_instances_kv_by_name",
    "doc": "DropKV deprovisions one Hanzo KV store. It reverts any app instance bound to\nit back to Base BEFORE tearing down the org's dedicated Valkey instance, then\ndeletes the sealed credential and removes the metadata row. Answers 204 with\nno body; a second call is a 404."
   },
   {
-   "id": "delete_s3_by_name",
+   "id": "delete_instances_s3_by_name",
    "doc": "Deletes one bucket from the shared object store and removes its\nmetadata row. Answers 204 with no body; a second call is a 404."
   },
   {
-   "id": "delete_search_by_name",
+   "id": "delete_instances_search_by_name",
    "doc": "Deletes one search index from the shared backend and removes its\nmetadata row. Answers 204 with no body; a second call is a 404."
   },
   {
-   "id": "delete_sql_by_name",
+   "id": "delete_instances_sql_by_name",
    "doc": "DropSQL deprovisions one Hanzo SQL database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated Postgres\ninstance — never a live app pointed at a deleted backend — then deletes the\nsealed credential and removes the metadata row. Answers 204 with no body; a\nsecond call is a 404, not a second delete."
   },
   {
-   "id": "delete_vector_by_name",
+   "id": "delete_instances_vector_by_name",
    "doc": "Deletes one vector collection from the shared backend and removes\nits metadata row. Answers 204 with no body; a second call is a 404."
   },
   {
-   "id": "get_datastore",
+   "id": "get_instances_datastore",
    "doc": "Lists the caller org's Hanzo Datastore warehouses. Each one is\na DEDICATED analytical instance the org alone runs, so the host is that\ninstance's own in-cluster Service and the port is its HTTP port, 8123."
   },
   {
-   "id": "get_datastore_by_name",
+   "id": "get_instances_datastore_by_name",
    "doc": "Returns one Hanzo Datastore warehouse's metadata. It carries the\nwarehouse's status, its instance address and the admin user the instance\nbooted with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view rather than the row."
   },
   {
-   "id": "get_docdb",
+   "id": "get_instances_docdb",
    "doc": "ListDocDB lists the caller org's Hanzo DocDB document databases. Each one is\na DEDICATED FerretDB instance the org alone runs, speaking the MongoDB wire\nprotocol, so the host is that instance's own in-cluster Service and the port\nis 27017."
   },
   {
-   "id": "get_docdb_by_name",
+   "id": "get_instances_docdb_by_name",
    "doc": "GetDocDB returns one Hanzo DocDB database's metadata. It carries the\ndatabase's status, its instance address and the SCRAM user the instance was\nset up with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view."
   },
   {
-   "id": "get_kv",
+   "id": "get_instances_kv",
    "doc": "ListKV lists the caller org's Hanzo KV stores. Each one is a DEDICATED Valkey\ninstance the org alone runs, so the host is that instance's own in-cluster\nService and the port is 6379."
   },
   {
-   "id": "get_kv_by_name",
+   "id": "get_instances_kv_by_name",
    "doc": "GetKV returns one Hanzo KV store's metadata. It carries the store's status,\nits instance address and the Valkey user it authenticates as (\"default\", the\nonly user a requirepass instance has) — never the password. A still-booting\ninstance reads \"provisioning\", reconciled from the operator's live view."
   },
   {
-   "id": "get_s3",
+   "id": "get_instances_s3",
    "doc": "Lists the caller org's object-storage buckets. A bucket lives in an\nalready-live shared object store and is reached through the public gateway.\nThe names here are the friendly ones the org provisioned; the physical bucket\nis org-namespaced underneath, which is what keeps two tenants' buckets\ndistinct."
   },
   {
-   "id": "get_s3_by_name",
+   "id": "get_instances_s3_by_name",
    "doc": "Returns one bucket's metadata. It carries the bucket's status and the\ngateway address it is reached at, and no username: the object store\nauthenticates with a shared, out-of-band key rather than a per-bucket\ncredential."
   },
   {
-   "id": "get_search",
+   "id": "get_instances_search",
    "doc": "Lists the caller org's search indexes. An index is a logical\nresource inside an already-live shared backend, so every one of them is\nreached through the public gateway rather than at an instance of its own."
   },
   {
-   "id": "get_search_by_name",
+   "id": "get_instances_search_by_name",
    "doc": "Returns one search index's metadata. It carries the index's status\nand the gateway address it is reached at, and no username: the backend\nauthenticates with a shared, out-of-band key rather than a per-index\ncredential."
   },
   {
-   "id": "get_sql",
+   "id": "get_instances_sql",
    "doc": "ListSQL lists the caller org's Hanzo SQL databases. Each one is a DEDICATED\nPostgreSQL instance the org alone runs, so the host is that instance's own\nin-cluster Service and the port is 5432."
   },
   {
-   "id": "get_sql_by_name",
+   "id": "get_instances_sql_by_name",
    "doc": "GetSQL returns one Hanzo SQL database's metadata. It carries the database's\nstatus, its instance address and the admin user Postgres booted with — never\nthe password, which is returned once at create and otherwise lives only in\nHanzo KMS. A still-booting instance reads \"provisioning\", reconciled from the\noperator's live view rather than from the row."
   },
   {
-   "id": "get_vector",
+   "id": "get_instances_vector",
    "doc": "Lists the caller org's vector collections. A collection is a\nlogical resource inside an already-live shared backend, so every one of them\nis reached through the public gateway rather than at an instance of its own."
   },
   {
-   "id": "get_vector_by_name",
+   "id": "get_instances_vector_by_name",
    "doc": "Returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report."
   },
   {
-   "id": "post_datastore",
+   "id": "post_instances_datastore",
    "doc": "Launches your org's OWN Hanzo Datastore instance and answers with its `datastore://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment."
   },
   {
-   "id": "post_docdb",
+   "id": "post_instances_docdb",
    "doc": "Launches your org's OWN document-database instance — it speaks the MongoDB wire protocol, so existing MongoDB drivers connect unchanged — and answers with its `mongodb://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment."
   },
   {
-   "id": "post_kv",
+   "id": "post_instances_kv",
    "doc": "Launches your org's OWN key-value instance and answers with its `kv://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment."
   },
   {
-   "id": "post_s3",
+   "id": "post_instances_s3",
    "doc": "Creates an S3-compatible bucket inside the already-running shared object store and answers with the endpoint that reaches it.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment."
   },
   {
-   "id": "post_search",
+   "id": "post_instances_search",
    "doc": "Creates a search index inside the already-running shared search backend and answers with the endpoint that reaches it.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment."
   },
   {
-   "id": "post_sql",
+   "id": "post_instances_sql",
    "doc": "Launches your org's OWN PostgreSQL instance and answers with its `postgres://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment."
   },
   {
-   "id": "post_vector",
+   "id": "post_instances_vector",
    "doc": "Creates a vector collection inside the already-running shared vector backend and answers with the endpoint that reaches it.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment."
   }
  ],
@@ -9242,6 +9242,12 @@
   {
    "id": "post_sbom",
    "doc": "Ingest persists a CycloneDX SBOM's components keyed by image digest. Gated to a\nvalidated SuperAdmin (owner == AdminOrg) — the canonical cloud super-admin\ncheck, which the build fleet / CI carries. Re-ingest is idempotent: rows share\nthe (digest, name, version, purl) ORDER BY, so ReplacingMergeTree keeps the\nlatest by ingested_at (and resolve reads FINAL)."
+  }
+ ],
+ "search": [
+  {
+   "id": "search",
+   "doc": "Is the typed op behind POST /v1/search. It does exactly two things the\nin-process entry point must not do: resolve the tenant from the validated\nprincipal, and refuse when there is none. Everything else is ForOrg."
   }
  ],
  "security": [
