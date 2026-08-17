@@ -1,6 +1,6 @@
 {
-  "paths": 1826,
-  "operations": 2493,
+  "paths": 1827,
+  "operations": 2494,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -62,6 +62,7 @@
     "documents": 2,
     "domain": 7,
     "download": 1,
+    "edge": 1,
     "embed": 1,
     "embeddings": 1,
     "enablement": 3,
