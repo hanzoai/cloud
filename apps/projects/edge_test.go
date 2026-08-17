@@ -28,6 +28,10 @@ type configuredEdge struct{ sites.NoEdge }
 
 func (configuredEdge) Configured() bool { return true }
 
+// A configured edge covers the apexes a site is served on. Two, here, for the
+// same reason production has two: the site plane's own and the first-party one.
+func (configuredEdge) Reach() []string { return []string{"hanzo.app", "hanzo.ai"} }
+
 // The whole point of this endpoint is that the degraded case is REPORTED rather
 // than inferred from a CDN response, so both states are pinned: an operator has
 // to be able to tell "a publish is live now" from "a publish is live in four
@@ -68,6 +72,12 @@ func TestEdgeReportsWhetherAPublishReachesReaders(t *testing.T) {
 			// answer and a blank field is a question.
 			if got.Provider == "" {
 				t.Error("provider is blank; an operator cannot tell which edge this is")
+			}
+			// Reach is the fact that was missing for an entire day: a purge
+			// returned 200 while a first-party host served stale bytes, and
+			// nothing anywhere said which apexes the purge actually covered.
+			if tc.wantStatus == "ok" && len(got.Reach) == 0 {
+				t.Error("a configured edge reports no reach; that is the question this endpoint exists to answer")
 			}
 			// The policy is DERIVED from CacheControlFor, so it cannot drift from
 			// what the server actually serves — assert it matches at the source.

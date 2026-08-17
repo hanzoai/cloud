@@ -151,3 +151,8 @@ func (p *Edge) lookupZone(ctx context.Context, name string) (string, error) {
 	}
 	return out.Result[0].ID, nil
 }
+
+// Reach is the apexes a purge covers, by name. It reads the same configuration
+// the purge does, so the report and the act cannot disagree — the thing that
+// went wrong when one zone was purged and two were served.
+func (p *Edge) Reach() []string { return zoneNames() }
