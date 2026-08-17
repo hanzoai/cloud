@@ -54,11 +54,11 @@ type Arbiter struct {
 }
 
 // Cloud is the arbiter of the ghcr.io/hanzoai/cloud version sequence: every
-// v<X.Y.Z> in that sequence names a commit reachable from this branch.
+// v<X.Y.Z> in that sequence names a commit this branch has been.
 //
-// It is ONE value read by every claimant — the forge workflow through cmd/lineage,
-// and the in-cloud release path through Verify — so no two of them can come to
-// disagree about which repository numbers the sequence.
+// It is ONE value, because there is one claimant. A second one reading a second
+// repository is how a sequence comes to be numbered by two histories, and the
+// remedy is not to make them agree — it is for there to be one.
 var Cloud = Arbiter{
 	Remote: "https://git.hanzo.ai/hanzo-inc/cloud",
 	Branch: "main",

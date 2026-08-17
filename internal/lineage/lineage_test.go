@@ -209,9 +209,9 @@ func TestVerifyRefusesWithNoArbiter(t *testing.T) {
 	}
 }
 
-// TestCloudNamesOneArbiter holds the value both claimants read. Two claimants
-// reading two different arbiters is how one sequence comes to be numbered by two
-// unrelated histories, so the value is asserted rather than assumed.
+// TestCloudNamesOneArbiter holds the value the claim reads. One sequence numbered
+// by two histories is the defect this package exists to prevent, so which
+// repository and which branch is asserted rather than assumed.
 func TestCloudNamesOneArbiter(t *testing.T) {
 	if Cloud.Remote != "https://git.hanzo.ai/hanzo-inc/cloud" {
 		t.Errorf("the cloud sequence is numbered by one repository, got %q", Cloud.Remote)

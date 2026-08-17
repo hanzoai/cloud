@@ -503,10 +503,11 @@ jobs:
           # The question goes to that repository and is answered from the commit
           # graph, never from a name. This runner's checkout, its remotes and this
           # workflow's own file are all things that can be pointed somewhere else,
-          # and every one of them is a name; reachability is a property of the
-          # objects, so it is the only thing worth asking. cmd/lineage asks it —
-          # the same code the in-cloud release path calls, so the two cannot come
-          # to disagree about which history numbers this sequence.
+          # and every one of them is a name; the shape of the graph is a property
+          # of the objects, so it is the only thing worth asking. cmd/lineage asks
+          # it, and asks whether the branch has BEEN this commit rather than
+          # whether it can reach it: a merge makes everything it absorbed
+          # reachable, and none of that was ever a state this sequence numbers.
           #
           # It runs BEFORE the compare-and-swap below, so a commit that cannot hold
           # a number never takes one: no tag, not even the inert hole an abandoned
