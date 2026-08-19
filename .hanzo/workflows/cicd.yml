@@ -917,6 +917,21 @@ jobs:
           if grep -Eiq 'metrics\.Mount|mount metrics|panic|want \*zip\.App' /tmp/boot.log; then echo 'SMOKE FAIL: startup-crash signature'; exit 1; fi
           if [ "$listening" -ne 1 ]; then echo 'SMOKE FAIL: never reached listening'; exit 1; fi
           kill -0 "$pid" 2>/dev/null || { echo 'SMOKE FAIL: exited after listening'; exit 1; }
+          # The AI instance mounts LAZILY: a boot that never touches /v1 proves
+          # nothing about it, which is how v1.801.565 shipped green and died at
+          # the first real call (duplicate /v1/health, panic at mustBuild). One
+          # remainder request forces the instance build; the panic or its 503
+          # fails the run here instead of the fleet. 401/403 are fine — the door
+          # answered, which is all this asks.
+          if wget -q -O /tmp/v1.out http://127.0.0.1:8080/v1/models 2>/tmp/v1.err; then
+            echo 'SMOKE: /v1 remainder answered 2xx — instance built'
+          elif grep -qE 'HTTP/[0-9.]+ (401|403)' /tmp/v1.err; then
+            echo 'SMOKE: /v1 remainder refused auth — instance built, which is all this asks'
+          else
+            echo 'SMOKE FAIL: the lazy /v1 instance did not build'
+            cat /tmp/v1.err 2>/dev/null; tail -40 /tmp/boot.log; exit 1
+          fi
+          kill -0 "$pid" 2>/dev/null || { echo 'SMOKE FAIL: died building the /v1 instance'; exit 1; }
           echo 'SMOKE PASS'
           SMOKE
           )
