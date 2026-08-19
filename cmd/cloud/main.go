@@ -129,6 +129,17 @@ func doorConfig() zip.Config {
 		Warm:           manifest.Warm,
 		ReadBufferSize: edge.ReadBufferSize(),
 		BodyLimit:      edge.BodyLimit(),
+		// Which hops are ours, so the framework's ONE answer at the seam is the
+		// caller and not the ingress. zip honours a forwarded header only where an
+		// app names its own proxies; unnamed, every request through the bar reports
+		// the same in-cluster address, and anything keyed on the caller — the free
+		// lane's per-visitor ceiling, an audit line — collapses to a single bucket.
+		//
+		// The list comes from clientip so there is one trust set and one knob
+		// (CLOUD_TRUSTED_PROXIES), never a second spelling here to drift from it.
+		TrustProxy:     true,
+		TrustedProxies: clientip.Proxies(),
+		ProxyHeader:    "X-Forwarded-For",
 	}
 }
 
