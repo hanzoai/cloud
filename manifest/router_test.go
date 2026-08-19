@@ -256,7 +256,7 @@ func served(t *testing.T, app string) []string {
 	path := filepath.Join("..", "plugin", app, "openapi.json")
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("%s: %v\n\nEvery app publishes its own subset. Run `make -f mk/fleet.mk subsets`.", path, err)
+		t.Fatalf("%s: %v\n\nEvery app publishes its own subset. Run `make -f mk/fleet.mk describe`.", path, err)
 	}
 	var doc struct {
 		Paths map[string]json.RawMessage `json:"paths"`
