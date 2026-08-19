@@ -30,7 +30,7 @@ paths:
         /foley — that the Zen family serves natively.
       tags:
       - audio
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/audio/music:
     post:
@@ -44,7 +44,7 @@ paths:
         /foley — that the Zen family serves natively.
       tags:
       - audio
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/audio/speech:
     post:
@@ -59,7 +59,7 @@ paths:
       summary: The OpenAI-compatible TTS endpoint (POST /v1/audio/speech).
       tags:
       - audio
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/audio/transcriptions:
     post:
@@ -77,7 +77,7 @@ paths:
         multipart: file + model [+ language + response_format]).'
       tags:
       - audio
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/audio/voice:
     post:
@@ -91,7 +91,7 @@ paths:
         /foley — that the Zen family serves natively.
       tags:
       - audio
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/chat/completions:
     post:
@@ -100,7 +100,7 @@ paths:
       summary: Implements the OpenAI-compatible chat completions API
       tags:
       - chat
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/completions:
     post:
@@ -109,7 +109,7 @@ paths:
       summary: Implements the OpenAI-compatible chat completions API
       tags:
       - completions
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/embeddings:
     post:
@@ -124,7 +124,7 @@ paths:
       summary: Implements POST /v1/embeddings (OpenAI-compatible).
       tags:
       - embeddings
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/images/generations:
     post:
@@ -139,7 +139,7 @@ paths:
       summary: Implements POST /v1/images/generations (OpenAI-compatible).
       tags:
       - images
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/messages:
     post:
@@ -148,7 +148,7 @@ paths:
       summary: Implements the Anthropic Messages API.
       tags:
       - messages
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/messages/count_tokens:
     post:
@@ -160,7 +160,7 @@ paths:
       summary: Implements POST /v1/messages/count_tokens.
       tags:
       - messages
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/models:
     get:
@@ -228,19 +228,19 @@ paths:
       summary: Implements POST /v1/rerank (Cohere/Jina-compatible).
       tags:
       - rerank
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/responses:
     post:
       description: |-
-        Implements POST /v1/responses. The converted request is passed to
-        ChatCompletions and an installed ResponseWriter converts its OpenAI chat JSON
-        or SSE back into Responses JSON/SSE on the fly.
+        Implements POST /v1/responses. The converted request is completed by
+        the chat path, which is handed a sink saying where the answer goes: a stream is
+        translated as it is produced, a whole body is translated entire.
       operationId: post_responses
       summary: Implements POST /v1/responses.
       tags:
       - responses
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/videos/{id}:
     get:
@@ -262,7 +262,7 @@ paths:
       summary: Implements GET /v1/videos/{id} — poll a job's status.
       tags:
       - videos
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/videos/{id}/content:
     get:
@@ -284,7 +284,7 @@ paths:
       summary: Implements GET /v1/videos/{id}/content — download the finished MP4.
       tags:
       - videos
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
   /v1/videos/generations:
     post:
@@ -304,7 +304,7 @@ paths:
       summary: Implements POST /v1/videos/generations — the ASYNC create.
       tags:
       - videos
-      x-app: github.com/hanzoai/ai
+      x-app: ai
       x-public: true
 security:
 - bearer: []

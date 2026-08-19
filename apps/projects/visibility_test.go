@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -375,9 +376,22 @@ type said struct {
 // the tenant has to be carried rather than inherited: a stand-in that accepted
 // an empty org would be green over a seam whose every retraction the real git
 // app throws away.
+// sockDir is a SHORT runtime dir for the unix socket. t.TempDir() carries the
+// whole test name, and on macOS a bind past sun_path's 104 bytes fails — the
+// stand-in then "never begins listening" on any test with a long name.
+func sockDir(t *testing.T) string {
+	t.Helper()
+	d, err := os.MkdirTemp("", "zs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(d) })
+	return d
+}
+
 func listen(t *testing.T) *scribe {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", sockDir(t))
 	sc := &scribe{}
 	app := zip.New(zip.Config{AppName: "git"})
 	zip.Post[plane.Visibility, struct{}](app, "/git/publish",
@@ -840,7 +854,7 @@ func TestARetryDoesNotDestroyTheAuthorsRepository(t *testing.T) {
 // to RETRACT, whatever the other two copies can be told.
 func TestAnAbsentGitAppStopsNothing(t *testing.T) {
 	app, f, _ := mountShared(t)
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir()) // no git app behind this one
+	t.Setenv("ZIP_RUNTIME_DIR", sockDir(t)) // no git app behind this one
 
 	create(t, app, "board")
 	settled(t, "the forge's copy to be readable", func() bool { return f.readable(t, "acme_board") })

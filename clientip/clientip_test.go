@@ -151,28 +151,24 @@ func TestDefaultTrustedProxies(t *testing.T) {
 // End to end through a real request, on the process default set. fiber's test
 // connection reports the unspecified address as the peer, which the default set
 // treats as ours — so the chain is read, and the forged left-most entry loses.
-func TestClientIP_IsTheFrameworksAnswer(t *testing.T) {
-	// ONE SOURCE, and this asserts exactly that: what this returns IS what zip
-	// publishes, for the same request, always.
+func TestClientIP_AppliesTheRuleAtTheEdge(t *testing.T) {
+	// THE RULE, driven through a real app. The harness connection reports the
+	// unspecified peer, which is our own space, so the chain is readable and the
+	// answer is its right-most entry that is not one of our proxies.
 	//
-	// The rule that used to live here walked the forwarded chain from the right,
-	// treating our own address space as proxies — a SECOND trust set the framework
-	// never saw. It disagreed with zip in production on 4107 requests: zip reported a
-	// real address on the same log line where this returned "". Two derivations of one
-	// value is the shape of that bug, so the invariant worth pinning is not a
-	// particular address but that there is only ever ONE answer.
-	//
-	// Deliberately not asserting a literal: app.Test synthesises no connection, so
-	// fc.IP() is empty in any harness, and a test that demanded a value here could
-	// only be satisfied by reading a header — which is how the old rule passed its
-	// tests for months while answering nothing in production.
-	check := func(t *testing.T, name string, mut func(*http.Request)) {
+	// This briefly asserted the opposite — that ClientIP is whatever the
+	// framework resolved — but the framework honours a forwarded header only
+	// under proxy-trust config no binary wires, so that doctrine collapsed every
+	// caller into the socket peer: one bucket behind the ingress, an empty
+	// address in every audit row. The rule lives here, reading the framework's
+	// raw facts, and every consumer (the edge limiter, the abuse sensor, the
+	// audit trail) shares this one answer through its own door.
+	check := func(t *testing.T, name, want string, mut func(*http.Request)) {
 		t.Helper()
-		var mine, theirs string
+		var got string
 		app := zip.New(zip.Config{})
 		app.Get("/probe", func(c *zip.Ctx) error {
-			mine = ClientIP(c)
-			theirs = zip.CallerOf(c.Context()).IP
+			got = ClientIP(c)
 			return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
 		})
 		req := httptest.NewRequest(http.MethodGet, "/probe", nil)
@@ -180,19 +176,23 @@ func TestClientIP_IsTheFrameworksAnswer(t *testing.T) {
 		if _, err := app.Test(req); err != nil {
 			t.Fatal(err)
 		}
-		if mine != theirs {
-			t.Fatalf("%s: ClientIP=%q but the framework says %q — two answers to one question "+
-				"is the defect, whichever is 'right'", name, mine, theirs)
+		if got != want {
+			t.Fatalf("%s: ClientIP = %q, want %q", name, got, want)
 		}
 	}
 
-	check(t, "bare request", func(*http.Request) {})
-	// The case that broke it: a forwarded chain the old rule walked and zip did not.
-	check(t, "with a forwarded chain", func(r *http.Request) {
+	// No chain, in-cluster peer: no client transited the edge.
+	check(t, "bare request", "", func(*http.Request) {})
+	// Across lines and within a line, later is nearer and truer. The client
+	// wrote the first line before our infrastructure saw the request; the hop
+	// our own proxy appended is the one that counts, so the forged 1.2.3.4 is
+	// never reached.
+	check(t, "with a forwarded chain", "203.0.113.9", func(r *http.Request) {
 		r.Header.Add("X-Forwarded-For", "1.2.3.4")
 		r.Header.Add("X-Forwarded-For", "203.0.113.9, 10.0.0.6")
 	})
-	check(t, "with a single forged hop", func(r *http.Request) {
+	// One public hop from a trusted peer is the client itself.
+	check(t, "with a single forged hop", "198.51.100.255", func(r *http.Request) {
 		r.Header.Set("X-Forwarded-For", "198.51.100.255")
 	})
 }

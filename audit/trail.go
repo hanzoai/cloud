@@ -28,7 +28,9 @@ package audit
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -115,8 +117,15 @@ func (r *Recorder) Trail(ctx context.Context) (Trail, error) {
 	if err != nil {
 		return Trail{}, err
 	}
-	if len(names) == 0 {
-		return Trail{}, fmt.Errorf("audit: no chain under %s, though this process writes %q — the layout moved", r.dir, r.name)
+	// The LIVE chain has no sealed file until Close writes the envelope, so the
+	// glob can never see this process's own — measured: a recorder that has
+	// appended all day leaves nothing on disk under its own name. It is walked
+	// through the handle below, so it joins the family by name here; without
+	// this line the trail reports every sibling and silently omits the one
+	// chain this process is responsible for.
+	if !slices.Contains(names, r.name) {
+		names = append(names, r.name)
+		sort.Strings(names)
 	}
 
 	t := Trail{Chains: make([]Integrity, 0, len(names))}
@@ -212,7 +221,14 @@ func chains(dir string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("audit: locate chains: %w", err)
 	}
-	files, err := filepath.Glob(filepath.Join(filepath.Dir(anchor), "*.db"))
+	// The family directory must EXIST: cek creates it at the first Open, so a
+	// dir without it is not a fresh deployment, it is the wrong dir — and a
+	// quiet empty answer there is a fabricated clean trail.
+	fam := filepath.Dir(anchor)
+	if _, err := os.Stat(fam); err != nil {
+		return nil, fmt.Errorf("audit: no chain family under %s — the layout moved: %w", dir, err)
+	}
+	files, err := filepath.Glob(filepath.Join(fam, "*.db"))
 	if err != nil {
 		return nil, fmt.Errorf("audit: list chains: %w", err)
 	}
