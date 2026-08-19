@@ -173,8 +173,8 @@ func TestPlans_Ladder(t *testing.T) {
 	if err := json.Unmarshal(resp.Body, &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	price := map[string]float64{"free": 0, "go": 8, "pro": 19, "max": 99, "team": 25}
-	lookup := map[string]string{"free": "", "go": "hanzo_go_8", "pro": "hanzo_pro_19", "max": "hanzo_max_99", "team": "hanzo_team_25"}
+	price := map[string]float64{"free": 0, "go": 9, "dev": 19, "pro": 49, "max": 99, "team": 25}
+	lookup := map[string]string{"free": "", "go": "hanzo_go_9", "dev": "hanzo_dev_19", "pro": "hanzo_pro_49", "max": "hanzo_max_99", "team": "hanzo_team_25"}
 	seen := map[string]bool{}
 	for _, p := range body.Plans {
 		want, ok := price[p.ID]
