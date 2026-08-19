@@ -1152,8 +1152,16 @@ jobs:
   # The repo is the FORGE, not the mirror. The forge is canonical, the tag this
   # release just claimed exists only there, and it is anonymously cloneable — the
   # Job does a bare `git fetch` with no credential, so a mirror URL would fetch a
-  # ref that is not there. Measured: neither github.com/hanzoai/cloud nor
-  # github.com/hanzo-inc/cloud carries a release tag or forge/main.
+  # ref that is not there.
+  #
+  # THE MIRRORS ARE WORSE THAN EMPTY, which is why this reads the arbiter rather
+  # than a name. github.com/hanzo-inc/cloud is not the barren twin an earlier note
+  # here described: it holds 694 tags, and 480 of those names point at a DIFFERENT
+  # commit than the same name on the forge — 213 of them v1.801.* release numbers.
+  # 99 release numbers exist only on the forge, every recent one among them. So
+  # "which commit is v1.801.564" has two answers by host, and one of them is not a
+  # release of anything. github.com/hanzoai/cloud is a third product again. Reading
+  # the arbiter is the only address that cannot be one of the other two.
   #
   # DEPLOYMENT REQUIREMENT, and it is not optional: cloud must TRUST the forge as
   # a build source. hostAllowed (apps/platform/validate.go) trusts the four public
