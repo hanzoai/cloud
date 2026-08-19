@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -95,13 +96,18 @@ func TestRunRetriesTransientThenSucceedsBillsOnce(t *testing.T) {
 
 // TestRunFailsOverToReliableModelAndBillsIt proves the escalation: the agent's
 // own model stays throttled through all its retries, so the run fails over to the
-// configured reliable model ("best"), still lands a reply, and bills the model
-// ACTUALLY used (best) — not the throttled one it started on.
+// configured reliable model (cloud.FallbackModel), still lands a reply, and bills
+// the model ACTUALLY used — not the throttled one it started on.
+//
+// The failover tier is named ONCE, in cloud.FallbackModel. These assertions read
+// it rather than repeating its value: the literal was "best" in five places here,
+// and a tier that is renamed in one line must not leave four copies asserting the
+// old name.
 func TestRunFailsOverToReliableModelAndBillsIt(t *testing.T) {
 	bs := &billServer{available: 100000}
-	// gpt-4o-mini is busy for MORE than its retry budget (never recovers); "best"
-	// answers first try.
-	ai := &scriptedAI{content: "from-best", busy: map[string]int{"gpt-4o-mini": 99}}
+	// gpt-4o-mini is busy for MORE than its retry budget (never recovers); the
+	// failover tier answers first try.
+	ai := &scriptedAI{content: "from-failover", busy: map[string]int{"gpt-4o-mini": 99}}
 	app := mountBilled(t, bs.start(t), ai)
 
 	do(t, app, http.MethodPost, "/v1/agents", "acme",
@@ -112,15 +118,15 @@ func TestRunFailsOverToReliableModelAndBillsIt(t *testing.T) {
 	}
 	var rv agentRunView
 	_ = json.Unmarshal(body, &rv)
-	if rv.Output != "from-best" {
+	if rv.Output != "from-failover" {
 		t.Fatalf("failover reply must come from the reliable model, got %q", rv.Output)
 	}
-	// Primary exhausted its retries, then exactly one failover attempt on "best".
+	// Primary exhausted its retries, then exactly one failover attempt.
 	if got := ai.callCount(); got != maxAttempts+1 {
 		t.Fatalf("want %d attempts (primary exhausted + 1 failover), got %d", maxAttempts+1, got)
 	}
 	seen := ai.modelsSeen()
-	if seen[len(seen)-1] != "best" {
+	if seen[len(seen)-1] != cloud.FallbackModel {
 		t.Fatalf("the final attempt must be the failover model, got %q", seen[len(seen)-1])
 	}
 	if !waitForDebit(func() bool { return bs.debits() == 1 }) {
@@ -131,8 +137,8 @@ func TestRunFailsOverToReliableModelAndBillsIt(t *testing.T) {
 		Model string `json:"model"`
 	}
 	_ = json.Unmarshal(ubody, &u)
-	if u.Model != "best" {
-		t.Fatalf("failover run must bill the model actually used (best), got %q", u.Model)
+	if u.Model != cloud.FallbackModel {
+		t.Fatalf("failover run must bill the model actually used (%q), got %q", cloud.FallbackModel, u.Model)
 	}
 }
 

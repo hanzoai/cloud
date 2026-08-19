@@ -123,7 +123,7 @@ func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub
 // it is nonetheless the right tier for a tool-driving turn, and cloud.ChatModel
 // carries those numbers.
 //
-// It is also NOT cloud.FallbackModel ("best"): that constant's own doc says it
+// It is also NOT cloud.FallbackModel: that constant's own doc says it
 // "keeps a bot's reply landing when the flash tier is saturated; the interactive
 // chat path never uses it" — it is the degraded path, and a Slack turn IS the
 // interactive chat path.
