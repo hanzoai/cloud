@@ -39,22 +39,39 @@ import (
 	"time"
 )
 
-// Arbiter is the repository and branch whose history defines one version sequence.
+// Arbiter is the repository and branch whose history defines one version sequence,
+// together with the image that sequence names.
 //
 // Remote is a clone URL naming the arbiter by ITS OWN name: a forge answers a
 // repository's former name with a redirect to whatever holds that name now, so this
 // path refuses redirects rather than following them (see env). A Remote that has to
 // be redirected to reach its target fails the fetch, which is the honest outcome —
 // the repository at the end of a redirect is not the one the caller named.
+//
+// IMAGE BELONGS HERE, WITH THE BRANCH THAT NUMBERS IT. A version number and the
+// bytes it names are one fact — "the release after the last one, published as this"
+// — and the release lane used to spell that fact in five places: this remote, the
+// address it claims a tag at, the tag list it maxes over, the image it pushes, and
+// the repository it builds the plugin set from. Five spellings of one repository is
+// how a rename splits them: the name moves, one spelling resolves somewhere new, and
+// the others go on meaning what they meant. That is the whole of how commits from
+// another history came to hold numbers in this sequence, and how a release published
+// a plugin set built from a repository it had nothing to do with.
+//
+// So the lane reads all of it from HERE, downstream of the verification — the image
+// path is an output of proving the commit belongs, which leaves no order of steps in
+// which bytes are published under a number their commit was never entitled to.
 type Arbiter struct {
 	// Remote is the clone URL fetched for the release branch.
 	Remote string
 	// Branch is the branch whose history numbers the sequence.
 	Branch string
+	// Image is what that sequence names, registry host included.
+	Image string
 }
 
-// Cloud is the arbiter of the ghcr.io/hanzoai/cloud version sequence: every
-// v<X.Y.Z> in that sequence names a commit this branch has been.
+// Cloud is the arbiter of cloud's version sequence: every v<X.Y.Z> in it names a
+// commit this branch has been, published as this image.
 //
 // It is ONE value, because there is one claimant. A second one reading a second
 // repository is how a sequence comes to be numbered by two histories, and the
@@ -62,6 +79,31 @@ type Arbiter struct {
 var Cloud = Arbiter{
 	Remote: "https://git.hanzo.ai/hanzo-inc/cloud",
 	Branch: "main",
+	Image:  "ghcr.io/hanzoai/cloud",
+}
+
+// API is the same repository addressed for writing. The forge creates a ref under
+// /v1/repos/<owner>/<repo>, and creating refs/tags/v<N> is the one write a release
+// performs — the compare-and-swap that allocates the number.
+//
+// DERIVED FROM Remote, NEVER STORED BESIDE IT. A second field would be a second
+// spelling of one repository, and then the read that verifies a commit and the write
+// that claims its number are addressed independently: repoint one and the lane
+// verifies against the repository it means while claiming in the repository it does
+// not. Deriving puts the read and the write on the same object by construction.
+//
+// Empty for a remote that is not an https URL, because there is no forge behind a
+// local path to write to and a caller must fail rather than address something else.
+func (a Arbiter) API() string {
+	rest, ok := strings.CutPrefix(a.Remote, "https://")
+	if !ok {
+		return ""
+	}
+	host, path, ok := strings.Cut(rest, "/")
+	if !ok || path == "" {
+		return ""
+	}
+	return "https://" + host + "/v1/repos/" + path
 }
 
 // ErrForeign reports a commit the arbiter's release branch has never been.
