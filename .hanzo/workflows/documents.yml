@@ -1,0 +1,204 @@
+# Regenerate the fleet's documents, on a runner, and commit what came out.
+#
+# THE GATE REFUSES; THIS PRODUCES. `make -f mk/fleet.mk check` regenerates every
+# app's document from source and fails on any diff, and its own error names the
+# repair: rerun the sweep and commit the result. That repair had nowhere to run.
+#
+#   THE TREE MUST BE STILL. The sweep is one binary per app across all 125 of
+#   them, reading the whole tree as it goes. Several sessions edit the shared
+#   working copy at once, so a run that starts clean can finish against a tree
+#   that changed underneath it and write documents describing a half-saved state.
+#   That is not a risk, it happened: the mtimes showed the interleaving and the
+#   output had to be thrown away. A fresh checkout is quiet because nothing else
+#   can reach it.
+#
+#   THE CODEC WANTS RAM. Every app opens its cek-encrypted store to mount, and the
+#   pure-Go SQLCipher codec decrypts only onto RAM-backed scratch — it probes for
+#   that rather than believing a flag. /dev/shm is already tmpfs on linux and
+#   macOS mounts none, so `make ramfs` exists and needs root. Here the
+#   prerequisite is simply true, and mk/fleet.mk's ramfs-check is a no-op.
+#
+#   AND THE FILESYSTEM MUST BE CASE-SENSITIVE. Running the linux build over a
+#   bind-mounted macOS volume trips Go's loader on a filename collision that is
+#   not in the tree, only in the mount. A native filesystem has no such shadow.
+#
+# All three are properties of WHERE it runs, not of what it does — so the fix is a
+# runner, and the sweep itself is unchanged. It is the same target, at the same
+# concurrency knobs, that the gate already runs green here in about six minutes
+# warm; a lane that regenerated differently from the lane that judges would be the
+# two-spellings-of-one-sweep bug the Makefile was already refactored to end.
+#
+# DISPATCH ONLY, and that is the second half of the same idea. A gate allowed to
+# rewrite the value it compares against is not a gate — on a push trigger this
+# would go green against whatever it had just produced, and a real surface
+# regression would land as a new baseline. So a person decides the regeneration is
+# wanted and asks for it. The refusal stays in `check`, where every push meets it.
+#
+# WHAT STOPS IT COMMITTING A REGRESSION: nothing here, and nothing here needs to.
+# `documents` composes the woven document through openapi/floor.json, which
+# refuses a surface that SHRANK. A sweep that lost operations fails before the
+# commit step is reached, and the log carries the count that moved. The floor
+# decides, not a flag in this file.
+name: Documents
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  # Two of these must never overlap: both write the same paths on the same
+  # branch, and the loser would push onto a base it never read. Serialised, the
+  # second one simply finds the first one's work already committed and reports
+  # that nothing moved.
+  group: documents
+  cancel-in-progress: false
+
+jobs:
+  write:
+    # The label the gate uses. `ubuntu-*` is not advertised to this fleet, and an
+    # unmatched label does not error — the job queues until it times out.
+    runs-on: [hanzo-build-linux-amd64]
+    # The sweep is ~6 minutes against the warm per-runner cache and ~50 cold, and
+    # a runner that has never built this repo is the case that has to fit.
+    timeout-minutes: 90
+    env:
+      GOPRIVATE: github.com/hanzoai/*
+      GOWORK: off
+      # A STABLE cache home, at the path the gate uses. setup-go's cache writes to
+      # the Actions cache backend, which this forge does not provide; naming the
+      # two caches at a fixed path makes them persist on the runner's filesystem
+      # instead, and sharing the gate's path is what makes this six minutes rather
+      # than fifty. Go locks both, so concurrent jobs sharing them is safe.
+      GOCACHE: /var/tmp/hanzo-go/build
+      GOMODCACHE: /var/tmp/hanzo-go/mod
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Named, not inherited. This lane is dispatched, and a dispatch can name
+          # any ref; the documents are only meaningful against the branch they are
+          # committed to, and the push below targets main unconditionally.
+          ref: main
+
+      - name: Provision Go, at the version this module asks for
+        # The runner image ships no Go, so `go` here is `command not found` and
+        # every step after it dies at exit 127. Read the version from go.mod
+        # rather than pinning one: a toolchain that is not the module's own
+        # generates documents this repo cannot reproduce.
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          # OFF, and said rather than defaulted: setup-go's cache writes to the
+          # Actions cache backend, which this forge does not serve. The caches
+          # that make this six minutes are the fixed paths in `env:` above, which
+          # live on the runner's own filesystem and outlast the job.
+          cache: false
+
+      - name: Reach the private modules
+        # GOPRIVATE sends hanzoai/* past the proxy to a direct clone, which needs a
+        # credential. A FRESH per-job config rather than ~/.gitconfig: this runner
+        # is shared, and a stale insteadOf left behind by another repo's job is
+        # read in preference to anything set later.
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          [ -n "${GH_PAT:-}" ] || { echo "GH_PAT is not set — a private module that is not already in the cache cannot be fetched"; exit 0; }
+          # RUNNER_TEMP is unset on this forge. Unguarded, "$RUNNER_TEMP/x" is
+          # "/x" and the step dies before printing anything.
+          TMP="${RUNNER_TEMP:-/tmp}"
+          CFG="$TMP/gitconfig-private"; : > "$CFG"
+          GIT_CONFIG_GLOBAL="$CFG" git config --global \
+            url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+          { echo "GIT_CONFIG_GLOBAL=$CFG"; echo "GIT_CONFIG_NOSYSTEM=1"; } >> "$GITHUB_ENV"
+
+      - name: Write the documents
+        # ONE TARGET, CALLED. Everything about which apps describe themselves,
+        # which two only build, how wide the fan runs and what the weave refuses
+        # lives in mk/fleet.mk, and is read from there by the gate too.
+        run: |
+          set -euo pipefail
+          # ASK THE PATH, not the environment. A toolchain step can report success
+          # and leave nothing runnable, and the sweep's first symptom would then be
+          # 125 apps failing to build for a reason none of them names.
+          command -v go >/dev/null || { echo "::error::no go on PATH after the toolchain step — the sweep cannot start"; exit 1; }
+          go version
+          make -f mk/fleet.mk documents
+
+      - name: Commit what the sweep wrote
+        env:
+          # The automatic per-job token CANNOT do this: it is not a user, and this
+          # forge answers its push to a protected branch with "User -2 is not
+          # allowed to push to protected branch main". FORGE_TOKEN is the
+          # credential with contents:write, inherited from the org.
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -n "${FORGE_TOKEN:-}" ] || {
+            echo "::error::FORGE_TOKEN is not readable here, and the automatic token cannot push to a protected branch. The documents were regenerated and would be discarded with this container — refusing to report that as a success."; exit 1; }
+
+          # EVERYTHING THE SWEEP TOUCHED, said out loud before anything is
+          # selected. The commit below takes only the generated set; a file
+          # outside it that moved is a fact about this repo worth seeing, and a
+          # step that stages a subset silently is how it stops being seen.
+          echo "── the sweep left this ──"
+          git status --porcelain
+          echo "─────────────────────────"
+
+          # THE SET, ASKED FOR RATHER THAN RESTATED. mk/fleet.mk owns which paths
+          # are generated documents, and the gate judges that same list. A copy
+          # here would be a second answer to one question, and the copy that drifts
+          # is the one nobody reads.
+          #
+          # READ INTO A VARIABLE FIRST, and it is not style. Inline, `git add --
+          # $(make …)` takes its exit status from git, so a make that failed
+          # expands to nothing, git adds nothing and succeeds, the diff is empty
+          # and the step reports "nothing to commit" — a green run that regenerated
+          # the fleet and threw it away. Observed while testing this file. An
+          # assignment carries the substitution's status, and the emptiness check
+          # covers the case where it exits 0 saying nothing.
+          DOCUMENTS=$(make -s -f mk/fleet.mk paths)
+          [ -n "$DOCUMENTS" ] || { echo "::error::mk/fleet.mk named no generated documents — refusing to decide there is nothing to commit on the strength of a question that did not get answered"; exit 1; }
+          git add -- $DOCUMENTS
+          if git diff --cached --quiet; then
+            echo "every document already matches the source it is generated from — nothing to commit"
+            exit 0
+          fi
+          git -c user.name=hanzo-dev -c user.email=dev@hanzo.ai commit \
+            -m 'regenerate the fleet documents from source' \
+            -m 'Written by the Documents lane on hanzo-build-linux-amd64 — the platform the drift gate judges them on, with the RAM-backed scratch the codec requires and a checkout nothing else is editing.'
+
+          # The push is FAST-FORWARD, and that is the compare-and-swap. If main
+          # moved while the sweep ran, these documents were generated from a tree
+          # that is no longer the branch, and the right outcome is a red run and a
+          # rerun — not a merge, and never a force.
+          REMOTE="${GITHUB_SERVER_URL:-https://git.hanzo.ai}"
+          REMOTE="${REMOTE%/}/${{ github.repository }}"
+          # git sends EVERY matching http.extraHeader and the server honours the
+          # first Authorization it reads, so adding one beside the header
+          # actions/checkout persisted leaves the weaker token winning. Clear them
+          # all, then set the one that can write.
+          #
+          # `|| true` on the read: `--get-regexp` exits 1 when nothing matches, and
+          # under pipefail that ends the step — having nothing to clear is the
+          # good case, not a failure.
+          { git config --local --name-only --get-regexp '^http\..*extraheader$' || true; } 2>/dev/null \
+            | while read -r k; do git config --local --unset-all "$k" || true; done
+          git config --local http.extraheader "Authorization: token ${FORGE_TOKEN}"
+          git push "$REMOTE" HEAD:main
+          echo "pushed $(git rev-parse --short HEAD) to main"
+
+          # A push made with a token fires no workflow on this forge, so without
+          # this the regenerated documents would sit on main having been gated by
+          # nothing until somebody else happened to push. Ask the train directly.
+          #
+          # A WARNING RATHER THAN A FAILURE: the documents are already committed
+          # and correct at this point, and reporting the whole lane red would say
+          # the regeneration did not happen. What is missing is a run, and the
+          # line below says exactly how to start one.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            -H "Authorization: token ${FORGE_TOKEN}" -H 'Content-Type: application/json' \
+            -d '{"ref":"main"}' \
+            "https://git.hanzo.ai/v1/repos/${{ github.repository }}/actions/workflows/cicd.yml/dispatches") || code=000
+          case "$code" in
+            2*) echo "CI/CD dispatched on main" ;;
+            *)  echo "::warning::could not start CI/CD (HTTP $code) — the documents are committed but nothing has gated them. Dispatch the CI/CD workflow on main." ;;
+          esac

@@ -1484,6 +1484,20 @@ zip is getting multi-status `responses`, and these convert when it lands.
    from `openapi.yaml` and therefore from every generated SDK, so no Python, Go
    or TS caller could reach the ingress API at all, with every gate green. The
    cure is `make -f mk/fleet.mk check`, which REGENERATES and diffs.
+   **Producing the documents and judging the tree are two targets.** `check`
+   fails exactly when there is something to commit, so it cannot be its own
+   repair; `documents` is the same sweep with no verdict, and `paths` prints the
+   generated set both of them work on, so the gate's scope and the repair's
+   `git add` cannot drift apart. Do not run either against the shared working
+   copy — it is ~15 minutes reading a tree other sessions are editing, and a run
+   that starts clean finishes describing a half-saved state (observed; the output
+   was reverted). Dispatch `.hanzo/workflows/documents.yml` instead: a linux
+   runner gives a checkout nothing else touches, `/dev/shm` for the codec's
+   RAM-backed scratch (macOS mounts no tmpfs and `make ramfs` wants root), and a
+   case-sensitive filesystem, which a bind-mounted macOS volume is not — Go's
+   loader trips on a collision that exists only in the mount. It commits what it
+   wrote and asks CI/CD to gate it, because a push made with a token starts no
+   run here.
    It RECURS, and the gate is what finds it: `e83d7e90` moved websearch's scrape
    to `/v1/scrape` without re-emitting `plugin/websearch/openapi.json`, so main
    published two paths nobody serves (`/v1/websearch/scrape`,
@@ -1771,7 +1785,7 @@ invisible to prose, MCP, the CLI and every typed SDK method. What it taught:
   Makefiles are added here (byte-identical to the generated form). **bot, meet and
   zen are still uncovered**, and the class fix is in `plugin/gen-app-cmds/main.go`:
   emit the Makefile beside the main it already writes, then run `make -f
-  mk/fleet.mk openapi-check` and commit whatever drift those three have been
+  mk/fleet.mk check` and commit whatever drift those three have been
   hiding.
 **The six-plugin pass (bots, entitlements, sbom, translate, skills, gateway):
 11 typed, 5 refused, out of 16 operations that published NOTHING.** Same work list
@@ -2985,7 +2999,7 @@ migration silently strips request shapes from every generated CLI and SDK.
   composition against `openapi.yaml`, so an app whose subset no longer matches its
   routes fails there — and a MISSING subset fails immediately, naming the file.
   The fix is to re-emit: `make -C apps/<app> describe` for one,
-  `make -f mk/fleet.mk subsets` for all of them. Never edit the JSON, and
+  `make -f mk/fleet.mk describe` for all of them. Never edit the JSON, and
   never relax the gate. The same test also LOGS `UNROUTED: <app> serves <path>,
   which the fleet routes nowhere` — reported rather than refused, because that one
   is a composition-root defect (a prefix missing from a `Wire()` entry) and the

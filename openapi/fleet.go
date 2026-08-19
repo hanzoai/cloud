@@ -41,7 +41,7 @@ import (
 // subsystem and 116 app binaries that each project their OWN router when they are
 // BUILT. What the host serves is the weave of those projections ([MountFleet]),
 // so nothing in production reads a live router, and the artifact is only as fresh
-// as the last `make -f mk/fleet.mk subsets`. It shipped stale — one binary answered
+// as the last `make -f mk/fleet.mk describe`. It shipped stale — one binary answered
 // a renamed billing route under its new name while still publishing the old one,
 // because the rename commit did not regenerate the subset.
 //
@@ -133,7 +133,7 @@ func Subsets(apps []string, read func(app string) []byte) ([]Part, error) {
 	for _, name := range apps {
 		raw := read(name)
 		if len(raw) == 0 {
-			return nil, fmt.Errorf("%s publishes no subset — every app describes itself; run `make -f mk/fleet.mk subsets`", name)
+			return nil, fmt.Errorf("%s publishes no subset — every app describes itself; run `make -f mk/fleet.mk describe`", name)
 		}
 		var doc Document
 		if err := json.Unmarshal(raw, &doc); err != nil {
