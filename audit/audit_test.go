@@ -100,7 +100,7 @@ func TestVerify_PassesOnUntamperedChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
-	if !integrity.OK {
+	if integrity.Verdict != Intact {
 		t.Fatalf("chain not OK: broken at %d (%s)", integrity.BrokenAt, integrity.Reason)
 	}
 	if integrity.Count != 25 {
@@ -111,8 +111,8 @@ func TestVerify_PassesOnUntamperedChain(t *testing.T) {
 	}
 	// Head must equal the last record's hash.
 	count, head := rec.Head()
-	if count != 25 || head != integrity.HeadHash {
-		t.Fatalf("head mismatch: (%d,%q) vs verify (%d,%q)", count, head, integrity.Count, integrity.HeadHash)
+	if count != 25 || head != integrity.Head {
+		t.Fatalf("head mismatch: (%d,%q) vs verify (%d,%q)", count, head, integrity.Count, integrity.Head)
 	}
 }
 
@@ -131,7 +131,7 @@ func TestVerify_DetectsFieldTamper(t *testing.T) {
 		}
 	}
 	// Sanity: clean chain verifies.
-	if iv, _ := rec.Verify(ctx); !iv.OK {
+	if iv, _ := rec.Verify(ctx); iv.Verdict != Intact {
 		t.Fatalf("precondition: clean chain should verify, broke at %d", iv.BrokenAt)
 	}
 
@@ -143,7 +143,7 @@ func TestVerify_DetectsFieldTamper(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify after tamper: %v", err)
 	}
-	if iv.OK {
+	if iv.Verdict == Intact {
 		t.Fatal("TAMPER NOT DETECTED — a modified record verified as OK; the chain is forgeable")
 	}
 	if iv.BrokenAt != 4 {
@@ -173,7 +173,7 @@ func TestVerify_DetectsDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify after delete: %v", err)
 	}
-	if iv.OK {
+	if iv.Verdict == Intact {
 		t.Fatal("DELETION NOT DETECTED — a removed record left the chain verifying OK")
 	}
 	// The break is observed at seq 6 (the record whose predecessor vanished): its
@@ -201,7 +201,7 @@ func TestVerify_DetectsReorder(t *testing.T) {
 UPDATE audit_log SET hash = (SELECT hash FROM audit_log WHERE seq=3) WHERE seq=2;`)
 
 	iv, _ := rec.Verify(ctx)
-	if iv.OK {
+	if iv.Verdict == Intact {
 		t.Fatal("REORDER/HASH-SWAP NOT DETECTED")
 	}
 	if iv.BrokenAt < 0 {
@@ -252,7 +252,7 @@ func TestChain_RestartContinues(t *testing.T) {
 		t.Fatalf("chain did not continue: seq=%d prev=%q (want seq 5 prev %q)", r5.Seq, r5.PrevHash, lastHash)
 	}
 	// And the whole continued chain still verifies.
-	if iv, _ := rec2.Verify(ctx); !iv.OK {
+	if iv, _ := rec2.Verify(ctx); iv.Verdict != Intact {
 		t.Fatalf("continued chain broke at %d (%s)", iv.BrokenAt, iv.Reason)
 	}
 }
@@ -434,7 +434,7 @@ func TestChain_ConcurrentAppendsStayGapless(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	if !iv.OK {
+	if iv.Verdict != Intact {
 		t.Fatalf("concurrent chain broke at %d (%s)", iv.BrokenAt, iv.Reason)
 	}
 	if iv.Count != uint64(total) {
@@ -600,7 +600,7 @@ func TestCheckpoint_CountMonotonicDetectsTruncation(t *testing.T) {
 	defer func() { _ = rec2.Close() }()
 	after, _ := rec2.Head()
 	// The internal chain still verifies (a truncated prefix is self-consistent)…
-	if iv, _ := rec2.Verify(ctx); !iv.OK {
+	if iv, _ := rec2.Verify(ctx); iv.Verdict != Intact {
 		t.Fatalf("truncated prefix should self-verify, broke at %d", iv.BrokenAt)
 	}
 	// …but the count REGRESSED vs the pinned checkpoint — the truncation signal.

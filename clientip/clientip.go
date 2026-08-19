@@ -331,8 +331,9 @@ func StampClientIP(c *zip.Ctx) error {
 // busiest path in the fleet is how an observability line becomes an outage.
 var first sync.Once
 
-// ClientIPAcross reads the address back inside a child. Subsystems install it rather
-// than deriving an address of their own.
+// ClientIPAcross reads the address back inside a child, which is what the crossing
+// tests assert on. A subsystem reads the header itself rather than deriving an
+// address of its own — ai does, and nothing installs a resolver any more.
 //
 // CLONED, and this is the clone that matters. The value comes back out of a buffer
 // fasthttp reuses between requests, so uncloned it is a view the NEXT caller
