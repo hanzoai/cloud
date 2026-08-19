@@ -63304,6 +63304,30 @@ paths:
       tags:
       - billing
       x-app: billing
+  /v1/billing/usage/rollup:
+    get:
+      description: 'Answers the one read the account page renders: the subject''s
+        resolved plan, the plan''s included monthly allotment beside what was actually
+        granted this period, consumption capped at that grant, the overage past it,
+        and the spendable wallet (balance minus holds) — all for the current UTC month,
+        every figure derived from the same transactions the gateway''s balance gate
+        reads, so this read can never disagree with the gate that admits the next
+        call. It rides the same pinned chain as the sibling reads: the user parameter
+        is overwritten with the validated caller''s own billing subject before the
+        handler runs, so it can never name another tenant; user is required, which
+        only a service-to-service caller can omit and be refused 400 for, and plan
+        is optional — omitted, it is resolved from the subject''s subscription. The
+        rule to get right is that the two sides are DIFFERENT MONEY: the included
+        figures are usage the subscription grants and the wallet is prepaid credit
+        the customer bought, so a reader who sums them invents a balance nobody holds
+        — and before the period''s first allotment grant runs, monthlyCents shows
+        the plan''s entitlement while grantedCents is zero, which is the figure consumption
+        actually draws down.'
+      operationId: get_billing_usage_rollup
+      summary: What plan you are on and how much of it is left, beside the wallet
+      tags:
+      - billing
+      x-app: commerce
   /v1/billing/webhooks/{provider}:
     post:
       description: 'Accepts a payment provider''s event, verifies it, records it for
