@@ -193,7 +193,7 @@ JOBS := $(or $(JOBS),$(shell \
 # thing the next person will reach for.
 fan = $(MAKE) -f $(ROOT)/mk/fleet.mk -k -j$(JOBS) GOFLAGS=-p=$(FLEET_P) $1
 
-.PHONY: binaries describe dist openapi check
+.PHONY: binaries describe dist openapi documents paths check
 
 # FIRST, so a bare `make -f mk/fleet.mk` runs the two-second check and not the
 # twelve-minute rebuild. (Included at the root it changes nothing: the default
@@ -373,11 +373,42 @@ describe: ## Every app describes itself (one binary per app, all at once).
 # depending on which name you called it by. It leaves them now — 4.1 GiB in an
 # ignored ./bin, on a runner that requests 38Gi of ephemeral storage — and you
 # have the binaries you just built.
-check: describe ## Regenerate every document + openapi.yaml FROM SOURCE and fail on any diff. The drift gate.
+# WRITING THE DOCUMENTS AND JUDGING THE TREE ARE TWO THINGS, so they are two
+# targets. They were one, and the seam is where a whole class of work had nowhere
+# to go: `check` REFUSES exactly when there is something to commit, so the one
+# command that repairs a red gate could not be the gate, and the repair had no
+# home at all. Its own error text says `fix: make describe` — and that fix is a
+# fleet-wide sweep of one binary per app, fifteen minutes against a tree nobody
+# else may touch, on a platform whose codec needs RAM-backed scratch. Every
+# property that makes it hard to run by hand is free on a linux runner, so the
+# repair belongs there: `.hanzo/workflows/documents.yml` calls THIS target and
+# commits what it wrote.
+#
+# `check` is unchanged in behaviour — same sweep, same order, same refusal. It
+# CALLS the producer rather than restating it, for the reason `check` already
+# calls `describe`: the copy is what lets two spellings of one sweep disagree.
+documents: describe ## Write every generated document FROM SOURCE. Produces; renders no verdict.
 	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi OUT=$(ROOT)/openapi.yaml 2>&1) \
 	  || { echo "$$out"; echo "!! the compose refused; nothing was written"; exit 1; }
 	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-fleet-catalog . >/dev/null
-	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml public.yaml openapi/floor.json openapi/closure.json fleet/catalog.json plugin/); \
+
+# THE SET, NAMED ONCE. The gate judges these paths and the repair lane commits
+# them, and a repair carrying fewer paths than the gate judges leaves a tree that
+# only the gate can see is still red. `paths` is how a reader outside make — a
+# workflow's `git add` — asks for the same list rather than keeping its own.
+#
+# zipdoc_gen.go is deliberately NOT here. `describe` does regenerate the lifted
+# prose on its way past, but the gate that judges it is `zipdoc-check`, which
+# reports it against the source it was lifted from in ninety seconds. A stale
+# lift is a thing to repair in seconds anywhere; this list is the set that is
+# expensive to produce, which is the set worth a runner.
+DOCUMENTS = openapi.yaml public.yaml openapi/floor.json openapi/closure.json fleet/catalog.json plugin/
+
+paths: ## Print the generated-document paths, for a caller that has to name them outside make.
+	@echo $(DOCUMENTS)
+
+check: documents ## Regenerate every document + openapi.yaml FROM SOURCE and fail on any diff. The drift gate.
+	@stale=$$(git -C $(ROOT) status --porcelain -- $(DOCUMENTS)); \
 	only_witness=$$(printf '%s\n' "$$stale" | grep -vc 'openapi/closure.json' 2>/dev/null || true); \
 	if [ -n "$$stale" ] && [ "$$only_witness" = "0" ]; then \
 	  echo ">> the witness moved and no document did: a dependency changed, and every one of"; \
@@ -401,7 +432,11 @@ check: describe ## Regenerate every document + openapi.yaml FROM SOURCE and fail
 	  echo "undocumented, or documented and gone. The SDK repos pull this file, so a route"; \
 	  echo "missing here is a route no generated client can reach."; \
 	  echo ""; \
-	  echo "  fix:  make describe  # then commit openapi.yaml, plugin/*/openapi.json and openapi/closure.json"; \
+	  echo "  fix:  dispatch the Documents workflow (.hanzo/workflows/documents.yml). It runs this"; \
+	  echo "        same sweep on a linux runner — quiet checkout, RAM-backed scratch, no root"; \
+	  echo "        needed — and commits what it wrote."; \
+	  echo ""; \
+	  echo "        by hand:  make -f mk/fleet.mk documents  # then commit \$$(make -s -f mk/fleet.mk paths)"; \
 	  echo ""; \
 	  echo "  openapi/closure.json alone means only the DEPENDENCIES moved — the documents"; \
 	  echo "  are current and the witness is what was not committed. 'make closure-check'"; \
