@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/cloud/clientip"
 )
 
 // fourMiB is fasthttp's default request-body ceiling. It is the number this test
@@ -64,5 +66,39 @@ func TestTheDoorCarriesTheHeaderCeilingToo(t *testing.T) {
 	}
 	if cfg.BodyLimit <= fourMiB {
 		t.Fatalf("door BodyLimit=%d is at or below the %d framework default", cfg.BodyLimit, fourMiB)
+	}
+}
+
+// TestTheDoorReportsTheCallerAndNotTheIngress holds the door to the one fact every
+// per-caller rule is keyed on.
+//
+// zip resolves the caller ONCE at the seam and believes a forwarded header only
+// where the app names its own hops. Unnamed, its answer is the socket peer — which
+// behind the bar is one in-cluster address for every visitor on earth, so the free
+// lane's per-visitor ceiling becomes a single global bucket that whoever arrives
+// first each day spends for everybody.
+//
+// It drives a real request rather than reading the config back, for the reason the
+// test above states: the defect is that the value never reaches the transport.
+// `app.Test` reports the unspecified address as the peer, which the shipped trust
+// set names, so a forwarded header is honoured here exactly as it is from the bar.
+func TestTheDoorReportsTheCallerAndNotTheIngress(t *testing.T) {
+	const visitor = "203.0.113.7" // TEST-NET-3: never a real peer, so never a false pass
+
+	var seen string
+	app := zip.New(doorConfig())
+	app.Get("/probe", func(c *zip.Ctx) error {
+		seen = clientip.ClientIP(c)
+		return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req.Header.Set("X-Forwarded-For", visitor)
+	if _, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true}); err != nil {
+		t.Fatalf("probe did not reach the handler: %v", err)
+	}
+	if seen != visitor {
+		t.Fatalf("the door reported %q; the caller is %q. The door names no trusted "+
+			"proxies, so every visitor arrives as the same in-cluster address", seen, visitor)
 	}
 }
