@@ -1578,7 +1578,7 @@
   },
   {
    "id": "post_responses",
-   "doc": "Implements POST /v1/responses. The converted request is passed to\nChatCompletions and an installed ResponseWriter converts its OpenAI chat JSON\nor SSE back into Responses JSON/SSE on the fly."
+   "doc": "Implements POST /v1/responses. The converted request is completed by\nthe chat path, which is handed a sink saying where the answer goes: a stream is\ntranslated as it is produced, a whole body is translated entire."
   },
   {
    "id": "post_router_artifact-meta",
