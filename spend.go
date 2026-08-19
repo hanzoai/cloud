@@ -211,7 +211,7 @@ func Billable(method, path string) bool {
 		if path == strings.TrimSuffix(t, "/") || strings.HasPrefix(path, t) {
 			// Prefixes NEST, and the shorter one here may belong to a different
 			// app than the one that actually serves this path. provisioning is
-			// routed /v1/vector and /v1/search; product is routed the more
+			// routed /v1/vector and /v1/search/query; product is routed the more
 			// specific /v1/vector/collections and /v1/search/indexes and declares
 			// cloud.Free. A bare HasPrefix scan bills four of product's surfaces
 			// on provisioning's standing — gating a Free product behind a balance.

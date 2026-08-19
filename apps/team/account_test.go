@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -30,7 +31,9 @@ func TestBearerFromHeader(t *testing.T) {
 // authenticated RPC.
 func TestTokenRoundTrip(t *testing.T) {
 	const account = "550e8400-e29b-41d4-a716-446655440000"
-	tok, err := token.Generate(account, "", map[string]any{"org": "acme"}, 0, "s3cret")
+	// A real exp, as both production mints pass: exp=0 is the legacy cutoff,
+	// which has passed, so an exp-less mint decodes expired by design.
+	tok, err := token.Generate(account, "", map[string]any{"org": "acme"}, expUnix(time.Hour), "s3cret")
 	if err != nil {
 		t.Fatal(err)
 	}
