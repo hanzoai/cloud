@@ -119,20 +119,46 @@ func GrantFor(name string) []string {
 // HasPrefix scan will attribute those paths to the wrong app.
 //
 // An unrouted path returns "" — the caller decides what that means.
+//
+// The match is SEGMENT-WISE, because one address has three spellings: the
+// manifest writes a parameter as `:org`, a document writes it `{org}`, and a
+// real request carries the value itself. A byte-prefix compare answers only the
+// literal spelling, which is how a declared owner of /v1/orgs/:org/entitlements
+// read as unowned and its live operations were pruned as a sibling's. A `:name`
+// prefix segment matches any single path segment; a literal one matches itself.
 func OwnerOf(path string) string {
-	best, bestLen := "", -1
+	ps := segments(path)
+	best, bestDepth := "", -1
 	for _, a := range Apps {
 		for _, p := range a.Prefixes {
-			root := strings.TrimSuffix(p, "/")
-			if root == "" {
+			pre := segments(p)
+			if len(pre) == 0 || len(pre) > len(ps) {
 				continue
 			}
-			if path == root || strings.HasPrefix(path, root+"/") {
-				if len(root) > bestLen {
-					best, bestLen = a.Name, len(root)
+			matched := true
+			for i, s := range pre {
+				if strings.HasPrefix(s, ":") {
+					continue // a parameter owns whatever stands in its place
 				}
+				if ps[i] != s {
+					matched = false
+					break
+				}
+			}
+			if matched && len(pre) > bestDepth {
+				best, bestDepth = a.Name, len(pre)
 			}
 		}
 	}
 	return best
+}
+
+// segments is a path as the router walks it: leading and trailing slashes
+// dropped, one entry per segment.
+func segments(p string) []string {
+	p = strings.Trim(p, "/")
+	if p == "" {
+		return nil
+	}
+	return strings.Split(p, "/")
 }
