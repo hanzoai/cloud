@@ -4041,6 +4041,21 @@ that creates `refs/tags/v<N>` on the repository whose branch orders the sequence
 and `internal/lineage` refuses the claim for any commit that branch has never
 been.
 
+**The register also names the image, and the lane reads both from it.** They used
+to be five literals — the repository to list, the address to claim at, the branch,
+the image to push, the repository to build the plugin set from — and a rename moves
+what one of them resolves to while the rest go on meaning what they meant.
+`git.hanzo.ai/hanzoai/cloud` is a different repository now and answers
+`refs/tags/v1.801.564` with a commit from a history this sequence has never been
+on; the plugin car still spelled it, so a release built its plugin set from a
+repository it had nothing to do with. `lineage.Cloud` carries `Remote`, `Branch`
+and `Image`, derives the write address from `Remote` (`Arbiter.API`) so the
+repository that answers the read is the one that takes the write, and `cmd/lineage`
+prints all of it on a pass and only on a pass. The claim step evaluates that,
+writes it once to `GITHUB_ENV` and `GITHUB_OUTPUT`, and every later step and car
+reads it — so naming the image is something a run can only do after proving its
+commit is a state of the branch that numbers the sequence.
+
 The final step has ONE writer, and for a first-party service it is **universe git,
 not the cluster**. `clients/paas.releaseService` REFUSES to patch the operator
 `hanzo.ai/v1` App CR's `spec.image`: those CRs are declared in
@@ -4155,11 +4170,14 @@ git server's clone URL is `/v1/git/<org>/<project>/<repo>`, whose tail a tenant
 names, and a project `hanzoai` holding a repo `cloud` would otherwise spell the
 release repository's own coordinate.
 
-`isReleasePush` is narrow on purpose: the release repo BY URL (an org does not
-identify a repo), `main` only, a pinned commit only. Single-flight, because the
-version is computed from existing tags and two overlapping runs would compute the
-same one. Bot-authored pushes are excluded, so the release's own tag and mirror
-pushes cannot retrigger it.
+**That collapse decides which APPLICATION builds, and nothing about releases.**
+`isReleasePush` used to read it too, and a name is the wrong thing to hang a
+release on: while the private tree held the forge name `hanzoai/cloud`, every push
+to it normalised equal to the public repo, and a merge on either cut a release of
+the binary the whole fleet runs. Both the function and the lane that called it are
+gone; a version is now allocated only by `.hanzo/workflows/cicd.yml`, against the
+arbiter, on the graph rather than on a name. `sameRepo` keeps the collapse for what
+it was built for — matching a push to the applications tracking that repository.
 
 The org an inbound webhook belongs to comes from the App INSTALLATION id via the
 `connections` row written by the install callback. Without that row every delivery is
