@@ -108,7 +108,7 @@ fi
 # the READ is checked for succeeding, separately from what it returned: a network
 # that answered nothing would otherwise make every published image look untagged
 # and turn a broken check into 700 spurious failures.
-ARBITER="https://git.hanzo.ai/hanzo-inc/cloud"
+ARBITER="${ORPHANS_ARBITER:-https://git.hanzo.ai/hanzo-inc/cloud}"
 if [ -n "${ORPHANS_TAGS:-}" ]; then
   [ -r "$ORPHANS_TAGS" ] || { echo "orphans: cannot read ORPHANS_TAGS=$ORPHANS_TAGS" >&2; exit 2; }
   grep -E "$SEMVER" "$ORPHANS_TAGS" | sort -u > "$work/tags" || true

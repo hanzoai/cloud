@@ -234,13 +234,46 @@ func TestARefusalCarriesNoCredential(t *testing.T) {
 
 // TestCloudNamesOneArbiter holds the value the claim reads. One sequence numbered
 // by two histories is the defect this package exists to prevent, so which
-// repository and which branch is asserted rather than assumed.
+// repository, which branch and which image is asserted rather than assumed.
+//
+// The image is asserted HERE, beside the repository, because that pairing is the
+// property: these bytes are published by that branch and by nothing else. Read from
+// somewhere else it is a coincidence, and a coincidence between an image named
+// hanzoai/cloud and a repository named hanzoai/cloud is exactly what a release lane
+// mistook for an identity.
 func TestCloudNamesOneArbiter(t *testing.T) {
 	if Cloud.Remote != "https://git.hanzo.ai/hanzo-inc/cloud" {
 		t.Errorf("the cloud sequence is numbered by one repository, got %q", Cloud.Remote)
 	}
 	if Cloud.Branch != "main" {
 		t.Errorf("the cloud sequence is numbered along one branch, got %q", Cloud.Branch)
+	}
+	if Cloud.Image != "ghcr.io/hanzoai/cloud" {
+		t.Errorf("the cloud sequence names one image, got %q", Cloud.Image)
+	}
+}
+
+// TestAPIAddressesTheRepositoryItVerifies is the reason API is a method and not a
+// field: the write goes to the object the read just judged, so the two cannot be
+// pointed at different repositories.
+func TestAPIAddressesTheRepositoryItVerifies(t *testing.T) {
+	if got, want := Cloud.API(), "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud"; got != want {
+		t.Errorf("the claim is written to %q, want %q", got, want)
+	}
+	// Move the arbiter and the claim address follows in the same step. Two fields
+	// would let this pair come apart, which is how a lane verifies one repository
+	// and allocates numbers in another.
+	moved := Arbiter{Remote: "https://git.hanzo.ai/somewhere/else", Branch: "main"}
+	if got, want := moved.API(), "https://git.hanzo.ai/v1/repos/somewhere/else"; got != want {
+		t.Errorf("the claim address must follow the arbiter, got %q, want %q", got, want)
+	}
+	// Nothing to write to, so nothing is offered. A caller that addressed the empty
+	// string would post to a relative path, and the tests below run against local
+	// paths precisely because there is no forge behind them.
+	for _, a := range []Arbiter{{}, {Remote: t.TempDir()}, {Remote: "https://git.hanzo.ai"}} {
+		if got := a.API(); got != "" {
+			t.Errorf("%+v has no forge to claim in, got %q", a, got)
+		}
 	}
 }
 
