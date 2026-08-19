@@ -118,10 +118,10 @@ func verifyChain(t *testing.T, rec *audit.Recorder) {
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	if !got.OK {
-		t.Fatalf("audit chain BROKEN at seq %d: %s", got.BrokenAt, got.Reason)
+	if got.Verdict != audit.Intact {
+		t.Fatalf("audit chain %s at seq %d: %s", got.Verdict, got.BrokenAt, got.Reason)
 	}
-	t.Logf("chain OK: %d records, head %s", got.Count, got.HeadHash[:16])
+	t.Logf("chain %s intact: %d records, head %s", got.Name, got.Count, got.Head[:16])
 }
 
 // ── 1. the retained capability works AND is recorded ──────────────────────────

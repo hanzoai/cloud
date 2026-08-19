@@ -7,6 +7,7 @@ package audit
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -158,39 +159,77 @@ func scanRecord(sc interface{ Scan(...any) error }) (Record, error) {
 	return rec, nil
 }
 
-// Integrity is the result of a Verify walk — the AU-9 evidence that the trail has
-// not been tampered with.
+// Verdict is what a chain walk concluded. THREE states, not two: a chain that
+// could not be READ is not a chain that passed, and a boolean has nowhere to put
+// the difference. That distinction is the whole reason this is not a bool — an
+// outage and a clean bill of health must never render the same.
+type Verdict string
+
+const (
+	// Intact: every record's stored hash equals the recomputed hash AND the chain
+	// links are continuous (each PrevHash == the prior record's Hash, seqs gapless
+	// from 0).
+	Intact Verdict = "intact"
+	// Broken: the walk reached BrokenAt, and Reason says how the chain fails there.
+	Broken Verdict = "broken"
+	// Unread: the chain could not be walked at all, and Reason says why. Nothing is
+	// known about its contents — it is neither a pass nor a break.
+	Unread Verdict = "unread"
+)
+
+// Integrity is ONE chain's verification — the AU-9 evidence that THAT chain has
+// not been tampered with. One chain, never the trail: a deployment holds one chain
+// per process (see Name), and the whole family verified is a Trail.
 type Integrity struct {
-	// OK is true iff every record's stored hash equals the recomputed hash AND the
-	// chain links are continuous (each PrevHash == the prior record's Hash, seqs
-	// gapless from 0).
-	OK bool `json:"ok"`
-	// Count is the number of records walked.
+	// Name is the chain this verdict is about, e.g. "audit" or "audit-iam". It is
+	// carried because a verdict with no chain on it reads as the whole trail's,
+	// which is what a reader of a 128-chain deployment did.
+	Name string `json:"name"`
+	// Verdict is intact, broken or unread.
+	Verdict Verdict `json:"verdict"`
+	// Count is the number of records walked. Zero on an unread chain, where it
+	// means "nothing was read", not "the chain is empty".
 	Count uint64 `json:"count"`
-	// HeadHash is the hash of the last record (or the genesis anchor for an empty
+	// Head is the hash of the last record (or the genesis anchor for an empty
 	// chain). Pin this externally over time to detect tail-truncation.
-	HeadHash string `json:"headHash"`
-	// BrokenAt is the seq of the FIRST record that failed verification, or -1 when
-	// OK. Reason describes the break (recomputed-hash mismatch, prev-hash
-	// discontinuity, or a seq gap).
+	Head string `json:"head"`
+	// BrokenAt is the seq of the FIRST record that failed verification, and -1
+	// whenever the walk found no break (including an unread chain, where no seq
+	// was reached). Reason describes the break (recomputed-hash mismatch,
+	// prev-hash discontinuity, or a seq gap) or why the chain could not be read.
 	BrokenAt int64  `json:"brokenAt"`
 	Reason   string `json:"reason,omitempty"`
 }
 
-// Verify walks the entire chain in seq order, recomputing each record's hash from
-// its content + the running prev-hash and checking continuity. It is the
+// Verify walks THIS recorder's chain and reports its integrity. The whole family
+// a deployment keeps is the package-level Verify.
+func (r *Recorder) Verify(ctx context.Context) (Integrity, error) {
+	return walk(ctx, r.db, r.name)
+}
+
+// walk is the ONE chain walk, shared by the Recorder's own Verify and by the
+// trail reader, so a chain cannot be judged by two different rules depending on
+// whether the process that wrote it is the process asking.
+//
+// It reads the chain in seq order, recomputing each record's hash from its
+// content + the running prev-hash and checking continuity. It is the
 // tamper-detector: any modification (a changed field re-hashes differently), any
 // deletion or reordering (a seq gap or a broken prev-hash link), or a forged row
 // (its recomputed hash won't match unless the attacker also recomputed the entire
 // suffix — which they cannot do without re-inserting every subsequent record) is
 // reported with the exact seq where the chain first breaks.
 //
-// Complexity is O(n) over the records; for very large trails this streams row by
-// row (no full materialization). At cloud's audit volume this is fine; if a trail
-// grows past what an on-demand full walk should touch, verify a seq WINDOW
-// (Verify is easily extended with a bound) or rely on the externally-pinned head.
-func (r *Recorder) Verify(ctx context.Context) (Integrity, error) {
-	rs, err := r.db.QueryContext(ctx,
+// A returned ERROR means the chain could not be read; it is never a verdict about
+// its contents, and a caller must not render one as the other. Cancelling ctx
+// stops the walk — database/sql closes the rows and rs.Err() carries the reason —
+// so a 1.7 GB family does not outlive the client that asked about it.
+//
+// Complexity is O(n) over the records; this streams row by row (no full
+// materialization). If a chain grows past what an on-demand full walk should
+// touch, walk a seq WINDOW (this is easily extended with a bound) or rely on the
+// externally-pinned head.
+func walk(ctx context.Context, db *sql.DB, name string) (Integrity, error) {
+	rs, err := db.QueryContext(ctx,
 		`SELECT `+selectCols+` FROM audit_log ORDER BY seq ASC`)
 	if err != nil {
 		return Integrity{}, fmt.Errorf("audit: verify query: %w", err)
@@ -202,6 +241,13 @@ func (r *Recorder) Verify(ctx context.Context) (Integrity, error) {
 	var count uint64
 	headHash := genesisPrevHash
 
+	broke := func(seq uint64, reason string) Integrity {
+		return Integrity{
+			Name: name, Verdict: Broken, Count: count, Head: headHash,
+			BrokenAt: int64(seq), Reason: reason,
+		}
+	}
+
 	for rs.Next() {
 		rec, scanErr := scanRecord(rs)
 		if scanErr != nil {
@@ -209,19 +255,11 @@ func (r *Recorder) Verify(ctx context.Context) (Integrity, error) {
 		}
 		// Gapless, 0-based ordering.
 		if rec.Seq != expectSeq {
-			return Integrity{
-				OK: false, Count: count, HeadHash: headHash,
-				BrokenAt: int64(rec.Seq),
-				Reason:   fmt.Sprintf("seq gap: expected %d, got %d", expectSeq, rec.Seq),
-			}, nil
+			return broke(rec.Seq, fmt.Sprintf("seq gap: expected %d, got %d", expectSeq, rec.Seq)), nil
 		}
 		// Link continuity: this record must chain to the previous record's hash.
 		if rec.PrevHash != prevHash {
-			return Integrity{
-				OK: false, Count: count, HeadHash: headHash,
-				BrokenAt: int64(rec.Seq),
-				Reason:   "prev_hash discontinuity (a record was deleted, reordered, or altered)",
-			}, nil
+			return broke(rec.Seq, "prev_hash discontinuity (a record was deleted, reordered, or altered)"), nil
 		}
 		// Content integrity: recompute the hash from the record's own fields.
 		want, hErr := computeHash(rec, rec.PrevHash)
@@ -229,11 +267,7 @@ func (r *Recorder) Verify(ctx context.Context) (Integrity, error) {
 			return Integrity{}, fmt.Errorf("audit: verify hash: %w", hErr)
 		}
 		if want != rec.Hash {
-			return Integrity{
-				OK: false, Count: count, HeadHash: headHash,
-				BrokenAt: int64(rec.Seq),
-				Reason:   "hash mismatch (record content was modified after it was written)",
-			}, nil
+			return broke(rec.Seq, "hash mismatch (record content was modified after it was written)"), nil
 		}
 		prevHash = rec.Hash
 		headHash = rec.Hash
@@ -243,5 +277,5 @@ func (r *Recorder) Verify(ctx context.Context) (Integrity, error) {
 	if err := rs.Err(); err != nil {
 		return Integrity{}, fmt.Errorf("audit: verify rows: %w", err)
 	}
-	return Integrity{OK: true, Count: count, HeadHash: headHash, BrokenAt: -1}, nil
+	return Integrity{Name: name, Verdict: Intact, Count: count, Head: headHash, BrokenAt: -1}, nil
 }
