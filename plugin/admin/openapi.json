@@ -189,8 +189,8 @@
     "/v1/admin/audit": {
       "get": {
         "operationId": "adminAudit",
-        "summary": "Reads cloud's tamper-evident audit trail, newest first, with the chain's live integrity attached so a listing can be badged as verified.",
-        "description": "Reads cloud's tamper-evident audit trail, newest first, with the chain's live\nintegrity attached so a listing can be badged as verified.\n\nWhen cloud has no local store configured it falls back to forwarding IAM's own\nget-records trail verbatim — a DIFFERENT trail, federated so the endpoint never\nregresses to an empty list. Those rows carry no integrity of ours, so the field is\nnull there.",
+        "summary": "Reads one chain of cloud's tamper-evident audit trail, newest first, with that chain's live integrity attached so a listing can be badged as verified.",
+        "description": "Reads one chain of cloud's tamper-evident audit trail, newest first, with\nthat chain's live integrity attached so a listing can be badged as verified.\n\nWhen cloud has no local store configured it falls back to forwarding IAM's own\nget-records trail verbatim — a DIFFERENT trail, federated so the endpoint never\nregresses to an empty list. Those rows carry no integrity of ours, so the field is\nnull there.",
         "tags": [
           "admin"
         ],
@@ -309,8 +309,9 @@
                   "integrity": {
                     "brokenAt": -1,
                     "count": 42,
-                    "headHash": "9f2c",
-                    "ok": true
+                    "head": "9f2c",
+                    "name": "audit-admin",
+                    "verdict": "intact"
                   },
                   "msg": "",
                   "status": "ok",
@@ -329,8 +330,8 @@
     "/v1/admin/audit/verify": {
       "get": {
         "operationId": "adminAuditVerify",
-        "summary": "Walks the WHOLE hash chain and reports whether it is intact: how many records were checked, the head hash to pin externally against tail-truncation, and — when the chain is broken — the seq of the first bad record and why.",
-        "description": "Walks the WHOLE hash chain and reports whether it is intact: how many records\nwere checked, the head hash to pin externally against tail-truncation, and — when the\nchain is broken — the seq of the first bad record and why.\n\nbrokenAt is -1 exactly when ok is true. An unconfigured store is an honest failure\nhere rather than a fabricated pass.",
+        "summary": "Walks EVERY hash chain this deployment keeps and reports each one: which chains were checked, how many records each holds, the head hash to pin externally against tail-truncation, and — when a chain is broken — the seq of the first bad record and why.",
+        "description": "Walks EVERY hash chain this deployment keeps and reports each one: which\nchains were checked, how many records each holds, the head hash to pin externally\nagainst tail-truncation, and — when a chain is broken — the seq of the first bad\nrecord and why.\n\nThe trail is a FAMILY of chains, one per process, so the answer is a set and not a\nboolean: `intact`, `broken` and `unread` count the three verdicts and sum to the\nnumber of chains. A chain that could not be READ is reported `unread` and is never\na pass — an unreadable chain and a verified one must not render the same, which is\nthe whole reason this is not one flag.\n\nAn unconfigured store is an honest failure here rather than a fabricated pass.",
         "tags": [
           "admin"
         ],
@@ -340,10 +341,19 @@
               "application/json": {
                 "example": {
                   "data": {
-                    "brokenAt": -1,
-                    "count": 42,
-                    "headHash": "9f2c",
-                    "ok": true
+                    "broken": 0,
+                    "chains": [
+                      {
+                        "brokenAt": -1,
+                        "count": 42,
+                        "head": "9f2c",
+                        "name": "audit-iam",
+                        "verdict": "intact"
+                      }
+                    ],
+                    "intact": 1,
+                    "records": 42,
+                    "unread": 0
                   },
                   "msg": "",
                   "status": "ok"
@@ -3639,22 +3649,26 @@
       "Integrity": {
         "properties": {
           "brokenAt": {
-            "description": "BrokenAt is the seq of the FIRST record that failed verification, or -1 when\nOK. Reason describes the break (recomputed-hash mismatch, prev-hash\ndiscontinuity, or a seq gap).",
+            "description": "BrokenAt is the seq of the FIRST record that failed verification, and -1\nwhenever the walk found no break (including an unread chain, where no seq\nwas reached). Reason describes the break (recomputed-hash mismatch,\nprev-hash discontinuity, or a seq gap) or why the chain could not be read.",
             "type": "integer"
           },
           "count": {
-            "description": "Count is the number of records walked.",
+            "description": "Count is the number of records walked. Zero on an unread chain, where it\nmeans \"nothing was read\", not \"the chain is empty\".",
             "type": "integer"
           },
-          "headHash": {
-            "description": "HeadHash is the hash of the last record (or the genesis anchor for an empty\nchain). Pin this externally over time to detect tail-truncation.",
+          "head": {
+            "description": "Head is the hash of the last record (or the genesis anchor for an empty\nchain). Pin this externally over time to detect tail-truncation.",
             "type": "string"
           },
-          "ok": {
-            "description": "OK is true iff every record's stored hash equals the recomputed hash AND the\nchain links are continuous (each PrevHash == the prior record's Hash, seqs\ngapless from 0).",
-            "type": "boolean"
+          "name": {
+            "description": "Name is the chain this verdict is about, e.g. \"audit\" or \"audit-iam\". It is\ncarried because a verdict with no chain on it reads as the whole trail's,\nwhich is what a reader of a 128-chain deployment did.",
+            "type": "string"
           },
           "reason": {
+            "type": "string"
+          },
+          "verdict": {
+            "description": "Verdict is intact, broken or unread.",
             "type": "string"
           }
         },
@@ -4593,6 +4607,34 @@
         },
         "type": "object"
       },
+      "Trail": {
+        "properties": {
+          "broken": {
+            "description": "Broken counts the chains whose hash chain fails; each names where.",
+            "type": "integer"
+          },
+          "chains": {
+            "description": "Chains is every chain of the family, in name order.",
+            "items": {
+              "$ref": "#/components/schemas/Integrity"
+            },
+            "type": "array"
+          },
+          "intact": {
+            "description": "Intact counts the chains that verified end to end.",
+            "type": "integer"
+          },
+          "records": {
+            "description": "Records is the total number of records walked across every chain that was\nread. It counts nothing for an unread chain.",
+            "type": "integer"
+          },
+          "unread": {
+            "description": "Unread counts the chains that could not be read. NOT a pass: nothing is known\nabout their contents.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "UsageFundingOut": {
         "properties": {
           "data": {
@@ -4658,7 +4700,7 @@
       "VerifyOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Integrity"
+            "$ref": "#/components/schemas/Trail"
           },
           "msg": {
             "type": "string"
