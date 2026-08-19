@@ -126,7 +126,7 @@ var Apps = []App{
 	// the same pair already works for /v1/vector (provisioning) against
 	// /v1/vector/collections (product). No route moves.
 	{Name: "storage", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
-	{Name: "provisioning", Prefixes: []string{"/v1/instances"}},
+	{Name: "provisioning", Prefixes: []string{"/v1/instances", "/v1/s3", "/v1/search/query", "/v1/vector"}},
 	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	// The free lane's ceiling, beside the priced lane's. rollingcap bounds how fast

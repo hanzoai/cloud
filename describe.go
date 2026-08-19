@@ -110,6 +110,25 @@ func Describe(dir string, app *zip.App) error {
 	if err != nil {
 		return fmt.Errorf("openapi: %w", err)
 	}
+	// An address the fleet delivers to a SIBLING is not this app's to publish.
+	//
+	// ai is the case: its module registers real routes now (apps/ai composes the
+	// whole app rather than a wildcard door), so mounted alone it carries
+	// /v1/crawl and /v1/metrics — addresses the manifest routes to the apps that
+	// own those prefixes, where this binary's handler never answers. The relay's
+	// Yields used to subtract exactly this at the door; a real route is the
+	// host's own registration and wins its address, so the door never sees it
+	// and the subtraction has to live at the one producer instead. It asks the
+	// same routing table the host reads, so a dropped address is the fleet's
+	// answer, not a judgment call — and the owner's own subset still carries the
+	// operation, which is what the weave requires: one address, one app. The dir
+	// names the app because the describe contract writes into plugin/<app>.
+	self := filepath.Base(filepath.Clean(dir))
+	for path := range doc.Paths {
+		if owner := manifest.OwnerOf(path); owner != "" && owner != self {
+			delete(doc.Paths, path)
+		}
+	}
 	// The gap is refused HERE, at the one producer, and nowhere downstream.
 	//
 	// This is the file that mints the artifact eight SDKs, the MCP tool list, the
