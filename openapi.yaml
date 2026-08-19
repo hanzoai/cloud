@@ -75297,14 +75297,6 @@ paths:
       tags:
       - guide
       x-app: guide
-  /v1/health:
-    get:
-      description: Check if the system is live
-      operationId: get_health
-      summary: Check if the system is live
-      tags:
-      - health
-      x-app: ai
   /v1/help/articles:
     get:
       description: |-
@@ -113830,11 +113822,6 @@ tags:
 - description: Package guide is a step-by-step checklist that gets your business running
     on AI.
   name: guide
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: health
 - description: 'Package help is a support desk: customers file tickets, your team
     answers them.'
   name: help
