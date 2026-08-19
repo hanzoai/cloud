@@ -157,8 +157,8 @@ func pluginIsMetered(file *ast.File) bool {
 // A Free app's surface is not billable just because a metered app is routed a
 // SHORTER prefix over the same tree.
 //
-// provisioning is metered and routed /v1/vector and /v1/search; product is Free
-// and routed the more specific /v1/vector/collections, /v1/vector/stats,
+// provisioning is metered and routed /v1/vector and /v1/search/query; product is
+// Free and routed the more specific /v1/vector/collections, /v1/vector/stats,
 // /v1/search/indexes and /v1/search/stats. A bare HasPrefix scan bills all four
 // on provisioning's standing, which gates a Free product behind a balance. The
 // router resolves by longest prefix; ownership has to as well.
