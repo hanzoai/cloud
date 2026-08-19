@@ -1045,10 +1045,6 @@
    "doc": "Returns the new-job catalog plus, when a selection is passed\n(?baseModel\u0026method\u0026task\u0026preset[\u0026datasetExamples]), the recommended config so the\nconsole can render \"Recommended\" as a one-click, ready-to-run default."
   },
   {
-   "id": "get_health",
-   "doc": "Check if the system is live"
-  },
-  {
    "id": "get_memory_facts",
    "doc": "List the authenticated user's stored facts"
   },

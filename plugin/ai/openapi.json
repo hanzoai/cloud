@@ -32,9 +32,6 @@
       "name": "completions"
     },
     {
-      "name": "crawl"
-    },
-    {
       "name": "dev-bridge"
     },
     {
@@ -54,9 +51,6 @@
     },
     {
       "name": "finetune"
-    },
-    {
-      "name": "health"
     },
     {
       "name": "images"
@@ -4133,16 +4127,6 @@
         "description": "Returns the new-job catalog plus, when a selection is passed\n(?baseModel\u0026method\u0026task\u0026preset[\u0026datasetExamples]), the recommended config so the\nconsole can render \"Recommended\" as a one-click, ready-to-run default.",
         "tags": [
           "finetune"
-        ]
-      }
-    },
-    "/v1/health": {
-      "get": {
-        "operationId": "get_health",
-        "summary": "Check if the system is live",
-        "description": "Check if the system is live",
-        "tags": [
-          "health"
         ]
       }
     },
