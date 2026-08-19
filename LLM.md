@@ -49,7 +49,11 @@ source for the generated per-language SDKs.
   document-level requirement every operation inherits — default-REQUIRE — and
   `Open(path, method)` is the per-operation override that renders `security: []`.
   Adding the scheme is what makes generated SDKs send a token at all: a document
-  naming no scheme produces a client with no auth in every language
+  naming no scheme produces a client with no auth in every language. A subset
+  carries only addresses the fleet delivers to that app: describe prunes every
+  path whose `manifest.OwnerOf` names a sibling — the routing table's own
+  longest-prefix answer — so a module that registers a sibling's address (ai's
+  /v1/crawl) can neither re-publish it nor collide with its owner (describe.go)
 - `manifest/apps.go` — hand-authored source of truth; what `cmd/cloud` knows about the fleet
 
 ---
@@ -5009,6 +5013,29 @@ join plus a policy about who may pull which rung.
 
 ### Provenance — which tree each claim was verified against
 
+**CORRECTION (2026-08-18): the topology moved again; the 08-13 correction below
+is itself historical now.** git.hanzo.ai/hanzoai/cloud no longer carries the
+product line: it is a READ-ONLY pull mirror of github.com/hanzoai/cloud, the
+public OSS core — a re-rooted, dual-licensed (Apache-2.0 OR MIT) 12-commit line
+sharing no ancestor with the product. The product line and its version register
+live at **git.hanzo.ai/hanzo-inc/cloud** (`release` remote in this checkout; the
+train runs beside it and its tags are the receipts), and
+github.com/hanzo-inc/cloud (`origin`) is the working copy this checkout tracks.
+Ship = green gate locally, push main to BOTH `origin` and `release`; the train
+mints the next receipt. Verified 2026-08-18: api.hanzo.ai `/v1/health` revision
+`3face661…` == v1.801.564's own commit on the hanzo-inc line (the full 144-app
+tree); universe pin `charts/app/values/hanzo/cloud.yaml` names tag v1.801.564.
+
+TAGS ON THE PUBLIC OSS REPO ARE NOT RECEIPTS. The receipt car publishes each
+release's RECORD — document sha256, the car table, the version+sha+digest JSON —
+as a GitHub Release on hanzoai/cloud, and GitHub mints the release's tag at that
+repo's own head, a different line entirely, so every v1.801.* tag there sits on
+the OSS core's tip. The release BODY names the register commit; the tag object
+is an API artifact. NEVER `git fetch --tags` from the hanzoai/cloud remotes:
+those tag names land on the wrong commits and poison `git describe`,
+internal/lineage and pin ordering locally (this happened 2026-08-18 and was
+cleaned by deleting the local copies and refetching from hanzo-inc).
+
 **CORRECTION (2026-08-13): the paragraph below is STALE and inverted. THE FORGE
 LINE IS WHAT SHIPS.** Do not follow it — it sends you to hand-build an image for a
 line production does not run. Measured against the live deployment:
@@ -5099,12 +5126,11 @@ So, by claim class:
   (`POST https://api.hanzo.ai/v1/mcp`) and the inc-line source. Do not re-check
   them against a forge-line checkout; the files are not there.
 
-`~/work/hanzo/cloud` is **not** a separate product line — same repo, on branch
-`feat/sandbox-executor`, one commit behind `forge/main`, carrying concurrent
-sandbox work. It is a working checkout, not a fork. **This section should land on
-the inc line's `LLM.md`**, because that is what production builds and what § 6
-and § 9 describe. The forge↔inc divergence is itself the finding: it is why this
-was got wrong once, and it will do it again to the next reader.
+`~/work/hanzo/cloud` tracks the hanzo-inc line on `main` (`origin` =
+github.com/hanzo-inc/cloud, `release` = git.hanzo.ai/hanzo-inc/cloud). This
+section lives where it should: on the line production builds. The forge↔inc
+divergence it once described is closed; the 2026-08-18 correction above is the
+current topology.
 
 ### What was measured before designing (2026-08-06, live warehouse)
 
