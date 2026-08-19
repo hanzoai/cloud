@@ -153,6 +153,35 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	// is the correct answer to a flood of preflights.
 	app.Use(EdgeRateLimit(deps.GatewayPolicy))
 	app.Use(EdgeCORS(deps.GatewayPolicy))
+	// ONE VERDICT, AND THIS IS WHERE IT IS MADE SINGULAR. EdgeCORS above is the CORS
+	// authority for this binary; a child that also inspects Origin would answer the
+	// same question a second time, and two Access-Control-Allow-Origin headers break
+	// every preflight that reads them. So for an origin the authority ADMITTED, the
+	// header is taken off the request before any child sees it — a child with no
+	// Origin to read cannot form an opinion about one.
+	//
+	// SCOPED AND CONDITIONAL, both deliberately:
+	//
+	//   - only for origins already admitted, by the SAME predicate EdgeCORS used
+	//     (CORSAllows — same instance, same cache), so the two cannot disagree. A
+	//     denied origin keeps its header and is refused downstream exactly as before:
+	//     this changes the allow path only.
+	//   - only for non-upgrade requests. A socket has no preflight and no ACAO, and
+	//     the origin check that guards cross-site WebSocket hijacking admits an EMPTY
+	//     Origin to let CLI clients in — clearing it there would fail OPEN.
+	//
+	// It sits here rather than inside the child because the child is not ours to
+	// reach into: this used to be an InsertFilter on ai's own router, which stopped
+	// existing when ai moved to zip. Registered before the children are included, a
+	// parent's middleware is what they see first — the same position, said in the one
+	// composition verb zip has.
+	app.Use(zip.H(func(c *zip.Ctx) error {
+		origin := c.Header("Origin")
+		if origin != "" && c.Header("Upgrade") == "" && CORSAllows(c.Context(), origin) {
+			c.Fiber().Request().Header.Del("Origin")
+		}
+		return c.Continue()
+	}))
 
 	Identify(app, cfg)
 	return app
