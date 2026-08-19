@@ -10,12 +10,13 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/admin/audit", zip.Doc{
-		Description: "Reads cloud's tamper-evident audit trail, newest first, with the chain's live\nintegrity attached so a listing can be badged as verified.\n\nWhen cloud has no local store configured it falls back to forwarding IAM's own\nget-records trail verbatim — a DIFFERENT trail, federated so the endpoint never\nregresses to an empty list. Those rows carry no integrity of ours, so the field is\nnull there.",
+		Description: "Reads one chain of cloud's tamper-evident audit trail, newest first, with\nthat chain's live integrity attached so a listing can be badged as verified.\n\nWhen cloud has no local store configured it falls back to forwarding IAM's own\nget-records trail verbatim — a DIFFERENT trail, federated so the endpoint never\nregresses to an empty list. Those rows carry no integrity of ours, so the field is\nnull there.",
 		Fields: map[string]string{
-			"Integrity.brokenAt":   "BrokenAt is the seq of the FIRST record that failed verification, or -1 when\nOK. Reason describes the break (recomputed-hash mismatch, prev-hash\ndiscontinuity, or a seq gap).",
-			"Integrity.count":      "Count is the number of records walked.",
-			"Integrity.headHash":   "HeadHash is the hash of the last record (or the genesis anchor for an empty\nchain). Pin this externally over time to detect tail-truncation.",
-			"Integrity.ok":         "OK is true iff every record's stored hash equals the recomputed hash AND the\nchain links are continuous (each PrevHash == the prior record's Hash, seqs\ngapless from 0).",
+			"Integrity.brokenAt":   "BrokenAt is the seq of the FIRST record that failed verification, and -1\nwhenever the walk found no break (including an unread chain, where no seq\nwas reached). Reason describes the break (recomputed-hash mismatch,\nprev-hash discontinuity, or a seq gap) or why the chain could not be read.",
+			"Integrity.count":      "Count is the number of records walked. Zero on an unread chain, where it\nmeans \"nothing was read\", not \"the chain is empty\".",
+			"Integrity.head":       "Head is the hash of the last record (or the genesis anchor for an empty\nchain). Pin this externally over time to detect tail-truncation.",
+			"Integrity.name":       "Name is the chain this verdict is about, e.g. \"audit\" or \"audit-iam\". It is\ncarried because a verdict with no chain on it reads as the whole trail's,\nwhich is what a reader of a 128-chain deployment did.",
+			"Integrity.verdict":    "Verdict is intact, broken or unread.",
 			"RecordsIn.action":     "Action restricts it to one action name, e.g. \"admin.waitlist.grant\".",
 			"RecordsIn.org":        "Org restricts the trail to one tenant.",
 			"RecordsIn.p":          "Page is the 1-based page number, driving the offset.",
@@ -28,16 +29,22 @@ func init() {
 			"RecordsIn.until":      "Until is the upper time bound, RFC3339, with the same tolerance.",
 		},
 		Example:  json.RawMessage(`{"org":"acme","action":"admin.waitlist.grant","since":"2026-07-01T00:00:00Z","pageSize":"50"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"seq":41,"ts":"2026-07-26T18:00:00Z","org":"acme","sub":"z@hanzo.ai","action":"admin.waitlist.grant","resource":"waitlist","result":"success"}],"total":1,"integrity":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"seq":41,"ts":"2026-07-26T18:00:00Z","org":"acme","sub":"z@hanzo.ai","action":"admin.waitlist.grant","resource":"waitlist","result":"success"}],"total":1,"integrity":{"name":"audit-admin","verdict":"intact","count":42,"head":"9f2c","brokenAt":-1}}`),
 	})
 	zip.Describe("GET /v1/admin/audit/verify", zip.Doc{
-		Description: "Walks the WHOLE hash chain and reports whether it is intact: how many records\nwere checked, the head hash to pin externally against tail-truncation, and — when the\nchain is broken — the seq of the first bad record and why.\n\nbrokenAt is -1 exactly when ok is true. An unconfigured store is an honest failure\nhere rather than a fabricated pass.",
+		Description: "Walks EVERY hash chain this deployment keeps and reports each one: which\nchains were checked, how many records each holds, the head hash to pin externally\nagainst tail-truncation, and — when a chain is broken — the seq of the first bad\nrecord and why.\n\nThe trail is a FAMILY of chains, one per process, so the answer is a set and not a\nboolean: `intact`, `broken` and `unread` count the three verdicts and sum to the\nnumber of chains. A chain that could not be READ is reported `unread` and is never\na pass — an unreadable chain and a verified one must not render the same, which is\nthe whole reason this is not one flag.\n\nAn unconfigured store is an honest failure here rather than a fabricated pass.",
 		Fields: map[string]string{
-			"Integrity.brokenAt": "BrokenAt is the seq of the FIRST record that failed verification, or -1 when\nOK. Reason describes the break (recomputed-hash mismatch, prev-hash\ndiscontinuity, or a seq gap).",
-			"Integrity.count":    "Count is the number of records walked.",
-			"Integrity.headHash": "HeadHash is the hash of the last record (or the genesis anchor for an empty\nchain). Pin this externally over time to detect tail-truncation.",
-			"Integrity.ok":       "OK is true iff every record's stored hash equals the recomputed hash AND the\nchain links are continuous (each PrevHash == the prior record's Hash, seqs\ngapless from 0).",
+			"Integrity.brokenAt": "BrokenAt is the seq of the FIRST record that failed verification, and -1\nwhenever the walk found no break (including an unread chain, where no seq\nwas reached). Reason describes the break (recomputed-hash mismatch,\nprev-hash discontinuity, or a seq gap) or why the chain could not be read.",
+			"Integrity.count":    "Count is the number of records walked. Zero on an unread chain, where it\nmeans \"nothing was read\", not \"the chain is empty\".",
+			"Integrity.head":     "Head is the hash of the last record (or the genesis anchor for an empty\nchain). Pin this externally over time to detect tail-truncation.",
+			"Integrity.name":     "Name is the chain this verdict is about, e.g. \"audit\" or \"audit-iam\". It is\ncarried because a verdict with no chain on it reads as the whole trail's,\nwhich is what a reader of a 128-chain deployment did.",
+			"Integrity.verdict":  "Verdict is intact, broken or unread.",
+			"Trail.broken":       "Broken counts the chains whose hash chain fails; each names where.",
+			"Trail.chains":       "Chains is every chain of the family, in name order.",
+			"Trail.intact":       "Intact counts the chains that verified end to end.",
+			"Trail.records":      "Records is the total number of records walked across every chain that was\nread. It counts nothing for an unread chain.",
+			"Trail.unread":       "Unread counts the chains that could not be read. NOT a pass: nothing is known\nabout their contents.",
 		},
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"chains":[{"name":"audit-iam","verdict":"intact","count":42,"head":"9f2c","brokenAt":-1}],"intact":1,"broken":0,"unread":0,"records":42}}`),
 	})
 }
