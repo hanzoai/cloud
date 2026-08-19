@@ -344,3 +344,21 @@ var first sync.Once
 func ClientIPAcross(r *http.Request) string {
 	return strings.Clone(r.Header.Get(ClientIPHeader))
 }
+
+// Proxies is the resolved trust set as CIDR strings, for a framework that wants
+// the allowlist rather than the predicate.
+//
+// zip resolves the caller once at the seam and honours a forwarded header only
+// where the app names its own hops (zip.Config.TrustProxy + TrustedProxies), so
+// without this the framework's answer is the socket peer — which behind an
+// ingress is one address for every caller on earth. Handing it THIS list keeps
+// one trust set in one place: the same knob, the same defaults, and no second
+// spelling to drift.
+func Proxies() []string {
+	s := trustedProxies()
+	out := make([]string, 0, len(s.nets))
+	for _, n := range s.nets {
+		out = append(out, n.String())
+	}
+	return out
+}
