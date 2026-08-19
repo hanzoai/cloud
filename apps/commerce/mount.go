@@ -590,6 +590,27 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		// A caller-scoped crypto deposit intent read (pending → confirming →
 		// succeeded); a foreign intent id answers 404.
 		{"/v1/billing/crypto/deposit/:id", commercebilling.GetCryptoDeposit},
+		// "What plan am I on, and how much of it is left" — the one question a
+		// subscriber asks and the one nothing could answer. Same hole as the
+		// credits tab and the tier lookup above: the handler has been in the
+		// vendored module all along (api/billing/allotment.go), and commerce's own
+		// api.Route() bundle that registers it is behind //go:build cloud and is
+		// never compiled here, so the address reached nobody.
+		//
+		// It composes the two figures that must never be added together: the plan
+		// side (what the subscription includes, what has been consumed against it,
+		// what remains) and the WALLET side (prepaid credit, a balance bought
+		// separately). One is usage a plan grants; the other is money the customer
+		// holds. The handler already keeps them in separate blocks, which is the
+		// reason it is worth mounting rather than rewriting.
+		//
+		// Subject-scoped like every row here, and that matters more than usual: the
+		// handler reads ?user= verbatim, and PinBillingSubject overwrites it with
+		// the validated caller before the handler runs. Unpinned, this is the same
+		// cross-customer read that GetTier turned out to be — every self-serve
+		// signup lands in one org with a per-person subject, so the org namespace
+		// closes nothing on its own.
+		{"/v1/billing/usage/rollup", commercebilling.GetUsageRollup},
 	}
 	for _, r := range billingRead {
 		app.Get(r.path,
