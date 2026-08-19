@@ -994,12 +994,8 @@ github.com/hanzoai/account v0.3.2 h1:6dC9ePgE73xZmIPckWfnFLYGbqtOoDV97iKs6wksbFY
 github.com/hanzoai/account v0.3.2/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
 github.com/hanzoai/agent v1.0.5 h1:RWe4cSyie+5wAt2s0kAIqxQ4m6ID5JlqI/xUEUxhFEI=
 github.com/hanzoai/agent v1.0.5/go.mod h1:3bqSx+EkF4Lm0BxJEEb7TbV0Ck1EsBgt6tteHJmX1nk=
-github.com/hanzoai/ai v1.833.88 h1:q3LGW0DB3c9rWDxdFX74zxhkLlhpbLF9Mwz82uVRxsA=
-github.com/hanzoai/ai v1.833.88/go.mod h1:cUqnDnUBfe38be6C+2HJmB4RmJU95YLRZuYmiJ0ykzs=
-github.com/hanzoai/ai v1.833.89 h1:v0kbx6PR2UgvdanxFppYrEnWzI1FbLjS64OWwQra3Mg=
-github.com/hanzoai/ai v1.833.89/go.mod h1:HSiT2VgwhtrI413SHOueWj+dHJhgmhP5oi+yHiAB1VQ=
-github.com/hanzoai/ai v1.833.90 h1:nH9m9CKjH8U0mCXQ+D2IPF8y2NTnnSD/jwvTEcZsF4E=
-github.com/hanzoai/ai v1.833.90/go.mod h1:HSiT2VgwhtrI413SHOueWj+dHJhgmhP5oi+yHiAB1VQ=
+github.com/hanzoai/ai v1.833.93 h1:Mm53yQr+wERFWevt9WcnWRnU8zuu9HlYRmnr/Su6O/U=
+github.com/hanzoai/ai v1.833.93/go.mod h1:HSiT2VgwhtrI413SHOueWj+dHJhgmhP5oi+yHiAB1VQ=
 github.com/hanzoai/authz v1.10.29 h1:b4vWtI9g4Mvay1zizW7cwly/hDk06r+oAdA/y+317Do=
 github.com/hanzoai/authz v1.10.29/go.mod h1:xkzFdiIFx4UQMlU0NkmSRz0dgRQYqSXpKgVjn8ijn3E=
 github.com/hanzoai/base v1.5.61 h1:UDCQDHjB5GnFDvj7XVB3Muq9223SrpxnCkGJmI5Jm1c=
@@ -1010,10 +1006,6 @@ github.com/hanzoai/cd/gitops-engine v0.7.3 h1:NmPf8v3Ti8ejSI8M96wFmzOchQ2fgxZHhV
 github.com/hanzoai/cd/gitops-engine v0.7.3/go.mod h1:Jyc94hEnwpmaS4kBFmC4fP3t+VvZ8DZgxPtV4FdmL7M=
 github.com/hanzoai/cek v0.2.7 h1:BxnyA1HTDKnsNPtFADxtNt16YIcXumCFzIBe2Pw5a3Q=
 github.com/hanzoai/cek v0.2.7/go.mod h1:PlVKtP1KOlcHHFLsag2zSWLnXNSaUD7GIenUsSRQqeo=
-github.com/hanzoai/commerce v1.50.51 h1:qGXj2ScoV5nhQzOFRWw90a6NMTiggRvlqJfMYN5ddHQ=
-github.com/hanzoai/commerce v1.50.51/go.mod h1:LSyVj+gXhPxHIkO9B9FsOT50qkh/t+pz5X9JgUHb5fM=
-github.com/hanzoai/commerce v1.50.52 h1:eDimZP5fK/CeJSStv4pA2xaf0UzXwKPBcvQ6ZYIkgXE=
-github.com/hanzoai/commerce v1.50.52/go.mod h1:jvKM48o/fC2GDioCAF4LkDNC3vJtOelmeHTlNUSDUIA=
 github.com/hanzoai/commerce v1.50.53 h1:49IpQDnmSwNnxoQD1YX23/3B+1vOti1JDLpIR7W3Kr4=
 github.com/hanzoai/commerce v1.50.53/go.mod h1:LSyVj+gXhPxHIkO9B9FsOT50qkh/t+pz5X9JgUHb5fM=
 github.com/hanzoai/csqlite v0.1.2 h1:4DzdgUfKADhzEP66Y30/HwepuBLrwt7NsemJMfrPGl4=
@@ -1050,8 +1042,6 @@ github.com/hanzoai/govaluate v0.1.0 h1:8Ajg4pNw2zFssXO2Ixj3fa73HawZUQiMwcP2NakUj
 github.com/hanzoai/govaluate v0.1.0/go.mod h1:0kZEEPJJmWLx67swZ7wAbE7xahX+CQzm9u/O4dNF5u4=
 github.com/hanzoai/ha v0.2.0 h1:zgIbr3mjeuFfF26lkIKf/47ZM5kYBubWIPjEA24Yu7g=
 github.com/hanzoai/ha v0.2.0/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
-github.com/hanzoai/iam v1.34.61 h1:DHL7rIFQ5fjHcfsSZ1G5z5xS6s6D3e8myluvdI5ANbo=
-github.com/hanzoai/iam v1.34.61/go.mod h1:dMm9lAMYekIQVuAw9q0ayZKFIRBx3vZpBdmXFNthnTc=
 github.com/hanzoai/iam v1.34.62 h1:k/HR0l4f3KW+ZKhAZeeTcRIKjtI4E5DmeZcQtGQqOCU=
 github.com/hanzoai/iam v1.34.62/go.mod h1:dMm9lAMYekIQVuAw9q0ayZKFIRBx3vZpBdmXFNthnTc=
 github.com/hanzoai/kafka v1.3.2 h1:oiU77wsU7lWuXAOmCfzkcaT2RTX4PdLqzw1vRMHM44A=
@@ -1074,12 +1064,6 @@ github.com/hanzoai/otel-collector v1.2.0 h1:lBDL5lKotq89JaqchcM+/oxEnjrjazEI2JJf
 github.com/hanzoai/otel-collector v1.2.0/go.mod h1:rNCSDd4fw23kCi5UQ4u2IGhSYifYMex5O6SwZGHtIPE=
 github.com/hanzoai/pdf v1.2.0 h1:3/zYs4estaf6hpa3Ug/NgfYEQpmkmMClmRcREAP8KUo=
 github.com/hanzoai/pdf v1.2.0/go.mod h1:Lb5LhbMY7QvrxxMeKbI22Kvoz4XQhHgJV7Erq0U8zHU=
-github.com/hanzoai/plans v1.4.16 h1:5vSugItl3BXz1FNZm/owkrrzca/7lINtzQoIXfk/iK0=
-github.com/hanzoai/plans v1.4.16/go.mod h1:PNMFyolotEyxx20+OJTh7uGx1kduuHMhpCYDrkfqwpQ=
-github.com/hanzoai/plans v1.4.18 h1:qwROWFtsKEzHUmC/UJz7AsvaJDw8LQ0LHB0zWNBvBDI=
-github.com/hanzoai/plans v1.4.18/go.mod h1:PNMFyolotEyxx20+OJTh7uGx1kduuHMhpCYDrkfqwpQ=
-github.com/hanzoai/plans v1.4.19 h1:hIR9JlVV/IHcr+mCxqii1nTX+oXSghpfZjG/07cLgDs=
-github.com/hanzoai/plans v1.4.19/go.mod h1:PNMFyolotEyxx20+OJTh7uGx1kduuHMhpCYDrkfqwpQ=
 github.com/hanzoai/plans v1.4.20 h1:N/oBc6Xmcjugz5NGNvELhUTBXLNbMDNr6zFMk3cnUa0=
 github.com/hanzoai/plans v1.4.20/go.mod h1:PNMFyolotEyxx20+OJTh7uGx1kduuHMhpCYDrkfqwpQ=
 github.com/hanzoai/pricing v1.4.10 h1:bE3WgaTiEPwSvFNzgNkKJ9SHyFkP4+0pEMq+6aTRrds=

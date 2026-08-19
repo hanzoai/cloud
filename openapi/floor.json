@@ -1,6 +1,6 @@
 {
-  "paths": 1833,
-  "operations": 2503,
+  "paths": 1832,
+  "operations": 2502,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -87,7 +87,6 @@
     "git-webhook": 1,
     "gpus": 2,
     "guide": 19,
-    "health": 1,
     "help": 4,
     "iam": 203,
     "images": 1,
