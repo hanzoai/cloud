@@ -96,12 +96,26 @@ const ChatModel = "enso-flash"
 // chat path never uses it.
 //
 // It is a constant rather than config because it is not ours to configure: the
-// value names `best`, a SKU in the gateway's own catalog (hanzoai/ai
-// conf/models.yaml) that carries its own route and a four-deep fallback chain
-// server-side. Cloud neither resolves nor validates it — the string is forwarded
-// verbatim. A knob here could only ever disagree with the catalog that actually
-// decides, and no deployment ever set the one that existed.
-const FallbackModel = "best"
+// value names a SKU in the gateway's own catalog (hanzoai/ai conf/models.yaml),
+// which carries its own route and its own server-side fallbacks. Cloud neither
+// resolves nor validates it — the string is forwarded verbatim. A knob here
+// could only ever disagree with the catalog that actually decides, and no
+// deployment ever set the one that existed.
+//
+// It named `best` until that SKU was retired. A superlative is not a product
+// name — it says which model is best without saying what it is, and it was a
+// second answer to a question the enso family already answers, since enso IS
+// the routing tier that picks. `auto` (alias `zen-router`) was the other
+// candidate and is the better idea on paper; it was rejected on evidence.
+// Measured against production: `GET /v1/models` publishes 528 ids and neither
+// `auto` nor `zen-router` is among them, no completion for it could be executed
+// (the balance gate refuses before model resolution), and ai's own router probe
+// — the one component in the fleet that sends `{"model":"auto"}` — has been
+// answering 401 on a loop, so nothing anywhere demonstrates that id currently
+// serves. This is the DEGRADED path: an id that does not resolve here fails at
+// the moment something else is already failing, so it takes the tier that is
+// published, live, and already the interactive default's own family.
+const FallbackModel = "enso"
 
 // upstreamModels are the model families Hanzo serves under its own name. Naming
 // one on a customer-visible surface discloses which base sits behind an enso or
