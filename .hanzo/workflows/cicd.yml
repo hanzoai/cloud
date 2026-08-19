@@ -449,6 +449,14 @@ jobs:
       # tag is a name a registry can move; a digest is the content. The pin names
       # this and nothing else.
       digest: ${{ steps.img.outputs.digest }}
+      # THE ARBITER, carried to every car behind this one. cmd/lineage prints these
+      # on a pass and only on a pass, so a job downstream names the repository and
+      # the image of the release that was actually proven, rather than repeating a
+      # literal that a rename can quietly point somewhere else.
+      remote: ${{ steps.ver.outputs.remote }}
+      api: ${{ steps.ver.outputs.api }}
+      image: ${{ steps.ver.outputs.image }}
+      path: ${{ steps.ver.outputs.path }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -512,11 +520,24 @@ jobs:
           # It runs BEFORE the compare-and-swap below, so a commit that cannot hold
           # a number never takes one: no tag, not even the inert hole an abandoned
           # build leaves.
-          if ! LINE=$(go run ./cmd/lineage "$SHA" 2>&1); then
-            echo "::error::${LINE}"
-            exit 1
-          fi
-          echo "$LINE"
+          # It also PRINTS the arbiter — the repository to list, the address to
+          # claim at, the branch, the image — and everything below reads those
+          # rather than a literal of its own. That is not tidying: five literals
+          # for one repository is what let a rename move the meaning of one of
+          # them while the rest went on meaning what they meant. Now the image
+          # cannot be named without the proof, and the claim cannot be written
+          # anywhere but the repository the proof was taken against.
+          ARBITER=$(go run ./cmd/lineage "$SHA" 2>/tmp/lineage.err) || {
+            echo "::error::$(cat /tmp/lineage.err)"; exit 1; }
+          cat /tmp/lineage.err
+          eval "$ARBITER"
+          # The image is spelled to the registry API without its host: one value,
+          # two shapes, derived where it is used rather than carried twice.
+          path="${image#ghcr.io/}"
+          # Written once, read three ways: by this step, by every later step of this
+          # job (GITHUB_ENV), and by every later job (GITHUB_OUTPUT). One write, so
+          # there is nothing for a second reading to disagree with.
+          printf '%s\npath=%s\n' "$ARBITER" "$path" | tee -a "$GITHUB_ENV" >> "$GITHUB_OUTPUT"
 
           # THE DIGEST OF THE DOCUMENT, computed here and carried by every car
           # below. This is the coupler: a projection generated from any other
@@ -540,7 +561,7 @@ jobs:
           # actually knows the answer.
 
           TOKEN=$(curl -fsSL -u "$GHCR_USER:$GHCR_TOKEN" \
-            "https://ghcr.io/token?scope=repository:hanzoai/cloud:pull&service=ghcr.io" | jq -r .token)
+            "https://ghcr.io/token?scope=repository:${path}:pull&service=ghcr.io" | jq -r .token)
 
           # What has been PUBLISHED. GHCR ignores n>1000 and pages via
           # `Link: rel="next"`; a reader that drops the header sees one page,
@@ -548,7 +569,7 @@ jobs:
           # release, so the max() leaned on git tags alone. Follow it to
           # exhaustion.
           REG=""
-          page="https://ghcr.io/v2/hanzoai/cloud/tags/list?n=1000"
+          page="https://ghcr.io/v2/${path}/tags/list?n=1000"
           while [ -n "$page" ]; do
             hdr=$(mktemp)
             body=$(curl -fsSL -D "$hdr" -H "Authorization: Bearer $TOKEN" "$page")
@@ -573,7 +594,7 @@ jobs:
           # direction to fail (a hole is inert; a reused number serves wrong
           # bytes). They are not carried over, because a name nothing published
           # is not a release.
-          GIT=$(git ls-remote --tags "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzo-inc/cloud" \
+          GIT=$(git ls-remote --tags "https://x:${FORGE_TOKEN}@${remote#https://}" \
             | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' || true)
 
@@ -625,7 +646,7 @@ jobs:
             CODE=$(curl -s -o /tmp/claim.json -w '%{http_code}' -X POST \
               -H "Authorization: token $FORGE_TOKEN" \
               -H 'Content-Type: application/json' \
-              "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/tags" \
+              "${api}/tags" \
               -d "{\"tag_name\":\"v${CAND}\",\"target\":\"${SHA}\"}")
             if [ "$CODE" = "409" ]; then
               # TWO DIFFERENT FAILURES SHARE THIS STATUS, and treating them alike
@@ -645,7 +666,7 @@ jobs:
               # Taken. By us, or by somebody else? The distinction is the whole
               # difference between a resume and a collision, and it is one GET.
               HAVE=$(curl -fsS -H "Authorization: token $FORGE_TOKEN" \
-                "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/tags/v${CAND}" | jq -r '.commit.sha // empty')
+                "${api}/tags/v${CAND}" | jq -r '.commit.sha // empty')
               if [ "$HAVE" = "${SHA}" ]; then
                 echo "v${CAND} is already claimed at our sha — this release, resumed"
                 CLAIMED="$CAND"; break
@@ -659,7 +680,7 @@ jobs:
               # secret. FORGE_TOKEN has only ever been READ with in this
               # workflow — go module fetches and ls-remote — so the first
               # release to write with it is the first test of its scope.
-              echo "::error::the forge refused the claim for v${CAND} with $CODE. Ask the forge what it wants before assuming: POST /v1/repos/hanzo-inc/cloud/tags answers 403 with {\"message\":\"token does not have at least one of required scope(s), required=[write:repository], token scope=read:repository\"} for a read-scoped token, at BOTH this path and the old hanzoai/ one, so a 403 here is the TOKEN and not the address. Scopes are fixed when a token is minted, so this needs a new FORGE_TOKEN carrying write:repository installed as the actions secret — it creates refs/tags/v<N> and the refs/smoked/<digest> receipt."
+              echo "::error::the forge refused the claim for v${CAND} with $CODE. Ask the forge what it wants before assuming: POST <arbiter>/tags answers 403 with {\"message\":\"token does not have at least one of required scope(s), required=[write:repository], token scope=read:repository\"} for a read-scoped token, at BOTH this path and the old hanzoai/ one, so a 403 here is the TOKEN and not the address. Scopes are fixed when a token is minted, so this needs a new FORGE_TOKEN carrying write:repository installed as the actions secret — it creates refs/tags/v<N> and the refs/smoked/<digest> receipt."
               cat /tmp/claim.json; exit 1
             fi
             if [ "$CODE" != "201" ]; then
@@ -693,9 +714,9 @@ jobs:
           BUILT=0
           CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" \
             -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json' \
-            "https://ghcr.io/v2/hanzoai/cloud/manifests/v$NEXT")
+            "https://ghcr.io/v2/${path}/manifests/v$NEXT")
           if [ "$CODE" = "200" ]; then
-            REV=$(bash .hanzo/scripts/image-revision.sh "hanzoai/cloud" "v$NEXT" "$TOKEN" || echo "")
+            REV=$(bash .hanzo/scripts/image-revision.sh "$path" "v$NEXT" "$TOKEN" || echo "")
             if [ "$REV" = "${SHA}" ]; then
               echo "v$NEXT is already published from our sha — skipping the build (whether it was SMOKED is a different question, asked below)"
               BUILT=1
@@ -752,7 +773,7 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           provenance: false
-          tags: ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}
+          tags: ${{ steps.ver.outputs.image }}:v${{ steps.ver.outputs.version }}
           # `outputs:` in place of `push: true` — the only way to reach buildkit's
           # exporter attributes through this action, and `push: true` cannot be set
           # alongside it because both ask for an image exporter.
@@ -786,7 +807,7 @@ jobs:
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=v${{ steps.ver.outputs.version }}
-            org.opencontainers.image.source=https://github.com/hanzoai/cloud
+            org.opencontainers.image.source=${{ steps.ver.outputs.remote }}
           secrets: |
             GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
             FORGE_TOKEN=${{ secrets.FORGE_TOKEN }}
@@ -818,7 +839,7 @@ jobs:
           FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
         run: |
           set -euo pipefail
-          img="ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}"
+          img="${{ steps.ver.outputs.image }}:v${{ steps.ver.outputs.version }}"
           ok=0
           for i in 1 2 3 4 5 6; do
             docker buildx imagetools inspect "$img" >/dev/null 2>&1 && { ok=1; break; }
@@ -827,7 +848,7 @@ jobs:
           [ "$ok" = 1 ] || { echo "::error::pushed image never resolved: $img"; exit 1; }
           echo "resolved $img"
 
-          REV=$(bash .hanzo/scripts/image-revision.sh "hanzoai/cloud" "v${{ steps.ver.outputs.version }}")
+          REV=$(bash .hanzo/scripts/image-revision.sh "$path" "v${{ steps.ver.outputs.version }}")
           if [ "$REV" != "${{ github.sha }}" ]; then
             echo "::error::${img} resolves, but the bytes behind that tag were built from '${REV:-an unlabelled commit}', not ${{ github.sha }}. Another lane pushed over the tag this run owns. Nothing downstream may pin it."
             exit 1
@@ -839,10 +860,10 @@ jobs:
           # what it pinned against what this run smoked without either side
           # deriving the value a second way.
           TOKEN=$(curl -fsSL -u "$GHCR_USER:$GHCR_TOKEN" \
-            "https://ghcr.io/token?scope=repository:hanzoai/cloud:pull&service=ghcr.io" | jq -r .token)
+            "https://ghcr.io/token?scope=repository:${path}:pull&service=ghcr.io" | jq -r .token)
           DIGEST=$(curl -fsSL -I -H "Authorization: Bearer $TOKEN" \
             -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json' \
-            "https://ghcr.io/v2/hanzoai/cloud/manifests/v${{ steps.ver.outputs.version }}" \
+            "https://ghcr.io/v2/${path}/manifests/v${{ steps.ver.outputs.version }}" \
             | tr -d '\r' | sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: *//p' | head -1)
           case "$DIGEST" in
             sha256:*) : ;;
@@ -871,7 +892,7 @@ jobs:
           # so the receipt says "these bytes, from this source, booted" and stays
           # false the moment the bytes change under the name.
           SMOKED=0
-          if git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzo-inc/cloud" "refs/${RECEIPT}" >/dev/null 2>&1; then
+          if git ls-remote --exit-code "https://x:${FORGE_TOKEN}@${remote#https://}" "refs/${RECEIPT}" >/dev/null 2>&1; then
             echo "$DIGEST already has a smoke receipt — these exact bytes have booted"
             SMOKED=1
           fi
@@ -901,7 +922,7 @@ jobs:
         if: steps.img.outputs.smoked == '0'
         run: |
           set -euo pipefail
-          img="ghcr.io/hanzoai/cloud@${{ steps.img.outputs.digest }}"
+          img="${{ steps.ver.outputs.image }}@${{ steps.img.outputs.digest }}"
 
           SMOKE_B64=$(base64 -w0 <<'SMOKE'
           set -u
@@ -968,10 +989,10 @@ jobs:
           # already names something else, and re-pushing the identical value is a
           # no-op. Gitea has no POST for a ref outside refs/tags, and it does not
           # need one — this is the operation that endpoint would have wrapped.
-          if git push "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzo-inc/cloud" \
+          if git push "https://x:${FORGE_TOKEN}@${remote#https://}" \
                "${{ github.sha }}:refs/${{ steps.img.outputs.receipt }}" 2>/tmp/receipt.err; then
             echo "recorded: ${{ steps.img.outputs.digest }} booted, built from ${{ github.sha }}"
-          elif git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzo-inc/cloud" \
+          elif git ls-remote --exit-code "https://x:${FORGE_TOKEN}@${remote#https://}" \
                  "refs/${{ steps.img.outputs.receipt }}" >/dev/null 2>&1; then
             echo "already recorded by another run — same digest, same statement"
           else
@@ -988,7 +1009,7 @@ jobs:
           FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
         run: |
           set -euo pipefail
-          git ls-remote --exit-code "https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzo-inc/cloud" \
+          git ls-remote --exit-code "https://x:${FORGE_TOKEN}@${remote#https://}" \
             "refs/${{ steps.img.outputs.receipt }}" >/dev/null 2>&1 \
             || { echo "::error::no smoke receipt for ${{ steps.img.outputs.digest }} — these bytes have never been proven to boot. Nothing downstream may pin them."; exit 1; }
           echo "${{ steps.img.outputs.digest }} is smoked"
@@ -1006,7 +1027,7 @@ jobs:
           set -euo pipefail
           TAG="v${{ steps.ver.outputs.version }}"
           HAVE=$(curl -fsS -H "Authorization: token ${FORGE_TOKEN}" \
-            "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/tags/${TAG}" | jq -r '.commit.sha // empty')
+            "${api}/tags/${TAG}" | jq -r '.commit.sha // empty')
           if [ -z "$HAVE" ]; then
             echo "::error::${TAG} was claimed by this run but no longer exists — refusing to ship a release whose receipt was deleted"; exit 1
           fi
@@ -1160,7 +1181,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ needs.image.outputs.version }}"
-          REPO="https://git.hanzo.ai/hanzoai/cloud"
+          REPO="${{ needs.image.outputs.remote }}"
 
           # Same KMS path convention as the pin token: there is no org in a KMS
           # path, the store root comes from the validated claim.
@@ -1463,6 +1484,9 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v${{ needs.image.outputs.version }}"
+          # The release object is written to the repository that issued the number,
+          # which the image job proved before it issued one.
+          api="${{ needs.image.outputs.api }}"
 
           jq -n \
             --arg tag "$TAG" --arg sha "${{ github.sha }}" \
@@ -1502,16 +1526,16 @@ jobs:
           # is every receipt this car has ever tried to write. The repo holds one
           # release object, v1.801.31, from before the car existed.
           ID=$(curl -sS -H "Authorization: token ${FORGE_TOKEN}" \
-            "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
+            "${api}/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
           if [ -n "$ID" ]; then
             curl -fsS -X PATCH -H "Authorization: token ${FORGE_TOKEN}" \
               -H 'Content-Type: application/json' \
-              "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/releases/${ID}" \
+              "${api}/releases/${ID}" \
               -d "$(jq -nc --arg b "$BODY" '{body:$b}')" >/dev/null
           else
             curl -fsS -X POST -H "Authorization: token ${FORGE_TOKEN}" \
               -H 'Content-Type: application/json' \
-              "https://git.hanzo.ai/v1/repos/hanzo-inc/cloud/releases" \
+              "${api}/releases" \
               -d "$(jq -nc --arg t "$TAG" --arg b "$BODY" '{tag_name:$t, name:$t, body:$b}')" >/dev/null
           fi
           echo "receipt written to the ${TAG} release"
@@ -1555,4 +1579,9 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
           FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          # The audit reads the same two coordinates the release just used, rather
+          # than its own copy of them: an audit that checks a different image
+          # against a different register answers a question nobody asked.
+          ORPHANS_ARBITER: ${{ needs.image.outputs.remote }}
+          ORPHANS_IMAGE_PATH: ${{ needs.image.outputs.path }}
         run: bash .hanzo/scripts/orphans.sh
