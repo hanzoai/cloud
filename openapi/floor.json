@@ -1,6 +1,6 @@
 {
-  "paths": 1828,
-  "operations": 2495,
+  "paths": 1833,
+  "operations": 2503,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -158,7 +158,7 @@
     "sentry": 22,
     "settings": 2,
     "share": 2,
-    "sites": 13,
+    "sites": 21,
     "skills": 4,
     "social": 13,
     "store": 34,
