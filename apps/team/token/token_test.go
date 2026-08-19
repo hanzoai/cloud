@@ -132,8 +132,11 @@ func TestExpEnforced(t *testing.T) {
 		{"valid future exp", n.Add(time.Hour).Unix(), 0, nil},
 		{"expired", n.Add(-2 * time.Minute).Unix(), 0, ErrExpired},
 		{"exp within skew", n.Add(-clockSkew / 2).Unix(), 0, nil},
-		{"future nbf", 0, n.Add(time.Hour).Unix(), ErrNotYetValid},
-		{"nbf within skew", 0, n.Add(clockSkew / 2).Unix(), nil},
+		// The nbf cases carry a real future exp: exp=0 means the legacy
+		// cutoff (legacyExp), which has PASSED — an exp-less mint is now
+		// expired by design, and these two are about nbf, not the cutoff.
+		{"future nbf", n.Add(time.Hour).Unix(), n.Add(time.Hour).Unix(), ErrNotYetValid},
+		{"nbf within skew", n.Add(time.Hour).Unix(), n.Add(clockSkew / 2).Unix(), nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
