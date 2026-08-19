@@ -72,7 +72,7 @@ func TestBuiltinModelIsTheChatConstant(t *testing.T) {
 		t.Errorf("the chat brain must be cloud.ChatModel (%q), got %q", cloud.ChatModel, a.Model)
 	}
 	if a.Model == cloud.FallbackModel {
-		t.Error(`"best" is the degraded fallback tier, never the interactive default`)
+		t.Errorf("%q is the degraded fallback tier, never the interactive default", cloud.FallbackModel)
 	}
 	// The menu must be able to express the default, or a person who opens App Home
 	// sees a blank selector and their own model looks lost.
@@ -89,7 +89,7 @@ func TestAppHomePinBeatsTheDefault(t *testing.T) {
 			t.Errorf("App Home offers %q, so the turn must accept it", m)
 		}
 	}
-	if knownChatModel("gpt-4o") || knownChatModel("best") {
+	if knownChatModel("gpt-4o") || knownChatModel("zen5") {
 		t.Error("only the enso family may be pinned from a client")
 	}
 }

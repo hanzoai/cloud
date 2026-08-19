@@ -99,7 +99,7 @@ func TestOnlyOfferedModelsAreAccepted(t *testing.T) {
 			t.Errorf("%q is on the menu and must be accepted", ok)
 		}
 	}
-	for _, bad := range []string{"gpt-4", "", "best", "enso; drop", "ENSO"} {
+	for _, bad := range []string{"gpt-4", "", "zen5", "enso; drop", "ENSO"} {
 		if validHomeModel(bad) {
 			t.Errorf("%q was never offered and must be refused", bad)
 		}

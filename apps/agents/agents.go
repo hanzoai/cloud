@@ -136,7 +136,8 @@ type state struct {
 	ai     types.AIClient
 	// failoverModel is the reliable model a run falls over to when the agent's own
 	// model stays throttled (429/overloaded) after bounded retries
-	// (deps.AIFallbackModel, default "best"). It makes an autonomous bot reply
+	// (deps.AIFallbackModel, defaulting to cloud.FallbackModel). It makes an
+	// autonomous bot reply
 	// still land when the throttled default flash model is overloaded. Empty
 	// disables failover (retry-only). Only the run path reads it — interactive
 	// chat is untouched.
