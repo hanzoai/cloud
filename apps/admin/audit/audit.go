@@ -3,9 +3,15 @@
 // deps.Audit).
 //
 // cloud keeps its OWN append-only, hash-chained trail of every security-relevant
-// request against this binary, and that is what a compliance auditor queries here. IAM's
-// own login/session records remain a DIFFERENT trail; admin still federates them as a
-// fallback when cloud's local store is not configured, so no capability is lost.
+// request, and that is what a compliance auditor queries here. IAM's own login/session
+// records remain a DIFFERENT trail; admin still federates them as a fallback when
+// cloud's local store is not configured, so no capability is lost.
+//
+// THE TRAIL IS A FAMILY OF CHAINS, one per process (audit.Name), because two writers
+// can only fork a hash chain. So the two ops here are at different scopes and say so:
+// the listing reads the ONE chain this process holds and badges it by NAME, while
+// verify enumerates EVERY chain and answers with a set of verdicts. Reading one chain
+// and reporting its verdict as the trail's is the defect this split exists to end.
 //
 // SECURITY. Both ops call core.Admit (SuperAdmin only, fail-closed) on their first line.
 // They are READ-ONLY (Query and Verify issue SELECT only), so exposing them cannot
@@ -67,11 +73,13 @@ type RecordsIn struct {
 
 // RecordsOut is the GET /v1/admin/audit envelope.
 //
-// `integrity` is this op's own field, beside the envelope's four: it carries the chain's
-// live verification so the console can badge a listing as verified without a second
-// round trip. It is null when the check could not run — a verify failure must not fail
-// the listing — and on the IAM fallback, which is a different trail with no chain of
-// ours to verify.
+// `integrity` is this op's own field, beside the envelope's four: it carries the live
+// verification OF THE ONE CHAIN these records came from — named, so it cannot be read
+// as the whole trail's — letting the console badge a listing without a second round
+// trip. The trail is a family of chains and this listing reads one of them; for every
+// chain, ask GET /v1/admin/audit/verify. It is null when the check could not run — a
+// verify failure must not fail the listing — and on the IAM fallback, which is a
+// different trail with no chain of ours to verify.
 //
 // `data` is opaque because it is one of two shapes: this store's own records
 // (audit.Wire), or IAM's get-records payload forwarded verbatim by the fallback.
@@ -83,8 +91,8 @@ type RecordsOut struct {
 	Integrity *auditstore.Integrity `json:"integrity"`
 }
 
-// Records reads cloud's tamper-evident audit trail, newest first, with the chain's live
-// integrity attached so a listing can be badged as verified.
+// Records reads one chain of cloud's tamper-evident audit trail, newest first, with
+// that chain's live integrity attached so a listing can be badged as verified.
 //
 // When cloud has no local store configured it falls back to forwarding IAM's own
 // get-records trail verbatim — a DIFFERENT trail, federated so the endpoint never
@@ -94,7 +102,7 @@ type RecordsOut struct {
 // Example: {"org":"acme","action":"admin.waitlist.grant","since":"2026-07-01T00:00:00Z","pageSize":"50"}
 // Response: {"status":"ok","msg":"","data":[{"seq":41,"ts":"2026-07-26T18:00:00Z","org":"acme",
 // "sub":"z@hanzo.ai","action":"admin.waitlist.grant","resource":"waitlist","result":"success"}],
-// "total":1,"integrity":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}
+// "total":1,"integrity":{"name":"audit-admin","verdict":"intact","count":42,"head":"9f2c","brokenAt":-1}}
 func (o ops) Records(ctx context.Context, in *RecordsIn) (*RecordsOut, error) {
 	c, err := core.Admit(ctx)
 	if err != nil {
@@ -125,8 +133,9 @@ func (o ops) Records(ctx context.Context, in *RecordsIn) (*RecordsOut, error) {
 		out = append(out, r.ToWire())
 	}
 
-	// Attach the live integrity summary so the console can badge the trail as verified.
-	// Best-effort: a verify error must not fail the listing.
+	// Attach the live integrity of the chain these rows came from, so the console can
+	// badge the listing as verified. It carries that chain's NAME, so it cannot pass
+	// for the whole trail's. Best-effort: a verify error must not fail the listing.
 	var integrity *auditstore.Integrity
 	if iv, ivErr := s.State.AuditStore.Verify(ctx); ivErr == nil {
 		integrity = &iv
@@ -137,19 +146,26 @@ func (o ops) Records(ctx context.Context, in *RecordsIn) (*RecordsOut, error) {
 
 // VerifyOut is the GET /v1/admin/audit/verify envelope.
 type VerifyOut struct {
-	Status string                `json:"status"`
-	Msg    string                `json:"msg"`
-	Data   *auditstore.Integrity `json:"data"`
+	Status string            `json:"status"`
+	Msg    string            `json:"msg"`
+	Data   *auditstore.Trail `json:"data"`
 }
 
-// Verify walks the WHOLE hash chain and reports whether it is intact: how many records
-// were checked, the head hash to pin externally against tail-truncation, and — when the
-// chain is broken — the seq of the first bad record and why.
+// Verify walks EVERY hash chain this deployment keeps and reports each one: which
+// chains were checked, how many records each holds, the head hash to pin externally
+// against tail-truncation, and — when a chain is broken — the seq of the first bad
+// record and why.
 //
-// brokenAt is -1 exactly when ok is true. An unconfigured store is an honest failure
-// here rather than a fabricated pass.
+// The trail is a FAMILY of chains, one per process, so the answer is a set and not a
+// boolean: `intact`, `broken` and `unread` count the three verdicts and sum to the
+// number of chains. A chain that could not be READ is reported `unread` and is never
+// a pass — an unreadable chain and a verified one must not render the same, which is
+// the whole reason this is not one flag.
 //
-// Response: {"status":"ok","msg":"","data":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}
+// An unconfigured store is an honest failure here rather than a fabricated pass.
+//
+// Response: {"status":"ok","msg":"","data":{"chains":[{"name":"audit-iam","verdict":"intact",
+// "count":42,"head":"9f2c","brokenAt":-1}],"intact":1,"broken":0,"unread":0,"records":42}}
 func (o ops) Verify(ctx context.Context, _ *core.None) (*VerifyOut, error) {
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
@@ -158,11 +174,14 @@ func (o ops) Verify(ctx context.Context, _ *core.None) (*VerifyOut, error) {
 	if s.State.AuditStore == nil {
 		return &VerifyOut{Status: core.Err, Msg: "audit store not configured"}, nil
 	}
-	integrity, err := s.State.AuditStore.Verify(ctx)
+	// The family, not this process's own chain. Asking the recorder for its own
+	// verdict answers for 1 of N and labels it the trail's — which is what shipped,
+	// from inside the admin plugin, against 128 live chains.
+	trail, err := s.State.AuditStore.Trail(ctx)
 	if err != nil {
 		return &VerifyOut{Status: core.Err, Msg: err.Error()}, nil
 	}
-	return &VerifyOut{Status: core.OK, Data: &integrity}, nil
+	return &VerifyOut{Status: core.OK, Data: &trail}, nil
 }
 
 // filter builds the store filter from the request. Time bounds accept RFC3339; pageSize

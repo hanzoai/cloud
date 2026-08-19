@@ -82,7 +82,16 @@ type CheckpointSink interface {
 // by mu AND by the single-connection SQLite pool, so the on-disk order equals
 // the chain order with no gaps.
 type Recorder struct {
-	db     *sql.DB
+	db *sql.DB
+	// name is the chain this recorder writes — the subsystem cek keyed the file
+	// under. It rides on every verdict, so a verification can never be read as
+	// being about a chain other than the one it walked.
+	//
+	// dir is the data root it was opened under, which is where the REST of the
+	// family lives. Keeping it means Trail needs no argument: the one object that
+	// holds a chain open is the one that knows where its siblings are.
+	name   string
+	dir    string
 	mirror Mirror // nil when no OLAP mirror is configured.
 
 	mu       sync.Mutex // guards nextSeq/headHash and serializes appends.
@@ -121,7 +130,7 @@ func Open(dir, subsystem string, mirror Mirror) (*Recorder, error) {
 		return nil, fmt.Errorf("audit: open %s: %w", subsystem, err)
 	}
 	sqlpool.Single(db)
-	r := &Recorder{db: db, mirror: mirror}
+	r := &Recorder{db: db, name: subsystem, dir: dir, mirror: mirror}
 	if err := r.migrate(); err != nil {
 		_ = db.Close()
 		return nil, err
