@@ -36,8 +36,9 @@
 //	Trigger       Push events only
 //	Branch filter *
 //
-// api.hanzo.ai is the fleet's one endpoint; platform.hanzo.ai/v1/git-webhook is
-// the same door through the sibling host, and is the address apps/git's 410 names.
+// api.hanzo.ai is the fleet's one endpoint and the only host that reaches this
+// receiver. platform.hanzo.ai is a separate deployment; the address apps/git's
+// 410 names resolves there, not here.
 //
 // The secret is CONFIGURED, not generated here: the forge and this receiver share
 // one value, and the KMS ref is where the deployment keeps it. Rotating means
