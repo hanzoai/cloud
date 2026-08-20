@@ -15529,31 +15529,6 @@ components:
             Trigger is the root of the step tree — how the flow starts, and the action
             chain that follows. Optional: a flow may be created empty and edited later.
       type: object
-    createLBReq:
-      properties:
-        forwarding_rules:
-          description: |-
-            ForwardingRules are the listen→backend port mappings. Empty defaults to
-            plain HTTP 80→80, the same default DigitalOcean's own console applies.
-          items:
-            $ref: '#/components/schemas/fwdRule'
-          type: array
-        name:
-          description: |-
-            Name is the FRIENDLY name, a DNS-safe slug of at most 40 characters. The
-            physical DigitalOcean name is derived from it and the caller's org.
-          type: string
-        region:
-          description: Region is the DigitalOcean region slug (nyc3, sfo3, …). Required.
-          type: string
-        size:
-          description: Size is the DigitalOcean size slug. Empty takes DO's default.
-          type: string
-        type:
-          description: Type is the DigitalOcean load-balancer type. Empty takes DO's
-            default (REGIONAL).
-          type: string
-      type: object
     createLinkRequest:
       properties:
         code:
@@ -15617,21 +15592,6 @@ components:
             URL is the server's JSON-RPC endpoint. It must be an http(s) URL naming a
             PUBLIC host: loopback, link-local, private and cloud-metadata addresses are
             refused here and again when the dialer connects.
-          type: string
-      type: object
-    createVPCReq:
-      properties:
-        ip_range:
-          description: IPRange is the VPC's private CIDR. Empty lets DigitalOcean
-            assign one.
-          type: string
-        name:
-          description: |-
-            Name is the FRIENDLY name, a DNS-safe slug of at most 40 characters. The
-            physical DigitalOcean name is derived from it and the caller's org.
-          type: string
-        region:
-          description: Region is the DigitalOcean region slug (nyc3, sfo3, …). Required.
           type: string
       type: object
     createVersionIn:
@@ -17882,22 +17842,6 @@ components:
             ReferredOrgs is how many attribution edges exist fleet-wide — one per referred
             org, first-touch, so it is also the count of distinct referred orgs.
           type: integer
-      type: object
-    fwdRule:
-      properties:
-        entry_port:
-          description: EntryPort is the port the load balancer listens on.
-          type: integer
-        entry_protocol:
-          description: EntryProtocol is the protocol the load balancer listens with
-            (http, https, tcp).
-          type: string
-        target_port:
-          description: TargetPort is the backend port traffic is forwarded to.
-          type: integer
-        target_protocol:
-          description: TargetProtocol is the protocol used to reach the backend droplets.
-          type: string
       type: object
     gcOut:
       properties:
@@ -23141,30 +23085,6 @@ components:
           type: string
         seq:
           type: integer
-      type: object
-    lbList:
-      properties:
-        loadBalancers:
-          description: LoadBalancers are the caller org's load balancers under their
-            friendly names.
-          items:
-            $ref: '#/components/schemas/lbView'
-          type: array
-      type: object
-    lbView:
-      properties:
-        id:
-          type: string
-        ip:
-          type: string
-        name:
-          type: string
-        status:
-          type: string
-        targets:
-          type: integer
-        type:
-          type: string
       type: object
     leaderboard:
       properties:
@@ -46123,31 +46043,6 @@ components:
         status:
           type: string
       type: object
-    vpcList:
-      properties:
-        vpcs:
-          description: VPCs are the caller org's VPCs under their friendly names.
-          items:
-            $ref: '#/components/schemas/vpcView'
-          type: array
-      type: object
-    vpcView:
-      properties:
-        cidr:
-          type: string
-        id:
-          type: string
-        name:
-          type: string
-        region:
-          type: string
-        status:
-          type: string
-        subnets:
-          items:
-            type: string
-          type: array
-      type: object
     waiting:
       properties:
         email:
@@ -56890,117 +56785,6 @@ paths:
       tags:
       - avatar
       x-app: account
-  /v1/balancers:
-    get:
-      description: |-
-        Returns every load balancer the caller's org owns, under the
-        friendly names the org created them with. Same account-wide filter as the VPC
-        listing: a load balancer outside the caller's "o"<orgHash>- namespace is never
-        in the answer.
-      operationId: get_balancers
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                loadBalancers:
-                - id: lb-1
-                  ip: 10.0.0.1
-                  name: edge
-                  status: active
-                  targets: 3
-                  type: REGIONAL
-              schema:
-                $ref: '#/components/schemas/lbList'
-          description: ok
-      summary: Returns every load balancer the caller's org owns, under the friendly
-        names the org created them with.
-      tags:
-      - balancers
-      x-app: do
-      x-tool: true
-    post:
-      description: |-
-        Creates a load balancer in the caller's org namespace and
-        answers 201 with it. The physical DigitalOcean name is derived server-side from
-        the validated org; a name that already exists there is a 409. Omitting
-        forwarding rules yields a usable HTTP 80→80 load balancer rather than a 422.
-      operationId: post_balancers
-      requestBody:
-        content:
-          application/json:
-            example:
-              forwarding_rules:
-              - entry_port: 443
-                entry_protocol: https
-                target_port: 8080
-                target_protocol: http
-              name: edge
-              region: nyc3
-            schema:
-              $ref: '#/components/schemas/createLBReq'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/lbView'
-          description: created
-      summary: Creates a load balancer in the caller's org namespace and answers 201
-        with it.
-      tags:
-      - balancers
-      x-app: do
-      x-tool: true
-  /v1/balancers/{id}:
-    delete:
-      description: |-
-        Removes one of the caller org's load balancers and answers
-        204. Ownership is confirmed by re-fetching the resource before anything is
-        deleted, so a cross-tenant id is a 404 rather than a delete of another org's
-        load balancer.
-      operationId: delete_balancers_by_id
-      parameters:
-      - description: ID is the DigitalOcean resource id (a UUID), from the path.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Removes one of the caller org's load balancers and answers 204.
-      tags:
-      - balancers
-      x-app: do
-      x-tool: true
-    get:
-      description: |-
-        Returns one of the caller org's load balancers by id. One that
-        exists in another org's namespace is reported 404, never 403 — the same
-        existence-oracle guard the VPC read applies.
-      operationId: get_balancers_by_id
-      parameters:
-      - description: ID is the DigitalOcean resource id (a UUID), from the path.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/lbView'
-          description: ok
-      summary: Returns one of the caller org's load balancers by id.
-      tags:
-      - balancers
-      x-app: do
-      x-tool: true
   /v1/base/health:
     get:
       description: |-
@@ -88183,7 +87967,7 @@ paths:
       description: |-
         Accepts an application/x-sentry-envelope frame from a Sentry SDK — the batched wire format carrying events, sessions and attachments — and ingests it against the project named in the path.
 
-        THE /api/ SEGMENT IS NOT OURS TO NAME. An SDK appends its own fixed /api/<project>/envelope/ suffix to whatever DSN it is given, so this address is the SDK's, received verbatim. We receive this shape; we do not publish it. The clean spelling of the same wire is /v1/sentry/{project}/envelope/.
+        THE /api/ SEGMENT IS NOT OURS TO NAME. An SDK appends its own fixed /api/<project>/envelope/ suffix to whatever DSN it is given, so this address is the SDK's, received verbatim. We receive this shape; we do not publish it. The clean spelling of the same wire is /v1/sentinel/{project}/envelope/.
 
         AUTHENTICATED BY THE DSN PUBLIC KEY, never a Hanzo session, and therefore exempt from the principal gate: the ingest verifier checks the key in constant time, fails closed, and derives the org from it. A keyless submission is a 401 from that verifier — not a 403 from the gate, and not a 404 — which is how you tell the hops apart. The exemption is matched by method plus prefix plus suffix, never a bare prefix, so no read is reachable through it.
       operationId: post_o11y_api_by_project_id_envelope
@@ -108199,47 +107983,49 @@ paths:
       - security
       x-app: security
       x-tool: true
-  /v1/sentry/{project}/envelope/:
+  /v1/sentinel/{project}/envelope/:
     post:
       description: |-
-        The same envelope ingest as the DSN path, spelled the way this platform names things: one /v1/, the product, the project. Point an SDK's DSN here and the wire is identical.
+        The runtime's own ingest address for a Sentry envelope frame, kept under this root because that is where the module registers it.
 
-        AUTHENTICATED BY THE DSN PUBLIC KEY and exempt from the principal gate for the same reason — a Sentry SDK has no Hanzo session to present. The project segment is a UUID enforced by the route, and the exemption matches method plus prefix plus suffix, so every Sentry READ (issues, discover, events, logs, traces, stats) stays gated.
-      operationId: post_sentry_by_project_envelope
+        THE DOOR A CLIENT SHOULD USE IS /v1/event/{project}/envelope. That is what a minted DSN addresses and what @hanzo/event posts to, and it carries the same wire to the same sink. This address answers identically; it is the second spelling of one wire and it is on its way out.
+
+        AUTHENTICATED BY THE DSN PUBLIC KEY, never a Hanzo session, so it is exempt from the principal gate — a reporting SDK has no session to present. The project segment is a UUID enforced by the route, and the exemption matches method plus prefix plus suffix, so every Sentinel READ (issues, discover, events, logs, traces, stats) stays gated.
+      operationId: post_sentinel_by_project_envelope
       parameters:
       - in: path
         name: project
         required: true
         schema:
           type: string
-      summary: Receive a Sentry envelope on the clean root
+      summary: Receive a Sentry envelope on the runtime's ingest hatch
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
-  /v1/sentry/{project}/store/:
+  /v1/sentinel/{project}/store/:
     post:
-      description: The legacy single-event ingest on the clean /v1/sentry root — one
-        JSON event rather than a framed batch. Same DSN-key authentication, same gate
-        exemption, same UUID-enforced project segment as the envelope route beside
-        it.
-      operationId: post_sentry_by_project_store
+      description: |-
+        The legacy single-event form of the envelope ingest — one JSON event rather than a framed batch — kept because SDKs in the field still send it.
+
+        Same address ownership and same authentication as the envelope route beside it, and the same advice: point a client at /v1/event/{project}/store, which is the one door.
+      operationId: post_sentinel_by_project_store
       parameters:
       - in: path
         name: project
         required: true
         schema:
           type: string
-      summary: Receive a single Sentry event on the clean root
+      summary: Receive a single event on the runtime's ingest hatch
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
-  /v1/sentry/{wildcard1}:
+  /v1/sentinel/{wildcard1}:
     delete:
       description: |-
         The one delete on the Sentry surface: removing a PROJECT, answering 204. Error issues, events and traces are not individually deletable — they are append-only telemetry, and their lifetime is retention's business, not an API call's.
 
         Requires a validated, org-scoped principal with edit rights; a viewer is refused. The delete is confined to the org minted from that principal's claim, so a project id belonging to another tenant is not found rather than removed. Deleting a project retires the DSN that fed it, so any SDK still pointed at that key stops being accepted. Before the runtime is initialized, 503.
-      operationId: delete_sentry_by_wildcard1
+      operationId: delete_sentinel_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -108248,7 +108034,7 @@ paths:
           type: string
       summary: Delete a Sentry project
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
     get:
       description: |-
@@ -108257,7 +108043,7 @@ paths:
         It is the SAME runtime the observability surface serves, reached under a second path family, and there is NO rewrite: the runtime carries these routes literally. That is what makes this a product face rather than a translation layer. One runtime, two path families.
 
         A validated principal is required and the read is scoped to that principal's own org. Errors are a tenant's OWN data, so org membership is the whole admission test and there is deliberately no admin term on it — gating the product on platform sudo would make the only way to see your own errors a scope that shows you everyone's. Before the runtime is initialized, 503.
-      operationId: get_sentry_by_wildcard1
+      operationId: get_sentinel_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -108266,14 +108052,14 @@ paths:
           type: string
       summary: Read the caller org's errors on the Sentry surface
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
     patch:
       description: |-
         The Sentry face carries NO route for a partial update. The wildcard admits every method, so this operation exists as an address, but nothing behind it answers and a request lands on the runtime as an unrouted path.
 
         It is documented rather than silently omitted because the useful thing to say is where to go instead: an issue's lifecycle — resolve, ignore, assign — is a REPLACE on that issue, not a patch, and it is the only mutable state on this surface. A client that reaches for a partial update here is looking for that call.
-      operationId: patch_sentry_by_wildcard1
+      operationId: patch_sentinel_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -108282,7 +108068,7 @@ paths:
           type: string
       summary: Not served — the Sentry surface has no partial update
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
     post:
       description: |-
@@ -108291,7 +108077,7 @@ paths:
         THE TWO ARE AUTHENTICATED DIFFERENTLY, and that is the rule to get right. An envelope or store submission presents a DSN public key, never a Hanzo session, so it is exempt from the principal gate and verified by the ingest key check instead — which derives the org from the DSN and fails closed. A keyless submission is a 401 from that verifier, not a 403 from the gate, and telling those two apart is how you tell the hops apart. Every other write here needs a validated, org-scoped principal, and creating or rotating requires an editor rather than a viewer.
 
         The ingest exemption is matched by method plus prefix plus suffix, never a bare prefix, and the project segment must be a UUID — so no read is reachable through it. Before the runtime is initialized, 503.
-      operationId: post_sentry_by_wildcard1
+      operationId: post_sentinel_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -108300,7 +108086,7 @@ paths:
           type: string
       summary: Send events to the Sentry surface, or write on it
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
     put:
       description: |-
@@ -108309,7 +108095,7 @@ paths:
         Nothing else here takes a replace. A project is created and deleted but never replaced, and the event and trace planes are append-only telemetry, so an issue's lifecycle is the only mutable state this face exposes.
 
         Requires a validated, org-scoped principal with edit rights; a viewer is refused. The write is confined to the org minted from that principal's claim, so an issue id belonging to another tenant is simply not found. Before the runtime is initialized, 503.
-      operationId: put_sentry_by_wildcard1
+      operationId: put_sentinel_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -108318,9 +108104,9 @@ paths:
           type: string
       summary: Move an error issue through its lifecycle
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
-  /v1/sentry/discover:
+  /v1/sentinel/discover:
     post:
       description: |-
         Aggregates a project's captured errors into a table — the caller
@@ -108330,7 +108116,7 @@ paths:
         The project is mandatory and is checked against the caller's own org before it
         scopes anything, so a project id belonging to someone else reads as absent
         rather than as data.
-      operationId: post_sentry_discover
+      operationId: post_sentinel_discover
       requestBody:
         content:
           application/json:
@@ -108348,16 +108134,16 @@ paths:
         the filters, the groupings and the aggregations, and gets back the columns
         and rows they asked for.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
-  /v1/sentry/events/{id}:
+  /v1/sentinel/events/{id}:
     get:
       description: |-
         Returns one captured error event of a project, by its id.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentry_events_by_id
+      operationId: get_sentinel_events_by_id
       parameters:
       - description: ID is the event id.
         in: path
@@ -108380,10 +108166,10 @@ paths:
           description: ok
       summary: Returns one captured error event of a project, by its id.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
-  /v1/sentry/issues:
+  /v1/sentinel/issues:
     get:
       description: |-
         Lists the caller's org's grouped error issues, optionally
@@ -108391,7 +108177,7 @@ paths:
         environment, service, a free-text query and a sort.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentry_issues
+      operationId: get_sentinel_issues
       parameters:
       - description: 'Status narrows to one lifecycle state: unresolved, resolved
           or ignored.'
@@ -108466,17 +108252,17 @@ paths:
         to one project and one time window, and filtered by status, level, environment,
         service, a free-text query and a sort.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
-  /v1/sentry/issues/{id}:
+  /v1/sentinel/issues/{id}:
     get:
       description: |-
         Returns one grouped issue of the caller's org with its latest
         occurrence sample.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentry_issues_by_id
+      operationId: get_sentinel_issues_by_id
       parameters:
       - description: ID is the issue id.
         in: path
@@ -108494,7 +108280,7 @@ paths:
       summary: Returns one grouped issue of the caller's org with its latest occurrence
         sample.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
     put:
@@ -108503,7 +108289,7 @@ paths:
         assign — and returns the updated issue. Fields left unset are left unchanged.
 
         Callers need the editor role; the runtime's own gate enforces it.
-      operationId: put_sentry_issues_by_id
+      operationId: put_sentinel_issues_by_id
       parameters:
       - description: ID is the issue id.
         in: path
@@ -108527,10 +108313,10 @@ paths:
       summary: Changes an issue's lifecycle — resolve, ignore, reopen or assign —
         and returns the updated issue.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
-  /v1/sentry/issues/{id}/events:
+  /v1/sentinel/issues/{id}/events:
     get:
       description: |-
         Lists one issue's captured occurrences, scoped to a project
@@ -108538,7 +108324,7 @@ paths:
         occurrences to read.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentry_issues_by_id_events
+      operationId: get_sentinel_issues_by_id_events
       parameters:
       - description: ID is the issue id.
         in: path
@@ -108570,15 +108356,15 @@ paths:
         is an isolation unit, so the caller declares which project's occurrences to
         read.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
-  /v1/sentry/logs:
+  /v1/sentinel/logs:
     get:
       description: |-
         Lists a project's captured error events, newest first, optionally
         narrowed to those whose message or exception text contains a search string.
-      operationId: get_sentry_logs
+      operationId: get_sentinel_logs
       parameters:
       - description: Project is the project to read, as its id. Required.
         in: query
@@ -108615,17 +108401,17 @@ paths:
       summary: Lists a project's captured error events, newest first, optionally narrowed
         to those whose message or exception text contains a search string.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
-  /v1/sentry/projects:
+  /v1/sentinel/projects:
     get:
       description: |-
         Lists the caller's org's Sentry projects, each with its
         freshly-derived DSN.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentry_projects
+      operationId: get_sentinel_projects
       responses:
         "200":
           content:
@@ -108636,7 +108422,7 @@ paths:
       summary: Lists the caller's org's Sentry projects, each with its freshly-derived
         DSN.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
     post:
@@ -108646,7 +108432,7 @@ paths:
         are the caller's to set; the org, id and key are server-assigned.
 
         Callers need the editor role; the runtime's own gate enforces it.
-      operationId: post_sentry_projects
+      operationId: post_sentinel_projects
       requestBody:
         content:
           application/json:
@@ -108663,10 +108449,10 @@ paths:
       summary: Creates a Sentry project under the caller's org and returns it, DSN
         included.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
-  /v1/sentry/projects/{id}:
+  /v1/sentinel/projects/{id}:
     delete:
       description: |-
         Deletes one Sentry project of the caller's org. Its DSN
@@ -108674,7 +108460,7 @@ paths:
         unknown project does; retained events are not touched. Answers 204.
 
         Callers need the editor role; the runtime's own gate enforces it.
-      operationId: delete_sentry_projects_by_id
+      operationId: delete_sentinel_projects_by_id
       parameters:
       - description: ID is the project id.
         in: path
@@ -108687,7 +108473,7 @@ paths:
           description: no content
       summary: Deletes one Sentry project of the caller's org.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
     get:
@@ -108695,7 +108481,7 @@ paths:
         Returns one Sentry project of the caller's org, DSN included.
 
         Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentry_projects_by_id
+      operationId: get_sentinel_projects_by_id
       parameters:
       - description: ID is the project id.
         in: path
@@ -108712,10 +108498,10 @@ paths:
           description: ok
       summary: Returns one Sentry project of the caller's org, DSN included.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
-  /v1/sentry/projects/{id}/keys/rotate:
+  /v1/sentinel/projects/{id}/keys/rotate:
     post:
       description: |-
         Rotates a project's DSN key — bumping its rotation
@@ -108723,7 +108509,7 @@ paths:
         new DSN.
 
         Callers need the editor role; the runtime's own gate enforces it.
-      operationId: post_sentry_projects_by_id_keys_rotate
+      operationId: post_sentinel_projects_by_id_keys_rotate
       parameters:
       - description: ID is the project id.
         in: path
@@ -108741,15 +108527,15 @@ paths:
       summary: Rotates a project's DSN key — bumping its rotation watermark so keys
         below it stop verifying — and returns the project with its new DSN.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
-  /v1/sentry/stats:
+  /v1/sentinel/stats:
     get:
       description: |-
         Returns a project's event-rate timeseries: one bucket per interval over
         the requested period, counting the events in it.
-      operationId: get_sentry_stats
+      operationId: get_sentinel_stats
       parameters:
       - description: Project is the project to read, as its id. Required.
         in: query
@@ -108780,16 +108566,16 @@ paths:
       summary: 'Returns a project''s event-rate timeseries: one bucket per interval
         over the requested period, counting the events in it.'
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
-  /v1/sentry/traces:
+  /v1/sentinel/traces:
     get:
       description: |-
         Lists the traces a project's captured errors reference, each with how
         many errors landed on it, when they started and stopped, and the latest
         message seen — the entry point for "which requests are failing".
-      operationId: get_sentry_traces
+      operationId: get_sentinel_traces
       parameters:
       - description: Project is the project to read, as its id. Required.
         in: query
@@ -108821,15 +108607,15 @@ paths:
         many errors landed on it, when they started and stopped, and the latest message
         seen — the entry point for "which requests are failing".
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
-  /v1/sentry/traces/{id}:
+  /v1/sentinel/traces/{id}:
     get:
       description: |-
         Returns one trace's captured errors for a project — every error event
         that carried the trace id, in the order the events plane holds them.
-      operationId: get_sentry_traces_by_id
+      operationId: get_sentinel_traces_by_id
       parameters:
       - description: ID is the trace id.
         in: path
@@ -108853,7 +108639,7 @@ paths:
       summary: Returns one trace's captured errors for a project — every error event
         that carried the trace id, in the order the events plane holds them.
       tags:
-      - sentry
+      - sentinel
       x-app: o11y
       x-tool: true
   /v1/settings/{product}:
@@ -114110,113 +113896,6 @@ paths:
       - videos
       x-app: ai
       x-public: true
-  /v1/vpcs:
-    get:
-      description: |-
-        Returns every VPC the caller's org owns, under the friendly names the
-        org created them with. DigitalOcean is one account for the whole deployment, so
-        the account-wide inventory is filtered to the caller's own "o"<orgHash>- name
-        prefix and the prefix is stripped — another org's VPC is not merely hidden, it
-        is never in the answer.
-      operationId: get_vpcs
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                vpcs:
-                - cidr: 10.10.0.0/16
-                  id: vpc-1
-                  name: web
-                  region: nyc3
-                  status: active
-                  subnets: []
-              schema:
-                $ref: '#/components/schemas/vpcList'
-          description: ok
-      summary: Returns every VPC the caller's org owns, under the friendly names the
-        org created them with.
-      tags:
-      - vpcs
-      x-app: do
-      x-tool: true
-    post:
-      description: |-
-        Creates a VPC in the caller's org namespace and answers 201 with it.
-        The physical DigitalOcean name is derived server-side from the validated org,
-        so a tenant can only ever create inside its own namespace; a name that already
-        exists there is a 409.
-      operationId: post_vpcs
-      requestBody:
-        content:
-          application/json:
-            example:
-              ip_range: 10.10.0.0/16
-              name: web
-              region: nyc3
-            schema:
-              $ref: '#/components/schemas/createVPCReq'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/vpcView'
-          description: created
-      summary: Creates a VPC in the caller's org namespace and answers 201 with it.
-      tags:
-      - vpcs
-      x-app: do
-      x-tool: true
-  /v1/vpcs/{id}:
-    delete:
-      description: |-
-        Removes one of the caller org's VPCs and answers 204. Ownership is
-        confirmed by re-fetching the resource and checking its physical name carries
-        the caller's org prefix BEFORE anything is deleted, so a cross-tenant id is a
-        404 rather than a delete of another org's VPC.
-      operationId: delete_vpcs_by_id
-      parameters:
-      - description: ID is the DigitalOcean resource id (a UUID), from the path.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Removes one of the caller org's VPCs and answers 204.
-      tags:
-      - vpcs
-      x-app: do
-      x-tool: true
-    get:
-      description: |-
-        Returns one of the caller org's VPCs by id. A VPC that exists but sits
-        in another org's namespace is reported 404, never 403 — the answer must not
-        tell one tenant that another tenant's resource exists.
-      operationId: get_vpcs_by_id
-      parameters:
-      - description: ID is the DigitalOcean resource id (a UUID), from the path.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/vpcView'
-          description: ok
-      summary: Returns one of the caller org's VPCs by id.
-      tags:
-      - vpcs
-      x-app: do
-      x-tool: true
   /v1/wallets:
     get:
       description: |-
@@ -115159,9 +114838,6 @@ tags:
 - description: 'Package account is your own account: API keys you mint and revoke,
     and org onboarding.'
   name: avatar
-- description: Package do is the org-scoped private-network surface — /v1/vpcs and
-    /v1/balancers — carved out of Hanzo's OWN house DigitalOcean account.
-  name: balancers
 - description: 'Package base is managed Hanzo Base: a hosted backend for your app
     — collections, records, access rules and sign-in.'
   name: base
@@ -115602,7 +115278,7 @@ tags:
   name: security
 - description: 'Package o11y is your logs, metrics and traces: ship them in, query
     them, chart them.'
-  name: sentry
+  name: sentinel
 - description: Package settings is how an org configures each product it uses, secret
     fields included.
   name: settings
@@ -115683,9 +115359,6 @@ tags:
     a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
     cannot INSTALL.
   name: videos
-- description: Package do is the org-scoped private-network surface — /v1/vpcs and
-    /v1/balancers — carved out of Hanzo's OWN house DigitalOcean account.
-  name: vpcs
 - description: 'Package wallets is blockchain key custody: create wallets, rotate
     their keys, and sign with them.'
   name: wallets

@@ -1596,40 +1596,6 @@
   }
  ],
  "dns": [],
- "do": [
-  {
-   "id": "delete_balancers_by_id",
-   "doc": "Removes one of the caller org's load balancers and answers\n204. Ownership is confirmed by re-fetching the resource before anything is\ndeleted, so a cross-tenant id is a 404 rather than a delete of another org's\nload balancer."
-  },
-  {
-   "id": "delete_vpcs_by_id",
-   "doc": "Removes one of the caller org's VPCs and answers 204. Ownership is\nconfirmed by re-fetching the resource and checking its physical name carries\nthe caller's org prefix BEFORE anything is deleted, so a cross-tenant id is a\n404 rather than a delete of another org's VPC."
-  },
-  {
-   "id": "get_balancers",
-   "doc": "Returns every load balancer the caller's org owns, under the\nfriendly names the org created them with. Same account-wide filter as the VPC\nlisting: a load balancer outside the caller's \"o\"\u003corgHash\u003e- namespace is never\nin the answer."
-  },
-  {
-   "id": "get_balancers_by_id",
-   "doc": "Returns one of the caller org's load balancers by id. One that\nexists in another org's namespace is reported 404, never 403 — the same\nexistence-oracle guard the VPC read applies."
-  },
-  {
-   "id": "get_vpcs",
-   "doc": "Returns every VPC the caller's org owns, under the friendly names the\norg created them with. DigitalOcean is one account for the whole deployment, so\nthe account-wide inventory is filtered to the caller's own \"o\"\u003corgHash\u003e- name\nprefix and the prefix is stripped — another org's VPC is not merely hidden, it\nis never in the answer."
-  },
-  {
-   "id": "get_vpcs_by_id",
-   "doc": "Returns one of the caller org's VPCs by id. A VPC that exists but sits\nin another org's namespace is reported 404, never 403 — the answer must not\ntell one tenant that another tenant's resource exists."
-  },
-  {
-   "id": "post_balancers",
-   "doc": "Creates a load balancer in the caller's org namespace and\nanswers 201 with it. The physical DigitalOcean name is derived server-side from\nthe validated org; a name that already exists there is a 409. Omitting\nforwarding rules yields a usable HTTP 80→80 load balancer rather than a 422."
-  },
-  {
-   "id": "post_vpcs",
-   "doc": "Creates a VPC in the caller's org namespace and answers 201 with it.\nThe physical DigitalOcean name is derived server-side from the validated org,\nso a tenant can only ever create inside its own namespace; a name that already\nexists there is a 409."
-  }
- ],
  "domain": [
   {
    "id": "get_domain_availability",
@@ -4239,7 +4205,7 @@
    "doc": "Removes one review queue and every item in it. A queue\nid belonging to another org answers the same 404 an unknown id does, so a\nprobe learns nothing about what exists."
   },
   {
-   "id": "delete_sentry_projects_by_id",
+   "id": "delete_sentinel_projects_by_id",
    "doc": "Deletes one Sentry project of the caller's org. Its DSN\nstops resolving immediately, so ingest for that id fails closed exactly as an\nunknown project does; retained events are not touched. Answers 204.\n\nCallers need the editor role; the runtime's own gate enforces it."
   },
   {
@@ -4499,43 +4465,43 @@
    "doc": "Reports the running build: its version, whether an enterprise\nedition is present (\"N\" in this build), and whether first-user setup has\ncompleted.\n\nOpen by design; the runtime's own gate is OpenAccess."
   },
   {
-   "id": "get_sentry_events_by_id",
+   "id": "get_sentinel_events_by_id",
    "doc": "Returns one captured error event of a project, by its id.\n\nCallers need the viewer role; the runtime's own gate enforces it."
   },
   {
-   "id": "get_sentry_issues",
+   "id": "get_sentinel_issues",
    "doc": "Lists the caller's org's grouped error issues, optionally\nnarrowed to one project and one time window, and filtered by status, level,\nenvironment, service, a free-text query and a sort.\n\nCallers need the viewer role; the runtime's own gate enforces it."
   },
   {
-   "id": "get_sentry_issues_by_id",
+   "id": "get_sentinel_issues_by_id",
    "doc": "Returns one grouped issue of the caller's org with its latest\noccurrence sample.\n\nCallers need the viewer role; the runtime's own gate enforces it."
   },
   {
-   "id": "get_sentry_issues_by_id_events",
+   "id": "get_sentinel_issues_by_id_events",
    "doc": "Lists one issue's captured occurrences, scoped to a project\n— a project is an isolation unit, so the caller declares which project's\noccurrences to read.\n\nCallers need the viewer role; the runtime's own gate enforces it."
   },
   {
-   "id": "get_sentry_logs",
+   "id": "get_sentinel_logs",
    "doc": "Lists a project's captured error events, newest first, optionally\nnarrowed to those whose message or exception text contains a search string."
   },
   {
-   "id": "get_sentry_projects",
+   "id": "get_sentinel_projects",
    "doc": "Lists the caller's org's Sentry projects, each with its\nfreshly-derived DSN.\n\nCallers need the viewer role; the runtime's own gate enforces it."
   },
   {
-   "id": "get_sentry_projects_by_id",
+   "id": "get_sentinel_projects_by_id",
    "doc": "Returns one Sentry project of the caller's org, DSN included.\n\nCallers need the viewer role; the runtime's own gate enforces it."
   },
   {
-   "id": "get_sentry_stats",
+   "id": "get_sentinel_stats",
    "doc": "Returns a project's event-rate timeseries: one bucket per interval over\nthe requested period, counting the events in it."
   },
   {
-   "id": "get_sentry_traces",
+   "id": "get_sentinel_traces",
    "doc": "Lists the traces a project's captured errors reference, each with how\nmany errors landed on it, when they started and stopped, and the latest\nmessage seen — the entry point for \"which requests are failing\"."
   },
   {
-   "id": "get_sentry_traces_by_id",
+   "id": "get_sentinel_traces_by_id",
    "doc": "Returns one trace's captured errors for a project — every error event\nthat carried the trace id, in the order the events plane holds them."
   },
   {
@@ -4807,15 +4773,15 @@
    "doc": "Evaluates a dashboard variable query and returns the values the\nvariable may take.\n\nCallers need the viewer role; the runtime's own gate enforces it."
   },
   {
-   "id": "post_sentry_discover",
+   "id": "post_sentinel_discover",
    "doc": "Aggregates a project's captured errors into a table — the caller\nnames the filters, the groupings and the aggregations, and gets back the\ncolumns and rows they asked for.\n\nThe project is mandatory and is checked against the caller's own org before it\nscopes anything, so a project id belonging to someone else reads as absent\nrather than as data."
   },
   {
-   "id": "post_sentry_projects",
+   "id": "post_sentinel_projects",
    "doc": "Creates a Sentry project under the caller's org and\nreturns it, DSN included. Only the name, and optionally a slug and platform,\nare the caller's to set; the org, id and key are server-assigned.\n\nCallers need the editor role; the runtime's own gate enforces it."
   },
   {
-   "id": "post_sentry_projects_by_id_keys_rotate",
+   "id": "post_sentinel_projects_by_id_keys_rotate",
    "doc": "Rotates a project's DSN key — bumping its rotation\nwatermark so keys below it stop verifying — and returns the project with its\nnew DSN.\n\nCallers need the editor role; the runtime's own gate enforces it."
   },
   {
@@ -4823,7 +4789,7 @@
    "doc": "Replaces one saved explorer view by id with the given view and\nechoes it back.\n\nCallers need the editor role; the runtime's own gate enforces it."
   },
   {
-   "id": "put_sentry_issues_by_id",
+   "id": "put_sentinel_issues_by_id",
    "doc": "Changes an issue's lifecycle — resolve, ignore, reopen or\nassign — and returns the updated issue. Fields left unset are left unchanged.\n\nCallers need the editor role; the runtime's own gate enforces it."
   }
  ],
