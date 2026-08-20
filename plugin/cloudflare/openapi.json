@@ -87,7 +87,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_cloudflare_d1_databases",
@@ -118,7 +119,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/d1/databases/{database}": {
@@ -150,7 +152,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/d1/databases/{database}/query": {
@@ -246,7 +249,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_cloudflare_kv_namespaces",
@@ -277,7 +281,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/kv/namespaces/{namespace}": {
@@ -309,7 +314,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/kv/namespaces/{namespace}/values/{key}": {
@@ -351,7 +357,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_cloudflare_kv_namespaces_by_namespace_values_by_key",
@@ -423,7 +430,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_cloudflare_pages_projects",
@@ -455,7 +463,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/pages/projects/{project}": {
@@ -487,7 +496,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_cloudflare_pages_projects_by_project",
@@ -517,7 +527,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/pages/projects/{project}/deployments": {
@@ -602,7 +613,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/pages/projects/{project}/domains/{domain}": {
@@ -644,7 +656,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/r2/buckets": {
@@ -710,7 +723,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_cloudflare_r2_buckets",
@@ -741,7 +755,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/r2/buckets/{bucket}": {
@@ -773,7 +788,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/workers/scripts": {
@@ -793,7 +809,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/workers/scripts/{script}": {
@@ -825,7 +842,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_cloudflare_workers_scripts_by_script",
@@ -908,7 +926,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/workers/subdomain": {
@@ -928,7 +947,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/workers/zones/{zone}/routes": {
@@ -960,7 +980,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_cloudflare_workers_zones_by_zone_routes",
@@ -1005,7 +1026,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/workers/zones/{zone}/routes/{route}": {
@@ -1047,7 +1069,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/zones": {
@@ -1122,7 +1145,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/zones/{zone}": {
@@ -1154,7 +1178,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/zones/{zone}/analytics": {
@@ -1214,7 +1239,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cloudflare/zones/{zone}/purge": {
@@ -1260,7 +1286,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

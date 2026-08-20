@@ -40,7 +40,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketplace/install": {
@@ -75,7 +76,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketplace/listings": {
@@ -97,7 +99,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_marketplace_listings",
@@ -134,7 +137,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketplace/listings/{id}": {
@@ -161,7 +165,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketplace/uninstall": {
@@ -196,7 +201,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },
