@@ -328,29 +328,30 @@ const zenProvider = "zen"
 
 // zenKeyResolver is zen's upstream-credential resolver. zen's catalog names each
 // provider's key by an env-var convention (DO_AI_API_KEY, ANTHROPIC_API_KEY, …);
-// the resolver turns that name into a concrete secret. It reads the ENVIRONMENT
-// FIRST, then falls back to KMS — the SAME order ai uses (object/kms.go: "the prod
-// hot path resolves DO_AI_API_KEY from the env before any live KMS"). The operator
-// injects these provider keys as env from the KMS-synced K8s secret
-// (cloud-api-llm-keys), so the env is the live value; the embedded KMS store is a
-// fallback that is not always seeded with the provider keys. Reading KMS-only made
-// zen send an EMPTY key whenever the store lacked it, and the upstream (DO GenAI)
-// answered 401 "Unable to authenticate you" — surfacing to the caller as a failed
-// chat while ai (which reads env) worked. Env-first fixes that with one source of
-// truth shared across both zen and ai. An empty result on both still returns "" so
-// the upstream call fails fast (never silent free usage).
+// the resolver turns that name into a concrete secret. It reads the STORE FIRST
+// and the environment second — the same order ai uses (object/kms.go
+// resolveSecretName, since v1.833.35). That order is what lets a key be sealed:
+// with the environment first, sealing one changes nothing while a stale entry
+// sits beside it, so the value in the process environment stays the live one.
+//
+// The environment remains the FALLBACK, so a store that has not been seeded with
+// a provider key still resolves rather than sending an empty one — which is the
+// failure this order was originally reversed to avoid (an empty key made the
+// upstream answer 401 and read as a failed chat). Nothing is lost by asking the
+// store first. An empty result from both still returns "" so the call fails fast
+// rather than spending silently.
 func zenKeyResolver(kms cloud.KMSClient) func(context.Context, string) string {
 	return func(ctx context.Context, envName string) string {
+		if kms != nil {
+			if b, err := kms.GetSecret(ctx, envName); err == nil && len(b) > 0 {
+				if v := strings.TrimSpace(string(b)); v != "" {
+					return v
+				}
+			}
+		}
 		if v := strings.TrimSpace(os.Getenv(envName)); v != "" {
 			return v
 		}
-		if kms == nil {
-			return ""
-		}
-		b, err := kms.GetSecret(ctx, envName)
-		if err != nil || len(b) == 0 {
-			return ""
-		}
-		return string(b)
+		return ""
 	}
 }
