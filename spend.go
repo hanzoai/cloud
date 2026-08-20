@@ -296,6 +296,7 @@ var meteredApps = []string{
 	"provisioning", // sql/kv/vector/docdb/s3/search/datastore creates.
 	"risk",         // per-screen fee inside each op.
 	"security",     // scan fee.
+	"seo",          // measurement resold at the vendor's own per-call price.
 	"storage",      // object-storage data plane.
 	"tools",        // per-tool dispatch.
 	"todo",         // per-project/issue fee.
