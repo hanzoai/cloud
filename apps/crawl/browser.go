@@ -67,6 +67,16 @@ const thinText = 512
 // open. Exceeded means "keep the static Page", never an error to the caller.
 const browserTimeout = 45 * time.Second
 
+// browserMaxBody caps the service's response, and it is NOT maxBody for the same
+// reason `service` is not `client`: that cap bounds a page an outside caller
+// pointed us at, this one bounds an envelope from a service we configured. The
+// envelope wraps the page — markdown plus metadata plus the render's own
+// bookkeeping — so it is structurally larger than the document it carries, and a
+// page well within maxBody can arrive here past it. Truncated JSON does not
+// degrade, it fails to decode, so an undersized cap turns exactly the pages worth
+// escalating into "the render failed" with nothing anywhere saying why.
+const browserMaxBody = 64 << 20
+
 // browserEndpoint is the in-cluster crawl service. Same host:port ai already
 // dials, so the two agree on where the browser lives without a shared constant
 // across repos.
@@ -211,7 +221,7 @@ func browse(ctx context.Context, raw string) (*Page, error) {
 	}
 
 	var out browserResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, browserMaxBody)).Decode(&out); err != nil {
 		return nil, err
 	}
 	if len(out.Results) == 0 {
