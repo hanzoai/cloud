@@ -1485,11 +1485,33 @@ jobs:
           ok=0; bad=""
           for entry in $PROJECTIONS; do
             repo="${entry%%:*}"; wf="${entry##*:}"
+            # THE REF TRAVELS WITH THE POKE, and until it did this whole car was
+            # ceremony. hanzoai/ci's client lane moves a projection's pin only when
+            # it is handed a ref, and it read that from `client_payload` — which
+            # `repository_dispatch` populates and Hanzo Git does not serve. So every
+            # poke landed in `check`: re-read the LOCKED ref, assert its digest, exit
+            # before any write. Measured before the fix, the SDKs sat 254 commits
+            # behind while their registries matched their newest tags exactly,
+            # because publishing was never the broken half.
+            #
+            # ci v1.0.75 takes the ref as an input. `github.sha` is the commit this
+            # release IS, so a projection pins to the thing that shipped rather than
+            # to whatever main happened to be when its own run started.
+            #
+            # Only the cicd.yml callers declare it. docs' deploy.yml takes no inputs
+            # and re-pins nothing — it rebuilds at the pin already committed, which
+            # is a deliberate manual bump there — so it keeps the bare body rather
+            # than being sent a field it does not declare.
+            if [ "$wf" = cicd.yml ]; then
+              BODY=$(jq -nc --arg sha "${{ github.sha }}" '{ref:"main",inputs:{"spec-ref":$sha}}')
+            else
+              BODY='{"ref":"main"}'
+            fi
             CODE=$(curl -s -o /tmp/d.json -w '%{http_code}' -X POST \
               -H "Authorization: token ${GIT_TOKEN}" \
               -H 'Content-Type: application/json' \
               "https://git.hanzo.ai/v1/repos/${repo}/actions/workflows/${wf}/dispatches" \
-              -d '{"ref":"main"}')
+              -d "$BODY")
             if [ "$CODE" = "204" ]; then
               ok=$(( ok + 1 )); echo "  poked     ${repo}"
             else
