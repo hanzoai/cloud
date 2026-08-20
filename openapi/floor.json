@@ -1,6 +1,6 @@
 {
-  "paths": 1828,
-  "operations": 2494,
+  "paths": 1826,
+  "operations": 2492,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -153,7 +153,7 @@
     "scrape": 1,
     "search": 3,
     "security": 7,
-    "sentinel": 22,
+    "sentinel": 20,
     "settings": 2,
     "share": 2,
     "sites": 21,

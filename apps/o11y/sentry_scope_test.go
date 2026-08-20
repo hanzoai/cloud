@@ -11,11 +11,11 @@ import (
 // The Sentry/o11y product surface. Every path here is a TENANT read: an org's own
 // errors, issues, logs and traces.
 var productPaths = []string{
-	"/v1/sentry/issues",
-	"/v1/sentry/projects",
-	"/v1/sentry/logs",
-	"/v1/sentry/traces",
-	"/v1/sentry/stats",
+	"/v1/sentinel/issues",
+	"/v1/sentinel/projects",
+	"/v1/sentinel/logs",
+	"/v1/sentinel/traces",
+	"/v1/sentinel/stats",
 	"/v1/o11y/errortracking/issues",
 }
 
@@ -113,7 +113,7 @@ func TestMemberKeepsWithinOrgNarrowings(t *testing.T) {
 	var got seen
 	const raw = "project=p1&product=kms&query=a%20b"
 	rec := httptest.NewRecorder()
-	gated(t, &got).ServeHTTP(rec, member("orga", "/v1/sentry/traces/abc?"+raw))
+	gated(t, &got).ServeHTTP(rec, member("orga", "/v1/sentinel/traces/abc?"+raw))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -135,7 +135,7 @@ func TestMemberKeepsWithinOrgNarrowings(t *testing.T) {
 // org term. That buys REACH, not data: the runtime still scopes from X-Org-Id.
 func TestSuperAdminReachesTheProductOrgless(t *testing.T) {
 	var got seen
-	r := member("", "/v1/sentry/issues")
+	r := member("", "/v1/sentinel/issues")
 	r.Header.Set("X-User-IsAdmin", "true")
 
 	rec := httptest.NewRecorder()
@@ -152,7 +152,7 @@ func TestOnlyTheMintedAdminBitCounts(t *testing.T) {
 	for _, v := range []string{"", "false", "TRUE", "1", "yes", " true"} {
 		var got seen
 		// Org-LESS, so only a true sudo bit could get through the org term.
-		r := member("", "/v1/sentry/issues")
+		r := member("", "/v1/sentinel/issues")
 		if v != "" {
 			r.Header.Set("X-User-IsAdmin", v)
 		}
@@ -169,7 +169,7 @@ func TestOnlyTheMintedAdminBitCounts(t *testing.T) {
 func TestOrglessMemberIsRefused(t *testing.T) {
 	for _, org := range []string{"", "   "} {
 		var got seen
-		r := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/sentry/issues", nil)
+		r := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/sentinel/issues", nil)
 		r.Header.Set("X-User-Id", "z")
 		if org != "" {
 			r.Header.Set("X-Org-Id", org)
@@ -187,8 +187,8 @@ func TestOrglessMemberIsRefused(t *testing.T) {
 // presents a DSN key), so the scope decision must not touch it.
 func TestIngestIsUntouchedByTheScopeDecision(t *testing.T) {
 	for _, p := range []string{
-		"/v1/sentry/8f14e45f-ceea-467a-9575-6f6b6f6b6f6b/envelope/",
-		"/v1/sentry/8f14e45f-ceea-467a-9575-6f6b6f6b6f6b/store/",
+		"/v1/event/8f14e45f-ceea-467a-9575-6f6b6f6b6f6b/envelope/",
+		"/v1/event/8f14e45f-ceea-467a-9575-6f6b6f6b6f6b/store/",
 		"/v1/o11y/api/8f14e45f/envelope/",
 	} {
 		var got seen
