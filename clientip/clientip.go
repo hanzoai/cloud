@@ -42,6 +42,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hanzoai/ai/address"
 	"github.com/zap-proto/zip"
 )
 
@@ -264,25 +265,24 @@ func parseClientAddr(s string) (netip.Addr, bool) {
 
 // ---- carrying the caller's address to a child process -----------------------
 
-// ClientIPHeader carries the caller's address from this host to a subsystem running
-// as its own process.
-//
 // A SUBSYSTEM CANNOT SEE THE CONNECTION. The pod runs one process per subsystem and
 // the host reaches each over a unix socket, so the request a child handles has the
 // SOCKET as its peer — measured empty, and constant whatever it is. Anything a child
 // derives from it is therefore one value for every caller on earth, which is not a
-// degraded answer but a single answer wearing everyone's name. It cost us a live
-// defect: ai's public lane keys a per-visitor ceiling on the caller's address, and
-// one address for everyone made that ceiling one bucket for the whole internet.
+// degraded answer but a single answer wearing everyone's name, and ai's per-visitor
+// ceiling is keyed on exactly that value.
 //
-// So the host answers, because the host is where the connection is. ClientIP is
-// already the ONE hardened definition; this only carries it across.
+// So the host answers, because the host is where the connection is. ClientIP above is
+// already the ONE hardened definition; the rest of this section only carries it
+// across.
 //
-// A HEADER, because that is what survives the crossing — proven by behaviour that
-// already ships rather than by a test written for the question: Authorization
-// reaches ai's controllers today, which is the same journey. Forgery is handled by
-// always OVERWRITING, so a caller's own claim is gone before any child reads it.
-const ClientIPHeader = "X-Hanzo-Client-Ip"
+// THE NAME IT CROSSES UNDER IS address.Header, AND IT IS NOT DEFINED HERE. This host
+// writes it and ai reads it, so a copy on each side would be two constants held equal
+// by nothing but attention — and the failure that invites is silent, since a stamp
+// under one name and a read under another compiles perfectly and simply finds
+// nothing. github.com/hanzoai/ai/address is a leaf that imports nothing, so naming it
+// costs this host no weight: the single symbol is reachable from both sides and the
+// two cannot disagree.
 
 // StampClientIP writes this host's answer onto the request, replacing anything the
 // caller sent under that name.
@@ -293,7 +293,7 @@ const ClientIPHeader = "X-Hanzo-Client-Ip"
 // harmless one level down makes it load-bearing here.
 func StampClientIP(c *zip.Ctx) error {
 	addr := ClientIP(c)
-	c.Fiber().Request().Header.Set(ClientIPHeader, addr)
+	c.Fiber().Request().Header.Set(address.Header, addr)
 	// WHAT A SUBSYSTEM IN ANOTHER PROCESS WILL READ AS THE CALLER, said out loud.
 	//
 	// Kept, not a probe. Five separate times this estate could not answer "what did
@@ -316,12 +316,12 @@ func StampClientIP(c *zip.Ctx) error {
 	if log := c.Log(); log != nil {
 		first.Do(func() {
 			log.Info("client address stamped for another process (first of this process)",
-				"addr", addr, "empty", addr == "", "header", ClientIPHeader)
+				"addr", addr, "empty", addr == "", "header", address.Header)
 		})
 		log.Debug("client address stamped for another process",
 			"addr", addr,
 			"empty", addr == "",
-			"header", ClientIPHeader,
+			"header", address.Header,
 			"path", string(c.Fiber().Request().URI().Path()))
 	}
 	return c.Continue()
@@ -342,7 +342,7 @@ var first sync.Once
 // dropping this clone fails the crossing test; a clone at the writing end changes
 // nothing, because Header.Set already copies.
 func ClientIPAcross(r *http.Request) string {
-	return strings.Clone(r.Header.Get(ClientIPHeader))
+	return strings.Clone(r.Header.Get(address.Header))
 }
 
 // Proxies is the resolved trust set as CIDR strings, for a framework that wants
