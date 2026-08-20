@@ -20,9 +20,9 @@ import (
 
 // sentryPrefix is the SECOND path family this package owns — the Hanzo Sentry
 // product face, delegating to the same gated runtime handler as the /v1/o11y
-// wildcard (mountSentry, o11y.go). The gate below has to read both, or half the
+// wildcard (mountSentinel, o11y.go). The gate below has to read both, or half the
 // surface it claims to cover is outside it.
-const sentryPrefix = "/v1/sentry"
+const sentryPrefix = "/v1/sentinel"
 
 // surfaceApp mounts the WHOLE observability surface through the REAL MountO11y,
 // so the assertions below read the router the document is generated from rather
@@ -85,13 +85,13 @@ var untypedByDesign = map[string]string{
 		"body — it is a delivery receipt, so a body that will not parse still proves delivery and a 400 " +
 		"would make Alertmanager retry forever. zip decodes a typed In before the handler runs, so " +
 		"typing it would turn that 200 into a 400.",
-	// The /v1/sentry catch-all this package registers (mountSentry). A wildcard has
+	// The /v1/sentinel catch-all this package registers (mountSentinel). A wildcard has
 	// no operation to type.
-	"GET /v1/sentry/{wildcard1}":    sentryReason,
-	"POST /v1/sentry/{wildcard1}":   sentryReason,
-	"PUT /v1/sentry/{wildcard1}":    sentryReason,
-	"PATCH /v1/sentry/{wildcard1}":  sentryReason,
-	"DELETE /v1/sentry/{wildcard1}": sentryReason,
+	"GET /v1/sentinel/{wildcard1}":    sentryReason,
+	"POST /v1/sentinel/{wildcard1}":   sentryReason,
+	"PUT /v1/sentinel/{wildcard1}":    sentryReason,
+	"PATCH /v1/sentinel/{wildcard1}":  sentryReason,
+	"DELETE /v1/sentinel/{wildcard1}": sentryReason,
 
 	// The upstream module's own hatches. hanzoai/o11y no longer registers a
 	// /v1/o11y/* catch-all — every route it serves is named — so the routes a
@@ -115,12 +115,10 @@ var untypedByDesign = map[string]string{
 
 	"POST /v1/o11y/api/{project_id}/envelope/": upstreamIngestReason,
 	"POST /v1/o11y/api/{project_id}/store/":    upstreamIngestReason,
-	"POST /v1/sentry/{project}/envelope/":      upstreamIngestReason,
-	"POST /v1/sentry/{project}/store/":         upstreamIngestReason,
 }
 
 const (
-	sentryReason = "the /v1/sentry/* wildcard (mountSentry) forwarding to the same gated runtime handler. " +
+	sentryReason = "the /v1/sentinel/* wildcard (mountSentinel) forwarding to the same gated runtime handler. " +
 		"A wildcard has no operation to type."
 	upstreamProbeReason = "registered by the upstream hanzoai/o11y module, not by this package — a " +
 		"liveness/readiness path the runtime serves without identity so k8s probes pass."
