@@ -4,6 +4,8 @@ package fleet
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -65,11 +67,49 @@ var readings = []struct{ id, want, route string }{
 	{"ListTraceFunnels", "ListTraceFunnels", "…and they are not routes to read back"},
 }
 
-func TestAPhraseSaysWhatTheRouteSays(t *testing.T) {
-	declared := map[string]bool{}
-	for _, op := range Corpus(t) {
-		declared[op.ID] = true
+// declaredInSpecs is every operation id the fleet SERVES, read from the per-app
+// documents.
+//
+// The anchor below asks whether a table entry still names a real route, and the
+// catalog is the wrong place to ask: it carries the DISPATCHABLE subset (x-tool),
+// so an operation that is served and merely untyped is absent from it. Reading it
+// there conflated two independent questions and failed a NAMING test for a
+// dispatchability reason — thirteen entries at once, including the whole
+// inference surface, none of which had been renamed. The comment on `readings`
+// already named this set; this is the code catching up to it.
+func declaredInSpecs(t *testing.T) map[string]bool {
+	t.Helper()
+	specs, err := filepath.Glob(filepath.Join("..", "plugin", "*", "openapi.json"))
+	if err != nil || len(specs) == 0 {
+		t.Fatalf("no per-app documents to anchor the table against (%v)", err)
 	}
+	ids := map[string]bool{}
+	for _, path := range specs {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var doc struct {
+			Paths map[string]map[string]struct {
+				OperationID string `json:"operationId"`
+			} `json:"paths"`
+		}
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		for _, methods := range doc.Paths {
+			for method, op := range methods {
+				if method != "parameters" && op.OperationID != "" {
+					ids[op.OperationID] = true
+				}
+			}
+		}
+	}
+	return ids
+}
+
+func TestAPhraseSaysWhatTheRouteSays(t *testing.T) {
+	declared := declaredInSpecs(t)
 	for _, r := range readings {
 		if got := phrase(r.id); got != r.want {
 			t.Errorf("%s\n  %s\n  reads as %q, want %q", r.route, r.id, got, r.want)

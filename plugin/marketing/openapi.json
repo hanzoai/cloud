@@ -52,7 +52,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_marketing_audiences",
@@ -87,7 +88,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/audiences/{id}": {
@@ -114,7 +116,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_marketing_audiences_by_id",
@@ -146,7 +149,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/audiences/{id}/preview": {
@@ -191,7 +195,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/calendar": {
@@ -235,7 +240,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_marketing_calendar",
@@ -271,7 +277,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/calendar/{id}": {
@@ -298,7 +305,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_marketing_calendar_by_id",
@@ -330,7 +338,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_marketing_calendar_by_id",
@@ -377,7 +386,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/calendar/{id}/publish": {
@@ -411,7 +421,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/campaigns": {
@@ -455,7 +466,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_marketing_campaigns",
@@ -492,7 +504,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/campaigns/{id}": {
@@ -519,7 +532,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_marketing_campaigns_by_id",
@@ -551,7 +565,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_marketing_campaigns_by_id",
@@ -600,7 +615,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/campaigns/{id}/schedule": {
@@ -648,7 +664,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/promos": {
@@ -684,7 +701,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/promos/{code}/eligibility": {
@@ -748,7 +766,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/promos/{code}/redeem": {
@@ -796,7 +815,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/promos/{code}/redemption": {
@@ -830,7 +850,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/sequences": {
@@ -864,7 +885,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_marketing_sequences",
@@ -898,7 +920,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/sequences/{id}": {
@@ -932,7 +955,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/sequences/{id}/enroll": {
@@ -984,7 +1008,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/sequences/{id}/enrollments": {
@@ -1028,7 +1053,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/sequences/{id}/enrollments/{eid}/cancel": {
@@ -1065,7 +1091,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/sequences/{id}/status": {
@@ -1113,7 +1140,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/sequences/{id}/steps": {
@@ -1147,7 +1175,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_marketing_sequences_by_id_steps",
@@ -1193,7 +1222,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/summary": {
@@ -1221,7 +1251,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/suppressions": {
@@ -1276,7 +1307,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_marketing_suppressions",
@@ -1308,7 +1340,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_marketing_suppressions",
@@ -1343,7 +1376,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/marketing/unsubscribe": {
@@ -1412,7 +1446,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

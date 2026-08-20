@@ -40,7 +40,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_sync",
@@ -77,7 +78,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sync/{id}": {
@@ -104,7 +106,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_sync_by_id",
@@ -136,7 +139,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "patch_sync_by_id",
@@ -182,7 +186,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sync/{id}/run": {
@@ -216,7 +221,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

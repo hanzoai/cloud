@@ -40,7 +40,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_prompts",
@@ -77,7 +78,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/prompts/catalog": {
@@ -99,7 +101,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/prompts/metrics": {
@@ -121,7 +124,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/prompts/{name}": {
@@ -148,7 +152,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_prompts_by_name",
@@ -180,7 +185,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

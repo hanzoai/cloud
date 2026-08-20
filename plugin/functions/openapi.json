@@ -40,7 +40,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_functions",
@@ -70,7 +71,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/functions/deployments": {
@@ -92,7 +94,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/functions/metrics": {
@@ -125,7 +128,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/functions/secrets": {
@@ -147,7 +151,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/functions/triggers": {
@@ -169,7 +174,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/functions/{name}": {
@@ -202,7 +208,8 @@
             },
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_functions_by_name",
@@ -233,7 +240,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/functions/{name}/invocations": {
@@ -275,7 +283,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/functions/{name}/invoke": {
@@ -337,7 +346,8 @@
             },
             "description": "service unavailable"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/functions/{name}/logs": {
@@ -370,7 +380,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

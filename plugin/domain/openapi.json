@@ -51,7 +51,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/domain/domains": {
@@ -73,7 +74,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/domain/health": {
@@ -105,7 +107,8 @@
             },
             "description": "service unavailable"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/domain/register": {
@@ -137,7 +140,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/domain/renew": {
@@ -169,7 +173,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/domain/search": {
@@ -211,7 +216,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/domain/transfer": {
@@ -243,7 +249,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

@@ -96,7 +96,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_agents",
@@ -131,7 +132,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/activity": {
@@ -153,7 +155,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/builds": {
@@ -186,7 +189,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/builds/{org}/{project}": {
@@ -230,7 +234,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/metrics": {
@@ -264,7 +269,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/runs": {
@@ -308,7 +314,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/sessions": {
@@ -379,7 +386,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_agents_sessions",
@@ -414,7 +422,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/sessions/stream": {
@@ -458,7 +467,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "patch_agents_sessions_by_id",
@@ -504,7 +514,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/sessions/{id}/control": {
@@ -548,7 +559,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/sessions/{id}/events": {
@@ -682,7 +694,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/targets": {
@@ -704,7 +717,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_agents_targets",
@@ -739,7 +753,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/targets/{id}": {
@@ -773,7 +788,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_agents_targets_by_id",
@@ -805,7 +821,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "patch_agents_targets_by_id",
@@ -851,7 +868,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/targets/{id}/claim": {
@@ -885,7 +903,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/targets/{id}/key": {
@@ -919,7 +938,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/targets/{id}/runs/{runId}/report": {
@@ -980,7 +1000,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/{ref}": {
@@ -1007,7 +1028,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_agents_by_ref",
@@ -1039,7 +1061,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "patch_agents_by_ref",
@@ -1085,7 +1108,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/agents/{ref}/run": {
@@ -1149,7 +1173,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/coding": {
@@ -1181,7 +1206,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },
