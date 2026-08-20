@@ -1564,7 +1564,8 @@ jobs:
             # is a deliberate manual bump there — so it keeps the bare body rather
             # than being sent a field it does not declare.
             if [ "$wf" = cicd.yml ]; then
-              BODY=$(jq -nc --arg sha "${{ github.sha }}" '{ref:"main",inputs:{"spec-ref":$sha}}')
+              BODY=$(jq -nc --arg sha "${{ github.sha }}" --arg ver "${{ needs.image.outputs.version }}" \
+                '{ref:"main",inputs:{"spec-ref":$sha,"spec-version":$ver}}')
             else
               BODY='{"ref":"main"}'
             fi
