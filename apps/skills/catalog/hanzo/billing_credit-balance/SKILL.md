@@ -1,7 +1,7 @@
 ---
 name: billing_credit-balance
 version: "8.0.0"
-description: "Read billing credit balance: What is left of your credit, as one number."
+description: "Read billing credit balance: What is left of your credit, as one number, What is left of your credit, grouped by where it came from."
 ---
 
 # Hanzo · BILLING · credit balance
@@ -15,10 +15,12 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.hanzo.ai/v1/billing/credit-balance` — What is left of your credit, as one number
+- `GET https://api.hanzo.ai/v1/billing/credit-balance/breakdown` — What is left of your credit, grouped by where it came from
 
 ## Response
 
 - `/v1/billing/credit-balance` → JSON body.
+- `/v1/billing/credit-balance/breakdown` → JSON body.
 
 ## Example
 
