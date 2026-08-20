@@ -270,10 +270,10 @@ cat binaries.json
 // on an unauthenticated PUT rather than the Job being unschedulable.
 const artifactS3Secret = "artifact-s3"
 
-// forgeTokenSecret holds the read credential for OUR OWN forge, in the build
-// namespace. It is mounted on the `fetch` container alone — never on a recipe
-// container, and never on the publisher.
-const forgeTokenSecret = "forge-token"
+// The forge read credential this lane presents is forgeTokenSecret (k8s.go) —
+// the same Secret the BuildKit lane fetches its git context with, because it is
+// the same authority against the same host. It is mounted on the `prepare`
+// container alone — never on a recipe container, and never on the publisher.
 
 // artifactPrepareScript puts the SOURCE in /w/src and the MODULES in /w/go, and
 // is the ONLY script that ever sees a credential.
@@ -309,13 +309,12 @@ const forgeTokenSecret = "forge-token"
 const artifactPrepareScript = `set -eu
 mkdir -p /w/src /w/dist /w/go
 cd /w/src
-if [ -n "${GIT_TOKEN:-}" ]; then
-  export GIT_CONFIG_COUNT=2 \
-    GIT_CONFIG_KEY_0="http.https://git.hanzo.ai/.extraheader" \
-    GIT_CONFIG_VALUE_0="Authorization: Basic $(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 | tr -d '\n')" \
-    GIT_CONFIG_KEY_1="url.https://git.hanzo.ai/hanzoai/.insteadOf" \
-    GIT_CONFIG_VALUE_1="https://github.com/hanzoai/"
-fi
+: "${GIT_TOKEN:?empty forge credential: Secret hanzo-build/forge-token key token, from KMS orgs/hanzo/deploy/FORGE_TOKEN@prod}"
+export GIT_CONFIG_COUNT=2 \
+  GIT_CONFIG_KEY_0="http.https://git.hanzo.ai/.extraheader" \
+  GIT_CONFIG_VALUE_0="Authorization: Basic $(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 | tr -d '\n')" \
+  GIT_CONFIG_KEY_1="url.https://git.hanzo.ai/hanzoai/.insteadOf" \
+  GIT_CONFIG_VALUE_1="https://github.com/hanzoai/"
 git init -q
 git remote add origin "$REPO_URL"
 git -c protocol.version=2 fetch -q --depth 1 origin "$REF"
@@ -459,10 +458,11 @@ func (k *k8sClient) artifactJobSpec(jobName, repoURL, ref, tag, base, putBase st
 		"workingDir": "/w",
 		"env": []any{
 			env("REPO_URL", repoURL), env("REF", ref),
-			// Optional: a public source with public modules needs none, and this
-			// falls back to anonymous rather than failing on a missing secret.
+			// Required: the forge serves no repository anonymously, and the
+			// module fetch is redirected onto it too (GIT_CONFIG_KEY_1). A pod
+			// that cannot have the credential should say so by name.
 			map[string]any{"name": "GIT_TOKEN", "valueFrom": map[string]any{
-				"secretKeyRef": map[string]any{"name": forgeTokenSecret, "key": "token", "optional": true},
+				"secretKeyRef": map[string]any{"name": forgeTokenSecret, "key": "token"},
 			}},
 		},
 		"volumeMounts": []any{map[string]any{"name": "w", "mountPath": "/w"}},

@@ -889,10 +889,9 @@ const platformBuildOrg = "platform"
 // element, so a caller can never redirect --output to another repo.
 //
 // The GIT_AUTH_TOKEN build secret (sourced from the Job env, which buildJobSpec
-// wires from the gitTokenSecret Secret when present) is what lets the git
-// context fetch PRIVATE repos — BuildKit's gitsource presents it as the HTTPS
-// credential. Public repos ignore it; without the Secret the env is empty and
-// fetches are anonymous, exactly as before.
+// wires from the forgeTokenSecret Secret) is what opens the fabric's own
+// repositories to the git context — BuildKit's gitsource presents it as the HTTPS
+// credential, and the forge serves no repository, public or private, without one.
 func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 	return buildFrontendCmdRev(buildCtx, dockerfile, image, "")
 }
@@ -1134,19 +1133,37 @@ func s3CacheEndpoint(ep string) string {
 	return "http://" + ep
 }
 
-// gitTokenSecret is the Secret (same namespace as the build Jobs) whose `token`
-// key authenticates the fabric's git fetches for private repos. Optional by
-// design: absent Secret ⇒ empty env ⇒ anonymous fetch (public repos only).
-const gitTokenSecret = "console-git-token"
+// forgeTokenSecret is the Secret (same namespace as the build Jobs) whose `token`
+// key authenticates reads of the fabric's OWN forge. Two lanes present it: the
+// artifact lane's prepare step as GIT_TOKEN (artifact.go), which clones
+// git.hanzo.ai and nothing else, and the BuildKit git context as GIT_AUTH_TOKEN,
+// whose host is the caller's within resolveGitHosts. It reconciles from KMS
+// orgs/hanzo/deploy/FORGE_TOKEN@prod — universe
+// infra/k8s/hanzo-build/forge-token-kmssecret.yaml.
+//
+// NAMED FOR THE HOST IT AUTHENTICATES TO. git.hanzo.ai and github.com both speak
+// git and take different credentials, so a name saying only "git" leaves the two
+// interchangeable, and the forge answers a credential it does not know by asking
+// for a username — which reads as no credential rather than the wrong one. A
+// foreign host in the allowlist serves anonymously what it serves anonymously and
+// is never challenged for this one.
+//
+// NOT optional, unlike registryTokenSecret below. REQUIRE_SIGNIN_VIEW is on, so
+// the forge refuses an anonymous fetch even of a public repo, and the fabric
+// builds its own repositories. A required mount stops the pod on the Secret and
+// the key it wanted; an optional one starts it and leaves the absence to surface
+// as a clone asking for a username.
+const forgeTokenSecret = "forge-token"
 
 // registryTokenSecret is the Secret (same namespace as the build Jobs) whose
 // `token` key reads the fabric's own package registry — git.hanzo.ai serves npm
 // and Go modules, and REQUIRE_SIGNIN_VIEW gates them, so an anonymous install
-// 401s even against a public repo's packages. Kept apart from gitTokenSecret
-// because the two authenticate to different services and rotate on their own
-// schedules; folding them into one credential is how a package read starts
-// depending on a git-fetch rotation. Optional by design: absent Secret ⇒ empty
-// env ⇒ a build installs from public registries exactly as before.
+// 401s even against a public repo's packages. Kept apart from forgeTokenSecret
+// because the two authenticate to different SERVICES on that host and rotate on
+// their own schedules; folding them into one credential is how a package read
+// starts depending on a git-fetch rotation. Optional, and here that is real
+// rather than residual: a build with no package credential installs from public
+// registries exactly as before, which is a working build, not a silent one.
 const registryTokenSecret = "forge-registry-token"
 
 // buildkitRootlessImage is the UNPRIVILEGED buildkit variant. The build Job runs
@@ -1344,11 +1361,13 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 							// no privileged process sandbox (it user-namespaces the build).
 							map[string]any{"name": "BUILDKITD_FLAGS", "value": "--oci-worker-no-process-sandbox"},
 							map[string]any{"name": "DOCKER_CONFIG", "value": "/ghcr"},
-							// Private-repo fetch credential, surfaced to the solve as the
-							// GIT_AUTH_TOKEN build secret (buildFrontendCmd). optional: a
-							// cluster without the Secret builds public repos exactly as before.
+							// Forge fetch credential, surfaced to the solve as the
+							// GIT_AUTH_TOKEN build secret (buildFrontendCmd). Required: the
+							// forge serves nothing anonymously, so a build of one of our own
+							// repositories without this fetches nothing, and the pod should
+							// say which Secret is missing rather than leave that to a clone.
 							map[string]any{"name": "GIT_AUTH_TOKEN", "valueFrom": map[string]any{
-								"secretKeyRef": map[string]any{"name": gitTokenSecret, "key": "token", "optional": true},
+								"secretKeyRef": map[string]any{"name": forgeTokenSecret, "key": "token"},
 							}},
 							// Package-registry credential, surfaced as the REGISTRY_TOKEN build
 							// secret. A build that installs the fabric's own packages needs it
