@@ -4020,17 +4020,26 @@ cache hit, never the page.
 is the whole pipeline**, and it is one `needs:` graph:
 
 ```
-gate ──┐
-       ├─→ image ─→ rollout ─→ reach ─→ fanout ─→ receipt
-containment ─┘
+gate ────────┐                    ┌─→ plugins
+containment ─┼─→ image ───────────┤
+review ──────┘                    └─→ live ─→ reach ─→ fanout ─→ receipt
 ```
+
+Read that graph off `.hanzo/workflows/cicd.yml`'s own `needs:`, never off this
+picture — the picture was wrong for months in the way a picture goes wrong: it
+omitted `review`, the car that gates EVERY release and had stopped three in a row,
+omitted `plugins` entirely, and called the rollout car `rollout` when the job is
+named `live`. A diagram that names a car nothing runs is a diagram that sends the
+next reader to fix the wrong thing.
 
 | car | what it does | what it refuses |
 |---|---|---|
+| **review** | the change is read, in as many bounded requests as it takes | a change carrying an attack — and, failing closed, one it could not read |
 | **gate** | hanzoai/ci reusable → `hanzo.yml` `test:` → `make -f mk/fleet.mk check` | a route added, renamed or deleted without regenerating the document |
 | **containment** | apps/controlplane is unreachable from every real binary | stub crypto in a serve binary |
 | **image** | version derived ONCE → build → push → resolve → smoke | a tag naming an image that did not boot |
-| **rollout** | tag → universe pin → **poll `x-api-version` until it is ours** | describing a version that is not running |
+| **plugins** | the per-app binaries the image ships | an app that stopped linking |
+| **live** | tag → universe pin → **poll `x-api-version` until it is ours** | describing a version that is not running |
 | **reach** | `go run ./cmd/reach` over every literal address + the MCP tool count | an address this document publishes that production does not route |
 | **fanout** | `repository_dispatch: spec-update` → 9 repos, payload `(version, sha, spec_sha256)` | a projection that never heard about this release |
 | **receipt** | `release.json` on the tag's GitHub Release, `if: always()` | a hole, silently |
@@ -4084,7 +4093,19 @@ to say it was.** It named a classic PAT spanning six GitHub owners as the last
 thing standing between a release and its projections. That was a misreading of a
 failure, and the misreading outlived the code by long enough to dispatch two
 agents at it — the fanout car has since been rewritten and names `FORGE_TOKEN`,
-the same secret `image` already uses to read this repo's tags.
+the org credential that spans the projection repositories.
+
+**And this paragraph then ran ahead of the code, which is the same fault one turn
+later.** The car's `env:` still read `${{ github.token }}` while its own error
+message described FORGE_TOKEN, so a reader checking the prose against the message
+found agreement and neither described the assignment. `github.token` is minted per
+run and scoped to THIS repository — enough for `image` to claim this repo's tags,
+which is why `image` uses it, and never enough to write another — so every
+projection answered `403 user should have a permission to write to a repo`. That is
+a repository PERMISSION and not a missing scope, and no scope on a per-run token
+reaches an estate it was not minted for. The org secrets are FORGE_TOKEN,
+GHCR_TOKEN, GHCR_USER, GH_PAT, KMS_CLIENT_ID, KMS_CLIENT_SECRET and REVIEW_API_KEY;
+list them before naming one as a blocker.
 
 The old car posted `repository_dispatch` to api.github.com, and could never have
 worked whatever credential it held: the receiving workflows ask for
