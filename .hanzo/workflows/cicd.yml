@@ -125,11 +125,11 @@ jobs:
           fetch-depth: 0
       # THE KEY HAS ONE HOME, AND IT IS KMS.
       #
-      # It was a forge org secret, and a copy of a credential is a copy that goes
+      # It was a Hanzo Git org secret, and a copy of a credential is a copy that goes
       # stale on its own: measured on runs 90908 and 91045, the reviewer answered
       # `401 … API key sk-live-4… is not recognized — it was revoked or replaced`,
       # so every release since v1.801.536 was refused by a credential nobody knew
-      # had died. Rotating the real key does not reach a forge secret, and nothing
+      # had died. Rotating the real key does not reach a Hanzo Git secret, and nothing
       # reports the divergence — the gate simply fails closed forever.
       #
       # So it is READ from KMS at the moment of use, by the same two calls the
@@ -164,7 +164,7 @@ jobs:
           [ -n "$REVIEW_API_KEY" ] || { echo "::error::review: REVIEW_API_KEY missing in KMS at review/ (env ${KMS_SECRET_ENV}, org from the KMS credential) — mint a key and store it there"; exit 1; }
           base="${{ github.event.before }}"
           # MEASURED, because this comment used to say the opposite and the
-          # opposite is what a reader plans against. On run 90908 the forge DID
+          # opposite is what a reader plans against. On run 90908 Hanzo Git DID
           # report a predecessor: base resolved to c25fe6659, the previous main
           # tip, and the reviewer read 9,031B over 2 files — the push, not the
           # backlog. So `before` is the rule and the fallback is the exception it
@@ -208,13 +208,13 @@ jobs:
     # `.hanzo/workflows/`, because GitHub resolves only `.github/workflows` and
     # git.hanzo.ai only `.hanzo/workflows`; hanzoai/ci publishes build.yml at BOTH
     # paths from every tag, byte-identical apart from its header. Pinned at a path
-    # the ref does not carry, the forge cannot even construct a run — InsertRun
+    # the ref does not carry, Hanzo Git cannot even construct a run — InsertRun
     # fails before any run row is written, so there is no failed run to look at.
     # Dead CI here is not red, it is absent.
     #
     # Pinned to the immutable patch tag, not the `v1` rolling alias, because the
     # alias is only as current as the last sync and sync-from-github refuses to
-    # move a tag that already exists. On the forge `v1` still names a commit
+    # move a tag that already exists. On Hanzo Git `v1` still names a commit
     # whose tree is `.github` and README alone, so the gate resolved to a ref
     # carrying no `.hanzo/` at all and every release died at InsertRun — the
     # condition the paragraph above describes, reached through the alias rather
@@ -223,13 +223,13 @@ jobs:
     #
     # v1.0.16 constructed the run and then died in its FIRST step: the reusable
     # read GITHUB_WORKFLOW_REF to find its own tools, that variable is GitHub's
-    # and the forge runner does not set it, and `set -u` turned the miss into an
+    # and the Hanzo Git runner does not set it, and `set -u` turned the miss into an
     # abort — so every step after it, build through deploy, reported skipped.
     # v1.0.17 defaults the variable; nothing else about the lane changed.
     #
     # PINNED TO @v1, NOT @v1.0.17, AND THE DIFFERENCE IS THAT THE TESTS RUN.
-    # v1.0.17 declares the reusable's `tests` input as `type: boolean`, and the
-    # forge substitutes a workflow_call input's DECLARED-TYPE ZERO VALUE — so
+    # v1.0.17 declares the reusable's `tests` input as `type: boolean`, and
+    # Hanzo Git substitutes a workflow_call input's DECLARED-TYPE ZERO VALUE — so
     # `inputs.tests` was always false and the test step was SKIPPED on every run.
     # Measured on this repo: 20 skipped, 0 executed. The most critical service in
     # the fleet has been shipping without its suite ever running.
@@ -239,7 +239,7 @@ jobs:
     # (81b3c18), so the set -u default this pin was taken for comes with it.
     # BACK ON @v1, and not because the alias is right.
     #
-    # Pinning @v1.0.38 — which the paragraphs above call for — stopped the forge
+    # Pinning @v1.0.38 — which the paragraphs above call for — stopped Hanzo Git
     # constructing a run AT ALL: no row, nothing to inspect, exactly the "dead CI
     # is not red, it is absent" failure described above. A failing `gate` is worse
     # than a passing one and better than no run, so this is reverted to the state
@@ -247,18 +247,18 @@ jobs:
     #
     # A CALLER JOB IS A PARENT, NOT A JOB — read the CHILD before reading a fault.
     #
-    # The forge expands `uses:` into a child job carrying the reusable's own key
+    # Hanzo Git expands `uses:` into a child job carrying the reusable's own key
     # (here `cicd`), and the child is what holds the labels, the runner and the
     # steps. So this row always shows runner_id 0, `runs_on` null and zero steps,
     # and its duration and status are the CHILD's, inherited. That is the shape of
-    # every caller on this forge, the successful ones included — so none of it is
+    # every caller on Hanzo Git, the successful ones included — so none of it is
     # a symptom, and a fault read off this row alone is a fault read off the wrong
     # row. `SELECT * FROM action_run_job WHERE parent_job_id = <this job>` is the
     # job that actually ran; its task carries the log.
     #
-    # This replaces a paragraph asserting the opposite — that the forge declines to
+    # This replaces a paragraph asserting the opposite — that Hanzo Git declines to
     # schedule a called workflow's jobs, so nothing had shipped since v1.801.490.
-    # Both halves were read off the parent row. Measured on this forge: 2159 caller
+    # Both halves were read off the parent row. Measured on Hanzo Git: 2159 caller
     # jobs have succeeded across 292 repos, and this lane's own gate succeeded 174
     # times in the ten days that paragraph called dead.
     #
@@ -379,7 +379,7 @@ jobs:
         # db, which is what makes a module hash immutable: zap-proto (all 55 repos)
         # and luxfi (all 37 deps here) are public and proxy-served.
         #
-        # OUR OWN MODULES RESOLVE FROM OUR OWN FORGE. The module PATH stays
+        # OUR OWN MODULES RESOLVE FROM OUR OWN GIT.HANZO.AI. The module PATH stays
         # github.com/hanzoai/* — that is the package's name, not its address — but
         # the address git dials is git.hanzo.ai, which is canonical anyway.
         #
@@ -391,12 +391,12 @@ jobs:
         # which had happened. Nothing about zen changed; an ACL beside it did, and
         # it stopped the fleet.
         #
-        # A checksum makes the substitution safe rather than merely convenient: the
-        # forge mirrors the same objects, so the fetched zip hashes to the h1: line
-        # already committed in go.sum. A forge that served different bytes would
+        # A checksum makes the substitution safe rather than merely convenient:
+        # Hanzo Git mirrors the same objects, so the fetched zip hashes to the h1: line
+        # already committed in go.sum. Hanzo Git serving different bytes would
         # fail the build, loudly, instead of shipping them.
         #
-        # GH_PAT remains the fallback for a module the forge has not mirrored.
+        # GH_PAT remains the fallback for a module Hanzo Git has not mirrored.
         run: |
           set -euo pipefail
           # PER REPO, because `insteadOf` is a rewrite and not a chain: one prefix
@@ -544,7 +544,7 @@ jobs:
         env:
           GHCR_USER: ${{ secrets.GHCR_USER }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          # The claim is written to git.hanzo.ai, so it is the forge credential
+          # The claim is written to git.hanzo.ai, so it is the Hanzo Git credential
           # that has to be able to write it. GH_PAT is gone from this step: it
           # authenticated a register that no longer lives on github.
           GIT_TOKEN: ${{ github.token }}
@@ -636,7 +636,7 @@ jobs:
 
           # What has been TAGGED. ls-remote rather than /repos/../tags because the
           # REST list paginates at 100 and this repo carries ~1700 refs. The
-          # private github repo, not the forge: the claim is a compare-and-swap
+          # private github repo, not Hanzo Git: the claim is a compare-and-swap
           # and only one server can arbitrate it, so the register of names has to
           # be the one the claim writes to. Reading a different git than we claim
           # against is how two lanes come to believe they both own a number.
@@ -709,7 +709,7 @@ jobs:
               # loop is for. "Object does not exist" means OUR OWN COMMIT is not
               # on github.com — which is a live possibility, because this workflow
               # runs on git.hanzo.ai and claims against GitHub, so a commit that
-              # reached the forge and not the mirror lands exactly here. It is not
+              # reached Hanzo Git and not the mirror lands exactly here. It is not
               # a name to skip past; it is a repo that has not been published, and
               # the next number would fail identically.
               WHY=$(jq -r '.message // empty' /tmp/claim.json)
@@ -734,7 +734,7 @@ jobs:
               # secret. GIT_TOKEN has only ever been READ with in this
               # workflow — go module fetches and ls-remote — so the first
               # release to write with it is the first test of its scope.
-              echo "::error::the forge refused the claim for v${CAND} with $CODE. Ask the forge what it wants before assuming: POST <arbiter>/tags answers 403 with {\"message\":\"token does not have at least one of required scope(s), required=[write:repository], token scope=read:repository\"} for a read-scoped token, at BOTH this path and the old hanzoai/ one, so a 403 here is the TOKEN and not the address. Scopes are fixed when a token is minted, so this needs a new GIT_TOKEN carrying write:repository installed as the actions secret — it creates refs/tags/v<N> and the refs/smoked/<digest> receipt."
+              echo "::error::Hanzo Git refused the claim for v${CAND} with $CODE. Ask Hanzo Git what it wants before assuming: POST <arbiter>/tags answers 403 with {\"message\":\"token does not have at least one of required scope(s), required=[write:repository], token scope=read:repository\"} for a read-scoped token, at BOTH this path and the old hanzoai/ one, so a 403 here is the TOKEN and not the address. Scopes are fixed when a token is minted, so this needs a new GIT_TOKEN carrying write:repository installed as the actions secret — it creates refs/tags/v<N> and the refs/smoked/<digest> receipt."
               cat /tmp/claim.json; exit 1
             fi
             if [ "$CODE" != "201" ]; then
@@ -1203,7 +1203,7 @@ jobs:
   # namespace — so this runner holds no bucket key and names no bucket. That is
   # why the S3_ADMIN_* provisioning hanzo.yml used to ask for is not needed.
   #
-  # The repo is the FORGE, not the mirror. The forge is canonical, the tag this
+  # The repo is GIT.HANZO.AI, not the mirror. Hanzo Git is canonical, the tag this
   # release just claimed exists only there, and it is anonymously cloneable — the
   # Job does a bare `git fetch` with no credential, so a mirror URL would fetch a
   # ref that is not there.
@@ -1211,19 +1211,19 @@ jobs:
   # THE MIRRORS ARE WORSE THAN EMPTY, which is why this reads the arbiter rather
   # than a name. github.com/hanzo-inc/cloud is not the barren twin an earlier note
   # here described: it holds 694 tags, and 480 of those names point at a DIFFERENT
-  # commit than the same name on the forge — 213 of them v1.801.* release numbers.
-  # 99 release numbers exist only on the forge, every recent one among them. So
+  # commit than the same name on Hanzo Git — 213 of them v1.801.* release numbers.
+  # 99 release numbers exist only on Hanzo Git, every recent one among them. So
   # "which commit is v1.801.564" has two answers by host, and one of them is not a
   # release of anything. github.com/hanzoai/cloud is a third product again. Reading
   # the arbiter is the only address that cannot be one of the other two.
   #
-  # DEPLOYMENT REQUIREMENT, and it is not optional: cloud must TRUST the forge as
+  # DEPLOYMENT REQUIREMENT, and it is not optional: cloud must TRUST Hanzo Git as
   # a build source. hostAllowed (apps/platform/validate.go) trusts the four public
   # providers plus `selfGitHost` = brand.Apex(deps.Domain) — and CLOUD_DOMAIN is
   # set nowhere in the cloud deployment, so brand.Apex("") is "" and this recipe
   # is refused 400 `host "git.hanzo.ai" is not an allowed git provider`. The lever
   # is CLOUD_PLATFORM_GIT_HOSTS, which REPLACES the default set, so it must name
-  # the four defaults AND the forge; it is set in hanzoai/universe
+  # the four defaults AND Hanzo Git; it is set in hanzoai/universe
   # charts/app/values/hanzo/cloud.yaml and takes effect at the next pin.
   # Both halves are pinned by apps/platform/artifact_test.go — the accepted recipe
   # and the refusal — so neither this job nor that env var can drift silently.
@@ -1372,7 +1372,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Same private-module contract as the containment job, including the forge
+      # Same private-module contract as the containment job, including the Hanzo Git
       # substitution: our own modules resolve from git.hanzo.ai (the canonical
       # address) with GitHub as the fallback, so one drifted GitHub ACL cannot
       # stop a release. go.sum still decides whether the bytes were right.
@@ -1434,7 +1434,7 @@ jobs:
   #
   # THIS USED TO POST TO api.github.com AND COULD NEVER WORK. It sent
   # `repository_dispatch: spec-update` to nine repos on github.com, and those
-  # repos' workflows ask for `hanzo-build-linux-amd64` — a label only the forge's
+  # repos' workflows ask for `hanzo-build-linux-amd64` — a label only Hanzo Git's
   # fleet carries. github.com has zero self-hosted runners of ours, so the events
   # were ACCEPTED and ran nothing: twelve of them. The job then failed for want
   # of a FLEET_DISPATCH_TOKEN, a classic PAT spanning six GitHub owners, which
@@ -1442,10 +1442,10 @@ jobs:
   # plane was wrong. CI here is native (.hanzo/workflows on git.hanzo.ai), and a
   # GitHub credential cannot fix an estate that does not run there.
   #
-  # The forge has no `repository_dispatch` — that is the wall the old shape hit —
+  # Hanzo Git has no `repository_dispatch` — that is the wall the old shape hit —
   # but it has `workflow_dispatch`, and the receivers already migrated to it:
   # every projection's cicd.yml now declares a bare `workflow_dispatch:` and
-  # says so in its own comment. So this sends the verb the forge HAS, with the
+  # says so in its own comment. So this sends the verb Hanzo Git HAS, with the
   # GIT_TOKEN image already uses to read this repo's tags. Verified against
   # a live projection before it was written here: POST -> 204, and the run
   # appears as event=workflow_dispatch, in_progress, on a runner.
@@ -1466,14 +1466,14 @@ jobs:
     outputs:
       dispatched: ${{ steps.send.outputs.dispatched }}
     steps:
-      - name: Poke every projection on the forge
+      - name: Poke every projection on Hanzo Git
         id: send
         env:
           GIT_TOKEN: ${{ github.token }}
-          # The projections that exist ON THE FORGE, which is the only place a
+          # The projections that exist ON GIT.HANZO.AI, which is the only place a
           # dispatch can be answered. hanzo-kotlin/sdk and hanzo-cpp/sdk are in
           # the old list and are NOT here: both 404 on git.hanzo.ai, so poking
-          # them is not a thing that can succeed. Mirror them to the forge and
+          # them is not a thing that can succeed. Mirror them to Hanzo Git and
           # add them back; leaving them in would fail every release for two repos
           # nothing can deliver to.
           # repo:workflow — the workflow name is NOT uniform, and assuming it was
@@ -1530,7 +1530,7 @@ jobs:
           done
           echo "dispatched=${ok}" >> "$GITHUB_OUTPUT"
           if [ -n "$bad" ]; then
-            echo "::error::the forge refused the dispatch for:${bad}. A projection that never heard about this release describes the previous one."
+            echo "::error::Hanzo Git refused the dispatch for:${bad}. A projection that never heard about this release describes the previous one."
             exit 1
           fi
           echo "::group::did the dispatch start a run?"
@@ -1553,7 +1553,7 @@ jobs:
           done
           echo "::endgroup::"
           if [ -n "$pending" ]; then
-            echo "::error::accepted but never ran:${pending}. The forge took the dispatch and no runner answered within 8 minutes — check the git-runner fleet and the labels in ConfigMap git-runner-config."
+            echo "::error::accepted but never ran:${pending}. Hanzo Git took the dispatch and no runner answered within 8 minutes — check the git-runner fleet and the labels in ConfigMap git-runner-config."
             exit 1
           fi
 
@@ -1611,7 +1611,7 @@ jobs:
           #
           # SAY THE CONTENT TYPE. `curl -d` sends application/x-www-form-urlencoded,
           # so a JSON body binds to an empty struct: tag_name arrives unset, fails
-          # Required, and the forge answers 422 — which -f turns into exit 22. That
+          # Required, and Hanzo Git answers 422 — which -f turns into exit 22. That
           # is every receipt this car has ever tried to write. The repo holds one
           # release object, v1.801.31, from before the car existed.
           ID=$(curl -sS -H "Authorization: token ${GIT_TOKEN}" \
