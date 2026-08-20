@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/ai/address"
 	"github.com/hanzoai/cloud/clientip"
 	"github.com/zap-proto/zip"
 )
@@ -44,7 +45,7 @@ func TestWhatTheChildActuallyReceives(t *testing.T) {
 
 	// ---- the CHILD: ai's shape, on its own socket ----
 	landing := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		v, ok := r.Header[http.CanonicalHeaderKey(clientip.ClientIPHeader)]
+		v, ok := r.Header[http.CanonicalHeaderKey(address.Header)]
 		s := seen{present: ok}
 		if ok && len(v) > 0 {
 			s.got = v[0]
@@ -83,7 +84,7 @@ func TestWhatTheChildActuallyReceives(t *testing.T) {
 	host.Use(zip.H(clientip.StampClientIP))
 	host.Use(zip.H(func(c *zip.Ctx) error {
 		stampRan = true
-		stamped = string(c.Fiber().Request().Header.Peek(clientip.ClientIPHeader))
+		stamped = string(c.Fiber().Request().Header.Peek(address.Header))
 		return c.Continue()
 	}))
 
