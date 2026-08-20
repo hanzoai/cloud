@@ -14,9 +14,12 @@ import (
 // accidental deletion is a product change, so it fails here rather than being
 // noticed by a customer whose card vanished.
 var wanted = []string{
+	// OAuth — a consent screen and a code.
 	"x", "linkedin", "facebook", "instagram", "threads", "pinterest", "reddit",
 	"tiktok", "youtube", "twitch", "slack", "discord", "github", "google",
 	"microsoft", "notion",
+	// Credential — no consent screen exists, so the org pastes its own account.
+	"whatsapp", "sms", "email",
 }
 
 func TestCatalogCarriesEveryConnector(t *testing.T) {
@@ -64,6 +67,13 @@ func TestCatalogEndpointsAreHTTPS(t *testing.T) {
 // it is worth failing here first, where the message names the provider.
 func TestCatalogRedirectPathsMatchTheOneRoute(t *testing.T) {
 	for id, p := range registry {
+		// Credential connectors have no callback to declare — see Mount.
+		if p.Kind == KindCredential {
+			if p.RedirectPath != "" {
+				t.Errorf("%s is credential but declares a callback path", id)
+			}
+			continue
+		}
 		if want := "/v1/connectors/" + id + "/callback"; p.RedirectPath != want {
 			t.Errorf("%s RedirectPath = %q, want %q", id, p.RedirectPath, want)
 		}
@@ -79,8 +89,71 @@ func TestCatalogUnconfiguredIsNotAvailable(t *testing.T) {
 			t.Errorf("%s has no Configured func", id)
 			continue
 		}
+		// A CREDENTIAL connector is configured by the org that pastes its own
+		// account, not by this deployment — there is no client id here to be
+		// missing, so it is always available and reporting otherwise would hide
+		// a card that works.
+		if p.Kind == KindCredential {
+			if !p.Configured() {
+				t.Errorf("%s is a credential connector and must always be available", id)
+			}
+			continue
+		}
 		if p.Configured() {
 			t.Errorf("%s reports configured with no env set", id)
+		}
+	}
+}
+
+// A credential connector has to declare the form it wants, mark its secret
+// fields, and be able to VERIFY. A missing verifier would mean storing whatever
+// was pasted and reporting it connected.
+func TestCredentialConnectorsAreComplete(t *testing.T) {
+	for id, p := range registry {
+		if p.Kind != KindCredential {
+			continue
+		}
+		if len(p.Fields) == 0 {
+			t.Errorf("%s asks for no fields", id)
+		}
+		if p.Verify == nil {
+			t.Errorf("%s has no Verify — it would store an unproven credential", id)
+		}
+		// Every named secret must be a field the form actually collects, or
+		// disconnect deletes a KMS key nothing ever wrote.
+		for _, name := range p.Secrets {
+			found := false
+			for _, f := range p.Fields {
+				if f.Name == name && f.Secret {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("%s custodies %q but no secret field collects it", id, name)
+			}
+		}
+	}
+}
+
+// An OAuth connector must NOT carry credential machinery, and vice versa. The
+// two kinds share every other part of the plane, so the one thing that must not
+// blur is which connect leg a provider takes.
+func TestKindsDoNotBlur(t *testing.T) {
+	for id, p := range registry {
+		switch p.Kind {
+		case KindCredential:
+			if p.Authorize != nil || p.Exchange != nil {
+				t.Errorf("%s is credential but declares an OAuth leg", id)
+			}
+		case KindOAuth, "":
+			if p.Verify != nil || len(p.Fields) > 0 {
+				t.Errorf("%s is oauth but declares credential fields", id)
+			}
+			if p.Authorize == nil || p.Exchange == nil {
+				t.Errorf("%s is oauth but cannot authorize/exchange", id)
+			}
+		default:
+			t.Errorf("%s has unknown kind %q", id, p.Kind)
 		}
 	}
 }
@@ -93,9 +166,10 @@ func TestCatalogDeclaresScopesAndSecrets(t *testing.T) {
 		if len(p.Secrets) == 0 {
 			t.Errorf("%s custodies no named secret — disconnect would leave the token sealed", id)
 		}
-		// Notion issues a workspace token with no scope parameter; everything
-		// else asks for least privilege explicitly.
-		if len(p.Scopes) == 0 && id != "notion" {
+		// Notion issues a workspace token with no scope parameter, and a
+		// credential connector has no consent screen to request scopes at;
+		// every OAuth connector asks for least privilege explicitly.
+		if len(p.Scopes) == 0 && id != "notion" && p.Kind != KindCredential {
 			t.Errorf("%s requests no scopes", id)
 		}
 	}
