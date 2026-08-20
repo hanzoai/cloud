@@ -133,7 +133,6 @@ var Apps = []App{
 	// a caller may burn their OWN money; allowance bounds how much of OUR compute a
 	// caller with no money may take. Sibling questions, one row each.
 	{Name: "allowance", Prefixes: []string{"/v1/allowance"}},
-	{Name: "do", Prefixes: []string{"/v1/balancers", "/v1/vpcs"}},
 	// /v1/platform/apps is the DELIVERY surface — declarations in universe git
 	// reconciled by cd.hanzo.ai — and /v1/platform/cd is what that plane did with
 	// them. Both are deeper than nothing this row already holds, and neither
