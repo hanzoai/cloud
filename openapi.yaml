@@ -5977,6 +5977,8 @@ components:
       properties:
         burn_cents:
           type: integer
+        error:
+          type: string
         grant_cents:
           type: integer
         has_credit:
@@ -9230,7 +9232,7 @@ components:
         cost_cents:
           type: integer
         funding:
-          description: credit | paid | paid_only | byo
+          description: credit | paid | paid_only | unknown | byo
           type: string
         model:
           type: string
@@ -44098,10 +44100,18 @@ components:
           items:
             $ref: '#/components/schemas/storageAlert'
           type: array
+        complete:
+          type: boolean
         datastore:
           $ref: '#/components/schemas/datastoreVolume'
         fleet:
           $ref: '#/components/schemas/storageFleet'
+        incompleteReason:
+          type: string
+        sources:
+          items:
+            $ref: '#/components/schemas/SourceStatus'
+          type: array
         volumes:
           items:
             $ref: '#/components/schemas/storageVolume'
@@ -50659,7 +50669,9 @@ paths:
         card is the one real fill here, and it is the number to scale on.
 
         The two sources degrade independently — a DO outage still returns the datastore fill,
-        and a disconnected datastore still returns the DO fleet.
+        and a disconnected datastore still returns the DO fleet. What a DO outage must NOT do
+        is pass for an account with no volumes, so the fleet it could not read is marked
+        incomplete rather than reported as a count of zero at a cost of zero.
       operationId: adminVolumes
       responses:
         "200":
@@ -50668,6 +50680,7 @@ paths:
               example:
                 data:
                   alerts: []
+                  complete: true
                   datastore:
                     mount: /var/lib/datastore
                     name: default
@@ -50680,6 +50693,13 @@ paths:
                     pct: null
                     totalGiB: 300
                     usedGiB: null
+                  incompleteReason: ""
+                  sources:
+                  - at: "2026-08-19T00:00:00Z"
+                    error: ""
+                    name: do.volumes
+                    ok: true
+                    rows: 2
                   volumes:
                   - attached: true
                     id: v1
