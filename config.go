@@ -384,7 +384,11 @@ func LoadConfig() *Config {
 		flag.StringVar(&cfg.Brand, "brand", cfg.Brand, "white-label brand")
 		flag.StringVar(&cfg.Domain, "domain", cfg.Domain, "primary domain")
 		flag.StringVar(&cfg.IAMIssuer, "iam-issuer", cfg.IAMIssuer, "JWKS issuer")
-		flag.StringVar(&cfg.KMSMasterKeyRef, "kms-master-key-ref", cfg.KMSMasterKeyRef, "KMS master key reference")
+		// The master key is NOT offered as a flag. Its value is what would become
+		// flag.DefValue, and usage prints defaults — on -h and on any parse error —
+		// so registering it puts the key on stderr, which is the pod log. Offering
+		// it would also invite it onto a command line, where /proc and ps keep it.
+		// The environment is the one way in, and it is what the chart sets.
 		flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "data root")
 		flag.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "HTTP listener")
 		flag.Parse()
