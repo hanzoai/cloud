@@ -370,7 +370,7 @@ jobs:
 
       - name: go env for private modules
         env:
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
           GH_PAT: ${{ secrets.GH_PAT }}
         # GOPRIVATE names exactly the namespace that is private. github.com/hanzoai/*
         # is: ai, account, commerce, orm, xorm, beego, csqlite and ~30 more are
@@ -399,8 +399,8 @@ jobs:
         # GH_PAT remains the fallback for a module the forge has not mirrored.
         run: |
           set -euo pipefail
-          if [ -n "${FORGE_TOKEN:-}" ]; then
-            git config --global url."https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
+          if [ -n "${GIT_TOKEN:-}" ]; then
+            git config --global url."https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
           fi
           git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
           {
@@ -542,7 +542,7 @@ jobs:
           # The claim is written to git.hanzo.ai, so it is the forge credential
           # that has to be able to write it. GH_PAT is gone from this step: it
           # authenticated a register that no longer lives on github.
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
           # The commit being released, named explicitly rather than read from
           # GITHUB_SHA: that variable is the runner's to set, this claim is the
           # workflow's to make, and a claim that silently reads an empty string
@@ -643,7 +643,7 @@ jobs:
           # direction to fail (a hole is inert; a reused number serves wrong
           # bytes). They are not carried over, because a name nothing published
           # is not a release.
-          GIT=$(git ls-remote --tags "https://x:${FORGE_TOKEN}@${remote#https://}" \
+          GIT=$(git ls-remote --tags "https://x:${GIT_TOKEN}@${remote#https://}" \
             | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' || true)
 
@@ -693,7 +693,7 @@ jobs:
 
             # THE COMPARE-AND-SWAP.
             CODE=$(curl -s -o /tmp/claim.json -w '%{http_code}' -X POST \
-              -H "Authorization: token $FORGE_TOKEN" \
+              -H "Authorization: token $GIT_TOKEN" \
               -H 'Content-Type: application/json' \
               "${api}/tags" \
               -d "{\"tag_name\":\"v${CAND}\",\"target\":\"${SHA}\"}")
@@ -714,7 +714,7 @@ jobs:
               esac
               # Taken. By us, or by somebody else? The distinction is the whole
               # difference between a resume and a collision, and it is one GET.
-              HAVE=$(curl -fsS -H "Authorization: token $FORGE_TOKEN" \
+              HAVE=$(curl -fsS -H "Authorization: token $GIT_TOKEN" \
                 "${api}/tags/v${CAND}" | jq -r '.commit.sha // empty')
               if [ "$HAVE" = "${SHA}" ]; then
                 echo "v${CAND} is already claimed at our sha — this release, resumed"
@@ -726,10 +726,10 @@ jobs:
             if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
               # Say which credential and which scope, because the symptom
               # otherwise reads as "the claim is broken" and the cause is one
-              # secret. FORGE_TOKEN has only ever been READ with in this
+              # secret. GIT_TOKEN has only ever been READ with in this
               # workflow — go module fetches and ls-remote — so the first
               # release to write with it is the first test of its scope.
-              echo "::error::the forge refused the claim for v${CAND} with $CODE. Ask the forge what it wants before assuming: POST <arbiter>/tags answers 403 with {\"message\":\"token does not have at least one of required scope(s), required=[write:repository], token scope=read:repository\"} for a read-scoped token, at BOTH this path and the old hanzoai/ one, so a 403 here is the TOKEN and not the address. Scopes are fixed when a token is minted, so this needs a new FORGE_TOKEN carrying write:repository installed as the actions secret — it creates refs/tags/v<N> and the refs/smoked/<digest> receipt."
+              echo "::error::the forge refused the claim for v${CAND} with $CODE. Ask the forge what it wants before assuming: POST <arbiter>/tags answers 403 with {\"message\":\"token does not have at least one of required scope(s), required=[write:repository], token scope=read:repository\"} for a read-scoped token, at BOTH this path and the old hanzoai/ one, so a 403 here is the TOKEN and not the address. Scopes are fixed when a token is minted, so this needs a new GIT_TOKEN carrying write:repository installed as the actions secret — it creates refs/tags/v<N> and the refs/smoked/<digest> receipt."
               cat /tmp/claim.json; exit 1
             fi
             if [ "$CODE" != "201" ]; then
@@ -859,7 +859,7 @@ jobs:
             org.opencontainers.image.source=${{ steps.ver.outputs.remote }}
           secrets: |
             GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
-            FORGE_TOKEN=${{ secrets.FORGE_TOKEN }}
+            GIT_TOKEN=${{ github.token }}
 
       # build-push-action can exit 0 before the manifest resolves, so a green run
       # could still mean a future ImagePullBackOff. Prove it pulls BEFORE the pin
@@ -885,7 +885,7 @@ jobs:
         env:
           GHCR_USER: ${{ secrets.GHCR_USER }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           img="${{ steps.ver.outputs.image }}:v${{ steps.ver.outputs.version }}"
@@ -941,7 +941,7 @@ jobs:
           # so the receipt says "these bytes, from this source, booted" and stays
           # false the moment the bytes change under the name.
           SMOKED=0
-          if git ls-remote --exit-code "https://x:${FORGE_TOKEN}@${remote#https://}" "refs/${RECEIPT}" >/dev/null 2>&1; then
+          if git ls-remote --exit-code "https://x:${GIT_TOKEN}@${remote#https://}" "refs/${RECEIPT}" >/dev/null 2>&1; then
             echo "$DIGEST already has a smoke receipt — these exact bytes have booted"
             SMOKED=1
           fi
@@ -1031,17 +1031,17 @@ jobs:
       - name: Record that these bytes booted
         if: steps.img.outputs.smoked == '0'
         env:
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # A push IS the compare-and-swap: the server refuses to move a ref that
           # already names something else, and re-pushing the identical value is a
           # no-op. Gitea has no POST for a ref outside refs/tags, and it does not
           # need one — this is the operation that endpoint would have wrapped.
-          if git push "https://x:${FORGE_TOKEN}@${remote#https://}" \
+          if git push "https://x:${GIT_TOKEN}@${remote#https://}" \
                "${{ github.sha }}:refs/${{ steps.img.outputs.receipt }}" 2>/tmp/receipt.err; then
             echo "recorded: ${{ steps.img.outputs.digest }} booted, built from ${{ github.sha }}"
-          elif git ls-remote --exit-code "https://x:${FORGE_TOKEN}@${remote#https://}" \
+          elif git ls-remote --exit-code "https://x:${GIT_TOKEN}@${remote#https://}" \
                  "refs/${{ steps.img.outputs.receipt }}" >/dev/null 2>&1; then
             echo "already recorded by another run — same digest, same statement"
           else
@@ -1055,10 +1055,10 @@ jobs:
       # still be answered before an unproven image becomes a pin.
       - name: These bytes have a smoke receipt
         env:
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git ls-remote --exit-code "https://x:${FORGE_TOKEN}@${remote#https://}" \
+          git ls-remote --exit-code "https://x:${GIT_TOKEN}@${remote#https://}" \
             "refs/${{ steps.img.outputs.receipt }}" >/dev/null 2>&1 \
             || { echo "::error::no smoke receipt for ${{ steps.img.outputs.digest }} — these bytes have never been proven to boot. Nothing downstream may pin them."; exit 1; }
           echo "${{ steps.img.outputs.digest }} is smoked"
@@ -1071,11 +1071,11 @@ jobs:
       # shipped.
       - name: The claimed tag still names this commit
         env:
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TAG="v${{ steps.ver.outputs.version }}"
-          HAVE=$(curl -fsS -H "Authorization: token ${FORGE_TOKEN}" \
+          HAVE=$(curl -fsS -H "Authorization: token ${GIT_TOKEN}" \
             "${api}/tags/${TAG}" | jq -r '.commit.sha // empty')
           if [ -z "$HAVE" ]; then
             echo "::error::${TAG} was claimed by this run but no longer exists — refusing to ship a release whose receipt was deleted"; exit 1
@@ -1373,12 +1373,12 @@ jobs:
       # stop a release. go.sum still decides whether the bytes were right.
       - name: go env for private modules
         env:
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
-          if [ -n "${FORGE_TOKEN:-}" ]; then
-            git config --global url."https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
+          if [ -n "${GIT_TOKEN:-}" ]; then
+            git config --global url."https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
           fi
           git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
           {
@@ -1436,7 +1436,7 @@ jobs:
   # but it has `workflow_dispatch`, and the receivers already migrated to it:
   # every projection's cicd.yml now declares a bare `workflow_dispatch:` and
   # says so in its own comment. So this sends the verb the forge HAS, with the
-  # FORGE_TOKEN image already uses to read this repo's tags. Verified against
+  # GIT_TOKEN image already uses to read this repo's tags. Verified against
   # a live projection before it was written here: POST -> 204, and the run
   # appears as event=workflow_dispatch, in_progress, on a runner.
   #
@@ -1459,7 +1459,7 @@ jobs:
       - name: Poke every projection on the forge
         id: send
         env:
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
           # The projections that exist ON THE FORGE, which is the only place a
           # dispatch can be answered. hanzo-kotlin/sdk and hanzo-cpp/sdk are in
           # the old list and are NOT here: both 404 on git.hanzo.ai, so poking
@@ -1480,13 +1480,13 @@ jobs:
             hanzo-docs/docs:deploy.yml
         run: |
           set -euo pipefail
-          [ -n "${FORGE_TOKEN:-}" ] || { echo "::error::FORGE_TOKEN is empty — the same secret image uses to read this repo's tags"; exit 1; }
+          [ -n "${GIT_TOKEN:-}" ] || { echo "::error::GIT_TOKEN is empty — the same secret image uses to read this repo's tags"; exit 1; }
           T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           ok=0; bad=""
           for entry in $PROJECTIONS; do
             repo="${entry%%:*}"; wf="${entry##*:}"
             CODE=$(curl -s -o /tmp/d.json -w '%{http_code}' -X POST \
-              -H "Authorization: token ${FORGE_TOKEN}" \
+              -H "Authorization: token ${GIT_TOKEN}" \
               -H 'Content-Type: application/json' \
               "https://git.hanzo.ai/v1/repos/${repo}/actions/workflows/${wf}/dispatches" \
               -d '{"ref":"main"}')
@@ -1509,7 +1509,7 @@ jobs:
             for entry in $PROJECTIONS; do
               repo="${entry%%:*}"
               case " $started " in *" $repo "*) continue ;; esac
-              S=$(curl -s -H "Authorization: token ${FORGE_TOKEN}" \
+              S=$(curl -s -H "Authorization: token ${GIT_TOKEN}" \
                     "https://git.hanzo.ai/v1/repos/${repo}/actions/runs?limit=5" \
                   | jq -r --arg t "$T0" '[.workflow_runs[]? | select(.event=="workflow_dispatch") | .status] | first // ""')
               case "$S" in
@@ -1537,7 +1537,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Write release.json onto the tag
         env:
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TAG="v${{ needs.image.outputs.version }}"
@@ -1582,15 +1582,15 @@ jobs:
           # Required, and the forge answers 422 — which -f turns into exit 22. That
           # is every receipt this car has ever tried to write. The repo holds one
           # release object, v1.801.31, from before the car existed.
-          ID=$(curl -sS -H "Authorization: token ${FORGE_TOKEN}" \
+          ID=$(curl -sS -H "Authorization: token ${GIT_TOKEN}" \
             "${api}/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
           if [ -n "$ID" ]; then
-            curl -fsS -X PATCH -H "Authorization: token ${FORGE_TOKEN}" \
+            curl -fsS -X PATCH -H "Authorization: token ${GIT_TOKEN}" \
               -H 'Content-Type: application/json' \
               "${api}/releases/${ID}" \
               -d "$(jq -nc --arg b "$BODY" '{body:$b}')" >/dev/null
           else
-            curl -fsS -X POST -H "Authorization: token ${FORGE_TOKEN}" \
+            curl -fsS -X POST -H "Authorization: token ${GIT_TOKEN}" \
               -H 'Content-Type: application/json' \
               "${api}/releases" \
               -d "$(jq -nc --arg t "$TAG" --arg b "$BODY" '{tag_name:$t, name:$t, body:$b}')" >/dev/null
@@ -1635,7 +1635,7 @@ jobs:
           GHCR_USER: ${{ secrets.GHCR_USER }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
           # The audit reads the same two coordinates the release just used, rather
           # than its own copy of them: an audit that checks a different image
           # against a different register answers a question nobody asked.
