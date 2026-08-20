@@ -1,0 +1,633 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package seo is search visibility as data: what a phrase is worth, what a site already places for, who places beside it, who links to it, and what one page gets wrong.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "seo"
+    }
+  ],
+  "paths": {
+    "/v1/seo/audit": {
+      "post": {
+        "operationId": "seoAudit",
+        "summary": "Fetch one page and report what it gets wrong",
+        "description": "Fetches one page and reports what it gets wrong.\n\nIt returns the page's on-page score, its title and description, how much readable\ntext it carries, and the full set of named checks — is it https, does it have one\nh1, is the title duplicated, is it slow, is it a redirect, is anything on it\nbroken. It is the technical half of search visibility, and it is the half a\ndeveloper can act on this afternoon.\n\nONE PAGE, LIVE, IN THIS REQUEST. It is deliberately not a site crawl: a crawl is\na job with a lifecycle, and this answers the same questions about the page\nsomebody is actually looking at, now, with no task id to poll. Point it at the\npages that matter one at a time.\n\nIt is priced per page fetched, which is one.",
+        "tags": [
+          "seo"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/seoAuditIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/seoAuditOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/seo/backlinks": {
+      "post": {
+        "operationId": "seoBacklink",
+        "summary": "Who links to a target, and how much of it is broken or spam",
+        "description": "Summarises who links to a target.\n\nIt returns the authority score, how many links point at it and from how many\ndistinct sites, how many of those are broken, and how much of the profile reads\nas spam. Distinct sites is the number to read: a thousand links from one domain\nis one endorsement, and a profile that grew fast in links and not in domains is\nusually a profile somebody bought.\n\nThe target can be a whole domain, a subdomain, or one page URL — the summary is\nscoped to whatever is named. It is priced per request, so a domain with ten\nmillion links costs the same as one with ten.",
+        "tags": [
+          "seo"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/seoBacklinkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/seoBacklinkOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/seo/competitors": {
+      "post": {
+        "operationId": "seoCompetitor",
+        "summary": "The domains that place for the same phrases",
+        "description": "Names the domains that place for the same phrases.\n\nGiven a set of phrases it returns the sites that appear across them, with each\none's average position, how many of the phrases it places for, its share of the\navailable attention and the visits that earns. It answers \"who am I actually up\nagainst here\", which is a different question from \"who do I think my competitors\nare\" and frequently a different answer.\n\nPair it with seoRank: this says who is in the race, seoRank says where any one of\nthem finishes. It is priced per row, so Limit decides the cost.",
+        "tags": [
+          "seo"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/seoCompetitorIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/seoCompetitorOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/seo/ideas": {
+      "post": {
+        "operationId": "seoIdea",
+        "summary": "Grow a seed phrase into the phrases nobody named yet",
+        "description": "Grows a seed phrase into the phrases nobody named yet.\n\nIt takes phrases you have and returns phrases in the same category that you do\nnot — relevant rather than merely containing the seed — each with its search\nvolume, click cost, competition and how hard its first page is to reach. This is\nwhere a keyword list comes FROM; seoKeyword is where a list you already have gets\nmeasured.\n\nIt is priced per row, so Limit is the knob that decides what the call costs.\nTotal says how many more there were.",
+        "tags": [
+          "seo"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/seoIdeaIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/seoIdeaOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/seo/keywords": {
+      "post": {
+        "operationId": "seoKeyword",
+        "summary": "How often named phrases are searched, and what a click costs",
+        "description": "Measures phrases the caller already has.\n\nIt answers, for each phrase named, how many people search it in a month, what an\nadvertising click on it costs, and how contested that advertising is. This is the\nground fact of search: everything else on this surface is a question about\nphrases, and this is the one that says whether a phrase is worth having.\n\nGive it phrases you already suspect. To find phrases you have not thought of,\nuse seoIdea; to find the ones a site already places for, use seoRank.\n\nThe market defaults to the United States in English. It is priced per request\nrather than per phrase, so asking about fifty phrases costs what asking about\none does.",
+        "tags": [
+          "seo"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/seoKeywordIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/seoKeywordOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/seo/rankings": {
+      "post": {
+        "operationId": "seoRank",
+        "summary": "Every phrase a domain already places for, with its position",
+        "description": "Reports every phrase a domain already places for.\n\nFor each one it gives the phrase, the position on the results page, the page of\nthe site that placed, that result's headline, the phrase's monthly searches and\nthe visits the placement is estimated to earn. It is the single most direct\nquestion about a site's search visibility — yours or a competitor's, since it\ntakes any domain.\n\nPosition is the ABSOLUTE rank, counting every element on the page — the ads, the\nanswer boxes, the map — because that is what a person scrolling actually passes.\nAn organic-only rank flatters a result that sits below half a screen of other\nthings.\n\nIt is priced per row, so Limit decides what the call costs, and Total says how\nmany more there were.",
+        "tags": [
+          "seo"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/seoRankIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/seoRankOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/seo/rates": {
+      "get": {
+        "operationId": "seoRate",
+        "summary": "What each call on this surface costs, from the vendor's own list",
+        "description": "Publishes what every call on this surface costs.\n\nThe numbers are read from the upstream's own published price list, not from a\ntable kept here, so a price change on their side moves this card within the hour\nand moves what is debited with it. That is the whole of the pricing model: this\nsurface resells at cost, and the cost is theirs to state.\n\nA row has two numbers because a call has two costs: a flat charge for asking, and\na charge per row returned. An op priced per request reports zero for the second,\nand for one priced per row the total is `request + result x limit` — which is the\namount your balance is authorized against before the call, and roughly what you\nwill be debited after it.\n\nIt is a read and it is free: asking what something costs must not require the\nbalance that would pay for it. If the upstream cannot be reached the card comes\nback empty rather than stale — a price nobody can confirm is not a price.",
+        "tags": [
+          "seo"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/seoRateOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "seoAuditIn": {
+        "properties": {
+          "url": {
+            "description": "URL is the page, absolute and http or https.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "seoAuditOut": {
+        "properties": {
+          "checks": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "description": "Checks is every named finding, each a yes or no — \"is_https\", \"no_h1_tag\",\n\"high_loading_time\", around fifty of them. It is an OPEN set the upstream adds\nto, so it is published as an object of booleans rather than as fifty declared\nfields that would be wrong the next time they name a fifty-first.",
+            "type": "object"
+          },
+          "cost": {
+            "description": "Cost is what this call cost, in USD, as an exact decimal string.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is its meta description.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is the upstream's on-page score, 0 to 100.",
+            "type": "number"
+          },
+          "status": {
+            "description": "Status is the HTTP status the page answered with.",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Title is the page's title.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the address actually read, after redirects.",
+            "type": "string"
+          },
+          "words": {
+            "description": "Words is how many words of readable text the page carries.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "seoBacklinkIn": {
+        "properties": {
+          "target": {
+            "description": "Target is a domain, a subdomain or a single page URL. A domain summarises the\nwhole site; a URL summarises that page.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "seoBacklinkOut": {
+        "properties": {
+          "backlinks": {
+            "description": "Backlinks is how many links point at it.",
+            "type": "integer"
+          },
+          "broken": {
+            "description": "Broken is how many of those links point at something that no longer answers.",
+            "type": "integer"
+          },
+          "cost": {
+            "description": "Cost is what this call cost, in USD, as an exact decimal string.",
+            "type": "string"
+          },
+          "domains": {
+            "description": "Domains is how many distinct sites those links come from — the number that\nmatters, since a thousand links from one site is one site.",
+            "type": "integer"
+          },
+          "firstSeen": {
+            "description": "FirstSeen is when the upstream first saw a link to this target, RFC 3339.",
+            "type": "string"
+          },
+          "pages": {
+            "description": "Pages is how many distinct pages link in.",
+            "type": "integer"
+          },
+          "rank": {
+            "description": "Rank is the upstream's authority score for the target, 0 to 1000.",
+            "type": "integer"
+          },
+          "spam": {
+            "description": "Spam is the share of the profile judged spam, 0 to 100.",
+            "type": "integer"
+          },
+          "target": {
+            "description": "Target is the target as the upstream resolved it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "seoCharge": {
+        "properties": {
+          "op": {
+            "description": "Op is the operation id — seoKeyword, seoRank — so a line here and a tool in a\nmodel's list are the same name.",
+            "type": "string"
+          },
+          "request": {
+            "description": "Request is the flat charge for making the call, in USD, as an exact decimal\nstring.",
+            "type": "string"
+          },
+          "result": {
+            "description": "Result is the charge for each row returned, in USD, as an exact decimal\nstring. Zero for the ops priced per request.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "seoCompetitorIn": {
+        "properties": {
+          "keywords": {
+            "description": "Keywords are the phrases. At least one; blanks are dropped.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "language": {
+            "description": "Language is the ISO code. Defaults to \"en\".",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Limit is how many domains to return, 1 to 1000. Defaults to 100.",
+            "type": "integer"
+          },
+          "location": {
+            "description": "Location is the market, as the upstream's numeric code. Defaults to 2840.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "seoCompetitorOut": {
+        "properties": {
+          "competitors": {
+            "description": "Competitors is one row per domain, strongest first.",
+            "items": {
+              "$ref": "#/components/schemas/seoDomain"
+            },
+            "type": "array"
+          },
+          "cost": {
+            "description": "Cost is what this call cost, in USD, as an exact decimal string.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is how many domains the upstream holds for these phrases.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "seoDomain": {
+        "properties": {
+          "domain": {
+            "description": "Domain is the competitor.",
+            "type": "string"
+          },
+          "keywords": {
+            "description": "Keywords is how many of the phrases it places for.",
+            "type": "integer"
+          },
+          "position": {
+            "description": "Position is its average rank across the phrases.",
+            "type": "number"
+          },
+          "traffic": {
+            "description": "Traffic is the estimated monthly visits those placements earn.",
+            "type": "number"
+          },
+          "visibility": {
+            "description": "Visibility is its share of the possible attention across those phrases.",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "seoIdeaIn": {
+        "properties": {
+          "keywords": {
+            "description": "Keywords are the seeds. At least one; blanks are dropped.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "language": {
+            "description": "Language is the ISO code. Defaults to \"en\".",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Limit is how many phrases to return, 1 to 1000. Defaults to 100. It is what\nthis call is priced on, because the upstream charges per row.",
+            "type": "integer"
+          },
+          "location": {
+            "description": "Location is the market, as the upstream's numeric code. Defaults to 2840.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "seoIdeaOut": {
+        "properties": {
+          "cost": {
+            "description": "Cost is what this call cost, in USD, as an exact decimal string.",
+            "type": "string"
+          },
+          "keywords": {
+            "description": "Keywords is the phrases found, each measured.",
+            "items": {
+              "$ref": "#/components/schemas/seoMetric"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many the upstream holds, which is usually more than Limit\nreturned — it is what raising the limit would reach.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "seoKeywordIn": {
+        "properties": {
+          "keywords": {
+            "description": "Keywords are the phrases. At least one; blanks are dropped.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "language": {
+            "description": "Language is the ISO code. Defaults to \"en\".",
+            "type": "string"
+          },
+          "location": {
+            "description": "Location is the market, as the upstream's numeric code. Defaults to 2840,\nthe United States.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "seoKeywordOut": {
+        "properties": {
+          "cost": {
+            "description": "Cost is what this call cost, in USD, as an exact decimal string. It is the\nupstream's own number and it is what was debited.",
+            "type": "string"
+          },
+          "keywords": {
+            "description": "Keywords is one measurement per phrase, in the order the upstream answered.",
+            "items": {
+              "$ref": "#/components/schemas/seoMetric"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "seoMetric": {
+        "properties": {
+          "competition": {
+            "description": "Competition is how contested the advertising is, from 0 to 1. The upstream\nreports it as an index out of a hundred on one endpoint and as this fraction\non another; it is the fraction here in both cases.",
+            "type": "number"
+          },
+          "cpc": {
+            "description": "CPC is the average cost of one advertising click, in USD. It is a reported\nstatistic about somebody else's auction, not an amount this API moves.",
+            "type": "number"
+          },
+          "difficulty": {
+            "description": "Difficulty is how hard the first page is to reach organically, 0 to 100.\nPresent on seoIdea, which measures it; absent on seoKeyword, which does not.",
+            "type": "integer"
+          },
+          "keyword": {
+            "description": "Keyword is the phrase.",
+            "type": "string"
+          },
+          "level": {
+            "description": "Level is the same fact as a word: low, medium or high.",
+            "type": "string"
+          },
+          "volume": {
+            "description": "Volume is the average monthly searches.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "seoRankIn": {
+        "properties": {
+          "domain": {
+            "description": "Domain is the site, with or without a subdomain — \"hanzo.ai\", \"docs.hanzo.ai\".",
+            "type": "string"
+          },
+          "language": {
+            "description": "Language is the ISO code. Defaults to \"en\".",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Limit is how many placements to return, 1 to 1000. Defaults to 100.",
+            "type": "integer"
+          },
+          "location": {
+            "description": "Location is the market, as the upstream's numeric code. Defaults to 2840.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "seoRankOut": {
+        "properties": {
+          "cost": {
+            "description": "Cost is what this call cost, in USD, as an exact decimal string.",
+            "type": "string"
+          },
+          "rankings": {
+            "description": "Rankings is one row per phrase the domain places for.",
+            "items": {
+              "$ref": "#/components/schemas/seoRanking"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many placements the upstream holds for this domain.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "seoRanking": {
+        "properties": {
+          "keyword": {
+            "description": "Keyword is the phrase searched.",
+            "type": "string"
+          },
+          "position": {
+            "description": "Position is the absolute rank on the results page, counting every element —\nso it is what a person scrolling actually passes, not the organic-only rank.",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Title is that result's headline.",
+            "type": "string"
+          },
+          "traffic": {
+            "description": "Traffic is the estimated monthly visits this placement earns.",
+            "type": "number"
+          },
+          "url": {
+            "description": "URL is the page of the target that placed.",
+            "type": "string"
+          },
+          "volume": {
+            "description": "Volume is the phrase's average monthly searches.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "seoRateOut": {
+        "properties": {
+          "rates": {
+            "description": "Rates is one row per op on this surface.",
+            "items": {
+              "$ref": "#/components/schemas/seoCharge"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}
