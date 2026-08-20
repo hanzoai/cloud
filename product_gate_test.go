@@ -81,7 +81,7 @@ var unextracted = []string{
 	// lives here and nowhere else, which is what this bucket means.
 	"tel",
 	"templates", "tenant", "tools", "todo", "translate",
-	"treasury", "validators", "venue", "wallets", "webhooks", "websearch",
+	"treasury", "validators", "wallets", "webhooks", "websearch",
 	// web3 is the chain-access surface. It REPLACES the api/ half of
 	// hanzoai/bootnode rather than extracting from it — that half was Python
 	// serving four routes, and this is the richer router bootnode's own api-go/

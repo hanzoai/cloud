@@ -300,7 +300,6 @@ var meteredApps = []string{
 	"tools",        // per-tool dispatch.
 	"todo",         // per-project/issue fee.
 	"translate",    // per-character fee.
-	"venue",        // folded clusters (compute).
 	"visor",        // GPU clusters (compute).
 	"zen",          // zen SKU token costs (zen self-meters).
 }
