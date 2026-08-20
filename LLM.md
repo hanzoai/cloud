@@ -4044,6 +4044,36 @@ next reader to fix the wrong thing.
 | **fanout** | `repository_dispatch: spec-update` → 9 repos, payload `(version, sha, spec_sha256)` | a projection that never heard about this release |
 | **receipt** | `release.json` on the tag's GitHub Release, `if: always()` | a hole, silently |
 
+**THE REVIEWER'S IDENTITY IS AN IAM APPLICATION, AND ITS AUDIENCE IS THE THING
+THAT REFUSES IT.** The step reads the `hanzo-review` client credential out of KMS
+(`review/IAM_CLIENT_ID` + `review/IAM_CLIENT_SECRET`, the one cupboard) and mints
+a short-lived token at IAM, so nothing here stores a bearer. What then decides
+whether the reviewer can work is a value in ANOTHER REPOSITORY: per HIP-0111 the
+token carries `aud = client_id = <the application's name>`, and hanzoai/ai's
+request-auth path (`object/jwt_validate.go`, `jwtAudienceAllowlist`) accepts only
+`GATEWAY_ALLOWED_AUDIENCES` widened by the four brand auds. A name absent from
+that list answers `401 jwt: audience not allowed` — a refusal that names neither
+the audience it saw nor the list it checked, which is why review.sh now prints
+`iss`/`aud`/`sub` off the token it is holding. Those are identifiers, not
+credentials; the bearer stays masked.
+
+Two consequences worth knowing before diagnosing a reviewer 401. The allowlist
+lives in `universe/charts/app/values/hanzo/cloud.yaml`, so the remedy is a commit
+there and not here. And the `hanzo-review` application appears in NO repository —
+it was provisioned by hand, so nothing recreates it, nothing reviews it, and
+`grep -rn hanzo-review universe` is empty. Declare it in
+`infra/k8s/iam/provision.yaml` beside the applications that are declared, or the
+gate that stops every release depends on a row somebody typed once.
+
+**The gate's own log is not retrievable.** `gate` is a `uses:` call into
+hanzoai/ci, and the forge records neither steps nor a log for that job — both
+`actions/jobs/<id>/logs` and `actions/runs/<id>/logs` answer 404, and the API
+reports `steps: []` even for a run where it PASSED. So a red gate is diagnosed by
+running `hanzo.yml`'s eight steps locally, in order; they are cheap except
+`app-contract`, and the first one that fails is the answer. Measured that way
+once: `go vet` clean, `host-is-light` 405 packages, and `zipdoc-check` naming two
+stale `zipdoc_gen.go` files — which had been refusing every release for a day.
+
 **Why this shape.** `cicd.yml` used to gate and `deploy.yml` used to release, and
 they were two files with the SAME TRIGGER. Actions cannot express `needs:` across
 workflow files, so deploy built, smoked, tagged and pinned while the gate was
