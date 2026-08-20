@@ -99,7 +99,7 @@ jobs:
         # read in preference to anything set later.
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # RUNNER_TEMP is unset on this forge. Unguarded, "$RUNNER_TEMP/x" is
@@ -124,9 +124,9 @@ jobs:
           # It is also the substitution that survives a GitHub ACL drift, which
           # has blocked releases here before. GH_PAT stays the fallback for a
           # module the forge has not mirrored.
-          if [ -n "${FORGE_TOKEN:-}" ]; then
+          if [ -n "${GIT_TOKEN:-}" ]; then
             git config --global \
-              url."https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
+              url."https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
           fi
           [ -n "${GH_PAT:-}" ] || { echo "::warning::GH_PAT is not set — a private module the forge has not mirrored, and that is not already in the cache, cannot be fetched"; exit 0; }
           git config --global \
@@ -149,13 +149,13 @@ jobs:
         env:
           # The automatic per-job token CANNOT do this: it is not a user, and this
           # forge answers its push to a protected branch with "User -2 is not
-          # allowed to push to protected branch main". FORGE_TOKEN is the
+          # allowed to push to protected branch main". GIT_TOKEN is the
           # credential with contents:write, inherited from the org.
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          [ -n "${FORGE_TOKEN:-}" ] || {
-            echo "::error::FORGE_TOKEN is not readable here, and the automatic token cannot push to a protected branch. The documents were regenerated and would be discarded with this container — refusing to report that as a success."; exit 1; }
+          [ -n "${GIT_TOKEN:-}" ] || {
+            echo "::error::GIT_TOKEN is not readable here, and the automatic token cannot push to a protected branch. The documents were regenerated and would be discarded with this container — refusing to report that as a success."; exit 1; }
 
           # EVERYTHING THE SWEEP TOUCHED, said out loud before anything is
           # selected. The commit below takes only the generated set; a file
@@ -231,7 +231,7 @@ jobs:
             | while read -r k; do git config --local --unset-all "$k" || true; done
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0=http.extraheader \
-          GIT_CONFIG_VALUE_0="Authorization: token ${FORGE_TOKEN}" \
+          GIT_CONFIG_VALUE_0="Authorization: token ${GIT_TOKEN}" \
             git push "$REMOTE" HEAD:main
           echo "pushed $(git rev-parse --short HEAD) to main"
 
@@ -244,7 +244,7 @@ jobs:
           # the regeneration did not happen. What is missing is a run, and the
           # line below says exactly how to start one.
           code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
-            -H "Authorization: token ${FORGE_TOKEN}" -H 'Content-Type: application/json' \
+            -H "Authorization: token ${GIT_TOKEN}" -H 'Content-Type: application/json' \
             -d '{"ref":"main"}' \
             "https://git.hanzo.ai/v1/repos/${{ github.repository }}/actions/workflows/cicd.yml/dispatches") || code=000
           case "$code" in
