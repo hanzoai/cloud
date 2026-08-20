@@ -990,16 +990,12 @@ github.com/hanzo-ds/sqlbuilder v1.42.2 h1:739sudcAav513tsIj57CUjADCcEUzrztpOPYHy
 github.com/hanzo-ds/sqlbuilder v1.42.2/go.mod h1:Nk+F+SDxtsqAeI63jT7JPACZQ60top3rQCmKXUhfKQw=
 github.com/hanzo-ds/sqlparser v0.4.17 h1:yTBikkYx2NI2Fpd6lCp4GVEj/rMaV7w6N4R7PLJmoag=
 github.com/hanzo-ds/sqlparser v0.4.17/go.mod h1:b+9oCGF3WYGz4FfVo9eZ4wJiF7fiLa9aCWFGCcbqQbY=
-github.com/hanzoai/account v0.3.2 h1:6dC9ePgE73xZmIPckWfnFLYGbqtOoDV97iKs6wksbFY=
-github.com/hanzoai/account v0.3.2/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
 github.com/hanzoai/account v0.3.3 h1:Kn45AOIQVS7BuYDKuM1OWsxlPj4EbOSVWTrMknjHVQA=
 github.com/hanzoai/account v0.3.3/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
 github.com/hanzoai/agent v1.0.5 h1:RWe4cSyie+5wAt2s0kAIqxQ4m6ID5JlqI/xUEUxhFEI=
 github.com/hanzoai/agent v1.0.5/go.mod h1:3bqSx+EkF4Lm0BxJEEb7TbV0Ck1EsBgt6tteHJmX1nk=
-github.com/hanzoai/ai v1.833.97 h1:pOV6akjyBzjITlnOU34KMJwY8Jy19fOl+LEnMbdC/6o=
-github.com/hanzoai/ai v1.833.97/go.mod h1:iaVcu9tOJxUEcexeYJoOU6e0hfPqmgjqctODOAKCzaI=
-github.com/hanzoai/ai v1.833.100 h1:KeeXLWxTDQw8aEg4+IGUwFtjB/UQ2Ei0hMcVWs22tCk=
-github.com/hanzoai/ai v1.833.100/go.mod h1:1aOkVZyHxb7IfLKjP/d4fBZ3RSDCEL8nN5lMpRwM21s=
+github.com/hanzoai/ai v1.833.103 h1:SGznU0xfL+piTDjxdad4qKE9oywXt59HPAVKR4X+dSg=
+github.com/hanzoai/ai v1.833.103/go.mod h1:1aOkVZyHxb7IfLKjP/d4fBZ3RSDCEL8nN5lMpRwM21s=
 github.com/hanzoai/authz v1.10.30 h1:UzJlpaC+2XAY8s2Ui3ziWBZmIUOCGIND5EchqbYPmEk=
 github.com/hanzoai/authz v1.10.30/go.mod h1:rhZo/LvDXdUZG3/6+ujfJ1RHgLyfOpw2te+ebX3KSFs=
 github.com/hanzoai/base v1.5.61 h1:UDCQDHjB5GnFDvj7XVB3Muq9223SrpxnCkGJmI5Jm1c=
@@ -1010,8 +1006,6 @@ github.com/hanzoai/cd/gitops-engine v0.7.3 h1:NmPf8v3Ti8ejSI8M96wFmzOchQ2fgxZHhV
 github.com/hanzoai/cd/gitops-engine v0.7.3/go.mod h1:Jyc94hEnwpmaS4kBFmC4fP3t+VvZ8DZgxPtV4FdmL7M=
 github.com/hanzoai/cek v0.2.7 h1:BxnyA1HTDKnsNPtFADxtNt16YIcXumCFzIBe2Pw5a3Q=
 github.com/hanzoai/cek v0.2.7/go.mod h1:PlVKtP1KOlcHHFLsag2zSWLnXNSaUD7GIenUsSRQqeo=
-github.com/hanzoai/commerce v1.50.56 h1:UmBbnzNeMBFCOBur5R1knZf1WobOW8fBdsdID86fjFE=
-github.com/hanzoai/commerce v1.50.56/go.mod h1:LSyVj+gXhPxHIkO9B9FsOT50qkh/t+pz5X9JgUHb5fM=
 github.com/hanzoai/commerce v1.50.58 h1:S5MFkWiLOQoRbCZlRK8LhKiiBPHrwLWUXq0eK4mWEkg=
 github.com/hanzoai/commerce v1.50.58/go.mod h1:LSyVj+gXhPxHIkO9B9FsOT50qkh/t+pz5X9JgUHb5fM=
 github.com/hanzoai/csqlite v0.1.2 h1:4DzdgUfKADhzEP66Y30/HwepuBLrwt7NsemJMfrPGl4=
@@ -1048,8 +1042,6 @@ github.com/hanzoai/govaluate v0.1.0 h1:8Ajg4pNw2zFssXO2Ixj3fa73HawZUQiMwcP2NakUj
 github.com/hanzoai/govaluate v0.1.0/go.mod h1:0kZEEPJJmWLx67swZ7wAbE7xahX+CQzm9u/O4dNF5u4=
 github.com/hanzoai/ha v0.2.0 h1:zgIbr3mjeuFfF26lkIKf/47ZM5kYBubWIPjEA24Yu7g=
 github.com/hanzoai/ha v0.2.0/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
-github.com/hanzoai/iam v1.34.63 h1:3p8bL9ss5jyeiJOsFSDWa9pV++YURqUDH140W/hQG40=
-github.com/hanzoai/iam v1.34.63/go.mod h1:dMm9lAMYekIQVuAw9q0ayZKFIRBx3vZpBdmXFNthnTc=
 github.com/hanzoai/iam v1.34.65 h1:1Qr/NsDXExLS3WJN7UmJ6Acz7CxE1XEaEaOoPN1mQso=
 github.com/hanzoai/iam v1.34.65/go.mod h1:dMm9lAMYekIQVuAw9q0ayZKFIRBx3vZpBdmXFNthnTc=
 github.com/hanzoai/kafka v1.3.2 h1:oiU77wsU7lWuXAOmCfzkcaT2RTX4PdLqzw1vRMHM44A=
@@ -1064,10 +1056,6 @@ github.com/hanzoai/namespace v1.2.0 h1:FLEHzR/GyE/OltXozMvT2n2FfUUxTuVVbILKZBkEj
 github.com/hanzoai/namespace v1.2.0/go.mod h1:vGuxMDHg5MdhH5q2bqqjZL/afINBWJubP4WD1YwZTm4=
 github.com/hanzoai/notify v1.7.2 h1:xHaVVcOWLvLMpmtSH128FRgskj4WyfG371K6CI3OC/I=
 github.com/hanzoai/notify v1.7.2/go.mod h1:GZXKmj6UNtNBz32h0XPugNkYf8R34wlJqWuRstytXZE=
-github.com/hanzoai/o11y v1.5.64 h1:iIF8zhf3y7D4IxCnSOOOFo7EcmQ4wL324vdg5G5SJms=
-github.com/hanzoai/o11y v1.5.64/go.mod h1:B+W2Z4LB5zCmFtRLArOXH6uw6DMAvu7iOYRby0hmwT0=
-github.com/hanzoai/o11y v1.5.65 h1:jn5M9VWc3i1DlhwGvmTbpeNdsqWu97aLXICKm0THFLI=
-github.com/hanzoai/o11y v1.5.65/go.mod h1:B+W2Z4LB5zCmFtRLArOXH6uw6DMAvu7iOYRby0hmwT0=
 github.com/hanzoai/o11y v1.5.66 h1:qX8mZYzl/fGZmZokoGRIBtlviXpsuMtueR0AmV2LqpU=
 github.com/hanzoai/o11y v1.5.66/go.mod h1:B+W2Z4LB5zCmFtRLArOXH6uw6DMAvu7iOYRby0hmwT0=
 github.com/hanzoai/orm v0.6.26 h1:3AgS45D/7TgB2xJRLo7NOUeTYSDJq+1v4dffWIMGS10=
