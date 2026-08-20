@@ -674,7 +674,21 @@ jobs:
             | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' || true)
 
-          LAST=$(printf '%s\n%s\n%s\n' "$REG" "$GIT" "1.786.0" \
+          # THE V8 FLOOR. Hanzo 8 -- the Open Edition -- is one product released as one
+          # version: the API, the six clients, the CLI, the console and the docs all
+          # answer to the number this line mints, because a projection of one document
+          # should not need a compatibility table to say which document it is.
+          #
+          # 8.0.0 is a FLOOR, not a claim about this commit: the line below still takes
+          # the max of the registry, the tags and this, so a tag already past it wins
+          # and nothing is renumbered backwards. Every register moves FORWARD into it
+          # -- cloud 1.801.x, npm hanzoai 2.2.x, PyPI 3.2.x, hanzo-client 0.1.x and the
+          # CLI 1.9.x are all below 8 in semver, and java-sdk was already at 8.0.x.
+          #
+          # This is the one deliberate major in the estate. It is not a lazy bump: it
+          # names a product generation, and after it the patch counter carries on as
+          # before.
+          LAST=$(printf '%s\n%s\n%s\n' "$REG" "$GIT" "8.0.0" \
             | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
           if [ -z "${LAST:-}" ]; then
             echo "::error::could not read published or tagged semver for cloud — refusing to guess the next patch"
