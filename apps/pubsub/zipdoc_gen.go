@@ -9,19 +9,6 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/pubsub/jetstream/streams/:stream", zip.Doc{
-		Description: "Removes one stream of the caller's org — its retained messages\nand its consumers with it — and answers 204 with no body. 404 when the org\nhas no stream of that name.",
-		Fields: map[string]string{
-			"streamRef.stream": "Stream is the stream's name, from the path.",
-		},
-	})
-	zip.Describe("DELETE /v1/pubsub/jetstream/streams/:stream/consumers/:name", zip.Doc{
-		Description: "Removes one consumer — its cursor, not the stream's messages —\nand answers 204 with no body. 404 when the stream or the consumer does not\nexist.",
-		Fields: map[string]string{
-			"consumerRef.name":   "Name is the consumer, from the path.",
-			"consumerRef.stream": "Stream is the stream, from the path.",
-		},
-	})
 	zip.Describe("DELETE /v1/pubsub/kv/:bucket", zip.Doc{
 		Description: "Removes one bucket of the caller's org — every key and every\nrevision with it — and answers 204 with no body. 404 when the org has no\nbucket of that name.",
 		Fields: map[string]string{
@@ -33,82 +20,6 @@ func init() {
 		Fields: map[string]string{
 			"keyRef.bucket": "Bucket is the bucket, from the path.",
 			"keyRef.key":    "Key is the key, from the path.",
-		},
-	})
-	zip.Describe("GET /v1/pubsub/jetstream/streams", zip.Doc{
-		Description: "Returns the org's streams, sorted by name.\n\nA stream is the durable log: it captures every message published to its\nsubjects and retains them by its own limits, independent of any consumer.\nThe listing is org-scoped server-side — one org can never see another's\nstreams, and the platform's own planes never appear.",
-		Fields: map[string]string{
-			"streamPage.data":        "Data are the org's streams.",
-			"streamRecord.bytes":     "Bytes is how many bytes the stream holds right now.",
-			"streamRecord.consumers": "Consumers is how many consumers the stream carries.",
-			"streamRecord.created":   "Created is when the stream was created, RFC3339.",
-			"streamRecord.discard":   "Discard says which end gives way at the limits: old or new.",
-			"streamRecord.firstSeq":  "FirstSeq is the sequence of the oldest retained message.",
-			"streamRecord.lastSeq":   "LastSeq is the sequence of the newest message.",
-			"streamRecord.maxAge":    "MaxAge is the age cap in seconds; 0 means unlimited.",
-			"streamRecord.maxBytes":  "MaxBytes is the retained-byte cap; -1 means unlimited.",
-			"streamRecord.maxMsgs":   "MaxMsgs is the retained-message cap; -1 means unlimited.",
-			"streamRecord.messages":  "Messages is how many messages the stream holds right now.",
-			"streamRecord.name":      "Name is the stream's name within the org.",
-			"streamRecord.retention": "Retention is the discipline: limits, interest or workqueue.",
-			"streamRecord.storage":   "Storage is the backend: file or memory.",
-			"streamRecord.subjects":  "Subjects are the subjects it captures, in the org's namespace.",
-		},
-	})
-	zip.Describe("GET /v1/pubsub/jetstream/streams/:stream", zip.Doc{
-		Description: "Returns one stream of the caller's org — its configuration and its\nlive state (messages, bytes, sequence range, consumer count). 404 when the\norg has no stream of that name.",
-		Fields: map[string]string{
-			"streamRecord.bytes":     "Bytes is how many bytes the stream holds right now.",
-			"streamRecord.consumers": "Consumers is how many consumers the stream carries.",
-			"streamRecord.created":   "Created is when the stream was created, RFC3339.",
-			"streamRecord.discard":   "Discard says which end gives way at the limits: old or new.",
-			"streamRecord.firstSeq":  "FirstSeq is the sequence of the oldest retained message.",
-			"streamRecord.lastSeq":   "LastSeq is the sequence of the newest message.",
-			"streamRecord.maxAge":    "MaxAge is the age cap in seconds; 0 means unlimited.",
-			"streamRecord.maxBytes":  "MaxBytes is the retained-byte cap; -1 means unlimited.",
-			"streamRecord.maxMsgs":   "MaxMsgs is the retained-message cap; -1 means unlimited.",
-			"streamRecord.messages":  "Messages is how many messages the stream holds right now.",
-			"streamRecord.name":      "Name is the stream's name within the org.",
-			"streamRecord.retention": "Retention is the discipline: limits, interest or workqueue.",
-			"streamRecord.storage":   "Storage is the backend: file or memory.",
-			"streamRecord.subjects":  "Subjects are the subjects it captures, in the org's namespace.",
-			"streamRef.stream":       "Stream is the stream's name, from the path.",
-		},
-	})
-	zip.Describe("GET /v1/pubsub/jetstream/streams/:stream/consumers", zip.Doc{
-		Description: "Returns one stream's consumers, sorted by name. 404 when the\norg has no stream of that name.",
-		Fields: map[string]string{
-			"consumerPage.data":          "Data are the stream's consumers.",
-			"consumerRecord.ack":         "Ack is the acknowledgement discipline: explicit, none or all.",
-			"consumerRecord.ackWait":     "AckWait is the redelivery timeout in seconds.",
-			"consumerRecord.acked":       "Acked is the stream sequence acknowledged furthest.",
-			"consumerRecord.deliver":     "Deliver is the starting point: all, last, new or lastPerSubject.",
-			"consumerRecord.delivered":   "Delivered is the stream sequence delivered furthest.",
-			"consumerRecord.filter":      "Filter is the subject filter, in the org's namespace; empty means all.",
-			"consumerRecord.maxDeliver":  "MaxDeliver is the delivery-attempt cap; -1 means unlimited.",
-			"consumerRecord.name":        "Name is the durable consumer name.",
-			"consumerRecord.pending":     "Pending is how many messages await delivery.",
-			"consumerRecord.redelivered": "Redelivered is how many messages are being redelivered.",
-			"consumerRecord.stream":      "Stream is the stream it consumes, in the org's view.",
-			"streamRef.stream":           "Stream is the stream's name, from the path.",
-		},
-	})
-	zip.Describe("GET /v1/pubsub/jetstream/streams/:stream/consumers/:name", zip.Doc{
-		Description: "Returns one consumer of one org stream — its configuration and\nits cursor: delivered and acknowledged sequences, pending and redelivered\ncounts. 404 when the stream or the consumer does not exist.",
-		Fields: map[string]string{
-			"consumerRecord.ack":         "Ack is the acknowledgement discipline: explicit, none or all.",
-			"consumerRecord.ackWait":     "AckWait is the redelivery timeout in seconds.",
-			"consumerRecord.acked":       "Acked is the stream sequence acknowledged furthest.",
-			"consumerRecord.deliver":     "Deliver is the starting point: all, last, new or lastPerSubject.",
-			"consumerRecord.delivered":   "Delivered is the stream sequence delivered furthest.",
-			"consumerRecord.filter":      "Filter is the subject filter, in the org's namespace; empty means all.",
-			"consumerRecord.maxDeliver":  "MaxDeliver is the delivery-attempt cap; -1 means unlimited.",
-			"consumerRecord.name":        "Name is the durable consumer name.",
-			"consumerRecord.pending":     "Pending is how many messages await delivery.",
-			"consumerRecord.redelivered": "Redelivered is how many messages are being redelivered.",
-			"consumerRecord.stream":      "Stream is the stream it consumes, in the org's view.",
-			"consumerRef.name":           "Name is the consumer, from the path.",
-			"consumerRef.stream":         "Stream is the stream, from the path.",
 		},
 	})
 	zip.Describe("GET /v1/pubsub/kv/:bucket/:key", zip.Doc{
@@ -135,74 +46,6 @@ func init() {
 			"kvEntry.value":     "Value is the value as UTF-8 text; empty for delete and purge markers.",
 			"kvPage.data":       "Data are the key's retained revisions.",
 		},
-	})
-	zip.Describe("POST /v1/pubsub/jetstream/streams", zip.Doc{
-		Description: "Creates a durable stream capturing the given subjects and\nreturns it. 409 when the org already has a stream of that name; the subjects\nare the org's own and cannot collide with another org's.",
-		Fields: map[string]string{
-			"streamRecord.bytes":     "Bytes is how many bytes the stream holds right now.",
-			"streamRecord.consumers": "Consumers is how many consumers the stream carries.",
-			"streamRecord.created":   "Created is when the stream was created, RFC3339.",
-			"streamRecord.discard":   "Discard says which end gives way at the limits: old or new.",
-			"streamRecord.firstSeq":  "FirstSeq is the sequence of the oldest retained message.",
-			"streamRecord.lastSeq":   "LastSeq is the sequence of the newest message.",
-			"streamRecord.maxAge":    "MaxAge is the age cap in seconds; 0 means unlimited.",
-			"streamRecord.maxBytes":  "MaxBytes is the retained-byte cap; -1 means unlimited.",
-			"streamRecord.maxMsgs":   "MaxMsgs is the retained-message cap; -1 means unlimited.",
-			"streamRecord.messages":  "Messages is how many messages the stream holds right now.",
-			"streamRecord.name":      "Name is the stream's name within the org.",
-			"streamRecord.retention": "Retention is the discipline: limits, interest or workqueue.",
-			"streamRecord.storage":   "Storage is the backend: file or memory.",
-			"streamRecord.subjects":  "Subjects are the subjects it captures, in the org's namespace.",
-			"streamSpec.discard":     "Discard says which end gives way at the limits: old (the default) drops\nthe oldest, new refuses the newest.",
-			"streamSpec.maxAge":      "MaxAge caps message age in SECONDS. 0 or less means unlimited.",
-			"streamSpec.maxBytes":    "MaxBytes caps retained bytes. 0 or less means unlimited.",
-			"streamSpec.maxMsgs":     "MaxMsgs caps retained messages. 0 or less means unlimited.",
-			"streamSpec.retention":   "Retention is the discipline: limits (the default — every consumer gets\nits own copy), interest, or workqueue (a message leaves when ANY consumer\ntakes it).",
-			"streamSpec.storage":     "Storage is the backend: file (durable, the default) or memory.",
-			"streamSpec.subjects":    "Subjects are the subjects this stream captures, in the org's namespace,\nwildcards allowed — e.g. [\"orders.>\"]. 1 to 16 of them.",
-			"streamWrite.name":       "Name is the stream's name within the org: 1–64 of [A-Za-z0-9_], no dash.",
-		},
-		Example: json.RawMessage(`{"name":"ORDERS","subjects":["orders.>"],"maxAge":86400}`),
-	})
-	zip.Describe("POST /v1/pubsub/jetstream/streams/:stream/consumers", zip.Doc{
-		Description: "Creates a durable consumer on one stream and returns it. A\nconsumer is a named cursor: it tracks what has been delivered and what is\nacknowledged, so many workers can share it and none sees a message twice\noutside redelivery. 409 when the stream already has a consumer of that name\nwith a different configuration.",
-		Fields: map[string]string{
-			"consumerRecord.ack":         "Ack is the acknowledgement discipline: explicit, none or all.",
-			"consumerRecord.ackWait":     "AckWait is the redelivery timeout in seconds.",
-			"consumerRecord.acked":       "Acked is the stream sequence acknowledged furthest.",
-			"consumerRecord.deliver":     "Deliver is the starting point: all, last, new or lastPerSubject.",
-			"consumerRecord.delivered":   "Delivered is the stream sequence delivered furthest.",
-			"consumerRecord.filter":      "Filter is the subject filter, in the org's namespace; empty means all.",
-			"consumerRecord.maxDeliver":  "MaxDeliver is the delivery-attempt cap; -1 means unlimited.",
-			"consumerRecord.name":        "Name is the durable consumer name.",
-			"consumerRecord.pending":     "Pending is how many messages await delivery.",
-			"consumerRecord.redelivered": "Redelivered is how many messages are being redelivered.",
-			"consumerRecord.stream":      "Stream is the stream it consumes, in the org's view.",
-			"consumerSpec.ack":           "Ack is the acknowledgement discipline: explicit (the default), none, or\nall.",
-			"consumerSpec.ackWait":       "AckWait is how long a delivered message may stay unacknowledged before\nredelivery, in SECONDS. 0 or less means the default of 30.",
-			"consumerSpec.deliver":       "Deliver picks the starting point: all (the default), last, new, or\nlastPerSubject.",
-			"consumerSpec.filter":        "Filter narrows the consumer to one subject, wildcards allowed. Empty\nmeans every subject the stream captures.",
-			"consumerSpec.maxDeliver":    "MaxDeliver caps delivery attempts per message. 0 or less means unlimited.",
-			"consumerWrite.name":         "Name is the durable consumer name: 1–64 of [A-Za-z0-9_-].",
-			"consumerWrite.stream":       "Stream is the stream to consume, from the path.",
-		},
-		Example: json.RawMessage(`{"name":"worker","filter":"orders.created","ack":"explicit"}`),
-	})
-	zip.Describe("POST /v1/pubsub/jetstream/streams/:stream/consumers/:name/next", zip.Doc{
-		Description: "Fetch pulls the next batch from a consumer and acknowledges it — the\nrequest/response way to consume a stream. The hand-off is at-most-once: a\nmessage returned here is acked here, so a caller that loses the response does\nnot see it again. Workers needing at-least-once delivery consume the same\nconsumer over the NATS port, where acks are theirs to send. An empty batch\nafter the wait is an empty page, not an error.",
-		Fields: map[string]string{
-			"busMessage.data":    "Data is the payload as UTF-8 text.",
-			"busMessage.headers": "Headers are the message's headers, when it carries any.",
-			"busMessage.seq":     "Seq is the message's stream sequence — fetched messages only.",
-			"busMessage.subject": "Subject is the message's subject in the org's own namespace.",
-			"busMessage.time":    "Time is when the stream stored the message, RFC3339 — fetched messages\nonly.",
-			"fetchQuery.batch":   "Batch is the most messages to return. 0 or less means 1; anything above\n100 is clamped to 100.",
-			"fetchQuery.name":    "Name is the consumer, from the path.",
-			"fetchQuery.stream":  "Stream is the stream, from the path.",
-			"fetchQuery.waitMs":  "WaitMs is how long to wait for the batch to fill before answering with\nwhat arrived. 0 or less means the default of 5000; clamped to 30000.",
-			"messagePage.data":   "Data are the messages in this batch — empty when nothing was pending\nwithin the wait.",
-		},
-		Example: json.RawMessage(`{"batch":10,"waitMs":2000}`),
 	})
 	zip.Describe("POST /v1/pubsub/kv/:bucket", zip.Doc{
 		Description: "Creates a KV bucket and returns it. A bucket is keyed state on\nthe same durable plane as the streams: each key holds up to History\nrevisions, entries can expire by TTL, and watchers on the NATS port see every\nwrite. 409 when the org already has a bucket of that name.",
@@ -245,34 +88,6 @@ func init() {
 			"busRequest.timeoutMs": "TimeoutMs bounds the wait for a reply. 0 or less means the default of\n5000; anything above 30000 is clamped to 30000.",
 		},
 		Example: json.RawMessage(`{"subject":"billing.quote","data":"{\"sku\":\"gpu_1\"}","timeoutMs":2000}`),
-	})
-	zip.Describe("PUT /v1/pubsub/jetstream/streams/:stream", zip.Doc{
-		Description: "Rewrites a stream's configuration — subjects, limits, discard —\nand returns the updated stream. It is a PUT: the spec sent replaces the spec\nheld, with one reading for the enums a caller omits — an empty storage,\nretention or discard keeps the stream's current one, because JetStream holds\nstorage and retention immutable and refuses a change with a 400 rather than\nthis door pretending it took.",
-		Fields: map[string]string{
-			"streamRecord.bytes":     "Bytes is how many bytes the stream holds right now.",
-			"streamRecord.consumers": "Consumers is how many consumers the stream carries.",
-			"streamRecord.created":   "Created is when the stream was created, RFC3339.",
-			"streamRecord.discard":   "Discard says which end gives way at the limits: old or new.",
-			"streamRecord.firstSeq":  "FirstSeq is the sequence of the oldest retained message.",
-			"streamRecord.lastSeq":   "LastSeq is the sequence of the newest message.",
-			"streamRecord.maxAge":    "MaxAge is the age cap in seconds; 0 means unlimited.",
-			"streamRecord.maxBytes":  "MaxBytes is the retained-byte cap; -1 means unlimited.",
-			"streamRecord.maxMsgs":   "MaxMsgs is the retained-message cap; -1 means unlimited.",
-			"streamRecord.messages":  "Messages is how many messages the stream holds right now.",
-			"streamRecord.name":      "Name is the stream's name within the org.",
-			"streamRecord.retention": "Retention is the discipline: limits, interest or workqueue.",
-			"streamRecord.storage":   "Storage is the backend: file or memory.",
-			"streamRecord.subjects":  "Subjects are the subjects it captures, in the org's namespace.",
-			"streamSpec.discard":     "Discard says which end gives way at the limits: old (the default) drops\nthe oldest, new refuses the newest.",
-			"streamSpec.maxAge":      "MaxAge caps message age in SECONDS. 0 or less means unlimited.",
-			"streamSpec.maxBytes":    "MaxBytes caps retained bytes. 0 or less means unlimited.",
-			"streamSpec.maxMsgs":     "MaxMsgs caps retained messages. 0 or less means unlimited.",
-			"streamSpec.retention":   "Retention is the discipline: limits (the default — every consumer gets\nits own copy), interest, or workqueue (a message leaves when ANY consumer\ntakes it).",
-			"streamSpec.storage":     "Storage is the backend: file (durable, the default) or memory.",
-			"streamSpec.subjects":    "Subjects are the subjects this stream captures, in the org's namespace,\nwildcards allowed — e.g. [\"orders.>\"]. 1 to 16 of them.",
-			"streamUpdate.stream":    "Stream is the stream to update, from the path.",
-		},
-		Example: json.RawMessage(`{"subjects":["orders.>","refunds.>"],"maxMsgs":100000}`),
 	})
 	zip.Describe("PUT /v1/pubsub/kv/:bucket/:key", zip.Doc{
 		Description: "Put sets one key to one value and returns the revision the write created.\nWrites are versioned: each put is a new revision and the bucket retains up to\nits History of them per key.",
