@@ -123,92 +123,96 @@ jobs:
           # more than the tip. Shallow history is why a first-push review would
           # otherwise have nothing to compare.
           fetch-depth: 0
-      # THE REVIEWER'S BEARER IS MINTED BY IAM, FROM A SECRET HELD IN KMS.
+      # THE REVIEWER ASKS FOR A CALL. IT IS NEVER GIVEN A KEY.
       #
-      # Two stores, two jobs, and nothing else: IAM issues every token, KMS holds
-      # every secret. The reviewer's credential is therefore a `hanzo-review`
-      # client credential in KMS, spent at IAM's token endpoint for a short-lived
-      # bearer at the moment of use. review.sh takes a bearer and does not care
-      # what minted it, so the choice lives here.
+      # A credential a job can read is one that job can spend anywhere, for as
+      # long as the credential lives — and every org's jobs share this runner
+      # pool. So none is fetched and none is exported. The step presents the
+      # identity IAM minted for it and asks api.hanzo.ai to make the call; what
+      # it holds is an access token that buys one thing, expires on its own, and
+      # is withdrawn at IAM rather than at a vendor.
       #
-      # It used to be REVIEW_API_KEY — a long-lived `sk-live-` bearer parked in
-      # KMS and handed straight to the reviewer. That is a third store of auth
-      # standing beside the issuer, and it failed the way a stored bearer always
-      # does: the key was revoked at IAM, nothing told the store, and the gate
-      # then refused EVERY change on a credential nobody knew had died. It fails
-      # closed by design, so a dead key is a frozen release train — measured, it
-      # held every release from v1.801.568 onward. A token that expires in
-      # minutes cannot rot that way; a key that lives forever always will.
+      # IAM is the one authority for this. `hanzo-review` is a SERVICE client —
+      # client_credentials, no interactive grant — so the token names the app as
+      # its own principal, carries that app's org as `owner`, and bills the org
+      # pool. The reviewer's spend is metered and attributable like any other.
       #
-      # No fallback, and no second spelling. A fallback is how a stale copy keeps
-      # winning, and this gate must fail closed rather than pass on whichever
-      # credential answers. If the mint fails the change does not pass.
+      # ITS CLIENT CREDENTIAL HAS ONE HOME, AND IT IS KMS. A second copy in a
+      # forge secret is a copy that goes stale by itself: rotating the real one
+      # does not reach it, nothing reports the divergence, and the gate then
+      # fails closed forever on a credential nobody knew had died. That is
+      # measured history here, not a worry — it is how the provider key this step
+      # used to carry died, and a client secret kept the same way dies the same
+      # way.
       #
-      # `hanzo-review` is a SERVICE client (iam internal/provision: a service type
-      # is granted exactly client_credentials), owned by the `hanzo` org, its
-      # secret stored at review/IAM_CLIENT_SECRET. Rotating it is a KMS write and
-      # nothing here changes.
+      # So the credential is never a value this job holds. It is read from KMS
+      # and PIPED into the token request: it is never assigned to a variable,
+      # never exported, never on a command line — /proc/<pid>/cmdline is readable
+      # by every user on this shared runner — and never on disk. What survives
+      # the pipe is an access token that buys one thing, expires by itself, and
+      # is withdrawn at IAM rather than at a vendor.
+      #
+      # The gate still fails closed in every direction: no token, no answer, an
+      # unparseable verdict and a diff too large to read all REFUSE, and there is
+      # nothing here to fall back to.
       - name: read the change, and refuse it if it carries an attack
         env:
           KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
           KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
           KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
           KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
-          IAM_ENDPOINT: ${{ vars.IAM_ENDPOINT || 'https://iam.hanzo.ai' }}
+          REVIEW_CLIENT: ${{ vars.REVIEW_CLIENT || 'hanzo-review' }}
         run: |
           set -euo pipefail
 
-          # ASKED PROPERLY BEFORE IT IS REFUSED. This login leaves the cluster and
-          # returns through a CDN, so one attempt makes a release depend on a
-          # single packet — and a 502 from that path is not a refusal, it is the
-          # absence of an answer. A transient status is asked again; a 4xx is the
-          # endpoint answering and stands on the first reply. Exhausting the
-          # tries still fails, which is the direction this has to fail in.
-          #
-          # The body is READ rather than piped straight into jq: a reply that is
-          # not JSON reported a jq parse error, which tells a reader that the
-          # JSON was not JSON and nothing whatever about what came back.
-          kms_body=$(mktemp)
-          kms_attempt=1
-          while :; do
-            kms_code=$(curl -sS -m 30 -o "$kms_body" -w '%{http_code}' "${KMS_ENDPOINT}/v1/kms/auth/login" \
-              -H 'Content-Type: application/json' \
-              -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" || true)
-            kms_code=${kms_code:-000}
-            case "$kms_code" in
-              000|429|502|503|504) : ;;
-              *) break ;;
-            esac
-            if [ "$kms_attempt" -ge 3 ]; then break; fi
-            echo "kms: ${KMS_ENDPOINT} answered ${kms_code}, which is no answer; asking again (${kms_attempt} of 3)"
-            sleep $(( kms_attempt * 3 ))
-            kms_attempt=$(( kms_attempt + 1 ))
-          done
-          KMS_TOKEN=$(jq -r '.accessToken // empty' < "$kms_body" 2>/dev/null || true)
-          [ -n "$KMS_TOKEN" ] || echo "kms: ${KMS_ENDPOINT} answered ${kms_code} — $(head -c 200 "$kms_body")"
-          rm -f "$kms_body"
-          [ -n "$KMS_TOKEN" ] || { echo "::error::review: KMS login failed at ${KMS_ENDPOINT} — the reviewer cannot be given a credential, so the change cannot pass"; exit 1; }
-
-          kms_secret() {
-            curl -sS "${KMS_ENDPOINT}/v1/kms/secrets/review/$1?env=${KMS_SECRET_ENV}" \
-              -H "Authorization: Bearer ${KMS_TOKEN}" \
-              | jq -r '.value // .secret.value // empty' || true
+          # ONE HOST, the one this job already talks to. The token below is
+          # IAM's — /v1/kms/auth/login is a client_credentials grant proxied to
+          # the issuer, and KMS signs nothing and hands back what IAM minted, so
+          # the reviewer still presents an IAM-signed token for one audience.
+          # Going to the issuer directly would work and would also add a
+          # destination this job reaches while holding secret material, which is
+          # a wider job for no more authority.
+          login() {
+            jq -Rsj --arg id "$1" '{clientId: $id, clientSecret: rtrimstr("\n")}' \
+              | curl -sS --max-time 30 "${KMS_ENDPOINT}/v1/kms/auth/login" \
+                  -H 'content-type: application/json' --data-binary @- \
+              | jq -r '.accessToken // empty'
           }
-          IAM_CLIENT_ID=$(kms_secret IAM_CLIENT_ID)
-          IAM_CLIENT_SECRET=$(kms_secret IAM_CLIENT_SECRET)
-          echo "::add-mask::${IAM_CLIENT_SECRET}"
-          [ -n "$IAM_CLIENT_ID" ] && [ -n "$IAM_CLIENT_SECRET" ] || {
-            echo "::error::review: the hanzo-review client credential is missing from KMS at review/IAM_CLIENT_ID + review/IAM_CLIENT_SECRET (env ${KMS_SECRET_ENV}, org from the KMS credential). Create the \`hanzo-review\` SERVICE application in IAM and store its credential there — the reviewer mints its own bearer and holds no stored key."; exit 1; }
 
-          # client_secret_basic, per HIP-0111. The token is short-lived by
-          # construction, so there is nothing here for a rotation to miss.
-          REVIEW_TOKEN=$(curl -sS "${IAM_ENDPOINT}/v1/iam/oauth/token" \
-            -u "${IAM_CLIENT_ID}:${IAM_CLIENT_SECRET}" \
-            -d 'grant_type=client_credentials' \
-            | jq -r '.access_token // empty' || true)
+          # ASKED AGAIN BEFORE IT IS BELIEVED. This login leaves the cluster and
+          # comes back through a CDN, so one attempt makes a release depend on a
+          # single packet, and an empty answer there is the absence of a reply
+          # rather than a refusal. Retrying re-runs the whole pipeline instead of
+          # re-reading a buffered copy, so nothing has to be held to try twice.
+          again() {
+            local attempt=1 out=
+            while :; do
+              out=$("$@" || true)
+              [ -n "$out" ] && { printf %s "$out"; return 0; }
+              [ "$attempt" -ge 3 ] && return 1
+              sleep $(( attempt * 3 ))
+              attempt=$(( attempt + 1 ))
+            done
+          }
+
+          kms_login() { printf %s "$KMS_CLIENT_SECRET" | login "$KMS_CLIENT_ID"; }
+          KMS_TOKEN=$(again kms_login || true)
+          [ -n "$KMS_TOKEN" ] || { echo "::error::review: KMS login failed at ${KMS_ENDPOINT} — the reviewer's identity cannot be read, so the change does not pass"; exit 1; }
+
+          # No org in a KMS path: the store root comes from the validated claim,
+          # so this reads the KMS credential's OWN org and cannot name another's.
+          # The secret is never a value here — it is piped from the store into
+          # the grant that spends it.
+          mint_review() {
+            curl -sS --max-time 30 \
+                "${KMS_ENDPOINT}/v1/kms/secrets/iam/clients/${REVIEW_CLIENT}?env=${KMS_SECRET_ENV}" \
+                -H "Authorization: Bearer ${KMS_TOKEN}" \
+              | jq -r '.value // .secret.value // empty' \
+              | login "$REVIEW_CLIENT"
+          }
+          REVIEW_TOKEN=$(again mint_review || true)
           export REVIEW_TOKEN
-          [ -n "$REVIEW_TOKEN" ] || { echo "::error::review: IAM refused client_credentials for hanzo-review at ${IAM_ENDPOINT} — the reviewer cannot be given a bearer, so the change cannot pass"; exit 1; }
-          echo "::add-mask::${REVIEW_TOKEN}"
+          [ -n "$REVIEW_TOKEN" ] || { echo "::error::review: no access token was issued to ${REVIEW_CLIENT} — store that client's secret in KMS at iam/clients/${REVIEW_CLIENT} (env ${KMS_SECRET_ENV}, org from the KMS credential); the reviewer cannot be reached, so the change does not pass"; exit 1; }
           base="${{ github.event.before }}"
           # MEASURED, because this comment used to say the opposite and the
           # opposite is what a reader plans against. On run 90908 Hanzo Git DID
