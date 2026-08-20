@@ -164,7 +164,8 @@
             },
             "description": "service unavailable"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/meet/session": {

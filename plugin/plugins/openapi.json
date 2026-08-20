@@ -83,7 +83,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/plugins/{name}/disable": {
@@ -140,7 +141,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/plugins/{name}/enable": {
@@ -197,7 +199,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/plugins/{name}/reload": {
@@ -256,7 +259,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

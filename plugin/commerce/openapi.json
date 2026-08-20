@@ -62,7 +62,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/billing/accounts": {
@@ -268,7 +269,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/billing/invoices/{id}": {
@@ -301,7 +303,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/billing/invoices/{id}/collect": {
@@ -334,7 +337,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/billing/invoices/{id}/issue": {
@@ -367,7 +371,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/billing/invoices/{id}/pdf": {
@@ -420,7 +425,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/billing/methods": {
@@ -718,7 +724,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cart/{id}": {
@@ -751,7 +758,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cart/{id}/discard": {
@@ -784,7 +792,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/cart/{id}/item": {
@@ -827,7 +836,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/catalog/entries": {
@@ -2855,7 +2865,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/payments/{id}": {
@@ -2888,7 +2899,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/plans/entries": {
