@@ -324,6 +324,39 @@ func TestLaunchArtifactBuild_SharesTheBuildCeiling(t *testing.T) {
 	}
 }
 
+// launchArtifactBuild clones from an allowlisted git host over https, the same
+// rule launchBuildJob and launchDirectBuild state. It holds at the constructor,
+// so it does not depend on which caller reached it.
+func TestLaunchArtifactBuild_ClonesAnAllowedSource(t *testing.T) {
+	bins := []binarySpec{{Name: "x", Main: ".", Platforms: []string{"linux/amd64"}, Image: defaultToolchainImage}}
+	refused := []struct{ name, repo, ref string }{
+		{"another host", "https://evil.example.com/hanzoai/cloud", "v1"},
+		{"a host the allowlist only suffixes", "https://evil-github.com/hanzoai/cloud", "v1"},
+		{"a host the allowlist only prefixes", "https://github.com.evil.tld/hanzoai/cloud", "v1"},
+		{"plaintext", "http://github.com/hanzoai/cloud", "v1"},
+		{"embedded credentials", "https://u:p@github.com/hanzoai/cloud", "v1"},
+		{"the loopback", "https://127.0.0.1/hanzoai/cloud", "v1"},
+		{"instance metadata", "https://169.254.169.254/latest/meta-data", "v1"},
+		{"a shell metacharacter", "https://github.com/hanzoai/cloud;id", "v1"},
+		{"an abbreviated commit", "https://github.com/hanzoai/cloud", "abc1234"},
+		{"a traversing ref", "https://github.com/hanzoai/cloud", "../../etc"},
+	}
+	for _, tc := range refused {
+		k := fakeK8s()
+		if _, err := k.launchArtifactBuild(context.Background(), tc.repo, tc.ref, "v1", "https://s3/x", "http://s3/x", bins, "bld_x"); err == nil {
+			t.Fatalf("%s: launched a build from %q@%q", tc.name, tc.repo, tc.ref)
+		}
+		list, _ := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).List(context.Background(), metav1.ListOptions{})
+		if len(list.Items) != 0 {
+			t.Fatalf("%s: %d Jobs created for a source it refused", tc.name, len(list.Items))
+		}
+	}
+	k := fakeK8s()
+	if _, err := k.launchArtifactBuild(context.Background(), "https://github.com/hanzoai/cloud", "v1.2.3", "v1.2.3", "https://s3/x", "http://s3/x", bins, "bld_ok"); err != nil {
+		t.Fatalf("an ordinary source: %v", err)
+	}
+}
+
 func write(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
