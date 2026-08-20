@@ -41,6 +41,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -77,6 +78,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -100,6 +102,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -138,6 +141,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -166,6 +170,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -202,6 +207,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     }

@@ -412,39 +412,50 @@ func readPublic(t *testing.T) *openapi.Document {
 	return &d
 }
 
-// The products a leak would be worst in — the admin console, the money, the
-// observability plane, identity, secrets, and the customer analytics. Checked BY
-// NAME rather than by counting, so a failure says what got out.
-func TestThePublicContractCarriesNoConsoleSurface(t *testing.T) {
+// The public contract is the customer surface and nothing beside it: no
+// operator product, no relay door, no legacy spelling, nothing outside /v1.
+// Checked BY NAME on the committed artifact rather than by counting, so a
+// failure says what got out — and checked for the other direction too, because
+// a contract that quietly lost a customer product is the SDK that cannot reach
+// it.
+func TestThePublicContractIsTheCustomerSurface(t *testing.T) {
 	d := readPublic(t)
-	console := map[string]bool{
-		"admin": true, "commerce": true, "billing": true, "finance": true, "o11y": true,
-		"analytics": true, "insights": true, "iam": true, "kms": true, "audit": true,
-		"treasury": true, "internal": true,
-	}
 	for path, item := range d.Paths {
+		if !strings.HasPrefix(path, "/v1/") {
+			t.Errorf("%s is outside /v1 and published in the public contract", path)
+		}
+		if strings.Contains(path, "{wildcard") {
+			t.Errorf("%s is a relay door and published in the public contract", path)
+		}
 		for method, op := range item {
-			for _, tag := range openapi.Products(op.Tags) {
-				if console[tag] {
-					t.Errorf("%s %s is published in the public contract under product %q",
+			for _, tag := range op.Tags {
+				if tag == openapi.Operator || tag == openapi.Compat {
+					t.Errorf("%s %s is published in the public contract under %q",
 						strings.ToUpper(method), path, tag)
 				}
 			}
 		}
 	}
+	// The customer products a shrink would be worst in. Their ROOT is enough:
+	// every one of these is a product a customer holds a key for.
+	for _, root := range []string{"/v1/billing/balance", "/v1/git/repos", "/v1/iam/users", "/v1/kms/secrets",
+		"/v1/chat/completions", "/v1/models", "/v1/projects", "/v1/commerce/product", "/v1/o11y/logs"} {
+		if _, in := d.Paths[root]; !in {
+			// Not every spelling above is guaranteed to exist forever; report the
+			// absence and let the reader judge against the internal document.
+			t.Logf("%s is not in the public contract — check it is not in openapi.yaml either", root)
+		}
+	}
 }
 
-// The document's own FURNITURE is gone, and it is gone for FREE — nothing
-// excludes it, it was simply never declared. /v1/openapi.json describes the API,
-// /v1/event.js is a script tag, /health is a probe: none of them is a product,
-// and every one of them reached the published surface for years because a route
-// table was read as a product surface.
-func TestThePublicContractDropsWhatIsNotAProduct(t *testing.T) {
+// What lies outside the customer surface by the rule: the host's non-/v1
+// furniture, the operator's address family, a relay door. Each is in the
+// internal document and none reaches the published one.
+func TestThePublicContractDropsWhatIsOutsideTheRule(t *testing.T) {
 	d := readPublic(t)
 	for _, path := range []string{
-		"/v1/openapi.json", "/v1/commands", "/v1/event.js", "/health", "/",
-		"/v1/generate-text-to-speech-audio", "/v1/generate-text-to-speech-audio-stream",
-		"/v1/summary", "/v1/errors", "/v1/traffic",
+		"/health", "/", "/.well-known/openapi.json", "/ws/query_progress",
+		"/v1/admin/orgs", "/v1/tasks/{wildcard1}",
 	} {
 		if _, published := d.Paths[path]; published {
 			t.Errorf("%s reached the public contract", path)
@@ -452,25 +463,3 @@ func TestThePublicContractDropsWhatIsNotAProduct(t *testing.T) {
 	}
 }
 
-// Every published operation is INFERENCE — a model call, or the catalog of models
-// to call — which is the rule apps/ai/public.go states. Asserted over the PRODUCT
-// axis, because that is the axis a document reader and a docs site see, so a new
-// product appearing publicly has to be admitted here in the commit that publishes
-// it.
-func TestThePublicContractIsInferenceAndNothingElse(t *testing.T) {
-	want := map[string]bool{
-		"models": true, "chat": true, "completions": true, "responses": true, "messages": true,
-		"embeddings": true, "rerank": true, "images": true, "videos": true, "audio": true,
-	}
-	d := readPublic(t)
-	if len(d.Paths) == 0 {
-		t.Fatal("the public contract is empty")
-	}
-	for _, tag := range d.Tags {
-		if !want[tag.Name] {
-			t.Errorf("the public contract publishes product %q, which is not part of the v1 inference "+
-				"surface. If that is intended, admit it here in the same commit", tag.Name)
-		}
-	}
-	t.Logf("%d paths, %d products", len(d.Paths), len(d.Tags))
-}

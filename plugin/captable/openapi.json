@@ -44,6 +44,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -52,7 +53,8 @@
         "description": "Creates a class of stock — its authorized share count, votes per share, par and issue price, seniority, conversion rights and liquidation/participation multiples — which is what shares, priced rounds and equity plans are then issued against.\n\nTwo fields are the company's to assign, not the caller's: the class index auto-increments per company, and the certificate prefix is DERIVED from the class type (CS for COMMON, PS for anything else), so a prefix in the body is ignored.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
           "captable"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/captable/classes/{id}": {
@@ -72,7 +74,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/captable/company": {
@@ -95,6 +98,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "put": {
@@ -126,6 +130,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -149,6 +154,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -157,7 +163,8 @@
         "description": "Records a convertible note held by a stakeholder: the principal, the conversion cap, discount and interest rate, MFN, and the issue and board-approval dates.\n\nThe stakeholder must already exist in this company, and the note's public id must be unused there — a reused id is a conflict rather than an overwrite. Like a SAFE, this records the instrument only; conversion is not performed here.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
           "captable"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/captable/convertibles/{id}": {
@@ -191,6 +198,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -214,6 +222,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -237,6 +246,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -245,7 +255,8 @@
         "description": "Records an option grant to a stakeholder under an equity plan — quantity, exercise price, ISO/NSO type, cliff and vesting years, and the issue, expiration, vesting-start, board-approval and Rule 144 dates.\n\nThe stakeholder and the equity plan must both already exist in this company, and the grant id must be unused there — a reused grant id is a conflict, so a grant can never be overwritten by a later one carrying the same number.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
           "captable"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/captable/options/{id}": {
@@ -279,6 +290,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -302,6 +314,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -310,7 +323,8 @@
         "description": "Reserves a pool of shares out of a share class for option grants, with the board approval and effective dates and what happens to cancelled options.\n\nThe share class must already exist in this company — a plan cannot reserve out of nothing. Note the field name the bundle reads for the cancellation behaviour is `defaultCancellatonBehavior`; that spelling is the wire, and a correctly spelled key is simply not seen.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
           "captable"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/captable/rounds": {
@@ -333,6 +347,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -341,7 +356,8 @@
         "description": "Opens a round with its name, type and target amount. It starts OPEN with nothing raised; investments are then added to it, and closing it is its own call.\n\nA PRICED round is the constrained case: it requires a share class that exists in this company and a price per share above zero, because that price is what converts each investment into issued shares. Its pre-money valuation is optional. A non-priced round carries none of the three.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
           "captable"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/captable/rounds/{id}": {
@@ -375,6 +391,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -419,6 +436,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -439,7 +457,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/captable/safes": {
@@ -462,6 +481,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -470,7 +490,8 @@
         "description": "Records a Simple Agreement for Future Equity held by a stakeholder: the capital in, the valuation cap and discount, MFN and pro-rata rights, pre- or post-money type, and the issue and board-approval dates.\n\nThe stakeholder must already exist in this company, and the SAFE's public id must be unused there — a reused id is a conflict rather than an overwrite. This records the instrument; it does not convert it, so nothing is issued against a share class until a round does that.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
           "captable"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/captable/safes/{id}": {
@@ -504,6 +525,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -527,6 +549,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -535,7 +558,8 @@
         "description": "Issues shares of a class to a stakeholder as a certificate: quantity, price and capital contributed, the vesting cliff and term, the legends on the certificate, and the issue, Rule 144, vesting-start and board-approval dates.\n\nBoth the stakeholder and the share class must already exist in this company, and the certificate id must be unused there — a reused id is a conflict, never a silent overwrite of an existing certificate.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
           "captable"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/captable/shares/transfer": {
@@ -545,7 +569,8 @@
         "description": "Moves shares from one certificate to another stakeholder, in one atomic step.\n\nOMITTING `quantity` transfers the WHOLE certificate, which simply reassigns it and answers newShareId null — that is the difference between a full and a partial transfer, and it is why quantity is absent rather than zero. A partial transfer shrinks the source certificate and issues a NEW one to the recipient, so it requires a `certificateId` for that new certificate and refuses a reused one. The quantity must be between 1 and what the source certificate actually holds; the recipient must be a stakeholder of this same company.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
           "captable"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/captable/shares/{id}": {
@@ -579,6 +604,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -605,6 +631,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -613,7 +640,8 @@
         "description": "Records the people and institutions that can hold equity — the rows every share, option, SAFE, note and investment is issued to.\n\nThe body is ONE stakeholder object or an ARRAY of them, and the array is the point: a whole roster loads in a single call. Email is the identity within the company, so a stakeholder whose email is already on the table is SKIPPED rather than duplicated or rejected — the 201 reports how many rows were actually inserted, which is what makes re-running an import safe. Validation is all-or-nothing across the batch: one bad entry refuses the whole array.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
         "tags": [
           "captable"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/captable/stakeholders/{id}": {
@@ -647,6 +675,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -689,6 +718,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -712,6 +742,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     }

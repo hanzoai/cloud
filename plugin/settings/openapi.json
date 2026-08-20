@@ -52,6 +52,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "put": {
@@ -94,6 +95,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     }
