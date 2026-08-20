@@ -42,6 +42,14 @@ package sandbox
 //	        to git.<brand> and to nothing else a checkout might point at.
 //	kubectl reads a FILE and KUBECONFIG names its path, so the SuperAdmin's
 //	        kubeconfig is written into the pod.
+//	doctl   reads a FILE too, under $XDG_CONFIG_HOME, so the DigitalOcean token
+//	        goes the same way. It used to be the one exception, on the grounds that
+//	        doctl wants an environment variable — which is not true, and the cost
+//	        of believing it was the platform's own provider token sitting in a Pod
+//	        spec, in etcd and in every `kubectl describe`, for the life of a lease.
+//	        Measured before changing it: with the file and no variable doctl
+//	        authenticates; with the variable removed and the file taken away it
+//	        refuses with "access token is required". The file is the authority.
 //
 // THE SUPERADMIN'S OWN SHELL IS THE ONE THAT GETS MORE. `admin` below is the one
 // predicate deciding both which bytes the pod boots and whether it also holds the
@@ -83,6 +91,14 @@ const home = "/home/sandbox"
 // kubePath is where kubectl is TOLD to look, for the same reason.
 const kubePath = home + "/.kube/config"
 
+// configHome and doctlPath are the same fact for doctl. It reads its credential
+// from a file under $XDG_CONFIG_HOME, so the credential can travel the way every
+// other one here does and only the PATH has to be stated in the spec.
+const (
+	configHome = home + "/.config"
+	doctlPath  = configHome + "/doctl/config.yaml"
+)
+
 // admin is the ONE combination that is a SuperAdmin's own shell: platform sudo,
 // asking for the class that has a toolchain to spend credentials with.
 //
@@ -102,12 +118,18 @@ type cred struct {
 	// exec channel and this file never writes the CLI's store format — the tool
 	// that owns the store writes it.
 	session iam.Session
-	// env reaches the pod in its spec, because that is where doctl looks. Empty for
-	// every lease but a SuperAdmin's own, so the ordinary Pod spec states no `env`.
+	// env reaches the pod in its spec, so nothing in it is a credential — only the
+	// two PATHS that tell kubectl and doctl where to look. Empty for every lease
+	// but a SuperAdmin's own, so the ordinary Pod spec states no `env`.
 	env map[string]string
 	// kube reaches the pod through the exec channel, because kubectl reads a file
 	// and no Kubernetes object should hold a cluster-admin credential.
 	kube []byte
+	// doctl is the same, and for a sharper reason: this token is the platform's
+	// own, it is not scoped to a lease, and DigitalOcean accepts it at the
+	// inference endpoint as well as the control plane — so a copy of it in a Pod
+	// spec is uncapped model spend readable by anything that can get a pod.
+	doctl []byte
 }
 
 // sessionFor exchanges the caller's own token for one bound to this lease.
@@ -255,14 +277,26 @@ func credFor(ctx context.Context, log luxlog.Logger) (cred, error) {
 	}
 	return cred{
 		env: map[string]string{
-			// doctl's own name for it, which is the whole reason this one is an
-			// env var rather than a file.
-			"DIGITALOCEAN_ACCESS_TOKEN": token,
-			// And ours, so a script run in this shell reads the same name it
-			// reads everywhere else in the fleet.
-			"DO_API_TOKEN": token,
-			"KUBECONFIG":   kubePath,
+			// Both of these are PATHS. An exec session carries no HOME, so each
+			// tool has to be told where its own credential is; neither value is
+			// the credential, so the Pod spec still states no secret.
+			"KUBECONFIG":      kubePath,
+			"XDG_CONFIG_HOME": configHome,
 		},
-		kube: kube,
+		kube:  kube,
+		doctl: doctlConfig(token),
 	}, nil
+}
+
+// doctlConfig is the credential in the shape doctl reads it. It exists so the
+// token can travel the exec channel with the kubeconfig instead of riding the Pod
+// spec, which is what the rest of this file already does and what the header
+// states as the rule.
+//
+// The file is the whole authority: with it and no token in the environment, doctl
+// authenticates; without it, doctl refuses with "access token is required". So
+// this is not a second copy of a credential that is also somewhere else — it is
+// the only one the pod gets.
+func doctlConfig(token string) []byte {
+	return []byte("access-token: " + token + "\n")
 }
