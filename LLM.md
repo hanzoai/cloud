@@ -3526,7 +3526,7 @@ what went wrong.
 
 | Header | Predicate | Means |
 |---|---|---|
-| `X-User-IsAdmin` | `authz.Claims.PlatformSudo` | a HUMAN who is a MEMBER of the reserved `admin` org, **at any position** in `orgs` |
+| `X-User-IsAdmin` | `authz.Claims.Sudo` | a HUMAN who is a MEMBER of the reserved `admin` org, **at any position** in `orgs` |
 | `X-User-IsOrgAdmin` | `authz.Claims.OrgAdmin(effOrg)` | admin/owner role in the org the request ACTS in. Never platform authority |
 
 Narrowed in `auth_identity.go` by the one denial only cloud can make — the per-org
@@ -3556,7 +3556,7 @@ Honoring it widens nothing: IAM already guards the grant as platform authority o
 the write side (`memberships.mayGrant` refuses a membership into a reserved org
 unless the caller is already a SuperAdmin, because it "seeds admin-org (SuperAdmin)
 tenancy"). A grant the issuer treats as sudo must not be inert at the resource
-server. `TestPlatformSudoIsMembershipNotPosition` pins it with z's real membership
+server. `TestSudoIsMembershipNotPosition` pins it with z's real membership
 set; its negative cases (admin of every brand org but no reserved membership, a
 look-alike `"Admin"`, an empty set) pass under both predicates, which is how the
 change is shown to grant nothing new.

@@ -33,14 +33,14 @@ import (
 	"github.com/hanzoai/authz"
 )
 
-// TestPlatformSudoIsMembershipNotPosition drives real JWKS-validated tokens
+// TestSudoIsMembershipNotPosition drives real JWKS-validated tokens
 // through SanitizeIdentity and reads the X-User-IsAdmin a downstream gate sees.
 //
 // The load-bearing case is "operator anchored in a brand org": it FAILS against a
 // homeOrg/Orgs[0] predicate and passes against a set-membership one. Every other
 // case pins that widening nothing else: a member of no reserved org gets nothing
 // no matter how many orgs they hold or what role they hold in them.
-func TestPlatformSudoIsMembershipNotPosition(t *testing.T) {
+func TestSudoIsMembershipNotPosition(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
@@ -147,12 +147,12 @@ func TestPlatformSudoIsMembershipNotPosition(t *testing.T) {
 	}
 }
 
-// TestPlatformSudoDoesNotRideTheAppOrg pins that the grant reads the SUBJECT's
+// TestSudoDoesNotRideTheAppOrg pins that the grant reads the SUBJECT's
 // membership set and never the `owner` claim, which IAM stamps with the
 // APPLICATION's org. Signing in through an admin-org-owned app must not confer
 // platform authority on a user who holds no reserved membership — otherwise the
 // authority is a property of whichever client you logged in through.
-func TestPlatformSudoDoesNotRideTheAppOrg(t *testing.T) {
+func TestSudoDoesNotRideTheAppOrg(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
