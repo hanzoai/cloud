@@ -25,7 +25,9 @@
 // GITHUB_OUTPUT reads, so the same bytes serve this job and every job after it with
 // nothing in between to translate them. The values are constants of this program.
 //
-// FORGE_TOKEN authenticates the read.
+// GIT_TOKEN authenticates the read — the forge credential the claim step already
+// carries, read here rather than introduced under a second name, and sent by Verify
+// as a header rather than URL userinfo.
 package main
 
 import (
@@ -44,7 +46,7 @@ func main() {
 	sha := os.Args[1]
 
 	a := lineage.Cloud
-	if err := a.Verify(context.Background(), os.Getenv("FORGE_TOKEN"), sha); err != nil {
+	if err := a.Verify(context.Background(), os.Getenv("GIT_TOKEN"), sha); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
