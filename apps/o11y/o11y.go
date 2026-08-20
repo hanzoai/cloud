@@ -64,7 +64,7 @@ import (
 )
 
 // The prose for the operations this package serves but does not OWN the shape of:
-// the three native service probes hanzoai/o11y registers, and the /v1/sentry
+// the three native service probes hanzoai/o11y registers, and the /v1/sentinel
 // wildcard this file registers itself. Neither has an operation to type — a probe
 // is a bare handler and a wildcard is a wildcard — so zipdoc has nothing to lift,
 // and without a Describe they publish an operationId and nothing else. Declared
@@ -202,7 +202,7 @@ func init() {
 			"THE /api/ SEGMENT IS NOT OURS TO NAME. An SDK appends its own fixed "+
 			"/api/<project>/envelope/ suffix to whatever DSN it is given, so this address is "+
 			"the SDK's, received verbatim. We receive this shape; we do not publish it. The "+
-			"clean spelling of the same wire is /v1/sentry/{project}/envelope/.\n\n"+
+			"clean spelling of the same wire is /v1/sentinel/{project}/envelope/.\n\n"+
 			"AUTHENTICATED BY THE DSN PUBLIC KEY, never a Hanzo session, and therefore exempt "+
 			"from the principal gate: the ingest verifier checks the key in constant time, "+
 			"fails closed, and derives the org from it. A keyless submission is a 401 from that "+
@@ -216,24 +216,26 @@ func init() {
 			"Same address ownership and same authentication as the envelope route — the "+
 			"/api/ segment is the SDK's, the DSN public key is the credential, the principal "+
 			"gate does not apply, and a keyless submission is a 401 from the ingest verifier.")
-	openapi.Describe("/v1/sentry/:project/envelope/", http.MethodPost,
-		"Receive a Sentry envelope on the clean root",
-		"The same envelope ingest as the DSN path, spelled the way this platform names "+
-			"things: one /v1/, the product, the project. Point an SDK's DSN here and the wire "+
-			"is identical.\n\n"+
-			"AUTHENTICATED BY THE DSN PUBLIC KEY and exempt from the principal gate for the "+
-			"same reason — a Sentry SDK has no Hanzo session to present. The project segment is "+
-			"a UUID enforced by the route, and the exemption matches method plus prefix plus "+
-			"suffix, so every Sentry READ (issues, discover, events, logs, traces, stats) stays "+
-			"gated.")
-	openapi.Describe("/v1/sentry/:project/store/", http.MethodPost,
-		"Receive a single Sentry event on the clean root",
-		"The legacy single-event ingest on the clean /v1/sentry root — one JSON event rather "+
-			"than a framed batch. Same DSN-key authentication, same gate exemption, same "+
-			"UUID-enforced project segment as the envelope route beside it.")
-
-	// --- /v1/sentry/* — the Sentry product face over the SAME runtime ---
-	openapi.Describe("/v1/sentry/*", http.MethodGet,
+	openapi.Describe("/v1/sentinel/:project/envelope/", http.MethodPost,
+		"Receive a Sentry envelope on the runtime's ingest hatch",
+		"The runtime's own ingest address for a Sentry envelope frame, kept under this root "+
+			"because that is where the module registers it.\n\n"+
+			"THE DOOR A CLIENT SHOULD USE IS /v1/event/{project}/envelope. That is what a minted "+
+			"DSN addresses and what @hanzo/event posts to, and it carries the same wire to the "+
+			"same sink. This address answers identically; it is the second spelling of one wire "+
+			"and it is on its way out.\n\n"+
+			"AUTHENTICATED BY THE DSN PUBLIC KEY, never a Hanzo session, so it is exempt from the "+
+			"principal gate — a reporting SDK has no session to present. The project segment is a "+
+			"UUID enforced by the route, and the exemption matches method plus prefix plus suffix, "+
+			"so every Sentinel READ (issues, discover, events, logs, traces, stats) stays gated.")
+	openapi.Describe("/v1/sentinel/:project/store/", http.MethodPost,
+		"Receive a single event on the runtime's ingest hatch",
+		"The legacy single-event form of the envelope ingest — one JSON event rather than a "+
+			"framed batch — kept because SDKs in the field still send it.\n\n"+
+			"Same address ownership and same authentication as the envelope route beside it, and "+
+			"the same advice: point a client at /v1/event/{project}/store, which is the one door.")
+	// --- /v1/sentinel/* — the Sentry product face over the SAME runtime ---
+	openapi.Describe("/v1/sentinel/*", http.MethodGet,
 		"Read the caller org's errors on the Sentry surface",
 		"Serves the Sentry-compatible read surface — projects, error issues and one issue's "+
 			"occurrences, a single event, error logs, error-correlated traces and one trace's "+
@@ -248,7 +250,7 @@ func init() {
 			"and there is deliberately no admin term on it — gating the product on platform "+
 			"sudo would make the only way to see your own errors a scope that shows you "+
 			"everyone's. Before the runtime is initialized, 503.")
-	openapi.Describe("/v1/sentry/*", http.MethodPost,
+	openapi.Describe("/v1/sentinel/*", http.MethodPost,
 		"Send events to the Sentry surface, or write on it",
 		"Carries every write on the Sentry-compatible surface: the SDK's error ingest, and "+
 			"the authenticated writes the console makes — creating a project, rotating a "+
@@ -263,7 +265,7 @@ func init() {
 			"The ingest exemption is matched by method plus prefix plus suffix, never a bare "+
 			"prefix, and the project segment must be a UUID — so no read is reachable through "+
 			"it. Before the runtime is initialized, 503.")
-	openapi.Describe("/v1/sentry/*", http.MethodPut,
+	openapi.Describe("/v1/sentinel/*", http.MethodPut,
 		"Move an error issue through its lifecycle",
 		"The one replace on the Sentry surface: updating an error ISSUE — resolving it, "+
 			"ignoring it, or assigning it — and answering the updated issue.\n\n"+
@@ -274,7 +276,7 @@ func init() {
 			"The write is confined to the org minted from that principal's claim, so an issue "+
 			"id belonging to another tenant is simply not found. Before the runtime is "+
 			"initialized, 503.")
-	openapi.Describe("/v1/sentry/*", http.MethodPatch,
+	openapi.Describe("/v1/sentinel/*", http.MethodPatch,
 		"Not served — the Sentry surface has no partial update",
 		"The Sentry face carries NO route for a partial update. The wildcard admits every "+
 			"method, so this operation exists as an address, but nothing behind it answers and "+
@@ -284,7 +286,7 @@ func init() {
 			"REPLACE on that issue, not a patch, and it is the only mutable state on this "+
 			"surface. A client that reaches for a partial update here is looking for that "+
 			"call.")
-	openapi.Describe("/v1/sentry/*", http.MethodDelete,
+	openapi.Describe("/v1/sentinel/*", http.MethodDelete,
 		"Delete a Sentry project",
 		"The one delete on the Sentry surface: removing a PROJECT, answering 204. Error "+
 			"issues, events and traces are not individually deletable — they are append-only "+
@@ -299,7 +301,7 @@ func init() {
 	// something. DescribeRest covers the remainder from the generator's own set, so a
 	// method added there is covered the day it appears rather than published bare —
 	// which is what a hand-copied list here had already produced for OPTIONS and TRACE.
-	openapi.DescribeRest("/v1/sentry/*",
+	openapi.DescribeRest("/v1/sentinel/*",
 		"Not served by the Sentry face",
 		"Published because this address accepts every method, but the Sentry face routes "+
 			"nothing here: the request reaches the runtime as an unrouted path and no issue, "+
@@ -470,7 +472,7 @@ func orgOf(r *http.Request) string { return strings.TrimSpace(r.Header.Get("X-Or
 // here for having no token; both sides read the same predicate now instead of
 // two lists that agreed only by inspection. The three answers are still how you
 // tell the hops apart if this regresses: a keyless POST to
-// /v1/sentry/<uuid>/envelope/ answers 401 "invalid ingest key" (text/plain, from
+// /v1/sentinel/<uuid>/envelope/ answers 401 "invalid ingest key" (text/plain, from
 // the ingest verifier) — NOT 404 (unrouted), and NOT the 403
 // {"status":"error","msg":"no validated principal"} the READ paths return.
 
@@ -531,16 +533,24 @@ func mountRuntime(deps cloud.Deps) error {
 	return nil
 }
 
-// mountSentry registers the /v1/sentry/* wildcard, forwarding every request to the
+// mountSentinel registers the /v1/sentinel/* wildcard, forwarding every request to the
 // gated runtime handler (resolved PER-REQUEST, so it is in place by first request —
-// same discipline as the o11y wildcard). No path rewrite: the Sentry routes are
-// literal /v1/sentry/… in the runtime. The DSN-ingest routes are principal-gate-exempt
-// (module.IngestWire); the reads stay gated.
+// same discipline as the o11y wildcard). No path rewrite: the Sentinel routes are
+// literal /v1/sentinel/… in the runtime. The reads stay principal-gated.
 //
-// Raw: it carries Sentry's own protocol — DSN-keyed envelope frames, a third
-// party's shape — through a wildcard that has no single operation to type.
-func mountSentry(a cloud.Router) {
-	a.All("/v1/sentry/*", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// Sentinel is the FACE — issues, projects, stats, traces, the reads a signed-in
+// person makes. The one door a beacon lands on is /v1/event, and that is what a
+// minted DSN addresses.
+//
+// The runtime's ingest hatch is still spelled under this root, so the two
+// envelope/store operations below it remain reachable here as well. That is one
+// wire at two addresses and it is NOT finished: refusing them at THIS wildcard
+// does not close them, because the module registers them as concrete routes and
+// fiber resolves most-specific first — the wildcard is never consulted for a path
+// that matched. Closing it means moving the hatch off the face root in
+// hanzoai/o11y, which is a route move plus a tag plus a pin, not a guard here.
+func mountSentinel(a cloud.Router) {
+	a.All("/v1/sentinel/*", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := runtimeHandler
 		if h == nil {
 			http.Error(w, "o11y runtime not initialized", http.StatusServiceUnavailable)
@@ -551,15 +561,19 @@ func mountSentry(a cloud.Router) {
 }
 
 // eventToRuntimePath maps the Sentry wire on the ONE /v1/event door to its
-// runtime route: POST /v1/event/<project>/envelope|store(/) onto the clean
-// /v1/sentry ingest routes. ok=false for anything else — the mapping carries
-// ingest ONLY, so no READ API is reachable through it.
+// runtime route: POST /v1/event/<project>/envelope|store(/) onto the runtime's
+// own ingest hatch. ok=false for anything else — the mapping carries ingest ONLY,
+// so no READ API is reachable through it.
+//
+// The hatch is spelled under the runtime's sentinel root, and that is an INTERNAL
+// address: the public door is /v1/event and this is the one function that knows
+// what it lands on.
 func eventToRuntimePath(method, path string) (string, bool) {
 	rest, found := strings.CutPrefix(path, "/v1/event/")
 	if !found {
 		return "", false
 	}
-	mapped := "/v1/sentry/" + rest
+	mapped := "/v1/sentinel/" + rest
 	return mapped, module.IngestWire(method, mapped)
 }
 
@@ -625,7 +639,7 @@ func eventToRuntimePath(method, path string) (string, bool) {
 // [zip.App.Declaration] drops HEAD and OPTIONS unconditionally — they are the
 // shadows fiber generates for a GET and for CORS, and a host does not route those
 // on their own. A door opened with All therefore cannot cross a graft intact:
-// OPTIONS is a METHOD the /v1/sentry proxy genuinely answers, and it is published
+// OPTIONS is a METHOD the /v1/sentinel proxy genuinely answers, and it is published
 // as an operation. So that one door is registered on the HOST, at the same point
 // in the same order it always was, and it costs nothing here because a wildcard
 // proxy declares no typed op and contributes no schema. Everything with a shape
@@ -653,8 +667,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err := mountRuntime(deps); err != nil {
 		return err
 	}
-	// Hanzo Sentry product face /v1/sentry/* — the SIBLING of the /v1/o11y wildcard,
-	// delegating to the SAME gated runtime handler (which carries the clean /v1/sentry
+	// Hanzo Sentry product face /v1/sentinel/* — the SIBLING of the /v1/o11y wildcard,
+	// delegating to the SAME gated runtime handler (which carries the clean /v1/sentinel
 	// routes; the DSN-ingest routes are gate-exempt via module.IngestWire). One
 	// runtime, two path families.
 	//
@@ -662,17 +676,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// reachable at both hops above this one, and it silently was not at either:
 	// hanzoai/o11y had to carry the routes (the pinned v1.5.33 does —
 	// o11yapiserver/sentry.go registers them), and now that o11y runs out-of-process the HOST has
-	// to mount /v1/sentry as a second prefix or the request 404s before it ever
+	// to mount /v1/sentinel as a second prefix or the request 404s before it ever
 	// reaches this process — see cloud.PluginSpec in apps.Wire().
 	//
 	// On the HOST, because All opens OPTIONS and a graft cannot carry one; see
 	// [Mount]. Here in its order, so it still precedes the module's own
-	// /v1/sentry ingest routes and still swallows them exactly as before.
-	mountSentry(app)
+	// /v1/sentinel ingest routes and still swallows them exactly as before.
+	mountSentinel(app)
 	// The Sentry wire on the ONE /v1/event door: POST /v1/event/{project}/envelope|store.
 	// The door's owner (analytics) carries the route — the project segment is
 	// variable, so no static prefix could route it here — and forwards through
-	// cloud.ObsErrorIngest to this handler, which rewrites onto the /v1/sentry
+	// cloud.ObsErrorIngest to this handler, which rewrites onto the /v1/sentinel
 	// runtime routes BEFORE the principal gate sees the path, so the existing
 	// ingest exemption stays the only exemption. No /api/ segment anywhere:
 	// /v1/ is the only prefix this platform speaks.
@@ -745,8 +759,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 //
 // host is the router the graft lands on, and takes only what cannot cross one —
 // see [Mount]. It is registered in its own order here rather than before or
-// after the whole mount, because the /v1/sentry wildcard has to precede the
-// module's own /v1/sentry ingest routes exactly as it always did.
+// after the whole mount, because the /v1/sentinel wildcard has to precede the
+// module's own /v1/sentinel ingest routes exactly as it always did.
 //
 // cloud.Bridge is NOT installed here, and no subsystem installs it. The typed ops
 // below do need it — a zip.Get[In, Out] handler receives a context and its decoded
