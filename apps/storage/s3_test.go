@@ -1,6 +1,6 @@
 package storage_test
 
-// Integration tests for the /v1/s3 file-manager subsystem, driven through the
+// Integration tests for the /v1/storage file-manager subsystem, driven through the
 // REAL orchestrator path (BuildDeps → the init()-registered App → the
 // zip/Fiber stack), exactly like apps/kms/kms_test.go. Requests run in-process
 // via app.Fiber().Test — no listener, no live SeaweedFS.
@@ -15,8 +15,8 @@ package storage_test
 // store here — S3_ADMIN_ENDPOINT points at store(), which refuses in-process — so
 // the whole file runs offline and in milliseconds. What it asserts is the gates
 // that run BEFORE any S3 call — fail-closed 503, org 403, name/key 400, and (the
-// load-bearing one) that /v1/s3/buckets + /v1/s3/health reach the s3 subsystem's
-// handlers and NOT provisioning's /v1/s3/:name. The live S3 round-trips are
+// load-bearing one) that /v1/storage/buckets + /v1/storage/health reach the s3 subsystem's
+// handlers and NOT provisioning's /v1/storage/:name. The live S3 round-trips are
 // covered by the pure mapping tests (s3_internal_test.go) + live e2e post-deploy.
 
 import (
@@ -33,8 +33,8 @@ import (
 	"github.com/zap-proto/zip/middleware"
 
 	// Mount storage (118) then provisioning (120) IN ORDER via their composition-root
-	// specs, so storage's static /v1/s3/buckets + /v1/s3/health register before
-	// provisioning's /v1/s3/:name — the route-precedence guarantee, on the real Mounts.
+	// specs, so storage's static /v1/storage/buckets + /v1/storage/health register before
+	// provisioning's /v1/storage/:name — the route-precedence guarantee, on the real Mounts.
 	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/hanzoai/cloud/apps/storage"
 )
@@ -141,12 +141,12 @@ func decode(t *testing.T, r io.Reader) map[string]any {
 }
 
 // TestHealthFailClosedWithoutCreds: absent S3 credentials the subsystem still
-// mounts, but /v1/s3/health reports 503 (health-only) — never a silent 200.
+// mounts, but /v1/storage/health reports 503 (health-only) — never a silent 200.
 func TestHealthFailClosedWithoutCreds(t *testing.T) {
 	app := newApp(t, false)
-	resp := do(t, app, "GET", "/v1/s3/health", "", "", false)
+	resp := do(t, app, "GET", "/v1/storage/health", "", "", false)
 	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("GET /v1/s3/health (no creds) = %d, want 503", resp.StatusCode)
+		t.Fatalf("GET /v1/storage/health (no creds) = %d, want 503", resp.StatusCode)
 	}
 	body := decode(t, resp.Body)
 	if body["ready"] != false {
@@ -160,18 +160,18 @@ func TestHealthFailClosedWithoutCreds(t *testing.T) {
 	}
 }
 
-// TestHealthOwnedByS3NotGenericLiveness: the real /v1/s3/health probe is the s3
+// TestHealthOwnedByS3NotGenericLiveness: the real /v1/storage/health probe is the s3
 // subsystem's, NOT serve.go's generic GET /v1/<name>/health (which would be a
 // fake 200). Proven by: it 503s without creds AND returns 200 WITH creds carrying
 // the s3-specific "presign" field. (serve.go's generic route is not mounted in
 // this MountAll-only harness; in production the s3 subsystem registers with
 // cloud.HealthOwner, so Serve skips the generic route entirely and this real
-// probe owns /v1/s3/health.)
+// probe owns /v1/storage/health.)
 func TestHealthOwnedByS3NotGenericLiveness(t *testing.T) {
 	app := newApp(t, true)
-	resp := do(t, app, "GET", "/v1/s3/health", "", "", false)
+	resp := do(t, app, "GET", "/v1/storage/health", "", "", false)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GET /v1/s3/health (creds) = %d, want 200", resp.StatusCode)
+		t.Fatalf("GET /v1/storage/health (creds) = %d, want 200", resp.StatusCode)
 	}
 	body := decode(t, resp.Body)
 	if body["ready"] != true {
@@ -183,23 +183,23 @@ func TestHealthOwnedByS3NotGenericLiveness(t *testing.T) {
 }
 
 // TestBucketsRouteReachesS3NotProvisioning: THE load-bearing routing proof.
-// provisioning owns GET /v1/s3/:name (order 120); the s3 subsystem owns the
-// static GET /v1/s3/buckets (order 118). A request to /v1/s3/buckets must reach
+// provisioning owns GET /v1/storage/:name (order 120); the s3 subsystem owns the
+// static GET /v1/storage/buckets (order 118). A request to /v1/storage/buckets must reach
 // the s3 handler (which requires an org → 403 without one), NOT provisioning's
 // list-resource-by-name handler (which would treat "buckets" as a resource name).
 // The s3 403 body names the missing principal from the s3 guard; provisioning's
 // :name GET with a valid org would 404 "resource not found" for name "buckets".
 // We assert the s3 path wins by checking the WITHOUT-org 403 (s3's guard fires
-// first) — provisioning's GET /v1/s3/:name also 403s without org, so to
+// first) — provisioning's GET /v1/storage/:name also 403s without org, so to
 // disambiguate we ALSO assert that WITH an org the request reaches the s3
 // listBuckets handler and dials the store.
 func TestBucketsRouteReachesS3NotProvisioning(t *testing.T) {
 	app := newApp(t, true)
 
 	// Without org: s3 guard → 403.
-	resp := do(t, app, "GET", "/v1/s3/buckets", "", "", false)
+	resp := do(t, app, "GET", "/v1/storage/buckets", "", "", false)
 	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("GET /v1/s3/buckets (no org) = %d, want 403", resp.StatusCode)
+		t.Fatalf("GET /v1/storage/buckets (no org) = %d, want 403", resp.StatusCode)
 	}
 
 	// With org: the request reaches the s3 listBuckets handler, which dials the
@@ -207,27 +207,27 @@ func TestBucketsRouteReachesS3NotProvisioning(t *testing.T) {
 	// tried an S3 call, which provisioning's store-only :name handler never does.
 	// A 404 "resource not found" would mean provisioning's :name won the route
 	// (broken ordering) — that is the failure we guard against.
-	resp2 := do(t, app, "GET", "/v1/s3/buckets", "acme", "", false)
+	resp2 := do(t, app, "GET", "/v1/storage/buckets", "acme", "", false)
 	if resp2.StatusCode != http.StatusBadGateway {
 		body := decode(t, resp2.Body)
-		t.Fatalf("GET /v1/s3/buckets (org) = %d %v, want 502 from the s3 listBuckets handler; a 404 means provisioning's :name shadowed the s3 route (ordering broken)", resp2.StatusCode, body)
+		t.Fatalf("GET /v1/storage/buckets (org) = %d %v, want 502 from the s3 listBuckets handler; a 404 means provisioning's :name shadowed the s3 route (ordering broken)", resp2.StatusCode, body)
 	}
 }
 
-// TestHealthRouteReachesS3NotProvisioning: /v1/s3/health must be the s3 subsystem's
-// real probe, not provisioning's GET /v1/s3/:name treating "health" as a resource
+// TestHealthRouteReachesS3NotProvisioning: /v1/storage/health must be the s3 subsystem's
+// real probe, not provisioning's GET /v1/storage/:name treating "health" as a resource
 // name. Proven by the 503 (no creds) carrying the s3 health body, which
 // provisioning's :name handler would never produce (it 403s without org or 404s
 // a missing resource — never a {service:"s3", ready:false} health doc).
 func TestHealthRouteReachesS3NotProvisioning(t *testing.T) {
 	app := newApp(t, false)
-	resp := do(t, app, "GET", "/v1/s3/health", "", "", false)
+	resp := do(t, app, "GET", "/v1/storage/health", "", "", false)
 	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("GET /v1/s3/health = %d, want 503 (s3 health-only)", resp.StatusCode)
+		t.Fatalf("GET /v1/storage/health = %d, want 503 (s3 health-only)", resp.StatusCode)
 	}
 	body := decode(t, resp.Body)
 	if body["service"] != "s3" {
-		t.Fatalf("GET /v1/s3/health body service=%v — provisioning's :name shadowed the health route", body["service"])
+		t.Fatalf("GET /v1/storage/health body service=%v — provisioning's :name shadowed the health route", body["service"])
 	}
 }
 
@@ -236,13 +236,13 @@ func TestHealthRouteReachesS3NotProvisioning(t *testing.T) {
 func TestGateRequiresOrg(t *testing.T) {
 	app := newApp(t, true)
 	cases := []struct{ method, path, body string }{
-		{"GET", "/v1/s3/buckets", ""},
-		{"POST", "/v1/s3/buckets", `{"name":"photos"}`},
-		{"DELETE", "/v1/s3/buckets/photos", ""},
-		{"GET", "/v1/s3/buckets/photos/objects", ""},
-		{"POST", "/v1/s3/buckets/photos/objects", `{"key":"a.txt"}`},
-		{"GET", "/v1/s3/buckets/photos/objects/a.txt", ""},
-		{"DELETE", "/v1/s3/buckets/photos/objects/a.txt", ""},
+		{"GET", "/v1/storage/buckets", ""},
+		{"POST", "/v1/storage/buckets", `{"name":"photos"}`},
+		{"DELETE", "/v1/storage/buckets/photos", ""},
+		{"GET", "/v1/storage/buckets/photos/objects", ""},
+		{"POST", "/v1/storage/buckets/photos/objects", `{"key":"a.txt"}`},
+		{"GET", "/v1/storage/buckets/photos/objects/a.txt", ""},
+		{"DELETE", "/v1/storage/buckets/photos/objects/a.txt", ""},
 	}
 	for _, c := range cases {
 		resp := do(t, app, c.method, c.path, "", c.body, false)
@@ -263,12 +263,12 @@ func TestGateRequiresOrg(t *testing.T) {
 func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
 	app := newApp(t, true)
 	cases := []struct{ method, path, body string }{
-		{"GET", "/v1/s3/buckets", ""},
-		{"POST", "/v1/s3/buckets", `{"name":"photos"}`},
-		{"DELETE", "/v1/s3/buckets/victim-bucket", ""},
-		{"GET", "/v1/s3/buckets/victim-bucket/objects", ""},
-		{"POST", "/v1/s3/buckets/victim-bucket/objects", `{"key":"a.txt"}`},
-		{"DELETE", "/v1/s3/buckets/victim-bucket/objects/secret.pdf", ""},
+		{"GET", "/v1/storage/buckets", ""},
+		{"POST", "/v1/storage/buckets", `{"name":"photos"}`},
+		{"DELETE", "/v1/storage/buckets/victim-bucket", ""},
+		{"GET", "/v1/storage/buckets/victim-bucket/objects", ""},
+		{"POST", "/v1/storage/buckets/victim-bucket/objects", `{"key":"a.txt"}`},
+		{"DELETE", "/v1/storage/buckets/victim-bucket/objects/secret.pdf", ""},
 	}
 	for _, c := range cases {
 		var rdr io.Reader
@@ -299,9 +299,9 @@ func TestFailClosedWhenUnconfigured(t *testing.T) {
 	// A fully-authorized request (org present) still 503s because the backend is
 	// unconfigured — the guard's fail-closed check fires before the org check
 	// reaches an S3 call.
-	resp := do(t, app, "GET", "/v1/s3/buckets", "acme", "", false)
+	resp := do(t, app, "GET", "/v1/storage/buckets", "acme", "", false)
 	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("GET /v1/s3/buckets (no creds, with org) = %d, want 503", resp.StatusCode)
+		t.Fatalf("GET /v1/storage/buckets (no creds, with org) = %d, want 503", resp.StatusCode)
 	}
 }
 
@@ -310,15 +310,15 @@ func TestCreateBucketValidatesName(t *testing.T) {
 	app := newApp(t, true)
 	bad := []string{`{"name":"UPPER"}`, `{"name":"has space"}`, `{"name":"-lead"}`, `{"name":""}`, `{"name":"under_score"}`}
 	for _, body := range bad {
-		resp := do(t, app, "POST", "/v1/s3/buckets", "acme", body, false)
+		resp := do(t, app, "POST", "/v1/storage/buckets", "acme", body, false)
 		if resp.StatusCode != http.StatusBadRequest {
-			t.Errorf("POST /v1/s3/buckets %s = %d, want 400", body, resp.StatusCode)
+			t.Errorf("POST /v1/storage/buckets %s = %d, want 400", body, resp.StatusCode)
 		}
 	}
 	// Malformed JSON → 400.
-	resp := do(t, app, "POST", "/v1/s3/buckets", "acme", `{not json`, false)
+	resp := do(t, app, "POST", "/v1/storage/buckets", "acme", `{not json`, false)
 	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("POST /v1/s3/buckets (bad json) = %d, want 400", resp.StatusCode)
+		t.Errorf("POST /v1/storage/buckets (bad json) = %d, want 400", resp.StatusCode)
 	}
 }
 
@@ -327,12 +327,12 @@ func TestCreateBucketValidatesName(t *testing.T) {
 func TestObjectKeyTraversalRejected(t *testing.T) {
 	app := newApp(t, true)
 	// Presign upload with a traversal key.
-	resp := do(t, app, "POST", "/v1/s3/buckets/photos/objects", "acme", `{"key":"../../etc/passwd"}`, false)
+	resp := do(t, app, "POST", "/v1/storage/buckets/photos/objects", "acme", `{"key":"../../etc/passwd"}`, false)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("presign upload traversal key = %d, want 400", resp.StatusCode)
 	}
 	// Presign upload with an empty key.
-	resp = do(t, app, "POST", "/v1/s3/buckets/photos/objects", "acme", `{"key":""}`, false)
+	resp = do(t, app, "POST", "/v1/storage/buckets/photos/objects", "acme", `{"key":""}`, false)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("presign upload empty key = %d, want 400", resp.StatusCode)
 	}
@@ -343,7 +343,7 @@ func TestObjectKeyTraversalRejected(t *testing.T) {
 func TestBadBucketParamRejected(t *testing.T) {
 	app := newApp(t, true)
 	// An uppercase bucket param fails friendlyParam.
-	resp := do(t, app, "GET", "/v1/s3/buckets/BADNAME/objects", "acme", "", false)
+	resp := do(t, app, "GET", "/v1/storage/buckets/BADNAME/objects", "acme", "", false)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("GET objects with bad bucket param = %d, want 400", resp.StatusCode)
 	}
