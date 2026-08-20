@@ -52,6 +52,9 @@ type state struct {
 	store      *Store
 	carrier    Carrier
 	assistants Assistants
+	// live says the carrier is the real one and therefore that its acts cost
+	// money. The stub buys nothing, so it is never gated and never billed.
+	live bool
 }
 
 var mounted *cloud.Service[state]
@@ -80,7 +83,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	b := cloud.NewBase(deps, "tel")
 	s := &cloud.Service[state]{Base: b, State: state{
-		store: store, carrier: carrier, assistants: assistantsFromEnv(),
+		store: store, carrier: carrier, assistants: assistantsFromEnv(), live: live,
 	}}
 	mounted = s
 
@@ -190,10 +193,16 @@ func (o ops) buyNumber(ctx context.Context, in *buyInput) (*Number, error) {
 	if in.E164 == "" {
 		return nil, zip.Errorf(http.StatusBadRequest, "e164 is required")
 	}
+	ch, err := o.afford(ctx, number)
+	if err != nil {
+		return nil, cloud.Denied(err)
+	}
+	defer ch.Release()
 	n, err := o.s.State.carrier.Buy(ctx, in.E164)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "buy: %v", err)
 	}
+	o.charge(ch, number)
 	n.Org = org
 	if err := o.s.State.store.PutNumber(ctx, n); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "record: %v", err)
@@ -271,17 +280,23 @@ func (o ops) placeCall(ctx context.Context, in *callInput) (*Call, error) {
 		return nil, zip.Errorf(http.StatusForbidden, "from is not a number this org holds")
 	}
 
-	call, err := o.s.State.carrier.Call(ctx, CallRequest{
+	ch, err := o.afford(ctx, call)
+	if err != nil {
+		return nil, cloud.Denied(err)
+	}
+	defer ch.Release()
+	placed, err := o.s.State.carrier.Call(ctx, CallRequest{
 		From: in.From, To: in.To, Agent: in.Agent, Record: in.Record, Webhook: in.Webhook,
 	})
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "call: %v", err)
 	}
-	call.Org = org
-	if err := o.s.State.store.PutCall(ctx, call); err != nil {
+	o.charge(ch, call)
+	placed.Org = org
+	if err := o.s.State.store.PutCall(ctx, placed); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "record: %v", err)
 	}
-	return &call, nil
+	return &placed, nil
 }
 
 // Ends a call this org placed. The holding is read for THIS org before the
@@ -350,12 +365,18 @@ func (o ops) sendMessage(ctx context.Context, in *messageInput) (*SMS, error) {
 		return nil, zip.Errorf(http.StatusForbidden, "from is not a number this org holds")
 	}
 
+	ch, err := o.afford(ctx, message)
+	if err != nil {
+		return nil, cloud.Denied(err)
+	}
+	defer ch.Release()
 	m, err := o.s.State.carrier.Send(ctx, SMSRequest{
 		From: in.From, To: in.To, Text: in.Text, Media: in.Media,
 	})
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "send: %v", err)
 	}
+	o.charge(ch, message)
 	m.Org = org
 	if err := o.s.State.store.PutMessage(ctx, m); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "record: %v", err)

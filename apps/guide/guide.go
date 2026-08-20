@@ -916,8 +916,16 @@ func doStep(s *cloud.Service[state], c *zip.Ctx) error {
 		c.SetHeader("Cache-Control", "no-cache")
 		c.SetHeader("Connection", "keep-alive")
 		c.SetHeader("X-Accel-Buffering", "no")
+		// The caller, resolved while the request still exists. This callback runs
+		// after the handler returns and the Ctx is recycled, so the detach is right —
+		// but a detached context carries no identity, and the JSON arm below runs the
+		// same agent on c.Context(). Today nothing is lost: this reaches automations,
+		// which bills by explicit argument. That is a property of one seam, not of the
+		// asymmetry, and answer.go had the identical shape until a streamed answer
+		// turned out to buy searches and page renders for free. Carry it now.
+		caller := cloud.Detach(context.Background(), c)
 		return c.SendStreamWriter(func(w *bufio.Writer) {
-			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+			ctx, cancel := context.WithTimeout(caller, 120*time.Second)
 			defer cancel()
 			_, _ = w.WriteString(": stream open\n\n")
 			_ = w.Flush()

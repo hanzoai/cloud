@@ -15,11 +15,18 @@ import (
 // and not the ~3040-package union the fused binary was. The light host loads it
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `domain openapi`. Hand-owned — edit the spec below directly.
+//
+// Metered, not Free: registering, renewing and transferring a name all debit the
+// reseller account at the registrar, and this surface already authorizes and
+// captures that spend through its own meter (apps/domain/mount.go's meterBiller,
+// wrapping Base.Bill). The declaration was the only part that had not caught up —
+// it said the surface costs nothing while the handlers underneath it moved money
+// correctly, which is exactly the drift Metered exists to state.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:       "domain",
 		OwnsHealth: true,
-		Price:      cloud.Free,
+		Price:      cloud.Metered,
 		Mount:      domain.Mount,
 	}}, []string{"domain"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
