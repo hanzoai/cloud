@@ -19455,6 +19455,8 @@ components:
           type: string
         accessSecret:
           type: string
+        accessSecretDigest:
+          type: string
         application:
           type: string
         createdAt:

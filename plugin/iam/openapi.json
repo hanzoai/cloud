@@ -6335,6 +6335,9 @@
           "accessSecret": {
             "type": "string"
           },
+          "accessSecretDigest": {
+            "type": "string"
+          },
           "application": {
             "type": "string"
           },
