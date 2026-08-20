@@ -359,7 +359,7 @@ func isKMSMachinePrincipal(claims *idClaims) bool {
 // that matters. Platform sudo asked `homeOrg == adminOrg` — Orgs[0], a POSITIONAL
 // read — while IAM always writes the user's own org at index 0, so an operator
 // granted admin-org membership (the deliberate, signed, revocable way operators
-// are made) could never satisfy it. authz.Claims.PlatformSudo asks the question
+// are made) could never satisfy it. authz.Claims.Sudo asks the question
 // that was meant: is the reserved org anywhere in the signed set.
 //
 // THE NARROWING is the per-org KMS-sync machine, named by its owner-bound
@@ -376,7 +376,7 @@ func isKMSMachinePrincipal(claims *idClaims) bool {
 // over the alternative: admitting an unidentifiable principal to the only
 // cross-tenant scope in the system.
 func platformSudo(claims *idClaims) bool {
-	return claims.PlatformSudo() && !isKMSMachinePrincipal(claims)
+	return claims.Sudo() && !isKMSMachinePrincipal(claims)
 }
 
 // orgAdmin reports whether claims administer the org the request ACTS in. See
