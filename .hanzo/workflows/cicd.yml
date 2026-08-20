@@ -110,7 +110,12 @@ jobs:
   # reaches for, and the way past outlives the reason it was opened.
   review:
     runs-on: [hanzo-build-linux-amd64]
-    timeout-minutes: 20
+    # A change larger than one request is read in several (.hanzo/review/review.sh),
+    # so the clock scales with the BACKLOG rather than with the push. Measured on
+    # the v1.801.536 backlog: 207 commits, 1,805 units, 18 requests. That is the
+    # cost of a release drought, not of a change — the base advances with each
+    # release, so a routine push is one request and finishes in under a minute.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
