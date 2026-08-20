@@ -115,7 +115,7 @@ const ChatModel = "enso-flash"
 // serves. This is the DEGRADED path: an id that does not resolve here fails at
 // the moment something else is already failing, so it takes the tier that is
 // published, live, and already the interactive default's own family.
-const FallbackModel = "enso"
+const FallbackModel = "enso-auto"
 
 // upstreamModels are the model families Hanzo serves under its own name. Naming
 // one on a customer-visible surface discloses which base sits behind an enso or
