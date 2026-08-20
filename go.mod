@@ -16,7 +16,7 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.3.2
 	github.com/hanzoai/cek v0.2.7
-	github.com/hanzoai/commerce v1.50.55
+	github.com/hanzoai/commerce v1.50.56
 	github.com/hanzoai/dataroom v1.1.7
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
