@@ -146,9 +146,32 @@ json.dump({"model": model, "max_tokens": 1500, "temperature": 0,
            "messages": [{"role":"system","content":system},{"role":"user","content":user}]}, sys.stdout)
 PY
 
+# `-w` prints 000 itself when the transfer never completed, so a `|| echo 000`
+# fallback APPENDS to that rather than standing in for it, and the refusal read
+# `answered 000000` — a status nothing can look up. Take curl's own word, and
+# default only the case where it printed nothing at all.
 code=$(curl -sS -m 180 -o "$resp" -w '%{http_code}' "$API/v1/chat/completions" \
-  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' --data-binary @"$req" || echo 000)
-[ "$code" = "200" ] || die "reviewer answered $code — cannot judge this change, so it does not pass ($(head -c 200 "$resp"))"
+  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' --data-binary @"$req" || true)
+code=${code:-000}
+# A REFUSED BEARER NAMES ITSELF. The gateway answers `jwt: audience not allowed`
+# without saying which audience it saw or which it wanted, and the two live in
+# different repositories — the aud is whatever IAM application minted this token
+# (HIP-0111: client_id == app == aud), the allowlist is GATEWAY_ALLOWED_AUDIENCES
+# on the deployment. So a reader holding only the 401 has to go and mint a token
+# by hand to learn the one value that decides it. We are holding the token, so we
+# can just read it: `iss` and `aud` are identifiers rather than credentials, and
+# printing them turns an opaque refusal into the name to add to a list.
+claims() {
+  local p; p=$(printf %s "$TOKEN" | cut -d. -f2) || return 0
+  case $(( ${#p} % 4 )) in 2) p="$p==";; 3) p="$p=";; esac
+  printf %s "$p" | tr '_-' '/+' | base64 -d 2>/dev/null \
+    | python3 -c 'import json,sys
+try: c = json.load(sys.stdin)
+except Exception: sys.exit(0)
+print(" ".join(f"{k}={c[k]}" for k in ("iss","aud","sub","client_id") if c.get(k)))' 2>/dev/null
+}
+presented=$(claims)
+[ "$code" = "200" ] || die "reviewer answered $code — cannot judge this change, so it does not pass ($(head -c 200 "$resp"))${presented:+ [presented $presented]}"
 
 python3 - "$resp" "$selfmod" <<'PY'
 import json, os, re, sys
