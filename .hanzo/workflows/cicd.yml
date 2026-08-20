@@ -548,6 +548,11 @@ jobs:
           # that has to be able to write it. GH_PAT is gone from this step: it
           # authenticated a register that no longer lives on github.
           GIT_TOKEN: ${{ github.token }}
+          # cmd/lineage reads FORGE_TOKEN to authenticate its read of the arbiter's
+          # main. It is the same credential, under the name the tool reads and the
+          # one cmd/index and orphans.sh already use; lineage sends it as a header
+          # rather than URL userinfo, so it is named apart from the GIT_TOKEN above.
+          FORGE_TOKEN: ${{ github.token }}
           # The commit being released, named explicitly rather than read from
           # GITHUB_SHA: that variable is the runner's to set, this claim is the
           # workflow's to make, and a claim that silently reads an empty string
