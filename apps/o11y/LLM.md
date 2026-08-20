@@ -117,7 +117,7 @@ an answer.
 - `GET /v1/o11y/public/dashboards/{id}` and `…/widgets/{idx}/query_range` — the
   tenant comes from the SHARE's scope, not from a header.
 - the DSN ingest wires (`POST …/{envelope,store}` under `/v1/o11y/api/` and
-  `/v1/sentry/`) — the DSN key is the credential and the org comes from the
+  `/v1/sentinel/`) — the DSN key is the credential and the org comes from the
   project segment. The gateway waives its JWT check on exactly these, so a
   request it lets through tokenless must not be refused here for having no token.
 
@@ -196,9 +196,9 @@ forwards, which name the internal spelling:
   any exemption that names a path Mount does not register.
 
 `o11y.go`'s other forward, `eventToRuntimePath` (`/v1/event/<p>/envelope|store`
-→ `/v1/sentry/<p>/…`), is unaffected: both families survive the rename verbatim.
+→ `/v1/sentinel/<p>/…`), is unaffected: both families survive the rename verbatim.
 The DSN ingest wires (`/v1/o11y/api/<project>/envelope|store` and the clean
-`/v1/sentry/<project>/…`) also stay — that `/api/` segment is the Sentry SDK's own
+`/v1/sentinel/<project>/…`) also stay — that `/api/` segment is the Sentry SDK's own
 wire format, received as-is, not our spelling of a route — and they are now
 `o11y.IngestWire`, exported precisely because the gateway's JWT bypass must match
 it byte-for-byte.
@@ -245,7 +245,7 @@ operation objects are byte-identical once the `o11y.` prefix is undone.
 
 Two facts the graft made local, both load-bearing:
 
-- **`ALL /v1/sentry/*` is registered on the HOST, not on the child.**
+- **`ALL /v1/sentinel/*` is registered on the HOST, not on the child.**
   `zip.App.Declaration` drops HEAD and OPTIONS unconditionally — they are the
   shadows fiber generates — so a door opened with `All` cannot cross a graft
   intact, and OPTIONS is a method that proxy genuinely answers and publishes. It
@@ -370,7 +370,7 @@ red; that is why this list was a promise until the gate existed.
   delivery receipt: a body that will not parse still proves delivery, and a 400
   would make Alertmanager retry forever). A typed op would answer JSON and reject
   the malformed body.
-- `ALL /v1/sentry/*` — a wildcard proxy; a wildcard has no operation to type.
+- `ALL /v1/sentinel/*` — a wildcard proxy; a wildcard has no operation to type.
 
 ## Annotation queues (native, relational) — `annotation_queues.go` + `annotation_store.go`
 

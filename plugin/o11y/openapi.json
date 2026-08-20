@@ -17,6 +17,9 @@
   ],
   "tags": [
     {
+      "name": "event"
+    },
+    {
       "name": "o11y"
     },
     {
@@ -15054,46 +15057,6 @@
           }
         },
         "x-tool": true
-      }
-    },
-    "/v1/sentinel/{project}/envelope/": {
-      "post": {
-        "operationId": "post_sentinel_by_project_envelope",
-        "summary": "Receive a Sentry envelope on the runtime's ingest hatch",
-        "description": "The runtime's own ingest address for a Sentry envelope frame, kept under this root because that is where the module registers it.\n\nTHE DOOR A CLIENT SHOULD USE IS /v1/event/{project}/envelope. That is what a minted DSN addresses and what @hanzo/event posts to, and it carries the same wire to the same sink. This address answers identically; it is the second spelling of one wire and it is on its way out.\n\nAUTHENTICATED BY THE DSN PUBLIC KEY, never a Hanzo session, so it is exempt from the principal gate — a reporting SDK has no session to present. The project segment is a UUID enforced by the route, and the exemption matches method plus prefix plus suffix, so every Sentinel READ (issues, discover, events, logs, traces, stats) stays gated.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "project",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      }
-    },
-    "/v1/sentinel/{project}/store/": {
-      "post": {
-        "operationId": "post_sentinel_by_project_store",
-        "summary": "Receive a single event on the runtime's ingest hatch",
-        "description": "The legacy single-event form of the envelope ingest — one JSON event rather than a framed batch — kept because SDKs in the field still send it.\n\nSame address ownership and same authentication as the envelope route beside it, and the same advice: point a client at /v1/event/{project}/store, which is the one door.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "project",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
       }
     },
     "/v1/sentinel/{wildcard1}": {
