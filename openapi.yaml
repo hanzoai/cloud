@@ -9690,20 +9690,6 @@ components:
           description: UpdatedAt is the unix second the record last changed.
           type: integer
       type: object
-    accountFoldView:
-      properties:
-        account:
-          $ref: '#/components/schemas/cloudAccountView'
-          description: Account is the account as it is now recorded.
-        clusters:
-          description: |-
-            Clusters is one entry per cluster discovered in the account. It is empty
-            when discovery itself failed, which leaves the previously folded set
-            untouched rather than mass-detaching it.
-          items:
-            $ref: '#/components/schemas/clusterResult'
-          type: array
-      type: object
     accountList:
       properties:
         accounts:
@@ -14362,60 +14348,6 @@ components:
             supply it.
           type: string
       type: object
-    cloudAccountView:
-      properties:
-        account:
-          description: |-
-            Account is the provider's human label for it, e.g. the DigitalOcean team
-            email.
-          type: string
-        clusters:
-          description: |-
-            Clusters is the fleet names this account currently owns. Unlinking detaches
-            exactly these and nothing else.
-          items:
-            type: string
-          type: array
-        externalId:
-          description: |-
-            ExternalID is the provider's own identifier for the account — a
-            DigitalOcean account uuid, an AWS account id, a GCP project.
-          type: string
-        label:
-          description: |-
-            Label is the org-chosen name for this account within the provider, which is
-            how a second account at the same provider is addressed. Defaults to
-            "default".
-          type: string
-        linkedAt:
-          description: |-
-            LinkedAt is when the account was first linked, RFC3339 UTC. Re-linking the
-            same label keeps the original.
-          type: string
-        project:
-          description: |-
-            Project is the fleet shard the account's clusters were folded into,
-            recorded at link time so a later sync or unlink acts on the same shard.
-          type: string
-        provider:
-          description: |-
-            Provider is the cloud the account belongs to: digitalocean, aws, gcp or
-            azure.
-          type: string
-        syncedAt:
-          description: SyncedAt is when it was last discovered, RFC3339 UTC.
-          type: string
-      type: object
-    cloudAccountsView:
-      properties:
-        accounts:
-          description: |-
-            Accounts is every account this org has linked, across all providers. Empty
-            when it has linked none.
-          items:
-            $ref: '#/components/schemas/cloudAccountView'
-          type: array
-      type: object
     clusterAttach:
       properties:
         default:
@@ -14493,40 +14425,6 @@ components:
           items:
             $ref: '#/components/schemas/sourceFailure'
           type: array
-      type: object
-    clusterResult:
-      properties:
-        amdGpu:
-          description: AmdGPU is how many AMD GPUs those nodes advertise.
-          type: integer
-        cluster:
-          description: |-
-            Cluster is the stable fleet name the cluster was folded under — the name
-            /v1/clusters shows and a workload targets.
-          type: string
-        error:
-          description: |-
-            Error is why this cluster did not fold — a billing denial, an unsafe
-            kubeconfig, or an unreachable apiserver. It never contains credential
-            material.
-          type: string
-        folded:
-          description: |-
-            Folded is whether it reached the fleet. False means Error says why, and
-            this cluster alone was skipped.
-          type: boolean
-        nodes:
-          description: Nodes is how many nodes the fleet counted in it.
-          type: integer
-        nvidiaGpu:
-          description: NvidiaGPU is how many NVIDIA GPUs those nodes advertise.
-          type: integer
-        region:
-          description: Region is the provider region it runs in.
-          type: string
-        source:
-          description: Source is the cluster's own name at the provider.
-          type: string
       type: object
     clusterView:
       properties:
@@ -38811,29 +38709,6 @@ components:
           description: Type labels the template's kind; defaults to "text".
           type: string
       type: object
-    providerCard:
-      properties:
-        id:
-          description: 'ID is the provider slug used in the path: digitalocean, aws,
-            gcp, azure.'
-          type: string
-        keyless:
-          description: |-
-            Keyless is whether the provider can be linked WITHOUT storing a long-lived
-            secret — AWS by role assumption, GCP by workload identity federation, Azure
-            by federated credential. DigitalOcean is not: it needs a stored token.
-          type: boolean
-        name:
-          description: Name is the provider's display name.
-          type: string
-        requires:
-          description: |-
-            Requires names the credential fields a link body must carry for this
-            provider.
-          items:
-            type: string
-          type: array
-      type: object
     providerPatchIn:
       properties:
         beta:
@@ -38880,15 +38755,6 @@ components:
         name:
           description: Name is the provider's display name ("Slack").
           type: string
-      type: object
-    providersView:
-      properties:
-        providers:
-          description: Providers is every cloud this deployment can link, with what
-            each needs.
-          items:
-            $ref: '#/components/schemas/providerCard'
-          type: array
       type: object
     provisionRequest:
       properties:
@@ -45282,15 +45148,6 @@ components:
           description: what kind of trigger it is; HTTP is the only one today
           type: string
       type: object
-    unlinkedView:
-      properties:
-        unlinked:
-          description: |-
-            Unlinked is always true. Unlinking is idempotent: an account this org does
-            not hold answers the same, so a repeated call is not an error and is not an
-            existence oracle either.
-          type: boolean
-      type: object
     unreconciledOut:
       properties:
         questions:
@@ -45830,67 +45687,6 @@ components:
           items:
             $ref: '#/components/schemas/VendorRow'
           type: array
-      type: object
-    venueLinkRequest:
-      properties:
-        clientId:
-          description: ClientID is the Azure AD application id. Azure only.
-          type: string
-        clientSecret:
-          description: |-
-            ClientSecret selects the service-principal flow. LEAVING IT OUT selects
-            keyless workload identity federation instead, so omitting it is a choice
-            rather than an omission. Azure only.
-          type: string
-        credentialJson:
-          description: |-
-            CredentialJSON is a Google credentials document — an external_account
-            (workload identity federation, keyless) or a service-account key. GCP only.
-          type: string
-        externalId:
-          description: |-
-            ExternalID pins that role assumption to Hanzo, which is what closes the
-            confused-deputy hole. AWS only.
-          type: string
-        label:
-          description: |-
-            Label is the org-chosen name for this account within the provider, which is
-            how a second account at the same provider is addressed later. Empty means
-            "default"; anything outside 1–64 of [A-Za-z0-9._-] is refused.
-          type: string
-        projectIds:
-          description: ProjectIDs bounds the GKE cluster sweep. GCP only.
-          items:
-            type: string
-          type: array
-        provider:
-          description: |-
-            Provider is the cloud being linked, from the path: digitalocean, aws, gcp
-            or azure.
-          type: string
-        regions:
-          description: Regions bounds the AWS EKS cluster sweep. AWS only.
-          items:
-            type: string
-          type: array
-        roleArn:
-          description: |-
-            RoleARN is the AWS role Hanzo assumes into the account — the keyless path,
-            so no access key is ever stored.
-          type: string
-        subscriptionIds:
-          description: SubscriptionIDs bounds the AKS cluster sweep. Azure only.
-          items:
-            type: string
-          type: array
-        tenantId:
-          description: TenantID is the Azure AD tenant of the app. Azure only.
-          type: string
-        token:
-          description: |-
-            Token is the DigitalOcean personal access token. DigitalOcean only, and it
-            is the one provider that requires storing a secret.
-          type: string
       type: object
     verdict:
       properties:
@@ -60812,187 +60608,6 @@ paths:
       tags:
       - chat
       x-app: ai
-  /v1/cloud:
-    get:
-      description: |-
-        Returns the clouds this deployment can link and what linking each
-        one needs — the DigitalOcean token, the AWS role and external id, the GCP
-        credential JSON, the Azure app — plus whether the provider can be linked without
-        storing any long-lived secret. It is the catalog a "connect a cloud" screen
-        renders; it reports no account and no credential.
-      operationId: get_cloud
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/providersView'
-          description: ok
-      summary: Returns the clouds this deployment can link and what linking each one
-        needs — the DigitalOcean token, the AWS role and external id, the GCP credential
-        JSON, the Azure app — plus whether the provider can be linked without storing
-        any long-lived secret.
-      tags:
-      - cloud
-      x-app: venue
-      x-tool: true
-  /v1/cloud/{provider}/accounts:
-    post:
-      description: |-
-        Links one of the caller org's cloud accounts and folds the Kubernetes
-        clusters it finds there into the ONE Hanzo fleet, so they appear at /v1/clusters
-        and can run work like any managed or bring-your-own cluster. Answers 201.
-
-        The credential is verified LIVE against the provider BEFORE anything is stored,
-        so a bad one is refused and nothing is written; it is then sealed in the org's own
-        KMS namespace and never appears in a response, the account index, or a log line.
-        Discovery follows, and a cluster that fails to fold is reported as DATA in the
-        clusters list rather than failing the link.
-
-        Re-linking a label that already exists re-seals its credential and re-folds it, so
-        this is how a rotated token is replaced. Requires org admin.
-      operationId: post_cloud_by_provider_accounts
-      parameters:
-      - description: |-
-          Provider is the cloud being linked, from the path: digitalocean, aws, gcp
-          or azure.
-        in: path
-        name: provider
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/venueLinkRequest'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/accountFoldView'
-          description: created
-      summary: Links one of the caller org's cloud accounts and folds the Kubernetes
-        clusters it finds there into the ONE Hanzo fleet, so they appear at /v1/clusters
-        and can run work like any managed or bring-your-own cluster.
-      tags:
-      - cloud
-      x-app: venue
-      x-tool: true
-  /v1/cloud/{provider}/accounts/{label}:
-    delete:
-      description: |-
-        Forgets one linked cloud account: it detaches every fleet cluster
-        THIS account folded (its own names, in its own shard — a neighbour's cluster of
-        the same name is untouched), deletes the sealed credential, and drops the index
-        row.
-
-        It is idempotent and deliberately not an existence oracle: an account this org
-        does not hold answers exactly the same as one it just removed. A cluster that
-        fails to detach is logged and the unlink continues, so a dead provider cannot
-        strand a credential. Requires org admin.
-      operationId: delete_cloud_by_provider_accounts_by_label
-      parameters:
-      - description: |-
-          Provider is the cloud the account belongs to: digitalocean, aws, gcp or
-          azure. An unknown provider is not found.
-        in: path
-        name: provider
-        required: true
-        schema:
-          type: string
-      - description: |-
-          Label is the org-chosen name of the account within that provider. Empty
-          means "default"; anything outside 1–64 of [A-Za-z0-9._-] is refused.
-        in: path
-        name: label
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/unlinkedView'
-          description: ok
-      summary: 'Forgets one linked cloud account: it detaches every fleet cluster
-        THIS account folded (its own names, in its own shard — a neighbour''s cluster
-        of the same name is untouched), deletes the sealed credential, and drops the
-        index row.'
-      tags:
-      - cloud
-      x-app: venue
-      x-tool: true
-  /v1/cloud/{provider}/accounts/{label}/sync:
-    post:
-      description: |-
-        Re-discovers one already-linked cloud account and reconciles what it
-        folded: kubeconfigs are refreshed, clusters that appeared since the last sync are
-        folded, and clusters this account folded that the provider no longer returns are
-        detached — only this account's own, in the fleet shard it was linked into.
-
-        It is idempotent, it reads the credential already sealed at link time, and a
-        discovery failure leaves the existing fold set alone rather than mass-detaching
-        it. An account this org has not linked is not found. Requires org admin.
-      operationId: post_cloud_by_provider_accounts_by_label_sync
-      parameters:
-      - description: |-
-          Provider is the cloud the account belongs to: digitalocean, aws, gcp or
-          azure. An unknown provider is not found.
-        in: path
-        name: provider
-        required: true
-        schema:
-          type: string
-      - description: |-
-          Label is the org-chosen name of the account within that provider. Empty
-          means "default"; anything outside 1–64 of [A-Za-z0-9._-] is refused.
-        in: path
-        name: label
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/accountFoldView'
-          description: ok
-      summary: 'Re-discovers one already-linked cloud account and reconciles what
-        it folded: kubeconfigs are refreshed, clusters that appeared since the last
-        sync are folded, and clusters this account folded that the provider no longer
-        returns are detached — only this account''s own, in the fleet shard it was
-        linked into.'
-      tags:
-      - cloud
-      x-app: venue
-      x-tool: true
-  /v1/cloud/accounts:
-    get:
-      description: |-
-        Lists the caller org's linked cloud accounts across every provider:
-        which account each one is at the provider, which fleet clusters it folded, and
-        when it was last discovered. Metadata only — a sealed credential never appears in
-        a response. Another org's accounts are not visible and not countable.
-      operationId: get_cloud_accounts
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/cloudAccountsView'
-          description: ok
-      summary: 'Lists the caller org''s linked cloud accounts across every provider:
-        which account each one is at the provider, which fleet clusters it folded,
-        and when it was last discovered.'
-      tags:
-      - cloud
-      x-app: venue
-      x-tool: true
   /v1/cloudflare/ai/run/{wildcard1}:
     post:
       description: |-
@@ -114851,9 +114466,6 @@ tags:
     a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
     cannot INSTALL.
   name: chat
-- description: 'Package venue is bring your own cloud: link a DigitalOcean, AWS or
-    GCP account and its clusters show up ready to run work.'
-  name: cloud
 - description: 'Package cloudflare is your Cloudflare account, managed from Hanzo:
     zones, Pages, Workers, Workers AI, R2, KV and D1.'
   name: cloudflare
