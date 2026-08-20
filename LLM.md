@@ -668,7 +668,7 @@ package under `apps/<name>` that obeys these seams — nothing more.
     surface costs has to be stated by whoever decides to mount it — exactly as
     for a linked-in subsystem.
   - `prefixes` is variadic because ONE service commonly owns several route
-    subtrees (`o11y` answers `/v1/o11y` AND `/v1/sentry`, both registered by the
+    subtrees (`o11y` answers `/v1/o11y` AND `/v1/sentinel`, both registered by the
     same `MountO11y` the child runs). Naming only the first 404s the rest AT THE
     HOST — the request never reaches the child — while the host starts and
     reports healthy. **The plugin is the unit of deployment; the subtrees it owns
@@ -2263,7 +2263,7 @@ file until now, in opposite directions:
   the filter eats all of them and the partition table has never dispatched either
   package. This is the SAME failure the two bullets above describe, in the
   direction that costs more: a phantom sends an agent at nothing, a hidden route
-  means nobody is ever sent. o11y's own 7-vs-8 was the tell (`a.All("/v1/sentry/*",
+  means nobody is ever sent. o11y's own 7-vs-8 was the tell (`a.All("/v1/sentinel/*",
   zip.AdaptNetHTTP(…`, o11y.go:231) — one route short of the 8 its conversion
   recorded, which is how this was found.
 
