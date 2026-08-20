@@ -1,21 +1,21 @@
 // Package storage is object storage: your buckets and the files in them, with
 // signed URLs for upload and download.
 //
-// It serves an org's buckets and objects at /v1/storage — list, create, delete, and
+// It serves an org's buckets and objects at /v1/s3 — list, create, delete, and
 // presigned upload/download URLs — over the shared SeaweedFS S3 gateway.
 //
 // It is the DATA plane over that store — the companion to apps/provisioning,
-// which is the CONTROL plane (allocate/list/drop the s3 RESOURCE at /v1/storage and
-// /v1/storage/:name).
+// which is the CONTROL plane (allocate/list/drop the s3 RESOURCE at /v1/s3 and
+// /v1/s3/:name).
 //
-//	GET    /v1/storage/health                              — real probe (503 fail-closed); public
-//	GET    /v1/storage/buckets                             — list the caller's buckets;       JWT, org-scoped
-//	POST   /v1/storage/buckets            {name}           — create a bucket;                  JWT, org-scoped
-//	DELETE /v1/storage/buckets/:bucket                     — delete an EMPTY bucket;           JWT, org-scoped
-//	GET    /v1/storage/buckets/:bucket/objects?prefix=&delimiter=/  — list objects (folders);  JWT, org-scoped
-//	POST   /v1/storage/buckets/:bucket/objects  {key}      — presigned PUT url (upload);       JWT, org-scoped
-//	GET    /v1/storage/buckets/:bucket/objects/*           — presigned GET url (download);     JWT, org-scoped
-//	DELETE /v1/storage/buckets/:bucket/objects/*           — delete one object;                JWT, org-scoped
+//	GET    /v1/s3/health                              — real probe (503 fail-closed); public
+//	GET    /v1/s3/buckets                             — list the caller's buckets;       JWT, org-scoped
+//	POST   /v1/s3/buckets            {name}           — create a bucket;                  JWT, org-scoped
+//	DELETE /v1/s3/buckets/:bucket                     — delete an EMPTY bucket;           JWT, org-scoped
+//	GET    /v1/s3/buckets/:bucket/objects?prefix=&delimiter=/  — list objects (folders);  JWT, org-scoped
+//	POST   /v1/s3/buckets/:bucket/objects  {key}      — presigned PUT url (upload);       JWT, org-scoped
+//	GET    /v1/s3/buckets/:bucket/objects/*           — presigned GET url (download);     JWT, org-scoped
+//	DELETE /v1/s3/buckets/:bucket/objects/*           — delete one object;                JWT, org-scoped
 //
 // ORG SCOPING — every tenant only ever sees or touches its OWN namespace. A
 // bucket's PHYSICAL name is derived server-side from the caller's validated org
@@ -28,17 +28,17 @@
 // boundary is by construction, not by a checked flag.
 //
 // FAIL-CLOSED — absent S3_ADMIN_* credentials the subsystem mounts
-// health-only: /v1/storage/health is an honest 503 and every op returns 503. It never
+// health-only: /v1/s3/health is an honest 503 and every op returns 503. It never
 // fabricates a bucket or object list.
 //
 // ROUTE ORDERING — registered as id "s3" with cloud.HealthOwner, at order 118
 // (< provisioning's 120). Two independent concerns: (1) health — this subsystem
-// serves its OWN fail-closed /v1/storage/health (Mount); cloud.HealthOwner makes Serve
+// serves its OWN fail-closed /v1/s3/health (Mount); cloud.HealthOwner makes Serve
 // skip the generic always-ok /v1/<name>/health so it never shadows the real probe
 // with a fake 200 (the same flag clients/kms and clients/paas use). (2) routing —
 // Fiber v3 matches routes by an ORDERED scan and takes the first match, so the
-// static GET /v1/storage/buckets and GET /v1/storage/health must register BEFORE
-// provisioning's GET /v1/storage/:name (order 120) to win — hence order 118.
+// static GET /v1/s3/buckets and GET /v1/s3/health must register BEFORE
+// provisioning's GET /v1/s3/:name (order 120) to win — hence order 118.
 //
 // RESIDUAL RISKS THIS SUBSYSTEM RIDES (documented after adversarial review; not
 // fixable inside the subsystem, escalated to the platform):
@@ -136,14 +136,14 @@ const metered = "\n\nA validated principal is required, and every bucket and key
 // answers one object under two statuses (see each note above). So there is no doc
 // comment for zipdoc to lift, and the prose is declared beside the route table.
 func init() {
-	openapi.Describe("/v1/storage/buckets", http.MethodGet,
+	openapi.Describe("/v1/s3/buckets", http.MethodGet,
 		"List your org's buckets",
 		"Returns the caller's own buckets under the friendly names they were created with, "+
 			"each with its creation time.\n\n"+
 			"Another tenant's bucket is not refused, it is INVISIBLE — a bucket outside the "+
 			"caller's namespace is skipped during the listing rather than reported, so the "+
 			"operation cannot be used to discover that a name is taken elsewhere."+metered)
-	openapi.Describe("/v1/storage/buckets", http.MethodPost,
+	openapi.Describe("/v1/s3/buckets", http.MethodPost,
 		"Create a bucket in your org",
 		"Creates a new bucket in the caller's own namespace and answers 201 with its "+
 			"friendly name and creation time.\n\n"+
@@ -151,7 +151,7 @@ func init() {
 			"match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, so a mixed-case name is a clean "+
 			"400 rather than a bucket created as `photos` that the caller keeps asking for "+
 			"as `Photos`. A name already in use in the caller's own namespace is 409."+metered)
-	openapi.Describe("/v1/storage/buckets/:bucket", http.MethodDelete,
+	openapi.Describe("/v1/s3/buckets/:bucket", http.MethodDelete,
 		"Delete an empty bucket",
 		"Removes one of the caller's buckets, and only when it is already EMPTY — a bucket "+
 			"with objects in it answers 409 instead.\n\n"+
@@ -159,7 +159,7 @@ func init() {
 			"a delete of a tenant's objects behind a single bucket call, so emptying the "+
 			"bucket stays an explicit act. A bucket that does not exist is 404, and a "+
 			"successful delete answers 204 with no body."+metered)
-	openapi.Describe("/v1/storage/buckets/:bucket/objects", http.MethodGet,
+	openapi.Describe("/v1/s3/buckets/:bucket/objects", http.MethodGet,
 		"Browse one level of a bucket",
 		"Lists one folder level of a bucket: each entry's key, whether it is a folder, its "+
 			"size, last-modified time and ETag. `prefix` scopes the read to a sub-folder.\n\n"+
@@ -169,7 +169,7 @@ func init() {
 			"`recursive=true` flattens it to every key beneath the prefix instead.\n\n"+
 			"The listing is bounded at 1000 entries so a large bucket cannot exhaust memory; "+
 			"treat a full page as \"there may be more\" rather than as the whole bucket."+metered)
-	openapi.Describe("/v1/storage/buckets/:bucket/objects", http.MethodPost,
+	openapi.Describe("/v1/s3/buckets/:bucket/objects", http.MethodPost,
 		"Get a URL to upload one object directly",
 		"Returns a short-lived presigned PUT URL, with the method, the cleaned key and the "+
 			"seconds until it expires. The client uploads to that URL DIRECTLY — the bytes "+
@@ -180,7 +180,7 @@ func init() {
 			"path-cleaned before signing, so a traversal cannot escape the bucket. A "+
 			"deployment with no public storage endpoint answers 503, because there is no "+
 			"host to sign a browser-followable URL against."+metered)
-	openapi.Describe("/v1/storage/buckets/:bucket/objects/*", http.MethodGet,
+	openapi.Describe("/v1/s3/buckets/:bucket/objects/*", http.MethodGet,
 		"Get a URL to download one object directly",
 		"Returns a short-lived presigned GET URL for the object at the trailing path, with "+
 			"the method, the key and its remaining lifetime. As with upload, the client "+
@@ -191,14 +191,14 @@ func init() {
 			"in place. Signed against the public host, scoped to the one bucket and key, and "+
 			"good for five minutes; a deployment with no public storage endpoint answers "+
 			"503."+metered)
-	openapi.Describe("/v1/storage/buckets/:bucket/objects/*", http.MethodDelete,
+	openapi.Describe("/v1/s3/buckets/:bucket/objects/*", http.MethodDelete,
 		"Delete one object",
 		"Removes the single object at the trailing path from one of the caller's buckets "+
 			"and answers 204 with no body. The key is path-cleaned first, so the delete "+
 			"cannot reach outside the bucket it names.\n\n"+
 			"It removes one object and never a prefix: a trailing path that looks like a "+
 			"folder deletes the placeholder at that key, not the objects beneath it."+metered)
-	openapi.Describe("/v1/storage/health", http.MethodGet,
+	openapi.Describe("/v1/s3/health", http.MethodGet,
 		"Whether object storage is usable here",
 		"A real readiness probe rather than a liveness stub: 200 only when the storage "+
 			"credentials are present, and it additionally reports whether presigning is "+
@@ -210,7 +210,7 @@ func init() {
 			"no credential, bucket or tenant detail.")
 }
 
-// Mount wires /v1/storage/* onto app. The "s3"-product meter and the guard-wrapped,
+// Mount wires /v1/s3/* onto app. The "s3"-product meter and the guard-wrapped,
 // unconditional route set make this a direct construction (cloud.NewBase), not
 // cloud.Mount.
 func Mount(app cloud.Router, deps cloud.Deps) error {
@@ -222,8 +222,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Register the FULL surface unconditionally — even when S3 is unconfigured.
 	// The guard fails each op closed with 503 (s.State.admin.Configured() is false),
 	// so the s3 subsystem always OWNS its route space. If the routes were mounted only
-	// when configured, an unconfigured deployment would leak /v1/storage/buckets and
-	// /v1/storage/objects to provisioning's GET /v1/storage/:name (a 404 "resource not
+	// when configured, an unconfigured deployment would leak /v1/s3/buckets and
+	// /v1/s3/objects to provisioning's GET /v1/s3/:name (a 404 "resource not
 	// found") instead of the honest 503 — the file-manager surface must fail closed
 	// under its own name, never fall through to a different subsystem's handler.
 	// EVERY ROUTE ON THIS SURFACE STAYS UNTYPED, and none of it is for want of
@@ -251,7 +251,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//
 	// All three clear on the same zip change: an error that can carry a body, and a
 	// second declarable success status.
-	g := app.Group("/v1/storage")
+	g := app.Group("/v1/s3")
 	g.Get("/health", cloud.Handle(s, health))
 	g.Get("/buckets", guard(s, cloud.Handle(s, listBuckets)))
 	g.Post("/buckets", guard(s, cloud.Handle(s, createBucket)))
@@ -266,7 +266,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return nil
 	}
 	s.Log.Info("s3 subsystem mounted",
-		"prefix", "/v1/storage",
+		"prefix", "/v1/s3",
 		"presign", s.State.admin.PresignConfigured(),
 		"brand", deps.Brand,
 		"env", deps.Env,
@@ -354,7 +354,7 @@ func reqOrg(ctx *zip.Ctx) string {
 // NORMALIZATION — this uses namespace.Sanitize (case-folds to a DNS slug),
 // NOT KMS's exact-match, ON PURPOSE: the S3 bucket name is derived through
 // provisioning's SAME sanitized slug (BucketName), so a bucket provisioned via
-// POST /v1/storage is findable here — exact-match would break that lockstep. A real
+// POST /v1/s3 is findable here — exact-match would break that lockstep. A real
 // IAM owner claim is already a lowercase DNS label, so the fold is a no-op on
 // validated input (and, post the gate, only a validated principal reaches it).
 // The divergence from KMS is intentional per-subsystem, not drift.
@@ -374,7 +374,7 @@ func tenant(ctx *zip.Ctx) (string, bool) {
 // namespaced to the caller's org. This is the SAME derivation
 // provisioning.BucketName uses (bucketName(physicalName(org,name)) — org-hash
 // prefixed AND '_'→'-' folded to a DNS-safe S3 name), so a bucket provisioned via
-// POST /v1/storage is browsable here and a bucket created here is a valid S3 name.
+// POST /v1/s3 is browsable here and a bucket created here is a valid S3 name.
 func physicalBucket(org, friendly string) string { return provisioning.BucketName(org, friendly) }
 
 // orgPrefix is the S3-bucket-name prefix that ALL of a caller's buckets share
