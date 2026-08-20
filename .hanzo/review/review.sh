@@ -168,7 +168,11 @@ claims() {
     | python3 -c 'import json,sys
 try: c = json.load(sys.stdin)
 except Exception: sys.exit(0)
-print(" ".join(f"{k}={c[k]}" for k in ("iss","aud","sub","client_id") if c.get(k)))' 2>/dev/null
+# aud is a string OR an array (RFC 7519), and the point of printing it is that a
+# reader copies the value into an allowlist — so render the members, never the
+# Python list that once made this read aud=["hanzo-review"].
+def v(x): return ",".join(map(str, x)) if isinstance(x, list) else str(x)
+print(" ".join(f"{k}={v(c[k])}" for k in ("iss","aud","sub","client_id") if c.get(k)))' 2>/dev/null
 }
 presented=$(claims)
 [ "$code" = "200" ] || die "reviewer answered $code — cannot judge this change, so it does not pass ($(head -c 200 "$resp"))${presented:+ [presented $presented]}"
