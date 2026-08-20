@@ -114,32 +114,27 @@ func TestCompleteReadsAWildcardDeclarationThroughTheSameTranslation(t *testing.T
 
 // THE FALSE POSITIVE, at the pair that produced it.
 //
-// It was found on s3: provisioning both served and described POST /v1/s3 while
-// storage served the deeper /v1/s3/buckets, so by product segment both were "s3"
-// and storage was charged with a declaration that is provisioning's and correct.
-// `make check` died on an app with nothing wrong with it.
+// provisioning both SERVES and DESCRIBES POST /v1/s3 — the route at
+// apps/provisioning/provisioning.go:257, the prose at :341 — while storage serves
+// the deeper /v1/s3/buckets and /v1/s3/health. By product segment both are "s3",
+// so storage was charged with a declaration that is provisioning's and correct,
+// and `make check` died on an app with nothing wrong with it:
 //
-// That pair is gone — storage answers at /v1/storage now and shares its product
-// with nobody — so the fixture is /v1/vector, which the manifest names as the
-// same relation: provisioning serves the shallow address, product serves
-// /v1/vector/collections beneath it. The property is what is under test, not the
-// address it was first seen at.
+//	storage: 1 description(s) name no operation:
+//	  POST /v1/s3
 //
-// By owner they are two apps, and the deeper one is never asked about the
-// shallower one's prose.
+// By owner they are two apps, and storage is never asked about provisioning's prose.
 func TestCompleteDoesNotChargeAnAppForASiblingSharingItsProduct(t *testing.T) {
-	Describe("/v1/vector", "POST", "Provision a vector resource",
+	Describe("/v1/s3", "POST", "Provision an s3 resource",
 		"provisioning's own declaration, on a route provisioning itself serves.")
-	t.Cleanup(func() { unregister("/v1/vector", "POST") })
+	t.Cleanup(func() { unregister("/v1/s3", "POST") })
 
-	product := &Document{Paths: map[string]PathItem{
-		"/v1/vector/collections": {"get": {
-			OperationID: "get_vector_collections",
-			Summary:     "List your org's collections",
-		}},
+	storage := &Document{Paths: map[string]PathItem{
+		"/v1/s3/buckets": {"get": {OperationID: "get_s3_buckets", Summary: "List your org's buckets"}},
+		"/v1/s3/health":  {"get": {OperationID: "get_s3_health", Summary: "Report the object store's reachability"}},
 	}}
-	if err := Complete(product, routed); err != nil {
-		t.Fatalf("product was charged with provisioning's declaration: %v", err)
+	if err := Complete(storage, routed); err != nil {
+		t.Fatalf("storage was charged with provisioning's declaration: %v", err)
 	}
 }
 
@@ -153,7 +148,7 @@ func TestCompleteDoesNotChargeAnAppForASiblingSharingItsProduct(t *testing.T) {
 // POST /v1/store/storefront-token, one app over. Attributing by owner must not
 // soften this by one inch.
 func TestCompleteStillRefusesADeclarationMisfiledInsideTheAppsOwnPrefix(t *testing.T) {
-	const misfiled = "/v1/storage/buckets/:bucket/object" // the router carries .../objects
+	const misfiled = "/v1/s3/buckets/:bucket/object" // the router carries .../objects
 	if got := routed(misfiled); got != "storage" {
 		t.Fatalf("premise broken: the fleet routes %s to %q, so this no longer tests "+
 			"a misfile inside storage's OWN surface", misfiled, got)
@@ -162,9 +157,9 @@ func TestCompleteStillRefusesADeclarationMisfiledInsideTheAppsOwnPrefix(t *testi
 	t.Cleanup(func() { unregister(misfiled, "GET") })
 
 	storage := &Document{Paths: map[string]PathItem{
-		"/v1/storage/buckets": {"get": {OperationID: "get_storage_buckets", Summary: "List your org's buckets"}},
-		"/v1/storage/buckets/{bucket}/objects": {"get": {
-			OperationID: "get_storage_buckets_by_bucket_objects",
+		"/v1/s3/buckets": {"get": {OperationID: "get_s3_buckets", Summary: "List your org's buckets"}},
+		"/v1/s3/buckets/{bucket}/objects": {"get": {
+			OperationID: "get_s3_buckets_by_bucket_objects",
 			Summary:     "List the objects in one bucket",
 		}},
 	}}
