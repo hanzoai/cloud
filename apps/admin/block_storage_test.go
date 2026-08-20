@@ -15,6 +15,8 @@
 package admin
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
@@ -126,5 +128,50 @@ func TestDatastoreFillFromRow(t *testing.T) {
 	// A disk that reports no capacity is an unusable read → nil (never a fake 0%).
 	if datastoreFillFromRow(map[string]any{"total_space": uint64(0)}) != nil {
 		t.Fatal("zero-capacity disk must yield nil, not a fabricated 0%")
+	}
+}
+
+// TestAnUnreadFleetIsNotAnEmptyOne is the mechanism finding on this board. The DO
+// read's error used to be discarded (`vols, _ :=`), and the fleet roll-up has no
+// field that can abstain — so a refused read produced 0 volumes, 0 GiB and $0/mo,
+// which is byte-identical to the perfectly ordinary answer for an account that
+// holds no block storage. The count is not the place to say this; completeness is.
+func TestAnUnreadFleetIsNotAnEmptyOne(t *testing.T) {
+	refused := errors.New("do: 401 unauthorized")
+
+	empty, reason := fleetRead(true, nil)
+	if !empty || reason != "" {
+		t.Fatalf("a read that answered is complete; got complete=%v reason=%q", empty, reason)
+	}
+
+	for _, tc := range []struct {
+		name       string
+		configured bool
+		err        error
+		names      string
+	}{
+		{"credential absent", false, nil, "DO_API_TOKEN"},
+		{"credential refused", true, refused, "401"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			complete, reason := fleetRead(tc.configured, tc.err)
+			if complete {
+				t.Fatal("a fleet nobody read cannot be reported as fully read")
+			}
+			if reason == "" {
+				t.Fatal("an incomplete board must name why, or the zeros below it still read as measurements")
+			}
+			if !strings.Contains(reason, tc.names) {
+				t.Errorf("reason %q does not name the actual cause (%q)", reason, tc.names)
+			}
+		})
+	}
+
+	// The two negative cases are different facts and must not collapse into one
+	// message: "never asked" and "asked, refused" call for different operator moves.
+	_, absent := fleetRead(false, nil)
+	_, broken := fleetRead(true, refused)
+	if absent == broken {
+		t.Error("an unconfigured account and a refused credential are different facts and must read differently")
 	}
 }

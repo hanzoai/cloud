@@ -1,8 +1,17 @@
 package finance
 
 import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/admin/core"
+	"github.com/hanzoai/cloud/apps/admin/digitalocean"
 )
 
 // TestFundingClass locks the provider-level funding classification the
@@ -109,4 +118,103 @@ func TestWindowReadsTheDatesItWasGiven(t *testing.T) {
 			}
 		}
 	})
+}
+
+// doStub serves the two reads the do-ai ledger row makes (balance, then invoices for
+// the discovered grant) at a chosen status, so a test can revoke the credential
+// without one existing.
+func doStub(t *testing.T, status int, balance string) *digitalocean.Client {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+			_, _ = io.WriteString(w, `{"id":"unauthorized","message":"Unable to authenticate you"}`)
+			return
+		}
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/v2/customers/my/balance"):
+			_, _ = io.WriteString(w, balance)
+		default:
+			_, _ = io.WriteString(w, `{"invoices":[]}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return digitalocean.NewWithBase(srv.URL, "dop_v1_a_revoked_token_is_still_a_string")
+}
+
+// TestARevokedTokenDoesNotClassifyAProviderAsPaid is the mechanism finding on this
+// board. Ready() is a PRESENCE check and a revoked token is still a non-empty
+// string, so the do-ai row is built, the live read 401s, and the row used to fall
+// through to the no-grant branch — publishing IsPaidOnly on an account whose promo
+// credit had simply not been read. Every usage line then inherited "paid".
+func TestARevokedTokenDoesNotClassifyAProviderAsPaid(t *testing.T) {
+	s := &cloud.Service[core.State]{State: core.State{DO: doStub(t, http.StatusUnauthorized, "")}}
+
+	var row ProviderCredit
+	for _, pc := range computeProviderCredits(context.Background(), s) {
+		if pc.Provider == "do-ai" {
+			row = pc
+		}
+	}
+	if row.Provider == "" {
+		t.Fatal("a configured provider must stay on the board when its read fails — vanishing is its own lie")
+	}
+	if row.Error == "" {
+		t.Fatal("the row carries no error, so a refused read is indistinguishable from a read that found no grant")
+	}
+	if row.IsPaidOnly {
+		t.Error("a provider whose credit could not be READ was reported as established paid-only — " +
+			"that is promo spend labelled as cash")
+	}
+	if row.HasCredit {
+		t.Error("nothing was read, so credit must not be asserted either")
+	}
+	if got := fundingClass(row); got != "unknown" {
+		t.Errorf("fundingClass on an unread row = %q, want %q — the usage board tags every line with this", got, "unknown")
+	}
+}
+
+// TestAReadThatAnsweredStillClassifies keeps the fix from becoming a blanket
+// abstention: when DO answers, the verdict is real. A balance of -$500 is $500 of
+// credit we hold.
+func TestAReadThatAnsweredStillClassifies(t *testing.T) {
+	bal := `{"account_balance":"-500.00","month_to_date_balance":"0.00","month_to_date_usage":"10.00","generated_at":"2026-08-19T00:00:00Z"}`
+	s := &cloud.Service[core.State]{State: core.State{DO: doStub(t, http.StatusOK, bal)}}
+
+	var row ProviderCredit
+	for _, pc := range computeProviderCredits(context.Background(), s) {
+		if pc.Provider == "do-ai" {
+			row = pc
+		}
+	}
+	if row.Error != "" {
+		t.Fatalf("DO answered, so no error belongs on the row: %q", row.Error)
+	}
+	if row.RemainingCents != 50_000 {
+		t.Errorf("remaining = %d cents, want 50000", row.RemainingCents)
+	}
+	if !row.HasCredit || row.IsPaidOnly {
+		t.Errorf("credit remaining must classify as credit-funded; got hasCredit=%v isPaidOnly=%v", row.HasCredit, row.IsPaidOnly)
+	}
+	if got := fundingClass(row); got != "credit" {
+		t.Errorf("fundingClass = %q, want credit", got)
+	}
+}
+
+// TestUnknownIsNotOneOfTheThreeVerdicts pins the wire invariant the row relies on:
+// on the healthy path exactly one of HasCredit/IsPaidOnly is true, so both-false is
+// unambiguously "not classified" and needs no sentinel amount to say so.
+func TestUnknownIsNotOneOfTheThreeVerdicts(t *testing.T) {
+	for _, pc := range []ProviderCredit{
+		{HasCredit: true, RemainingCents: 1},
+		{HasCredit: true, RemainingCents: 0},
+		{IsPaidOnly: true},
+	} {
+		if got := fundingClass(pc); got == "unknown" {
+			t.Errorf("a row that WAS read must reach a real verdict; %+v classified unknown", pc)
+		}
+	}
+	if got := fundingClass(ProviderCredit{Error: "401 unauthorized"}); got != "unknown" {
+		t.Errorf("an unread row = %q, want unknown", got)
+	}
 }

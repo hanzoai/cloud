@@ -32,11 +32,14 @@ package admin
 //     connection. This is THE number the operator scales on.
 //
 // SUPERADMIN ONLY (core.Admit, the op's first line): a cross-tenant infra read, all-orgs.
-// admin holds NO storage state — it only reads DO + the datastore. DO unconfigured →
-// empty fleet; datastore not connected → no datastore card. Never a fabricated fleet.
+// admin holds NO storage state — it only reads DO + the datastore. DO unread → the fleet
+// numbers are marked incomplete and the reason names which read failed; datastore not
+// connected → no datastore card. Never a fabricated fleet, and never a silent one.
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
@@ -92,11 +95,22 @@ type storageAlert struct {
 }
 
 // storageSnapshot is the whole board payload the console normalizes.
+//
+// Complete/IncompleteReason/Sources carry the same meaning they carry on the infra
+// board, which is the one vocabulary for this in admin: Sources names each upstream
+// and why it did or did not answer, and Complete says whether the numbers beside it
+// may be read as measurements. The fleet roll-up needs it because its fields cannot
+// abstain — a fleet of 0 volumes at $0/mo is a perfectly ordinary answer for an
+// account with no block storage, so it is also exactly what an unread account looks
+// like, and nothing in the payload told the two apart.
 type storageSnapshot struct {
-	Fleet     storageFleet     `json:"fleet"`
-	Datastore *datastoreVolume `json:"datastore"`
-	Volumes   []storageVolume  `json:"volumes"`
-	Alerts    []storageAlert   `json:"alerts"`
+	Complete         bool                `json:"complete"`
+	IncompleteReason string              `json:"incompleteReason"`
+	Sources          []core.SourceStatus `json:"sources"`
+	Fleet            storageFleet        `json:"fleet"`
+	Datastore        *datastoreVolume    `json:"datastore"`
+	Volumes          []storageVolume     `json:"volumes"`
+	Alerts           []storageAlert      `json:"alerts"`
 }
 
 // volumes returns the realtime block-storage board: the DigitalOcean volume fleet
@@ -108,9 +122,13 @@ type storageSnapshot struct {
 // card is the one real fill here, and it is the number to scale on.
 //
 // The two sources degrade independently — a DO outage still returns the datastore fill,
-// and a disconnected datastore still returns the DO fleet.
+// and a disconnected datastore still returns the DO fleet. What a DO outage must NOT do
+// is pass for an account with no volumes, so the fleet it could not read is marked
+// incomplete rather than reported as a count of zero at a cost of zero.
 //
-// Response: {"status":"ok","msg":"","data":{"fleet":{"count":2,"totalGiB":300,"usedGiB":null,
+// Response: {"status":"ok","msg":"","data":{"complete":true,"incompleteReason":"",
+// "sources":[{"name":"do.volumes","ok":true,"rows":2,"error":"","at":"2026-08-19T00:00:00Z"}],
+// "fleet":{"count":2,"totalGiB":300,"usedGiB":null,
 // "pct":null,"monthlyUsd":30},"datastore":{"name":"default","mount":"/var/lib/datastore",
 // "sizeGiB":200,"usedGiB":81.4,"pct":40.7},"volumes":[{"id":"v1","name":"datastore-data",
 // "region":"nyc3","sizeGiB":200,"usedGiB":null,"pct":null,"attached":true,"service":""}],
@@ -119,10 +137,32 @@ func (o ops) volumes(ctx context.Context, _ *core.None) (*volumesOut, error) {
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
 	}
-	vols, _ := o.s.State.DO.Volumes(ctx) // honest empty on not-configured / unreachable
-	fill := datastoreFill(ctx)           // nil unless system.disks answered
+	at := time.Now().UTC().Format(time.RFC3339)
+	vols, err := o.s.State.DO.Volumes(ctx) // the error is the board's, not a detail to drop
+	fill := datastoreFill(ctx)             // nil unless system.disks answered
 	snap := buildStorageSnapshot(vols, fill)
+	snap.Sources = []core.SourceStatus{core.SrcOf("do.volumes", err, len(vols), at)}
+	snap.Complete, snap.IncompleteReason = fleetRead(o.s.State.DO.Ready(), err)
 	return &volumesOut{Status: core.OK, Data: &snap}, nil
+}
+
+// fleetRead says whether the fleet roll-up may be read as a measurement, and when it
+// may not, why (PURE — unit-tested).
+//
+// The two negative cases are different facts and are told apart: an account we were
+// never given a token for has no fleet to report, while a token that stopped working
+// leaves a fleet we simply did not see. Both produce the same zeros, which is the
+// whole reason the distinction has to be carried alongside them rather than inferred
+// from them. This still answers 200 with the datastore card intact — an operator
+// reads this board DURING an incident, and a named gap beats a blank page.
+func fleetRead(configured bool, err error) (bool, string) {
+	switch {
+	case !configured:
+		return false, "DO_API_TOKEN is not configured, so the block-storage fleet was never read — its count, capacity and cost are unknown, not zero."
+	case err != nil:
+		return false, fmt.Sprintf("DigitalOcean did not answer (%v), so the fleet count, capacity and cost below are not measurements.", err)
+	}
+	return true, ""
 }
 
 // volumesOut is the GET /v1/admin/volumes envelope.
