@@ -23,10 +23,10 @@ func (stubKMS) PutSecret(context.Context, string, []byte) error      { return ni
 func (stubKMS) DeleteSecret(context.Context, string) error           { return nil }
 func (stubKMS) Sign(context.Context, string, []byte) ([]byte, error) { return nil, nil }
 
-// TestZenKeyResolver_EnvFallback pins the production wiring: the upstream provider
-// key is provisioned as env (from the cloud-api-llm-keys secret), NOT sealed in the
-// co-resident KMS store, so a KMS miss must resolve to the env value rather than
-// returning "" (which would send an empty bearer upstream → provider 401).
+// TestZenKeyResolver_EnvFallback keeps the environment as the FALLBACK. Provider
+// keys are provisioned as env today and are not all sealed, so a store miss must
+// resolve to the env value rather than "" — an empty bearer upstream is a 401 that
+// reads to the caller as a failed chat. Asking the store first costs nothing here.
 func TestZenKeyResolver_EnvFallback(t *testing.T) {
 	const env = "DO_AI_API_KEY"
 	t.Setenv(env, "env-provisioned-key")
@@ -42,17 +42,18 @@ func TestZenKeyResolver_EnvFallback(t *testing.T) {
 	}
 }
 
-// TestZenKeyResolver_EnvTakesPrecedence pins the resolution ORDER: env is read
-// FIRST, then KMS — the same order ai uses on the prod hot path. The operator
-// injects provider keys as env from the KMS-synced secret, so the env is the live
-// value; the co-resident store is the fallback. A key present in BOTH surfaces
-// resolves to the env value.
-func TestZenKeyResolver_EnvTakesPrecedence(t *testing.T) {
+// TestZenKeyResolver_SealedTakesPrecedence pins the resolution ORDER: the store is
+// read FIRST, the environment second — the same order ai uses (object/kms.go
+// resolveSecretName). This is what makes sealing a key mean anything: with the
+// environment first, a sealed key changes nothing while a stale entry sits beside
+// it, so the entry can never be removed and the value stays readable to anything
+// that can reach the process.
+func TestZenKeyResolver_SealedTakesPrecedence(t *testing.T) {
 	const env = "ANTHROPIC_API_KEY"
 	t.Setenv(env, "env-key")
 	got := zenKeyResolver(stubKMS{sealed: map[string]string{env: "sealed-key"}})(context.Background(), env)
-	if got != "env-key" {
-		t.Fatalf("got %q, want env-key (env precedence)", got)
+	if got != "sealed-key" {
+		t.Fatalf("got %q, want sealed-key — sealing is inert if the environment wins", got)
 	}
 }
 
