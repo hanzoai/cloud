@@ -80,7 +80,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/content/channels": {
@@ -102,7 +103,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/content/generate": {
@@ -144,7 +146,8 @@
             },
             "description": "payment required"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/content/lifecycle": {
@@ -166,7 +169,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/content/publish": {
@@ -202,7 +206,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/content/{doctype}/{name}/transition": {
@@ -261,7 +266,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

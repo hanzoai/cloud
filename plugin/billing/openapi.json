@@ -71,7 +71,8 @@
               }
             }
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/finance/balance": {
@@ -101,7 +102,8 @@
               }
             }
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/finance/credits": {
@@ -134,7 +136,8 @@
               }
             }
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/finance/invoices": {
@@ -167,7 +170,8 @@
               }
             }
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/finance/ledger": {
@@ -212,7 +216,8 @@
               }
             }
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/finance/payment-methods": {
@@ -245,7 +250,8 @@
               }
             }
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/finance/usage": {
@@ -287,7 +293,8 @@
               }
             }
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },
