@@ -5,10 +5,24 @@
 
 // planesink.go — the WRITE half of cloud's own telemetry, ON THE EVENT PLANE.
 //
-// Spans and logs that reach this binary land in event.span / event.log — the
-// same 15-column envelope every other signal shares (event.event, event.error,
-// event.metric) — never in the retired o11y_* databases. ONE shape for every
-// signal's write path, and it is the shape metrics.go already proved: a ZAP
+// Spans and logs that reach this binary land in event.span / event.log, never in
+// the retired o11y_* databases.
+//
+// THEY DO NOT SHARE AN ENVELOPE WITH event.fact, and this comment used to say
+// they did — "the same 15-column envelope every other signal shares". Measured
+// 2026-08-20: fact 41 columns, error 32, log 25, span 24, event 16, metric 8. No
+// two agree and not one of them is 15.
+//
+// That matters because event.fact IS the canonical occurrence table and its
+// signal enum already carries "log" and "span", so this looks like a migration
+// waiting on a constant swap. It is not. event.log carries resource_fingerprint,
+// the join key every log read narrows through (see planeLogResourceTable below),
+// and event.fact has no such column — so a log written there is a log no service
+// filter can find. Finishing the merge means a column on a 41-column table, the
+// read plane, and a backfill; it does not mean editing the two lines under it.
+//
+// ONE shape for every signal's write path, and it is the shape metrics.go already
+// proved: a ZAP
 // receiver decodes the wire, a native writer appends a prepared batch over the
 // branded datastore client. No embedded otelcol pipeline, no pdata bridge, no
 // exporter fork — the previous path (ingest.go + zapingest.go + spanconv.go +
