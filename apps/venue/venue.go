@@ -31,8 +31,9 @@
 // sealed in the org's KMS namespace (/orgs/{org}/cloud/{provider}/{label}), and
 // recorded in the org's account index (metadata only — the credential is never in
 // the index, a response, or a log line). This is DISTINCT from the platform's own
-// house DO key (apps/do, one DO_API_TOKEN for Hanzo's own VPCs/LBs): a venue
-// account is the CUSTOMER's cloud account, org-scoped and isolated.
+// house DO key (apps/admin/digitalocean, one DO_API_TOKEN for Hanzo's own
+// account): a venue account is the CUSTOMER's cloud account, org-scoped and
+// isolated.
 //
 // TENANT ISOLATION. org is principal.Org (the ZAP-propagated, gateway-validated
 // owner) — never a client field. Every KMS path, index, and fleet.Register call
