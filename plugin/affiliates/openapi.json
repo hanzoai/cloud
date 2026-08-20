@@ -54,7 +54,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/affiliates/sweep": {
@@ -76,7 +77,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/affiliates/{id}/approve": {
@@ -119,7 +121,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/affiliates/{id}/payout": {
@@ -167,7 +170,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/affiliates/{id}/rate": {
@@ -213,7 +217,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/affiliates/{id}/suspend": {
@@ -246,7 +251,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/referrals": {
@@ -268,7 +274,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/affiliates": {
@@ -290,7 +297,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/affiliates/apply": {
@@ -335,7 +343,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/affiliates/attribute": {
@@ -380,7 +389,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/affiliates/click": {
@@ -415,7 +425,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/affiliates/leaderboard": {
@@ -437,7 +448,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/affiliates/me": {
@@ -459,7 +471,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/affiliates/me/earnings": {
@@ -481,7 +494,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/affiliates/me/handle": {
@@ -516,7 +530,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/affiliates/me/links": {
@@ -538,7 +553,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_affiliates_me_links",
@@ -571,7 +587,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

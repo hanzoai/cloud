@@ -40,7 +40,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "patch_prefs",

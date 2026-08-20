@@ -60,7 +60,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/deploy/applications/{name}": {
@@ -93,7 +94,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/deploy/applications/{name}/resource-tree": {
@@ -126,7 +128,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/deploy/applications/{name}/revisions/{revision}/metadata": {
@@ -168,7 +171,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/deploy/applications/{name}/rollback": {
@@ -241,7 +245,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/deploy/callback": {
@@ -273,7 +278,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/deploy/gitops": {
@@ -295,7 +301,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/deploy/health": {
@@ -347,7 +354,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/deploy/reconcile": {
@@ -379,7 +387,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/deploy/settings": {
@@ -401,7 +410,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/deploy/stream/applications": {
@@ -453,7 +463,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },
