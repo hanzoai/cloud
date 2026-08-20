@@ -40,7 +40,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_framework_doctypes",
@@ -81,7 +82,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/framework/doctypes/{name}": {
@@ -108,7 +110,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_framework_doctypes_by_name",
@@ -140,7 +143,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_framework_doctypes_by_name",
@@ -190,7 +194,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/framework/modules": {
@@ -212,7 +217,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/framework/modules/{module}": {
@@ -246,7 +252,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/framework/modules/{module}/install": {
@@ -280,7 +287,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/framework/roles": {
@@ -302,7 +310,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_framework_roles",
@@ -336,7 +345,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/framework/roles/{user}/{role}": {
@@ -373,7 +383,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/framework/summary": {
@@ -395,7 +406,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/framework/{doctype}": {
@@ -468,7 +480,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_framework_by_doctype",
@@ -523,7 +536,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_framework_by_doctype_by_name",
@@ -568,7 +582,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_framework_by_doctype_by_name",
@@ -641,7 +656,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/framework/{doctype}/{name}/submit": {
@@ -688,7 +704,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

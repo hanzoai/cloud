@@ -40,7 +40,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_links",
@@ -70,7 +71,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/links/devices/{machine}": {
@@ -103,7 +105,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/links/devices/{machine}/revoke": {
@@ -136,7 +139,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/links/route": {
@@ -158,7 +162,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/links/usage": {
@@ -218,7 +223,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_links_usage",
@@ -248,7 +254,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/links/usage/accounts": {
@@ -270,7 +277,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/links/usage/summary": {
@@ -303,7 +311,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/links/{id}": {
@@ -336,7 +345,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_links_by_id",
@@ -367,7 +377,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

@@ -50,7 +50,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/usage/analytics": {
@@ -110,7 +111,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/usage/analytics/access": {
@@ -143,7 +145,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/usage/samples": {
@@ -203,7 +206,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/usage/summary": {
@@ -254,7 +258,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

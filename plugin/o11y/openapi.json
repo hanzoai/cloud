@@ -46,7 +46,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/alerts/last": {
@@ -151,7 +152,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/auto_complete/attribute_values": {
@@ -183,7 +185,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/autocomplete/aggregate_attributes": {
@@ -243,7 +246,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/autocomplete/attribute_keys": {
@@ -321,7 +325,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/autocomplete/attribute_values": {
@@ -417,7 +422,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/availability": {
@@ -460,7 +466,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/channels": {
@@ -482,7 +489,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateChannel",
@@ -512,7 +520,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/channels/test": {
@@ -537,7 +546,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/channels/{id}": {
@@ -562,7 +572,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetChannelByID",
@@ -592,7 +603,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateChannelByID",
@@ -625,7 +637,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/cloud-integrations/{cloud_provider}/agent-check-in": {
@@ -667,7 +680,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/cloud_integrations/{cloud_provider}/accounts": {
@@ -699,7 +713,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateAccount",
@@ -739,7 +754,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/cloud_integrations/{cloud_provider}/accounts/check_in": {
@@ -781,7 +797,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/cloud_integrations/{cloud_provider}/accounts/{id}": {
@@ -814,7 +831,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetAccount",
@@ -852,7 +870,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateAccount",
@@ -893,7 +912,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/cloud_integrations/{cloud_provider}/accounts/{id}/services": {
@@ -933,7 +953,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/cloud_integrations/{cloud_provider}/accounts/{id}/services/{service_id}": {
@@ -981,7 +1002,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateService",
@@ -1030,7 +1052,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/cloud_integrations/{cloud_provider}/credentials": {
@@ -1062,7 +1085,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/cloud_integrations/{cloud_provider}/services": {
@@ -1103,7 +1127,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/cloud_integrations/{cloud_provider}/services/{service_id}": {
@@ -1152,7 +1177,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/clusters/attribute_keys": {
@@ -1230,7 +1256,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/clusters/attribute_values": {
@@ -1326,7 +1353,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/clusters/list": {
@@ -1358,7 +1386,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/complete/google": {
@@ -1420,7 +1449,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/daemonsets/attribute_keys": {
@@ -1498,7 +1528,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/daemonsets/attribute_values": {
@@ -1594,7 +1625,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/daemonsets/list": {
@@ -1626,7 +1658,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/dashboard_views": {
@@ -1648,7 +1681,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateDashboardView",
@@ -1678,7 +1712,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/dashboard_views/{id}": {
@@ -1704,7 +1739,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateDashboardView",
@@ -1745,7 +1781,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/dashboards": {
@@ -1814,7 +1851,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateDashboardV2",
@@ -1844,7 +1882,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/dashboards/{id}": {
@@ -1870,7 +1909,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetDashboardV2",
@@ -1901,7 +1941,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "PatchDashboardV2",
@@ -1942,7 +1983,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateDashboardV2",
@@ -1983,7 +2025,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/dashboards/{id}/clone": {
@@ -2016,7 +2059,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/dashboards/{id}/lock": {
@@ -2042,7 +2086,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "LockDashboardV2",
@@ -2066,7 +2111,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/dashboards/{id}/public": {
@@ -2092,7 +2138,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetPublicDashboard",
@@ -2123,7 +2170,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreatePublicDashboard",
@@ -2164,7 +2212,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdatePublicDashboard",
@@ -2198,7 +2247,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/dependency_graph": {
@@ -2233,7 +2283,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/deployments/attribute_keys": {
@@ -2311,7 +2362,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/deployments/attribute_values": {
@@ -2407,7 +2459,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/deployments/list": {
@@ -2439,7 +2492,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/disks": {
@@ -2464,7 +2518,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/domains": {
@@ -2486,7 +2541,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateAuthDomain",
@@ -2516,7 +2572,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/domains/{id}": {
@@ -2541,7 +2598,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetAuthDomain",
@@ -2571,7 +2629,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateAuthDomain",
@@ -2604,7 +2663,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/downtime_schedules": {
@@ -2646,7 +2706,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateDowntimeSchedule",
@@ -2676,7 +2737,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/downtime_schedules/{id}": {
@@ -2701,7 +2763,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetDowntimeScheduleByID",
@@ -2731,7 +2794,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateDowntimeScheduleByID",
@@ -2764,7 +2828,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/errorFromErrorID": {
@@ -2815,7 +2880,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/errorFromGroupID": {
@@ -2866,7 +2932,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/errortracking/issues": {
@@ -2962,7 +3029,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/errortracking/issues/{id}": {
@@ -2995,7 +3063,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_o11y_errortracking_issues_by_id",
@@ -3036,7 +3105,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/event": {
@@ -3068,7 +3138,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/explorer/views": {
@@ -3119,7 +3190,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_o11y_explorer_views",
@@ -3149,7 +3221,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/explorer/views/{viewId}": {
@@ -3182,7 +3255,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_o11y_explorer_views_by_viewid",
@@ -3213,7 +3287,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_o11y_explorer_views_by_viewid",
@@ -3254,7 +3329,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/export_raw_data": {
@@ -3289,7 +3365,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/features": {
@@ -3311,7 +3388,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/fields/keys": {
@@ -3425,7 +3503,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/fields/values": {
@@ -3557,7 +3636,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/filter_suggestions": {
@@ -3626,7 +3706,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/gateway/ingestion_keys": {
@@ -3668,7 +3749,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateIngestionKey",
@@ -3698,7 +3780,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/gateway/ingestion_keys/limits/{limitId}": {
@@ -3723,7 +3806,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "UpdateIngestionKeyLimit",
@@ -3756,7 +3840,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/gateway/ingestion_keys/search": {
@@ -3807,7 +3892,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/gateway/ingestion_keys/{keyId}": {
@@ -3832,7 +3918,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "UpdateIngestionKey",
@@ -3865,7 +3952,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/gateway/ingestion_keys/{keyId}/limits": {
@@ -3907,7 +3995,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/getResetPasswordToken/{id}": {
@@ -3939,7 +4028,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/global/config": {
@@ -3961,7 +4051,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/health": {
@@ -3994,7 +4085,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/healthz": {
@@ -4082,7 +4174,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/hosts/attribute_values": {
@@ -4178,7 +4271,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/hosts/list": {
@@ -4210,7 +4304,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_monitoring/checks": {
@@ -4243,7 +4338,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_monitoring/clusters": {
@@ -4275,7 +4371,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_monitoring/daemonsets": {
@@ -4307,7 +4404,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_monitoring/deployments": {
@@ -4339,7 +4437,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_monitoring/hosts": {
@@ -4371,7 +4470,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_monitoring/jobs": {
@@ -4403,7 +4503,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_monitoring/namespaces": {
@@ -4435,7 +4536,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_monitoring/nodes": {
@@ -4467,7 +4569,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_monitoring/pods": {
@@ -4499,7 +4602,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_monitoring/pvcs": {
@@ -4531,7 +4635,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_monitoring/statefulsets": {
@@ -4563,7 +4668,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/infra_onboarding/k8s/status": {
@@ -4585,7 +4691,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/integrations": {
@@ -4618,7 +4725,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/integrations/install": {
@@ -4650,7 +4758,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/integrations/uninstall": {
@@ -4682,7 +4791,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/integrations/{integrationId}": {
@@ -4714,7 +4824,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/integrations/{integrationId}/connection_status": {
@@ -4755,7 +4866,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/invite": {
@@ -4787,7 +4899,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/invite/bulk": {
@@ -4819,7 +4932,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/jobs/attribute_keys": {
@@ -4897,7 +5011,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/jobs/attribute_values": {
@@ -4993,7 +5108,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/jobs/list": {
@@ -5025,7 +5141,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/licenses": {
@@ -5047,7 +5164,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/licenses/active": {
@@ -5069,7 +5187,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/listErrors": {
@@ -5104,7 +5223,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/livez": {
@@ -5183,7 +5303,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateLLMAnnotation",
@@ -5213,7 +5334,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/llm/observations": {
@@ -5318,7 +5440,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/llm/score/{id}": {
@@ -5343,7 +5466,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetLLMScore",
@@ -5373,7 +5497,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/llm/scores": {
@@ -5451,7 +5576,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateLLMScore",
@@ -5481,7 +5607,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/llm/sessions": {
@@ -5586,7 +5713,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/llm/traces": {
@@ -5691,7 +5819,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/llm/users": {
@@ -5796,7 +5925,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/llm_pricing_rules": {
@@ -5856,7 +5986,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "CreateOrUpdateLLMPricingRules",
@@ -5879,7 +6010,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/llm_pricing_rules/{id}": {
@@ -5904,7 +6036,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetLLMPricingRule",
@@ -5934,7 +6067,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/login": {
@@ -5995,7 +6129,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/logs/aggregate": {
@@ -6017,7 +6152,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/logs/fields": {
@@ -6039,7 +6175,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_o11y_logs_fields",
@@ -6069,7 +6206,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/logs/livetail": {
@@ -6111,7 +6249,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/logs/pipelines/preview": {
@@ -6143,7 +6282,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/logs/pipelines/{version}": {
@@ -6176,7 +6316,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/logs/promote_paths": {
@@ -6198,7 +6339,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_o11y_logs_promote_paths",
@@ -6231,7 +6373,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/consumer-lag/consumer-details": {
@@ -6263,7 +6406,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/consumer-lag/network-latency": {
@@ -6295,7 +6439,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/consumer-lag/producer-details": {
@@ -6327,7 +6472,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/onboarding/consumers": {
@@ -6359,7 +6505,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/onboarding/kafka": {
@@ -6391,7 +6538,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/onboarding/producers": {
@@ -6423,7 +6571,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/partition-latency/consumer": {
@@ -6455,7 +6604,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/partition-latency/overview": {
@@ -6487,7 +6637,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/span/evaluation": {
@@ -6519,7 +6670,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/topic-throughput/consumer": {
@@ -6551,7 +6703,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/topic-throughput/consumer-details": {
@@ -6583,7 +6736,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/topic-throughput/producer": {
@@ -6615,7 +6769,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/kafka/topic-throughput/producer-details": {
@@ -6647,7 +6802,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/messaging-queues/queue-overview": {
@@ -6679,7 +6835,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metric/metric_metadata": {
@@ -6721,7 +6878,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metric_reduction_rules": {
@@ -6799,7 +6957,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateMetricReductionRule",
@@ -6829,7 +6988,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metric_reduction_rules/preview": {
@@ -6861,7 +7021,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metric_reduction_rules/stats": {
@@ -6883,7 +7044,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metric_reduction_rules/timeseries": {
@@ -6905,7 +7067,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metric_reduction_rules/{id}": {
@@ -6931,7 +7094,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetMetricReductionRuleByID",
@@ -6962,7 +7126,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateMetricReductionRuleByID",
@@ -7003,7 +7168,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metrics": {
@@ -7072,7 +7238,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metrics/alerts": {
@@ -7105,7 +7272,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metrics/attributes": {
@@ -7156,7 +7324,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metrics/dashboards": {
@@ -7189,7 +7358,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metrics/highlights": {
@@ -7222,7 +7392,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metrics/inspect": {
@@ -7254,7 +7425,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metrics/metadata": {
@@ -7287,7 +7459,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "UpdateMetricMetadata",
@@ -7317,7 +7490,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metrics/onboarding": {
@@ -7339,7 +7513,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metrics/stats": {
@@ -7371,7 +7546,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/metrics/treemap": {
@@ -7403,7 +7579,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/namespaces/attribute_keys": {
@@ -7481,7 +7658,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/namespaces/attribute_values": {
@@ -7577,7 +7755,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/namespaces/list": {
@@ -7609,7 +7788,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/nextPrevErrorIDs": {
@@ -7660,7 +7840,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/nodes/attribute_keys": {
@@ -7738,7 +7919,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/nodes/attribute_values": {
@@ -7834,7 +8016,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/nodes/list": {
@@ -7866,7 +8049,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/org/preferences": {
@@ -7888,7 +8072,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/org/preferences/{name}": {
@@ -7920,7 +8105,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateOrgPreference",
@@ -7953,7 +8139,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/orgs/me": {
@@ -7975,7 +8162,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateMyOrganization",
@@ -7998,7 +8186,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/orgs/me/filters": {
@@ -8020,7 +8209,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateQuickFilters",
@@ -8043,7 +8233,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/orgs/me/filters/{signal}": {
@@ -8075,7 +8266,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/pods/attribute_keys": {
@@ -8153,7 +8345,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/pods/attribute_values": {
@@ -8249,7 +8442,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/pods/list": {
@@ -8281,7 +8475,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/processes/attribute_keys": {
@@ -8359,7 +8554,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/processes/attribute_values": {
@@ -8455,7 +8651,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/processes/list": {
@@ -8487,7 +8684,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/product/metrics": {
@@ -8540,7 +8738,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/public/dashboards/{id}": {
@@ -8573,7 +8772,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/public/dashboards/{id}/widgets/{idx}/query_range": {
@@ -8633,7 +8833,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/pvcs/attribute_keys": {
@@ -8711,7 +8912,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/pvcs/attribute_values": {
@@ -8807,7 +9009,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/pvcs/list": {
@@ -8839,7 +9042,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/query": {
@@ -8899,7 +9103,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/query_filter/analyze": {
@@ -8931,7 +9136,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/query_progress": {
@@ -9019,7 +9225,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_o11y_query_range",
@@ -9049,7 +9256,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/query_range/format": {
@@ -9081,7 +9289,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/query_range/preview": {
@@ -9113,7 +9322,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/readyz": {
@@ -9155,7 +9365,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/resetPassword": {
@@ -9180,7 +9391,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/reset_password_tokens/verify": {
@@ -9205,7 +9417,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/reviews": {
@@ -9249,7 +9462,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_o11y_reviews",
@@ -9285,7 +9499,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/reviews/{id}": {
@@ -9319,7 +9534,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_o11y_reviews_by_id",
@@ -9351,7 +9567,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "patch_o11y_reviews_by_id",
@@ -9397,7 +9614,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/reviews/{id}/items": {
@@ -9459,7 +9677,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_o11y_reviews_by_id_items",
@@ -9509,7 +9728,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/reviews/{id}/items/{itemId}": {
@@ -9568,7 +9788,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/roles": {
@@ -9590,7 +9811,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateRole",
@@ -9620,7 +9842,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/roles/{id}": {
@@ -9645,7 +9868,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetRole",
@@ -9675,7 +9899,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateRole",
@@ -9708,7 +9933,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/roles/{id}/users": {
@@ -9740,7 +9966,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/route_policies": {
@@ -9762,7 +9989,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateRoutePolicy",
@@ -9792,7 +10020,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/route_policies/{id}": {
@@ -9817,7 +10046,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetRoutePolicyByID",
@@ -9847,7 +10077,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateRoutePolicy",
@@ -9887,7 +10118,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/rules": {
@@ -9909,7 +10141,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateRule",
@@ -9937,7 +10170,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/rules/test": {
@@ -9967,7 +10201,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/rules/{id}": {
@@ -9992,7 +10227,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetRuleByID",
@@ -10022,7 +10258,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "PatchRuleByID",
@@ -10060,7 +10297,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateRuleByID",
@@ -10091,7 +10329,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/rules/{id}/history/filter_keys": {
@@ -10159,7 +10398,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/rules/{id}/history/filter_values": {
@@ -10241,7 +10481,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/rules/{id}/history/overall_status": {
@@ -10291,7 +10532,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "GetOverallStateTransitions",
@@ -10331,7 +10573,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/rules/{id}/history/stats": {
@@ -10381,7 +10624,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "GetRuleStats",
@@ -10421,7 +10665,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/rules/{id}/history/timeline": {
@@ -10516,7 +10761,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "GetRuleStateHistory",
@@ -10556,7 +10802,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/rules/{id}/history/top_contributors": {
@@ -10606,7 +10853,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "GetRuleStateHistoryTopContributors",
@@ -10646,7 +10894,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/service/entry_point_operations": {
@@ -10678,7 +10927,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/service/top_level_operations": {
@@ -10716,7 +10966,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/service/top_operations": {
@@ -10748,7 +10999,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/service_accounts": {
@@ -10770,7 +11022,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateServiceAccount",
@@ -10800,7 +11053,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/service_accounts/me": {
@@ -10822,7 +11076,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateMyServiceAccount",
@@ -10845,7 +11100,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/service_accounts/{id}": {
@@ -10870,7 +11126,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetServiceAccount",
@@ -10900,7 +11157,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateServiceAccount",
@@ -10933,7 +11191,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/service_accounts/{id}/keys": {
@@ -10965,7 +11224,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateServiceAccountKey",
@@ -11005,7 +11265,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/service_accounts/{id}/keys/{fid}": {
@@ -11038,7 +11299,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateServiceAccountKey",
@@ -11079,7 +11341,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/service_accounts/{id}/roles": {
@@ -11111,7 +11374,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateServiceAccountRole",
@@ -11145,7 +11409,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/service_accounts/{id}/roles/{rid}": {
@@ -11178,7 +11443,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/services": {
@@ -11210,7 +11476,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/services/list": {
@@ -11235,7 +11502,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/sessions": {
@@ -11250,7 +11518,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_o11y_sessions",
@@ -11300,7 +11569,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/sessions/email_password": {
@@ -11332,7 +11602,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/sessions/rotate": {
@@ -11364,7 +11635,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/settings/apdex": {
@@ -11397,7 +11669,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_o11y_settings_apdex",
@@ -11427,7 +11700,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/settings/ttl": {
@@ -11449,7 +11723,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_o11y_settings_ttl",
@@ -11479,7 +11754,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/span_mapper_groups": {
@@ -11511,7 +11787,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateSpanMapperGroup",
@@ -11541,7 +11818,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/span_mapper_groups/{groupId}": {
@@ -11566,7 +11844,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "UpdateSpanMapperGroup",
@@ -11599,7 +11878,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/span_mapper_groups/{groupId}/span_mappers": {
@@ -11631,7 +11911,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateSpanMapper",
@@ -11671,7 +11952,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/span_mapper_groups/{groupId}/span_mappers/{mapperId}": {
@@ -11704,7 +11986,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "UpdateSpanMapper",
@@ -11745,7 +12028,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/span_percentile": {
@@ -11777,7 +12061,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/statefulsets/attribute_keys": {
@@ -11855,7 +12140,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/statefulsets/attribute_values": {
@@ -11951,7 +12237,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/statefulsets/list": {
@@ -11983,7 +12270,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/stats": {
@@ -12005,7 +12293,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/status": {
@@ -12039,7 +12328,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/substitute_vars": {
@@ -12071,7 +12361,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/testChannel": {
@@ -12096,7 +12387,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/testRule": {
@@ -12126,7 +12418,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/third-party-apis/overview/domain": {
@@ -12158,7 +12451,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/third-party-apis/overview/list": {
@@ -12190,7 +12484,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/analytics/error-traces": {
@@ -12222,7 +12517,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/analytics/overview": {
@@ -12254,7 +12550,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/analytics/slow-traces": {
@@ -12286,7 +12583,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/analytics/steps": {
@@ -12318,7 +12616,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/analytics/steps/overview": {
@@ -12350,7 +12649,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/analytics/validate": {
@@ -12382,7 +12682,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/list": {
@@ -12404,7 +12705,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/new": {
@@ -12436,7 +12738,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/steps/update": {
@@ -12468,7 +12771,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/{funnel_id}": {
@@ -12500,7 +12804,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetTraceFunnel",
@@ -12530,7 +12835,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateTraceFunnel",
@@ -12570,7 +12876,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/{funnel_id}/analytics/error-traces": {
@@ -12612,7 +12919,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/{funnel_id}/analytics/overview": {
@@ -12654,7 +12962,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/{funnel_id}/analytics/slow-traces": {
@@ -12696,7 +13005,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/{funnel_id}/analytics/steps": {
@@ -12738,7 +13048,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/{funnel_id}/analytics/steps/overview": {
@@ -12780,7 +13091,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/trace-funnels/{funnel_id}/analytics/validate": {
@@ -12822,7 +13134,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/traces": {
@@ -12875,7 +13188,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/traces/fields": {
@@ -12897,7 +13211,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "UpdateTraceField",
@@ -12927,7 +13242,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/traces/{traceId}": {
@@ -12994,7 +13310,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/traces/{traceId}/aggregations": {
@@ -13036,7 +13353,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/traces/{traceId}/flamegraph": {
@@ -13078,7 +13396,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/traces/{traceId}/waterfall": {
@@ -13120,7 +13439,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/usage": {
@@ -13183,7 +13503,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/user": {
@@ -13205,7 +13526,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/user/me": {
@@ -13227,7 +13549,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/user/preferences": {
@@ -13249,7 +13572,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/user/preferences/{name}": {
@@ -13281,7 +13605,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateUserPreference",
@@ -13314,7 +13639,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/user/{id}": {
@@ -13339,7 +13665,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetUserDeprecated",
@@ -13369,7 +13696,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateUserDeprecated",
@@ -13409,7 +13737,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/users": {
@@ -13431,7 +13760,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "CreateUser",
@@ -13461,7 +13791,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/users/me": {
@@ -13483,7 +13814,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateMyUserV2",
@@ -13506,7 +13838,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/users/me/dashboards": {
@@ -13575,7 +13908,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/users/me/dashboards/{id}/pins": {
@@ -13601,7 +13935,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "PinDashboardV2",
@@ -13625,7 +13960,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/users/me/factor_password": {
@@ -13650,7 +13986,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/users/{id}": {
@@ -13675,7 +14012,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "GetUser",
@@ -13705,7 +14043,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "UpdateUser",
@@ -13738,7 +14077,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/users/{id}/reset_password_tokens": {
@@ -13770,7 +14110,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "CreateResetPasswordToken",
@@ -13800,7 +14141,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/users/{id}/roles": {
@@ -13832,7 +14174,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "SetRoleByUserID",
@@ -13872,7 +14215,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/users/{id}/roles/{roleId}": {
@@ -13905,7 +14249,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/variables/query": {
@@ -13937,7 +14282,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/version": {
@@ -13959,7 +14305,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/zeus/hosts": {
@@ -13981,7 +14328,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "PutHost",
@@ -14004,7 +14352,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/o11y/zeus/profiles": {
@@ -14029,7 +14378,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/discover": {
@@ -14061,7 +14411,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/events/{id}": {
@@ -14103,7 +14454,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/issues": {
@@ -14217,7 +14569,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/issues/{id}": {
@@ -14250,7 +14603,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_sentry_issues_by_id",
@@ -14291,7 +14645,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/issues/{id}/events": {
@@ -14342,7 +14697,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/logs": {
@@ -14402,7 +14758,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/projects": {
@@ -14424,7 +14781,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_sentry_projects",
@@ -14454,7 +14812,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/projects/{id}": {
@@ -14480,7 +14839,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_sentry_projects_by_id",
@@ -14511,7 +14871,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/projects/{id}/keys/rotate": {
@@ -14544,7 +14905,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/stats": {
@@ -14595,7 +14957,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/traces": {
@@ -14646,7 +15009,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/traces/{id}": {
@@ -14688,7 +15052,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/sentry/{project}/envelope/": {
@@ -14842,7 +15207,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/ws/query_progress": {
