@@ -15,10 +15,19 @@ import (
 // and not the ~3040-package union the fused binary was. The light host loads it
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `websearch openapi`. Hand-owned — edit the spec below directly.
+//
+// Metered, not Free: two of the engines behind this surface are bought — Brave
+// sells a subscription and Mojeek sells an API against a prepaid balance — so
+// money moves inside the handlers even though the edge charges nothing, which is
+// the one thing Metered says and Free cannot. A search is a READ, and price.go's
+// Consumes makes a read free at the edge by construction, so the charge could
+// never have been a number here: "such a surface meters its own units downstream
+// and declares Metered." The meter is apps/websearch/meter.go, and it fires only
+// for an engine whose key this deployment holds — the keyless engines stay free.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "websearch",
-		Price: cloud.Free,
+		Price: cloud.Metered,
 		Mount: websearch.Mount,
 	}}, []string{"websearch"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

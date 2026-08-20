@@ -306,6 +306,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// have a logger to pass, and a search that must not run without one would be
 	// a worse trade than a warning that stays quiet in a library caller.
 	setLogger(logger)
+	// Bound the same way and for the same reason as the logger above: the paid
+	// engines are asked from metaSearch, which every door reaches and none of
+	// them can hand a meter to. See meter.go.
+	bindMeter(cloud.NewResourceMeter(deps, "websearch"))
 
 	// /v1/websearch/search admits a caller two ONE-WAY-equivalent ways, checked at
 	// the zip layer so the same request either reaches native meta-search or is
@@ -339,15 +343,22 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		zip.WithOperationID("search_web"),
 		zip.WithSummary("Search the live web"))
 
-	native := http.HandlerFunc(searchNative)
-	searchDirect := zip.AdaptNetHTTP(native)
-	searchKeyed := zip.AdaptNetHTTP(searchGuard(native))
 	g := app.Group("/v1/websearch")
 	g.All("/search", func(c *zip.Ctx) error {
+		// The net/http adaptor hands the handler a request whose Context is the
+		// TRANSPORT's, not the one cloud.Bridge parked the validated caller in —
+		// so a search arriving by this door reached metaSearch with no principal
+		// and no ledger, and the paid engines had nobody to bill. Re-attaching
+		// the request's own context here is what makes this door resolve the same
+		// payer the typed door does. Same move, for the same reason, as scrape
+		// below: identity is resolved where the request is.
+		native := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			searchNative(w, r.WithContext(c.Context()))
+		})
 		if principal.Validated(c) {
-			return searchDirect(c)
+			return zip.AdaptNetHTTP(native)(c)
 		}
-		return searchKeyed(c)
+		return zip.AdaptNetHTTP(searchGuard(native))(c)
 	})
 
 	// Scope resolved at the zip layer where the verified principal lives; the
@@ -356,7 +367,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		org, _ := principal.Org(c)
 		s := crawl.Scope{Org: org, Project: principal.Project(c)}
 		return zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			scrapeScoped(w, r, s)
+			// Carried for the reason the search door above carries it: a page
+			// this fetch has to RENDER is billed, and the meter reads the payer
+			// off the request's own context, which the adaptor does not pass on.
+			scrapeScoped(w, r.WithContext(c.Context()), s)
 		}))(c)
 	}
 	// Firecrawl builds {apiUrl}/{version}/scrape and there is no way to make it

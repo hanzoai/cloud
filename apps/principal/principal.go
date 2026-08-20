@@ -576,11 +576,29 @@ func WithProject(ctx context.Context, c *zip.Ctx) context.Context {
 // reports no principal, so the caller is already refused at the org boundary
 // before a project is ever consulted.
 func ProjectFrom(ctx context.Context) string {
-	project, ok := ctx.Value(projectKey{}).(string)
-	if !ok || project == "" {
-		return DefaultProject
+	if project, ok := ctx.Value(projectKey{}).(string); ok && project != "" {
+		return project
 	}
-	return project
+	// The SAME second reader [OrgFrom] has, for the same reason: a door with no
+	// route parks nothing, and zip carries the caller instead. Without this a plane
+	// or agent caller carrying a real project resolved to "default" — so its
+	// storage keys, its metrics and the scope a spend cap sums over all named the
+	// whole org, and a project-scoped cap could never see it.
+	if project := strings.TrimSpace(zip.CallerOf(ctx).Project); project != "" {
+		return project
+	}
+	return DefaultProject
+}
+
+// ValidatedProjectFrom is [ValidatedProject] where only the context crossed the
+// seam. It composes the SAME rule rather than restating its two inputs, which is
+// the whole reason it exists: the caller that read ProjectFrom and ValidatedFrom
+// separately reconstructed a DIFFERENT rule — it dropped the default-project
+// carve-out, so a project cap hard-enforced 402 on the agent door while the
+// identical REST call softened. One rule, two doors.
+func ValidatedProjectFrom(ctx context.Context) (string, bool) {
+	project := ProjectFrom(ctx)
+	return project, ValidatedFrom(ctx) && !IsDefaultProject(project)
 }
 
 // ProjectScope resolves the caller's project as a storage/filter KEY: "" for the
