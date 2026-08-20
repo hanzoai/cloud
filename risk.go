@@ -302,20 +302,26 @@ func decide(sem *calls, ctx context.Context, org string, q RiskQuery) RiskVerdic
 	}
 	ch := make(chan answer, 1)
 	go func() {
+		v, err := func() (v RiskVerdict, err error) {
+			// A panicking scorer is a scorer that did not answer. Contained here
+			// so a model bug cannot take down the request path.
+			defer func() {
+				if r := recover(); r != nil {
+					err = errScorerPanic
+				}
+			}()
+			return fn(ctx, org, q)
+		}()
+
 		// The slot is released by the goroutine that holds it, when the scorer
 		// actually returns — NOT when the budget expires. Releasing it at the
 		// timeout would let the ceiling be exceeded without bound by exactly the
-		// scorer it exists to contain. The return is also the health signal: a
-		// scorer that keeps returning is busy, one that never returns is stuck.
-		defer sem.give()
-		defer func() {
-			// A panicking scorer is a scorer that did not answer. Contained here
-			// so a model bug cannot take down the request path.
-			if r := recover(); r != nil {
-				ch <- answer{err: errScorerPanic}
-			}
-		}()
-		v, err := fn(ctx, org, q)
+		// scorer it exists to contain. It goes back BEFORE the answer is handed
+		// over, so holding an answer means holding a released slot: the ceiling
+		// then counts calls that are still out, and never one that already came
+		// back. The return is also the health signal: a scorer that keeps
+		// returning is busy, one that never returns is stuck.
+		sem.give()
 		ch <- answer{v, err}
 	}()
 
