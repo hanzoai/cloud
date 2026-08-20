@@ -60,7 +60,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/help/articles/{slug}": {
@@ -93,7 +94,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/help/categories": {
@@ -115,7 +117,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/help/tickets": {
@@ -147,7 +150,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },
