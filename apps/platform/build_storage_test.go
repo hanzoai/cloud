@@ -235,9 +235,9 @@ func TestEveryJobEmptyDirIsCapped(t *testing.T) {
 // so an anonymous `npm ci` for an @hanzoteam/* dependency 401s even though the
 // repo is public. The build therefore carries a registry credential — separate
 // from GIT_AUTH_TOKEN, which authenticates a git fetch and rotates on its own
-// schedule. Both are optional: a cluster with neither Secret builds exactly as it
-// did before, which is what lets this land without touching any existing repo.
-func TestBuildCarriesAPackageRegistryCredentialApartFromTheGitOne(t *testing.T) {
+// schedule. They differ in whether the mount is optional, and that difference is
+// the point: one has a working degraded mode and the other has none.
+func TestBuildCarriesAPackageRegistryCredentialApartFromTheForgeOne(t *testing.T) {
 	k := fakeK8s()
 	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
 	cs, _, err := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "containers")
@@ -247,6 +247,7 @@ func TestBuildCarriesAPackageRegistryCredentialApartFromTheGitOne(t *testing.T) 
 	env, _ := cs[0].(map[string]any)["env"].([]any)
 
 	from := map[string]string{}
+	optional := map[string]bool{}
 	for _, e := range env {
 		m, ok := e.(map[string]any)
 		if !ok {
@@ -262,19 +263,30 @@ func TestBuildCarriesAPackageRegistryCredentialApartFromTheGitOne(t *testing.T) 
 		}
 		name, _ := m["name"].(string)
 		from[name], _ = skr["name"].(string)
-		if opt, _ := skr["optional"].(bool); !opt && name == "REGISTRY_TOKEN" {
-			t.Fatal("REGISTRY_TOKEN is not optional; a cluster without the Secret would fail to schedule every build")
-		}
+		optional[name], _ = skr["optional"].(bool)
 	}
 
 	if from["REGISTRY_TOKEN"] != registryTokenSecret {
 		t.Fatalf("REGISTRY_TOKEN comes from %q, want %q", from["REGISTRY_TOKEN"], registryTokenSecret)
 	}
-	if from["GIT_AUTH_TOKEN"] != gitTokenSecret {
-		t.Fatalf("GIT_AUTH_TOKEN comes from %q, want %q", from["GIT_AUTH_TOKEN"], gitTokenSecret)
+	if from["GIT_AUTH_TOKEN"] != forgeTokenSecret {
+		t.Fatalf("GIT_AUTH_TOKEN comes from %q, want %q", from["GIT_AUTH_TOKEN"], forgeTokenSecret)
 	}
-	if registryTokenSecret == gitTokenSecret {
+	if registryTokenSecret == forgeTokenSecret {
 		t.Fatal("the two credentials share one Secret; a package read now depends on a git-fetch rotation")
+	}
+
+	// A package credential is optional because losing it DEGRADES — the build
+	// installs from public registries. A forge credential is not, because losing
+	// it does not degrade anything: the forge serves nothing anonymously, so the
+	// build fetches no source and says only that it wanted a username. Optional
+	// there buys a fetch that cannot work in exchange for the kubelet's error
+	// naming the Secret and the key.
+	if !optional["REGISTRY_TOKEN"] {
+		t.Error("REGISTRY_TOKEN must stay optional; without the Secret a build should install from public registries, not fail to schedule")
+	}
+	if optional["GIT_AUTH_TOKEN"] {
+		t.Error("GIT_AUTH_TOKEN must not be optional; an absent forge credential has to name itself at the pod, not surface as a clone asking for a username")
 	}
 }
 
