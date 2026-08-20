@@ -59,17 +59,48 @@ generated=(
   ':(exclude)fleet/catalog.json' ':(exclude)plugin/*/openapi.json'
 )
 
-diff_file=$(mktemp); trap 'rm -f "$diff_file" "${req:-}" "${resp:-}" 2>/dev/null' EXIT
-git diff --no-color "$BASE".."$HEAD" -- . "${generated[@]}" > "$diff_file" 2>/dev/null || die "could not read the diff $BASE..$HEAD"
-
-bytes=$(wc -c < "$diff_file")
-files=$(git diff --name-only "$BASE".."$HEAD" -- . "${generated[@]}" | wc -l)
-[ "$bytes" -gt 0 ] || { echo "review: empty diff — nothing to read"; exit 0; }
-[ "$bytes" -le "$MAXBYTES" ] || die "diff is ${bytes}B over the ${MAXBYTES}B bound — split the change; a truncated review is not a review"
-
 # Does this change touch the machinery that reviews and releases it?
 selfmod=no
 if git diff --name-only "$BASE".."$HEAD" | grep -qE '^\.hanzo/'; then selfmod=yes; fi
+
+# READING A CHANGE TOO LARGE FOR ONE REQUEST, RATHER THAN REFUSING IT.
+#
+# The bound is about ONE request: past it the reviewer would be reading a
+# truncated diff, and the hunk that fell off the end is the one that mattered. So
+# the bound must never be raised and must never truncate. But REFUSING at the
+# bound, with the base being the last release reachable from HEAD, is a deadlock —
+# and it closed. Measured on this range: 1,701,350B against the 400,000B bound,
+# 4.3x over, 487 files, 207 commits, every one of them refused. Production sat on
+# v1.801.536, which is also the base the diff was measured from, so nothing could
+# ship and each push made the diff bigger. The exclusion of generated artifacts
+# above bought headroom (118,143B at the time it landed) and 207 commits of
+# ordinary Go and prose refilled it. Excluding more content only moves where it
+# locks; the shape is the problem.
+#
+# So a change larger than one request is read in AS MANY REQUESTS AS IT TAKES.
+# Slices are cut on commit boundaries, each one measured before it is sent, and
+# together they cover BASE..HEAD with no gap — so no request is truncated and no
+# byte goes unread. That satisfies both laws this script is built on rather than
+# trading one for the other: it is strictly MORE review than the refusal it
+# replaces, which reviewed nothing at all.
+#
+# The refusal survives where it is still the honest answer: a SINGLE commit whose
+# own diff exceeds the bound cannot be split by this rule, and is refused naming
+# itself. And the slice count falls back to 1 as soon as a release lands, because
+# the base advances with it.
+#
+# A slice that rejects exits here. First refusal wins and the rest are not read,
+# which is the fail-closed direction.
+
+judge() {
+local diff_file="$1" LABEL="$2" files="$3" bytes
+trap 'rm -f "${req:-}" "${resp:-}" 2>/dev/null' EXIT
+bytes=$(wc -c < "$diff_file")
+echo "review: reading $LABEL — ${bytes}B, ${files} file(s)"
+# RETURN, never exit: `exit` inside judge would end the script and report
+# success with every later request unread.
+[ "$bytes" -gt 0 ] || { echo "review: $LABEL is empty — nothing to read"; return 0; }
+[ "$bytes" -le "$MAXBYTES" ] || die "diff is ${bytes}B over the ${MAXBYTES}B bound — split the change; a truncated review is not a review"
 
 req=$(mktemp); resp=$(mktemp)
 python3 - "$diff_file" "$MODEL" "$selfmod" "$files" > "$req" <<'PY'
@@ -189,3 +220,92 @@ if verdict != "pass":
     print(f"::error::review: unknown verdict {verdict!r} — refusing rather than guessing"); sys.exit(1)
 print("review: no attack found in this diff")
 PY
+rm -f "$req" "$resp"
+}
+
+# ── the change, as units no larger than one request ───────────────────────────
+#
+# A UNIT is what one commit actually CONTRIBUTES, which is not the same as the
+# range diff up to it, and the difference is what made a naive walk wrong:
+#
+#   A MERGE contributes its conflict RESOLUTION and nothing else. Its content
+#   arrives through the commits it brought, which rev-list already walks, so
+#   diffing a merge against its first parent re-reads all of them. Measured on
+#   efd4c1127: first-parent 880,148B against a combined diff of 246B. This is the
+#   same first-parent trap the base rule above already documents, one level down.
+#
+#   A commit too large to read is split BY FILE, because a file is the smallest
+#   thing a finding can name. Measured on 27b36872d: 2,426,774B across 1,623
+#   files, largest single file 194,999B — so the split terminates well inside the
+#   bound. A single FILE over the bound is irreducible and refused naming itself,
+#   which is where the original refusal is still the honest answer.
+#
+# Units are then packed into requests while they fit. Coverage is every commit's
+# own change exactly once; no request is truncated; and the whole range is read
+# whatever its size. Sending per-commit diffs rather than one squashed range diff
+# also keeps commit boundaries and messages in front of the reviewer, which is
+# what makes a hunk legible as intent rather than as text.
+
+units=$(mktemp -d); trap 'rm -rf "$units" 2>/dev/null' EXIT
+n=0
+
+emit() {  # emit <path-to-diff> <label> <file-count>
+  [ -s "$1" ] || return 0
+  local b; b=$(wc -c < "$1")
+  [ "$b" -le "$MAXBYTES" ] || die "$2 diffs ${b}B over the ${MAXBYTES}B bound and cannot be split further — a truncated review is not a review"
+  n=$((n + 1)); printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$b" >> "$units/index"
+}
+
+for c in $(git rev-list --reverse "$BASE".."$HEAD"); do
+  short=$(git rev-parse --short "$c")
+  d="$units/$short.diff"
+  # `--parents -1` prints "<sha> <parent>..."; more than two words is a merge.
+  # NOT `--count --parents`, which prints the count and drops the parents, so
+  # every merge reads as a normal commit and takes the first-parent path above.
+  if [ "$(git rev-list --parents -1 "$c" | wc -w)" -gt 2 ]; then
+    # a merge: the resolution only
+    git show --cc --no-color --format= "$c" -- . "${generated[@]}" > "$d" 2>/dev/null || die "could not read merge $short"
+    emit "$d" "merge $short" "$(git show --cc --name-only --format= "$c" -- . "${generated[@]}" 2>/dev/null | wc -l)"
+    continue
+  fi
+  git diff --no-color "$c^1" "$c" -- . "${generated[@]}" > "$d" 2>/dev/null || die "could not read commit $short"
+  if [ "$(wc -c < "$d")" -le "$MAXBYTES" ]; then
+    emit "$d" "commit $short" "$(git diff --name-only "$c^1" "$c" -- . "${generated[@]}" | wc -l)"
+    continue
+  fi
+  # too large to read whole: one unit per file
+  rm -f "$d"
+  i=0
+  git diff --name-only "$c^1" "$c" -- . "${generated[@]}" | while IFS= read -r f; do
+    i=$((i + 1)); fd="$units/$short.$i.diff"
+    git diff --no-color "$c^1" "$c" -- "$f" > "$fd" 2>/dev/null || die "could not read $f in $short"
+    printf '%s\t%s\t%s\t%s\n' "$fd" "commit $short · $f" 1 "$(wc -c < "$fd")" >> "$units/index"
+  done
+done
+
+[ -s "$units/index" ] || { echo "review: nothing to read in $BASE..$HEAD"; exit 0; }
+
+# A file unit written by the subshell above skipped emit's bound check, so it is
+# applied here over every unit — one place, so no path can miss it.
+while IFS=$(printf '\t') read -r _ label _ b; do
+  [ "$b" -le "$MAXBYTES" ] || die "$label diffs ${b}B over the ${MAXBYTES}B bound and cannot be split further — a truncated review is not a review"
+done < "$units/index"
+
+# pack units into requests, in order, while they fit
+slice=$(mktemp); slices=0; acc=0; nfiles=0; first=""; last=""
+flush() {
+  [ "$acc" -gt 0 ] || return 0
+  slices=$((slices + 1))
+  judge "$slice" "slice $slices ($first .. $last)" "$nfiles"
+  : > "$slice"; acc=0; nfiles=0; first=""
+}
+while IFS=$(printf '\t') read -r path label files b; do
+  if [ "$acc" -gt 0 ] && [ $((acc + b)) -gt "$MAXBYTES" ]; then flush; fi
+  cat "$path" >> "$slice"
+  acc=$((acc + b)); nfiles=$((nfiles + files)); last="$label"
+  [ -n "$first" ] || first="$label"
+done < "$units/index"
+flush
+rm -f "$slice"
+
+echo "review: read $BASE..$HEAD as $(wc -l < "$units/index") unit(s) in $slices request(s); no attack found"
