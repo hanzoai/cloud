@@ -952,13 +952,17 @@ jobs:
           fi
           echo "smoked=$SMOKED" >> "$GITHUB_OUTPUT"
 
-      # THE SMOKE GATE. Boot the image that was actually pushed and require it to
-      # reach "zip listening" without a crash signature, on the boot env a real pod
-      # gets — a writable /data, CLOUD_ENV=smoke and a throwaway 32-byte master key
-      # so the KMS plane mounts on its normal ready path rather than a degraded one.
+      # THE SMOKE GATE. Boot the image that was actually pushed and require the
+      # HTTP plane to reach "listening" without a crash signature, on the boot env a
+      # real pod gets — a writable /data, CLOUD_ENV=smoke and a throwaway 32-byte
+      # master key so the KMS plane mounts on its normal ready path rather than a
+      # degraded one. The plugins announce their own sockets first ("zip listening",
+      # "plane listening", "listening as plugin"); the top-level "message":"listening"
+      # line is the one that carries the http address the probe below dials, so that
+      # is the needle — waiting on a plugin socket dials a port nothing has bound.
       #
       # The script is handed over base64 because it contains both single and
-      # double quotes (the `"message":"zip listening"` needle), and re-quoting it
+      # double quotes (the `"message":"listening"` needle), and re-quoting it
       # for `sh -c` is how a gate quietly stops matching what it is looking for.
       #
       # IT RUNS ON `smoked`, NEVER ON `built`, AND THE DIFFERENCE IS A RELEASE.
@@ -984,7 +988,7 @@ jobs:
           pid=$!
           listening=0
           for _ in $(seq 1 180); do
-            if grep -q '"message":"zip listening"' /tmp/boot.log 2>/dev/null; then listening=1; break; fi
+            if grep -q '"message":"listening"' /tmp/boot.log 2>/dev/null; then listening=1; break; fi
             kill -0 "$pid" 2>/dev/null || break
             sleep 1
           done
@@ -998,11 +1002,21 @@ jobs:
           # remainder request forces the instance build; the panic or its 503
           # fails the run here instead of the fleet. 401/403 are fine — the door
           # answered, which is all this asks.
-          if wget -q -O /tmp/v1.out http://127.0.0.1:8080/v1/models 2>/tmp/v1.err; then
-            echo 'SMOKE: /v1 remainder answered 2xx — instance built'
-          elif grep -qE 'HTTP/[0-9.]+ (401|403)' /tmp/v1.err; then
-            echo 'SMOKE: /v1 remainder refused auth — instance built, which is all this asks'
-          else
+          # The "listening" line is logged as the socket begins accepting, so a
+          # probe fired the same instant can still race the bind — retry a few
+          # one-second beats, treating 2xx OR an auth refusal as proof the door
+          # answered, and only failing once the process is gone or the window closes.
+          built=0
+          for _ in $(seq 1 15); do
+            if wget -q -O /tmp/v1.out http://127.0.0.1:8080/v1/models 2>/tmp/v1.err; then
+              echo 'SMOKE: /v1 remainder answered 2xx — instance built'; built=1; break
+            elif grep -qE 'HTTP/[0-9.]+ (401|403)' /tmp/v1.err; then
+              echo 'SMOKE: /v1 remainder refused auth — instance built, which is all this asks'; built=1; break
+            fi
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          if [ "$built" -ne 1 ]; then
             echo 'SMOKE FAIL: the lazy /v1 instance did not build'
             cat /tmp/v1.err 2>/dev/null; tail -40 /tmp/boot.log; exit 1
           fi
