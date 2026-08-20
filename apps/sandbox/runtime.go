@@ -611,26 +611,35 @@ func (r *runtime) start(ctx context.Context, m Sandbox, cr cred) error {
 	// time. Not flaky: waitRunning had already proven the pod was up, and the only
 	// thing that disagreed was a stale field in a local struct.
 	m.Status = "running"
-	// THE KUBECONFIG ARRIVES LAST AND THROUGH THE EXEC CHANNEL, so it exists in
-	// the pod and in no Kubernetes object — see cred.go for why the bigger
-	// credential takes this route and the DO token does not. It is empty for every
-	// lease but a SuperAdmin's own, so this is one comparison for everybody else.
+	// THE ADMIN CREDENTIALS ARRIVE LAST AND THROUGH THE EXEC CHANNEL, so they
+	// exist in the pod and in no Kubernetes object — see cred.go. Both are empty
+	// for every lease but a SuperAdmin's own, so this is one comparison for
+	// everybody else.
 	//
 	// A failure here FAILS THE LEASE, because a lease that asked for the admin
-	// image asked for the toolchain that spends this: the caller gets the 503 and
+	// image asked for the toolchain that spends these: the caller gets the 503 and
 	// the row records why, rather than a shell whose kubectl reaches nothing and
 	// only says so the first time somebody trusts it. The OWNER SESSION is
 	// delivered by Lease and does not fail one — the policies differ, so they live
 	// with the decision rather than in the mechanism.
-	if len(cr.kube) == 0 {
-		return nil
-	}
-	res, err := r.put(ctx, m, kubePath, cr.kube)
-	if err != nil {
-		return fmt.Errorf("write kubeconfig: %w", err)
-	}
-	if res.ExitCode != 0 {
-		return fmt.Errorf("write kubeconfig: %s", strings.TrimSpace(res.Stderr))
+	for _, f := range []struct {
+		what string
+		path string
+		body []byte
+	}{
+		{"kubeconfig", kubePath, cr.kube},
+		{"doctl config", doctlPath, cr.doctl},
+	} {
+		if len(f.body) == 0 {
+			continue
+		}
+		res, err := r.put(ctx, m, f.path, f.body)
+		if err != nil {
+			return fmt.Errorf("write %s: %w", f.what, err)
+		}
+		if res.ExitCode != 0 {
+			return fmt.Errorf("write %s: %s", f.what, strings.TrimSpace(res.Stderr))
+		}
 	}
 	return nil
 }
@@ -767,12 +776,18 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 			"capabilities":             map[string]any{"drop": []any{"ALL"}},
 		},
 	}
-	// THE ONLY THING AN IDENTITY EVER PUTS IN A POD, and it is empty for every
-	// lease but one. cr.env is non-empty only on the `admin` branch — a
-	// SuperAdmin's own dev sandbox, cred.go — so this key is ABSENT, not empty,
-	// from every other sandbox's spec. Absent is the point: "a sandbox is handed
-	// nothing" stays a readable fact about the OBJECT rather than a claim about
-	// the code that built it.
+	// NO CREDENTIAL IS EVER PUT IN A POD, and on most leases nothing is. cr.env is
+	// non-empty only on the `admin` branch — a SuperAdmin's own dev sandbox,
+	// cred.go — so this key is ABSENT, not empty, from every other sandbox's spec.
+	// Absent is the point: "a sandbox is handed nothing" stays a readable fact
+	// about the OBJECT rather than a claim about the code that built it.
+	//
+	// What the admin branch does put here is two PATHS — where kubectl and doctl
+	// each find the credential the exec channel delivered — because an exec session
+	// carries no HOME and a tool that cannot find its own file is a tool that
+	// silently reaches nothing. A value in the spec is a value in etcd and in every
+	// `kubectl describe` of that pod, so a path is the most that may travel this
+	// way.
 	//
 	// Sorted, because a Go map ranges in random order and a pod spec that differs
 	// run to run is one nothing can diff.
