@@ -171,7 +171,7 @@ func TestGateExemptsErrorIngestButGatesReads(t *testing.T) {
 }
 
 // TestGateExemptsSentryIngestButGatesReads is the Sentry sibling: the DSN-authenticated
-// /v1/sentry/{project}/envelope|store WRITE bypasses the principal gate (the runtime's
+// /v1/event/{project}/envelope|store WRITE bypasses the principal gate (the runtime's
 // DSN check authenticates), while EVERY Sentry read/write API stays principal-gated —
 // the ingest exemption must not leak to projects/issues/discover/logs/traces/stats.
 func TestGateExemptsSentryIngestButGatesReads(t *testing.T) {
@@ -185,9 +185,9 @@ func TestGateExemptsSentryIngestButGatesReads(t *testing.T) {
 
 	// DSN-authed ingest WRITEs, NO principal → must pass (the runtime's DSN check authenticates).
 	for _, p := range []string{
-		"/v1/sentry/00000000-0000-0000-0000-000000000000/envelope/",
-		"/v1/sentry/00000000-0000-0000-0000-000000000000/store/",
-		"/v1/sentry/00000000-0000-0000-0000-000000000000/envelope", // slash-less tolerated
+		"/v1/event/00000000-0000-0000-0000-000000000000/envelope/",
+		"/v1/event/00000000-0000-0000-0000-000000000000/store/",
+		"/v1/event/00000000-0000-0000-0000-000000000000/envelope", // slash-less tolerated
 	} {
 		reached.Store(false)
 		req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai"+p, nil)
@@ -204,14 +204,14 @@ func TestGateExemptsSentryIngestButGatesReads(t *testing.T) {
 	// These MUST stay gated (403) with no principal — the exemption must not leak.
 	type gc struct{ method, path string }
 	for _, c := range []gc{
-		{http.MethodGet, "/v1/sentry/issues"},                                         // Issues LIST (read)
-		{http.MethodGet, "/v1/sentry/projects"},                                       // Projects LIST (read)
-		{http.MethodPost, "/v1/sentry/projects"},                                      // Project CREATE (write, not ingest)
-		{http.MethodPost, "/v1/sentry/discover"},                                      // Discover (read query, not ingest suffix)
-		{http.MethodGet, "/v1/sentry/logs"},                                           // Logs (read)
-		{http.MethodGet, "/v1/sentry/traces"},                                         // Traces (read)
-		{http.MethodGet, "/v1/sentry/stats"},                                          // Stats (read)
-		{http.MethodGet, "/v1/sentry/00000000-0000-0000-0000-000000000000/envelope/"}, // ingest is POST-only
+		{http.MethodGet, "/v1/sentinel/issues"},                                         // Issues LIST (read)
+		{http.MethodGet, "/v1/sentinel/projects"},                                       // Projects LIST (read)
+		{http.MethodPost, "/v1/sentinel/projects"},                                      // Project CREATE (write, not ingest)
+		{http.MethodPost, "/v1/sentinel/discover"},                                      // Discover (read query, not ingest suffix)
+		{http.MethodGet, "/v1/sentinel/logs"},                                           // Logs (read)
+		{http.MethodGet, "/v1/sentinel/traces"},                                         // Traces (read)
+		{http.MethodGet, "/v1/sentinel/stats"},                                          // Stats (read)
+		{http.MethodGet, "/v1/event/00000000-0000-0000-0000-000000000000/envelope/"}, // ingest is POST-only
 	} {
 		reached.Store(false)
 		req := httptest.NewRequest(c.method, "http://api.hanzo.ai"+c.path, nil)

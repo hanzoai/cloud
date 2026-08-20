@@ -216,24 +216,6 @@ func init() {
 			"Same address ownership and same authentication as the envelope route — the "+
 			"/api/ segment is the SDK's, the DSN public key is the credential, the principal "+
 			"gate does not apply, and a keyless submission is a 401 from the ingest verifier.")
-	openapi.Describe("/v1/sentinel/:project/envelope/", http.MethodPost,
-		"Receive a Sentry envelope on the runtime's ingest hatch",
-		"The runtime's own ingest address for a Sentry envelope frame, kept under this root "+
-			"because that is where the module registers it.\n\n"+
-			"THE DOOR A CLIENT SHOULD USE IS /v1/event/{project}/envelope. That is what a minted "+
-			"DSN addresses and what @hanzo/event posts to, and it carries the same wire to the "+
-			"same sink. This address answers identically; it is the second spelling of one wire "+
-			"and it is on its way out.\n\n"+
-			"AUTHENTICATED BY THE DSN PUBLIC KEY, never a Hanzo session, so it is exempt from the "+
-			"principal gate — a reporting SDK has no session to present. The project segment is a "+
-			"UUID enforced by the route, and the exemption matches method plus prefix plus suffix, "+
-			"so every Sentinel READ (issues, discover, events, logs, traces, stats) stays gated.")
-	openapi.Describe("/v1/sentinel/:project/store/", http.MethodPost,
-		"Receive a single event on the runtime's ingest hatch",
-		"The legacy single-event form of the envelope ingest — one JSON event rather than a "+
-			"framed batch — kept because SDKs in the field still send it.\n\n"+
-			"Same address ownership and same authentication as the envelope route beside it, and "+
-			"the same advice: point a client at /v1/event/{project}/store, which is the one door.")
 	// --- /v1/sentinel/* — the Sentry product face over the SAME runtime ---
 	openapi.Describe("/v1/sentinel/*", http.MethodGet,
 		"Read the caller org's errors on the Sentry surface",
@@ -558,23 +540,6 @@ func mountSentinel(a cloud.Router) {
 		}
 		h.ServeHTTP(w, r)
 	})))
-}
-
-// eventToRuntimePath maps the Sentry wire on the ONE /v1/event door to its
-// runtime route: POST /v1/event/<project>/envelope|store(/) onto the runtime's
-// own ingest hatch. ok=false for anything else — the mapping carries ingest ONLY,
-// so no READ API is reachable through it.
-//
-// The hatch is spelled under the runtime's sentinel root, and that is an INTERNAL
-// address: the public door is /v1/event and this is the one function that knows
-// what it lands on.
-func eventToRuntimePath(method, path string) (string, bool) {
-	rest, found := strings.CutPrefix(path, "/v1/event/")
-	if !found {
-		return "", false
-	}
-	mapped := "/v1/sentinel/" + rest
-	return mapped, module.IngestWire(method, mapped)
 }
 
 // Mount composes the whole observability surface into its host as ONE app,
