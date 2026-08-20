@@ -244,7 +244,10 @@ const builtinAgentInstructions = "" +
 // a caller pick what their org pays for.
 func knownChatModel(m string) bool {
 	switch m {
-	case "enso", "enso-flash", "enso-ultra":
+	// `enso-auto` is the flagship; `enso` is the same SKU under the name it is
+	// being renamed FROM and stays until the catalog drops it, or a session
+	// already pinned to the old id stops being selectable.
+	case "enso-auto", "enso", "enso-flash", "enso-ultra":
 		return true
 	}
 	return false
