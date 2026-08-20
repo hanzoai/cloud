@@ -953,17 +953,20 @@ jobs:
           echo "smoked=$SMOKED" >> "$GITHUB_OUTPUT"
 
       # THE SMOKE GATE. Boot the image that was actually pushed and require the
-      # HTTP plane to reach "listening" without a crash signature, on the boot env a
-      # real pod gets — a writable /data, CLOUD_ENV=smoke and a throwaway 32-byte
-      # master key so the KMS plane mounts on its normal ready path rather than a
-      # degraded one. The plugins announce their own sockets first ("zip listening",
-      # "plane listening", "listening as plugin"); the top-level "message":"listening"
-      # line is the one that carries the http address the probe below dials, so that
-      # is the needle — waiting on a plugin socket dials a port nothing has bound.
+      # host's HTTP plane to bind before probing it, without a crash signature, on
+      # the boot env a real pod gets — a writable /data, CLOUD_ENV=smoke and a
+      # throwaway 32-byte master key so the KMS plane mounts on its normal ready path
+      # rather than a degraded one. The host and its plugins announce listeners with
+      # the SAME "zip listening" message, so the message alone cannot tell them apart;
+      # the ADDRESS can. The host binds a TCP port (an http transport at addr ":8080");
+      # every plugin binds a unix socket path (addr "/data/run/...sock"). So the needle
+      # is an http transport on a PORT-shaped address — the host's plane and never a
+      # plugin's socket — because matching the bare message breaks out on the first
+      # plugin and then dials a port nothing has bound.
       #
       # The script is handed over base64 because it contains both single and
-      # double quotes (the `"message":"listening"` needle), and re-quoting it
-      # for `sh -c` is how a gate quietly stops matching what it is looking for.
+      # double quotes (the `"transport":"http","addr":":<port>"` needle), and
+      # re-quoting it for `sh -c` is how a gate quietly stops matching what it seeks.
       #
       # IT RUNS ON `smoked`, NEVER ON `built`, AND THE DIFFERENCE IS A RELEASE.
       # These were one flag: skip the build, skip the proof. A run that pushed and
@@ -988,7 +991,7 @@ jobs:
           pid=$!
           listening=0
           for _ in $(seq 1 180); do
-            if grep -q '"message":"listening"' /tmp/boot.log 2>/dev/null; then listening=1; break; fi
+            if grep -qE '"transport":"http","addr":":[0-9]+"' /tmp/boot.log 2>/dev/null; then listening=1; break; fi
             kill -0 "$pid" 2>/dev/null || break
             sleep 1
           done
