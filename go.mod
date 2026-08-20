@@ -7,7 +7,7 @@ go 1.26.5
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
-	github.com/coder/websocket v1.8.14
+	github.com/coder/websocket v1.8.15
 	github.com/digitalocean/godo v1.197.0
 	github.com/digitorus/pdf v0.1.2
 	github.com/digitorus/pdfsign v0.0.0-20260407063256-85ede6424a74
@@ -87,6 +87,7 @@ require (
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
 	github.com/hanzoai/otel-collector v1.2.0 // indirect
 	github.com/hanzoai/sqlcipher v0.1.1 // indirect
+	github.com/hanzoai/voice v0.1.1-0.20260815163030-0c26e48ac43f // indirect
 	github.com/hanzokv/go/extra/kvcmd/v9 v9.22.0 // indirect
 	github.com/hanzokv/go/extra/kvotel/v9 v9.22.0 // indirect
 	github.com/hanzos3/crc64nvme v1.1.2 // indirect
@@ -688,8 +689,8 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.5
-	github.com/hanzoai/ai v1.833.93
-	github.com/hanzoai/authz v1.10.29
+	github.com/hanzoai/ai v1.833.94
+	github.com/hanzoai/authz v1.10.30
 	github.com/hanzoai/base v1.5.61
 	github.com/hanzoai/licensing v0.1.15
 	github.com/hanzoai/metrics v1.110.6
