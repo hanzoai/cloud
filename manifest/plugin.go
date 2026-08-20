@@ -117,7 +117,7 @@ type App struct {
 	// :4317-:4319 from the `ai` child, the child's listen failed, and mount()
 	// correctly degraded it to absent — but absence went into a map that only
 	// /healthz reported, in a FIELD, and the probe reads the STATUS CODE. Every
-	// specifically-mounted prefix (/v1/sentry, /v1/o11y, /v1/commerce/catalog,
+	// specifically-mounted prefix (/v1/sentinel, /v1/o11y, /v1/commerce/catalog,
 	// /v1/admin/*) kept answering from its own subsystem, so only a path falling
 	// THROUGH to `ai` showed it. A health check that returns 200 while the entire
 	// product API is absent is not a health check.
