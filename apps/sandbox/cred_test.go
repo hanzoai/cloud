@@ -53,13 +53,19 @@ func podWith(t *testing.T, class string, cr cred) (spec, container map[string]an
 // unmistakable in a rendered object. It never reaches DigitalOcean: what is under
 // test is who the value is GIVEN to, which is decided here and not there.
 func adminCred() cred {
+	return credFrom("dop_v1_TESTTOKEN")
+}
+
+// credFrom builds the admin lease's credentials the way credFor does, from one
+// token, so a test cannot assert a shape the real path does not produce.
+func credFrom(token string) cred {
 	return cred{
 		env: map[string]string{
-			"DIGITALOCEAN_ACCESS_TOKEN": "dop_v1_TESTTOKEN",
-			"DO_API_TOKEN":              "dop_v1_TESTTOKEN",
-			"KUBECONFIG":                kubePath,
+			"KUBECONFIG":      kubePath,
+			"XDG_CONFIG_HOME": configHome,
 		},
-		kube: []byte("apiVersion: v1\nkind: Config\nusers:\n- user:\n    token: TESTKUBETOKEN\n"),
+		kube:  []byte("apiVersion: v1\nkind: Config\nusers:\n- user:\n    token: TESTKUBETOKEN\n"),
+		doctl: doctlConfig(token),
 	}
 }
 
@@ -135,9 +141,9 @@ func TestNoCredentialSurvivesAFalseSuper(t *testing.T) {
 }
 
 // TestASuperAdminsSandboxCarriesItsOwnCredentials is the other direction: the
-// feature has to actually work, and it has to put each value where its tool looks
-// — the token in the environment because that is where doctl reads it, KUBECONFIG
-// naming a path because kubectl reads a file and no env var carries one.
+// feature has to actually work, and it has to tell each tool where to look. Both
+// values here are PATHS — kubectl and doctl each read a file, and an exec session
+// carries no HOME to derive one from — so the spec states where, never what.
 func TestASuperAdminsSandboxCarriesItsOwnCredentials(t *testing.T) {
 	_, c := podWith(t, "dev", adminCred())
 	env, ok := c["env"].([]any)
@@ -173,24 +179,48 @@ func TestASuperAdminsSandboxCarriesItsOwnCredentials(t *testing.T) {
 	}
 }
 
-// TestTheKubeconfigIsNeverInAKubernetesObject states the design decision as a
-// property. The DOKS kubeconfig is cluster-admin; it reaches the pod through the
-// exec channel and must appear NOWHERE in the object the apiserver stores — not
-// in env, not in a volume, not in a command line.
-func TestTheKubeconfigIsNeverInAKubernetesObject(t *testing.T) {
-	cr := adminCred()
+// TestNoCredentialIsEverInAKubernetesObject states the design decision as a
+// property. A Pod spec is an object in etcd and is printed by every `kubectl
+// describe` of that pod, so a credential must appear NOWHERE in it — not in env,
+// not in a volume, not in a command line. Every one reaches the pod through the
+// exec channel instead, and the spec carries only the path each tool reads.
+func TestNoCredentialIsEverInAKubernetesObject(t *testing.T) {
+	const doToken = "dop_v1_SPECMUSTNOTHOLDTHIS"
+	cr := credFrom(doToken)
 	spec, _ := podWith(t, "dev", cr)
 	rendered := renderedText(t, spec)
-	if strings.Contains(rendered, "TESTKUBETOKEN") {
-		t.Fatal("the kubeconfig appears in the pod object — it must reach the pod " +
-			"through the exec channel and live in no Kubernetes object")
+
+	// Both admin credentials, for the same reason and with different stakes. The
+	// kubeconfig is cluster-admin. The DigitalOcean token is the platform's own,
+	// is scoped to no lease, and DigitalOcean accepts it at the inference endpoint
+	// as well as the control plane — so a copy of it here is uncapped model spend
+	// readable by anything that can get a pod in this namespace.
+	for what, secret := range map[string]string{
+		"kubeconfig":         "TESTKUBETOKEN",
+		"DigitalOcean token": doToken,
+	} {
+		if strings.Contains(rendered, secret) {
+			t.Fatalf("the %s appears in the pod object — it must reach the pod "+
+				"through the exec channel and live in no Kubernetes object", what)
+		}
 	}
-	// It is the file start writes, so it must be reachable through the same
+
+	// The control. The spec DOES name both paths, so the search above ran over a
+	// spec that really carries this lease's env rather than over an empty one.
+	for _, path := range []string{kubePath, configHome} {
+		if !strings.Contains(rendered, path) {
+			t.Fatalf("the spec does not name %q — this test is asserting nothing", path)
+		}
+	}
+
+	// They are the files start writes, so each must be reachable through the same
 	// mechanism the fs verb uses, at a path outside the project volume (a PVC
-	// outlives the lease; the credential must not).
-	if strings.HasPrefix(kubePath, workdir) || strings.HasPrefix(kubePath, execdir) {
-		t.Fatalf("kubePath %q is under a mounted workdir — a project PVC outlives "+
-			"the lease and would keep the credential", kubePath)
+	// outlives the lease; a credential must not).
+	for _, p := range []string{kubePath, doctlPath} {
+		if strings.HasPrefix(p, workdir) || strings.HasPrefix(p, execdir) {
+			t.Fatalf("%q is under a mounted workdir — a project PVC outlives the "+
+				"lease and would keep the credential", p)
+		}
 	}
 }
 
@@ -411,5 +441,18 @@ func TestAnIdentityOutageStillLeases(t *testing.T) {
 	_, c := podWith(t, "exec", cred{session: s})
 	if _, stated := c["env"]; stated {
 		t.Fatalf("a session-less sandbox states env %v", c["env"])
+	}
+}
+
+// doctl reads its credential from a file and refuses without one, so the file
+// this writes IS the pod's whole DigitalOcean authority. Verified against the
+// real binary before the change: with this file and no variable set, doctl
+// authenticates; with the file removed it answers "access token is required".
+func TestTheDoctlConfigCarriesTheToken(t *testing.T) {
+	if got, want := string(doctlConfig("dop_v1_X")), "access-token: dop_v1_X\n"; got != want {
+		t.Errorf("doctlConfig = %q, want %q", got, want)
+	}
+	if !strings.HasPrefix(doctlPath, configHome+"/") {
+		t.Errorf("doctlPath %q is not under XDG_CONFIG_HOME %q, so doctl will not find it", doctlPath, configHome)
 	}
 }
