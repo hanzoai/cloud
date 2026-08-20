@@ -8,7 +8,6 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
 	github.com/coder/websocket v1.8.15
-	github.com/digitalocean/godo v1.197.0
 	github.com/digitorus/pdf v0.1.2
 	github.com/digitorus/pdfsign v0.0.0-20260407063256-85ede6424a74
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
@@ -66,6 +65,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/lightsail v1.53.0 // indirect
 	github.com/btcsuite/btcd/chainhash/v2 v2.0.0 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
+	github.com/digitalocean/godo v1.197.0 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
 	github.com/docker/cli v29.5.3+incompatible // indirect
@@ -75,7 +75,6 @@ require (
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
 	github.com/go-webauthn/webauthn v0.17.4 // indirect
 	github.com/go-webauthn/x v0.2.6 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
@@ -160,8 +159,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/hanzoai/govaluate v0.1.0 // indirect
 	github.com/hanzoai/ha v0.2.0
-	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
-	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/huandu/go-clone v1.7.3 // indirect
 	github.com/jackc/pgx/v5 v5.9.2 // indirect
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible // indirect
