@@ -51,7 +51,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_evals_datasets",
@@ -81,7 +82,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/evals/datasets/{name}": {
@@ -114,7 +116,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_evals_datasets_by_name",
@@ -145,7 +148,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/evals/datasets/{name}/items": {
@@ -186,7 +190,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_evals_datasets_by_name_items",
@@ -226,7 +231,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/evals/evaluators": {
@@ -259,7 +265,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_evals_evaluators",
@@ -289,7 +296,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/evals/metrics": {
@@ -331,7 +339,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/evals/rubrics": {
@@ -364,7 +373,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_evals_rubrics",
@@ -394,7 +404,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/evals/runs": {
@@ -435,7 +446,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_evals_runs",
@@ -485,7 +497,8 @@
             },
             "description": "bad gateway"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/evals/scores": {
@@ -544,7 +557,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_evals_scores",
@@ -574,7 +588,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/evals/traces": {
@@ -633,7 +648,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

@@ -59,7 +59,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/connectors/providers": {
@@ -98,7 +99,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/connectors/{id}": {
@@ -135,7 +137,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/connectors/{id}/refresh": {
@@ -184,7 +187,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/connectors/{id}/token": {
@@ -224,7 +228,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/connectors/{provider}/credential": {
@@ -288,7 +293,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/connectors/{provider}/device": {
@@ -343,7 +349,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/connectors/{provider}/device/{flow}/poll": {
@@ -402,7 +409,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations": {
@@ -444,7 +452,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/discord/interactions": {
@@ -525,7 +534,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/github/fork": {
@@ -567,7 +577,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/github/installations": {
@@ -601,7 +612,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/github/issues/backfill": {
@@ -643,7 +655,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/github/repos": {
@@ -679,7 +692,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/github/repos/import": {
@@ -722,7 +736,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/github/repos/{repo}/pages": {
@@ -760,7 +775,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_integrations_github_repos_by_repo_pages",
@@ -805,7 +821,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_integrations_github_repos_by_repo_pages",
@@ -864,7 +881,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_integrations_github_repos_by_repo_pages",
@@ -915,7 +933,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/github/repos/{repo}/pages/builds": {
@@ -954,7 +973,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/github/search": {
@@ -1000,7 +1020,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/github/webhook": {
@@ -1046,7 +1067,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/openrouter/webhook": {
@@ -1204,7 +1226,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/telegram/link": {
@@ -1286,7 +1309,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/{provider}/callback": {
@@ -1362,7 +1386,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/{provider}/disconnect": {
@@ -1399,7 +1424,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/integrations/{provider}/verify": {
@@ -1442,7 +1468,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

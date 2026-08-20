@@ -49,7 +49,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_mcp_servers",
@@ -84,7 +85,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/mcp/servers/{id}": {
@@ -110,7 +112,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/plugins": {
@@ -143,7 +146,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/plugins/authored": {
@@ -165,7 +169,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/plugins/authored/{id}": {
@@ -198,7 +203,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/plugins/build": {
@@ -262,7 +268,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_skills",
@@ -297,7 +304,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/skills/authored": {
@@ -319,7 +327,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/skills/{id}": {
@@ -352,7 +361,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/tools": {
@@ -394,7 +404,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/tools/activation": {
@@ -416,7 +427,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_tools_activation",
@@ -452,7 +464,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/tools/call": {
@@ -491,7 +504,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/tools/catalog": {
@@ -560,7 +574,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/tools/catalog/sync": {
@@ -582,7 +597,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/tools/catalog/{id}": {
@@ -615,7 +631,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "patch_tools_catalog_by_id",
@@ -660,7 +677,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

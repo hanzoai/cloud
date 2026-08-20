@@ -66,7 +66,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/analytics": {
@@ -117,7 +118,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/applications": {
@@ -183,7 +185,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/audit": {
@@ -324,7 +327,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/audit/verify": {
@@ -365,7 +369,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/bases": {
@@ -403,7 +408,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/caps": {
@@ -462,7 +468,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "adminCreateCap",
@@ -507,7 +514,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/caps/{id}": {
@@ -558,7 +566,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "patch": {
         "operationId": "adminUpdateCap",
@@ -614,7 +623,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/compute": {
@@ -685,7 +695,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/customers": {
@@ -727,7 +738,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/customers/{org}": {
@@ -760,7 +772,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/customers/{org}/credit": {
@@ -823,7 +836,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/customers/{org}/reactivate": {
@@ -869,7 +883,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/customers/{org}/suspend": {
@@ -915,7 +930,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/finance": {
@@ -937,7 +953,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/finance/backfill": {
@@ -981,7 +998,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/flags": {
@@ -1019,7 +1037,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/flags/{key}": {
@@ -1089,7 +1108,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/grants": {
@@ -1160,7 +1180,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "adminIssueGrant",
@@ -1211,7 +1232,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/infra": {
@@ -1263,7 +1285,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/infra/clusters/{id}/nodepools/{pool}/scale": {
@@ -1328,7 +1351,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/infra/droplets/{id}": {
@@ -1388,7 +1412,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/infra/droplets/{id}/resize": {
@@ -1447,7 +1472,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/infra/loadbalancers/{id}": {
@@ -1490,7 +1516,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/infra/nodes/{id}/cordon": {
@@ -1546,7 +1573,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/infra/volumes/{id}": {
@@ -1617,7 +1645,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/infra/volumes/{id}/resize": {
@@ -1660,7 +1689,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/infra/volumes/{id}/snapshot": {
@@ -1716,7 +1746,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/invoices": {
@@ -1767,7 +1798,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/me": {
@@ -1801,7 +1833,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/metrics": {
@@ -1843,7 +1876,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/money": {
@@ -1865,7 +1899,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/o11y": {
@@ -1923,7 +1958,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/orgs": {
@@ -1962,7 +1998,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/overview": {
@@ -2007,7 +2044,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/products": {
@@ -2085,7 +2123,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/promos": {
@@ -2121,7 +2160,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "adminSetPromo",
@@ -2174,7 +2214,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/providers/credit": {
@@ -2196,7 +2237,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/revenue": {
@@ -2241,7 +2283,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/roles": {
@@ -2307,7 +2350,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/services": {
@@ -2346,7 +2390,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "adminUpsertService",
@@ -2400,7 +2445,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/services/{service}/mode": {
@@ -2461,7 +2507,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/subscriptions": {
@@ -2512,7 +2559,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/subsystems": {
@@ -2545,7 +2593,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/sync": {
@@ -2574,7 +2623,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/usage": {
@@ -2634,7 +2684,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/usage/funding": {
@@ -2692,7 +2743,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/users": {
@@ -2775,7 +2827,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/volumes": {
@@ -2830,7 +2883,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/waitlist": {
@@ -2898,7 +2952,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/waitlist/boost": {
@@ -2945,7 +3000,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

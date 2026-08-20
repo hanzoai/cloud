@@ -349,6 +349,28 @@ type Operation struct {
 	Security    *[]Requirement `json:"security,omitempty"`
 	App         string         `json:"x-app,omitempty"`
 	Public      bool           `json:"x-public,omitempty"`
+	// Tool says this operation is DISPATCHABLE, not merely described.
+	//
+	// zip builds its MCP tool list by walking the typed registry and nothing else
+	// (mcpTools → Registry), so an op earns a tool exactly when it is typed —
+	// which is the same set [Fold] folds, and why this is written there and
+	// nowhere else. An untyped route reaches the document through [From] and a
+	// declared one through [Register]; both describe a shape the child's registry
+	// has never heard of, so both leave this false.
+	//
+	// It exists because the fleet's agent door reads a CATALOG built from these
+	// documents, and a document carries every ROUTE. Advertising the difference
+	// is not a cosmetic over-count: a caller that picks one of those names gets
+	// `unknown tool` from the child that published it — measured on the live door,
+	// `storage`/`list_s3_buckets`, and 157 operations across ten apps behind it.
+	// Marking the dispatchable subset here lets the catalog carry what a child
+	// ANSWERS TO rather than what it describes, which is what Op's own doc comment
+	// in fleet/catalog.go has always claimed it holds.
+	//
+	// An extension rather than a tag: the tag axis means PRODUCT, and a generator
+	// ignores an unknown `x-`. It is derived on every regeneration and never
+	// hand-set — the same law Register, Describe and Public are held to.
+	Tool bool `json:"x-tool,omitempty"`
 }
 
 // Components holds the named schemas operations reference by $ref, so an SDK
@@ -660,6 +682,10 @@ func Fold(doc *Document, reg Registry) error {
 		if legacy {
 			op.Tags = append(op.Tags, Compat)
 		}
+		// This loop IS the set zip will build MCP tools from — both read the typed
+		// registry and nothing else — so the mark is a restatement of where we are
+		// standing rather than a judgement made here. See [Operation.Tool].
+		op.Tool = true
 		doc.Paths[path][strings.ToLower(method)] = op
 	}
 	// MERGE, never replace: From may already have named schemas from Register.

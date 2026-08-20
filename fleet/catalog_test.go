@@ -35,6 +35,12 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 		var doc struct {
 			Paths map[string]map[string]struct {
 				OperationID string `json:"operationId"`
+				// x-tool, the same mark gen-fleet-catalog reads. Both sides of
+				// this comparison must apply it or the link is between two
+				// different questions: a document carries every ROUTE and the
+				// catalog carries what a child ANSWERS TO, so an unfiltered
+				// `want` reads the dispatchable catalog as permanently stale.
+				Tool bool `json:"x-tool"`
 			} `json:"paths"`
 		}
 		if err := json.Unmarshal(raw, &doc); err != nil {
@@ -44,13 +50,23 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 		seen := map[string]bool{}
 		for _, methods := range doc.Paths {
 			for method, op := range methods {
-				if method == "parameters" || op.OperationID == "" || seen[op.OperationID] {
+				if method == "parameters" || op.OperationID == "" || !op.Tool || seen[op.OperationID] {
 					continue
 				}
 				seen[op.OperationID] = true
 				want[app] = append(want[app], op.OperationID)
 			}
 		}
+	}
+
+	// The comparison below quantifies over `want`, so an EMPTY want compares
+	// nothing and reports success. That is the same shade of quiet as the skip in
+	// TestListingStartsNothing: every spec carrying no dispatchable operation is
+	// the mark having stopped being written, and it would read as agreement.
+	if len(want) == 0 {
+		t.Fatalf("%d specs and not one dispatchable operation between them — "+
+			"openapi.Fold is no longer marking the typed registry, so this "+
+			"comparison has nothing to hold the catalog against", len(specs))
 	}
 
 	for app, ids := range want {
@@ -104,7 +120,15 @@ func TestListingStartsNothing(t *testing.T) {
 		}
 	}
 	if len(apps) == 0 {
-		t.Skip("the catalog is empty")
+		// FAIL, never skip. An empty catalog is a door that publishes nothing,
+		// which is the outage this file exists to prevent — and a skip reports it
+		// in the one shade CI reads as fine, so the property below would go
+		// untested exactly when it had stopped holding. The generator drops an
+		// operation that is not marked dispatchable, so "no app carries one" means
+		// the mark stopped being written, not that there is nothing to check.
+		t.Fatal("no app carries a published operation: the fleet door would list " +
+			"nothing. Regenerate with `make -f mk/fleet.mk documents`, and if the " +
+			"catalog is still empty the x-tool mark is not reaching the documents")
 	}
 	sort.Strings(apps)
 
