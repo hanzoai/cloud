@@ -28,11 +28,11 @@ import (
 	"cmp"
 	"context"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 
 	"github.com/zap-proto/zip"
@@ -132,16 +132,12 @@ const dirExit = 10
 //
 // A negative or unparseable value falls through to free rather than to the
 // fallback, so a typo cannot price a class by accident in either direction.
-func ResourceFee(class string) int64 {
-	for _, k := range []string{feeEnv + "_" + strings.ToUpper(class), feeEnv} {
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
-				return n
-			}
-		}
-	}
-	return 0
-}
+//
+// The RULE is cloud.FeeCents and only the DEFAULT is local. This used to restate
+// the three-line lookup so it could change that one value, which is the copy
+// FeeCents was extracted to remove — the resolution order is fleet-wide, the
+// number is this surface's.
+func ResourceFee(class string) int64 { return cloud.FeeCents(feeEnv, class, 0) }
 
 const feeEnv = "SANDBOX_FEE_CENTS"
 

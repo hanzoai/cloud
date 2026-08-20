@@ -388,10 +388,15 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 			"reason", s.State.reason, "prefix", "/v1/meet")
 		return nil
 	}
-	// apiKey is an identifier, not a secret (it is the public `iss` of every minted
-	// token), so logging it is what lets an operator confirm the binary and the
-	// LiveKit server agree on which key pair is in play. The secret is never logged.
-	s.Log.Info("meet subsystem mounted", "prefix", "/v1/meet", "ttl", ttl.String(), "livekitApiKey", s.State.apiKey)
+	// The api key is half a credential pair, so it goes into the log the one way
+	// this binary puts any credential into one: as a Fingerprint, the stable
+	// per-process handle that confirms WHICH key pair is in play without printing
+	// it. That it is also the public `iss` of every minted token is a reason this
+	// was never an urgent disclosure, not a reason to print it — a log is read by
+	// more people, kept longer, and shipped further than a token is, and nothing
+	// downstream can tell a key from a secret by looking. The secret is never
+	// logged, and never was.
+	s.Log.Info("meet subsystem mounted", "prefix", "/v1/meet", "ttl", ttl.String(), "cred", cloud.Fingerprint(s.State.apiKey))
 	return nil
 }
 
@@ -595,10 +600,19 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	if identity == "" {
 		return zip.Errorf(http.StatusUnauthorized, "the membership row names no account")
 	}
+	// A seat on the media server is the one thing here that costs money, and this
+	// is where it is handed out. Authorized before the token exists, so a caller
+	// who cannot cover it never holds credentials to the room. See meter.go.
+	ch, err := afford(s, c)
+	if err != nil {
+		return cloud.DenyResource(c, err)
+	}
+	defer ch.Release()
 	tok, err := st.grant(room, identity, strings.TrimSpace(req.ParticipantName), time.Now())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "meet: mint failed")
 	}
+	charge(ch)
 	return c.String(http.StatusOK, tok)
 }
 

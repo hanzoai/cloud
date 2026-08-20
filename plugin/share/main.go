@@ -15,10 +15,17 @@ import (
 // and not the ~3040-package union the fused binary was. The light host loads it
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `share openapi`. Hand-owned — edit the spec below directly.
+// Metered, not Free: POST /v1/share/enable mints an account on the share fabric
+// using the PLATFORM's admin credential and hands the caller the token their CLI
+// enables tunnels with. It is org-scoped with no admin gate — self-service is the
+// product — so any tenant reaches it. The meter is apps/share/meter.go, and it
+// charges the PROVISION only: reading back an account you already have is free,
+// because enable is idempotent and a caller re-reading their own token has bought
+// nothing.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "share",
-		Price: cloud.Free,
+		Price: cloud.Metered,
 		Mount: share.Mount,
 	}}, []string{"share"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
