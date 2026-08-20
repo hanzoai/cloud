@@ -117,16 +117,21 @@ var Apps = []App{
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plans"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing"}},
-	// storage is the S3 DATA plane (buckets, objects, health); provisioning below
-	// PROVISIONS an s3 resource and answers /v1/s3 + /v1/s3/{name}. Both rows once
-	// read "/v1/s3" — one prefix, two owners — so whichever mounted first took the
-	// other's routes with it, and provisioning's /v1/s3/{name} matched
-	// /v1/s3/buckets and /v1/s3/health besides. Naming the deeper prefixes storage
-	// actually serves lets longest-prefix match separate them, which is exactly how
-	// the same pair already works for /v1/vector (provisioning) against
-	// /v1/vector/collections (product). No route moves.
-	{Name: "storage", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
-	{Name: "provisioning", Prefixes: []string{"/v1/instances", "/v1/s3", "/v1/search/query", "/v1/vector"}},
+	// storage is the object DATA plane — buckets, objects, health — and it answers
+	// at /v1/storage. The vendor's word is not the product's name: S3 is a wire
+	// protocol this plane speaks, so it belongs in the implementation and in the
+	// compatibility surface, never in the address a caller reads.
+	//
+	// provisioning below ALLOCATES an object-storage bucket (kind "s3") and answers
+	// under /v1/instances. The two share one tenant-to-bucket naming derivation on
+	// purpose (provisioning.BucketName) so allocate and operate cannot drift; the
+	// dependency runs one way and there is no cycle.
+	//
+	// Both rows once read "/v1/s3" — one prefix, two owners — so whichever mounted
+	// first took the other's routes with it. Separate addresses end that class of
+	// collision outright rather than leaving longest-prefix match to referee it.
+	{Name: "storage", Prefixes: []string{"/v1/storage"}},
+	{Name: "provisioning", Prefixes: []string{"/v1/instances", "/v1/search/query", "/v1/vector"}},
 	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	// The free lane's ceiling, beside the priced lane's. rollingcap bounds how fast
@@ -313,8 +318,7 @@ var Apps = []App{
 	//
 	// The nesting is not a routing hazard, it is how routing works: nested static
 	// prefixes resolve by SPECIFICITY, so /v1/code/lsp beats code's /v1/code and
-	// both beat ai's bare "/v1" — the same relation storage's /v1/s3/buckets has
-	// to provisioning's /v1/s3. Adjacency in this list is documentation.
+	// both beat ai's bare "/v1". Adjacency in this list is documentation.
 	{Name: "lsp", Prefixes: []string{"/v1/code/lsp"}},
 	// zt held "/v1/edge/nodes" — a top-level name for something that was never a
 	// product. Four unrelated things wore "edge": the on-device inference runtime

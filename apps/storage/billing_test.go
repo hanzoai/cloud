@@ -87,8 +87,8 @@ func callGuard(t *testing.T, s *cloud.Service[state], org string, hErr error) (s
 		return c.NoContent(http.StatusNoContent)
 	})
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/s3/op", h)
-	req := httptest.NewRequest("POST", "/v1/s3/op", nil)
+	app.Post("/v1/storage/op", h)
+	req := httptest.NewRequest("POST", "/v1/storage/op", nil)
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u-"+org) // validated principal (tenant() gates on X-User-Id)
