@@ -74,7 +74,7 @@ var Apps = []App{
 	// outside /v1/o11y because the Upgrade handshake is a transport concern, so no
 	// other prefix here reaches it: unlisted, the fleet published the address and
 	// routed it nowhere.
-	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry", "/v1/summary", "/ws/query_progress"}, Eager: true},
+	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentinel", "/v1/summary", "/ws/query_progress"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
 	// Commerce owns its published FAMILIES, never bare "/v1". As "/v1" this row was
 	// the fleet's route of last resort: every path no app named deeper — the whole
