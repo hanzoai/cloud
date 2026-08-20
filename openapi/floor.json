@@ -1,6 +1,6 @@
 {
-  "paths": 1832,
-  "operations": 2502,
+  "paths": 1828,
+  "operations": 2494,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -19,7 +19,6 @@
     "auto": 11,
     "automations": 18,
     "avatar": 2,
-    "balancers": 4,
     "base": 1,
     "benchmark": 9,
     "billing": 45,
@@ -154,7 +153,7 @@
     "scrape": 1,
     "search": 3,
     "security": 7,
-    "sentry": 22,
+    "sentinel": 22,
     "settings": 2,
     "share": 2,
     "sites": 21,
@@ -180,7 +179,6 @@
     "validators": 4,
     "vector": 2,
     "videos": 3,
-    "vpcs": 4,
     "wallets": 8,
     "webhooks": 8,
     "websearch": 6,
