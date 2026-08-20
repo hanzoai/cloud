@@ -362,6 +362,10 @@ var Apps = []App{
 	{Name: "sandboxes", Prefixes: []string{"/v1/sandboxes"}},
 	{Name: "websearch", Prefixes: []string{"/v1/websearch", "/v1/scrape"}},
 	{Name: "crawl", Prefixes: []string{"/v1/crawl"}},
+	// Beside the two surfaces that read the web, because it measures the same web
+	// one layer up: websearch asks what a query returns, crawl reads one page, and
+	// seo asks what a phrase is worth and where a domain places for it.
+	{Name: "seo", Prefixes: []string{"/v1/seo"}},
 	{Name: "index", Prefixes: []string{"/v1/index"}},
 	{Name: "catalog", Prefixes: []string{"/v1/catalog"}},
 	// The product TAXONOMY — categories, tags and display order — beside catalog

@@ -33,7 +33,7 @@ var frozen = []string{
 	"visor", "venue", "captable", "code", "lsp", "zt", "share",
 	"dataroom", "explorer", "security", "integrations", "destinations", "cloudflare",
 	"sbom", "team", "meet", "settings", "prefs", "notify",
-	"channels", "gateway", "entitlements", "exec", "sandboxes", "websearch", "crawl",
+	"channels", "gateway", "entitlements", "exec", "sandboxes", "websearch", "crawl", "seo",
 	"index", "catalog", "taxonomy", "world", "web3", "bot", "authors",
 	"bots", "audit", "affiliates", "esign", "product", "search", "evals",
 	"benchmark", "research", "experiments", "books", "treasury", "admin",
