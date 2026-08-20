@@ -4,9 +4,10 @@
 # It proves the two properties the design rests on, by MEASURING them rather than
 # by reading code:
 #
-#   1. tools/list costs ZERO process wakes. The host answers from the plugins'
-#      build-time catalogues (plugin/<app>/mcp.json, embedded via plugin/embed.go),
-#      so the child process count before and after must be identical.
+#   1. tools/list costs ZERO process wakes. The host answers from the fleet
+#      catalogue (fleet/catalog.json, generated from every plugin/<app>/openapi.json
+#      by plugin/gen-fleet-catalog and embedded), so the child process count before
+#      and after must be identical.
 #   2. tools/call wakes exactly ONE child — the plugin that owns the named tool —
 #      over ZAP on its private unix socket, and returns that plugin's own answer.
 #

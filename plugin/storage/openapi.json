@@ -28,7 +28,8 @@
         "description": "Returns the caller's own buckets under the friendly names they were created with, each with its creation time.\n\nAnother tenant's bucket is not refused, it is INVISIBLE — a bucket outside the caller's namespace is skipped during the listing rather than reported, so the operation cannot be used to discover that a name is taken elsewhere.\n\nA validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.",
         "tags": [
           "s3"
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_s3_buckets",
@@ -36,7 +37,8 @@
         "description": "Creates a new bucket in the caller's own namespace and answers 201 with its friendly name and creation time.\n\nThe name is validated exactly as sent and never quietly normalised: it must match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, so a mixed-case name is a clean 400 rather than a bucket created as `photos` that the caller keeps asking for as `Photos`. A name already in use in the caller's own namespace is 409.\n\nA validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.",
         "tags": [
           "s3"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/s3/buckets/{bucket}": {
@@ -56,7 +58,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/s3/buckets/{bucket}/objects": {
@@ -76,7 +79,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_s3_buckets_by_bucket_objects",
@@ -94,7 +98,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/s3/buckets/{bucket}/objects/{wildcard1}": {
@@ -158,7 +163,8 @@
         "description": "A real readiness probe rather than a liveness stub: 200 only when the storage credentials are present, and it additionally reports whether presigning is available — the capability the two URL-issuing operations need and refuse without.\n\nAn unconfigured deployment answers 503 with `ready:false` and the reason, which is the same state in which every data-plane operation here refuses. Not token-gated, so the platform can probe it without a credential, and it carries no credential, bucket or tenant detail.",
         "tags": [
           "s3"
-        ]
+        ],
+        "x-public": true
       }
     }
   },

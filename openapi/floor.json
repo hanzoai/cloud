@@ -1,6 +1,6 @@
 {
-  "paths": 1815,
-  "operations": 2472,
+  "paths": 1816,
+  "operations": 2473,
   "products": {
     "admin": 86,
     "ads": 7,
@@ -105,7 +105,7 @@
     "machines": 8,
     "marketing": 35,
     "marketplace": 6,
-    "mcp": 3,
+    "mcp": 4,
     "meet": 3,
     "memory": 7,
     "mesh": 1,

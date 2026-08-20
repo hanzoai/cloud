@@ -44,6 +44,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -78,6 +79,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -122,6 +124,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -150,6 +153,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -183,6 +187,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -230,6 +235,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -265,6 +271,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -300,6 +307,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -320,7 +328,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/auto/flows/{id}/run": {
@@ -355,6 +364,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -399,6 +409,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -446,6 +457,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -474,7 +486,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/auto/pieces": {
@@ -497,6 +510,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -540,6 +554,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -575,6 +590,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -595,7 +611,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     }
   },

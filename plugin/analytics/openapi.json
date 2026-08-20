@@ -63,6 +63,7 @@
             "description": "service unavailable"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -116,6 +117,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -169,6 +171,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -232,6 +235,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -267,6 +271,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -314,7 +319,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/event.js": {
@@ -334,7 +340,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/event/{project}/envelope": {
@@ -364,7 +371,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/event/{project}/store": {
@@ -394,7 +402,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/insights/events": {
@@ -429,6 +438,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -452,6 +462,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -483,7 +494,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     }
   },
