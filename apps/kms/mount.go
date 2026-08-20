@@ -255,11 +255,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	g.Get("/secrets/+", guard(s, cloud.Member, cloud.Handle(s, getSecret)))
 	g.Post("/secrets", guard(s, cloud.Admin, cloud.Handle(s, putSecret)))
 	g.Delete("/secrets/+", guard(s, cloud.Admin, cloud.Handle(s, deleteSecret)))
-	// Use a credential without reading it (call.go). Member, the same level a
-	// read takes: this returns the vendor's answer rather than the value, so it
-	// grants nothing a reader did not already have, and it is the authority to
-	// give something that must act on a vendor without holding its credential.
-	g.Post("/call/+", guard(s, cloud.Member, cloud.Handle(s, call)))
 
 	s.Log.Info(
 		"kms subsystem mounted",
