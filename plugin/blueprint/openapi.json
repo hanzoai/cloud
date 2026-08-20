@@ -40,7 +40,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/blueprint/health": {
@@ -62,7 +63,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/blueprint/sbom": {

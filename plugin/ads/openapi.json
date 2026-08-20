@@ -62,7 +62,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_ads_campaigns",
@@ -98,7 +99,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/ads/campaigns/{id}": {
@@ -124,7 +126,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_ads_campaigns_by_id",
@@ -155,7 +158,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_ads_campaigns_by_id",
@@ -203,7 +207,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/ads/campaigns/{id}/launch": {
@@ -245,7 +250,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

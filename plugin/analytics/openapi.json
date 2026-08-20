@@ -62,7 +62,8 @@
             },
             "description": "service unavailable"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/analytics/overview": {
@@ -114,7 +115,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/analytics/timeseries": {
@@ -166,7 +168,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/analytics/top": {
@@ -228,7 +231,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/errors": {
@@ -262,7 +266,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/event": {
@@ -423,7 +428,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/insights/health": {
@@ -445,7 +451,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/replay": {

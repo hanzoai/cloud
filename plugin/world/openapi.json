@@ -40,7 +40,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/world/limits": {
@@ -73,7 +74,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/world/news": {
@@ -95,7 +97,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/world/pipeline": {
@@ -117,7 +120,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_world_pipeline",
@@ -147,7 +151,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/world/stream": {

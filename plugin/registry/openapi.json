@@ -40,7 +40,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/registry/packages": {
@@ -73,7 +74,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/registry/projects": {
@@ -95,7 +97,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/registry/status": {
@@ -117,7 +120,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/registry/tags": {
@@ -150,7 +154,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/registry/token": {
@@ -185,7 +190,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

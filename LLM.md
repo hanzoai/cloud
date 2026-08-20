@@ -3237,9 +3237,32 @@ semantic is identical — fail closed once armed, allow before.
   registry answers to" — so the generator is what disagrees with the type it
   fills. Reading `plugin/<app>/openapi.json` cannot tell the two apart (storage's
   untyped routes carry prose from `openapi.Describe`, and `openapi.Register`d
-  ones carry schemas), so the fix is a dump mode beside `<binary> openapi <file>`
-  that emits the app's own MCP tool names — build-time still, so the process
-  explosion the catalog exists to prevent stays prevented.
+  ones carry schemas).
+  **CLOSED, and NOT by the dump mode this paragraph used to prescribe.** A second
+  per-app MCP artifact is what `plugin/<app>/mcp.json` was, and it was deleted for
+  drifting — writing one again would re-open the defect it was deleted for, one
+  file per app. The discriminator instead rides the document that already exists:
+  `openapi.Operation.Tool` (`x-tool`), written by `openapi.Fold` and nowhere else.
+  Fold's loop IS the typed registry, and `mcpTools` walks that same registry
+  (`zip/mcp.go`: `mcpTools` → `Registry`), so the mark restates where the writer is
+  standing rather than judging anything — an untyped route arriving through `From`
+  and a declared one through `Register` both leave it false.
+  `plugin/gen-fleet-catalog` carries only marked operations, so the catalog holds
+  what a child ANSWERS TO, which is what `Op`'s doc comment always claimed.
+  The gate is `openapi/tool_test.go`, and the case that earns it is the THIRD one:
+  a route with an `openapi.Register`ed body AND `openapi.Describe`d prose is
+  indistinguishable from a typed op by any document-shaped heuristic, carries a
+  requestBody and a description, and is not dispatchable. That is why the mark is
+  written where the registry is read rather than inferred from the JSON later.
+  Mutation-checked both directions.
+  **The catalog SHRINKS on the next regeneration and that is the correction, not a
+  loss** — it published 2499 operations against a fleet whose zero-typed apps
+  contribute nothing dispatchable (`tasks` 20 of 20 dead, `index` 17 of 17,
+  `social` 13 of 13). Nothing downstream trips on it: `openapi/floor.json` ratchets
+  the DOCUMENT and not the catalog, and `fleet/catalog_test.go`'s two counts are
+  both derived from the catalog itself. Watch one thing — `TestListingStartsNothing`
+  picks the first three apps with a non-empty entry and SKIPS when it finds none, so
+  if the typed set ever collapses that gate goes quiet rather than red.
   **The tools carry no prefix.** They shipped as `hanzo_<app>` + `hanzo_describe`
   and were renamed hours later to the bare app names + `describe`, in one change
   with no aliases. The MCP server is the namespace — a client reaches these names
@@ -4039,12 +4062,29 @@ the docs each run hanzoai/ci's `client:` lane, which fetches `openapi.yaml` at
 the release's sha, **refuses on a digest mismatch**, regenerates, compiles itself
 and its examples, writes `.spec-lock` and cuts a patch.
 
-**Credential still to create: `FLEET_DISPATCH_TOKEN`** — a fine-grained PAT with
-`contents:write` + `metadata:read` on `hanzoai/{python-sdk,js-sdk,go-sdk,rust-sdk,java-sdk,kotlin-sdk,cpp-sdk,cli,docs}`,
-stored in KMS at `orgs/hanzo/secrets/deploy/FLEET_DISPATCH_TOKEN` (env `prod`),
-beside `UNIVERSE_PIN_TOKEN`. Until it exists the fanout car fails loudly and
-names it; that is deliberate — a release that quietly skips its projections is
-the failure this train was built to end.
+**`FLEET_DISPATCH_TOKEN` IS NOT A CREDENTIAL ANYONE OWES, and this paragraph used
+to say it was.** It named a classic PAT spanning six GitHub owners as the last
+thing standing between a release and its projections. That was a misreading of a
+failure, and the misreading outlived the code by long enough to dispatch two
+agents at it — the fanout car has since been rewritten and names `FORGE_TOKEN`,
+the same secret `image` already uses to read this repo's tags.
+
+The old car posted `repository_dispatch` to api.github.com, and could never have
+worked whatever credential it held: the receiving workflows ask for
+`hanzo-build-linux-amd64`, a label only the forge's fleet carries, so github.com
+accepted the events and ran nothing. A missing GitHub credential was the visible
+symptom; the plane was wrong. CI here is native, on git.hanzo.ai, and no GitHub
+credential reaches an estate that does not run there. The car sends
+`workflow_dispatch` — the verb the forge HAS — and that was verified against a
+live projection before it was written down (POST → 204, run appears as
+`event=workflow_dispatch`, `in_progress`, on a runner).
+
+So a stale SDK is NOT this. Look at the projection's own publish step and at
+whether its KMS paths are seeded, and re-read `.hanzo/workflows/cicd.yml` car 4
+before believing any sentence here about why a client is behind. The general
+lesson is the one this file keeps paying for: **a credential named as a blocker
+is a claim about code, and it expires when the code moves.** Cite the car, not
+the prose.
 
 The image and its `v*` tags have ONE owner, the `image` job of
 `.hanzo/workflows/cicd.yml`: claim the next version → build → SMOKE the pushed

@@ -61,7 +61,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/environments": {
@@ -83,7 +84,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/git-webhook": {
@@ -136,7 +138,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/apps": {
@@ -274,7 +277,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/fleet/{app}": {
@@ -316,7 +320,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/fleet/{app}/deploy": {
@@ -359,7 +364,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/health": {
@@ -391,7 +397,8 @@
             },
             "description": "service unavailable"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects": {
@@ -416,7 +423,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}": {
@@ -449,7 +457,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps": {
@@ -485,7 +494,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_platform_projects_by_project_apps",
@@ -526,7 +536,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}": {
@@ -561,7 +572,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_platform_projects_by_project_apps_by_app",
@@ -601,7 +613,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/deploy": {
@@ -653,7 +666,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/deployments": {
@@ -698,7 +712,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/deployments/{id}": {
@@ -749,7 +764,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/deployments/{id}/logs": {
@@ -800,7 +816,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/domains": {
@@ -845,7 +862,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_platform_projects_by_project_apps_by_app_domains",
@@ -905,7 +923,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/domains/{host}": {
@@ -949,7 +968,8 @@
           "204": {
             "description": "no content"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/domains/{host}/verify": {
@@ -1000,7 +1020,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/env": {
@@ -1052,7 +1073,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/preview": {
@@ -1104,7 +1126,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/promote": {
@@ -1156,7 +1179,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/rollback": {
@@ -1208,7 +1232,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/start": {
@@ -1250,7 +1275,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/stop": {
@@ -1292,7 +1318,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/releases": {
@@ -1314,7 +1341,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/run": {
@@ -1346,7 +1374,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/runner": {
@@ -1378,7 +1407,8 @@
             },
             "description": "accepted"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

@@ -54,7 +54,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/admin/referrals/sweep": {
@@ -76,7 +77,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/referrals": {
@@ -98,7 +100,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/referrals/claim": {
@@ -133,7 +136,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

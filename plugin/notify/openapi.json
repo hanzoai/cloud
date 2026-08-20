@@ -40,7 +40,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/notify/send": {
@@ -70,7 +71,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/notify/send/email": {
@@ -100,7 +102,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/notify/send/sms": {
@@ -130,7 +133,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

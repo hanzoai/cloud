@@ -53,6 +53,9 @@ func main() {
 				OperationID string `json:"operationId"`
 				Summary     string `json:"summary"`
 				Description string `json:"description"`
+				// x-tool, written by openapi.Fold for the ops the app's own typed
+				// registry holds — the same registry zip builds its MCP tools from.
+				Tool bool `json:"x-tool"`
 			} `json:"paths"`
 		}
 		if err := json.Unmarshal(raw, &doc); err != nil {
@@ -65,6 +68,17 @@ func main() {
 			for method, o := range methods {
 				// The document's own junk keys are not operations.
 				if method == "parameters" || o.OperationID == "" || seen[o.OperationID] {
+					continue
+				}
+				// DESCRIBED IS NOT DISPATCHABLE, and this catalog is read by the
+				// door as the list of names a child ANSWERS TO. A document carries
+				// every route; only a typed op becomes a tool in the child, so an
+				// unmarked operation published here is a name the door offers and
+				// the child rejects — measured live as `unknown tool` on ten apps'
+				// worth of operations. Op's doc comment already promised this
+				// ("the id its own registry answers to"); the generator is what
+				// disagreed with it. See openapi.Operation.Tool.
+				if !o.Tool {
 					continue
 				}
 				seen[o.OperationID] = true

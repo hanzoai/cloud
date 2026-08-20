@@ -66,7 +66,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/flags/activity": {
@@ -99,7 +100,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/flags/decide": {
@@ -147,7 +149,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/flags/defs": {
@@ -169,7 +172,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/flags/defs/{key}": {
@@ -202,7 +206,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_flags_defs_by_key",
@@ -233,7 +238,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_flags_defs_by_key",
@@ -284,7 +290,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/flags/health": {
@@ -310,7 +317,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

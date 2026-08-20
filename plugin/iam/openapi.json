@@ -140,7 +140,8 @@
             },
             "description": "bad request"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/add-application": {
@@ -173,7 +174,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/add-membership": {
@@ -216,7 +218,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/add-project": {
@@ -249,7 +252,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/add-provider": {
@@ -282,7 +286,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/add-role": {
@@ -315,7 +320,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/add-user": {
@@ -348,7 +354,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/add-workspace": {
@@ -381,7 +388,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/admin/applications/upsert": {
@@ -453,7 +461,8 @@
             },
             "description": "internal server error"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/admin/provision": {
@@ -535,7 +544,8 @@
             },
             "description": "internal server error"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/application": {
@@ -576,7 +586,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_iam_application",
@@ -615,7 +626,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_application",
@@ -646,7 +658,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "put": {
         "operationId": "put_iam_application",
@@ -677,7 +690,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/applications": {
@@ -709,7 +723,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_applications",
@@ -739,7 +754,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/applications/delete": {
@@ -771,7 +787,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/applications/get": {
@@ -811,7 +828,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/applications/update": {
@@ -843,7 +861,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/assume": {
@@ -933,7 +952,8 @@
             },
             "description": "not found"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/audit-logs": {
@@ -965,7 +985,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_audit-logs",
@@ -995,7 +1016,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/audit-logs/delete": {
@@ -1027,7 +1049,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/audit-logs/get": {
@@ -1059,7 +1082,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/audit-logs/update": {
@@ -1091,7 +1115,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/auth/application": {
@@ -1143,7 +1168,8 @@
             },
             "description": "bad request"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/auth/methods": {
@@ -1186,7 +1212,8 @@
             },
             "description": "bad request"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/certs": {
@@ -1218,7 +1245,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_certs",
@@ -1248,7 +1276,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/certs/delete": {
@@ -1280,7 +1309,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/certs/get": {
@@ -1312,7 +1342,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/certs/update": {
@@ -1344,7 +1375,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/consent": {
@@ -1395,7 +1427,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/delete-membership": {
@@ -1448,7 +1481,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/delete-project": {
@@ -1481,7 +1515,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/delete-provider": {
@@ -1514,7 +1549,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/delete-role": {
@@ -1547,7 +1583,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/delete-user": {
@@ -1580,7 +1617,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/delete-workspace": {
@@ -1613,7 +1651,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/get-account": {
@@ -1675,7 +1714,8 @@
             },
             "description": "bad request"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/get-application": {
@@ -1787,7 +1827,8 @@
             },
             "description": "bad request"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/get-organization": {
@@ -1949,7 +1990,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_invitations",
@@ -1979,7 +2021,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/invitations/delete": {
@@ -2011,7 +2054,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/invitations/get": {
@@ -2043,7 +2087,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/invitations/update": {
@@ -2075,7 +2120,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/issue-user-token": {
@@ -2117,7 +2163,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_keys",
@@ -2147,7 +2194,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/keys/delete": {
@@ -2179,7 +2227,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/keys/get": {
@@ -2219,7 +2268,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/keys/mint": {
@@ -2271,7 +2321,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/link": {
@@ -2353,7 +2404,8 @@
             },
             "description": "bad request"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_memberships",
@@ -2593,7 +2645,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "createOrganization",
@@ -2623,7 +2676,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/organizations/avatar": {
@@ -2655,7 +2709,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/organizations/delete": {
@@ -2687,7 +2742,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/organizations/get": {
@@ -2727,7 +2783,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/organizations/search": {
@@ -2783,7 +2840,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/organizations/update": {
@@ -2815,7 +2873,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/password": {
@@ -2875,7 +2934,8 @@
             },
             "description": "bad request"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/permissions": {
@@ -2907,7 +2967,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_permissions",
@@ -2937,7 +2998,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/permissions/delete": {
@@ -2969,7 +3031,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/permissions/get": {
@@ -3009,7 +3072,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/permissions/update": {
@@ -3041,7 +3105,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/preferences": {
@@ -3083,7 +3148,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_projects",
@@ -3113,7 +3179,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/projects/delete": {
@@ -3145,7 +3212,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/projects/get": {
@@ -3177,7 +3245,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/projects/update": {
@@ -3209,7 +3278,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/providers": {
@@ -3241,7 +3311,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "addProvider",
@@ -3271,7 +3342,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/providers/delete": {
@@ -3303,7 +3375,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/providers/get": {
@@ -3335,7 +3408,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/providers/update": {
@@ -3367,7 +3441,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/registry/jwks": {
@@ -3465,7 +3540,8 @@
             },
             "description": "unauthorized"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/resolve-key": {
@@ -3517,7 +3593,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_roles",
@@ -3547,7 +3624,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/roles/delete": {
@@ -3579,7 +3657,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/roles/get": {
@@ -3611,7 +3690,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/roles/update": {
@@ -3643,7 +3723,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/scim/v2/ResourceTypes": {
@@ -3665,7 +3746,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/scim/v2/ResourceTypes/{name}": {
@@ -3703,7 +3785,8 @@
             },
             "description": "not found"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/scim/v2/Schemas": {
@@ -3725,7 +3808,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/scim/v2/Schemas/{id}": {
@@ -3763,7 +3847,8 @@
             },
             "description": "not found"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/scim/v2/ServiceProviderConfig": {
@@ -3785,7 +3870,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/scim/v2/Users": {
@@ -3980,7 +4066,8 @@
             },
             "description": "bad request"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_service-accounts",
@@ -4060,7 +4147,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/sessions/delete": {
@@ -4092,7 +4180,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/sessions/get": {
@@ -4124,7 +4213,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/sessions/list": {
@@ -4156,7 +4246,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/sessions/update": {
@@ -4188,7 +4279,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/set-preferred-mfa": {
@@ -4258,7 +4350,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "addToken",
@@ -4288,7 +4381,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/tokens/delete": {
@@ -4320,7 +4414,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/tokens/get": {
@@ -4352,7 +4447,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/tokens/issue": {
@@ -4394,7 +4490,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/unlink": {
@@ -4437,7 +4534,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/update-organization": {
@@ -4470,7 +4568,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/update-preferences": {
@@ -4513,7 +4612,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/update-role": {
@@ -4546,7 +4646,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/update-user": {
@@ -4579,7 +4680,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/users": {
@@ -4627,7 +4729,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_users",
@@ -4657,7 +4760,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/users/delete": {
@@ -4689,7 +4793,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/users/get": {
@@ -4737,7 +4842,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/users/update": {
@@ -4769,7 +4875,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/verification-codes": {
@@ -4831,7 +4938,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "addWebauthnCredential",
@@ -4861,7 +4969,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/webauthn-credentials/delete": {
@@ -4893,7 +5002,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/webauthn-credentials/get": {
@@ -4925,7 +5035,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/webauthn-credentials/update": {
@@ -4957,7 +5068,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/webauthn/signin/begin": {
@@ -5039,7 +5151,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_iam_workspaces",
@@ -5069,7 +5182,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/workspaces/delete": {
@@ -5101,7 +5215,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/workspaces/get": {
@@ -5133,7 +5248,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/iam/workspaces/update": {
@@ -5165,7 +5281,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },

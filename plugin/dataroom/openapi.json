@@ -51,7 +51,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/dataroom/analytics/link/{linkId}": {
@@ -84,7 +85,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/dataroom/datarooms": {
@@ -106,7 +108,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_dataroom_datarooms",
@@ -136,7 +139,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/dataroom/datarooms/{id}": {
@@ -169,7 +173,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/dataroom/datarooms/{id}/documents": {
@@ -212,7 +217,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/dataroom/documents": {
@@ -234,7 +240,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_dataroom_documents",
@@ -275,7 +282,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/dataroom/documents/{id}/file": {
@@ -327,7 +335,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_dataroom_links",
@@ -357,7 +366,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/dataroom/view/{linkId}": {

@@ -51,7 +51,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_compliance_accreditation",
@@ -86,7 +87,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/accreditation/{id}": {
@@ -120,7 +122,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/accreditation/{id}/decision": {
@@ -168,7 +171,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/audit": {
@@ -201,7 +205,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/health": {
@@ -223,7 +228,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/records": {
@@ -256,7 +262,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/status": {
@@ -278,7 +285,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/subjects": {
@@ -311,7 +319,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_compliance_subjects",
@@ -346,7 +355,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/subjects/{id}": {
@@ -380,7 +390,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/verifications": {
@@ -413,7 +424,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "post": {
         "operationId": "post_compliance_verifications",
@@ -446,7 +458,8 @@
             },
             "description": "created"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/verifications/webhook": {
@@ -490,7 +503,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/verifications/{id}/decision": {
@@ -538,7 +552,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/compliance/verifications/{id}/refresh": {
@@ -572,7 +587,8 @@
             },
             "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },
