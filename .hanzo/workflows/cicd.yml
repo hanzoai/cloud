@@ -123,11 +123,45 @@ jobs:
           # more than the tip. Shallow history is why a first-push review would
           # otherwise have nothing to compare.
           fetch-depth: 0
+      # THE KEY HAS ONE HOME, AND IT IS KMS.
+      #
+      # It was a forge org secret, and a copy of a credential is a copy that goes
+      # stale on its own: measured on runs 90908 and 91045, the reviewer answered
+      # `401 … API key sk-live-4… is not recognized — it was revoked or replaced`,
+      # so every release since v1.801.536 was refused by a credential nobody knew
+      # had died. Rotating the real key does not reach a forge secret, and nothing
+      # reports the divergence — the gate simply fails closed forever.
+      #
+      # So it is READ from KMS at the moment of use, by the same two calls the
+      # rollout car already makes (login with the KMS client credential, then read
+      # the secret by path). One home, so a rotation is picked up by the next run
+      # rather than needing a second place to be remembered.
+      #
+      # There is deliberately NO fallback to the old secret. A fallback is how the
+      # stale copy keeps winning, and this gate must fail closed rather than pass
+      # on whichever credential happens to answer.
       - name: read the change, and refuse it if it carries an attack
         env:
-          REVIEW_API_KEY: ${{ secrets.REVIEW_API_KEY }}
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
         run: |
           set -euo pipefail
+
+          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
+            | jq -r '.accessToken // empty' || true)
+          [ -n "$KMS_TOKEN" ] || { echo "::error::review: KMS login failed at ${KMS_ENDPOINT} — the reviewer cannot be given a credential, so the change cannot pass"; exit 1; }
+
+          # No org in a KMS path: the store root comes from the validated claim,
+          # so this reads the KMS credential's OWN org and cannot name another's.
+          REVIEW_API_KEY=$(curl -sS \
+            "${KMS_ENDPOINT}/v1/kms/secrets/review/REVIEW_API_KEY?env=${KMS_SECRET_ENV}" \
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
+          export REVIEW_API_KEY
+          [ -n "$REVIEW_API_KEY" ] || { echo "::error::review: REVIEW_API_KEY missing in KMS at review/ (env ${KMS_SECRET_ENV}, org from the KMS credential) — mint a key and store it there"; exit 1; }
           base="${{ github.event.before }}"
           # MEASURED, because this comment used to say the opposite and the
           # opposite is what a reader plans against. On run 90908 the forge DID
