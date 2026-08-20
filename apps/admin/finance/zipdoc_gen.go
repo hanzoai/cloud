@@ -26,7 +26,7 @@ func init() {
 		Fields: map[string]string{
 			"UsageFundingIn.from":     "From is the inclusive start of the window. Unparseable or absent, together with\nTo, falls back to the last 30 days.",
 			"UsageFundingIn.to":       "To is the exclusive end of the window.",
-			"UsageFundingRow.funding": "credit | paid | paid_only | byo",
+			"UsageFundingRow.funding": "credit | paid | paid_only | unknown | byo",
 		},
 		Example:  json.RawMessage(`{"from":"2026-07-01T00:00:00Z","to":"2026-07-27T00:00:00Z"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"provider":"digitalocean","model":"llama-3.3-70b","funding":"credit","tokens":1200000,"cost_cents":420,"requests":310}]}`),
