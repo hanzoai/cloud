@@ -399,9 +399,14 @@ jobs:
         # GH_PAT remains the fallback for a module the forge has not mirrored.
         run: |
           set -euo pipefail
-          if [ -n "${GIT_TOKEN:-}" ]; then
-            git config --global url."https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
-          fi
+          # PER REPO, because `insteadOf` is a rewrite and not a chain: one prefix
+          # rewrite means GitHub is never tried, so a single repo the forge denies
+          # takes the whole build down — which is what happened to hanzoai/zen on
+          # the forge exactly as it had happened to it on GitHub. The script asks
+          # this token, repo by repo, what the forge will actually serve and
+          # rewrites only those; everything else falls through to the GitHub
+          # rewrite below. See .hanzo/ci/forge-rewrites.sh.
+          bash .hanzo/ci/forge-rewrites.sh
           git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
           {
             echo "GOPRIVATE=github.com/hanzoai/*"
@@ -1377,9 +1382,14 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
-          if [ -n "${GIT_TOKEN:-}" ]; then
-            git config --global url."https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
-          fi
+          # PER REPO, because `insteadOf` is a rewrite and not a chain: one prefix
+          # rewrite means GitHub is never tried, so a single repo the forge denies
+          # takes the whole build down — which is what happened to hanzoai/zen on
+          # the forge exactly as it had happened to it on GitHub. The script asks
+          # this token, repo by repo, what the forge will actually serve and
+          # rewrites only those; everything else falls through to the GitHub
+          # rewrite below. See .hanzo/ci/forge-rewrites.sh.
+          bash .hanzo/ci/forge-rewrites.sh
           git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
           {
             echo "GOPRIVATE=github.com/hanzoai/*"
