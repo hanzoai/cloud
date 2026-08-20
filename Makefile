@@ -418,7 +418,7 @@ bump: ## Move a dependency and regenerate the documents it moves. make bump M=<m
 	   $(MAKE) -f mk/fleet.mk openapi; \
 	 else echo ">> no document moved"; fi
 	@$(MAKE) closure
-	@echo ">> commit: go.mod go.sum openapi/closure.json $$(git diff --name-only -- openapi.yaml public.yaml 'plugin/*/openapi.json' fleet/catalog.json | tr '\n' ' ')"
+	@echo ">> commit: go.mod go.sum $$(git diff --name-only -- $$($(MAKE) -s -f mk/fleet.mk paths) | tr '\n' ' ')"
 
 test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ships).
 	# CHEAPEST FIRST, and that ordering is the point rather than tidiness: these two

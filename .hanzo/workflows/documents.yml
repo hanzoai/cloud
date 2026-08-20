@@ -147,11 +147,17 @@ jobs:
 
       - name: Commit what the sweep wrote
         env:
-          # The automatic per-job token CANNOT do this: it is not a user, and this
-          # forge answers its push to a protected branch with "User -2 is not
-          # allowed to push to protected branch main". GIT_TOKEN is the
-          # credential with contents:write, inherited from the org.
+          # The token the forge issues this job. main IS a protected branch here,
+          # and it permits the push because the rule sets can_push with no
+          # whitelist — a rule that turned either of those the other way would
+          # refuse this job by name (`User -2 is not allowed to push to protected
+          # branch main`) rather than for want of a credential. Read the rule
+          # before reaching for a second token.
           GIT_TOKEN: ${{ github.token }}
+          # Through env: like the credential beside it, rather than substituted
+          # into the shell source. A repository name cannot carry a quote today;
+          # the reason this is safe should not be a fact about the forge.
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           [ -n "${GIT_TOKEN:-}" ] || {
@@ -161,7 +167,11 @@ jobs:
           # selected. The commit below takes only the generated set; a file
           # outside it that moved is a fact about this repo worth seeing, and a
           # step that stages a subset silently is how it stops being seen.
-          MOVED=$(git status --porcelain)
+          # -uall, because the default collapses an untracked directory to its
+          # name: a new app's whole subset would read as one line, `?? plugin/x/`,
+          # and the count in the warning below would say one path where it means
+          # several.
+          MOVED=$(git status --porcelain -uall)
           echo "── the sweep left this ──"
           printf '%s\n' "$MOVED"
           echo "─────────────────────────"
@@ -180,7 +190,10 @@ jobs:
           # covers the case where it exits 0 saying nothing.
           DOCUMENTS=$(make -s -f mk/fleet.mk paths)
           [ -n "$DOCUMENTS" ] || { echo "::error::mk/fleet.mk named no generated documents — refusing to decide there is nothing to commit on the strength of a question that did not get answered"; exit 1; }
-          git add -- $DOCUMENTS
+          # Unquoted for word splitting, which is the point, and `set -f` so that
+          # is ALL it does — a path that ever gains a bracket or a star would
+          # otherwise be matched against the tree rather than named.
+          set -f; git add -- $DOCUMENTS; set +f
           if git diff --cached --quiet; then
             # TWO DIFFERENT FACTS, and only one of them is "nothing was wrong".
             # `describe` regenerates the whole fleet on its way past, including the
@@ -209,7 +222,7 @@ jobs:
           # http://hanzo-git.hanzo.svc, measured off the runner's own
           # GIT_INSTANCE_URL — so honouring it would carry a contents:write token
           # over cleartext to an address nothing else in this repo pushes to.
-          REMOTE="https://git.hanzo.ai/${{ github.repository }}"
+          REMOTE="https://git.hanzo.ai/${REPO}"
 
           # git sends EVERY matching http.extraHeader and the server honours the
           # first Authorization it reads, so the header actions/checkout persisted
@@ -246,7 +259,7 @@ jobs:
           code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
             -H "Authorization: token ${GIT_TOKEN}" -H 'Content-Type: application/json' \
             -d '{"ref":"main"}' \
-            "https://git.hanzo.ai/v1/repos/${{ github.repository }}/actions/workflows/cicd.yml/dispatches") || code=000
+            "https://git.hanzo.ai/v1/repos/${REPO}/actions/workflows/cicd.yml/dispatches") || code=000
           case "$code" in
             2*) echo "CI/CD dispatched on main" ;;
             *)  echo "::warning::could not start CI/CD (HTTP $code) — the documents are committed but nothing has gated them. Dispatch the CI/CD workflow on main." ;;
