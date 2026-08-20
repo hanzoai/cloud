@@ -5018,9 +5018,10 @@ ends up running on two keys with nothing saying so.
 speak over a 0600 unix socket, but they prove different things and only one of them
 proves identity:
 
-    plane    answer() calls parseIdent(call.Cap) — it PARSES the capability.
-             Nothing verifies it. Any co-located app can call
-             Dial("commerce").For("another-tenant") and be believed.
+    plane    the caller is nine HEADERS (zip.CallerOf reads X-Org-Id, X-User-Id,
+             X-User-IsAdmin, …; zip caller.go). Nothing signs them and nothing
+             verifies them: the callee believes the sender, so any co-located app
+             can state For("another-tenant") and be believed.
     credz    peerPID (SO_PEERCRED, same uid) AND a launch token that opens only
              under the secret the launcher minted — so the app name is the one
              the LAUNCHER stamped, never one the caller chose.
@@ -5028,14 +5029,36 @@ proves identity:
 That difference is load-bearing: it is how each child gets ITS scoped bundle and not
 a sibling's. So the socket is the boundary for "one of our own processes", and it is
 NOT a boundary between our own processes — which is fine for a bug-free fleet and is
-worth knowing before treating a plane capability as an authorization decision. Tenancy
-is enforced where a request principal is resolved, at the edge, from a validated
-token; a method that re-checks the capability's org against a ref (as kms does)
+worth knowing before treating a forwarded identity as an authorization decision.
+Tenancy is enforced where a request principal is resolved, at the edge, from a
+validated token; a method that re-checks the stated org against a ref (as kms does)
 catches an app asking for one tenant while acting for another, which is a BUG worth
 failing on rather than an attack being repelled.
 
-Making the plane verify would need a verifier every app holds, and only the broker
-holds the launch secret today. Do not bolt on a weaker check and call it one.
+**This box used to describe `parseIdent(call.Cap)` — a capability the plane parsed
+and nothing verified — and BOTH SYMBOLS ARE GONE** (`grep -rn 'parseIdent|call\.Cap'
+over the tree: zero). They belonged to the hand-written `rpc.go`/`dial.go`/
+`payloads.go` this file records as deleted a few paragraphs up. The conclusion
+survived the mechanism, which is exactly why nobody noticed: an unverified parsed
+capability and an unverified forwarded header are one trust story. But an agent sent
+to fix `parseIdent` finds nothing to fix, so the CURRENT carrier is named above.
+
+**ZAP capabilities exist, and none of this uses them.** `luxfi/zap@v1.2.7/dexsession`
+is a Cap'n-Proto-shaped capability system — `QuoteCap`/`IntentCap`/`SettlementCap`/
+`AdminCap` derived by ASKING the session, backed by an unforgeable-token grant table,
+over a surface that is value-free by construction so `adminWithdraw` cannot be named
+at all. It is written, it is next door, and **cloud imports `dexsession` nowhere**.
+Do not read "we run ZAP" as "we hold capabilities": the plane's transport is ZAP and
+its authority model is a forwarded string.
+
+Adopting them is a change to zip's spawn contract, not a refactor here, and the
+blocker is distribution: a verifier every app holds, where today only the broker
+holds the launch secret. Two structural defenses carry the interval and both are
+load-bearing rather than incidental — `TestNoPlaneInputCanNameAnOrg` walks every
+input type by reflection so cross-tenant ADDRESSING is unrepresentable rather than
+merely refused, and kms re-checks the stated org against its ref. The reachable
+attack is therefore a compromised co-resident app, not a crafted argument. Do not
+bolt on a weaker check and call it a capability.
 
 ## /v1/world — one product, one owner, and the two wires the document cannot carry
 
