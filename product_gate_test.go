@@ -65,7 +65,15 @@ var unextracted = []string{
 	"metering", "mq", "payout", "plan", "plugin", "prefs", "principal",
 	"product", "projects", "prompts", "provisioning", "reference",
 	"referrals", "registry", "risk", "rollingcap", "s3admin",
-	"samples", "sandbox", "sbom", "search", "security", "settings", "share",
+	"samples", "sandbox", "sbom", "search", "security",
+	// seo is the search-visibility surface: a typed proxy onto a measurement
+	// vendor, metered at that vendor's own published prices. It imports only
+	// hanzoai/cloud and no hanzoai/seo exists to mount, so the functionality lives
+	// here and nowhere else — which is what this bucket means. The decision this pin
+	// owes leans toward the first branch: a keyword-and-backlink API is a product
+	// somebody would fork, not cloud's own machinery.
+	"seo",
+	"settings", "share",
 	"sites",
 	"storage", "sync",
 	// taxonomy is the product catalogue's own shape — the categories, tags and
