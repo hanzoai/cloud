@@ -169,7 +169,45 @@ func Describe(dir string, app *zip.App) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, SpecFile), append(spec, '\n'), 0o644)
+	// PUBLISHED BY RENAME, because a reader of this file runs at the same time.
+	//
+	// The fleet sweep describes and builds in parallel, and these documents are
+	// go:embed inputs — so while one app rewrites its subset, another app's build
+	// is reading it. A plain write truncates first and fills after, which leaves a
+	// window where that reader sees a SHORTER file and the compiler refuses it:
+	//
+	//   plugin/embed.go: copy plugin/admin/openapi.json: unexpected length 104448 != 203762
+	//
+	// It fails at whichever app the scheduler happened to pair with the writer, so
+	// it reads as a flaky build in an app that has nothing wrong with it. A rename
+	// within the same directory is atomic, so a concurrent reader gets the whole
+	// old document or the whole new one and never half of either.
+	final := filepath.Join(dir, SpecFile)
+	tmp, err := os.CreateTemp(dir, "."+SpecFile+".*")
+	if err != nil {
+		return err
+	}
+	if _, err := tmp.Write(append(spec, '\n')); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	// 0o600 is CreateTemp's mode; the committed artifact is world-readable like
+	// every other file in the tree, and the chmod happens before the swap so the
+	// document is never briefly published under the wrong one.
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := os.Rename(tmp.Name(), final); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return nil
 }
 
 // describe mounts specs into a throwaway app and writes its projections.
