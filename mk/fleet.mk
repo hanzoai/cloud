@@ -397,12 +397,25 @@ documents: describe ## Write every generated document FROM SOURCE. Produces; ren
 # only the gate can see is still red. `paths` is how a reader outside make — a
 # workflow's `git add` — asks for the same list rather than keeping its own.
 #
-# zipdoc_gen.go is deliberately NOT here. `describe` does regenerate the lifted
-# prose on its way past, but the gate that judges it is `zipdoc-check`, which
-# reports it against the source it was lifted from in ninety seconds. A stale
-# lift is a thing to repair in seconds anywhere; this list is the set that is
-# expensive to produce, which is the set worth a runner.
-DOCUMENTS = openapi.yaml public.yaml openapi/floor.json openapi/closure.json fleet/catalog.json plugin/
+# apps/*/zipdoc_gen.go is deliberately NOT here — 120 of them. `describe` does
+# regenerate the lifted prose on its way past, but the gate that judges it is
+# `zipdoc-check`, which reports it against the source it was lifted from in
+# ninety seconds. A stale lift is a thing to repair in seconds anywhere; this
+# list is the set that is expensive to produce, which is the set worth a runner.
+#
+# The 121st IS here, and by inclusion rather than by choice: `plugin/` is a
+# whole subtree, and plugin/agents/coding.go carries a //go:generate of its own,
+# so plugin/agents/zipdoc_gen.go is swept up with the subsets. Said out loud
+# because the asymmetry is otherwise invisible — `make zipdoc-check` moves from
+# N stale to N-1 after this lane runs, for a reason nobody would connect to it.
+#
+# OVERRIDE, so the pathspec is a property of this file and not an argument. Every
+# reader below judges or commits exactly this list, and a variable a caller can
+# set is a way past the gate: `make -f mk/fleet.mk DOCUMENTS=README.md check`
+# would regenerate the whole fleet, judge one unrelated path, find it clean and
+# report the surface unchanged. cicd.yml already states the rule for the reviewer
+# one lane over — "a reviewer with a way past it is one an attacker reaches for".
+override DOCUMENTS := openapi.yaml public.yaml openapi/floor.json openapi/closure.json fleet/catalog.json plugin/
 
 paths: ## Print the generated-document paths, for a caller that has to name them outside make.
 	@echo $(DOCUMENTS)
@@ -425,7 +438,7 @@ check: documents ## Regenerate every document + openapi.yaml FROM SOURCE and fai
 	fi; \
 	if [ -n "$$stale" ]; then \
 	  echo "$$stale"; \
-	  git -C $(ROOT) diff --stat -- openapi.yaml public.yaml plugin/; \
+	  git -C $(ROOT) diff --stat -- $(DOCUMENTS); \
 	  echo ""; \
 	  echo "STALE: regenerating the document from source produced something other than what is"; \
 	  echo "committed. The list above is published surface — routes that exist and are"; \
