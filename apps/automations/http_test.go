@@ -15,12 +15,12 @@ func TestOrgGating403(t *testing.T) {
 	gated := []struct {
 		method, path string
 	}{
-		{http.MethodGet, "/v1/automations/connectors"},
-		{http.MethodGet, "/v1/automations/flows"},
-		{http.MethodPost, "/v1/automations/flows"},
-		{http.MethodGet, "/v1/automations/flows/x"},
-		{http.MethodGet, "/v1/automations/runs"},
-		{http.MethodPost, "/v1/automations/flows/x/run"},
+		{http.MethodGet, "/v1/auto/connectors"},
+		{http.MethodGet, "/v1/auto/flows"},
+		{http.MethodPost, "/v1/auto/flows"},
+		{http.MethodGet, "/v1/auto/flows/x"},
+		{http.MethodGet, "/v1/auto/runs"},
+		{http.MethodPost, "/v1/auto/flows/x/run"},
 	}
 	for _, g := range gated {
 		if r := req(t, app, g.method, g.path, "", nil); r.Code != http.StatusForbidden {
@@ -36,7 +36,7 @@ func TestOrgGating403(t *testing.T) {
 // is present. The retired /pieces path is proven a byte-identical alias.
 func TestConnectorsCatalog(t *testing.T) {
 	app := newApp(t)
-	r := req(t, app, http.MethodGet, "/v1/automations/connectors", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/auto/connectors", "acme", nil)
 	if r.Code != http.StatusOK {
 		t.Fatalf("connectors want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -61,7 +61,7 @@ func TestConnectorsCatalog(t *testing.T) {
 	}
 
 	// Back-compat: the retired /pieces path is a pure alias — same 200, same body.
-	alias := req(t, app, http.MethodGet, "/v1/automations/pieces", "acme", nil)
+	alias := req(t, app, http.MethodGet, "/v1/auto/pieces", "acme", nil)
 	if alias.Code != http.StatusOK || !bytes.Equal(alias.Body, r.Body) {
 		t.Fatalf("/pieces alias must mirror /connectors: code=%d bodyEqual=%v", alias.Code, bytes.Equal(alias.Body, r.Body))
 	}
@@ -73,7 +73,7 @@ func TestFlowCRUDHTTP(t *testing.T) {
 	app := newApp(t)
 
 	// Create a flow with an initial draft version.
-	create := req(t, app, http.MethodPost, "/v1/automations/flows", "acme", map[string]any{
+	create := req(t, app, http.MethodPost, "/v1/auto/flows", "acme", map[string]any{
 		"displayName": "Nightly Sync",
 		"trigger": map[string]any{
 			"name": "trigger", "type": TriggerTypePiece, "displayName": "Start",
@@ -97,17 +97,17 @@ func TestFlowCRUDHTTP(t *testing.T) {
 	flowID := pf.ID
 
 	// GET returns the flow + latest version.
-	get := req(t, app, http.MethodGet, "/v1/automations/flows/"+flowID, "acme", nil)
+	get := req(t, app, http.MethodGet, "/v1/auto/flows/"+flowID, "acme", nil)
 	if get.Code != http.StatusOK {
 		t.Fatalf("get flow want 200, got %d (%s)", get.Code, get.Body)
 	}
 
 	// A different org cannot see it.
-	if r := req(t, app, http.MethodGet, "/v1/automations/flows/"+flowID, "globex", nil); r.Code != http.StatusNotFound {
+	if r := req(t, app, http.MethodGet, "/v1/auto/flows/"+flowID, "globex", nil); r.Code != http.StatusNotFound {
 		t.Fatalf("globex GET acme flow want 404, got %d", r.Code)
 	}
 	// A different org's list is empty.
-	rl := req(t, app, http.MethodGet, "/v1/automations/flows", "globex", nil)
+	rl := req(t, app, http.MethodGet, "/v1/auto/flows", "globex", nil)
 	var listOut struct {
 		Data []Flow `json:"data"`
 	}
@@ -117,10 +117,10 @@ func TestFlowCRUDHTTP(t *testing.T) {
 	}
 
 	// DELETE.
-	if r := req(t, app, http.MethodDelete, "/v1/automations/flows/"+flowID, "acme", nil); r.Code != http.StatusNoContent {
+	if r := req(t, app, http.MethodDelete, "/v1/auto/flows/"+flowID, "acme", nil); r.Code != http.StatusNoContent {
 		t.Fatalf("delete flow want 204, got %d (%s)", r.Code, r.Body)
 	}
-	if r := req(t, app, http.MethodGet, "/v1/automations/flows/"+flowID, "acme", nil); r.Code != http.StatusNotFound {
+	if r := req(t, app, http.MethodGet, "/v1/auto/flows/"+flowID, "acme", nil); r.Code != http.StatusNotFound {
 		t.Fatalf("deleted flow GET want 404, got %d", r.Code)
 	}
 }
@@ -130,7 +130,7 @@ func TestFlowCRUDHTTP(t *testing.T) {
 func TestOperationsApply(t *testing.T) {
 	app := newApp(t)
 
-	create := req(t, app, http.MethodPost, "/v1/automations/flows", "acme", map[string]any{
+	create := req(t, app, http.MethodPost, "/v1/auto/flows", "acme", map[string]any{
 		"displayName": "Builder Flow",
 		"trigger": map[string]any{
 			"name": "trigger", "type": TriggerTypePiece, "displayName": "Start",
@@ -153,7 +153,7 @@ func TestOperationsApply(t *testing.T) {
 			},
 		},
 	}
-	r := req(t, app, http.MethodPost, "/v1/automations/flows/"+flowID+"/operations", "acme", addReq)
+	r := req(t, app, http.MethodPost, "/v1/auto/flows/"+flowID+"/operations", "acme", addReq)
 	if r.Code != http.StatusOK {
 		t.Fatalf("ADD_ACTION want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -167,7 +167,7 @@ func TestOperationsApply(t *testing.T) {
 
 	// CHANGE_NAME.
 	nameReq := map[string]any{"type": string(OpChangeName), "request": map[string]any{"displayName": "Renamed"}}
-	rn := req(t, app, http.MethodPost, "/v1/automations/flows/"+flowID+"/operations", "acme", nameReq)
+	rn := req(t, app, http.MethodPost, "/v1/auto/flows/"+flowID+"/operations", "acme", nameReq)
 	var v2 FlowVersion
 	_ = json.Unmarshal(rn.Body, &v2)
 	if v2.DisplayName != "Renamed" {
@@ -182,7 +182,7 @@ func TestOperationsApply(t *testing.T) {
 			"action":     map[string]any{"name": "router1", "type": ActionTypeRouter, "displayName": "Route"},
 		},
 	}
-	if rb := req(t, app, http.MethodPost, "/v1/automations/flows/"+flowID+"/operations", "acme", badReq); rb.Code != http.StatusUnprocessableEntity {
+	if rb := req(t, app, http.MethodPost, "/v1/auto/flows/"+flowID+"/operations", "acme", badReq); rb.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("ROUTER add want 422 (unsupported), got %d (%s)", rb.Code, rb.Body)
 	}
 }
