@@ -235,10 +235,30 @@ func TestMeteredSurfacesHoldAMeter(t *testing.T) {
 
 	var held int
 	for _, name := range metered {
-		charges, zeroed := packageCharges(t, filepath.Join("apps", name))
+		// The packages the ROOT mounts, not apps/<name> — see appDirs. Assuming the
+		// two names match reported apps/sandboxes, which does not exist, as a surface
+		// holding no meter while apps/sandbox held one all along.
+		var charges, zeroed, priced bool
+		for _, dir := range appDirs(t, filepath.Join("plugin", name, "main.go")) {
+			if c, z, pr := packagePrice(t, dir); c {
+				charges, zeroed, priced = true, z, pr
+				break
+			}
+		}
 		switch {
 		case charges:
 			held++
+			// A meter that resolves every fee to a zero default charges nothing until
+			// somebody types a number — wired, gated, and free. That is a legitimate
+			// posture, but it must be a SENTENCE somebody wrote, not a default nobody
+			// noticed. See pricedAtZero.
+			if !priced && pricedAtZero[name] == "" {
+				t.Errorf("plugin/%s declares Price: cloud.Metered and its meter resolves every fee "+
+					"to a default of 0 — it is wired, it is gated, and it posts nothing.\n"+
+					"Give the fee a non-zero default (cloud.ResourceFeeCents, or a number of "+
+					"your own), or name %q in pricedAtZero with the reason the surface is "+
+					"deliberately free today.", name, name)
+			}
 			if zeroed {
 				t.Errorf("apps/%s: every Meter call passes a literal 0 — the seam is wired and "+
 					"records nothing.\nA debit of zero posts no ledger entry, so the surface "+
@@ -269,6 +289,24 @@ func TestMeteredSurfacesHoldAMeter(t *testing.T) {
 	}
 	t.Logf("%d of %d metered surfaces hold their own meter; %d meter through the AI wrapper; "+
 		"%d charge nothing", held, len(metered), len(meteredByAIWrapper), len(meteredWithoutAMeter))
+}
+
+// pricedAtZero names the metered surfaces whose meter is fully wired and whose
+// price is deliberately zero, with the reason. The meter is real — the gate runs,
+// the debit path exists — so Metered is the honest declaration; only the NUMBER is
+// zero, and turning it on is one environment variable.
+//
+// It is separate from meteredWithoutAMeter, and the difference is the whole point:
+// that list is a surface with no meter at all (a gap), this one is a surface with a
+// meter and a policy. A reader who cannot tell them apart cannot tell a decision
+// from an oversight.
+var pricedAtZero = map[string]string{
+	// Every sandbox class has been free since sandboxes existed, and shipping the
+	// meter must not also ship a price — the first anybody would hear of it is a 402
+	// on a button that worked yesterday. apps/sandbox/api.go's ResourceFee documents
+	// this at the knob (SANDBOX_FEE_CENTS[_EXEC|_DEV|_DESKTOP]) and a test pins it.
+	// Pricing it is a product decision, and a separate one from declaring it.
+	"sandboxes": "every class free since inception; SANDBOX_FEE_CENTS turns it on — a values change, not a wiring gap",
 }
 
 // meteredByAIWrapper are the surfaces whose spend is INFERENCE, metered once by the
@@ -307,6 +345,26 @@ var meteredWithoutAMeter = map[string]bool{
 // EVERY positional Meter call in them passes a literal zero amount (a wired seam that
 // records nothing — apps/security shipped exactly that).
 func packageCharges(t *testing.T, dir string) (charges, allZero bool) {
+	c, z, _ := packagePrice(t, dir)
+	return c, z
+}
+
+// packagePrice is packageCharges plus the question a wired meter cannot answer on
+// its own: does it charge a NUMBER?
+//
+// A meter priced at zero posts no ledger entry, so the surface is free while every
+// structural check reads it as metered — the seam is wired, the standing is
+// required, and the debit is a no-op. plugin/sandboxes passed this test that way
+// for its whole life. The evidence is the DEFAULT a fee resolves to:
+// cloud.FeeCents(env, kind, 0) is a surface that charges nothing unless an operator
+// types a number, and cloud.ResourceFeeCents (or any non-zero default) is one that
+// charges out of the box.
+//
+// priced is false only when the package resolves fees AND every one of them
+// defaults to zero. A package that resolves none is not making a claim either way —
+// its amount comes from somewhere this walk cannot see — so it is left alone.
+func packagePrice(t *testing.T, dir string) (charges, allZero, priced bool) {
+	fees, zeroFees := 0, 0
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	if err != nil {
@@ -342,11 +400,30 @@ func packageCharges(t *testing.T, dir string) (charges, allZero bool) {
 			if !ok {
 				return true
 			}
+			// WHAT IT CHARGES, asked before WHETHER it charges — the switch below
+			// returns early on every name it does not recognise, and a fee resolver is
+			// one of those. Counted here so a zero default is visible at all.
+			//
+			// FeeCents(envPrefix, kind, def): a literal 0 default is a surface that
+			// charges nothing until an operator prices it. ResourceFeeCents carries the
+			// platform's $1.00 default, so it is always priced.
+			if sel.Sel.Name == "FeeCents" && len(call.Args) == 3 {
+				fees++
+				if lit, ok := call.Args[2].(*ast.BasicLit); ok && lit.Kind == token.INT && lit.Value == "0" {
+					zeroFees++
+				}
+			}
+			if sel.Sel.Name == "ResourceFeeCents" {
+				fees++
+			}
 			switch sel.Sel.Name {
-			// Gate/Meter/MeterUsage are ResourceMeter's names; Authorize/Record are the
-			// metering client's own, which zen calls directly because it supplies the
-			// upstream module's Gate/Meter as function values rather than calling ours.
-			case "Gate", "Meter", "MeterUsage", "RecordUsage", "Authorize", "Record":
+			// Gate/Meter/MeterUsage are ResourceMeter's names, and Allow/Debit are the
+			// same two asked with a resolved cloud.Payer instead of loose strings (see
+			// payer.go) — a surface that composes them is metered exactly as much as one
+			// that does not. Authorize/Record are the metering client's own, which zen
+			// calls directly because it supplies the upstream module's Gate/Meter as
+			// function values rather than calling ours.
+			case "Gate", "Allow", "Meter", "MeterUsage", "Debit", "RecordUsage", "Authorize", "Record":
 				charges = true
 			default:
 				return true
@@ -362,5 +439,5 @@ func packageCharges(t *testing.T, dir string) (charges, allZero bool) {
 			return true
 		})
 	}
-	return charges, meters > 0 && meters == zeros
+	return charges, meters > 0 && meters == zeros, !(fees > 0 && zeroFees == fees)
 }

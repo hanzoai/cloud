@@ -124,10 +124,22 @@ func renderedResults(ctx context.Context, e engine, query, lang string) ([]webRe
 	ctx, cancel := context.WithTimeout(ctx, renderTimeout())
 	defer cancel()
 
+	// A render holds a browser on the crawl pod, which is the same act — and the
+	// same cost — apps/crawl charges for. It reaches that pod by its own door
+	// rather than through crawl.browse, so it carries its own gate and its own
+	// debit; declaring this surface Metered for the SEARCH fee never covered it.
+	// See meter.go.
+	ch, err := affordRender(ctx)
+	if err != nil {
+		return nil, false
+	}
+	defer ch.Release()
+
 	body, err := renderPage(ctx, e.build(query, lang))
 	if err != nil || strings.TrimSpace(body) == "" {
 		return nil, false
 	}
+	chargeRender(ch)
 	root, err := html.Parse(strings.NewReader(body))
 	if err != nil {
 		return nil, false

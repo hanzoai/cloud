@@ -2,6 +2,7 @@ package share
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/hanzoai/cloud"
@@ -107,11 +108,37 @@ func (o shareOps) enable(ctx context.Context, _ *noInput) (*enableResp, error) {
 	if err != nil {
 		return nil, err
 	}
-	tok, err := s.State.cl.token(ctx, org, true)
+	// READ-BACK FIRST, and it is free. An org that already has an account is
+	// fetching its own credential, which costs nobody anything — so it is neither
+	// gated nor billed, and a tenant at zero balance can always run the tunnels
+	// they already paid to enable. Only a MISS goes on to provision.
+	tok, err := s.State.cl.token(ctx, org, false)
+	if err == nil {
+		return &enableResp{
+			AccountToken: tok,
+			Controller:   publicController(),
+			Namespace:    namespaceToken(),
+			URLTemplate:  urlTemplate(),
+		}, nil
+	}
+	if !errors.Is(err, errNoAccount) {
+		s.Log.Warn("share lookup failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "share controller unavailable")
+	}
+
+	// A miss means we are about to mint an account on the PLATFORM's admin
+	// credential. Authorized before that happens. See meter.go.
+	ch, err := afford(s, ctx)
+	if err != nil {
+		return nil, cloud.Denied(err)
+	}
+	defer ch.Release()
+	tok, err = s.State.cl.token(ctx, org, true)
 	if err != nil {
 		s.Log.Warn("share provision failed", "org", org, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "share controller unavailable")
 	}
+	charge(ch)
 	return &enableResp{
 		AccountToken: tok,
 		Controller:   publicController(),

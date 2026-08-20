@@ -15,10 +15,16 @@ import (
 // and not the ~3040-package union the fused binary was. The light host loads it
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `company openapi`. Hand-owned — edit the spec below directly.
+// Metered, not Free — and the meter was already there. apps/company charges the
+// $999 formation (providers.go, gate + debit, kind "company-formation"); only the
+// declaration had not caught up, so the edge required no standing for a surface
+// that moves a four-figure sum. The on-chain genesis anchor is one act INSIDE that
+// paid formation, gated by the same stage machine, so it is covered rather than
+// separately priced.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "company",
-		Price:    cloud.Free,
+		Price:    cloud.Metered,
 		Mount:    company.Mount,
 		Shutdown: company.Shutdown,
 	}}, []string{"company"}); err != nil {
