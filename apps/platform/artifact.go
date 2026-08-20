@@ -368,18 +368,32 @@ func repoSlug(cloneURL string) string {
 
 // launchArtifactBuild launches the artifact Job and returns its name. It shares
 // every bound the image lane has — the isolated build namespace, the CI pool,
-// the per-org concurrency ceiling — so an artifact build cannot outrun a
-// container build or escape into another namespace. buildID is the idempotency
-// key: a retry collides on the Job name (409) rather than spawning a duplicate.
+// the per-org concurrency ceiling, and the same source rules — so an artifact
+// build cannot outrun a container build or escape into another namespace.
+// buildID is the idempotency key: a retry collides on the Job name (409) rather
+// than spawning a duplicate.
 func (k *k8sClient) launchArtifactBuild(ctx context.Context, repoURL, ref, tag, base, putBase string, bins []binarySpec, buildID string) (string, error) {
 	if err := k.ready(); err != nil {
 		return "", err
+	}
+	// The source a Job clones is checked where the Job is built, as it is in
+	// launchBuildJob and launchDirectBuild: an allowlisted git host over https
+	// carrying no credentials and no metacharacters, and a ref naming one
+	// commit. Every constructor of a build states the rule, so a caller cannot
+	// be the only thing holding it.
+	cleanURL, err := validateRepoURL(repoURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid build input: %w", err)
+	}
+	cleanRef, err := validateBuildRef(ref)
+	if err != nil {
+		return "", fmt.Errorf("invalid build input: %w", err)
 	}
 	if err := k.admitBuild(ctx, platformBuildOrg); err != nil {
 		return "", err
 	}
 	jobName := truncate("pf-artifact-"+jobIDSuffix(buildID), 63)
-	job := k.artifactJobSpec(jobName, repoURL, ref, tag, base, putBase, bins)
+	job := k.artifactJobSpec(jobName, cleanURL, cleanRef, tag, base, putBase, bins)
 	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}
