@@ -123,37 +123,38 @@ jobs:
           # more than the tip. Shallow history is why a first-push review would
           # otherwise have nothing to compare.
           fetch-depth: 0
-      # THE REVIEWER'S BEARER IS READ FROM KMS AT THE MOMENT OF USE.
+      # THE REVIEWER'S BEARER IS MINTED BY IAM, FROM A SECRET HELD IN KMS.
       #
-      # review.sh takes a bearer and does not care what minted it, so the choice
-      # lives here, and two spellings have been tried. A Hanzo Git org secret
-      # holding the key is a COPY: rotating the real key does not reach it,
-      # nothing reports the divergence, and the gate then fails closed forever on
-      # a credential nobody knew had died (runs 90908, 91045).
+      # Two stores, two jobs, and nothing else: IAM issues every token, KMS holds
+      # every secret. The reviewer's credential is therefore a `hanzo-review`
+      # client credential in KMS, spent at IAM's token endpoint for a short-lived
+      # bearer at the moment of use. review.sh takes a bearer and does not care
+      # what minted it, so the choice lives here.
       #
-      # IAM client_credentials is the better answer and is where this is going —
-      # a short-lived token from the only issuer beats any stored bearer. It
-      # needs a `hanzo-review` application whose client credential the runner can
-      # read. IAM_CLIENT_ID and IAM_CLIENT_SECRET are set on neither the repo nor
-      # the org, so the step minted nothing and refused every change; the org
-      # holds FORGE_TOKEN, GHCR_TOKEN, GHCR_USER, GH_PAT, KMS_CLIENT_ID,
-      # KMS_CLIENT_SECRET and REVIEW_API_KEY, and no IAM pair. Land that lane
-      # when the application exists, not before.
+      # It used to be REVIEW_API_KEY — a long-lived `sk-live-` bearer parked in
+      # KMS and handed straight to the reviewer. That is a third store of auth
+      # standing beside the issuer, and it failed the way a stored bearer always
+      # does: the key was revoked at IAM, nothing told the store, and the gate
+      # then refused EVERY change on a credential nobody knew had died. It fails
+      # closed by design, so a dead key is a frozen release train — measured, it
+      # held every release from v1.801.568 onward. A token that expires in
+      # minutes cannot rot that way; a key that lives forever always will.
       #
-      # KMS is measured to hold the key: on run 92398 these two calls returned it
-      # and the reviewer read the change and answered with a verdict. A probe
-      # that answers 404 here is reading a different store — the path carries no
-      # org, so its root comes from the KMS credential's own claim, and a probe
-      # made with another credential asks another org.
+      # No fallback, and no second spelling. A fallback is how a stale copy keeps
+      # winning, and this gate must fail closed rather than pass on whichever
+      # credential answers. If the mint fails the change does not pass.
       #
-      # No fallback. A fallback is how a stale copy keeps winning, and this gate
-      # must fail closed rather than pass on whichever credential answers.
+      # `hanzo-review` is a SERVICE client (iam internal/provision: a service type
+      # is granted exactly client_credentials), owned by the `hanzo` org, its
+      # secret stored at review/IAM_CLIENT_SECRET. Rotating it is a KMS write and
+      # nothing here changes.
       - name: read the change, and refuse it if it carries an attack
         env:
           KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
           KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
           KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
           KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
+          IAM_ENDPOINT: ${{ vars.IAM_ENDPOINT || 'https://iam.hanzo.ai' }}
         run: |
           set -euo pipefail
 
@@ -163,11 +164,25 @@ jobs:
             | jq -r '.accessToken // empty' || true)
           [ -n "$KMS_TOKEN" ] || { echo "::error::review: KMS login failed at ${KMS_ENDPOINT} — the reviewer cannot be given a credential, so the change cannot pass"; exit 1; }
 
-          REVIEW_TOKEN=$(curl -sS \
-            "${KMS_ENDPOINT}/v1/kms/secrets/review/REVIEW_API_KEY?env=${KMS_SECRET_ENV}" \
-            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
+          kms_secret() {
+            curl -sS "${KMS_ENDPOINT}/v1/kms/secrets/review/$1?env=${KMS_SECRET_ENV}" \
+              -H "Authorization: Bearer ${KMS_TOKEN}" \
+              | jq -r '.value // .secret.value // empty' || true
+          }
+          IAM_CLIENT_ID=$(kms_secret IAM_CLIENT_ID)
+          IAM_CLIENT_SECRET=$(kms_secret IAM_CLIENT_SECRET)
+          echo "::add-mask::${IAM_CLIENT_SECRET}"
+          [ -n "$IAM_CLIENT_ID" ] && [ -n "$IAM_CLIENT_SECRET" ] || {
+            echo "::error::review: the hanzo-review client credential is missing from KMS at review/IAM_CLIENT_ID + review/IAM_CLIENT_SECRET (env ${KMS_SECRET_ENV}, org from the KMS credential). Create the \`hanzo-review\` SERVICE application in IAM and store its credential there — the reviewer mints its own bearer and holds no stored key."; exit 1; }
+
+          # client_secret_basic, per HIP-0111. The token is short-lived by
+          # construction, so there is nothing here for a rotation to miss.
+          REVIEW_TOKEN=$(curl -sS "${IAM_ENDPOINT}/v1/iam/oauth/token" \
+            -u "${IAM_CLIENT_ID}:${IAM_CLIENT_SECRET}" \
+            -d 'grant_type=client_credentials' \
+            | jq -r '.access_token // empty' || true)
           export REVIEW_TOKEN
-          [ -n "$REVIEW_TOKEN" ] || { echo "::error::review: REVIEW_API_KEY missing in KMS at review/ (env ${KMS_SECRET_ENV}, org from the KMS credential) — mint a key and store it there"; exit 1; }
+          [ -n "$REVIEW_TOKEN" ] || { echo "::error::review: IAM refused client_credentials for hanzo-review at ${IAM_ENDPOINT} — the reviewer cannot be given a bearer, so the change cannot pass"; exit 1; }
           echo "::add-mask::${REVIEW_TOKEN}"
           base="${{ github.event.before }}"
           # MEASURED, because this comment used to say the opposite and the
