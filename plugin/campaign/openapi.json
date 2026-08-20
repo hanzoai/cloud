@@ -63,6 +63,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -107,6 +108,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -130,6 +132,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -157,6 +160,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -189,6 +193,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "put": {
@@ -235,6 +240,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -286,6 +292,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -329,6 +336,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -349,7 +357,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/campaign/{id}/metrics": {
@@ -412,6 +421,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -432,7 +442,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     }
   },

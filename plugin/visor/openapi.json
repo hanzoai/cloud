@@ -76,6 +76,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -122,6 +123,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -179,6 +181,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -223,6 +226,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -285,6 +289,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -322,6 +327,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -360,6 +366,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -370,7 +377,8 @@
         "description": "Creates BOTH halves of a bot in one call and answers 201 with the bot: the cloud agent it runs, then a bot-kind machine bootstrapped with the bot runtime, then the binding between them, so a launched bot is immediately messageable. Send `dryRun: true` for a price quote instead — 200 with the upstream quote verbatim, no agent created, no machine launched, nothing spent.\n\nThe agent is created FIRST and on purpose: it is create-if-absent (an agent that already exists is reused, so a relaunch is fine and several bots may share one explicit `agent`), and doing it before the machine means a bad request — a model that is not in the catalog, say — fails with the real reason BEFORE any metered machine is provisioned. `agent` defaults to the bot's name and an empty `model` takes the deployment default.\n\nOrg-scoped and fails closed: a validated principal is required (403 without one), the owning org is that principal's and never a body field, `size` is required (400), and `name` is required for a real launch though not for a quote.",
         "tags": [
           "compute"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/compute/bots/{id}": {
@@ -397,6 +405,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -440,6 +449,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -468,7 +478,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/compute/regions": {
@@ -478,7 +489,8 @@
         "description": "Lists the launch regions the compute catalog offers, passed through verbatim from the provider so the shape stays the provider's single source of truth. The catalog is GLOBAL, not per-tenant: no owner is forwarded and every org sees the same list. It is still gated — a validated principal is required, 403 without one — because the catalog is what backs the launch drawer, not public marketing copy.",
         "tags": [
           "compute"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/compute/sizes": {
@@ -488,7 +500,8 @@
         "description": "Lists the instance sizes the compute catalog offers, passed through verbatim from the provider so the shape stays the provider's single source of truth. These are the values `size` accepts on a launch. The catalog is GLOBAL, not per-tenant: no owner is forwarded and every org sees the same list. It is still gated — a validated principal is required, 403 without one.",
         "tags": [
           "compute"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/fleet": {
@@ -537,6 +550,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -594,6 +608,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -645,6 +660,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -711,6 +727,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -754,6 +771,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -796,6 +814,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -832,6 +851,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -858,6 +878,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -895,6 +916,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -945,6 +967,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -972,6 +995,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -1028,6 +1052,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1063,6 +1088,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1101,6 +1127,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1109,7 +1136,8 @@
         "description": "Provisions a machine owned by the caller's org and answers 201 with the machine. Send `dryRun: true` to get a PRICE QUOTE instead: 200 with the upstream quote passed through verbatim, nothing launched and nothing spent. Two response shapes on one address is the rule to know, and it is why this is not a typed op.\n\nMetering is not this plane's: the launch fronts the compute provider's resell endpoint, which owns the balance gate and the per-hour meter, and cloud only forwards the tenant. Ownership is the validated principal's org and is never read from the body, so a launch always lands in the caller's OWN tenant and the machine it creates is only ever visible to that tenant. Fails closed: a validated principal is required (403 without one) and `size` (or its `instanceType` alias) is required (400).",
         "tags": [
           "machines"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/machines/agents": {
@@ -1142,6 +1170,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1169,6 +1198,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -1210,6 +1240,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1237,6 +1268,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -1275,6 +1307,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "put": {
@@ -1326,6 +1359,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     }

@@ -66,6 +66,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hanzoai/cloud/manifest/door"
 	"github.com/zap-proto/zip"
 )
 
@@ -323,14 +324,13 @@ type Parameter struct {
 // stamps the relay's source as the operation enters, [Weave] stamps the part's app
 // for everything else, and neither overwrites a value already there.
 //
-// Public is AUDIENCE: this operation is part of the published contract. It is a
-// declared fact, never a derived one — see openapi/public.go for why the split is
-// a per-operation mark and not a list of prefixes, and [Publish] for the
-// projection that reads it. Default-deny: absent means internal, so an operation
-// that says nothing about its audience cannot leak into a public SDK. It rides in
-// the document as an extension rather than as a tag because the tag axis already
-// means PRODUCT — `compat` had to be filtered back out of it by [Products], and a
-// second orthogonal fact in the same slot would be that wart twice.
+// Public is AUDIENCE: this operation is part of the customer contract. It is
+// derived from the operation's own address and tags at the end of [Spec] — see
+// openapi/public.go for the rule, and [Publish] for the projection that reads
+// it. It rides in the document as an extension rather than as a tag because the
+// tag axis already means PRODUCT — `compat` had to be filtered back out of it by
+// [Products], and a second orthogonal fact in the same slot would be that wart
+// twice.
 // Security overrides the document-level requirement for ONE operation, and a
 // pointer is what lets it say the two different things OpenAPI distinguishes:
 // absent means "inherit the document's requirement" and present-and-empty means
@@ -926,8 +926,8 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 	serveCommands(app, render)
 }
 
-// Door reports whether path is one [serve] registers — the document and its
-// command projection.
+// Door reports whether path is the host's — one [serve] registers (the document
+// and its command projection) or the agent door (openapi/mcp.go).
 //
 // The doors are the host's, and they are the only operations that belong to NO
 // app: they are declared in this package rather than beside any subsystem, no
@@ -942,4 +942,6 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 // So it is stated once, beside the code that makes it true. The second door
 // arrived and all three were wrong the same afternoon — the cost of a literal is
 // that it is right until it isn't and says nothing when it stops.
-func Door(path string) bool { return path == Path || path == WellKnown || path == CommandPath }
+func Door(path string) bool {
+	return path == Path || path == WellKnown || path == CommandPath || path == door.Path
+}
