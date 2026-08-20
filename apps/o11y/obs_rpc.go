@@ -25,6 +25,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
+	module "github.com/hanzoai/o11y"
 	"github.com/zap-proto/zip"
 )
 
@@ -40,8 +41,12 @@ func exposeObs() {
 // be reshaped into a plane error. The request is rebuilt here rather than
 // forwarded as bytes because the runtime is an http.Handler.
 func planeObsError(ctx context.Context, in *plane.ObsErrorIn) (*plane.ObsErrorOut, error) {
-	mapped, ok := eventToRuntimePath(http.MethodPost, in.Path)
-	if !ok {
+	// THE ADDRESS DOES NOT MOVE. The runtime opens its ingest door at the same
+	// /v1/event the caller knocked on and a minted DSN spells, so there is
+	// nothing to translate — only to ADMIT. IngestWire is the module's own
+	// predicate, so the door that answers and the gate that lets a request reach
+	// it cannot come to disagree.
+	if !module.IngestWire(http.MethodPost, in.Path) {
 		return &plane.ObsErrorOut{Status: http.StatusNotFound}, nil
 	}
 	h := runtimeHandler
@@ -49,7 +54,7 @@ func planeObsError(ctx context.Context, in *plane.ObsErrorIn) (*plane.ObsErrorOu
 		return &plane.ObsErrorOut{Status: http.StatusServiceUnavailable,
 			ContentType: "text/plain", Body: []byte("o11y runtime not initialized")}, nil
 	}
-	u := &url.URL{Path: mapped}
+	u := &url.URL{Path: in.Path}
 	if in.Query != "" {
 		u.RawQuery = in.Query
 	}

@@ -13,7 +13,7 @@ package o11y
 // manifest, which matters more than it looks: a status endpoint is read exactly
 // when the platform is on fire, and a lazily-spawned plugin would pay a cold
 // start at that moment. The precedent for owning a top-level path outside
-// /v1/o11y is already here — o11y serves /v1/sentry the same way.
+// /v1/o11y is already here — o11y serves /v1/sentinel the same way.
 //
 // WHY IT IS UNAUTHENTICATED. A status endpoint that requires a login is useless
 // during an outage: IAM is one of the things that can be down, and the reader is
