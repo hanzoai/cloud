@@ -99,16 +99,38 @@ jobs:
         # read in preference to anything set later.
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
         run: |
           set -euo pipefail
-          [ -n "${GH_PAT:-}" ] || { echo "GH_PAT is not set — a private module that is not already in the cache cannot be fetched"; exit 0; }
           # RUNNER_TEMP is unset on this forge. Unguarded, "$RUNNER_TEMP/x" is
           # "/x" and the step dies before printing anything.
           TMP="${RUNNER_TEMP:-/tmp}"
-          CFG="$TMP/gitconfig-private"; : > "$CFG"
-          GIT_CONFIG_GLOBAL="$CFG" git config --global \
-            url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+          CFG="$TMP/gitconfig-private"
+          # 0600 BEFORE the file exists, because this file holds credentials and
+          # the default 0644 publishes them to every other uid on the box.
+          ( umask 077; : > "$CFG" )
+
+          # THE HARDENING FIRST, and the credentials after. Naming the fresh
+          # config is what makes a stale insteadOf from another repo's job
+          # unreadable, and that is worth doing whether or not this job has a
+          # token — an early return that skipped it left the shared ~/.gitconfig
+          # in force in exactly the case with nothing of our own to override it.
           { echo "GIT_CONFIG_GLOBAL=$CFG"; echo "GIT_CONFIG_NOSYSTEM=1"; } >> "$GITHUB_ENV"
+          export GIT_CONFIG_GLOBAL="$CFG" GIT_CONFIG_NOSYSTEM=1
+
+          # THE FORGE FIRST, as cicd.yml does. It mirrors the same objects, so the
+          # fetched zip hashes to the h1: line already in go.sum and a forge
+          # serving different bytes fails the build rather than shipping them.
+          # It is also the substitution that survives a GitHub ACL drift, which
+          # has blocked releases here before. GH_PAT stays the fallback for a
+          # module the forge has not mirrored.
+          if [ -n "${FORGE_TOKEN:-}" ]; then
+            git config --global \
+              url."https://x:${FORGE_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
+          fi
+          [ -n "${GH_PAT:-}" ] || { echo "::warning::GH_PAT is not set — a private module the forge has not mirrored, and that is not already in the cache, cannot be fetched"; exit 0; }
+          git config --global \
+            url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
 
       - name: Write the documents
         # ONE TARGET, CALLED. Everything about which apps describe themselves,
@@ -139,8 +161,9 @@ jobs:
           # selected. The commit below takes only the generated set; a file
           # outside it that moved is a fact about this repo worth seeing, and a
           # step that stages a subset silently is how it stops being seen.
+          MOVED=$(git status --porcelain)
           echo "── the sweep left this ──"
-          git status --porcelain
+          printf '%s\n' "$MOVED"
           echo "─────────────────────────"
 
           # THE SET, ASKED FOR RATHER THAN RESTATED. mk/fleet.mk owns which paths
@@ -159,6 +182,17 @@ jobs:
           [ -n "$DOCUMENTS" ] || { echo "::error::mk/fleet.mk named no generated documents — refusing to decide there is nothing to commit on the strength of a question that did not get answered"; exit 1; }
           git add -- $DOCUMENTS
           if git diff --cached --quiet; then
+            # TWO DIFFERENT FACTS, and only one of them is "nothing was wrong".
+            # `describe` regenerates the whole fleet on its way past, including the
+            # ~120 apps/*/zipdoc_gen.go this lane deliberately does not commit. So a
+            # gate that is red for a reason OUTSIDE the generated set leaves the
+            # porcelain full and the staged set empty, and saying "nothing to
+            # commit" there tells an operator who dispatched this to repair
+            # something that it was already fine. It is not; it is untouched.
+            if [ -n "$MOVED" ]; then
+              echo "::warning::nothing in the GENERATED set moved, but $(printf '%s\n' "$MOVED" | wc -l | tr -d ' ') other path(s) did — listed above. This lane commits only the generated set, so whatever left those is NOT repaired here."
+              exit 0
+            fi
             echo "every document already matches the source it is generated from — nothing to commit"
             exit 0
           fi
@@ -170,20 +204,35 @@ jobs:
           # moved while the sweep ran, these documents were generated from a tree
           # that is no longer the branch, and the right outcome is a red run and a
           # rerun — not a merge, and never a force.
-          REMOTE="${GITHUB_SERVER_URL:-https://git.hanzo.ai}"
-          REMOTE="${REMOTE%/}/${{ github.repository }}"
+          # ONE SPELLING of the host, and it is the one the dispatch below uses.
+          # GITHUB_SERVER_URL is this forge's IN-CLUSTER address —
+          # http://hanzo-git.hanzo.svc, measured off the runner's own
+          # GIT_INSTANCE_URL — so honouring it would carry a contents:write token
+          # over cleartext to an address nothing else in this repo pushes to.
+          REMOTE="https://git.hanzo.ai/${{ github.repository }}"
+
           # git sends EVERY matching http.extraHeader and the server honours the
-          # first Authorization it reads, so adding one beside the header
-          # actions/checkout persisted leaves the weaker token winning. Clear them
-          # all, then set the one that can write.
+          # first Authorization it reads, so the header actions/checkout persisted
+          # would leave the weaker token winning. Clear them, then carry the one
+          # that can write IN THE ENVIRONMENT, for the length of one command.
+          #
+          # The environment, and not the two nearer spellings. `git config --local`
+          # writes the token in plaintext into <workspace>/.git/config and NOTHING
+          # takes it out again — checkout's post-step unsets the URL-scoped key it
+          # set itself, which is a different key, so the write outlives the job on
+          # a runner whose caches are deliberately persistent. `-c` keeps it off
+          # disk and puts it in argv, where any process on the host reads it out of
+          # ps. GIT_CONFIG_* is neither.
           #
           # `|| true` on the read: `--get-regexp` exits 1 when nothing matches, and
           # under pipefail that ends the step — having nothing to clear is the
           # good case, not a failure.
           { git config --local --name-only --get-regexp '^http\..*extraheader$' || true; } 2>/dev/null \
             | while read -r k; do git config --local --unset-all "$k" || true; done
-          git config --local http.extraheader "Authorization: token ${FORGE_TOKEN}"
-          git push "$REMOTE" HEAD:main
+          GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0=http.extraheader \
+          GIT_CONFIG_VALUE_0="Authorization: token ${FORGE_TOKEN}" \
+            git push "$REMOTE" HEAD:main
           echo "pushed $(git rev-parse --short HEAD) to main"
 
           # A push made with a token fires no workflow on this forge, so without
