@@ -48,6 +48,17 @@ const usageTable = "hanzo.cloud_usage"
 var providerGrantsCents = map[string]int64{}
 
 // ProviderCredit is one provider's upstream credit ledger row.
+//
+// Error names the read that did not answer. It exists because this row had no way
+// to report a failure and therefore reported one as a verdict: a provider whose
+// live read failed fell through to the no-grant branch and came back
+// HasCredit=false, IsPaidOnly=true — indistinguishable from a provider we had
+// actually established has no promo credit.
+//
+// When Error is set the classification carries NO verdict: HasCredit and
+// IsPaidOnly are BOTH false, a state the healthy path can never produce (a grant
+// is either present or absent, so exactly one of them is always true there). That
+// makes "we could not tell" readable on the wire without a sentinel amount.
 type ProviderCredit struct {
 	Provider       string   `json:"provider"`
 	GrantCents     int64    `json:"grant_cents"`
@@ -56,6 +67,7 @@ type ProviderCredit struct {
 	RunwayDays     *float64 `json:"runway_days"` // nil when burn is 0 / unknown (never a fabricated infinity)
 	HasCredit      bool     `json:"has_credit"`
 	IsPaidOnly     bool     `json:"is_paid_only"`
+	Error          string   `json:"error,omitempty"`
 }
 
 // computeProviderCredits builds the per-provider ledger: grant (seed) + burn
@@ -95,30 +107,42 @@ func computeProviderCredits(ctx context.Context, s *cloud.Service[core.State]) [
 
 		// DO: authoritative live read (creditRemaining = -account_balance clamped ≥0,
 		// mirroring finance.go). Consumed = grant - remaining; runway = remaining / burn.
+		//
+		// Ready() only proves a token is SET. A revoked one is still a non-empty
+		// string, so it passes that check and fails here instead — which is why the
+		// failure needs somewhere to go. It used to have nowhere: the read was
+		// guarded by `err == nil` with no else, so a 401 fell through to the
+		// grant-less branch below and published IsPaidOnly on an account whose
+		// promo credit we simply had not been able to look at.
 		if p == "do-ai" && s.State.DO.Ready() {
-			if bal, err := s.State.DO.Balance(ctx); err == nil {
-				credit := max(-int64(bal.Account), 0)
-				row.RemainingCents = credit
-				// The grant is DO's own number, not ours (see providerGrantsCents).
-				// On failure leave it 0 rather than substituting a guess: a fabricated
-				// grant reads as headroom, and headroom is the one thing nobody should
-				// ever infer. HasCredit/IsPaidOnly follow the discovered value, so an
-				// exhausted promo correctly classifies every later call as PAID.
-				if issued, ierr := s.State.DO.CreditIssued(ctx); ierr == nil {
-					grant = int64(issued)
-					row.GrantCents = grant
-				}
-				consumed := max(grant-credit, 0)
-				row.BurnCents = consumed
-				row.HasCredit = credit > 0
-				row.IsPaidOnly = credit <= 0
-				if adb := AvgDailyBurnCents(int64(bal.Usage), now); adb > 0 {
-					rw := float64(credit) / float64(adb)
-					row.RunwayDays = &rw
-				}
+			bal, err := s.State.DO.Balance(ctx)
+			if err != nil {
+				row.Error = err.Error()
+				row.HasCredit, row.IsPaidOnly = false, false
 				out = append(out, row)
 				continue
 			}
+			credit := max(-int64(bal.Account), 0)
+			row.RemainingCents = credit
+			// The grant is DO's own number, not ours (see providerGrantsCents).
+			// On failure leave it 0 rather than substituting a guess: a fabricated
+			// grant reads as headroom, and headroom is the one thing nobody should
+			// ever infer. HasCredit/IsPaidOnly follow the discovered value, so an
+			// exhausted promo correctly classifies every later call as PAID.
+			if issued, ierr := s.State.DO.CreditIssued(ctx); ierr == nil {
+				grant = int64(issued)
+				row.GrantCents = grant
+			}
+			consumed := max(grant-credit, 0)
+			row.BurnCents = consumed
+			row.HasCredit = credit > 0
+			row.IsPaidOnly = credit <= 0
+			if adb := AvgDailyBurnCents(int64(bal.Usage), now); adb > 0 {
+				rw := float64(credit) / float64(adb)
+				row.RunwayDays = &rw
+			}
+			out = append(out, row)
+			continue
 		}
 
 		// Others (or DO unconfigured): remaining = grant - warehouse burn (≥0). Per-
@@ -182,7 +206,7 @@ type ProvidersCreditOut struct {
 type UsageFundingRow struct {
 	Provider  string `json:"provider"`
 	Model     string `json:"model"`
-	Funding   string `json:"funding"` // credit | paid | paid_only | byo
+	Funding   string `json:"funding"` // credit | paid | paid_only | unknown | byo
 	Tokens    int64  `json:"tokens"`
 	CostCents int64  `json:"cost_cents"`
 	Requests  int64  `json:"requests"`
@@ -192,8 +216,15 @@ type UsageFundingRow struct {
 // grant remaining => credit, grant exhausted => paid, no grant => paid_only. The
 // precise PER-CALL split (and the `byo` class) lands when the ai metering write stamps
 // a `funding` column on cloud_usage — then UsageFunding GROUP BYs that column directly.
+//
+// A row whose read failed is classified `unknown` rather than folded into one of the
+// three verdicts. The ledger's fields cannot tell "no grant" from "we could not ask",
+// so reading HasCredit off an unread row is how a promo-funded provider came to be
+// reported as paid_only on every one of its usage lines.
 func fundingClass(pc ProviderCredit) string {
 	switch {
+	case pc.Error != "":
+		return "unknown"
 	case !pc.HasCredit:
 		return "paid_only"
 	case pc.RemainingCents > 0:
