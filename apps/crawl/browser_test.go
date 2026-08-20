@@ -125,6 +125,24 @@ func TestEscalateKeepsTheStaticPageWhenTheRenderFails(t *testing.T) {
 	}
 }
 
+func TestEscalateReadsAnEnvelopeLargerThanMaxBody(t *testing.T) {
+	// The envelope wraps the page, so it is larger than the document it carries —
+	// a heavy article renders to more JSON than maxBody admits of raw HTML.
+	// Reading it through the fetch cap truncated the JSON mid-stream, the decode
+	// failed, and exactly the pages worth escalating came back as empty successes
+	// (usenaive.ai/blog: a 21MB envelope against an 8MiB cap). The envelope gets
+	// its own cap; this pins that a render past maxBody arrives whole.
+	full := strings.TrimSpace(strings.Repeat("an article heavy enough to overflow the fetch cap. ", maxBody/50))
+	browserAt(t, rendered(full))
+
+	shell := &Page{URL: "https://example.com/app", Markdown: "Loading…"}
+	got := escalate(context.Background(), shell, "https://example.com/app")
+
+	if len(got.Markdown) != len(full) {
+		t.Fatalf("a render larger than maxBody must arrive whole: sent %d bytes, got %d", len(full), len(got.Markdown))
+	}
+}
+
 // The service is shape-polymorphic about `markdown` across builds: a bare string
 // on some, an object with fit_markdown/raw_markdown on others. Decoding only one
 // shape means a working browser reads as an empty render on the other.
