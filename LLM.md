@@ -3196,15 +3196,19 @@ semantic is identical — fail closed once armed, allow before.
   `{"op":"<operation>","input":{…}}`, whose `op` enum holds NAMES ONLY, plus
   `describe` — which returns one operation's own descriptor, so a model
   searches the enum and fetches the schema for the one it picked. The whole
-  corpus is **118 tools in 106,282 bytes** (`fleet.TestTheWholeFleetFitsInAModelsHead`,
-  which builds it from `plugin/*/openapi.json`) — 17× less per operation, for 1.9×
+  corpus is **112 tools in 82,411 bytes** (`fleet.TestTheWholeFleetFitsInAModelsHead`,
+  which builds it from `plugin/*/openapi.json`) — 14× less per operation, for 1.2×
   MORE operations than the baseline carried. `describe` is FIRST because it is
   what makes every other tool usable, so truncation must never take it. The envelope
   is a DECODING and not a second route: it yields the (name, message) a direct call
   carries, and `refuse()` in `gather` remains the only gate, so a refused name is in
   no enum, dispatchable through no envelope, and describable by nothing.
-  **Headroom: 10 subsystems.** 118 of the 128 a client keeps. The manifest is 121
-  apps and growing, so the next ten subsystems put the door back over the cap; the
+  **Headroom: 16 subsystems.** 112 of the 128 a client keeps, and the six it
+  bought back came from `x-tool` rather than from any change here: an app whose
+  operations are all undispatchable now contributes NO tool, because `group`
+  builds only from names that survived, so fourteen apps left the surface and
+  none of them left an empty enum behind. The manifest is 121 apps and growing,
+  so the next sixteen subsystems put the door back over the cap; the
   move then is to group by product surface (`productStems`, 17 buckets), not to add
   a second projection.
   🔴 **THE DOOR ADVERTISES OPERATIONS THE CHILDREN CANNOT DISPATCH.** Measured
@@ -3255,14 +3259,27 @@ semantic is identical — fail closed once armed, allow before.
   requestBody and a description, and is not dispatchable. That is why the mark is
   written where the registry is read rather than inferred from the JSON later.
   Mutation-checked both directions.
-  **The catalog SHRINKS on the next regeneration and that is the correction, not a
-  loss** — it published 2499 operations against a fleet whose zero-typed apps
-  contribute nothing dispatchable (`tasks` 20 of 20 dead, `index` 17 of 17,
-  `social` 13 of 13). Nothing downstream trips on it: `openapi/floor.json` ratchets
-  the DOCUMENT and not the catalog, and `fleet/catalog_test.go`'s two counts are
-  both derived from the catalog itself. Watch one thing — `TestListingStartsNothing`
-  picks the first three apps with a non-empty entry and SKIPS when it finds none, so
-  if the typed set ever collapses that gate goes quiet rather than red.
+  **The catalog SHRANK on regeneration and that is the correction, not a loss:
+  2499 → 1554 operations, 945 withdrawn, 14 apps left publishing nothing**
+  (`authz catalogsync dns esign index kafka kms metrics rollingcap skills social
+  storage tasks zen`). Measured, and it agrees with what the live door was
+  answering `unknown tool` for. The withdrawal is far larger than the 157 counted
+  per-APP, which is the lesson: an app that types SOME routes stranded the rest,
+  so only a per-OP measure could see it.
+  Nothing downstream trips on it — `openapi/floor.json` ratchets the DOCUMENT and
+  not the catalog — and the door got SMALLER rather than poorer: 112 tools in
+  82,411 bytes, six subsystems of headroom bought back, because `group` builds
+  only from surviving names so an all-undispatchable app contributes no tool and
+  leaves no empty enum.
+  Three gates moved with it, each having read a proxy that stopped being
+  equivalent, and two of them were reporting SUCCESS on an empty set:
+  `TestListingStartsNothing` SKIPPED when no app had an operation, and
+  `TestCatalogIsTheSpecs` quantified over a `want` that would be empty if the mark
+  stopped being written — both now fail, because a catalog carrying nothing is a
+  door publishing nothing. The third, `TestAPhraseSaysWhatTheRouteSays`, anchored
+  its table on the catalog and so failed thirteen NAMING entries for a
+  dispatchability reason; it reads the per-app documents now, which is the set its
+  own comment always named.
   **The tools carry no prefix.** They shipped as `hanzo_<app>` + `hanzo_describe`
   and were renamed hours later to the bare app names + `describe`, in one change
   with no aliases. The MCP server is the namespace — a client reaches these names
