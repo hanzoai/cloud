@@ -14,7 +14,7 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
-	github.com/hanzoai/account v0.3.2
+	github.com/hanzoai/account v0.3.3
 	github.com/hanzoai/cek v0.2.7
 	github.com/hanzoai/commerce v1.50.58
 	github.com/hanzoai/dataroom v1.1.7
@@ -689,7 +689,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.5
-	github.com/hanzoai/ai v1.833.97
+	github.com/hanzoai/ai v1.833.99
 	github.com/hanzoai/authz v1.10.30
 	github.com/hanzoai/base v1.5.61
 	github.com/hanzoai/licensing v0.1.15
