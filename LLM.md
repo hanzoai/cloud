@@ -4104,8 +4104,23 @@ which is why `image` uses it, and never enough to write another — so every
 projection answered `403 user should have a permission to write to a repo`. That is
 a repository PERMISSION and not a missing scope, and no scope on a per-run token
 reaches an estate it was not minted for. The org secrets are FORGE_TOKEN,
-GHCR_TOKEN, GHCR_USER, GH_PAT, KMS_CLIENT_ID, KMS_CLIENT_SECRET and REVIEW_API_KEY;
-list them before naming one as a blocker.
+GHCR_TOKEN, GHCR_USER, GH_PAT, KMS_CLIENT_ID and KMS_CLIENT_SECRET; list them
+before naming one as a blocker.
+
+REVIEW_API_KEY was an eighth and is deleted. It was a long-lived `sk-live-`
+bearer the review car read from KMS and handed straight to the reviewer — a third
+store of auth standing beside IAM and KMS, which each already have exactly one
+job. It failed the way a stored bearer does: revoked at IAM, nothing told the
+store, and a gate that fails closed then refused every change on a credential
+that still read back fine. No run reached image or receipt, so it froze the train
+from v1.801.568 with no release and no obvious cause.
+
+The car now reads a `hanzo-review` SERVICE client credential from KMS
+(review/IAM_CLIENT_ID + review/IAM_CLIENT_SECRET) and spends it at IAM's token
+endpoint for a short-lived bearer at the moment of use. A minted token cannot
+rot; a stored one always will. Anything else that needs a credential takes the
+same shape — see universe docs/KMS-ACCESS.md, which also records that a machine
+credential may READ from KMS and never write.
 
 The old car posted `repository_dispatch` to api.github.com, and could never have
 worked whatever credential it held: the receiving workflows ask for
