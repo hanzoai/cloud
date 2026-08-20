@@ -28,7 +28,8 @@
         "description": "Lists the caller org's sandboxes, newest first. `project` and `status` narrow it, and both are read from the QUERY STRING.\n\nIt answers from the org's own store rather than from the cluster, so a sandbox whose pod has since died still appears, carrying the status it was last known to have. That is deliberate: a lease you are being charged for should not vanish from the list because the thing behind it fell over.",
         "tags": [
           "sandboxes"
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_sandboxes",
@@ -36,7 +37,8 @@
         "description": "Creates a sandbox and returns it. `class` is one of `exec`, `dev`, `desktop` or `android`; `dev` and `desktop` are attached to a `project`, which is required for them and names the volume the work persists on. `ttlSec` bounds the lease, and `image` overrides the class default.\n\nThis is the ONLY path that creates cluster objects. The isolation boundary is the pod's runtime class, one field, so what a sandbox is confined by is a deployment decision rather than anything this operation negotiates.",
         "tags": [
           "sandboxes"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/sandboxes/end": {
@@ -62,6 +64,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -95,6 +98,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -128,6 +132,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -161,6 +166,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -194,6 +200,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -227,6 +234,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -247,7 +255,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       },
       "get": {
         "operationId": "get_sandboxes_by_id",
@@ -265,7 +274,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/sandboxes/{id}/exec": {
@@ -285,7 +295,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/sandboxes/{id}/fs": {
@@ -305,7 +316,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_sandboxes_by_id_fs",
@@ -323,7 +335,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/sandboxes/{id}/screen": {
@@ -343,7 +356,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/sandboxes/{id}/screen/ticket": {
@@ -363,7 +377,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/sandboxes/{id}/screen/ws": {
@@ -383,7 +398,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/sandboxes/{id}/terminal": {
@@ -403,7 +419,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/sandboxes/{id}/terminal/ticket": {
@@ -423,7 +440,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/sandboxes/{id}/terminal/ws": {
@@ -443,7 +461,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     }
   },
