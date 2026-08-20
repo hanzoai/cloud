@@ -129,8 +129,18 @@ jobs:
         run: |
           set -euo pipefail
           base="${{ github.event.before }}"
-          # This forge reports no predecessor, so the fallback below is the rule
-          # in practice and not the exception it reads as.
+          # MEASURED, because this comment used to say the opposite and the
+          # opposite is what a reader plans against. On run 90908 the forge DID
+          # report a predecessor: base resolved to c25fe6659, the previous main
+          # tip, and the reviewer read 9,031B over 2 files — the push, not the
+          # backlog. So `before` is the rule and the fallback is the exception it
+          # reads as, reached on a first push or a force-update.
+          #
+          # The distinction is load-bearing rather than pedantic: the fallback
+          # measures from the last RELEASE, which on a release drought is the
+          # whole backlog (1,701,350B here), while `before` measures one push.
+          # review.sh reads either without refusing, but only one of them is what
+          # a normal push costs.
           #
           # The first parent is the WRONG base for a merge. `git merge main` on a
           # branch records that branch as parent 1, so HEAD~1 walks away from the
