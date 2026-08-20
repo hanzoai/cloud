@@ -336,9 +336,21 @@ zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
 	# them all, so one run is one full answer. The paths are normalised before
 	# `sort -u` because the same directory reached through `clients` and through `.`
 	# is two different strings and was checked twice.
-	@stale=""; \
+	# AND WHY, not only which. Both streams used to go to /dev/null, so three
+	# different failures arrived as one word: the prose genuinely drifted, the
+	# generator could not BUILD (a private module it cannot fetch, a toolchain it
+	# cannot resolve), or zipdoc REFUSED the package (a router it cannot resolve
+	# statically, which it is designed to refuse rather than file prose under a
+	# path that does not exist). Those have three different remedies and the
+	# report named one, `go generate`, which fixes only the first.
+	#
+	# Measured: run 91045 called apps/admin/finance and apps/ai stale while the
+	# same command on the same sha reported every file current locally. A gate
+	# that cannot say why it refused sends the next reader to regenerate files
+	# that are already correct — which is what I did, and it changed nothing.
+	@stale=""; why=$$(mktemp -d); \
 	for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | grep -v '/\.' | xargs -n1 dirname | sed 's|^\./||' | sort -u); do \
-	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check >/dev/null 2>&1) || stale="$$stale $$d"; \
+	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) > "$$why/$$(echo $$d | tr / _).out" 2>&1 || stale="$$stale $$d"; \
 	done; \
 	if [ -n "$$stale" ]; then \
 	  echo ""; \
@@ -347,7 +359,10 @@ zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
 	  echo "typed handler's doc comment to /v1/openapi.json — a stale lift ships a binary"; \
 	  echo "that describes itself wrongly."; \
 	  echo ""; \
-	  for d in $$stale; do echo "    $$d/zipdoc_gen.go"; done; \
+	  for d in $$stale; do \
+	    echo "    $$d/zipdoc_gen.go"; \
+	    sed -e 's/^/        /' "$$why/$$(echo $$d | tr / _).out" 2>/dev/null | tail -8; \
+	  done; \
 	  echo ""; \
 	  echo "  fix:"; \
 	  printf '    go generate -run zipdoc'; for d in $$stale; do printf ' ./%s/...' "$$d"; done; echo ""; \
