@@ -19,7 +19,13 @@ BASE="${1:?usage: review.sh <base-sha> <head-sha>}"
 HEAD="${2:?usage: review.sh <base-sha> <head-sha>}"
 
 API="${REVIEW_API:-https://api.hanzo.ai}"
-MODEL="${REVIEW_MODEL:-claude-sonnet-4-6}"
+# The default is a model this gateway can actually reach on its own paid
+# providers. claude-sonnet-4-6 routes to do-ai, whose token was revoked — the
+# gate then answered 401 on every push and nothing shipped for a day. Whatever
+# stands here must be PAID and private: never the `free` pool, which is
+# data-shared, and this reviewer is handed the diff of a private repository.
+MODEL="${REVIEW_MODEL:-fireworks/gpt-oss-120b}"
+
 KEY="${REVIEW_API_KEY:-}"
 # A diff no one can read is not a diff anyone reviewed. Bounded, and the bound
 # REFUSES rather than truncating: a silent cut is how the hostile hunk is the
