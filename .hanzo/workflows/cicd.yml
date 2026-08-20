@@ -123,41 +123,52 @@ jobs:
           # more than the tip. Shallow history is why a first-push review would
           # otherwise have nothing to compare.
           fetch-depth: 0
-      # THE REVIEWER PRESENTS AN IAM TOKEN. THERE IS NO API KEY IN THIS LANE.
+      # THE REVIEWER'S BEARER IS READ FROM KMS AT THE MOMENT OF USE.
       #
-      # Two credentials have already died here, and they were the same mistake
-      # twice: a Hanzo Git org secret holding an `sk-live-…` key (runs 90908 and
-      # 91045 answered `401 … is not recognized — it was revoked or replaced`),
-      # then that same class of key read from KMS. Moving a long-lived bearer to
-      # a better cupboard does not stop it going stale — only the issuer knows
-      # when a credential dies, so anything that stores a bearer elsewhere has to
-      # remember a rotation in a second place, and eventually does not.
+      # review.sh takes a bearer and does not care what minted it, so the choice
+      # lives here, and two spellings have been tried. A Hanzo Git org secret
+      # holding the key is a COPY: rotating the real key does not reach it,
+      # nothing reports the divergence, and the gate then fails closed forever on
+      # a credential nobody knew had died (runs 90908, 91045).
       #
-      # Measured on the KMS spelling: review/REVIEW_API_KEY answered 404 on prod,
-      # dev AND staging while control paths answered 200 — the gate demanded a
-      # key that had never been stored at all, so every release was refused by a
-      # credential that did not exist.
+      # IAM client_credentials is the better answer and is where this is going —
+      # a short-lived token from the only issuer beats any stored bearer. It
+      # needs a `hanzo-review` application whose client credential the runner can
+      # read. IAM_CLIENT_ID and IAM_CLIENT_SECRET are set on neither the repo nor
+      # the org, so the step minted nothing and refused every change; the org
+      # holds FORGE_TOKEN, GHCR_TOKEN, GHCR_USER, GH_PAT, KMS_CLIENT_ID,
+      # KMS_CLIENT_SECRET and REVIEW_API_KEY, and no IAM pair. Land that lane
+      # when the application exists, not before.
       #
-      # IAM issues tokens; nothing else does. This mints a short-lived one at the
-      # moment of use and the gateway accepts it like any other caller, so the
-      # reviewer has an identity rather than a secret, and there is no key left
-      # anywhere in this lane to copy, revoke or forget.
+      # KMS is measured to hold the key: on run 92398 these two calls returned it
+      # and the reviewer read the change and answered with a verdict. A probe
+      # that answers 404 here is reading a different store — the path carries no
+      # org, so its root comes from the KMS credential's own claim, and a probe
+      # made with another credential asks another org.
+      #
+      # No fallback. A fallback is how a stale copy keeps winning, and this gate
+      # must fail closed rather than pass on whichever credential answers.
       - name: read the change, and refuse it if it carries an attack
         env:
-          IAM_CLIENT_ID: ${{ secrets.IAM_CLIENT_ID }}
-          IAM_CLIENT_SECRET: ${{ secrets.IAM_CLIENT_SECRET }}
-          IAM_ENDPOINT: ${{ vars.IAM_ENDPOINT || 'https://hanzo.id' }}
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
         run: |
           set -euo pipefail
 
-          REVIEW_TOKEN=$(curl -sS "${IAM_ENDPOINT}/v1/iam/oauth/token" \
-            -H 'Content-Type: application/x-www-form-urlencoded' \
-            --data-urlencode 'grant_type=client_credentials' \
-            --data-urlencode "client_id=${IAM_CLIENT_ID}" \
-            --data-urlencode "client_secret=${IAM_CLIENT_SECRET}" \
-            | jq -r '.access_token // empty' || true)
+          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
+            | jq -r '.accessToken // empty' || true)
+          [ -n "$KMS_TOKEN" ] || { echo "::error::review: KMS login failed at ${KMS_ENDPOINT} — the reviewer cannot be given a credential, so the change cannot pass"; exit 1; }
+
+          REVIEW_TOKEN=$(curl -sS \
+            "${KMS_ENDPOINT}/v1/kms/secrets/review/REVIEW_API_KEY?env=${KMS_SECRET_ENV}" \
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
           export REVIEW_TOKEN
-          [ -n "$REVIEW_TOKEN" ] || { echo "::error::review: IAM refused client_credentials at ${IAM_ENDPOINT} — the reviewer has no identity, so the change cannot pass"; exit 1; }
+          [ -n "$REVIEW_TOKEN" ] || { echo "::error::review: REVIEW_API_KEY missing in KMS at review/ (env ${KMS_SECRET_ENV}, org from the KMS credential) — mint a key and store it there"; exit 1; }
+          echo "::add-mask::${REVIEW_TOKEN}"
           base="${{ github.event.before }}"
           # MEASURED, because this comment used to say the opposite and the
           # opposite is what a reader plans against. On run 90908 Hanzo Git DID
@@ -1482,7 +1493,19 @@ jobs:
       - name: Poke every projection on Hanzo Git
         id: send
         env:
-          GIT_TOKEN: ${{ github.token }}
+          # A DISPATCH CROSSES A REPOSITORY BOUNDARY, SO github.token CANNOT
+          # CARRY IT. That token is minted per run and scoped to this repository
+          # alone — enough to claim this repo's tags, which is why `image` uses
+          # it, and never enough to write another. Measured: every projection
+          # answered `403 user should have a permission to write to a repo`. That
+          # is a repository PERMISSION, not a missing scope, and no scope on a
+          # per-run token reaches an estate it was not minted for.
+          #
+          # FORGE_TOKEN is the org credential that spans them. All seven repos
+          # below are writable by an org identity (probed: push=true on each) and
+          # all seven workflows are active, so the poke had nothing wrong with it
+          # but the name in front of it.
+          GIT_TOKEN: ${{ secrets.FORGE_TOKEN }}
           # The projections that exist ON GIT.HANZO.AI, which is the only place a
           # dispatch can be answered. hanzo-kotlin/sdk and hanzo-cpp/sdk are in
           # the old list and are NOT here: both 404 on git.hanzo.ai, so poking
@@ -1503,7 +1526,7 @@ jobs:
             hanzo-docs/docs:deploy.yml
         run: |
           set -euo pipefail
-          [ -n "${GIT_TOKEN:-}" ] || { echo "::error::GIT_TOKEN is empty — the same secret image uses to read this repo's tags"; exit 1; }
+          [ -n "${GIT_TOKEN:-}" ] || { echo "::error::FORGE_TOKEN is empty — a dispatch writes to another repository, and no per-run token reaches one"; exit 1; }
           T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           ok=0; bad=""
           for entry in $PROJECTIONS; do
