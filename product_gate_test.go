@@ -58,7 +58,7 @@ var unextracted = []string{
 	"campaign", "catalog", "catalogsync", "channels", "cloudflare", "cms",
 	"code", "coding", "company", "compliance", "connectorruntime", "content",
 	"controlplane", "crawl", "crm", "cron", "dataset",
-	"destinations", "do", "domain", "entitlements", "erp", "esign", "exec",
+	"destinations", "domain", "entitlements", "erp", "esign", "exec",
 	"experiments", "explorer", "finance", "fleet", "flow", "goja", "guide",
 	"help", "index", "integrations", "k8s", "knowledge", "label",
 	"leaderboard", "legal", "link", "lsp", "marketplace", "meet", "membership",

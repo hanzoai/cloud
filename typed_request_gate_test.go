@@ -432,12 +432,6 @@ var allowedRequestUses = map[string]string{
 		"In field is caller-supplied, so a scope key read from one is a cross-scope read the caller " +
 		"asserted for itself. ONE function, so every typed op shares one seam; it fails closed off the " +
 		"HTTP path, where there is no principal and therefore no scope and no actor.",
-	"apps/do/do.go": "org — the DigitalOcean plane's ONE tenant-resolution point, and it fails closed " +
-		"in the same place it decides. It reads the request because principal.Acting turns on two facts the org " +
-		"key alone does not carry: whether the principal was VALIDATED at all, and whether it is a " +
-		"SuperAdmin, whose empty org falls back to the \"admin\" namespace — which principal.OrgFrom " +
-		"cannot express, since it refuses an empty org outright. Off the HTTP path there is no request, " +
-		"and the answer is a refusal rather than an invented identity.",
 	"apps/treasury/treasury.go": "admin / myAccounts — the ledger's tenant boundary and the one way " +
 		"across it. Every ordinary caller sees only accounts under its own \"org:<tenant>:\" prefix; a " +
 		"SuperAdmin may widen to the house scope or to another tenant, and platform-sudo is " +
