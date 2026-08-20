@@ -19,12 +19,18 @@ import (
 // runs this binary's own `exec openapi` over its own live router and writes
 // plugin/exec/openapi.json (mk/plugin.mk). Hand-editing that file is how a spec
 // starts disagreeing with the router; on a merge conflict, rebase and regenerate.
-// This file is the hand-owned half — a Shutdown/OwnsHealth/metered Price goes
-// here if the app grows to need one.
+// This file is the hand-owned half — a Shutdown/OwnsHealth goes here if the app
+// grows to need one.
+//
+// Metered, not Free: running a snippet leases a sandbox and executes a program in
+// it — a pod and a slice of a node for as long as the program takes. The meter is
+// apps/exec/meter.go, and it sits on this subsystem's own door rather than inside
+// the exported interpreter, because apps/functions composes that same call and
+// already charges its own invoke fee for it.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "exec",
-		Price: cloud.Free,
+		Price: cloud.Metered,
 		Mount: exec.Mount,
 	}}, []string{"exec"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
