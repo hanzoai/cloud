@@ -102,11 +102,11 @@ func run() error {
 	// its own listener at a temp path, /var/lib/cloud/run/o11y.sock never
 	// exists, and zip.DialApp("o11y") finds nothing. Peers then fail with no
 	// error anyone can see. That is exactly how POST /v1/event/{project}/envelope
-	// answered 503 to every Sentry SDK while o11y served /v1/sentry fine, and how
+	// answered 503 to every Sentry SDK while o11y served /v1/sentinel fine, and how
 	// the LLM-obs claim silently declined so those batches walked the product wire.
 	//
 	// Fail-SOFT: a plane that will not bind must not take the HTTP surface down
-	// with it — this process is what answers /v1/o11y and /v1/sentry.
+	// with it — this process is what answers /v1/o11y and /v1/sentinel.
 	//
 	// The AGENT DOOR goes on that plane first, for the third time in this file and
 	// for the third identical reason: cloud.Listen registers it for every generated
