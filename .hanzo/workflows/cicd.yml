@@ -123,45 +123,41 @@ jobs:
           # more than the tip. Shallow history is why a first-push review would
           # otherwise have nothing to compare.
           fetch-depth: 0
-      # THE KEY HAS ONE HOME, AND IT IS KMS.
+      # THE REVIEWER PRESENTS AN IAM TOKEN. THERE IS NO API KEY IN THIS LANE.
       #
-      # It was a Hanzo Git org secret, and a copy of a credential is a copy that goes
-      # stale on its own: measured on runs 90908 and 91045, the reviewer answered
-      # `401 … API key sk-live-4… is not recognized — it was revoked or replaced`,
-      # so every release since v1.801.536 was refused by a credential nobody knew
-      # had died. Rotating the real key does not reach a Hanzo Git secret, and nothing
-      # reports the divergence — the gate simply fails closed forever.
+      # Two credentials have already died here, and they were the same mistake
+      # twice: a Hanzo Git org secret holding an `sk-live-…` key (runs 90908 and
+      # 91045 answered `401 … is not recognized — it was revoked or replaced`),
+      # then that same class of key read from KMS. Moving a long-lived bearer to
+      # a better cupboard does not stop it going stale — only the issuer knows
+      # when a credential dies, so anything that stores a bearer elsewhere has to
+      # remember a rotation in a second place, and eventually does not.
       #
-      # So it is READ from KMS at the moment of use, by the same two calls the
-      # rollout car already makes (login with the KMS client credential, then read
-      # the secret by path). One home, so a rotation is picked up by the next run
-      # rather than needing a second place to be remembered.
+      # Measured on the KMS spelling: review/REVIEW_API_KEY answered 404 on prod,
+      # dev AND staging while control paths answered 200 — the gate demanded a
+      # key that had never been stored at all, so every release was refused by a
+      # credential that did not exist.
       #
-      # There is deliberately NO fallback to the old secret. A fallback is how the
-      # stale copy keeps winning, and this gate must fail closed rather than pass
-      # on whichever credential happens to answer.
+      # IAM issues tokens; nothing else does. This mints a short-lived one at the
+      # moment of use and the gateway accepts it like any other caller, so the
+      # reviewer has an identity rather than a secret, and there is no key left
+      # anywhere in this lane to copy, revoke or forget.
       - name: read the change, and refuse it if it carries an attack
         env:
-          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
-          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
-          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
-          KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
+          IAM_CLIENT_ID: ${{ secrets.IAM_CLIENT_ID }}
+          IAM_CLIENT_SECRET: ${{ secrets.IAM_CLIENT_SECRET }}
+          IAM_ENDPOINT: ${{ vars.IAM_ENDPOINT || 'https://hanzo.id' }}
         run: |
           set -euo pipefail
 
-          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
-            -H 'Content-Type: application/json' \
-            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
-            | jq -r '.accessToken // empty' || true)
-          [ -n "$KMS_TOKEN" ] || { echo "::error::review: KMS login failed at ${KMS_ENDPOINT} — the reviewer cannot be given a credential, so the change cannot pass"; exit 1; }
-
-          # No org in a KMS path: the store root comes from the validated claim,
-          # so this reads the KMS credential's OWN org and cannot name another's.
-          REVIEW_API_KEY=$(curl -sS \
-            "${KMS_ENDPOINT}/v1/kms/secrets/review/REVIEW_API_KEY?env=${KMS_SECRET_ENV}" \
-            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.value // .secret.value // empty' || true)
-          export REVIEW_API_KEY
-          [ -n "$REVIEW_API_KEY" ] || { echo "::error::review: REVIEW_API_KEY missing in KMS at review/ (env ${KMS_SECRET_ENV}, org from the KMS credential) — mint a key and store it there"; exit 1; }
+          REVIEW_TOKEN=$(curl -sS "${IAM_ENDPOINT}/v1/iam/oauth/token" \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=client_credentials' \
+            --data-urlencode "client_id=${IAM_CLIENT_ID}" \
+            --data-urlencode "client_secret=${IAM_CLIENT_SECRET}" \
+            | jq -r '.access_token // empty' || true)
+          export REVIEW_TOKEN
+          [ -n "$REVIEW_TOKEN" ] || { echo "::error::review: IAM refused client_credentials at ${IAM_ENDPOINT} — the reviewer has no identity, so the change cannot pass"; exit 1; }
           base="${{ github.event.before }}"
           # MEASURED, because this comment used to say the opposite and the
           # opposite is what a reader plans against. On run 90908 Hanzo Git DID
