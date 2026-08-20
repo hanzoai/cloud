@@ -10,8 +10,8 @@ package venue
 // /v2/kubernetes/clusters and pulls each cluster's kubeconfig
 // (/v2/kubernetes/clusters/{id}/kubeconfig) to fold into the fleet. The token is
 // the CUSTOMER's — org-scoped, KMS-sealed — NOT the platform's house DO key
-// (clients/do). The DO API base is the real api.digitalocean.com in production,
-// overridable via DIGITALOCEAN_API_URL for an httptest stub only.
+// (apps/admin/digitalocean). The DO API base is the real api.digitalocean.com
+// in production, overridable via DIGITALOCEAN_API_URL for an httptest stub only.
 
 import (
 	"cmp"
