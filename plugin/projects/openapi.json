@@ -63,6 +63,7 @@
             "description": "service unavailable"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -89,6 +90,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -120,6 +122,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -147,6 +150,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -179,6 +183,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -221,6 +226,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -263,7 +269,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/platform/sites/{slug}/deployments": {
@@ -300,6 +307,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -342,6 +350,7 @@
             "description": "accepted"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -385,6 +394,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -438,6 +448,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -472,6 +483,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -514,6 +526,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -550,6 +563,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -593,6 +607,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -637,6 +652,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -671,6 +687,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -708,6 +725,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -750,6 +768,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -793,6 +812,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -819,6 +839,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -850,6 +871,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -883,6 +905,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -910,6 +933,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -942,6 +966,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -984,6 +1009,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1026,7 +1052,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/projects/{slug}/deployments": {
@@ -1063,6 +1090,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1105,6 +1133,7 @@
             "description": "accepted"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1148,6 +1177,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1201,6 +1231,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1235,6 +1266,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1277,6 +1309,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1313,6 +1346,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1356,6 +1390,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1390,6 +1425,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1416,6 +1452,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1447,6 +1484,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1480,6 +1518,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1513,6 +1552,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1540,6 +1580,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -1572,6 +1613,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -1614,6 +1656,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1656,7 +1699,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/sites/{slug}/deployments": {
@@ -1693,6 +1737,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1735,6 +1780,7 @@
             "description": "accepted"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1778,6 +1824,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1831,6 +1878,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1865,6 +1913,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1907,6 +1956,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1943,6 +1993,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1986,6 +2037,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2030,6 +2082,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2064,6 +2117,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2101,6 +2155,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -2143,6 +2198,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2186,6 +2242,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2208,7 +2265,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     }
   },

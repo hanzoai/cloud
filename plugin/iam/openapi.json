@@ -52,7 +52,8 @@
         "description": "Publishes the public keys that verify the tokens issued here — the\none URL you point a service at so it can check a token itself, offline, without\ncalling back and without holding any secret of ours.\n\nKeys appear here before they start signing and stay after they stop, so a\nrotation never leaves a live token unverifiable. Nothing private is ever\npublished.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/.well-known/oauth-authorization-server": {
@@ -62,7 +63,8 @@
         "description": "Returns the OpenID Connect discovery document — the one URL you\npoint a standards-compliant client at so it can find every other endpoint on\nits own, instead of you configuring them by hand.\n\nIt advertises only what is actually implemented, so a client that reads it\ncannot ask for a flow that will fail: the authorization-code flow, PKCE with\nS256, the supported grants, and the signing algorithms whose public keys the\nJWKS really publishes.\n\nThe issuer is derived from the host you asked on and is the same value the\ntokens carry, so a client that pins the issuer never sees it change.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/.well-known/openid-configuration": {
@@ -72,7 +74,8 @@
         "description": "Returns the OpenID Connect discovery document — the one URL you\npoint a standards-compliant client at so it can find every other endpoint on\nits own, instead of you configuring them by hand.\n\nIt advertises only what is actually implemented, so a client that reads it\ncannot ask for a flow that will fail: the authorization-code flow, PKCE with\nS256, the supported grants, and the signing algorithms whose public keys the\nJWKS really publishes.\n\nThe issuer is derived from the host you asked on and is the same value the\ntokens carry, so a client that pins the issuer never sees it change.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/account": {
@@ -82,7 +85,8 @@
         "description": "Returns the signed-in person's own account and the organization\nthey belong to — what a console reads to draw the account menu.\n\nPasswords, API secrets and MFA material are stripped. It answers for a session\ncookie or a bearer token alike.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       },
       "put": {
         "operationId": "put_iam_account",
@@ -141,6 +145,7 @@
             "description": "bad request"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -185,7 +190,8 @@
         "description": "Lets a person or an application act in an organization. It is the grant\nbehind \"add someone to the team\", and it is safe to repeat — granting a\nmembership that already exists changes nothing. Granting membership IS the org's authority to give, so it takes the\nsame gate a write to that org's own registry row takes: a SuperAdmin, an admin\nof the org itself, or an org-admin-capable confidential client. One rule, one\nplace (internal/authz).",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/add-organization": {
@@ -462,6 +468,7 @@
             "description": "internal server error"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -472,7 +479,8 @@
         "description": "Sets up an account on someone's behalf — the same\nonboarding a person gets themselves, driven by one of your own services\ninstead of by them.\n\nIt authenticates as your service rather than as a person, which is why the\nperson to provision is named in the request. The setup it performs is\nidentical to self-service onboarding; there is one provisioning path, not\ntwo that can drift.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/admin/users/upsert": {
@@ -545,6 +553,7 @@
             "description": "internal server error"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -724,6 +733,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -755,6 +765,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -788,6 +799,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -829,6 +841,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -862,6 +875,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -953,6 +967,7 @@
             "description": "not found"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -986,6 +1001,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1017,6 +1033,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1050,6 +1067,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1083,6 +1101,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1116,6 +1135,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1169,6 +1189,7 @@
             "description": "bad request"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1213,6 +1234,7 @@
             "description": "bad request"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1246,6 +1268,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1277,6 +1300,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1310,6 +1334,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1343,6 +1368,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1376,6 +1402,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1386,7 +1413,8 @@
         "description": "Returns the calling person's own privacy and communication\nchoices. Somebody who has never set them gets the defaults rather than\nnothing, so a consent screen always has something to show — insights on, and\ntraining UNANSWERED, which is the state that means the screen still has to ask.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       },
       "put": {
         "operationId": "put_iam_consent",
@@ -1394,7 +1422,8 @@
         "description": "Records the calling person's privacy and communication\nchoices. Only their own — there is no way to set consent for somebody else.\n\nSend only the answers you are changing. A question you leave out keeps the\nanswer it already had, so a screen that saves one switch never revokes the\nother, and two screens saving at once do not undo each other.\n\nAn answer this version does not recognize is refused here rather than stored,\nso nothing is ever persisted for a later reader to have to interpret.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/delete-application": {
@@ -1438,7 +1467,8 @@
         "description": "Takes away a person's or an application's right to act in an\norganization. Their account survives; what ends is their access to that\norganization. Revoking a membership that is already gone reports that nothing\nwas removed rather than failing, so a retry is safe. It is the mirror of ensure and takes the SAME gate:\nrevoking membership is the org's authority to give or take, so a SuperAdmin, an\nadmin of the org itself, or an org-admin-capable confidential client. Idempotent\nthrough the store — deleting an absent membership reports removed=false, never an\nerror — so a retried revoke is safe.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/delete-mfa": {
@@ -1448,7 +1478,8 @@
         "description": "Turns a factor off, so sign-in stops asking for it. Naming no factor turns\noff ALL of them — the reset path. People may do this for themselves; doing it for\nsomebody else takes an administrator, which is what makes it the way back in when a\nphone is lost.\n\nThe recovery codes go with the last factor: they are the way past a challenge, so\nkeeping them alive for an account with nothing to challenge would leave a standing\ncredential behind.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/delete-organization": {
@@ -1662,7 +1693,8 @@
         "description": "Returns the signed-in person's own account and the organization\nthey belong to — what a console reads to draw the account menu.\n\nPasswords, API secrets and MFA material are stripped. It answers for a session\ncookie or a bearer token alike.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-app-login": {
@@ -1715,6 +1747,7 @@
             "description": "bad request"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1725,7 +1758,8 @@
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-applications": {
@@ -1735,7 +1769,8 @@
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-cert": {
@@ -1745,7 +1780,8 @@
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-certs": {
@@ -1755,7 +1791,8 @@
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-global-users": {
@@ -1765,7 +1802,8 @@
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-invitations": {
@@ -1775,7 +1813,8 @@
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-memberships": {
@@ -1828,6 +1867,7 @@
             "description": "bad request"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1838,7 +1878,8 @@
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-organization-projects": {
@@ -1848,7 +1889,8 @@
         "description": "Returns one organization's projects — what a scope switcher\nlists so somebody can move between them.\n\nYou see your own organization and no other, whatever the request asks for.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-organization-workspaces": {
@@ -1858,7 +1900,8 @@
         "description": "Returns one organization's workspaces — what a scope\nswitcher lists so somebody can move between them.\n\nYou see your own organization and no other, whatever the request asks for.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-organizations": {
@@ -1868,7 +1911,8 @@
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-permission": {
@@ -1878,7 +1922,8 @@
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-permissions": {
@@ -1888,7 +1933,8 @@
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-provider": {
@@ -1898,7 +1944,8 @@
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-providers": {
@@ -1908,7 +1955,8 @@
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-records": {
@@ -1918,7 +1966,8 @@
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-role": {
@@ -1928,7 +1977,8 @@
         "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-roles": {
@@ -1938,7 +1988,8 @@
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-user": {
@@ -1948,7 +1999,8 @@
         "description": "Reads one person, two ways.\n\nName them and it is an ordinary read, with secrets stripped. Or hand it a\nSECRET API key and it answers with the person that key belongs to — how a\nservice of yours turns a credential on an incoming request into an identity.\n\nA publishable key resolves to nobody here, deliberately: it is safe to ship in\na browser precisely because it names an organization and never a person.\n\nget-user is handler-authorized (authz.handlerAuthorizedExact) because the key\nvariant carries no owner/name for the Guard to authorize; so the owner/name\nvariant reinstates the SAME read authorization the Guard applies, through the ONE\npolicy function (authz.Can) — identical behavior, a cross-tenant or non-self read\nstill refused 403 — then reuses the generic getHandler verbatim for resolution and\nredaction. No authz and no CRUD is reimplemented.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/get-users": {
@@ -1958,7 +2010,8 @@
         "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/invitations": {
@@ -1991,6 +2044,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -2022,6 +2076,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2055,6 +2110,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2088,6 +2144,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2121,6 +2178,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2131,7 +2189,8 @@
         "description": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target\nuser (optional `?aud=` resource, RFC 8707), issued by the authenticated +\nallow-listed confidential client. The token's subject + owner are the TARGET\nUSER's, so a resource server scopes on the validated owner claim to the user's\ntenant — indistinguishable from a token the user obtained directly. Response is\nthe camelCase `{accessToken, expiresIn}` body identity.ts consumes. Equivalent to\nthe RFC 8693 token-exchange grant, minus the subject_token proof (the console has\nthe user's id, not a token) — the reason this compat shim exists.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/keys": {
@@ -2164,6 +2223,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -2195,6 +2255,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2228,6 +2289,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2269,6 +2331,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2279,7 +2342,8 @@
         "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/keys/revoke": {
@@ -2289,7 +2353,8 @@
         "description": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. A secret key's stored value is the sk- in its\nschema.Key row.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/keys/update": {
@@ -2322,6 +2387,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2332,7 +2398,8 @@
         "description": "Starts connecting another sign-in identity to the account you are already\nsigned in as. It answers with the provider's URL for the browser to follow; when\nthe provider returns, that identity is attached and you come back to returnUri.\n\nYour account is fixed here, from the credential you are already holding, and is\ncarried server-side for the rest of the round-trip — so nothing that happens at\nthe provider can point the link at somebody else.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/linked-accounts": {
@@ -2342,7 +2409,8 @@
         "description": "Returns the sign-in identities linked to the calling\nperson's account — every provider they can currently sign in with. It is what\na security page lists next to the option to disconnect one.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/login": {
@@ -2352,7 +2420,8 @@
         "description": "Signs a person in with the credential they typed, and — when the\nrequest is part of an OAuth flow — hands back the one-time code that finishes\nit. A second factor, if the account has one, is asked for and required here.\n\nThe password is compared against a stored one-way hash and is never logged,\nechoed or stored as typed.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/memberships": {
@@ -2405,6 +2474,7 @@
             "description": "bad request"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -2413,7 +2483,8 @@
         "description": "Lets a person or an application act in an organization. It is the grant\nbehind \"add someone to the team\", and it is safe to repeat — granting a\nmembership that already exists changes nothing. Granting membership IS the org's authority to give, so it takes the\nsame gate a write to that org's own registry row takes: a SuperAdmin, an admin\nof the org itself, or an org-admin-capable confidential client. One rule, one\nplace (internal/authz).",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/mfa/disable": {
@@ -2423,7 +2494,8 @@
         "description": "Turns a factor off, so sign-in stops asking for it. Naming no factor turns\noff ALL of them — the reset path. People may do this for themselves; doing it for\nsomebody else takes an administrator, which is what makes it the way back in when a\nphone is lost.\n\nThe recovery codes go with the last factor: they are the way past a challenge, so\nkeeping them alive for an account with nothing to challenge would leave a standing\ncredential behind.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/mfa/preferred": {
@@ -2433,7 +2505,8 @@
         "description": "Picks which second factor an account is asked for first when it has\nmore than one. Only a factor the account actually holds: storing an unheld one told\nthe login gate \"MFA is on\" — factor.Enabled reads that column — while leaving it\nnothing to ask for, so the sign-in required the password alone.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/mfa/setup/enable": {
@@ -2443,7 +2516,8 @@
         "description": "Finishes the enrolment: from here the account's sign-ins ask for this factor.\nIt requires the proof initiate handed out — a passcode from the authenticator, or the\ncode that was sent — and verifies it BEFORE writing anything.\n\nIt used to write on the strength of a `secret` field alone. A client that skipped\nthe verify step, scanned the QR into the wrong app, or was simply buggy switched on\na factor no code would ever satisfy, and the account was then locked out with no\nself-service way back: the gate holds the sign-in before minting, so the person\ncannot obtain the bearer that disable requires.\n\nThe recovery codes are minted here and returned ONCE, on the first factor the\naccount adds. Answering with them is the way back in when no factor can be\nproduced, so they are the same value the row's digests were made from — by\nconstruction, not by a client echoing them back.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/mfa/setup/initiate": {
@@ -2453,7 +2527,8 @@
         "description": "Starts enrolling a factor and hands over whatever the person needs to prove\nthey hold it:\n\n\tapp   a fresh secret and the otpauth:// URL to render as a QR code\n\tsms   a code texted to the number on the account\n\temail a code mailed to the address on the account\n\nNothing is switched on yet, so abandoning this step leaves the account exactly as\nit was. Response: {status:\"ok\", data:{mfaType, secret, url}} — secret and url only\nfor the authenticator.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/mint-user-keys": {
@@ -2463,7 +2538,8 @@
         "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/oauth/authorize": {
@@ -2473,7 +2549,8 @@
         "description": "Starts a sign-in — the address you send a browser to, and the\nbeginning of every OAuth and OpenID Connect flow.\n\nIf the person is ALREADY signed in here, it does not ask them again: it\nreturns them to the application with a one-time code and they never see this\npage. Otherwise it shows the right way to sign in for the application they are\nsigning in to, or hands off to another identity provider if that is what they\npick.\n\nA client can say what it wants with `prompt`: `none` means answer without any\nscreen at all — with the code if a session exists, with an error if not, but\nnever with a page; `login` means ask for the password again even if a session\nexists; `select_account` means let the person choose which identity to use.\n\nIt returns only to an address the application has registered. That check\nhappens before anything else, so a request naming an unregistered address is\nrefused where the person can see it rather than being bounced onwards.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_iam_oauth_authorize",
@@ -2481,7 +2558,8 @@
         "description": "Starts a sign-in — the address you send a browser to, and the\nbeginning of every OAuth and OpenID Connect flow.\n\nIf the person is ALREADY signed in here, it does not ask them again: it\nreturns them to the application with a one-time code and they never see this\npage. Otherwise it shows the right way to sign in for the application they are\nsigning in to, or hands off to another identity provider if that is what they\npick.\n\nA client can say what it wants with `prompt`: `none` means answer without any\nscreen at all — with the code if a session exists, with an error if not, but\nnever with a page; `login` means ask for the password again even if a session\nexists; `select_account` means let the person choose which identity to use.\n\nIt returns only to an address the application has registered. That check\nhappens before anything else, so a request naming an unregistered address is\nrefused where the person can see it rather than being bounced onwards.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/oauth/callback": {
@@ -2491,7 +2569,8 @@
         "description": "Completes the round-trip: it resolves and burns the\nsingle-use transaction (checking expiry + browser binding), exchanges and\nverifies the IdP response, links or provisions the local user, and mints the\niam authorization code the relying party expects — then redirects to the\noriginal redirect_uri with code + state.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/oauth/device": {
@@ -2501,7 +2580,8 @@
         "description": "Starts a sign-in on a device with no browser and no keyboard —\na TV, a CLI, a headless box. It returns a short code to show the person and\nthe address to send them to on a phone or laptop.\n\nNothing is granted until a human approves it there; until then the code is\njust a pending request.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/oauth/device/info": {
@@ -2511,7 +2591,8 @@
         "description": "Answers \"what am I approving?\" for a pending device code.\n\nThe approval page exists to tell a human WHICH application they are authorizing;\na page that names the wrong one defeats the control it implements. It used to\nrender the portal's own app name — a constant, `hanzo-console` for every code —\nso a device code minted by `hanzo-cli` was approved under a screen naming a\ndifferent application entirely. The client is a property of the CODE, so it is\nread from the code's row here and nowhere else.\n\nRequires a signed-in session, and answers with the same ONE opaque refusal\napproveDevice uses. That is deliberate: the user_code is only 40 bits and is the\none secret in this flow, so an unauthenticated lookup — or one that\ndistinguished unknown from expired from already-approved — would be an oracle\nfor hunting live codes. Gated and opaque, it reveals strictly less than the\napproval the same caller could already attempt.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/oauth/federation/mfa": {
@@ -2521,7 +2602,8 @@
         "description": "Completes a sign-in that came in through another identity\nprovider and still owes a second factor. The person supplies the factor here\nand the login finishes.\n\nThe account is fixed when the challenge is issued, not by the request, so no\none can redirect a half-finished login onto somebody else's account. A wrong\nfactor uses the challenge up: retrying means starting the sign-in again, the\nsame as a mistyped password.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/oauth/introspect": {
@@ -2531,7 +2613,8 @@
         "description": "Answers whether an access token is still good, and what it\nis good for — the check a resource server of yours makes before honouring a\ntoken it did not mint.\n\nA token counts as active only if it verifies AND has not been revoked, so a\nrevoked token reads as dead here immediately rather than until it expires. A\ntoken that is unknown, expired or revoked answers simply that it is not\nactive, and nothing more — the endpoint is not a way to learn about tokens you\nwere not given.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/oauth/logout": {
@@ -2541,7 +2624,8 @@
         "description": "Ends a sign-in and sends the browser somewhere sensible. Accepts\nGET or POST, so it works as a plain link.\n\nIt ACTUALLY signs you out, which is worth stating because the endpoint spent a\nrelease not doing it: the whole body computed a redirect and answered\n{\"status\":\"ok\"} unconditionally — no session ended, no token revoked. A logout\nthat reports success while leaving the session live is worse than no logout at\nall, because the person on the shared machine believes it worked. Three things\nhappen here now, in this order:\n\n 1. The browser session dies — sid revoked server-side AND the cookie expired\n    (sessions.Clear). Server-side revocation is the load-bearing half: a copy\n    of the cookie taken before logout must not still resolve.\n 2. The relying party's tokens are revoked when an id_token_hint names it, so\n    the refresh token cannot mint a fresh access token after the human left.\n    Revocation state is authoritative — a JWT's `exp` still reads valid for\n    days, so expiry is necessary but never sufficient.\n 3. Only then is a redirect considered, and only to a REGISTERED uri.\n\nThe open-redirect guard is unchanged: a redirect happens only when a VERIFIED\nid_token_hint identifies the application and that application has registered\nthe target. Anything else refuses to redirect — nobody can turn your logout\nlink into a redirect to a site of their choosing.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_iam_oauth_logout",
@@ -2549,7 +2633,8 @@
         "description": "Ends a sign-in and sends the browser somewhere sensible. Accepts\nGET or POST, so it works as a plain link.\n\nIt ACTUALLY signs you out, which is worth stating because the endpoint spent a\nrelease not doing it: the whole body computed a redirect and answered\n{\"status\":\"ok\"} unconditionally — no session ended, no token revoked. A logout\nthat reports success while leaving the session live is worse than no logout at\nall, because the person on the shared machine believes it worked. Three things\nhappen here now, in this order:\n\n 1. The browser session dies — sid revoked server-side AND the cookie expired\n    (sessions.Clear). Server-side revocation is the load-bearing half: a copy\n    of the cookie taken before logout must not still resolve.\n 2. The relying party's tokens are revoked when an id_token_hint names it, so\n    the refresh token cannot mint a fresh access token after the human left.\n    Revocation state is authoritative — a JWT's `exp` still reads valid for\n    days, so expiry is necessary but never sufficient.\n 3. Only then is a redirect considered, and only to a REGISTERED uri.\n\nThe open-redirect guard is unchanged: a redirect happens only when a VERIFIED\nid_token_hint identifies the application and that application has registered\nthe target. Anything else refuses to redirect — nobody can turn your logout\nlink into a redirect to a site of their choosing.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/oauth/revoke": {
@@ -2559,7 +2644,8 @@
         "description": "Retires a token before it expires — what you call when someone\nsigns out or a credential may have leaked.\n\nRevoking an access token kills that token. Revoking a REFRESH token kills the\nwhole chain it belongs to, so no further access tokens can be minted from it\nand every token already minted from it dies with it.\n\nA token that is not yours, or that never existed, answers success and does\nnothing — so the endpoint cannot be used to discover which tokens are real.\n\nPUBLIC clients revoke too, and must: sign-out is the only control a long-lived\nrefresh token has. hanzo-cli is a public PKCE client holding a 30-day rotating\nrefresh token, so a confidential-only revocation endpoint made `hanzo auth\nlogout` a LOCAL DELETE — the credential it dropped stayed spendable at\nhanzo.id for the rest of the month, with nothing able to kill it. Measured\n2026-08-01: revoke answered 401 invalid_client and the refresh token went on\nminting access tokens.\n\nWidening authentication does not widen authority. The caller must still POSSESS\nthe token — and possession already permits USE, of which revocation is the\nstrict opposite — and the row must belong to the client that presents it, so a\npublic client_id buys the ability to destroy exactly what its holder could\notherwise spend. RFC 6749 §3.2.1 is the same reading: a client with no\ncredentials identifies itself with client_id.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/oauth/token": {
@@ -2569,7 +2655,8 @@
         "description": "Exchanges what your application is holding for the tokens it\nneeds — the one-time code from a finished sign-in, a refresh token, or your\nown client credentials when the caller is a program rather than a person.\n\nA refresh returns a NEW refresh token and retires the one you sent. If a\nretired one is ever presented again the whole chain is revoked, on the\nassumption that a token which came back from the dead was copied — so a stolen\nrefresh token buys an attacker one use and costs them the session.\n\nResponses are never cached, by any hop.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/oauth/userinfo": {
@@ -2579,7 +2666,8 @@
         "description": "Returns the profile claims for whoever the access token\nbelongs to — the standard OpenID Connect way to find out who is calling you\nwithout your application storing anything itself.\n\nThe token must still be live: revoke it and this stops answering.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_iam_oauth_userinfo",
@@ -2587,7 +2675,8 @@
         "description": "Returns the profile claims for whoever the access token\nbelongs to — the standard OpenID Connect way to find out who is calling you\nwithout your application storing anything itself.\n\nThe token must still be live: revoke it and this stops answering.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/onboard": {
@@ -2597,7 +2686,8 @@
         "description": "Finishes setting up the account of whoever is calling — it\ncreates their organization if they have none and puts them in it, so a person\nwho has just signed up lands somewhere they can work.\n\nIt always acts on the caller and never on somebody named in the request, so\nthere is no way to onboard another person's account through it.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/organizations": {
@@ -2646,6 +2736,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -2677,6 +2768,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2710,6 +2802,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2743,6 +2836,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2784,6 +2878,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2841,6 +2936,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2874,6 +2970,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2935,6 +3032,7 @@
             "description": "bad request"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2968,6 +3066,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -2999,6 +3098,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3032,6 +3132,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3073,6 +3174,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3106,6 +3208,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3116,7 +3219,8 @@
         "description": "Saves the calling person's own settings and returns\nthe full set afterwards. Send only the settings you are changing — the rest\nare kept, so two screens can save at once without one undoing the other.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/projects": {
@@ -3149,6 +3253,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -3180,6 +3285,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3213,6 +3319,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3246,6 +3353,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3279,6 +3387,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3312,6 +3421,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -3343,6 +3453,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3376,6 +3487,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3409,6 +3521,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3442,6 +3555,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3452,7 +3566,8 @@
         "description": "Publishes the public key your registry uses to verify the tokens issued\nabove — the one URL to configure so the registry trusts logins without holding\nany secret of its own.\n\nIf no signing key is available it refuses rather than publishing an empty set,\nbecause a registry that trusts nothing looks identical to one that trusts\neverything until somebody tries to push.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/registry/token": {
@@ -3462,7 +3577,8 @@
         "description": "Signs a container client in to your registry. `docker login`, and every\nbuild tool that pushes or pulls images, lands here: it exchanges the\ncredential for a short-lived token scoped to exactly the repositories that\ncredential may touch.\n\nBoth of the shapes container tooling uses are accepted, so the same login works\nwhichever client your pipeline runs.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_iam_registry_token",
@@ -3470,7 +3586,8 @@
         "description": "Signs a container client in to your registry. `docker login`, and every\nbuild tool that pushes or pulls images, lands here: it exchanges the\ncredential for a short-lived token scoped to exactly the repositories that\ncredential may touch.\n\nBoth of the shapes container tooling uses are accepted, so the same login works\nwhichever client your pipeline runs.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/release": {
@@ -3541,6 +3658,7 @@
             "description": "unauthorized"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3551,7 +3669,8 @@
         "description": "Answers which organization a PUBLISHABLE key belongs to —\nwhat a service of yours calls to attribute a request that arrived carrying a\nkey shipped in a browser.\n\nIt names an organization and never a person: no path through it can load or\nreturn a user, so a key you put in client code cannot become a way to learn\nwho anyone is. A key that is expired, secret rather than publishable, or\nsimply unknown all answer with the same sentence, and with a `code` saying\nwhich of those it was. Only a confidential service that already proved it may\nresolve keys at all ever reads that code — there is no anonymous caller here\nto probe for which keys exist — and telling it apart is what lets the holder\nbe told to re-mint an expired key instead of hunting a configuration error.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/revoke-user-keys": {
@@ -3561,7 +3680,8 @@
         "description": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. A secret key's stored value is the sk- in its\nschema.Key row.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/roles": {
@@ -3594,6 +3714,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -3625,6 +3746,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3658,6 +3780,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3691,6 +3814,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3724,6 +3848,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3747,6 +3872,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3786,6 +3912,7 @@
             "description": "not found"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3809,6 +3936,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3848,6 +3976,7 @@
             "description": "not found"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3871,6 +4000,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -3881,7 +4011,8 @@
         "description": "Returns the people in your organization to your identity provider,\nin the standard SCIM shape, so an IdP can reconcile its directory against\nours. Searchable by username or email address, and paged.\n\nReading the whole list takes an administrator; an ordinary person is refused.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_iam_scim_v2_users",
@@ -3889,7 +4020,8 @@
         "description": "Provisions a person from your identity provider — how a new hire\ngets an account here automatically when they are added over there.\n\nTakes an administrator. Making someone an administrator takes more than that,\nso an IdP integration cannot escalate anyone by setting a flag.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/scim/v2/Users/{owner}/{name}": {
@@ -3917,7 +4049,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       },
       "get": {
         "operationId": "get_iam_scim_v2_users_by_owner_by_name",
@@ -3943,7 +4076,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       },
       "patch": {
         "operationId": "patch_iam_scim_v2_users_by_owner_by_name",
@@ -3969,7 +4103,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       },
       "put": {
         "operationId": "put_iam_scim_v2_users_by_owner_by_name",
@@ -3995,7 +4130,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/send-verification-code": {
@@ -4005,7 +4141,8 @@
         "description": "Validates the request and asks otp to get a code to the\nperson. The request fields are read via fiber's FormValue — the escape hatch zip\nexposes for form bodies (multipart or urlencoded) — since the typed JSON Bind does\nnot apply here. v1 also accepts countryCode/method/checkUser/captchaType; iam\nignores them (the captcha/forget/MFA flows those drive are not ported), and\nCAPTCHA verification is likewise not enforced — iam models no captcha provider —\nso the code is issued once the destination and application validate.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/service-accounts": {
@@ -4067,6 +4204,7 @@
             "description": "bad request"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -4075,7 +4213,8 @@
         "description": "Makes a service account — an identity for a program rather than a\nperson, for a script, a bot or a deployment that has to authenticate on its\nown.\n\nIt comes back with its first key, and the secret half is shown ONCE, here.\nThere is no way to read it again; if you lose it, rotate.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/service-accounts/{name}": {
@@ -4095,7 +4234,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/service-accounts/{name}/keys": {
@@ -4115,7 +4255,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/sessions/create": {
@@ -4148,6 +4289,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4181,6 +4323,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4214,6 +4357,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4247,6 +4391,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4280,6 +4425,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4290,7 +4436,8 @@
         "description": "Picks which second factor an account is asked for first when it has\nmore than one. Only a factor the account actually holds: storing an unheld one told\nthe login gate \"MFA is on\" — factor.Enabled reads that column — while leaving it\nnothing to ask for, so the sign-in required the password alone.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/signin": {
@@ -4300,7 +4447,8 @@
         "description": "Completes a sign-in: it exchanges the one-time code your\napplication was handed at the end of the login flow for a live session, and\nreturns the signed-in account.\n\nThe code works once. This is the call that turns a finished login into\nsomething your application can act on.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/signup": {
@@ -4310,7 +4458,8 @@
         "description": "Creates an account from the sign-up form and applies the\napplication's own sign-up rules — whether self-service registration is open at\nall, and which fields it requires.\n\nThe password is hashed before it is stored and is never returned.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/tokens": {
@@ -4351,6 +4500,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -4382,6 +4532,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4415,6 +4566,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4448,6 +4600,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4458,7 +4611,8 @@
         "description": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target\nuser (optional `?aud=` resource, RFC 8707), issued by the authenticated +\nallow-listed confidential client. The token's subject + owner are the TARGET\nUSER's, so a resource server scopes on the validated owner claim to the user's\ntenant — indistinguishable from a token the user obtained directly. Response is\nthe camelCase `{accessToken, expiresIn}` body identity.ts consumes. Equivalent to\nthe RFC 8693 token-exchange grant, minus the subject_token proof (the console has\nthe user's id, not a token) — the reason this compat shim exists.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/tokens/update": {
@@ -4491,6 +4645,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4501,7 +4656,8 @@
         "description": "Disconnects one sign-in identity from an account, so that provider can\nno longer be used to sign in as that person. Their account and every other way\nthey sign in are untouched. Two principals may do it, and\nonly two: the account holder itself, and a SuperAdmin (a member of the reserved\nadmin org, the one predicate). An ORG ADMIN deliberately may NOT — unlinking is\nnot tenant administration, it is unpicking someone's own sign-in method, so the\ngeneric org-admin rule is the wrong answer here.\n\nA holder unlinking itself must also be permitted by the application — the\nprovider link's CanUnlink flag — so an organization that mandates federated\nsign-in cannot have its users strand themselves. A SuperAdmin is not bound by\nthat flag; it is the platform's own recovery path. Fail-closed throughout.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/update-application": {
@@ -4579,7 +4735,8 @@
         "description": "Saves the calling person's own settings and returns\nthe full set afterwards. Send only the settings you are changing — the rest\nare kept, so two screens can save at once without one undoing the other.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/update-provider": {
@@ -4730,6 +4887,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -4761,6 +4919,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4794,6 +4953,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4843,6 +5003,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4876,6 +5037,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -4886,7 +5048,8 @@
         "description": "Validates the request and asks otp to get a code to the\nperson. The request fields are read via fiber's FormValue — the escape hatch zip\nexposes for form bodies (multipart or urlencoded) — since the typed JSON Bind does\nnot apply here. v1 also accepts countryCode/method/checkUser/captchaType; iam\nignores them (the captcha/forget/MFA flows those drive are not ported), and\nCAPTCHA verification is likewise not enforced — iam models no captcha provider —\nso the code is issued once the destination and application validate.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/web3/nonce": {
@@ -4896,7 +5059,8 @@
         "description": "Starts a wallet sign-in: it returns a one-time challenge for the wallet\nto sign. The challenge is good once and is tied to the site that asked for it,\nso a signature collected elsewhere cannot be replayed here.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/web3/verify": {
@@ -4906,7 +5070,8 @@
         "description": "Completes a wallet sign-in: it verifies the signed challenge and, if it\nholds, signs the wallet's owner in.\n\nThis IS the login — it answers exactly as a password sign-in does, so the rest\nof your flow does not branch on how somebody arrived.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/webauthn-credentials": {
@@ -4939,6 +5104,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -4970,6 +5136,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -5003,6 +5170,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -5036,6 +5204,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -5069,6 +5238,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -5079,7 +5249,8 @@
         "description": "Starts a passkey sign-in: it returns the challenge the person's\nauthenticator signs.\n\nThe account is named in the query, and the challenge is bound to it, so what may\nanswer is decided here — by the server, from the row — and the finish checks the\nanswer against that decision rather than recomputing it.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/webauthn/signin/finish": {
@@ -5089,7 +5260,8 @@
         "description": "Verifies the signed challenge and signs the person in.\n\nIt answers exactly as a password sign-in does — the same envelope, through the\nsame grant — so nothing downstream branches on how somebody arrived.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/webauthn/signup/begin": {
@@ -5099,7 +5271,8 @@
         "description": "Starts enrolling a passkey for the signed-in person: it returns the\noptions their browser hands to the authenticator.\n\nPasskeys already on the account are EXCLUDED, so a second enrollment on a device\nthat already holds one is refused by the authenticator itself rather than\nsilently producing a duplicate the person cannot tell apart.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/webauthn/signup/finish": {
@@ -5109,7 +5282,8 @@
         "description": "Verifies the newly created passkey and stores it, so the person\ncan sign in with their device from then on.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/whoami": {
@@ -5119,7 +5293,8 @@
         "description": "Tells you who the current caller is — the lightweight check a\npage makes on load to decide whether to render signed-in or signed-out.\n\nIt answers for a session cookie or a bearer token alike, and says plainly when\nnobody is signed in rather than failing.",
         "tags": [
           "iam"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/workspaces": {
@@ -5152,6 +5327,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -5183,6 +5359,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -5216,6 +5393,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -5249,6 +5427,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -5282,6 +5461,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     }

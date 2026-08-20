@@ -37,7 +37,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/ask/web": {
@@ -70,6 +71,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     }
