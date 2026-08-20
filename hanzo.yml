@@ -159,7 +159,7 @@ test:
     run: |
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
-      # backend, which a self-hosted forge runner may not provide — and when it
+      # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
       # These runners keep their filesystem between jobs, so naming the two
       # caches at a fixed path makes them persist on the host regardless. Go
@@ -197,7 +197,7 @@ test:
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
-      # backend, which a self-hosted forge runner may not provide — and when it
+      # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
       # These runners keep their filesystem between jobs, so naming the two
       # caches at a fixed path makes them persist on the host regardless. Go
@@ -253,7 +253,7 @@ test:
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
-      # backend, which a self-hosted forge runner may not provide — and when it
+      # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
       # These runners keep their filesystem between jobs, so naming the two
       # caches at a fixed path makes them persist on the host regardless. Go
@@ -282,7 +282,7 @@ test:
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
-      # backend, which a self-hosted forge runner may not provide — and when it
+      # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
       # These runners keep their filesystem between jobs, so naming the two
       # caches at a fixed path makes them persist on the host regardless. Go
@@ -324,7 +324,7 @@ test:
       # number a developer measures, for no reason anyone can see.
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=0
       # A STABLE cache home. setup-go's cache writes to the Actions cache
-      # backend, which a self-hosted forge runner may not provide — and when it
+      # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
       # These runners keep their filesystem between jobs, so naming the two
       # caches at a fixed path makes them persist on the host regardless. Go
@@ -363,7 +363,7 @@ test:
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
-      # backend, which a self-hosted forge runner may not provide — and when it
+      # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
       # These runners keep their filesystem between jobs, so naming the two
       # caches at a fixed path makes them persist on the host regardless. Go
@@ -386,7 +386,7 @@ test:
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
-      # backend, which a self-hosted forge runner may not provide — and when it
+      # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
       # These runners keep their filesystem between jobs, so naming the two
       # caches at a fixed path makes them persist on the host regardless. Go
@@ -406,7 +406,7 @@ test:
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=1
       # A STABLE cache home. setup-go's cache writes to the Actions cache
-      # backend, which a self-hosted forge runner may not provide — and when it
+      # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
       # These runners keep their filesystem between jobs, so naming the two
       # caches at a fixed path makes them persist on the host regardless. Go
